@@ -64,6 +64,7 @@ loadLocalEnv()
 const WEB_DEV_VARS = "apps/web/.dev.vars"
 const API_DEV_VARS = "apps/api/.dev.vars"
 const ORCHESTRATOR_DEV_VARS = "apps/orchestrator/.dev.vars"
+const ROUTER_DEV_VARS = "apps/router/.dev.vars"
 const SEAL = "WORKOS_COOKIE_PASSWORD"
 
 // Read out of the file rather than out of process.env. The values are copied
@@ -134,6 +135,8 @@ for (const [path, lines] of [
       "REME_MODEL_FALLBACK",
     ].map((name) => `${name}=${fromLocalEnv(name)}`),
   ],
+  // The local router verifies the claims the orchestrator signs.
+  [ROUTER_DEV_VARS, [`PREVIEW_KEY=${fromLocalEnv("PREVIEW_KEY")}`]],
 ]) {
   if (existsSync(path)) {
     ok(`${path} exists, left as it is`)
@@ -145,6 +148,30 @@ for (const [path, lines] of [
       ? `${path} created from .env.local`
       : `${path} created; add WORKOS_API_KEY and WORKOS_CLIENT_ID to it`
   )
+}
+
+// Local site links: previews and the live site open on the local router
+// (`pnpm --filter router dev`, port 3004) and Approve publishes to local KV
+// and R2, never to staging. `siteUrl` opens a `.localhost` host over http on
+// `SITE_PORT`, and no deployed config may carry either
+// (apps/router/test/local-links.test.ts). Added to files that already exist
+// too, since an older clone's predate them.
+const LOCAL_SITES = [
+  [API_DEV_VARS, ["SITE_HOST_SUFFIX=.reme.localhost", "SITE_PORT=3004"]],
+  [
+    ORCHESTRATOR_DEV_VARS,
+    ["SITE_HOST_SUFFIX=.reme.localhost", "SITE_PORT=3004"],
+  ],
+  [ROUTER_DEV_VARS, ["SITE_HOST_SUFFIX=.reme.localhost"]],
+]
+for (const [path, lines] of LOCAL_SITES) {
+  const held = readFileSync(path, "utf8")
+  const keys = new Set(held.split("\n").map((line) => line.split("=")[0]))
+  const missing = lines.filter((line) => !keys.has(line.split("=")[0]))
+  if (!missing.length) continue
+  const joiner = held === "" || held.endsWith("\n") ? "" : "\n"
+  writeFileSync(path, `${held}${joiner}${missing.join("\n")}\n`)
+  ok(`${path} gained ${missing.map((line) => line.split("=")[0]).join(", ")}`)
 }
 
 if (process.env.NEON_OFFLINE === "1") {

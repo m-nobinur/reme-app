@@ -5,15 +5,20 @@ import {
   formatSiteRevision,
   isPreviewHost,
   REQUEST_FAILED,
+  RedirectPointer,
   SITE_PROBE_HEADER,
   SITE_REVISION_HEADER,
   SitePointer,
   SLUG,
+  siteHost,
 } from "@workspace/contracts"
 import {
+  activeDomainHost,
   deployments,
   logFailure,
   orgOpen,
+  orgs,
+  resolveDomainHost,
   resolveOrgBySlug,
   sql,
   tenancy,
@@ -42,6 +47,14 @@ import { getCookie, setCookie } from "hono/cookie"
 
 type Bindings = Env
 type App = { Bindings: Bindings }
+
+/** What `host:{hostname}` holds: a site to serve, or a host to send visitors on to. */
+const Pointer = SitePointer.or(RedirectPointer)
+type Pointer = SitePointer | RedirectPointer
+
+/** The zone every Reme hostname is in. Any other host reaches the router as an owner's custom domain (Cloudflare for SaaS). */
+const ZONE = "remeai.co.uk"
+const inZone = (host: string) => host === ZONE || host.endsWith(`.${ZONE}`)
 
 const NO_STORE = { "cache-control": "no-store" }
 
@@ -95,9 +108,16 @@ const serviceHosts = (env: Env) =>
  */
 const passThrough = (c: Context<App>) => fetch(c.req.raw)
 
-/** A host in the zone that no site here claims: another name's, or nobody's. */
+/**
+ * A host no site here claims. In the zone it is another name's, or nobody's;
+ * outside it, behind production's route for every host, it is a custom
+ * hostname with no pointer, and handing it back would fetch the `100::`
+ * fallback origin, so it is 404.
+ */
 const unserved = (c: Context<App>) =>
-  serviceHosts(c.env).size > 0 ? passThrough(c) : notHere(c)
+  serviceHosts(c.env).size > 0 && inZone(new URL(c.req.url).hostname)
+    ? passThrough(c)
+    : notHere(c)
 
 /**
  * Hashed assets are immutable; everything else is revalidated on every
@@ -244,55 +264,107 @@ async function serve(
   c: Context<App>,
   host: string | null,
   key: string,
-  headers: Headers
+  headers: Headers,
+  // The slug host the build baked in and the custom domain to name instead.
+  rewrite?: { from: string; to: string }
 ): Promise<Response> {
-  const found = await fromR2(c, host, key, c.req.header("if-none-match"))
+  // A rewritten body is its own representation, so its validator is the
+  // file's, made weak and suffixed with the host; the file's own is what the
+  // cache matches.
+  const mark = rewrite ? `:${rewrite.to}"` : ""
+  let asked = c.req.header("if-none-match")
+  if (rewrite) {
+    asked =
+      asked?.startsWith("W/") && asked.endsWith(mark)
+        ? `${asked.slice(2, -mark.length)}"`
+        : undefined
+  }
+  const found = await fromR2(c, host, key, asked)
   if (!found) return notHere(c)
   const etag = found.headers.get("etag")
-  if (etag) headers.set("etag", etag)
+  if (etag) {
+    headers.set("etag", rewrite ? `W/${etag.replace(/"$/, mark)}` : etag)
+  }
   const bodiless = c.req.method === "HEAD" || found.status === 304
   // On a miss the body is one half of a tee whose other half fills the cache;
   // left unread it would be buffered whole. Not awaited: a tee's cancel
   // settles only when both halves are done, and the other is still filling.
   if (bodiless) found.body?.cancel().catch(() => undefined)
-  return new Response(bodiless ? null : found.body, {
-    status: found.status,
-    headers,
-  })
+  // shortcut: the page is read whole to rewrite it; a site's .html, .xml and
+  // .txt are kilobytes. Stream with a carry-over if one ever is not.
+  const body = bodiless
+    ? null
+    : rewrite
+      ? (await found.text()).replaceAll(
+          `https://${rewrite.from}`,
+          `https://${rewrite.to}`
+        )
+      : found.body
+  return new Response(body, { status: found.status, headers })
 }
 
 /**
- * The pointer Postgres would give for a host: the org the slug names, read
- * the way the console resolves one, then its newest deployment under that
- * org's own row security. Null for a slug no business holds or a site that
- * was never published, and `closed` for an org whose owner deleted their
- * account, published or not. Read on a KV miss only, so the hot path never
- * opens a connection.
+ * The pointer Postgres would give for a host. A slug host is the org the slug
+ * names, read the way the console resolves one; any other host is an active
+ * custom domain, through `resolve_domain_host`. Then, under that org's own row
+ * security, its newest deployment. A slug host whose org has an active domain
+ * redirects to it, so an evicted KV key never puts the site back on the old
+ * address, and a domain's other host redirects to its primary. Null for a
+ * name nobody holds or a site never published, and `closed` for an org whose
+ * owner deleted their account, published or not. Read on a KV miss only, so
+ * the hot path never opens a connection.
  */
 async function pointerFromTruth(
   c: Context<App>,
   host: string
-): Promise<SitePointer | "closed" | null> {
-  const slug = host.slice(0, -c.env.SITE_HOST_SUFFIX.length)
+): Promise<Pointer | "closed" | null> {
+  const suffix = c.env.SITE_HOST_SUFFIX
+  const bySlug = host.endsWith(suffix)
   const kit = tenancy(c.env.HYPERDRIVE.connectionString)
   try {
-    const orgId = await resolveOrgBySlug(kit, slug)
+    const domain = bySlug ? null : await resolveDomainHost(kit, host)
+    if (domain && domain.primaryHost !== host) {
+      return RedirectPointer.parse({ redirect_to: domain.primaryHost })
+    }
+    const orgId = bySlug
+      ? await resolveOrgBySlug(kit, host.slice(0, -suffix.length))
+      : (domain?.orgId ?? null)
     if (!orgId) return null
-    const row = await kit.withOrg({ orgId }, async (db) => {
+    const found = await kit.withOrg({ orgId }, async (db) => {
       if (!(await orgOpen(db))) return "closed" as const
+      const redirectTo = bySlug ? await activeDomainHost(db) : null
+      if (redirectTo) return { redirectTo }
       const [newest] = await db
         .select()
         .from(deployments)
         .orderBy(sql`${deployments.configVersion} desc`)
         .limit(1)
-      return newest ?? null
+      if (!newest) return null
+      // The slug host the build baked in, which a custom domain's pages are
+      // rewritten from.
+      const [org] = domain
+        ? await db
+            .select({ slug: orgs.slug })
+            .from(orgs)
+            .where(sql`${orgs.id} = ${orgId}`)
+        : []
+      return { newest, slug: org?.slug ?? null }
     })
-    if (row === "closed" || !row) return row
+    if (found === "closed" || !found) return found
+    if ("redirectTo" in found) {
+      return RedirectPointer.parse({ redirect_to: found.redirectTo })
+    }
     return SitePointer.parse({
       org_id: orgId,
-      site_id: row.siteId,
-      revision_id: row.revisionId,
-      config_version: row.configVersion,
+      site_id: found.newest.siteId,
+      revision_id: found.newest.revisionId,
+      config_version: found.newest.configVersion,
+      ...(domain && found.slug
+        ? {
+            canonical_host: domain.primaryHost,
+            origin_host: siteHost(found.slug, suffix),
+          }
+        : {}),
     })
   } finally {
     await later(c, kit.close())
@@ -327,17 +399,17 @@ const app = new Hono<App>()
 
 // Answered before any binding is read. A service hostname is checked first,
 // because on production every one of them also ends in `SITE_HOST_SUFFIX` and
-// would otherwise be read as a tenant host. What is left is a host this
-// environment does not serve: the zone apex among them, which ends in the
-// suffix for nobody.
+// would otherwise be read as a tenant host. A host in the zone that is not a
+// site name is one this environment does not serve: the zone apex among them,
+// which ends in the suffix for nobody. A host outside the zone goes on to its
+// `host:` pointer as a custom domain.
 app.use("*", async (c, next) => {
   const host = new URL(c.req.url).hostname
+  const suffix = c.env.SITE_HOST_SUFFIX
   if (serviceHosts(c.env).has(host)) return passThrough(c)
-  if (!host.endsWith(c.env.SITE_HOST_SUFFIX)) return unserved(c)
+  if (!host.endsWith(suffix)) return inZone(host) ? unserved(c) : next()
   // A name with a dot in it, or one no business could hold, costs nothing.
-  if (!SLUG.test(host.slice(0, -c.env.SITE_HOST_SUFFIX.length))) {
-    return unserved(c)
-  }
+  if (!SLUG.test(host.slice(0, -suffix.length))) return unserved(c)
   return next()
 })
 
@@ -372,6 +444,10 @@ app.get("/open", async (c) => {
   return c.redirect("/", 302)
 })
 
+// The catch-all, and the redirect pointer inside it, stay last: a route for a
+// specific path (the Search Console plan's `/google*.html` and IndexNow key)
+// goes above this line, so it answers on every host an org holds, a host that
+// redirects included, where a 301 would cost the owner their verification.
 app.on(["GET", "HEAD"], "*", async (c) => {
   const url = new URL(c.req.url)
   const host = url.hostname
@@ -408,14 +484,15 @@ app.on(["GET", "HEAD"], "*", async (c) => {
     )
   }
   // KV is the cache and Postgres the truth (§11.1.3): a miss reads the
-  // newest deployment for the org the slug names and writes the pointer
-  // back, unless the org is closed, which answers 410 and writes nothing. A
-  // pointer that does not parse is our bug and is logged as one, and the
-  // visitor still sees the same 404.
+  // newest deployment for the org the slug or the custom domain names, or the
+  // redirect a domain makes, and writes the pointer back, unless the org is
+  // closed, which answers 410 and writes nothing. A pointer that does not
+  // parse is our bug and is logged as one, and the visitor still sees the
+  // same 404.
   const raw = await c.env.ROUTES.get(`host:${host}`, "json")
-  let pointer: SitePointer | null = null
+  let pointer: Pointer | null = null
   if (raw !== null) {
-    const parsed = SitePointer.safeParse(raw)
+    const parsed = Pointer.safeParse(raw)
     if (!parsed.success) {
       console.error(JSON.stringify({ host, code: "pointer.malformed" }))
       return notHere(c)
@@ -431,7 +508,7 @@ app.on(["GET", "HEAD"], "*", async (c) => {
     // that holds against made-up names, each of which is new to the first.
     const known = await edge()?.match(edgeKey(host, "pointer"))
     if (known) {
-      pointer = SitePointer.parse(await known.json())
+      pointer = Pointer.parse(await known.json())
     } else {
       if (await edge()?.match(edgeKey(host, "nobody"))) return unserved(c)
       if (await edge()?.match(edgeKey(host, "closed"))) return gone(c)
@@ -456,6 +533,14 @@ app.on(["GET", "HEAD"], "*", async (c) => {
   // this name. On production that is another name's request (issue #90); a
   // pointer that resolves and a file that does not is this site's 404, below.
   if (!pointer) return unserved(c)
+  if ("redirect_to" in pointer) {
+    // Revalidated like a page, so a browser drops it once the domain goes.
+    c.header("cache-control", "no-cache")
+    return c.redirect(
+      `https://${pointer.redirect_to}${url.pathname}${url.search}`,
+      301
+    )
+  }
   const found = await manifestFor(c, host, pointer)
   if (!found) return notHere(c)
   const file = resolveSitePath(url.pathname, found.manifest.files)
@@ -474,7 +559,13 @@ app.on(["GET", "HEAD"], "*", async (c) => {
   ) {
     headers.set(SITE_REVISION_HEADER, formatSiteRevision(pointer))
   }
-  return serve(c, host, `${found.base}dist/${file}`, headers)
+  // `astro build --site` baked the slug host into canonicals, `og:url`, the
+  // sitemap and robots; on a custom domain those name the domain instead
+  // (ADR-032). One exact origin string, so nothing else on the page moves.
+  const { origin_host: from, canonical_host: to } = pointer
+  const rewrite =
+    from && to && /\.(html|xml|txt)$/.test(file) ? { from, to } : undefined
+  return serve(c, host, `${found.base}dist/${file}`, headers, rewrite)
 })
 
 app.notFound(notHere)

@@ -1,7 +1,14 @@
-import { type Context, createModels } from "@earendil-works/pi-ai"
+import {
+  type Context,
+  createInitialSystemMessage,
+  createModels,
+  type Message,
+} from "@earendil-works/pi-ai"
 import { describe, expect, it } from "vitest"
+import { registeredCap, withOutputCap } from "../src/caps.ts"
 import { FacadeError } from "../src/errors.ts"
 import { HOST_ROUTING } from "../src/models/price.ts"
+import { modelRouting, outputCaps } from "../src/spec.ts"
 import {
   buildProviders,
   outboundUrl,
@@ -149,12 +156,17 @@ async function call(
   id = "deepseek/deepseek-v4.1-flash",
   context: Context = {
     messages: [{ role: "user", content: "Say ready", timestamp: 0 }],
-  }
+  },
+  extra: {
+    caps?: Record<string, number>
+    reasoning?: "low" | "medium" | "high"
+  } = {}
 ) {
   const models = createModels()
   for (const provider of buildProviders(
     { OPENROUTER_API_KEY: "or-key" },
-    "direct:openrouter"
+    "direct:openrouter",
+    extra.caps
   )) {
     models.setProvider(provider)
   }
@@ -162,9 +174,12 @@ async function call(
   if (!model) throw new Error("model did not resolve")
   const sent: Record<string, unknown>[] = []
   const headers: Headers[] = []
-  const reply = await models.complete(model, context, {
+  // flue's loop calls the simple API, whose `reasoning` is the thinking level.
+  const run = extra.reasoning ? models.completeSimple : models.complete
+  const reply = await run.call(models, model, context, {
     // As flue's agent loop calls it: a session id, no cache retention.
     sessionId: "build-1",
+    ...(extra.reasoning ? { reasoning: extra.reasoning } : {}),
     fetch: async (_input, init) => {
       sent.push(JSON.parse(String(init?.body)))
       headers.push(new Headers(init?.headers))
@@ -261,5 +276,87 @@ describe("an OpenRouter call's prompt cache", () => {
   it("marks nothing for a model whose host caches on its own", async () => {
     const { sent } = await call(undefined, undefined, context)
     expect(JSON.stringify(sent[0])).not.toContain("cache_control")
+  })
+})
+
+describe("a role's effort and output cap on the wire", () => {
+  const spec = modelRouting({}, "A")
+  const caps = outputCaps(spec)
+  const sonnet = "anthropic/claude-sonnet-5.5"
+  const haiku = "anthropic/claude-haiku-5.5"
+
+  it("sends the role's effort as reasoning.effort and no reasoning.max_tokens", async () => {
+    const { sent } = await call(undefined, sonnet, undefined, {
+      caps,
+      reasoning: "medium",
+    })
+    expect(sent[0]?.reasoning).toEqual({ effort: "medium" })
+  })
+
+  it("applies the routing table's cap to a call that sets none", async () => {
+    const big = await call(undefined, sonnet, undefined, { caps })
+    expect(big.sent[0]?.max_completion_tokens).toBe(32_000)
+    const small = await call(undefined, haiku, undefined, { caps })
+    expect(small.sent[0]?.max_completion_tokens).toBe(8_000)
+    const none = await call(undefined, sonnet)
+    expect(none.sent[0]?.max_completion_tokens).toBeUndefined()
+  })
+
+  it("gives a subagent its own role's cap, found by the instructions its system prompt starts with", async () => {
+    // The leading system message flue's agent loop seeds from its prompt.
+    const asked = (systemPrompt: string): Context => ({
+      messages: [
+        createInitialSystemMessage(systemPrompt, []) as Message,
+        { role: "user", content: "Go", timestamp: 0 },
+      ],
+    })
+    // As the agent registers them, and as flue composes the prompt: the
+    // instructions first, then the catalog of agents and the date.
+    const lead = withOutputCap("You lead the build of a site.", 32_000)
+    const page = withOutputCap("You build one page.", 16_000)
+    const copyWriter = withOutputCap("You write the site's copy.", 8_000)
+    const extras = "\n\n## Available Agents\n\n- **page**\n\nDate: Wed, Oct 14"
+    const cap = async (id: string, prompt: string) =>
+      (await call(undefined, id, asked(prompt + extras), { caps })).sent[0]
+        ?.max_completion_tokens
+
+    // Both Sonnet: the table's per-model cap is 32k, so only the prompt says 16k.
+    expect(caps[sonnet]).toBe(32_000)
+    expect(await cap(sonnet, lead)).toBe(32_000)
+    expect(await cap(sonnet, page)).toBe(16_000)
+    expect(await cap(haiku, copyWriter)).toBe(8_000)
+    // A prompt nobody registered keeps the model's cap, and an explicit one wins.
+    expect(await cap(sonnet, "Some other agent.")).toBe(32_000)
+  })
+
+  it("takes the longest registered prompt a call's starts with, and forgets the oldest past sixteen", async () => {
+    const messages = (prompt: string) =>
+      [{ role: "system", content: prompt }] as Message[]
+    withOutputCap("Shared start.", 1_000)
+    withOutputCap("Shared start. And more of it.", 2_000)
+    expect(registeredCap(messages("Shared start. And more of it. Plus"))).toBe(
+      2_000
+    )
+    expect(registeredCap(messages("Shared start. Different."))).toBe(1_000)
+    expect(registeredCap([{ role: "user", content: "x", timestamp: 0 }])).toBe(
+      undefined
+    )
+    for (let i = 0; i < 16; i++) withOutputCap(`Filler ${i}.`, 5)
+    expect(registeredCap(messages("Shared start."))).toBeUndefined()
+    expect(registeredCap(messages("Filler 15."))).toBe(5)
+  })
+
+  it("never sets provider.order on a cached model and skips hosts without structured outputs", async () => {
+    const { sent } = await call(undefined, sonnet, undefined, { caps })
+    const provider = sent[0]?.provider as {
+      order?: unknown
+      ignore: string[]
+      data_collection: string
+    }
+    expect(provider.order).toBeUndefined()
+    expect(provider.ignore).toEqual(
+      expect.arrayContaining(["z-ai", "amazon-bedrock", "claude-on-aws"])
+    )
+    expect(provider.data_collection).toBe("deny")
   })
 })

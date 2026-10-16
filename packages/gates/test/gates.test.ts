@@ -9,10 +9,12 @@ import {
   checkBuild,
   checkContent,
   checkLinks,
+  checkPlannedPages,
   checkStructuredData,
   checkTypes,
   factsForContent,
   HIDDEN_FACTS_KEY,
+  limit,
   parsePage,
   runGates,
 } from "../src/index.ts"
@@ -59,6 +61,7 @@ const LD = JSON.stringify({
   "@context": "https://schema.org",
   "@type": "LocalBusiness",
   name: "BrightClean",
+  url: "https://brightclean.example/",
   telephone: "+15550142",
   email: "hello@brightclean.invalid",
 })
@@ -113,6 +116,18 @@ describe("the content gate", () => {
     ).toBe(true)
     expect(
       checkContent(pages(home("<p>Call 07700 900124</p>")), facts).passed
+    ).toBe(false)
+  })
+
+  it("reads a US number shown nationally as its E.164 fact", () => {
+    const facts = [...FACTS, fact("business.phone_us", "+12065550104")]
+    for (const shown of ["(206) 555-0104", "206-555-0104", "+1 206 555 0104"])
+      expect(
+        checkContent(pages(home(`<p>Call ${shown}</p>`)), facts).passed,
+        shown
+      ).toBe(true)
+    expect(
+      checkContent(pages(home("<p>Call (206) 555-0105</p>")), facts).passed
     ).toBe(false)
   })
 
@@ -275,6 +290,27 @@ describe("the structured data gate", () => {
     )
   })
 
+  it("fails a LocalBusiness, WebSite or Service without its url, so a lead cannot pass by deleting it", () => {
+    for (const type of ["LocalBusiness", "WebSite", "Service"]) {
+      const ld = (extra: Record<string, unknown>) =>
+        JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": type,
+          name: "BrightClean",
+          ...extra,
+        })
+      expect(
+        checkStructuredData(
+          pages(home(undefined, ld({ url: "https://brightclean.example/" })))
+        ).passed,
+        type
+      ).toBe(true)
+      const result = checkStructuredData(pages(home(undefined, ld({}))))
+      expect(result.passed, type).toBe(false)
+      expect(result.message).toContain("without url")
+    }
+  })
+
   it("fails JSON that does not parse, a missing context, an unknown type or a missing name", () => {
     for (const ld of [
       "{not json",
@@ -371,6 +407,51 @@ describe("the build gate", () => {
   })
 })
 
+describe("the planned pages", () => {
+  const plan = (...ids: string[]) =>
+    ({ pages: ids.map((page) => ({ page, sections: [] })) }) as never
+
+  it("passes with every planned page built at its starter path", () => {
+    expect(
+      checkPlannedPages(plan("home", "service_area", "quote"), {
+        "index.html": "x",
+        "service-area/index.html": "x",
+        "quote/index.html": "x",
+      })
+    ).toBeNull()
+  })
+
+  it("counts the service pages: one or more under services/ when the plan has them", () => {
+    const files = { "index.html": "x", "services/index.html": "x" }
+    const result = checkPlannedPages(plan("home", "services", "service"), files)
+    expect(result).toMatchObject({ passed: false, offending_node: "service" })
+    expect(result?.message).toContain("restore src/pages/services/[slug].astro")
+    expect(
+      checkPlannedPages(plan("home", "services", "service"), {
+        ...files,
+        "services/deep-clean/index.html": "x",
+        "services/weekly-clean/index.html": "x",
+      })
+    ).toBeNull()
+  })
+
+  it("fails the build gate naming each planned page the build lacks and its file", () => {
+    const result = checkPlannedPages(
+      plan("home", "services", "contact", "service_area"),
+      FILES
+    )
+    expect(result).toMatchObject({
+      gate: "build",
+      passed: false,
+      offending_node: "services",
+    })
+    expect(result?.message).toContain(
+      "restore src/pages/services.astro, src/pages/service-area.astro"
+    )
+    expect(GateResult.parse(result)).toEqual(result)
+  })
+})
+
 describe("the types gate", () => {
   const report = (checks: CompletionReport["checks"]) =>
     ({ checks }) as CompletionReport
@@ -409,7 +490,8 @@ describe("all the gates", () => {
     const body = new TextEncoder().encode(home())
     const contactBody = new TextEncoder().encode(contact)
     const hash = (b: Uint8Array) => createHash("sha256").update(b).digest("hex")
-    const results = await runGates({
+    const timings: Record<string, number> = {}
+    const input = {
       manifest: {
         revision_id: ORG,
         site_id: ORG,
@@ -422,17 +504,33 @@ describe("all the gates", () => {
         },
         built_at: AT,
       },
-      read: async (file) =>
+      read: async (file: string) =>
         file === "index.html"
           ? body
           : file === "contact/index.html"
             ? contactBody
             : null,
       report: {
-        checks: [{ check: "astro check", exit_code: 0, output_key: null }],
+        checks: [
+          { check: "astro check", exit_code: 0, output_key: null },
+          { check: "axe", exit_code: 0, output_key: null },
+          { check: "custom sections", exit_code: 0, output_key: null },
+        ],
       } as CompletionReport,
+      budget: { limit: 102_400 },
       facts: FACTS,
-    })
+    }
+    const results = await runGates({ ...input, timings })
+    expect(Object.keys(timings).sort()).toEqual([
+      "build",
+      "claims",
+      "content",
+      "copy",
+      "links",
+      "read",
+      "size",
+      "structured_data",
+    ])
     expect(results.map((r) => r.gate)).toEqual([
       "build",
       "types",
@@ -440,8 +538,167 @@ describe("all the gates", () => {
       "structured_data",
       "content",
       "claims",
+      "copy",
+      "a11y",
+      "size",
     ])
     for (const r of results) expect(GateResult.parse(r)).toEqual(r)
     expect(results.every((r) => r.passed)).toBe(true)
+    // The Blueprint reaches the claims gate: a generated team photo fails it.
+    const planned = await runGates({
+      ...input,
+      plan: {
+        images: [
+          {
+            id: "team",
+            page: "home",
+            section: "about",
+            aspect: "4:3",
+            resolution: "1K",
+            subject: "a cleaner",
+            alt: "A cleaner",
+            source: "generated",
+          },
+        ],
+        pages: [
+          {
+            page: "home",
+            sections: [
+              {
+                kind: "about",
+                variant: "default",
+                purpose: "x",
+                content_notes: null,
+              },
+            ],
+          },
+        ],
+      } as never,
+    })
+    expect(planned.find((r) => r.gate === "claims")?.offending_node).toContain(
+      "images.team"
+    )
+    // The copy gate reads the pages only on a planned build.
+    expect(results.find((r) => r.gate === "copy")?.message).toContain(
+      "not a planned first build"
+    )
+    expect(planned.find((r) => r.gate === "copy")?.message).not.toContain(
+      "not a planned first build"
+    )
+    // The Blueprint reaches the build gate too: a planned page the lead
+    // deleted fails it, so the repair puts it back.
+    expect(planned[0]).toMatchObject({ gate: "build", passed: true })
+    const deleted = await runGates({
+      ...input,
+      plan: {
+        images: [],
+        pages: ["home", "contact", "about"].map((page) => ({
+          page,
+          sections: [],
+        })),
+      } as never,
+    })
+    expect(deleted[0]).toMatchObject({
+      gate: "build",
+      passed: false,
+      offending_node: "about",
+    })
+  })
+  it("reads every file once, a page the build gate hashes and the pages share included, a few at a time", async () => {
+    const bodies: Record<string, Uint8Array> = {
+      "index.html": new TextEncoder().encode(home()),
+    }
+    for (let i = 0; i < 20; i++)
+      bodies[`img/${i}.png`] = new TextEncoder().encode(`image ${i}`)
+    const hash = (b: Uint8Array) => createHash("sha256").update(b).digest("hex")
+    const reads: string[] = []
+    let inFlight = 0
+    let peak = 0
+    const results = await runGates({
+      manifest: {
+        revision_id: ORG,
+        site_id: ORG,
+        org_id: ORG,
+        routes: [],
+        headers: {},
+        files: Object.fromEntries(
+          Object.entries(bodies).map(([f, b]) => [f, hash(b)])
+        ),
+        built_at: AT,
+      },
+      read: async (file) => {
+        reads.push(file)
+        peak = Math.max(peak, ++inFlight)
+        await new Promise((r) => setTimeout(r, 1))
+        inFlight--
+        return bodies[file] ?? null
+      },
+      report: {
+        checks: [
+          { check: "astro check", exit_code: 0, output_key: null },
+          { check: "axe", exit_code: 0, output_key: null },
+          { check: "custom sections", exit_code: 0, output_key: null },
+        ],
+      } as CompletionReport,
+      budget: { limit: 102_400 },
+      facts: FACTS,
+    })
+    expect(results[0]).toMatchObject({ gate: "build", passed: true })
+    expect([...reads].sort()).toEqual(Object.keys(bodies).sort())
+    expect(peak).toBeLessThanOrEqual(8)
+  })
+
+  it("names the first failing file in manifest order, whichever read finishes first", async () => {
+    const good = new TextEncoder().encode("ok")
+    const hash = createHash("sha256").update(good).digest("hex")
+    const result = await checkBuild(
+      {
+        revision_id: ORG,
+        site_id: ORG,
+        org_id: ORG,
+        routes: [],
+        headers: {},
+        files: {
+          "index.html": hash,
+          "a.css": "0".repeat(64),
+          "b.css": "1".repeat(64),
+        },
+        built_at: AT,
+      },
+      async (file) => {
+        // The later file answers first.
+        await new Promise((r) => setTimeout(r, file === "b.css" ? 1 : 10))
+        return good
+      }
+    )
+    expect(result).toMatchObject({ passed: false, offending_node: "a.css" })
+  })
+})
+
+describe("the limiter", () => {
+  it("never runs more than its limit, and runs every task", async () => {
+    const run = limit(3)
+    let active = 0
+    let peak = 0
+    const done = await Promise.all(
+      Array.from({ length: 12 }, (_, i) =>
+        run(async () => {
+          peak = Math.max(peak, ++active)
+          await new Promise((r) => setTimeout(r, 1))
+          active--
+          return i
+        })
+      )
+    )
+    expect(peak).toBe(3)
+    expect(done).toEqual(Array.from({ length: 12 }, (_, i) => i))
+  })
+
+  it("frees the slot of a task that throws", async () => {
+    const run = limit(1)
+    await expect(
+      run(async () => Promise.reject(new Error("no")))
+    ).rejects.toThrow("no")
+    expect(await run(async () => "next")).toBe("next")
   })
 })

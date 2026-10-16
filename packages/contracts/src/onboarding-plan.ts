@@ -1,7 +1,12 @@
 import { z } from "zod"
 import { ChoiceStep, DetailsStep } from "./chat.ts"
 import { QuoteFields } from "./onboarding.ts"
-import { FactValue, type FactValueKey } from "./owner.ts"
+import {
+  FactValue,
+  type FactValueKey,
+  REVIEW_FACT_KEYS,
+  type ReviewFactKey,
+} from "./owner.ts"
 import { Text } from "./text.ts"
 
 /**
@@ -14,15 +19,18 @@ import { Text } from "./text.ts"
 
 /**
  * The facts the planner may state from the owner's words. Photos arrive
- * only through `POST /assets`, and the quote form only through the owner's
- * confirmation of a proposal, so neither is here.
+ * only through `POST /assets`, the quote form only through the owner's
+ * confirmation of a proposal, and a review only through `record_review`'s
+ * card, so none of them is here.
  */
 export const PLAN_FACT_KEYS = FactValue.options
   .map((o) => o.shape.key.value)
-  .filter((key) => key !== "media.uploads" && key !== "quote.form") as Exclude<
-  FactValueKey,
-  "media.uploads" | "quote.form"
->[]
+  .filter(
+    (key) =>
+      key !== "media.uploads" &&
+      key !== "quote.form" &&
+      !(REVIEW_FACT_KEYS as readonly string[]).includes(key)
+  ) as Exclude<FactValueKey, "media.uploads" | "quote.form" | ReviewFactKey>[]
 export type PlanFactKey = (typeof PLAN_FACT_KEYS)[number]
 
 /**
@@ -84,6 +92,11 @@ export const PlanNext = z.discriminatedUnion("kind", [
     preselected: z.array(Text(40)).max(16),
     initial: z.array(Text(40)).max(4),
   }),
+  /**
+   * The design tray: palette, lettering, page arrangement and pages as four
+   * questions, replacing the template, palette, font and pages cards.
+   */
+  z.strictObject({ kind: z.literal("ask_design") }),
   /** A form for one fact, such as a phone number. */
   z.strictObject({
     kind: z.literal("ask_fact"),

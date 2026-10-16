@@ -14,7 +14,21 @@
     "check:drift": "pnpm manifests && git diff --exit-code -- manifests.json src/components"
   },
   "dependencies": {
-    "astro": "7.3.2"
+    "@fontsource/cormorant-garamond": "5.3.0",
+    "@fontsource/dm-sans": "5.3.0",
+    "@fontsource/figtree": "5.3.0",
+    "@fontsource/fraunces": "5.3.0",
+    "@fontsource/instrument-serif": "5.3.0",
+    "@fontsource/inter": "5.3.0",
+    "@fontsource/manrope": "5.3.0",
+    "@fontsource/newsreader": "5.3.0",
+    "@fontsource/outfit": "5.3.0",
+    "@fontsource/plus-jakarta-sans": "5.3.0",
+    "@fontsource/sora": "5.3.0",
+    "@fontsource/syne": "5.3.0",
+    "@fontsource/work-sans": "5.3.0",
+    "astro": "7.3.2",
+    "sharp": "0.35.4"
   },
   "devDependencies": {
     "@astrojs/check": "0.9.10",
@@ -32,6 +46,9 @@
     "./site-config": "./src/site-config.ts",
     "./brand": "./src/brand.ts",
     "./copy-check": "./src/copy-check.ts",
-    "./manifests.json": "./manifests.json"
+    "./icons": "./src/icons.ts",
+    "./manifests.json": "./manifests.json",
+    "./size-budget.json": "./size-budget.json",
+    "./directions.json": "./src/directions.json"
   }
 }

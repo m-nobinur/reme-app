@@ -184,3 +184,62 @@ export async function uploadAssets(
   const body: UploadedAssets = { assets: made.map((m) => m.asset) }
   return Response.json(body, { status: 201 })
 }
+
+/** The thumbnail's width in pixels, about three times its tile for sharp screens. */
+const THUMB_WIDTH = 320
+
+/** The types a generated photo is stored as, most likely first. */
+const PHOTO_EXTENSIONS = ["png", "webp", "jpg"] as const
+
+/**
+ * `GET /photos/{asset id}`: one generated photo of the caller's org, for the
+ * panel's thumbnails and the review card. The key starts with the session's
+ * own org, so another org's id is a miss like any other: 404, saying nothing
+ * about whether it exists. The id is the picture's hash, so the bytes behind
+ * it never change and the answer is cached for good, privately.
+ *
+ * The answer is a 320 px WebP made by the Images binding: the originals are
+ * about 2 MB and the tiles show them about 100 px wide. Without the binding,
+ * or if it refuses the bytes, the original is served instead.
+ *
+ * shortcut: re-made on every uncached request (billed once per image a
+ * month); store it beside the original if that cost or latency shows.
+ */
+export async function readPhoto(
+  env: Env,
+  owner: Owner,
+  assetId: string
+): Promise<Response> {
+  for (const ext of PHOTO_EXTENSIONS) {
+    const object = await env.SITES.get(
+      `generated/${owner.orgId}/${assetId}.${ext}`
+    )
+    if (!object) continue
+    const headers = {
+      "cache-control": "private, max-age=31536000, immutable",
+      "x-content-type-options": "nosniff",
+    }
+    const [forThumb, original] = object.body.tee()
+    const thumb = await env.IMAGES?.input(forThumb)
+      .transform({ width: THUMB_WIDTH })
+      .output({ format: "image/webp", quality: 75 })
+      .catch(() => null)
+    if (thumb) {
+      return new Response(thumb.image(), {
+        headers: { ...headers, "content-type": thumb.contentType() },
+      })
+    }
+    return new Response(original, {
+      headers: {
+        ...headers,
+        "content-type": object.httpMetadata?.contentType ?? `image/${ext}`,
+      },
+    })
+  }
+  return failure(404, {
+    class: "resource",
+    code: "photo.not_found",
+    message: "No photo with that id in this business.",
+    detail: {},
+  })
+}

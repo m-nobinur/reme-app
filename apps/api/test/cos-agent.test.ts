@@ -1,6 +1,7 @@
 import {
+  ChangeKind,
   ChatRequest,
-  type COS_TOOLS,
+  COS_TOOLS,
   CosToolResult,
   CosTurn,
   CreateReminderRequest,
@@ -15,7 +16,9 @@ import {
   eq,
   events,
   failureCode,
+  postAssistantMessage,
   reminders,
+  serverMessageId,
   sql,
   type Tenancy,
   tenancy,
@@ -45,13 +48,14 @@ import {
   vi,
 } from "vitest"
 import type { z } from "zod"
-import { type ChatDeps, chat } from "../src/chat.ts"
+import { type ChatDeps, chat, NO_ANSWER } from "../src/chat.ts"
 import {
   activeTools,
   type CosAgent,
   contextOf,
   costOf,
   DEFAULT_MODEL,
+  DESCRIPTIONS,
   INSTRUCTIONS,
   knownZone,
   LIMITS,
@@ -59,7 +63,9 @@ import {
   openrouterModel,
   personaOf,
   priceOf,
+  ROUTES,
   reservation,
+  routeOf,
   SITE_CHANGE_LINE,
   stepCost,
   toolErrorText,
@@ -67,6 +73,7 @@ import {
 import { retrying } from "../src/cos/retry.ts"
 import { ToolFailed } from "../src/cos/tools.ts"
 import { DAILY_CAP_USD as CAP, GRACE_MS, withinCap } from "../src/cos/turns.ts"
+import kinds from "./cos-change-kinds.json" with { type: "json" }
 import recorded from "./cos-recorded-turn.json" with { type: "json" }
 import staging from "./cos-staging-turn.json" with { type: "json" }
 import {
@@ -280,6 +287,72 @@ describe("the CoS's instructions", () => {
   })
 })
 
+describe("the CoS's change kinds", () => {
+  it("has a recorded request_change call per kind, each of which the schema accepts and the tool description names", () => {
+    const schema = COS_TOOLS.request_change.input
+    expect(kinds.cases.map((c) => c.input.change_kind).sort()).toEqual(
+      [...ChangeKind.options].sort()
+    )
+    for (const c of kinds.cases) {
+      expect(schema.parse(c.input)).toEqual(c.input)
+      expect(DESCRIPTIONS.request_change).toMatch(
+        new RegExp(`${c.input.change_kind} (is|adds|replaces)`)
+      )
+    }
+  })
+
+  it("tells the model to quote the measured wait, not a fixed one", () => {
+    expect(INSTRUCTIONS).toContain("expected_seconds.quick.p50")
+    expect(INSTRUCTIONS).toContain("Never use a fixed time of your own")
+    // A quick edit can move to a longer build, so the time is never a promise.
+    expect(INSTRUCTIONS).toContain("Never promise that time")
+  })
+
+  it("carries expected_seconds and each build's lane in the workspace the model reads", () => {
+    const text = contextOf("act", {
+      site: { host: null, live_version: null },
+      questions: [],
+      approvals: [],
+      missing_facts: [],
+      builds: [
+        {
+          assignment_id: "3f2b9c1e-8a4d-4f6b-9c2a-1d5e7f8a9b0d",
+          kind: "site.revise",
+          state: "implementing",
+          lane: "quick",
+          goal: "Change the headline.",
+          version: null,
+        },
+      ],
+      expected_seconds: {
+        quick: { p50: 15, p95: 45 },
+        full: { p50: 180, p95: 330 },
+      },
+    }).text
+    expect(text).toContain('"expected_seconds":{"quick":{"p50":15')
+    expect(text).toContain('"lane":"quick"')
+  })
+})
+
+describe("the CoS's routing table", () => {
+  it("keeps every owner-waiting turn on the default model at default effort", () => {
+    expect(ROUTES.owner_turn).toMatchObject({
+      model: DEFAULT_MODEL,
+      effort: null,
+      path: "stream",
+      enabled: true,
+    })
+    expect(routeOf("owner_turn")).toBe(ROUTES.owner_turn)
+  })
+
+  it("records the card-click and deferred rows as not enabled, and falls back to the owner-turn route", () => {
+    expect(ROUTES.card_click).toMatchObject({ effort: "low", enabled: false })
+    expect(ROUTES.deferred).toMatchObject({ path: "batch", enabled: false })
+    expect(routeOf("card_click")).toBe(ROUTES.owner_turn)
+    expect(routeOf("deferred")).toBe(ROUTES.owner_turn)
+  })
+})
+
 describe("the CoS's model and price", () => {
   it("keeps the default model in the facade's list, with a price", () => {
     expect(ids).toContain(DEFAULT_MODEL)
@@ -483,6 +556,14 @@ describe("the CoS's model and price", () => {
     expect(activeTools("act")).toContain("create_reminder")
   })
 
+  it("reads a domain in Ask mode, and connects or removes one only in Act mode", () => {
+    expect(activeTools("ask")).toContain("check_domain")
+    for (const act of ["connect_domain", "remove_domain"] as const) {
+      expect(activeTools("ask")).not.toContain(act)
+      expect(activeTools("act")).toContain(act)
+    }
+  })
+
   it("labels a reminder call with the owner's words before it has an output", () => {
     const pending = {
       role: "assistant",
@@ -679,6 +760,8 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
         ...env(url as string),
         ORCHESTRATOR: stub,
         SITE_HOST_SUFFIX: SUFFIX,
+        STRIPE_SECRET_KEY: "sk_fixture",
+        STRIPE_WEBHOOK_SECRET: "whsec_fix",
       } as unknown as Env,
       kit,
       { orgId: who.orgId, session: session(who) },
@@ -755,6 +838,31 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     return { id: row?.id, ...(row?.content as object) } as UIMessage
   }
 
+  /**
+   * The new message the stream showed is the stored row, with the time the
+   * row was written, as a reload reads it. A continued message gets no time
+   * of its own: replaying it onto its row must give the row exactly.
+   */
+  const shownAsStored = async (
+    who: Owner,
+    conversationId: string,
+    chunks: UIMessageChunk[]
+  ) => {
+    const row = (await rowsOf(who, conversationId)).at(-1)
+    if (!row) throw new Error("the conversation holds no rows")
+    const { metadata, ...shown } = (await replay(
+      undefined,
+      chunks
+    )) as UIMessage
+    expect(plain(shown)).toStrictEqual(
+      plain({ id: row.id, ...(row.content as object) })
+    )
+    const { createdAt } = (metadata as { custom: { createdAt: string } }).custom
+    expect(
+      Math.abs(Date.parse(createdAt) - row.createdAt.getTime())
+    ).toBeLessThan(2000)
+  }
+
   const waiting = (message: UIMessage) =>
     message.parts.filter(
       (p) => "state" in p && p.state === "approval-requested"
@@ -766,6 +874,45 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
 
   /** Everything the model was sent, as one string. */
   const wire = (sent: CallOptions[]) => JSON.stringify(sent)
+
+  it("sends the model what the assistant posted on its own since the last turn, logged once", async () => {
+    const id = await conversation(me)
+    await turn(me, typed(id, "Connect my domain", "ask"), {
+      model: scripted(said("It's on its way.")).model,
+    })
+    const key = `live:${id}`
+    expect(
+      await postAssistantMessage(kit, {
+        orgId: me.orgId,
+        key,
+        message: {
+          text: ["brightclean.example is live."],
+          button: {
+            label: "Open it",
+            action: { kind: "open", url: "https://brightclean.example" },
+          },
+        },
+      })
+    ).toBe("posted")
+    const next = scripted(said("Glad it's up."))
+    await turn(me, typed(id, "Is it working?", "ask"), { model: next.model })
+    const sent = wire(next.sent)
+    expect(sent).toContain("brightclean.example is live.")
+    // Before the owner's question, as the chat showed it.
+    expect(sent.indexOf("brightclean.example is live.")).toBeLessThan(
+      sent.indexOf("Is it working?")
+    )
+    const again = scripted(said("Yes."))
+    await turn(me, typed(id, "Thanks", "ask"), { model: again.model })
+    expect(wire(again.sent)).toContain("brightclean.example is live.")
+    const posts = (await logOf(id)).filter(
+      (e) =>
+        e.type === "cos.message" &&
+        e.payload.message.id === serverMessageId(key)
+    )
+    expect(posts).toHaveLength(1)
+    expect(posts[0]?.taint).toEqual(["inferred"])
+  })
 
   it("answers a typed message and logs the turn, and the model never sees a tenancy id", async () => {
     const id = await conversation(me)
@@ -802,10 +949,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       "get_workspace",
     ])
     // The stored row is what the stream showed.
-    const tail = await tailOf(me, id)
-    expect(plain(await replay(undefined, done.chunks))).toStrictEqual(
-      plain(tail)
-    )
+    await shownAsStored(me, id, done.chunks)
   })
 
   it("gives Ask mode the read tools only", async () => {
@@ -815,7 +959,13 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     const names = (sent[0]?.tools ?? []).map(
       (t) => (t as { name: string }).name
     )
-    expect(names.sort()).toEqual(["get_facts", "get_preview", "get_workspace"])
+    expect(names.sort()).toEqual([
+      "check_domain",
+      "find_domain",
+      "get_facts",
+      "get_preview",
+      "get_workspace",
+    ])
   })
 
   it("asks the owner before every act tool, even with a value that parses as a fact", async () => {
@@ -1080,19 +1230,27 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     )
   })
 
-  it("falls back on a provider error before content, and ends with an error chunk after it", async () => {
+  it("answers one line, never a card, on a provider error before content, and ends with an error chunk after it", async () => {
     const id = await conversation(me)
-    const early = await turn(me, typed(id, "Change the header", "act"), {
-      model: scripted(new Error("upstream 500")).model,
-    })
-    expect(early.response.status, early.text).toBe(200)
-    expect(early.chunks.some((c) => c.type === "tool-approval-request")).toBe(
-      true
-    )
-    expect((await turnsOf(id)).at(-1)).toMatchObject({
-      outcome: "fallback",
-      reason: "provider",
-    })
+    // Live test 2026-10-16: Act mode's script turned "Hello" into a build card.
+    for (const [text, mode] of [
+      ["Change the header", "act"],
+      ["How is my site?", "ask"],
+    ] as const) {
+      const early = await turn(me, typed(id, text, mode), {
+        model: scripted(new Error("upstream 500")).model,
+      })
+      expect(early.response.status, early.text).toBe(200)
+      expect(early.chunks.some((c) => c.type.startsWith("tool-"))).toBe(false)
+      expect((await tailOf(me, id)).parts).toEqual([
+        { type: "step-start" },
+        { type: "text", text: NO_ANSWER, state: "done" },
+      ])
+      expect((await turnsOf(id)).at(-1)).toMatchObject({
+        outcome: "fallback",
+        reason: "provider",
+      })
+    }
 
     const late = await turn(me, typed(id, "Tell me more", "ask"), {
       model: scripted([
@@ -1393,6 +1551,102 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     ).toHaveLength(0)
     expect(plain(await replay(tail, done.chunks))).toStrictEqual(plain(after))
     await s.state(asking, "cancelled")
+  })
+
+  it("waits for the owner's yes before connect_domain and remove_domain, and reads check_domain without asking", async () => {
+    const id = await conversation(me)
+    const stub = stubOrchestrator()
+    const done = await turn(
+      me,
+      typed(id, "Put the site on sparkleclean.co.uk and check it."),
+      {
+        model: scripted(
+          calls(
+            {
+              id: "call_check",
+              tool: "check_domain",
+              input: { name: "sparkleclean.co.uk" },
+            },
+            {
+              id: "call_connect",
+              tool: "connect_domain",
+              input: { name: "sparkleclean.co.uk" },
+            },
+            {
+              id: "call_remove",
+              tool: "remove_domain",
+              input: { name: "old.example" },
+            }
+          )
+        ).model,
+      },
+      stub
+    )
+    expect(done.response.status, done.text).toBe(200)
+    // The check ran (this org holds no such domain, so it was refused here);
+    // the connect and the removal wait on their cards and nothing reached
+    // the orchestrator.
+    expect(waiting(await tailOf(me, id)).map((p) => p.type)).toEqual([
+      "tool-connect_domain",
+      "tool-remove_domain",
+    ])
+    expect(
+      done.chunks.filter((c) => c.type === "tool-approval-request")
+    ).toHaveLength(2)
+    expect(stub.calls).toHaveLength(0)
+  })
+
+  it("runs buy_domain without a card, keyed by its tool call, since paying in Checkout is the consent", async () => {
+    const id = await conversation(me)
+    const stub = stubOrchestrator(() =>
+      Response.json(
+        {
+          outcome: "awaiting_payment",
+          name: "sparkleclean.com",
+          price_gbp: 12,
+          checkout: "embedded",
+        },
+        { status: 201 }
+      )
+    )
+    const done = await turn(
+      me,
+      typed(id, "Yes, buy sparkleclean.com."),
+      {
+        model: scripted(
+          calls({
+            id: "call_buy",
+            tool: "buy_domain",
+            input: {
+              name: "sparkleclean.com",
+              registrant: {
+                name: "Jane Smith",
+                email: "jane@sparkle.invalid",
+                phone: "+447700900123",
+                address: {
+                  street: "12 Mill Lane",
+                  city: "Bristol",
+                  postal_code: "BS1 4AB",
+                  country_code: "GB",
+                },
+              },
+            },
+          }),
+          said("The card has the details; paying there buys it.")
+        ).model,
+      },
+      stub
+    )
+    expect(done.response.status, done.text).toBe(200)
+    expect(
+      done.chunks.filter((c) => c.type === "tool-approval-request")
+    ).toHaveLength(0)
+    expect(waiting(await tailOf(me, id))).toEqual([])
+    const [call] = stub.calls
+    expect(new URL(call?.request.url ?? "").pathname).toBe(
+      "/assignments/domains/buy"
+    )
+    expect(call?.request.headers.get("idempotency-key")).toBe("call_buy")
   })
 
   it("stores an approved reminder under the turn's conversation, zone and the CoS, keyed by its approval", async () => {
@@ -1738,9 +1992,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       )
     ).toContain("The owner wants a change")
     // The stored row matches what the owner saw.
-    expect(plain(await replay(undefined, first.chunks))).toStrictEqual(
-      plain(tail)
-    )
+    await shownAsStored(me, id, first.chunks)
 
     const [call] = waiting(tail)
     const { model, sent } = scripted(said("Started."))

@@ -1,108 +1,215 @@
 ---
-import { iconPath } from "../../icons"
-import { hasRoute, primaryAction } from "../../routes"
+import Photo from "../../layouts/Photo.astro"
+import SectionHead from "../../layouts/SectionHead.astro"
+import { hasPhoto } from "../../photo-files"
+import { hasRoute, primaryAction, serviceHref } from "../../routes"
 import { site } from "../../site-config"
-import { serviceItems as items } from "../../structured-data"
+import { serviceItems } from "../../structured-data"
 import ActionLink from "../ActionLink/ActionLink.astro"
 import Icon from "../Icon/Icon.astro"
 
 interface Props {
-  /** cards on home, sections on the services page. */
-  variant?: "cards" | "sections"
+  /** The pattern. alternating is the services page's own. photo_cards shows numbered_rows unless every service has a photo, and alternating off the services page unless one has. */
+  variant?:
+    | "photo_cards"
+    | "numbered_rows"
+    | "alternating"
+    | "fleet"
+    | "practice_list"
+  /** On a service's own page, the one service it shows by id: its detail, under the page's hero. */
+  only?: string
 }
 
-const { variant = "cards" } = Astro.props
-// With a services page, each card's name links to its own section there and
-// the whole card answers the pointer; without one the cards are plain.
-const linked = hasRoute("/services/")
+const { variant: asked = "photo_cards", only } = Astro.props
+const items = serviceItems
+  .filter((item) => !only || item.id === only)
+  .map((item) => ({
+    ...item,
+    photo: item.image.alt && hasPhoto(item.image.src) ? item.image : null,
+  }))
+const onServices = Astro.url.pathname === "/services/"
+// A pattern built on pictures, with none to show, is one icon card three times
+// over: numbered rows carry the same services as a list. Cards need a photo
+// each; the services page keeps its detail rows either way, as the one place
+// the full lists live.
+// A service's own page always shows its detail row: the includes and who-it-suits
+// blocks live only there, and any other pattern would drop them.
+const variant = only
+  ? "alternating"
+  : (asked === "photo_cards" && !items.every((item) => item.photo)) ||
+      (asked === "alternating" &&
+        !onServices &&
+        !items.some((item) => item.photo))
+    ? "numbered_rows"
+    : asked
+// Alternating rows are a service's detail, the place every other pattern
+// links to (its own page, or the services page on a site without them), so
+// they link nowhere. On the services page and a service's own page, the
+// page's hero is the section's head.
+const detail = variant === "alternating"
+const linked = !detail && hasRoute("/services/")
+const headed = !onServices && !only
+// Cards per row on a wide screen: four in one row, otherwise rows of three,
+// a short last row centred (site.css counts the cards itself).
+const perRow = items.length === 4 ? 4 : 3
+// A linked card's name is the link, stretched over the card; the words and
+// arrow at its foot repeat it for the eye, so they are hidden from readers.
 ---
 
 {
-  items.length > 0 && variant === "cards" && (
-    <section class="band service-cards">
+  items.length > 0 && (
+    <section
+      class:list={[
+        "band service-cards",
+        `services-${variant}`,
+        detail && "service-details",
+        only && "service-single",
+      ]}
+    >
       <div class="wrap">
-        {site.serviceCardsHeading && (
-          <div class="section-head">
-            <h2>{site.serviceCardsHeading}</h2>
-          </div>
+        {headed && (
+          <SectionHead
+            eyebrow={site.serviceCardsEyebrow}
+            heading={site.serviceCardsHeading}
+          />
         )}
-        <ul class="card-grid">
-          {items.map((item) => (
-            <li class:list={["card", linked && "card-linked"]}>
-              {iconPath(item.icon) && (
-                <span class="card-icon">
-                  <Icon name={item.icon} />
-                </span>
-              )}
-              {item.name && (
-                <h3>
-                  {linked ? (
-                    <a href={`/services/#${item.id}`}>{item.name}</a>
-                  ) : (
-                    item.name
+        {(variant === "photo_cards" || variant === "fleet") && (
+          <ul class="card-grid">
+            {items.map((item) => (
+              <li class:list={["card", linked && "card-linked"]}>
+                {item.photo ? (
+                  <div class="card-media">
+                    <Photo
+                      class="card-photo"
+                      src={item.photo.src}
+                      alt={item.photo.alt}
+                      sizes={`(min-width: 80rem) ${perRow === 4 ? 19 : 26}rem, (min-width: 64rem) ${Math.floor(100 / perRow)}vw, (min-width: 40rem) 50vw, calc(100vw - 2rem)`}
+                    />
+                  </div>
+                ) : (
+                  variant === "photo_cards" && (
+                    <span class="card-icon">
+                      <Icon name={item.icon} />
+                    </span>
+                  )
+                )}
+                {item.name && (
+                  <h3>
+                    {linked ? <a href={serviceHref(item)}>{item.name}</a> : item.name}
+                  </h3>
+                )}
+                {item.body && <p data-copy="service_body">{item.body}</p>}
+                {variant === "fleet" && item.includes.length > 0 && (
+                  <ul class="spec-pills">
+                    {item.includes.map((line) => (
+                      <li>{line}</li>
+                    ))}
+                  </ul>
+                )}
+                {linked && (
+                  <span class="card-arrow" aria-hidden="true">
+                    {site.serviceMoreLabel}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+        {(variant === "numbered_rows" || variant === "practice_list") && (
+          <ol class:list={["service-rows", linked && "rows-linked"]}>
+            {items.map((item) => (
+              <li>
+                {variant === "numbered_rows" && (
+                  <span class="card-icon">
+                    <Icon name={item.icon} />
+                  </span>
+                )}
+                <div class="row-text">
+                  {item.name && (
+                    <h3>
+                      {linked ? (
+                        <a href={serviceHref(item)}>{item.name}</a>
+                      ) : (
+                        item.name
+                      )}
+                    </h3>
                   )}
-                </h3>
+                  {item.body && <p data-copy="service_body">{item.body}</p>}
+                </div>
+                {linked && <span class="row-arrow" aria-hidden="true" />}
+              </li>
+            ))}
+          </ol>
+        )}
+        {detail &&
+          items.map((item) => (
+            <article class="service-detail" id={item.id}>
+              {item.photo && !only && (
+                <Photo
+                  class="service-photo"
+                  src={item.photo.src}
+                  alt={item.photo.alt}
+                  sizes="(min-width: 80rem) 36rem, (min-width: 56rem) 50vw, 100vw"
+                />
               )}
-              {item.body && <p>{item.body}</p>}
-            </li>
+              <div class="service-detail-main">
+                <Icon name={item.icon} />
+                {site.serviceCardsEyebrow && (
+                  <p class="eyebrow">{site.serviceCardsEyebrow}</p>
+                )}
+                {/* The page's h1 names the service on its own page, and a
+                    headed section's h2 sits above its cards: the bare name as
+                    an h2 there repeats another page's heading. */}
+                {item.name && !only && (headed ? <h3>{item.name}</h3> : <h2>{item.name}</h2>)}
+                {(item.detail || item.body) && (
+                  <p class="service-detail-body" data-copy="service_detail">
+                    {item.detail || item.body}
+                  </p>
+                )}
+                {primaryAction && (
+                  <ActionLink
+                    href={primaryAction.href}
+                    label={primaryAction.label}
+                    variant="secondary"
+                  />
+                )}
+              </div>
+              {(item.includes.length > 0 || item.for) && (
+                <div class="service-detail-facts">
+                  {item.includes.length > 0 && (
+                    <>
+                      {site.serviceIncludesLabel && (
+                        <h3 class="facts-label">{site.serviceIncludesLabel}</h3>
+                      )}
+                      <ul class="check-list" data-copy="service_includes">
+                        {item.includes.map((line) => (
+                          <li>
+                            <Icon name="checkCircle" />
+                            <span>{line}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                  {item.for && (
+                    <>
+                      {site.serviceForLabel && (
+                        <h3 class="facts-label">{site.serviceForLabel}</h3>
+                      )}
+                      <p data-copy="service_for">{item.for}</p>
+                    </>
+                  )}
+                </div>
+              )}
+            </article>
           ))}
-        </ul>
-        {linked && site.serviceCardsLink && (
+        {linked && !onServices && site.serviceCardsLink && (
           <p class="section-more">
             <a class="more-link" href="/services/">
               {site.serviceCardsLink}
             </a>
           </p>
         )}
-      </div>
-    </section>
-  )
-}
-{
-  items.length > 0 && variant === "sections" && (
-    <section class="band service-details">
-      <div class="wrap">
-        {items.map((item) => (
-          <article class="service-detail" id={item.id}>
-            <div class="service-detail-main">
-              <Icon name={item.icon} />
-              {item.name && <h2>{item.name}</h2>}
-              {item.body && <p class="service-detail-body">{item.body}</p>}
-              {primaryAction && (
-                <ActionLink
-                  href={primaryAction.href}
-                  label={primaryAction.label}
-                  variant="secondary"
-                />
-              )}
-            </div>
-            {(item.includes.length > 0 || item.for) && (
-              <div class="service-detail-facts">
-                {item.includes.length > 0 && (
-                  <>
-                    {site.serviceIncludesLabel && (
-                      <h3 class="facts-label">{site.serviceIncludesLabel}</h3>
-                    )}
-                    <ul class="check-list">
-                      {item.includes.map((line) => (
-                        <li>
-                          <Icon name="checkCircle" />
-                          <span>{line}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                )}
-                {item.for && (
-                  <>
-                    {site.serviceForLabel && <h3 class="facts-label">{site.serviceForLabel}</h3>}
-                    <p>{item.for}</p>
-                  </>
-                )}
-              </div>
-            )}
-          </article>
-        ))}
       </div>
     </section>
   )

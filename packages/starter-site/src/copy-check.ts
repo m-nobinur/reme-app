@@ -37,10 +37,34 @@ export const BANNED_PHRASES = [
 /** U+2014, by code so this file holds none. */
 const EM_DASH = String.fromCharCode(0x2014)
 
-const TITLE_CHARS = { min: 45, max: 65 }
-const DESCRIPTION_CHARS = { min: 120, max: 165 }
+const TITLE_CHARS = { min: 50, max: 60 }
+const DESCRIPTION_CHARS = { min: 140, max: 165 }
 
 type BuiltPage = { file: string; html: string }
+
+/**
+ * The blocks a page fails the copy gate without, by built file: the
+ * `data-copy` mark and its fields. The gate's own table (packages/gates
+ * copy.ts BLOCKS), repeated because the sandbox holds no gates package; a
+ * test holds the two to the same verdicts.
+ */
+const BLOCKS: [RegExp, [string, string][]][] = [
+  [
+    /^services\/[^/]+\/index\.html$/,
+    [
+      ["service_includes", "serviceNIncludes (what is included)"],
+      ["service_for", "serviceNFor (who it suits)"],
+    ],
+  ],
+  [
+    /^about\/index\.html$/,
+    [
+      ["approach_body", "approach1Title to approach4Body"],
+      ["step_body", "aboutStep1Title to aboutStep4Body"],
+    ],
+  ],
+  [/^contact\/index\.html$/, [["contact_body", "contactIncludeBody"]]],
+]
 
 const ENTITIES: Record<string, string> = {
   "&amp;": "&",
@@ -62,6 +86,10 @@ const BANNED = BANNED_PHRASES.map((phrase) => ({
     "i"
   ),
 }))
+
+/** The stock phrases a text says, in list order; the writers' field check reads it too. */
+export const bannedIn = (text: string) =>
+  BANNED.filter(({ pattern }) => pattern.test(text)).map(({ phrase }) => phrase)
 
 /** What a visitor reads on a page, the title and the description included. */
 const textOf = (html: string) =>
@@ -95,7 +123,7 @@ export function copyFindings(pages: readonly BuiltPage[]): string[] {
     if (indexed) {
       for (const [name, value, range, aim] of [
         ["title", title, TITLE_CHARS, "50 to 60"],
-        ["meta description", description, DESCRIPTION_CHARS, "140 to 155"],
+        ["meta description", description, DESCRIPTION_CHARS, "140 to 160"],
       ] as const) {
         if (!value) say(`has no ${name}`)
         else if (value.length < range.min || value.length > range.max)
@@ -111,13 +139,25 @@ export function copyFindings(pages: readonly BuiltPage[]): string[] {
       }
     }
 
+    const marked = (kind: string) => html.includes(`data-copy="${kind}"`)
+    for (const [mark, field] of BLOCKS.find(([page]) => page.test(file))?.[1] ??
+      [])
+      if (indexed && !marked(mark))
+        say(`has no ${field} block; fill it for this page`)
+    // With two services or more, the services page helps a visitor choose.
+    if (
+      indexed &&
+      file === "services/index.html" &&
+      (html.match(/data-copy="service_body"/g)?.length ?? 0) > 1 &&
+      !marked("services_help")
+    )
+      say("has no servicesHelpBody block; fill it for this page")
+
     const text = textOf(html)
     if (text.includes(EM_DASH))
       say("has an em dash; use a comma, a colon or two sentences")
-    for (const { phrase, pattern } of BANNED) {
-      if (pattern.test(text))
-        say(`says "${phrase}"; say what the business does instead`)
-    }
+    for (const phrase of bannedIn(text))
+      say(`says "${phrase}"; say what the business does instead`)
   }
   return found
 }

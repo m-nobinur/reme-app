@@ -1,20 +1,27 @@
 import { spawn } from "node:child_process"
 import {
   cpSync,
+  existsSync,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs"
+import { createServer, type Server } from "node:http"
 import { tmpdir } from "node:os"
-import { join } from "node:path"
+import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { parse } from "parse5"
-import { fields } from "../src/site-config"
+import sharp from "sharp"
+import { fields, layout, site } from "../src/site-config"
 
 export const ROOT = fileURLToPath(new URL("..", import.meta.url))
+/** A stand-in photo's one colour, as sharp takes it. */
+const GREY = { r: 140, g: 140, b: 140 }
 /** Reserved by RFC 2606, so nothing built here can name a real site. */
 export const ORIGIN = "https://starter.invalid"
 
@@ -25,15 +32,20 @@ export type Built = { dir: string; dist: string }
  * (astro.config.mjs, tsconfig.json, src/), with node_modules linked rather
  * than installed, the way the sandbox does it. `site` replaces the config's
  * values, `quoteForm` replaces src/quote-form.json the way the seed writes
- * it from the owner's fact, `pages` plants page files and `remove` deletes
- * them.
+ * it from the owner's fact, `layout` replaces the pages' section lists,
+ * `pages` plants page files and `remove` deletes them.
  */
 export async function build(
   options: {
     site?: Record<string, string>
+    layout?: typeof layout
     quoteForm?: unknown
     pages?: Record<string, string>
     remove?: string[]
+    /** Files planted beside the site, by path from its root, such as src/assets/uploads/x.jpg. */
+    files?: Record<string, Uint8Array>
+    /** False plants no stand-in for a photo the site names, to build one whose file is missing. */
+    standIns?: boolean
   } = {}
 ): Promise<Built> {
   const dir = mkdtempSync(join(tmpdir(), "reme-starter-"))
@@ -41,11 +53,12 @@ export async function build(
     cpSync(join(ROOT, entry), join(dir, entry), { recursive: true })
   }
   symlinkSync(join(ROOT, "node_modules"), join(dir, "node_modules"), "dir")
-  if (options.site) {
+  if (options.site || options.layout) {
     writeFileSync(
       join(dir, "src/site-config.ts"),
-      `export const site = ${JSON.stringify(options.site, null, 2)}\n\n` +
-        `export const fields = ${JSON.stringify(fields, null, 2)}\n`
+      `export const site = ${JSON.stringify(options.site ?? site, null, 2)}\n\n` +
+        `export const fields = ${JSON.stringify(fields, null, 2)}\n\n` +
+        `export const layout = ${JSON.stringify(options.layout ?? layout, null, 2)}\n`
     )
   }
   if (options.quoteForm !== undefined) {
@@ -58,6 +71,25 @@ export async function build(
     writeFileSync(join(dir, "src/pages", name), source)
   }
   for (const name of options.remove ?? []) rmSync(join(dir, "src/pages", name))
+  // The sandbox places every photo the site names before a build, so a field
+  // that names one gets a small stand-in unless the test plants its own.
+  const named = Object.values(options.site ?? {})
+    .filter((value) => /^\/?[\w/.-]+\.(?:jpe?g|png|webp)$/.test(value))
+    .map((value) => `src/assets/${value.replace(/^\/?(?:src\/assets\/)?/, "")}`)
+  const planted = { ...options.files }
+  for (const name of options.standIns === false ? [] : named) {
+    planted[name] ??= await sharp({
+      create: { width: 640, height: 480, channels: 3, background: GREY },
+    })
+      [
+        name.endsWith(".png") ? "png" : name.endsWith(".webp") ? "webp" : "jpeg"
+      ]()
+      .toBuffer()
+  }
+  for (const [name, bytes] of Object.entries(planted)) {
+    mkdirSync(dirname(join(dir, name)), { recursive: true })
+    writeFileSync(join(dir, name), bytes)
+  }
 
   const result = await new Promise<{
     code: number | null
@@ -83,6 +115,44 @@ export async function build(
     throw new Error(`astro build failed in ${dir}\n${result.output}`)
   }
   return { dir, dist: join(dir, "dist") }
+}
+
+const TYPES: Record<string, string> = {
+  ".html": "text/html; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".xml": "application/xml; charset=utf-8",
+  ".txt": "text/plain; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+}
+
+/**
+ * Serves a build over HTTP on a free local port. A stylesheet is linked
+ * absolutely, and a file:// page loads none of it, which is the one thing a
+ * contrast check cannot do without.
+ */
+export async function serve(
+  dist: string
+): Promise<{ server: Server; origin: string }> {
+  const server = createServer((request, response) => {
+    const path = new URL(request.url ?? "/", "http://site.invalid").pathname
+    const file = join(dist, path.endsWith("/") ? `${path}index.html` : path)
+    if (
+      !file.startsWith(dist) ||
+      !existsSync(file) ||
+      statSync(file).isDirectory()
+    ) {
+      response.writeHead(404).end()
+      return
+    }
+    const type = TYPES[file.slice(file.lastIndexOf("."))]
+    response.writeHead(200, type ? { "Content-Type": type } : {})
+    response.end(readFileSync(file))
+  })
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
+  const address = server.address()
+  const port = typeof address === "object" && address ? address.port : 0
+  return { server, origin: `http://127.0.0.1:${port}` }
 }
 
 export const clean = (built: Built | undefined) => {

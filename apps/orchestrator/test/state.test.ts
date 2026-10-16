@@ -133,10 +133,10 @@ const PATH: Record<AssignmentState, AssignmentState[]> = {
 const NEXT: Record<AssignmentState, AssignmentState[]> = {
   queued: ["briefing"],
   briefing: ["planning"],
-  planning: ["implementing"],
+  planning: ["implementing", "failed"],
   implementing: ["validating", "blocked_on_information", "repairing", "failed"],
   validating: ["preview_ready", "repairing", "failed"],
-  preview_ready: ["awaiting_review"],
+  preview_ready: ["awaiting_review", "repairing", "failed"],
   awaiting_review: ["revising", "release_candidate", "blocked_on_approval"],
   revising: ["validating"],
   release_candidate: ["published"],

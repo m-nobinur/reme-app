@@ -235,7 +235,7 @@ it("a caller's own link component still gets the new tab and the host", async ()
 })
 
 it("the app lets images load only from itself, data and blob URLs and any remeai.co.uk host", () => {
-  expect(contentSecurityPolicy("n").split("; ")).toContain(
+  expect(contentSecurityPolicy("n", false).split("; ")).toContain(
     "img-src 'self' data: blob: https://*.remeai.co.uk"
   )
 })

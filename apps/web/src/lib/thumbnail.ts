@@ -7,7 +7,7 @@ import type { PreviewLinks, Workspace } from "./api/types"
  * orchestrator maps `SCREENSHOTS` in packages/gates), and the approval
  * item labels them phone, tablet and laptop by the same index.
  */
-export const DESKTOP = 2
+const DESKTOP = 2
 
 /** How long before a preview's signature lapses its links are read again. */
 export const REFRESH_BEFORE_EXPIRY = 5 * 60_000

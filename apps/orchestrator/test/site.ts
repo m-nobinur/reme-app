@@ -6,6 +6,7 @@ import {
   SITE_REVISION_HEADER,
 } from "@workspace/contracts"
 import {
+  appendEvent,
   assignments,
   eq,
   events,
@@ -77,7 +78,14 @@ export function storage() {
       put: async (key: string, value: string) => {
         pointers.set(key, value)
       },
-      get: async (key: string) => pointers.get(key) ?? null,
+      // KV's `get(key, "json")` parses, and rejects on a value that is not JSON.
+      get: async (key: string, type?: "json") => {
+        const value = pointers.get(key) ?? null
+        return type === "json" && value !== null ? JSON.parse(value) : value
+      },
+      delete: async (key: string) => {
+        pointers.delete(key)
+      },
     },
   }
 }
@@ -104,7 +112,9 @@ export const TO_PREVIEW: AssignmentState[] = [
 export async function previewed(
   store = storage(),
   html = GOOD_HTML,
-  older = 0
+  older = 0,
+  /** Whether the accessibility gate passed after the preview, as it does once axe has run. */
+  checked = true
 ) {
   const orgId = await freshOrg(kit)
   const ids = await newAssignment(kit, orgId)
@@ -128,7 +138,14 @@ export async function previewed(
       await addRevision(store, orgId, ids.assignmentId, html, "retired")
     )
   }
-  const revisionId = await addRevision(store, orgId, ids.assignmentId, html)
+  const revisionId = await addRevision(
+    store,
+    orgId,
+    ids.assignmentId,
+    html,
+    "preview",
+    checked
+  )
   return { orgId, ids, revisionId, store, others }
 }
 
@@ -137,7 +154,9 @@ export async function addRevision(
   orgId: string,
   assignmentId: string,
   html: string,
-  status: "preview" | "building" | "retired" = "preview"
+  status: "preview" | "building" | "retired" = "preview",
+  /** A preview's accessibility gate passed, as the Workflow's `a11y` step logs it. */
+  checked = status === "preview"
 ) {
   const id = crypto.randomUUID()
   const prefix = `sites/${orgId}/${id}/`
@@ -175,6 +194,25 @@ export async function addRevision(
   )
   await store.SITES.put(`${prefix}dist/index.html`, html)
   await store.SITES.put(`${prefix}source.tar.zst`, "source")
+  if (checked) {
+    await kit.withOrg({ orgId }, (db) =>
+      appendEvent(db, {
+        orgId,
+        assignmentId,
+        staffId: null,
+        type: "revision.a11y_checked",
+        payload: {
+          gate: "a11y",
+          passed: true,
+          evidence_key: null,
+          offending_node: null,
+          message: "axe found no violations",
+          report_id: crypto.randomUUID(),
+          revision_id: id,
+        },
+      })
+    )
+  }
   return id
 }
 

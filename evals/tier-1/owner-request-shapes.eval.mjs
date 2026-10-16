@@ -67,6 +67,7 @@ const business = {
   "@context": "https://schema.org",
   "@type": "LocalBusiness",
   name: "BrightClean",
+  url: "https://brightclean.invalid/",
   telephone: "+15550142",
   email: "hello@brightclean.invalid",
   openingHours: "Mo-Fr 08:00-17:00",
@@ -112,9 +113,16 @@ async function gates(html, facts) {
     },
     read: async (file) => (file === "index.html" ? body : null),
     report: {
-      checks: [{ check: "astro check", exit_code: 0, output_key: null }],
+      // As the gates tests report a clean sandbox run.
+      checks: [
+        { check: "astro check", exit_code: 0, output_key: null },
+        { check: "axe", exit_code: 0, output_key: null },
+        { check: "custom sections", exit_code: 0, output_key: null },
+      ],
     },
     facts,
+    // The gates tests' budget: these pages are a few hundred bytes.
+    budget: { limit: 102_400 },
   })
   return new Map(results.map((r) => [r.gate, r]))
 }

@@ -7,6 +7,8 @@ import {
 import { CopyIcon } from "@phosphor-icons/react"
 import {
   type AskChoiceInput,
+  type Blueprint,
+  type DomainPurchaseStatus,
   FONTS,
   INDUSTRIES,
   PALETTES,
@@ -20,8 +22,19 @@ import {
 } from "@workspace/contracts"
 import { Approval } from "@workspace/ui/components/assistant/approval"
 import { ChoiceForm } from "@workspace/ui/components/assistant/ask-choice"
+import { SaveDesignAnswerProvider } from "@workspace/ui/components/assistant/ask-design"
 import { UploadPhotosProvider } from "@workspace/ui/components/assistant/ask-upload"
+import {
+  BlueprintCard,
+  type BlueprintCardProps,
+  SiteNameProvider,
+} from "@workspace/ui/components/assistant/blueprint-card"
+import {
+  type DomainPurchase,
+  DomainPurchaseProvider,
+} from "@workspace/ui/components/assistant/buy-domain"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
+import { ServerButtonUI } from "@workspace/ui/components/assistant/server-button"
 import { SiteReady } from "@workspace/ui/components/assistant/site-ready"
 import {
   OWNER_QUICK_ACTIONS,
@@ -40,6 +53,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@workspace/ui/components/collapsible"
+import { GeneratedPhotos } from "@workspace/ui/components/generated-photos"
 import { AnswerInputs } from "@workspace/ui/components/live-panel"
 import {
   Tooltip,
@@ -53,7 +67,9 @@ import {
 } from "@workspace/ui/components/workspace-shell"
 import { FACT_INPUTS } from "@workspace/ui/lib/answer"
 import { BROKEN } from "@workspace/ui/lib/tool-state"
-import { useState } from "react"
+import { type ReactNode, useState } from "react"
+import { BLUEPRINT, REPLAN } from "./blueprint-fixtures"
+import { INPUT as ASK_DESIGN_INPUT } from "./tray-entries"
 
 /**
  * The chat surface's catalog entries. They live apart from the rest because
@@ -101,7 +117,13 @@ function FixtureThread({
   isLoading = false,
   bare = false,
   rates = false,
+  stored,
+  children,
 }: {
+  /** Mounted beside the thread, as the app mounts what registers a part's card. */
+  children?: ReactNode
+  /** The thread is this stored conversation, as at `/app/c/$id`. */
+  stored?: string
   height?: string
   /** Records a thumb on a reply, as the app does, so the thumbs show. */
   rates?: boolean
@@ -127,11 +149,29 @@ function FixtureThread({
     messages,
     onNew: noop,
     suggestions,
-    ...(rates ? { adapters: { feedback: { submit: noop } } } : {}),
+    adapters: {
+      ...(rates ? { feedback: { submit: noop } } : {}),
+      ...(stored
+        ? {
+            threadList: {
+              threadId: stored,
+              threads: [
+                {
+                  id: stored,
+                  remoteId: stored,
+                  status: "regular" as const,
+                  title: "Getting started",
+                },
+              ],
+            },
+          }
+        : {}),
+    },
   })
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
+      {children}
       <div
         className={
           bare
@@ -165,7 +205,9 @@ function OwnerThread(props: Parameters<typeof FixtureThread>[0]) {
       {...props}
       settings={{
         placeholder: "Ask Reme anything…",
+        questionPlaceholder: "Or tell Reme something else…",
         quickActions: OWNER_QUICK_ACTIONS,
+        ...(props.stored ? { stored: props.stored } : {}),
         ...props.settings,
       }}
     />
@@ -196,6 +238,11 @@ const on = (at: string, message: ThreadMessageLike): ThreadMessageLike => ({
 })
 
 const noop = async () => undefined
+
+/** A drawn picture, not a real one: a window, a worktop, a bowl. Grey by opacity alone. */
+const KITCHEN = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="150" height="100" viewBox="0 0 150 100"><rect width="150" height="100" fill-opacity=".08"/><rect x="18" y="12" width="54" height="40" fill-opacity=".2"/><rect x="0" y="62" width="150" height="38" fill-opacity=".35"/><circle cx="108" cy="52" r="12" fill-opacity=".5"/></svg>'
+)}`
 
 const ask = (text: string): ThreadMessageLike => ({
   content: [{ text, type: "text" }],
@@ -729,6 +776,94 @@ const LIMOUSINE_QUESTIONS = [
   quoteField("notes", "Anything else", "textarea", { required: false }),
 ]
 
+/** A `review_blueprint` call in one of its states. */
+const reviewBlueprint = (
+  label: string,
+  plan: Blueprint,
+  extra: { result?: unknown; isError?: boolean } = {}
+) => ({
+  args: { blueprint: plan },
+  isError: extra.isError,
+  result: extra.result,
+  toolCallId: `blueprint_${label}`,
+  toolName: "review_blueprint",
+  type: "tool-call" as const,
+})
+
+const PLANNED =
+  "Here is the plan for your site. Read it, then build it or change it."
+
+const REVIEW_BLUEPRINT_STATES: ThreadMessageLike[] = [
+  ...answeredStep(
+    PLANNED,
+    reviewBlueprint("built", BLUEPRINT, { result: { decision: "build" } }),
+    "Build it"
+  ),
+  {
+    content: [
+      reviewBlueprint("cancelled", BLUEPRINT, {
+        isError: true,
+        result: { error: TOOL_CALL_CANCELLED },
+      }),
+      reviewBlueprint("error", BLUEPRINT, {
+        isError: true,
+        result: { error: BROKEN },
+      }),
+    ],
+    role: "assistant",
+    status: DONE,
+  },
+  // A re-plan: the first plan was changed, so the second marks what differs.
+  {
+    content: [
+      question(PLANNED),
+      reviewBlueprint("first", BLUEPRINT, {
+        result: {
+          decision: "change",
+          note: "Add a gallery page and make the colours warmer",
+        },
+      }),
+    ],
+    role: "assistant",
+    status: DONE,
+  },
+  reply("Add a gallery page and make the colours warmer"),
+  {
+    content: [
+      question("Updated. The changed lines are marked."),
+      reviewBlueprint("replan", REPLAN),
+    ],
+    role: "assistant",
+    status: WAITING,
+  },
+]
+
+/** The plan card by itself: title, props, and an optional width. */
+const BLUEPRINT_CARDS: [string, BlueprintCardProps, string?][] = [
+  ["Feature plan", { blueprint: BLUEPRINT, onBuild: noop }],
+  ["Collapsed", { blueprint: BLUEPRINT, defaultOpen: false, onBuild: noop }],
+  [
+    "After a re-plan, changed rows marked",
+    { blueprint: REPLAN, previous: BLUEPRINT, onBuild: noop },
+  ],
+  [
+    "Read-only, as the panel keeps it",
+    { blueprint: BLUEPRINT, readOnly: true },
+  ],
+  [
+    "Your own colour, photos written in",
+    {
+      blueprint: {
+        ...BLUEPRINT,
+        palette: { kind: "brand", brand: PALETTES[3]?.brand ?? "" },
+      },
+      photoDirection: "Daylight, tidy rooms, hands at work, never faces.",
+      onBuild: noop,
+    },
+  ],
+  ["Phone width", { blueprint: BLUEPRINT, onBuild: noop }, "max-w-[22.5rem]"],
+]
+
 /** A `review_quote_form` call in one of its states. */
 const reviewQuote = (
   label: string,
@@ -1187,6 +1322,289 @@ const CREATE_REMINDER_STATES = decisionStates(
   refusal("reminder.due_past", "A reminder cannot be due in the past.")
 )
 
+const RECORD_REVIEW_STATES = decisionStates(
+  "record_review",
+  {
+    slot: 1,
+    quote:
+      "They worked around my hours and the kitchen has never looked so clean.",
+    name: "Marta L.",
+    permission: true,
+  },
+  { slot: 1, quote: "", name: "", permission: true },
+  { outcome: "recorded", slot: 1 },
+  refusal("review.unconfirmed", "The review could not be confirmed.")
+)
+
+const DOMAIN = "sparkleclean.co.uk"
+const WWW = { type: "CNAME", name: "www", value: "domains.remeai.co.uk" }
+const GODADDY = {
+  name: "GoDaddy",
+  settings_url: "https://dcc.godaddy.com/manage/dns",
+}
+
+/** A connect_domain call whose yes is in: the records to add, by case. */
+const connecting = (id: string, output: unknown, name = DOMAIN) =>
+  cosCall("connect_domain", `connect_${id}`, {
+    args: { name },
+    approval: { id: `approval_connect_${id}`, approved: true },
+    result: output,
+  })
+
+// The records a domain needs, as the orchestrator answers: with the provider
+// named and its own link, with only the bare-address alias, a subdomain's one
+// record, one that may touch email, and one with no records to show.
+const CONNECT_DOMAIN_STATES = [
+  ...decisionStates(
+    "connect_domain",
+    { name: DOMAIN },
+    { name: 7 },
+    {
+      outcome: "connecting",
+      method: "records",
+      email_affected: false,
+      apex: "forward",
+      provider: GODADDY,
+      steps: [
+        WWW,
+        { type: "TXT", name: "_acme-challenge.www", value: "k3j9x2m1q8w7e6r5" },
+      ],
+    },
+    refusal("domain.in_use", "That domain belongs to another business.")
+  ),
+  connecting("alias", {
+    outcome: "connecting",
+    method: "records",
+    email_affected: false,
+    apex: "alias",
+    provider: { name: "Namecheap" },
+    steps: [WWW],
+  }),
+  connecting("email", {
+    outcome: "connecting",
+    method: "records",
+    email_affected: true,
+    apex: "forward",
+    steps: [WWW],
+  }),
+  connecting("no_steps", {
+    outcome: "connecting",
+    method: "domain_connect",
+    email_affected: false,
+  }),
+  connecting(
+    "subdomain",
+    {
+      outcome: "connecting",
+      method: "records",
+      email_affected: false,
+      provider: GODADDY,
+      steps: [{ type: "CNAME", name: "book", value: "domains.remeai.co.uk" }],
+    },
+    `book.${DOMAIN}`
+  ),
+]
+
+const REMOVE_DOMAIN_STATES = decisionStates(
+  "remove_domain",
+  { name: DOMAIN },
+  { name: 7 },
+  { outcome: "removed" },
+  refusal("domain.not_found", "That domain is not connected.")
+)
+
+const offer = (name: string, price: number, why: string) => ({
+  name,
+  price_gbp_year: price,
+  why,
+})
+
+// What find_domain answers: the best pick and three others, none free, and
+// a search still running.
+const FIND_DOMAIN_STATES: ThreadMessageLike[] = [
+  ask("I don't have a website address. Can you sort one?"),
+  cosCall("find_domain", "find_running", { args: {} }, IN_FLIGHT),
+  cosCall("find_domain", "find_found", {
+    args: {},
+    result: {
+      outcome: "found",
+      best: offer(DOMAIN, 8, "Short, matches your name, and .co.uk says UK."),
+      options: [
+        offer("sparklecleanbristol.co.uk", 8, "Says where you work."),
+        offer("sparkleclean.uk", 8, "The shortest UK ending."),
+        offer("sparklecleanbristol.com", 12, "Known everywhere."),
+      ],
+    },
+  }),
+  cosCall("find_domain", "find_none", {
+    args: { query: "sparkle" },
+    result: refusal("domain.unavailable", "That name isn't free to register."),
+  }),
+]
+
+const REGISTRANT = {
+  name: "Jane Smith",
+  business_name: "Sparkle Clean",
+  email: "jane@sparkleclean.example",
+  phone: "+447700900123",
+  address: {
+    street: "12 Mill Lane",
+    city: "Bristol",
+    postal_code: "BS1 4AB",
+    country_code: "GB",
+  },
+}
+
+/** A buy_domain call for `name`, ready for payment. */
+const buying = (id: string, name: string, price = 8) =>
+  cosCall("buy_domain", `buy_${id}`, {
+    args: { name, registrant: REGISTRANT, registrant_type: "STRA" },
+    result: {
+      outcome: "awaiting_payment",
+      name,
+      price_gbp: price,
+      checkout: "embedded",
+    },
+  })
+
+// Each purchase after payment has its own name, so the catalog's status
+// read answers one state per card, as `GET /domains/{name}` would.
+const PAID: Record<string, Omit<DomainPurchaseStatus, "name">> = {
+  "authorised.co.uk": { state: "verifying", test: false },
+  "serving.co.uk": { state: "verifying", test: false, outcome: "registered" },
+  "registered.co.uk": { state: "active", test: false, outcome: "registered" },
+  "testpurchase.com": {
+    state: "verifying",
+    test: true,
+    outcome: "test_registered",
+  },
+  "failed.co.uk": { state: "failed", test: false, outcome: "payment_released" },
+  "pricechanged.co.uk": {
+    state: "failed",
+    test: false,
+    outcome: "price_changed",
+  },
+  "taken.co.uk": { state: "failed", test: false, outcome: "unavailable" },
+  "abandoned.co.uk": { state: "abandoned", test: false, outcome: "expired" },
+}
+
+// No Stripe in the catalog: Continue answers as an environment without
+// buying does.
+const CATALOG_PURCHASE: DomainPurchase = {
+  checkout: async () => ({
+    outcome: "refused",
+    code: "domain.buy_unavailable",
+  }),
+  status: async (name) => {
+    const paid = PAID[name]
+    return paid ? { name, ...paid } : null
+  },
+}
+
+const BUY_DOMAIN_STATES: ThreadMessageLike[] = [
+  cosCall(
+    "buy_domain",
+    "buy_running",
+    { args: { name: DOMAIN, registrant: REGISTRANT } },
+    IN_FLIGHT
+  ),
+  buying("awaiting", DOMAIN),
+  buying("com", "sparklecleanbristol.com", 12),
+  ...Object.keys(PAID).map((name) => buying(name, name)),
+  cosCall("buy_domain", "buy_refused", {
+    args: { name: DOMAIN, registrant: REGISTRANT, registrant_type: "STRA" },
+    result: refusal(
+      "domain.buy_unavailable",
+      "Buying a domain isn't available yet."
+    ),
+  }),
+]
+
+/** A check_domain call by where the domain stands; one message each. */
+const check = (id: string, status: unknown, state = "verifying") =>
+  cosCall("check_domain", `check_${id}`, {
+    args: { name: DOMAIN },
+    result: {
+      outcome: "checked",
+      state,
+      status,
+      next_step: "Tell the owner where the domain stands.",
+    },
+  })
+
+const CHECK_DOMAIN_STATES: ThreadMessageLike[] = [
+  cosCall(
+    "check_domain",
+    "check_running",
+    { args: { name: DOMAIN } },
+    IN_FLIGHT
+  ),
+  check("waiting", { status: "pending_verification" }),
+  check("not_found", { status: "not_found" }),
+  check("invalid", { status: "invalid_configuration" }),
+  check("certificate", { status: "pending_certificate" }),
+  check("live", { status: "valid" }, "active"),
+  check("conflict", {
+    status: "conflicting_record",
+    conflicts: [{ type: "A", name: `www.${DOMAIN}`, value: "192.0.2.10" }],
+  }),
+  check("unknown", { status: "unknown_error" }),
+  cosCall("check_domain", "check_refused", {
+    args: { name: DOMAIN },
+    result: refusal("domain.not_found", "That domain is not connected."),
+  }),
+  cosCall("check_domain", "check_cancelled", {
+    args: { name: DOMAIN },
+    isError: true,
+    result: { error: TOOL_CALL_CANCELLED },
+  }),
+]
+
+/** Messages the assistant posted on its own, each with the button it can carry. */
+const POSTED: ThreadMessageLike[] = [
+  ask("Is my domain connected?"),
+  {
+    content: [
+      { text: "Not yet. I'll message you the moment it is.", type: "text" },
+    ],
+    role: "assistant",
+    status: DONE,
+  },
+  {
+    content: [
+      {
+        text: `${DOMAIN} points at your website, and the certificate is ready.`,
+        type: "text",
+      },
+      {
+        type: "data",
+        name: "button",
+        data: {
+          label: "Open GoDaddy DNS settings",
+          action: { kind: "open", url: GODADDY.settings_url },
+        },
+      },
+    ],
+    role: "assistant",
+    status: DONE,
+  },
+  {
+    content: [
+      { text: "Your website is live on the new address.", type: "text" },
+      {
+        type: "data",
+        name: "button",
+        data: {
+          label: "Show me what changed",
+          action: { kind: "ask", text: "Show me what changed." },
+        },
+      },
+    ],
+    role: "assistant",
+    status: DONE,
+  },
+]
+
 /** Two replies with words: one the owner rated up, one not yet rated. */
 const RATED: ThreadMessageLike[] = [
   ask("What is live now?"),
@@ -1541,7 +1959,7 @@ function SendingThread({ streamed }: { streamed: boolean }) {
  * the top bar, the empty thread in the middle. `?entry=Conversation` loads it
  * alone at phone and desktop widths.
  */
-function ConversationSample() {
+function ConversationSample({ stored }: { stored?: string }) {
   return (
     <WorkspaceShell
       className="h-192 border border-border"
@@ -1555,13 +1973,14 @@ function ConversationSample() {
         <span className="text-muted-foreground text-sm">Nothing right now</span>
       }
       rail={<p className="text-sm">Brightclean</p>}
-      title="New chat"
+      title={stored ? "Getting started" : "New chat"}
     >
       <OwnerThread
         bare
         height="h-full"
         isDisabled={false}
         messages={[]}
+        {...(stored ? { stored } : {})}
         settings={{
           briefing: "v3 is live. Version 4 is ready for you to approve.",
         }}
@@ -1695,6 +2114,33 @@ const assistantCatalog = [
     ),
   },
   {
+    name: "ReviewBlueprint",
+    render: () => (
+      <FixtureThread height="h-[60rem]" messages={REVIEW_BLUEPRINT_STATES} />
+    ),
+  },
+  // The plan card on its own, in the states a card can be in.
+  ...(["BlueprintCard", "SiteNameProvider"] as const).map((name) => ({
+    name,
+    render: () => (
+      <SiteNameProvider value="Mop & Pail Cleaning">
+        <div className="flex max-w-2xl flex-col gap-8">
+          {BLUEPRINT_CARDS.map(([title, props, width]) => (
+            <section
+              className={`flex flex-col gap-3 ${width ?? ""}`}
+              key={title}
+            >
+              <h3 className="font-medium text-muted-foreground text-xs">
+                {title}
+              </h3>
+              <BlueprintCard {...props} />
+            </section>
+          ))}
+        </div>
+      </SiteNameProvider>
+    ),
+  })),
+  {
     name: "ReviewQuoteForm",
     render: () => (
       <FixtureThread height="h-[150rem]" messages={REVIEW_QUOTE_STATES} />
@@ -1709,6 +2155,61 @@ const assistantCatalog = [
       </UploadPhotosProvider>
     ),
   })),
+  // The design tray as a thread docks it, and the providers it reads.
+  ...(
+    ["AskDesign", "SaveDesignAnswerProvider", "TraySlotProvider"] as const
+  ).map((name) => ({
+    name,
+    render: () => (
+      <SaveDesignAnswerProvider value={async () => undefined}>
+        <FixtureThread
+          height="h-[44rem]"
+          isDisabled={false}
+          settings={{
+            placeholder: "Ask Fern anything…",
+            questionPlaceholder: "Or tell Fern something else…",
+          }}
+          messages={[
+            {
+              content: [
+                {
+                  args: ASK_DESIGN_INPUT,
+                  toolCallId: "design_pending",
+                  toolName: "ask_design",
+                  type: "tool-call" as const,
+                },
+              ],
+              role: "assistant",
+              status: WAITING,
+            },
+          ]}
+        />
+      </SaveDesignAnswerProvider>
+    ),
+  })),
+  {
+    name: "GeneratedPhotos",
+    render: () => (
+      <div className="max-w-xl">
+        <GeneratedPhotos
+          actions={{ onRemove: noop, onTryAnother: noop, onUseOwn: noop }}
+          photos={[
+            {
+              alt: "A bright kitchen after a clean",
+              section: "hero",
+              slot_id: "hero",
+              src: KITCHEN,
+            },
+            {
+              alt: "The team at work",
+              section: "about",
+              slot_id: "about",
+            },
+          ]}
+        />
+      </div>
+    ),
+  },
   // At the end of an open thread, then its other states on their own:
   // approving, refused and approved.
   {
@@ -1768,6 +2269,29 @@ const assistantCatalog = [
     ),
   },
   {
+    // The photos the build made, each from its own thumbnail.
+    name: "SiteReady with photos",
+    render: () => (
+      <div className="max-w-2xl">
+        <SiteReady
+          onApprove={noop}
+          onMakeChanges={noop}
+          onSeePreview={noop}
+          photoActions={{ onRemove: noop, onTryAnother: noop, onUseOwn: noop }}
+          photos={[
+            {
+              alt: "A bright, tidy living room in morning light",
+              section: "hero",
+              slot_id: "hero",
+              src: KITCHEN,
+            },
+          ]}
+          version={2}
+        />
+      </div>
+    ),
+  },
+  {
     name: "RequestChange",
     render: () => (
       <FixtureThread height="h-[130rem]" messages={REQUEST_CHANGE_STATES} />
@@ -1810,6 +2334,53 @@ const assistantCatalog = [
     name: "CreateReminder",
     render: () => (
       <FixtureThread height="h-[180rem]" messages={CREATE_REMINDER_STATES} />
+    ),
+  },
+  {
+    name: "RecordReview",
+    render: () => (
+      <FixtureThread height="h-[180rem]" messages={RECORD_REVIEW_STATES} />
+    ),
+  },
+  {
+    name: "ConnectDomain",
+    render: () => (
+      <FixtureThread height="h-[230rem]" messages={CONNECT_DOMAIN_STATES} />
+    ),
+  },
+  {
+    name: "RemoveDomain",
+    render: () => (
+      <FixtureThread height="h-[180rem]" messages={REMOVE_DOMAIN_STATES} />
+    ),
+  },
+  {
+    name: "FindDomain",
+    render: () => (
+      <FixtureThread height="h-[60rem]" messages={FIND_DOMAIN_STATES} />
+    ),
+  },
+  // The purchase card and the provider that gives it the app's checkout.
+  ...(["BuyDomain", "DomainPurchaseProvider"] as const).map((name) => ({
+    name,
+    render: () => (
+      <DomainPurchaseProvider value={CATALOG_PURCHASE}>
+        <FixtureThread height="h-[260rem]" messages={BUY_DOMAIN_STATES} />
+      </DomainPurchaseProvider>
+    ),
+  })),
+  {
+    name: "DomainCheck",
+    render: () => (
+      <FixtureThread height="h-[100rem]" messages={CHECK_DOMAIN_STATES} />
+    ),
+  },
+  {
+    name: "ServerButtonUI",
+    render: () => (
+      <FixtureThread height="h-[34rem]" messages={POSTED}>
+        <ServerButtonUI />
+      </FixtureThread>
     ),
   },
   { name: "AnswerInputs", render: () => <AnswerInputsSample /> },
@@ -1886,6 +2457,12 @@ const assistantCatalog = [
     ),
   },
   { name: "Conversation", render: () => <ConversationSample /> },
+  // A stored conversation with nothing in it yet, as onboarding opens: the
+  // same welcome and suggestions, composer in the middle.
+  {
+    name: "Conversation stored and empty",
+    render: () => <ConversationSample stored="stored-1" />,
+  },
   {
     name: "ConversationMenu",
     render: () => <ConversationMenu newChat={<a href="#new" />} />,

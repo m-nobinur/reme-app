@@ -2,24 +2,41 @@ import {
   type AnswerQuestionInput,
   type AnswerQuestionOutput,
   BuildSummary,
+  type BuyDomainInput,
+  BuyDomainOutput,
+  type CheckDomainInput,
+  CheckDomainOutput,
+  type ConnectDomainInput,
+  ConnectDomainOutput,
+  type CosChangeRequest,
   CosFacts,
+  CosMessage,
   CosWorkspace,
   type CreateReminderOutput,
   type CreateReminderRequest,
+  DomainCheck,
   ErrorEnvelope,
   type FactRecord,
   FactValue,
   FactValueKey,
+  type FindDomainInput,
+  FindDomainOutput,
   type GetPreviewInput,
   GetPreviewOutput,
   InformationAnswer,
   OwnerAnswerText,
-  type OwnerChangeRequest,
   PreviewLink,
+  REVIEW_FACT_KEYS,
+  type RecordReviewInput,
+  type RecordReviewOutput,
+  type RemoveDomainInput,
+  type RemoveDomainOutput,
   RequestChangeOutput,
+  type ReviewFactKey,
 } from "@workspace/contracts"
 import {
   assignments,
+  domains,
   eq,
   events,
   failureCode,
@@ -28,24 +45,34 @@ import {
   type Tenancy,
 } from "@workspace/db"
 import {
+  type Bridged,
   bridge,
   holds,
   notFound,
   type Owner,
   relay,
   startChange,
+  stateFacts,
 } from "../changes.ts"
+import { emailFromOwner, phoneFromOwner } from "../contact.ts"
+import {
+  buyConfigured,
+  buyUnavailable,
+  isOrgOwner,
+  notOwner,
+} from "../domain-buy.ts"
 import { failure } from "../http.ts"
 import {
   ASSISTANT_KEY_PREFIX,
   createReminder as storeReminder,
 } from "../reminders.ts"
 import { readFacts, readWorkspace } from "../workspace.ts"
+import { readSession } from "./history.ts"
 import { wallToUtc } from "./time.ts"
 import type { Turn } from "./turns.ts"
 
 /**
- * The Chief of Staff's six tools (ADR-034), as plain functions: the
+ * The Chief of Staff's ten tools (ADR-034), as plain functions: the
  * session's org, user and session in, the contract's output out. What they
  * return is what the model reads, so each is cut to its `COS_TOOLS` output:
  * no org or staff id, no URL, no open record, and every refusal the closed
@@ -123,11 +150,26 @@ function optionsOf(requestId: string, options: string[] | null) {
   return null
 }
 
+/** A domain the org still holds. */
+const live = sql`${domains.state} <> 'removed'`
+
 export async function getWorkspace(
   { env, kit, owner }: ToolContext,
   _input: Empty
 ): Promise<CosWorkspace> {
-  const status = await readWorkspace(kit, owner.orgId, env.SITE_HOST_SUFFIX)
+  const status = await readWorkspace(kit, owner.orgId, env)
+  const rows = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+    db
+      .select({
+        name: domains.name,
+        state: domains.state,
+        lastCheck: domains.lastCheck,
+      })
+      .from(domains)
+      .where(live)
+      .orderBy(sql`${domains.createdAt} desc`)
+      .limit(10)
+  )
   return CosWorkspace.parse({
     site: {
       host: status.site.host,
@@ -137,6 +179,7 @@ export async function getWorkspace(
       assignment_id: b.assignment_id,
       kind: b.kind,
       state: b.state,
+      lane: b.lane,
       goal: b.goal,
       version: b.revision?.version ?? null,
     })),
@@ -158,6 +201,13 @@ export async function getWorkspace(
       )
       .slice(0, 10),
     missing_facts: status.missing_facts,
+    domains: rows.map((r) => ({
+      name: r.name,
+      state: r.state,
+      // A check stored before the contract changed reads as none yet.
+      last_check: DomainCheck.safeParse(r.lastCheck).data ?? null,
+    })),
+    expected_seconds: status.expected_seconds,
   })
 }
 
@@ -236,13 +286,120 @@ export async function getPreview(
   })
 }
 
+const untyped = (what: string) =>
+  failure(400, {
+    class: "validation",
+    code: "contact.not_typed",
+    message: `That ${what} is not one the owner typed in this conversation, or the change text does not name it. Name it in the change, as the owner typed it, then propose again.`,
+    detail: {},
+  })
+
+/**
+ * A new phone or email the owner typed in full, recorded as their fact
+ * before the change starts, so the build reads the number the owner gave and
+ * the content gate agrees with the site. The model proposes the value; it is
+ * recorded only when the owner's own messages in `sessionId` hold the digits
+ * or the address, so a number the model made up never becomes a fact. The
+ * change text, which the owner reads on the card, must name it too.
+ * Null when there is nothing to record or it is recorded, else the refusal.
+ */
+async function recordContact(
+  { kit, owner }: Pick<ToolContext, "kit" | "owner">,
+  sessionId: string,
+  { contact, text }: CosChangeRequest
+): Promise<Response | null> {
+  if (!contact?.phone && !contact?.email) return null
+  const log = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+    readSession(db, sessionId)
+  )
+  const said = log
+    .flatMap((e) => {
+      const m =
+        e.type === "cos.message" ? CosMessage.safeParse(e.payload) : null
+      return m?.success && m.data.message.role === "user"
+        ? m.data.message.parts.flatMap((p) =>
+            p.type === "text" ? [p.text] : []
+          )
+        : []
+    })
+    .join("\n")
+  const stated: FactValue[] = []
+  if (contact.phone) {
+    if (
+      !(
+        phoneFromOwner(contact.phone, said) &&
+        phoneFromOwner(contact.phone, text)
+      )
+    )
+      return untyped("phone number")
+    stated.push({ key: "business.phone", value: { e164: contact.phone } })
+  }
+  if (contact.email) {
+    if (
+      !(
+        emailFromOwner(contact.email, said) &&
+        emailFromOwner(contact.email, text)
+      )
+    )
+      return untyped("email address")
+    stated.push({ key: "business.email", value: { address: contact.email } })
+  }
+  try {
+    await kit.withOrg(
+      { orgId: owner.orgId, workosUserId: owner.session.workosUserId },
+      (db) => stateFacts(db, owner, stated)
+    )
+  } catch (error) {
+    console.error(
+      JSON.stringify({ code: "cos.contact_failed", error: failureCode(error) })
+    )
+    return failure(503, {
+      class: "transient",
+      code: "contact.unconfirmed",
+      message: "The new contact detail could not be confirmed.",
+      detail: {},
+    })
+  }
+  return null
+}
+
+/**
+ * The owner's change, started as `/changes` starts it, keyed by the
+ * approval, after any contact detail in it is recorded. Both ways a yes
+ * reaches the change come here: the tool's body and the chat's approval.
+ */
+export async function startOwnerChange(
+  context: Pick<ToolContext, "env" | "kit" | "owner">,
+  sessionId: string,
+  input: CosChangeRequest,
+  approvalId: string
+): Promise<Response> {
+  return (
+    (await recordContact(context, sessionId, input)) ??
+    startChange(
+      context.env,
+      context.kit,
+      context.owner,
+      input.text,
+      approvalId,
+      input.change_kind
+    )
+  )
+}
+
 /** The owner's change, started as `/changes` starts it, keyed by the approval. */
 export async function requestChange(
-  { env, kit, owner }: ToolContext,
-  input: OwnerChangeRequest,
-  approvalId: string
+  context: ToolContext,
+  input: CosChangeRequest,
+  approvalId: string,
+  turn: Turn
 ): Promise<RequestChangeOutput> {
-  const response = await startChange(env, kit, owner, input.text, approvalId)
+  const response = await startOwnerChange(
+    context,
+    turn.sessionId,
+    input,
+    approvalId
+  )
   if (!response.ok) return refused(response)
   return RequestChangeOutput.parse({
     outcome: "started",
@@ -263,6 +420,15 @@ const answerInvalid = () =>
     class: "validation",
     code: "answer.invalid",
     message: "That answer does not fit the question.",
+    detail: {},
+  })
+
+const reviewElsewhere = () =>
+  failure(400, {
+    class: "validation",
+    code: "answer.review",
+    message:
+      "A review is recorded with record_review, once the owner confirms the customer agreed to be quoted.",
     detail: {},
   })
 
@@ -309,6 +475,11 @@ export async function answerQuestion(
   const wantsFact = FactValueKey.safeParse(asked.field).success
   if (wantsFact ? fact?.key !== asked.field : fact !== null) {
     return refused(answerInvalid())
+  }
+  // A review goes only through `record_review`, whose card asks the owner
+  // whether the customer agreed to be quoted; an answer card does not.
+  if (fact && (REVIEW_FACT_KEYS as readonly string[]).includes(fact.key)) {
+    return refused(reviewElsewhere())
   }
   const answered = relay(
     await bridge(env, owner, `/${asked.assignmentId}/answer`, {
@@ -365,4 +536,179 @@ export async function createReminder(
   }
   if (made instanceof Response) return refused(made)
   return { outcome: "created", due_at: made.due_at }
+}
+
+/**
+ * A customer's review, stored as the owner's `testimonials.review_<slot>`
+ * fact, replacing the review in that slot. It runs only after the owner said
+ * yes on the card that asks whether the customer agreed to be quoted, and the
+ * contract holds `permission` to true. A replay under the same approval
+ * restates the same value, which `stateFacts` skips; a database error leaves
+ * the outcome unknown.
+ */
+export async function recordReview(
+  { kit, owner }: ToolContext,
+  { slot, ...value }: RecordReviewInput
+): Promise<RecordReviewOutput> {
+  const key: ReviewFactKey = `testimonials.review_${slot}`
+  try {
+    await kit.withOrg(
+      { orgId: owner.orgId, workosUserId: owner.session.workosUserId },
+      (db) => stateFacts(db, owner, [{ key, value }])
+    )
+  } catch (error) {
+    console.error(
+      JSON.stringify({ code: "cos.review_failed", error: failureCode(error) })
+    )
+    throw new ToolFailed(503, {
+      class: "transient",
+      code: "review.unconfirmed",
+      message: "The review could not be confirmed.",
+    })
+  }
+  return { outcome: "recorded", slot }
+}
+
+const noDomain = () =>
+  failure(404, {
+    class: "resource",
+    code: "domain.not_found",
+    message: "No domain with that name is connected to this business.",
+    detail: {},
+  })
+
+/** An orchestrator domain answer as the model reads it: the output, or the closed refusal. */
+async function domainAnswer<T>(
+  result: Bridged,
+  parse: (body: unknown) => T
+): Promise<T | Refused> {
+  const answered = relay(result, parse)
+  if (!answered.ok) return refused(answered)
+  return parse(await answered.json())
+}
+
+/**
+ * Where a connected domain is now. It wakes the domain's workflow to look
+ * at once, so the orchestrator answers. A name this org does not hold,
+ * another org's included, is refused here and never reaches it.
+ */
+export async function checkDomain(
+  { env, kit, owner }: ToolContext,
+  { name }: CheckDomainInput
+): Promise<CheckDomainOutput> {
+  const [held] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+    db
+      .select({ id: domains.id })
+      .from(domains)
+      .where(sql`${eq(domains.name, name)} and ${live}`)
+  )
+  if (!held) return refused(noDomain())
+  return domainAnswer(
+    await bridge(env, owner, `/domains/${name}/check`),
+    CheckDomainOutput.parse
+  )
+}
+
+/** The orchestrator's connect answers that a second look a moment later can turn into records. */
+const PASSING = new Set(["dns.unavailable", "domain.records_pending"])
+
+/** The pause before that second look, inside the turn's budget. */
+export const CONNECT_RETRY_MS = 2_000
+
+/**
+ * The owner's existing domain, connected through the orchestrator's
+ * `/domains`, keyed by the approval: it starts the domain's workflow once
+ * and replays its answer. Whether the name may be claimed (`domain.in_use`,
+ * `domain.too_many_pending`, `domain.invalid`) is the orchestrator's to say.
+ * A passing 503 is asked once more under the same key, so one approval
+ * survives one blip; a second one stands.
+ */
+export async function connectDomain(
+  { env, owner }: ToolContext,
+  { name }: ConnectDomainInput,
+  approvalId: string
+): Promise<ConnectDomainOutput> {
+  const ask = () =>
+    bridge(env, owner, "/domains", {
+      body: { name, approval_id: approvalId },
+      key: approvalId,
+    })
+  let result = await ask()
+  if (
+    result.status === 503 &&
+    PASSING.has(ErrorEnvelope.safeParse(result.body).data?.code ?? "")
+  ) {
+    await new Promise((resolve) => setTimeout(resolve, CONNECT_RETRY_MS))
+    result = await ask()
+  }
+  return domainAnswer(result, ConnectDomainOutput.parse)
+}
+
+/**
+ * The org's removal of a connected domain, for the owner's route and the
+ * CoS tool alike: the org's owner only, checked as account deletion checks
+ * it, then the orchestrator's `DELETE /domains/{name}` (`remove` in
+ * domain-flow.ts), which answers 204. `name` is a path segment as given.
+ */
+export async function removal(
+  { env, kit, owner }: ToolContext,
+  name: string,
+  key: string
+): Promise<Response> {
+  if (!(await isOrgOwner(kit, owner))) return notOwner("remove")
+  const result = await bridge(env, owner, `/domains/${name}`, {
+    method: "DELETE",
+    key,
+  })
+  if (result.status === 204) return new Response(null, { status: 204 })
+  return relay(result, () => {
+    throw new Error("a removal answers 204 and no body")
+  })
+}
+
+/** A connected domain taken off the site once the owner said yes, keyed by the approval. */
+export async function removeDomain(
+  context: ToolContext,
+  { name }: RemoveDomainInput,
+  approvalId: string
+): Promise<RemoveDomainOutput> {
+  const answered = await removal(context, name, approvalId)
+  if (!answered.ok) return refused(answered)
+  return { outcome: "removed" }
+}
+
+/**
+ * Names free to register now, at the price table's price: the
+ * orchestrator's registrar search, which keeps only what the configured
+ * registrar reports registrable under the table's cost cap. It costs
+ * nothing and reserves nothing, so it needs no approval.
+ */
+export async function findDomain(
+  { env, owner }: ToolContext,
+  input: FindDomainInput
+): Promise<FindDomainOutput> {
+  return domainAnswer(
+    await bridge(env, owner, "/domains/find", { body: input }),
+    FindDomainOutput.parse
+  )
+}
+
+/**
+ * A purchase prepared and nothing charged: the orchestrator rechecks the
+ * name and its price and holds it as `awaiting_payment`, keyed by the tool
+ * call, so a rerun replays it. It takes no approval: the owner's payment in
+ * the card's Checkout is the consent, and the amount there comes from the
+ * row's price. The owner only, and only once this Worker can take payments.
+ */
+export async function buyDomain(
+  { env, kit, owner }: ToolContext,
+  input: BuyDomainInput,
+  key: string
+): Promise<BuyDomainOutput> {
+  if (!buyConfigured(env)) return refused(buyUnavailable())
+  if (!(await isOrgOwner(kit, owner))) return refused(notOwner("buy"))
+  return domainAnswer(
+    await bridge(env, owner, "/domains/buy", { body: input, key }),
+    BuyDomainOutput.parse
+  )
 }

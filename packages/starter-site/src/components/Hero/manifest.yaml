@@ -1,7 +1,7 @@
 component: Hero
 path: src/components/Hero/Hero.astro
-summary: The page's h1 with a lede and action links; on the home page the
-  template sets its composition.
+summary: The page's h1 with a lede and action links; on the home page a variant
+  sets its composition.
 props:
   - name: heading
     type: string
@@ -16,31 +16,69 @@ props:
     required: false
     description: A short line above it, as site.industry.
   - name: variant
-    type: '"home" | "page"'
+    type: '"wash" | "split_arch" | "split_frame" | "dark_center" | "text_led"'
     required: false
-    description: home on the home page, page elsewhere.
+    description: The home page's composition. Empty is the plain hero of every other page.
   - name: image
     type: "{ src: string; alt: string }"
     required: false
     description: The home photo, shown with both halves.
+  - name: caption
+    type: string
+    required: false
+    description: A few words on the photo, as site.heroCaption.
   - name: highlights
     type: "{ name: string; icon: string }[]"
     required: false
     description: Services shown when there is no photo.
+  - name: note
+    type: string
+    required: false
+    description: A short reassurance line under the actions, as site.heroNote.
+  - name: inner
+    type: boolean
+    required: false
+    description: "Every page but home: with no photo the header is the plain page
+      header, whatever the variant."
+  - name: deep
+    type: boolean
+    required: false
+    description: "A page header with an `art` slot (the service area's drawing) is a
+      cover: on the deep band when this is set."
 constraints:
   - One per page, first inside the layout.
   - Children are ActionLink elements only.
-  - home on the home page, page everywhere else. The home hero follows
-    site.template, with the copy beside the photo, the photo full-bleed behind
-    it, or oversized type over stacked blocks.
+  - variant is the home page's; another page names one only to show its own
+    photo beside the copy, and with no photo (inner) it is the plain page
+    header, one text block with no empty half. wash is the photo full-bleed with
+    a pale wash under the copy; split_arch the photo under an arch beside the
+    copy; split_frame the photo a crisp rounded panel beside the copy, no frame;
+    dark_center the photo full-bleed under a dark gradient with the copy
+    centred; text_led large type with the photo as a portrait inset.
+  - The home hero sets the h1's last word in the accent colour.
+  - caption is the one piece of copy on the photo, site.heroCaption, and shows
+    only with the photo.
   - With no photo the home hero shows highlights, the first three services with
     their icons, never an empty box.
   - Renders nothing when the heading, the lede and the actions are all empty.
   - eyebrow is for the home page, with site.industry.
+  - An inner page header with no photo and an `art` slot is a cover, the drawing
+    beside the text; the service area page fills it with the area drawing, and
+    deep puts it on the deep band.
   - image is the home page's, from site.heroImage and site.heroImageAlt; it
     renders only with both, and the same photo is not used again on the page.
 examples:
   - "<Hero heading={site.servicesHeading} lede={site.servicesIntro} />"
+  - '<Hero variant="wash" heading={site.heroHeading} image={{ src:
+    site.heroImage, alt: site.heroImageAlt }} caption={site.heroCaption} />'
+  - '<Hero variant="split_arch" heading={site.heroHeading} image={{ src:
+    site.heroImage, alt: site.heroImageAlt }} />'
+  - '<Hero variant="split_frame" heading={site.heroHeading} image={{ src:
+    site.heroImage, alt: site.heroImageAlt }} caption={site.heroCaption} />'
+  - '<Hero variant="dark_center" heading={site.heroHeading} image={{ src:
+    site.heroImage, alt: site.heroImageAlt }} />'
+  - '<Hero variant="text_led" heading={site.heroHeading} image={{ src:
+    site.heroImage, alt: site.heroImageAlt }} />'
 forbidden:
   - a second Hero on a page
   - literal text in heading or lede

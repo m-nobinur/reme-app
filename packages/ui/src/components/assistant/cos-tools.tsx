@@ -6,13 +6,26 @@ import { CaretDownIcon } from "@phosphor-icons/react"
 import {
   AnswerQuestionInput,
   AnswerQuestionOutput,
+  CheckDomainInput,
+  CheckDomainOutput,
   CosFacts,
   CosWorkspace,
   CreateReminderOutput,
   CreateReminderRequest,
   GetPreviewOutput,
+  RecordReviewInput,
+  RecordReviewOutput,
 } from "@workspace/contracts"
+import {
+  BuyDomain,
+  FindDomain,
+} from "@workspace/ui/components/assistant/buy-domain"
 import { Decision, Done } from "@workspace/ui/components/assistant/decision"
+import {
+  ConnectDomain,
+  domainStatusText,
+  RemoveDomain,
+} from "@workspace/ui/components/assistant/domain"
 import {
   Collapsible,
   CollapsibleContent,
@@ -251,6 +264,45 @@ const PreviewRead: ToolCallMessagePartComponent = (props) => {
   )
 }
 
+/**
+ * Where a domain stands, as one plain sentence: a domain check is quick and
+ * the assistant says what to do, so there is nothing to open.
+ */
+const DomainRead: ToolCallMessagePartComponent = (props) => {
+  const view = readView(props, CheckDomainOutput)
+  const name =
+    CheckDomainInput.safeParse(props.args).data?.name ?? "Your domain"
+  if (view.state === "done") {
+    return (
+      <p
+        className="px-1 py-1.5 text-muted-foreground text-sm"
+        data-slot="cos-read-domain"
+      >
+        {view.output.outcome === "checked"
+          ? domainStatusText(name, view.output)
+          : refusalText(
+              view.output.error.code,
+              "I couldn't check that domain."
+            )}
+      </p>
+    )
+  }
+  return (
+    <Read
+      labels={{
+        working: "Checking your domain",
+        done: "",
+        failed: "Could not check your domain",
+        cancelled: "Stopped checking your domain",
+      }}
+      slot="cos-read-domain"
+      view={view}
+    >
+      {() => null}
+    </Read>
+  )
+}
+
 /* Decisions ------------------------------------------------------------- */
 
 /**
@@ -347,15 +399,43 @@ const CreateReminder: ToolCallMessagePartComponent = (props) => {
   )
 }
 
+// The owner's yes is their word that the customer agreed, so the card asks
+// exactly that, and the button says it.
+const RecordReview: ToolCallMessagePartComponent = (props) => (
+  <Decision
+    busy="Saving"
+    cancelled="Not saved. You sent a message instead."
+    refused="The review could not be saved."
+    detail={(input) =>
+      // A name that ends in a dot (an initial) already closes the sentence.
+      `From ${input.name}${input.name.endsWith(".") ? "" : "."} Only say yes if ${input.name} agreed to be quoted on your website under that name. It becomes review ${input.slot}, replacing any review there.`
+    }
+    done={() => (
+      <Done>Saved. Your website can show it from its next update.</Done>
+    )}
+    props={props}
+    slot="record-review"
+    title={(input) => `"${input.quote}"`}
+    view={decisionView(props, RecordReviewInput, RecordReviewOutput)}
+    yes="They agreed, save it"
+  />
+)
+
 /** The reads, which the thread may fold together, by tool name. */
 export const COS_READS: Record<string, ToolCallMessagePartComponent> = {
   get_workspace: WorkspaceRead,
   get_facts: FactsRead,
   get_preview: PreviewRead,
+  check_domain: DomainRead,
 }
 
 /** The Chief of Staff's cards that wait on the owner, by tool name. */
 export const COS_CARDS: Record<string, ToolCallMessagePartComponent> = {
   answer_question: AnswerQuestion,
   create_reminder: CreateReminder,
+  record_review: RecordReview,
+  connect_domain: ConnectDomain,
+  remove_domain: RemoveDomain,
+  find_domain: FindDomain,
+  buy_domain: BuyDomain,
 }

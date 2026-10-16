@@ -5,7 +5,10 @@ import { TOOL_RESULT_MAX_CHARS } from "../src/hooks.ts"
 import {
   loggableSpec,
   modelRouting,
+  ROLES,
+  type Role,
   resolveRuntime,
+  roleOf,
   signSpec,
   type UnsignedSpec,
   verifySpec,
@@ -121,12 +124,40 @@ describe("the runtime spec", () => {
   })
 })
 
+describe("the roles", () => {
+  it("are all read from an issued spec, each at the table's model, effort and cap", () => {
+    const spec = signSpec(unsigned(), KEY)
+    const got = Object.fromEntries(
+      (Object.keys(ROLES) as Role[]).map((r) => [r, roleOf(spec, r)])
+    )
+    const sonnet = "openrouter/anthropic/claude-sonnet-5.5"
+    const haiku = "openrouter/anthropic/claude-haiku-5.5"
+    expect(got).toEqual({
+      plan: { model: sonnet, effort: "high", maxTokens: 32_000 },
+      build: { model: sonnet, effort: "medium", maxTokens: 32_000 },
+      page: { model: sonnet, effort: "medium", maxTokens: 16_000 },
+      copy: { model: haiku, effort: "low", maxTokens: 8_000 },
+      critic: { model: sonnet, effort: "medium", maxTokens: 4_000 },
+      critic_recheck: { model: haiku, effort: "low", maxTokens: 2_000 },
+      quick_copy: { model: haiku, effort: "low", maxTokens: 4_000 },
+      quick_section: { model: sonnet, effort: "low", maxTokens: 16_000 },
+    })
+    expect(resolveRuntime(spec, KEY).effort).toBe("medium")
+  })
+
+  it("refuse a spec that does not route one", () => {
+    const { page: _page, ...rest } = modelRouting({}, "A")
+    const spec = signSpec({ ...unsigned(), model_routing: rest }, KEY)
+    expect(refusal(() => roleOf(spec, "page")).code).toBe("spec.no_route")
+  })
+})
+
 describe("the routing table", () => {
   it("reads its defaults from the environment and B from the fixed pair", () => {
-    expect(modelRouting({}, "A").implement?.model).toBe(
+    expect(modelRouting({}, "A").build?.model).toBe(
       "openrouter/anthropic/claude-sonnet-5.5"
     )
-    expect(modelRouting({}, "B").implement?.model).toBe(
+    expect(modelRouting({}, "B").build?.model).toBe(
       "openrouter/z-ai/glm-5.3-flash"
     )
     const routing = modelRouting(
@@ -137,7 +168,7 @@ describe("the routing table", () => {
       "A"
     )
     expect(routing.plan?.model).toBe("openrouter/some/thing")
-    expect(routing.compaction?.model).toBe("openrouter/some/thing")
+    expect(routing.page?.model).toBe("openrouter/some/thing")
     expect(routing.fallback?.model).toBe("openrouter/other/thing")
   })
 })

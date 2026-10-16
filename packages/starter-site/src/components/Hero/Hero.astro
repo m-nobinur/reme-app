@@ -1,4 +1,6 @@
 ---
+import Photo from "../../layouts/Photo.astro"
+import { hasPhoto } from "../../photo-files"
 import Icon from "../Icon/Icon.astro"
 
 interface Props {
@@ -8,25 +10,81 @@ interface Props {
   lede?: string
   /** A short line above it, as site.industry. */
   eyebrow?: string
-  /** home on the home page, page elsewhere. */
-  variant?: "home" | "page"
+  /** The home page's composition. Empty is the plain hero of every other page. */
+  variant?: "wash" | "split_arch" | "split_frame" | "dark_center" | "text_led"
   /** The home photo, shown with both halves. */
   image?: { src: string; alt: string }
+  /** A few words on the photo, as site.heroCaption. */
+  caption?: string
   /** Services shown when there is no photo. */
   highlights?: { name: string; icon: string }[]
+  /** A short reassurance line under the actions, as site.heroNote. */
+  note?: string
+  /** Every page but home: with no photo the header is the plain page header, whatever the variant. */
+  inner?: boolean
+  /** A page header with an `art` slot (the service area's drawing) is a cover: on the deep band when this is set. */
+  deep?: boolean
 }
 
 const {
   heading,
   lede = "",
   eyebrow = "",
-  variant = "page",
+  variant,
   image,
+  caption = "",
   highlights = [],
+  note = "",
+  inner = false,
+  deep = false,
 } = Astro.props
-const photo = variant === "home" && image?.src && image.alt ? image : null
-const listed =
-  variant === "home" && !photo ? highlights.filter((h) => h.name) : []
+const photo = variant && image?.alt && hasPhoto(image.src) ? image : null
+// The box each variant's photo renders in (src/styles/site.css), so the browser
+// does not fetch a 1280 px candidate for a 480 px frame.
+const SIZES = {
+  wash: "(min-width: 56rem) 50vw, 100vw",
+  dark_center: "100vw",
+  split_frame: "(min-width: 80rem) 34rem, (min-width: 56rem) 42vw, 100vw",
+  split_arch:
+    "(min-width: 80rem) 30rem, (min-width: 56rem) 42vw, (min-width: 30rem) 30rem, 100vw",
+  text_led: "17rem",
+}
+// Sharp at 1440 to 1920 px wide on a 2x screen: up to 2560 px (and the
+// source's own width under that). A bigger candidate takes a lower AVIF
+// quality: the 1280 px one is what the size gate weighs against 180 KiB, and
+// a detailed photo at 75 was 341 KiB there (45: 122 to 136 KiB on the same
+// two), while a screen that fetches 1920 or more is dense enough to hide it.
+const HERO_WIDTHS = [640, 960, 1280, 1920, 2560]
+// An inner page's header photo in a split or inset box is a third to a half of
+// the screen wide, so 960 is its 2x width. A wash or dark_center header spans
+// the screen (the whole width, or the right half of it), so it goes to 1920.
+// Only the home hero goes up to 2560.
+const HEADER_WIDTHS = [640, 960]
+const FULL_BLEED_HEADER_WIDTHS = [640, 960, 1280, 1920]
+const HERO_QUALITY = 75
+const heroAvifQuality = (width: number) =>
+  width <= 640
+    ? 70
+    : width <= 960
+      ? 60
+      : width <= 1280
+        ? 45
+        : width <= 1920
+          ? 35
+          : 30
+// A header whose photo is missing is one text block, not a text column beside an empty one.
+const plainPage = !variant || (inner && !photo)
+// Rendered, because Astro counts a slot as passed even when its child is a false conditional.
+const art = Astro.slots.has("art")
+  ? (await Astro.slots.render("art")).trim()
+  : ""
+// A plain page header with a drawing beside its text is the cover form.
+const cover = plainPage && art !== ""
+const listed = variant && !photo ? highlights.filter((h) => h.name) : []
+// A home hero sets its last word in the accent, never the whole line.
+const cut = variant ? heading.trimEnd().lastIndexOf(" ") : -1
+const lead = cut > 0 ? heading.slice(0, cut + 1) : heading
+const accent = cut > 0 ? heading.trimEnd().slice(cut + 1) : ""
 // Rendered rather than slotted, so a hero whose actions all resolve to
 // nothing is a hero with no actions and not an empty row.
 const actions = Astro.slots.has("default")
@@ -39,25 +97,56 @@ const actions = Astro.slots.has("default")
     <section
       class:list={[
         "hero",
-        `hero-${variant}`,
-        variant === "home" && (photo ? "hero-photo" : "hero-plain"),
+        plainPage
+          ? [
+              "hero-page",
+              cover && ["hero-cover", deep ? "area-deep" : "area-light"],
+            ]
+          : [
+              "hero-home",
+              `hero-${variant}`,
+              photo ? "hero-photo" : "hero-plain",
+            ],
       ]}
     >
       <div class="wrap hero-inner">
         <div class="hero-text">
           {eyebrow && <p class="eyebrow">{eyebrow}</p>}
-          {heading && <h1>{heading}</h1>}
-          {lede && <p class="lede">{lede}</p>}
+          {heading && (
+            <h1>
+              {lead}
+              {accent && <span class="accent">{accent}</span>}
+            </h1>
+          )}
+          {lede && (
+            <p class="lede" data-copy={variant ? "hero_lede" : undefined}>
+              {lede}
+            </p>
+          )}
           {actions && <div class="actions" set:html={actions} />}
+          {note && <p class="hero-note">{note}</p>}
         </div>
+        {cover && <Fragment set:html={art} />}
         {photo && (
-          <img
-            class="hero-image"
-            src={photo.src}
-            alt={photo.alt}
-            fetchpriority="high"
-            decoding="async"
-          />
+          <div class="hero-media">
+            <Photo
+              class="hero-image"
+              src={photo.src}
+              alt={photo.alt}
+              sizes={SIZES[variant ?? "wash"]}
+              widths={
+                !inner
+                  ? HERO_WIDTHS
+                  : variant === "wash" || variant === "dark_center"
+                    ? FULL_BLEED_HEADER_WIDTHS
+                    : HEADER_WIDTHS
+              }
+              quality={HERO_QUALITY}
+              avifQuality={heroAvifQuality}
+              priority
+            />
+            {caption && <p class="hero-caption">{caption}</p>}
+          </div>
         )}
         {listed.length > 0 && (
           <ul class="hero-list">

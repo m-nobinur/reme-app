@@ -3,6 +3,7 @@
   "x-ai/grok-4.6",
   "z-ai/glm-5.3-flash",
   "anthropic/claude-sonnet-5.5",
+  "anthropic/claude-haiku-5.5",
   "google/gemini-3.8-flash",
   "openai/gpt-6.1-sol"
 ]

@@ -64,12 +64,14 @@ const EXTRACT: {
 /**
  * A phone number's digits, with a UK number written as dialled at home
  * ("07700 900123", eleven digits from 0) read as its +44 form, so the page
- * can show the national form of an E.164 fact. Null under seven digits.
+ * can show the national form of an E.164 fact; ten digits in the North
+ * American plan ("(206) 555-0104") as its +1 form. Null under seven digits.
  */
 export function phoneKey(text: string): string | null {
   const digits = text.replace(/\D/g, "")
   if (digits.length < 7) return null
-  return /^0\d{10}$/.test(digits) ? `44${digits.slice(1)}` : digits
+  if (/^0\d{10}$/.test(digits)) return `44${digits.slice(1)}`
+  return /^[2-9]\d{2}[2-9]\d{6}$/.test(digits) ? `1${digits}` : digits
 }
 
 const literal = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")

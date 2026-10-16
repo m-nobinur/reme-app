@@ -95,7 +95,7 @@ test("an owner with an org sees its team and the fact it stated @probe-org", asy
 
   // Nothing built, so no host and nothing live; the fact is no longer asked for.
   const workspace = await read("/workspace")
-  expect(workspace.site).toEqual({ host: null, live: null })
+  expect(workspace.site).toEqual({ host: null, url: null, live: null })
   expect(workspace.builds).toEqual([])
   expect(workspace.missing_facts).not.toContain("business.phone")
   expect(workspace.missing_facts.length).toBeGreaterThan(0)

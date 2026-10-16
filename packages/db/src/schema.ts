@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm"
 import {
   bigint,
+  boolean,
   char,
   check,
   customType,
@@ -158,11 +159,14 @@ export const orgs = pgTable(
      * a primary key wearing a disguise.
      */
     workosOrganizationId: text("workos_organization_id"),
+    /** The org's one Stripe Customer, made on its first domain purchase. */
+    stripeCustomerId: text("stripe_customer_id"),
     createdAt,
     updatedAt,
   },
   (t) => [
     unique("orgs_workos_organization_key").on(t.workosOrganizationId),
+    unique("orgs_stripe_customer_key").on(t.stripeCustomerId),
     // The tenant root carries no org_id: it scopes on its own key.
     pgPolicy("orgs_org_isolation", {
       for: "all",
@@ -691,6 +695,13 @@ export const assignments = pgTable(
      * log is the truth and this is the figure frozen at close.
      */
     costUsd: doublePrecision("cost_usd"),
+    /**
+     * The `Blueprint` the planner wrote and the owner reviews (ADR-038), the
+     * latest round's. Null on a build that did not plan: a revise, the quick
+     * lane, or a row from before planning. The contract is the check, in the
+     * planner; the column is its store, as `acceptance_criteria` is.
+     */
+    blueprint: jsonb("blueprint"),
     deadline: timestamp("deadline", { withTimezone: true }),
     priority: assignmentPriority("priority").notNull().default("normal"),
     /** The Workflows instance driving this row, once one exists. */
@@ -1106,5 +1117,118 @@ export const reminders = pgTable(
       sql`char_length(title) between 1 and 200 and title ~ '[^ \\t\\n\\v\\f\\r]'`
     ),
     orgIsolation("reminders"),
+  ]
+)
+
+/** `DomainOrigin`: connected by the owner, or bought through Reme. */
+export const domainOrigin = pgEnum("domain_origin", ["connected", "purchased"])
+
+/** `ConnectMethod`: how the domain points at Reme. */
+export const connectMethod = pgEnum("connect_method", [
+  "records",
+  "domain_connect",
+  "purchased",
+])
+
+/**
+ * `DomainState`. `removed` rows stay, so a later claim on the name can ask
+ * for a TXT. Order matters: a claim is live while its state sorts before
+ * `failed` (`domains_live_name`), so a new live state goes before it.
+ */
+export const domainState = pgEnum("domain_state", [
+  "awaiting_payment",
+  "awaiting_dns",
+  "verifying",
+  "active",
+  "failed",
+  "abandoned",
+  "removed",
+])
+
+/**
+ * A custom domain an owner connected to their site, or bought through Reme
+ * (`origin = 'purchased'`, priced, waiting on Checkout until paid). `name` is the zone apex,
+ * lowercase and punycode; `primary_host` is the apex or its `www.`. Postgres is
+ * the truth and the router's `host:` pointers in KV are a cache of the active
+ * rows. A name has one live row across all orgs, so that index is a plain
+ * unique index: a second claim fails on the unique violation and never reads
+ * the other org's row. The router's fallback finds an active row from the
+ * request host through `resolve_domain_host` (migration 0015).
+ */
+export const domains = pgTable(
+  "domains",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    /** The site the domain serves. Not a foreign key, like `deployments.site_id`. */
+    siteId: uuid("site_id").notNull(),
+    name: text("name").notNull(),
+    primaryHost: text("primary_host").notNull(),
+    origin: domainOrigin("origin").notNull(),
+    method: connectMethod("method").notNull(),
+    state: domainState("state").notNull(),
+    onCloudflare: boolean("on_cloudflare").notNull().default(false),
+    /** Cloudflare ids: the custom hostnames and the like. */
+    cfIds: jsonb("cf_ids").notNull().default(sql`'{}'::jsonb`),
+    /** `DomainProvider`, `{name, settings_url}`, from detection. */
+    provider: jsonb("provider"),
+    /** Another org held this name before, so ownership needs a TXT record. */
+    needsTxt: boolean("needs_txt").notNull().default(false),
+    /**
+     * Cloudflare's ownership TXT per host, `{[host]: {name, value}}`, kept
+     * from when the hostname was claimed so a `needs_txt` claim can be checked
+     * against it after Cloudflare stops showing it.
+     */
+    ownership: jsonb("ownership").notNull().default(sql`'{}'::jsonb`),
+    /** The approval that let the connect through; one domain per approval. */
+    approvalId: uuid("approval_id").unique(),
+    /** The last `DomainCheck`. */
+    lastCheck: jsonb("last_check"),
+    /** A purchase's `DomainStripe`: Stripe ids only, never a secret or card data. */
+    stripe: jsonb("stripe"),
+    /** A purchase's `DomainPrice`, from the price table and the live check. */
+    price: jsonb("price"),
+    /** A purchase's `DomainRegistration`: the sandbox flag, status and outcome. */
+    registration: jsonb("registration"),
+    /**
+     * The registrant's `RegistrantDetails`, held only while the purchase is
+     * open: the update that records its outcome sets this back to null.
+     */
+    registrant: jsonb("registrant"),
+    createdAt,
+    activatedAt: timestamp("activated_at", { withTimezone: true }),
+    removedAt: timestamp("removed_at", { withTimezone: true }),
+  },
+  (t) => [
+    foreignKey({
+      name: "domains_approval_fk",
+      columns: [t.approvalId, t.orgId],
+      foreignColumns: [approvals.id, approvals.orgId],
+    }),
+    // No `www.` prefix: `resolve_domain_host` strips one, so a live `www.x`
+    // beside a live `x` would put two orgs behind one host.
+    check(
+      "domains_name_lowercase_apex",
+      sql`name ~ '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$' and char_length(name) <= 253 and name not like 'www.%'`
+    ),
+    check(
+      "domains_primary_host_of_name",
+      sql`primary_host in (name, 'www.' || name)`
+    ),
+    // A purchase is bought and priced, and only a purchase waits on payment.
+    // `::text` because 0017 adds these enum values, and Postgres refuses a
+    // new value as a literal in the transaction that added it.
+    check(
+      "domains_purchase_shape",
+      sql`(origin::text = 'purchased') = (method::text = 'purchased') and (origin::text <> 'purchased' or price is not null) and (origin::text = 'purchased' or state::text not in ('awaiting_payment', 'abandoned'))`
+    ),
+    // One live claim on a name, across orgs; an expired Checkout frees it.
+    // The live states are the ones sorting before `failed` (see
+    // `domainState`): an index predicate takes no `::text`, which is stable.
+    uniqueIndex("domains_live_name").on(t.name).where(sql`state < 'failed'`),
+    index("domains_org_state_idx").on(t.orgId, t.state),
+    orgIsolation("domains"),
   ]
 )

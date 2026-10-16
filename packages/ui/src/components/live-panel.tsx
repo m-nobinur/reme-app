@@ -1,18 +1,32 @@
 import {
   ArrowSquareOutIcon,
+  CaretDownIcon,
   CheckCircleIcon,
+  CheckIcon,
   CircleIcon,
+  CircleNotchIcon,
   ClockIcon,
+  ImageIcon,
 } from "@phosphor-icons/react"
 import {
   type ApprovalTarget,
   type AssignmentState,
+  type Blueprint,
+  type BuildActivity,
+  type BuildLane,
+  type BuildPhoto,
   type DecisionRequest,
   GOAL_MAX,
 } from "@workspace/contracts"
 import { ApprovalTargetSummary } from "@workspace/ui/components/approval-target"
+import { BlueprintCard } from "@workspace/ui/components/assistant/blueprint-card"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { Field } from "@workspace/ui/components/field"
+import {
+  type GeneratedPhoto,
+  GeneratedPhotos,
+  type PhotoActions,
+} from "@workspace/ui/components/generated-photos"
 import { Skeleton } from "@workspace/ui/components/skeleton"
 import {
   type AnswerSpec,
@@ -20,7 +34,13 @@ import {
   FACT_INPUTS,
   type FactInput,
 } from "@workspace/ui/lib/answer"
-import { WORKING } from "@workspace/ui/lib/build-state"
+import {
+  directionLabel,
+  pairOfBlueprint,
+  paletteName,
+  paletteStops,
+} from "@workspace/ui/lib/blueprint"
+import { currentRow, WORKING } from "@workspace/ui/lib/build-state"
 import { formatDateTime } from "@workspace/ui/lib/format"
 import { cn, META } from "@workspace/ui/lib/utils"
 import {
@@ -157,6 +177,331 @@ function useElapsed(startedAt: string, now?: number): number | null {
   return at === null ? null : at - Date.parse(startedAt)
 }
 
+const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`
+
+/**
+ * What the plan settled, as it lands: the look, the site's own colours, its
+ * lettering and how much there is to write. Fixed labels around the plan's
+ * ids, never the planner's prose.
+ */
+function Decided({ plan }: { plan: Blueprint }) {
+  const pair = pairOfBlueprint(plan.fonts)
+  const sections = plan.pages.reduce((n, p) => n + p.sections.length, 0)
+  return (
+    <dl
+      className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1 text-[0.8125rem]"
+      data-slot="build-decided"
+    >
+      <dt className="text-muted-foreground">Look</dt>
+      <dd className="truncate">{directionLabel(plan.direction)}</dd>
+      <dt className="text-muted-foreground">Colours</dt>
+      <dd className="flex min-w-0 items-center gap-2">
+        {/* The site's own colours, whatever the app's theme, with a hairline so a white stop shows. */}
+        <span
+          aria-hidden
+          className="flex h-4 w-16 shrink-0 overflow-hidden rounded-sm ring-1 ring-foreground/15"
+        >
+          {paletteStops(plan.palette).map((color) => (
+            <span
+              className="h-full flex-1"
+              key={color}
+              style={{ backgroundColor: color }}
+            />
+          ))}
+        </span>
+        <span className="truncate">{paletteName(plan.palette)}</span>
+      </dd>
+      <dt className="text-muted-foreground">Lettering</dt>
+      <dd className="truncate">
+        {pair.display} and {pair.body}
+      </dd>
+      <dt className="text-muted-foreground">Pages</dt>
+      <dd className="truncate">
+        {plural(plan.pages.length, "page")}, {plural(sections, "section")}
+      </dd>
+    </dl>
+  )
+}
+
+/**
+ * One generated photo as the build makes it: a quiet shimmer while it is
+ * drawn, the picture once it exists, and a plain note when no model drew it. A picture that does not load is a quiet tile, never a broken image.
+ */
+function PhotoTile({ photo }: { photo: BuildPhoto }) {
+  const [loaded, setLoaded] = useState(false)
+  const [broken, setBroken] = useState(false)
+  const tile =
+    "relative aspect-[4/3] overflow-hidden rounded-lg border border-border"
+  if (photo.state === "drawing") {
+    return (
+      <div className={tile} data-state="drawing">
+        <Skeleton className="size-full rounded-none motion-reduce:animate-none" />
+        <span className="sr-only">Still drawing</span>
+      </div>
+    )
+  }
+  if (photo.state === "fallback") {
+    return (
+      <div
+        className={cn(
+          tile,
+          "flex items-end border-dashed p-1.5 text-[0.6875rem] text-muted-foreground leading-tight"
+        )}
+        data-state="fallback"
+      >
+        No photo, using a text layout
+      </div>
+    )
+  }
+  return (
+    <div className={cn(tile, "bg-muted")} data-state="made">
+      {photo.thumbnail && !broken ? (
+        <img
+          alt={photo.alt ?? ""}
+          className={cn(
+            "size-full object-cover transition-opacity duration-200 motion-reduce:transition-none",
+            loaded ? "opacity-100" : "opacity-0"
+          )}
+          decoding="async"
+          height={72}
+          onError={() => setBroken(true)}
+          onLoad={() => setLoaded(true)}
+          src={photo.thumbnail}
+          width={96}
+        />
+      ) : (
+        <ImageIcon
+          aria-hidden
+          className="absolute top-1.5 left-1.5 size-4 text-muted-foreground"
+        />
+      )}
+    </div>
+  )
+}
+
+/** The detail under a step: what it decided, made or is checking. */
+function StepDetail({
+  row,
+  at,
+  plan,
+  photos,
+  awaiting,
+}: {
+  row: BuildActivity
+  at: "done" | "now" | "next"
+  plan?: Blueprint | undefined
+  photos?: readonly BuildPhoto[] | undefined
+  awaiting: boolean
+}) {
+  switch (row.id) {
+    case "planning":
+      return (
+        <>
+          {at === "now" ? (
+            <p className={META}>
+              {awaiting
+                ? "Waiting for your review. The plan is in the chat."
+                : "Choosing a look, colours and pages."}
+            </p>
+          ) : null}
+          {plan ? <Decided plan={plan} /> : null}
+        </>
+      )
+    case "photos": {
+      if (at === "next" || !photos?.length) return null
+      const fell = photos.filter((p) => p.state === "fallback").length
+      return (
+        <>
+          <ul aria-label="Photos" className="grid max-w-sm grid-cols-3 gap-2">
+            {photos.map((photo) => (
+              <li key={photo.slot_id}>
+                <PhotoTile photo={photo} />
+              </li>
+            ))}
+          </ul>
+          {fell ? (
+            <p className={META}>
+              {fell === 1
+                ? "One section uses its text layout instead."
+                : `${fell} sections use their text layout instead.`}
+            </p>
+          ) : null}
+        </>
+      )
+    }
+    case "writing":
+      return row.items?.length ? (
+        <ul aria-label="Pages" className="flex flex-wrap gap-1.5">
+          {row.items.map((item) => (
+            <li
+              className={cn(
+                "inline-flex h-6 items-center gap-1 rounded-md border px-2 text-xs",
+                item.done
+                  ? "border-border text-foreground"
+                  : "border-dashed text-muted-foreground"
+              )}
+              data-state={item.done ? "done" : "next"}
+              key={item.label}
+            >
+              {item.done ? (
+                <CheckIcon aria-hidden className="size-3 text-primary" />
+              ) : null}
+              {item.label}
+              {item.done ? <span className="sr-only"> (written)</span> : null}
+            </li>
+          ))}
+        </ul>
+      ) : null
+    case "design":
+      return at === "now" ? (
+        <p className={META}>
+          Reading the home page at phone, tablet and desktop widths.
+        </p>
+      ) : null
+    case "polishing":
+      return at === "now" ? (
+        <p className={META}>Making the changes the design review asked for.</p>
+      ) : null
+    case "fixing":
+      return at === "now" ? (
+        <p className={META}>
+          Putting right what the checks flagged, then checking again.
+        </p>
+      ) : null
+    case "checking":
+      return at === "now" ? (
+        <p className={META}>Links, facts, accessibility and page weight.</p>
+      ) : null
+    default:
+      return null
+  }
+}
+
+/**
+ * Every step of a full build, in order: done ones ticked and folded, the one
+ * it is on marked, moving and open, the rest quiet. A done step's detail
+ * opens on demand. A screen reader hears the step change, never the counts
+ * ticking.
+ */
+function BuildSteps({
+  rows,
+  plan,
+  photos,
+  awaiting,
+}: {
+  rows: readonly BuildActivity[]
+  plan?: Blueprint | undefined
+  photos?: readonly BuildPhoto[] | undefined
+  awaiting: boolean
+}) {
+  const now = currentRow(rows)
+  const current = rows[now]
+  const waiting = awaiting && current?.id === "planning"
+  return (
+    <>
+      <p aria-live="polite" className="sr-only">
+        {current
+          ? `Now: ${waiting ? "waiting for your review" : current.label.toLowerCase()}.`
+          : ""}
+      </p>
+      <ol aria-label="Build steps" className="flex flex-col">
+        {rows.map((row, index) => {
+          const at =
+            index === now ? "now" : row.done >= row.total ? "done" : "next"
+          return (
+            <li
+              className="group relative flex gap-2.5 pb-3 last:pb-0"
+              data-state={at}
+              key={row.id}
+            >
+              {/* The rail between markers, quiet, ticked off as steps finish. */}
+              <span
+                aria-hidden
+                className={cn(
+                  "absolute top-5 bottom-0.5 left-[7.5px] w-px group-last:hidden",
+                  at === "done" ? "bg-primary/45" : "bg-border"
+                )}
+              />
+              <span aria-hidden className="mt-px flex size-4 shrink-0">
+                {at === "done" ? (
+                  <CheckCircleIcon
+                    className="size-4 text-primary"
+                    weight="fill"
+                  />
+                ) : at === "next" ? (
+                  <CircleIcon className="size-4 text-muted-foreground/60" />
+                ) : waiting ? (
+                  <ClockIcon className="size-4 text-primary" />
+                ) : (
+                  <CircleNotchIcon className="size-4 animate-spin text-primary motion-reduce:animate-none" />
+                )}
+              </span>
+              {at === "done" ? (
+                // A finished step folds to its line; its detail opens on demand.
+                <details className="group/step flex min-w-0 flex-1 flex-col">
+                  <summary className="flex cursor-pointer list-none items-baseline gap-1.5 rounded-sm text-[0.8125rem] focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
+                    <span className="min-w-0 flex-1 text-foreground">
+                      {row.label}
+                      <span className="sr-only"> (done)</span>
+                    </span>
+                    {row.total > 1 ? (
+                      <span className="shrink-0 text-muted-foreground tabular-nums">
+                        {row.done} of {row.total}
+                      </span>
+                    ) : null}
+                    <CaretDownIcon
+                      aria-hidden
+                      className="size-3 shrink-0 self-center text-muted-foreground transition-transform group-open/step:rotate-180 motion-reduce:transition-none"
+                    />
+                  </summary>
+                  <div className="flex flex-col gap-2 pt-2">
+                    <StepDetail
+                      at={at}
+                      awaiting={awaiting}
+                      photos={photos}
+                      plan={plan}
+                      row={row}
+                    />
+                  </div>
+                </details>
+              ) : (
+                <div className="flex min-w-0 flex-1 flex-col gap-2">
+                  <p className="flex items-baseline justify-between gap-2 text-[0.8125rem]">
+                    <span
+                      className={cn(
+                        at === "now"
+                          ? "font-medium text-foreground"
+                          : "text-muted-foreground"
+                      )}
+                    >
+                      {row.label}
+                      <span className="sr-only">
+                        {at === "now" ? " (now)" : " (next)"}
+                      </span>
+                    </span>
+                    {row.total > 1 && at !== "next" ? (
+                      <span className="shrink-0 text-muted-foreground tabular-nums">
+                        {row.done} of {row.total}
+                      </span>
+                    ) : null}
+                  </p>
+                  <StepDetail
+                    at={at}
+                    awaiting={awaiting}
+                    photos={photos}
+                    plan={plan}
+                    row={row}
+                  />
+                </div>
+              )}
+            </li>
+          )
+        })}
+      </ol>
+    </>
+  )
+}
+
 /**
  * The live stepper: the build the team is on, tied to its real state, with
  * the time it has taken against the measured typical, a Stop, and what is
@@ -165,7 +510,7 @@ function useElapsed(startedAt: string, now?: number): number | null {
 function WorkingOn({
   build,
   queued = [],
-  typical,
+  expectedSeconds,
   now,
   onStop,
   stopping = false,
@@ -177,11 +522,27 @@ function WorkingOn({
     state: AssignmentState
     version: number | null
     startedAt: string
+    /** A build with no lane is a full one. */
+    lane?: BuildLane
+    /** A quick edit that moved to a fuller lane, which the panel says once. */
+    fellThrough?: boolean
+    /** Fixed-string progress rows from the orchestrator; none shows only the stepper. */
+    activity?: BuildActivity[]
+    /** The plan, once one is made: what it decided shows under its step. */
+    plan?: Blueprint | undefined
+    /** The plan waits on the owner's review, which the clock leaves out. */
+    awaitingReview?: boolean
+    /** The photos it is making, as each settles. */
+    photos?: readonly BuildPhoto[] | undefined
+    /** Time spent on decided plan reviews, left out of the clock. */
+    reviewMs?: number | undefined
+    /** When the build last changed state: the clock stops there once it is ready. */
+    endedAt?: string | undefined
   }
   /** What the owner asked for in each build waiting behind this one. */
   queued?: string[]
-  /** The measured range a build takes, in seconds. */
-  typical: { min: number; max: number }
+  /** How long this build's lane usually takes, in seconds; absent says nothing about time. */
+  expectedSeconds?: { p50: number; p95: number }
   now?: number
   onStop?: () => void
   stopping?: boolean
@@ -190,7 +551,14 @@ function WorkingOn({
   defaultConfirming?: boolean
 }) {
   const stage = BUILD_STAGES[build.state]
-  const elapsed = useElapsed(build.startedAt, now)
+  // A ready build's clock stops where it got ready.
+  const ended =
+    stage.step === 3 && build.endedAt ? Date.parse(build.endedAt) : undefined
+  const ran = useElapsed(build.startedAt, ended ?? now)
+  // "Built in" is the build's own time: claim to preview_ready less the wait
+  // on the owner's plan review. Perf run 2: 6 min 05 s less 16.6 s of review
+  // shows 5 min 48 s, which is right.
+  const elapsed = ran === null ? null : ran - (build.reviewMs ?? 0)
   // "asking" once Stop is pressed, "kept" once the owner keeps building.
   // A Stop in flight keeps the question on screen, with its buttons
   // disabled, until the build is read again.
@@ -207,8 +575,24 @@ function WorkingOn({
     moveFocus.current = null
   }, [asked])
 
-  const long = elapsed !== null && elapsed > typical.max * 1000
-  const usually = `Builds usually take ${Math.round(typical.min / 60)} to ${Math.round(typical.max / 60)} minutes.`
+  const quick = build.lane === "quick"
+  const long =
+    elapsed !== null &&
+    expectedSeconds !== undefined &&
+    elapsed > expectedSeconds.p95 * 1000
+  const usually = expectedSeconds
+    ? quick
+      ? `Usually about ${expectedSeconds.p50} seconds.`
+      : `Builds usually take ${Math.round(expectedSeconds.p50 / 60)} to ${Math.round(expectedSeconds.p95 / 60)} minutes.`
+    : null
+  // A quick edit has no stages to walk: one line while it works, the usual note when it waits.
+  const note =
+    quick && WORKING.has(build.state) ? "Updating your preview." : stage.note
+  // A full build walks its steps; one with none, or waiting, shows the stepper and its note.
+  const rows = quick ? [] : (build.activity ?? [])
+  const steps = rows.length > 0
+  const awaiting = build.awaitingReview === true && build.state === "planning"
+  const waiting = awaiting && steps
 
   return (
     <PanelSection title="Working on">
@@ -217,45 +601,72 @@ function WorkingOn({
           {build.version ? `Version ${build.version}: ` : null}
           {build.goal}
         </p>
-        <ol aria-label="Build progress" className="grid grid-cols-4 gap-1">
-          {STEPS.map((label, index) => (
-            <li
-              aria-current={index === stage.step ? "step" : undefined}
-              className="flex flex-col gap-1.5"
-              key={label}
-            >
-              <span
-                aria-hidden
-                className={cn(
-                  "h-1 rounded-full transition-colors duration-200 motion-reduce:transition-none",
-                  index < stage.step && "bg-primary/45",
-                  index === stage.step && "bg-primary",
-                  index === stage.step &&
-                    WORKING.has(build.state) &&
-                    "animate-pulse motion-reduce:animate-none",
-                  index > stage.step && "bg-border"
-                )}
-                data-slot="step-bar"
-              />
-              <span
-                className={cn(
-                  "text-[0.8125rem]",
-                  index === stage.step
-                    ? "font-medium text-foreground"
-                    : "text-muted-foreground"
-                )}
+        {quick || steps ? null : (
+          <ol aria-label="Build progress" className="grid grid-cols-4 gap-1">
+            {STEPS.map((label, index) => (
+              <li
+                aria-current={index === stage.step ? "step" : undefined}
+                className="flex flex-col gap-1.5"
+                key={label}
               >
-                {label}
-              </span>
-            </li>
-          ))}
-        </ol>
-        <p aria-live="polite" className="text-sm">
-          {stage.note}
-        </p>
+                <span
+                  aria-hidden
+                  className={cn(
+                    "h-1 rounded-full transition-colors duration-200 motion-reduce:transition-none",
+                    index < stage.step && "bg-primary/45",
+                    index === stage.step && "bg-primary",
+                    index === stage.step &&
+                      WORKING.has(build.state) &&
+                      "animate-pulse motion-reduce:animate-none",
+                    index > stage.step && "bg-border"
+                  )}
+                  data-slot="step-bar"
+                />
+                <span
+                  className={cn(
+                    "text-[0.8125rem]",
+                    index === stage.step
+                      ? "font-medium text-foreground"
+                      : "text-muted-foreground"
+                  )}
+                >
+                  {label}
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
+        {steps ? (
+          <BuildSteps
+            awaiting={awaiting}
+            photos={build.photos}
+            plan={build.plan}
+            rows={rows}
+          />
+        ) : (
+          <p aria-live="polite" className="text-sm">
+            {note}
+          </p>
+        )}
+        {build.fellThrough ? (
+          <p className="text-sm" data-slot="fell-through">
+            This change needs more than a quick edit, so it will take a few
+            minutes.
+          </p>
+        ) : null}
         <p className={cn(META, "tabular-nums")}>
-          {elapsed === null ? null : `${duration(elapsed)} so far. `}
-          {long ? "This one is taking longer than usual." : usually}
+          {waiting
+            ? "The clock waits while you review the plan."
+            : ended !== undefined
+              ? elapsed === null
+                ? null
+                : `Built in ${duration(elapsed)}.`
+              : [
+                  elapsed === null ? null : `${duration(elapsed)} so far.`,
+                  long ? "This one is taking longer than usual." : usually,
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
         </p>
         {onStop && STOPPABLE(build.state) ? (
           confirming ? (
@@ -616,6 +1027,68 @@ type Preview = { url: string; screenshots: string[] }
 
 const SHOTS = ["on a phone", "on a tablet", "on a laptop"] as const
 
+/** Screenshots land about 10 s after the preview does; look again every 5 s for half a minute. */
+const SHOT_RETRY_MS = 5000
+const SHOT_TRIES = 6
+
+/**
+ * One width of the home page. Until the image exists it is a quiet block of
+ * the same size, never a broken image; a screenshot still missing after the
+ * last look tells the caller.
+ */
+function Shot({
+  src,
+  alt,
+  where,
+  onGiveUp,
+}: {
+  src: string | undefined
+  alt: string
+  where: string
+  onGiveUp: () => void
+}) {
+  const [tries, setTries] = useState(0)
+  const [loaded, setLoaded] = useState(false)
+  useEffect(() => {
+    if (loaded || tries === 0) return
+    if (tries >= SHOT_TRIES) {
+      onGiveUp()
+      return
+    }
+    const timer = setTimeout(() => setTries(tries + 1), SHOT_RETRY_MS)
+    return () => clearTimeout(timer)
+  }, [loaded, tries, onGiveUp])
+  return (
+    <div className="relative aspect-[3/4]">
+      {loaded ? null : (
+        <div
+          className="absolute inset-0 rounded-md border border-border bg-muted"
+          data-slot="screenshot-pending"
+        >
+          <span className="sr-only">
+            Screenshot {where} is still being made
+          </span>
+        </div>
+      )}
+      <img
+        alt={alt}
+        className={cn(
+          "size-full rounded-md border border-border bg-muted object-cover object-top",
+          !loaded && "invisible"
+        )}
+        height={160}
+        // A fresh element per look, so the browser asks again.
+        key={tries}
+        loading="lazy"
+        onError={() => setTries(tries + 1)}
+        onLoad={() => setLoaded(true)}
+        src={src}
+        width={120}
+      />
+    </div>
+  )
+}
+
 /**
  * The version's home page at three widths. A preview that could not be
  * read says so and can be read again, with no link implied where there is
@@ -657,15 +1130,12 @@ function Screenshots({
         preview === "loading" ? (
           <Skeleton className="aspect-[3/4] rounded-md" key={where} />
         ) : (
-          <img
+          <Shot
             alt={`Version ${version}, home page ${where}`}
-            className="aspect-[3/4] w-full rounded-md border border-border bg-muted object-cover object-top"
-            height={160}
             key={where}
-            loading="lazy"
-            onError={() => setBroken(preview)}
+            onGiveUp={() => setBroken(preview)}
             src={preview.screenshots[index]}
-            width={120}
+            where={where}
           />
         )
       )}
@@ -691,6 +1161,8 @@ function ApprovalItem({
   pending: busy = null,
   error = null,
   defaultAsking = false,
+  photos = [],
+  photoActions,
 }: {
   target: ApprovalTarget
   version: number
@@ -706,6 +1178,9 @@ function ApprovalItem({
   error?: string | null
   /** Open on the change note, for the catalog. */
   defaultAsking?: boolean
+  /** The pictures the assistant made for this version, to badge and offer changes on. */
+  photos?: readonly GeneratedPhoto[]
+  photoActions?: PhotoActions | undefined
 }) {
   const id = useId()
   const decision = approvalDecision(target, "approved")
@@ -745,6 +1220,16 @@ function ApprovalItem({
       />
       {typeof preview === "object" ? (
         <OutLink href={preview.url}>Open preview</OutLink>
+      ) : null}
+      {photoActions ? (
+        <GeneratedPhotos
+          actions={photoActions}
+          disabled={busy !== null}
+          heroShot={
+            typeof preview === "object" ? preview.screenshots[2] : undefined
+          }
+          photos={photos}
+        />
       ) : null}
       <p className={META}>{expiryLine(expiresAt, onExpiry)}</p>
       <ApprovalTargetSummary
@@ -973,13 +1458,19 @@ type Thumbnail = { src: string } | "loading" | null
  */
 function YourWebsite({
   host,
+  url,
   live,
   thumbnail = null,
+  blueprint = null,
   onRequestChanges,
 }: {
   host: string | null
+  /** Where `host` opens, as the api built it (http and a port on local dev). */
+  url?: string | null
   live: number | null
   thumbnail?: Thumbnail
+  /** The plan the live site was built from, kept under it read-only. */
+  blueprint?: Blueprint | null
   /** Starts a change to the live site in the chat. */
   onRequestChanges?: (() => void) | undefined
 }) {
@@ -1021,7 +1512,7 @@ function YourWebsite({
                 buttonVariants({ variant: "outline", size: "lg" }),
                 "grow"
               )}
-              href={`https://${host}`}
+              href={url ?? `https://${host}`}
               rel="noreferrer"
               target="_blank"
               title={host}
@@ -1047,6 +1538,14 @@ function YourWebsite({
             </Button>
           ) : null}
         </div>
+      ) : null}
+      {blueprint ? (
+        <BlueprintCard
+          blueprint={blueprint}
+          className="my-0 rounded-2xl p-3"
+          defaultOpen={false}
+          readOnly
+        />
       ) : null}
     </div>
   )
@@ -1088,10 +1587,13 @@ function LiveLine({
   tone,
   lead,
   detail = null,
+  progress = null,
 }: {
   tone: "working" | "live" | "idle"
   lead: string
   detail?: string | null
+  /** How far a build is through its steps, kept in view when the words truncate. */
+  progress?: { done: number; total: number } | null
 }) {
   return (
     <span
@@ -1107,12 +1609,31 @@ function LiveLine({
           tone === "working" && "animate-pulse motion-reduce:animate-none"
         )}
       />
-      <span className="min-w-0 truncate">
-        <span className="font-medium">{lead}</span>
-        {detail ? (
-          <span className="text-muted-foreground"> {detail}</span>
-        ) : null}
-      </span>
+      {progress ? (
+        // A build's step is the news, so the lead gives way first.
+        <span className="flex min-w-0 items-baseline gap-1">
+          <span className="min-w-0 truncate font-medium">{lead}</span>
+          <span className="shrink-0 text-muted-foreground">{detail}</span>
+          <span
+            className="shrink-0 text-muted-foreground tabular-nums"
+            data-slot="live-line-progress"
+          >
+            <span aria-hidden>
+              {progress.done}/{progress.total}
+            </span>
+            <span className="sr-only">
+              , step {progress.done} of {progress.total}
+            </span>
+          </span>
+        </span>
+      ) : (
+        <span className="min-w-0 truncate">
+          <span className="font-medium">{lead}</span>
+          {detail ? (
+            <span className="text-muted-foreground"> {detail}</span>
+          ) : null}
+        </span>
+      )}
     </span>
   )
 }

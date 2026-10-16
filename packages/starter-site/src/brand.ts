@@ -12,7 +12,17 @@
  *     One of them always reaches 4.58:1 or better, whatever the colour.
  *   --brand-text on the page, which is the colour darkened in steps until it
  *     reaches the ratio. Darkening only, because the starter renders light and
- *     the page under this text is white.
+ *     the page under this text is white. A preset's primary already holds it
+ *     on the page and on its tint, so `brandTheme` passes it through.
+ *
+ * `paletteFromBrand` goes further for the "your own colour" path: it derives
+ * all six palette roles (paper, ink, primary, tint, accent, line) from the one
+ * hex, neutrals leaning toward its hue, and darkens `primary` and `ink` until
+ * the four pairs `PALETTE_AA_PAIRS` names in the contracts hold at 4.5:1. The
+ * brand test reads that list from the contract; this file cannot import it.
+ *
+ * `site.palette` skips the derivation: it carries a preset's six roles, which
+ * `paletteOf` reads and `brandTheme` writes as they are.
  *
  * A colour that is not a hex string returns nothing and the site keeps the
  * default theme. The file imports nothing, so it builds in the sandbox.
@@ -80,6 +90,110 @@ function readable(rgb: Rgb, on: Rgb, target: number): Rgb {
   return out
 }
 
+// Hue and saturation of an sRGB colour, 0 to 1 (HSL).
+function hueSat(rgb: Rgb): [number, number] {
+  const [r, g, b] = rgb.map((v) => v / 255) as Rgb
+  const max = Math.max(r, g, b)
+  const min = Math.min(r, g, b)
+  const d = max - min
+  if (d === 0) return [0, 0]
+  const l = (max + min) / 2
+  const s = d / (1 - Math.abs(2 * l - 1))
+  const h =
+    max === r
+      ? ((g - b) / d) % 6
+      : max === g
+        ? (b - r) / d + 2
+        : (r - g) / d + 4
+  return [(h / 6 + 1) % 1, s]
+}
+
+function hsl(h: number, s: number, l: number): Rgb {
+  const a = s * Math.min(l, 1 - l)
+  const f = (n: number) => {
+    const k = (n + h * 12) % 12
+    return Math.round(255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))))
+  }
+  return [f(0), f(8), f(4)]
+}
+
+// OKLCH, for the neutrals: HSL saturation is not perceived chroma, and a red's
+// tint at HSL 0.57 read as a pink band. sRGB to OKLab and back (Ottosson).
+const lin = (v: number) => {
+  const c = v / 255
+  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+}
+const gam = (v: number) =>
+  Math.round(
+    255 *
+      Math.min(
+        1,
+        Math.max(0, v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055)
+      )
+  )
+
+function oklchOf(rgb: Rgb): [number, number, number] {
+  const [r, g, b] = rgb.map(lin) as Rgb
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b)
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b)
+  const a = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s
+  const bb = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s
+  return [
+    0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+    Math.hypot(a, bb),
+    Math.atan2(bb, a),
+  ]
+}
+
+function oklch(L: number, C: number, h: number): Rgb {
+  const [a, b] = [C * Math.cos(h), C * Math.sin(h)]
+  const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3
+  const m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3
+  const s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3
+  return [
+    gam(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s),
+    gam(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s),
+    gam(-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s),
+  ]
+}
+
+export type BrandPalette = {
+  paper: string
+  ink: string
+  primary: string
+  tint: string
+  accent: string
+  line: string
+}
+
+/**
+ * The six roles from one brand colour, or nothing when it is not a hex colour.
+ * `accent` is the owner's colour as chosen, for marks and underlines, which
+ * carry no contrast rule.
+ */
+export function paletteFromBrand(value: string): BrandPalette | undefined {
+  const brand = parse(value)
+  if (!brand) return undefined
+  const [h, s] = hueSat(brand)
+  // The reference's quiet neutrals, in the brand's hue: paper at L 0.985,
+  // tint 0.945 / C 0.0215, line 0.885 / C 0.0135. A grey brand keeps grey.
+  const [, chroma, hue] = oklchOf(brand)
+  const paper = oklch(0.985, Math.min(chroma, 0.004), hue)
+  const tint = oklch(0.945, Math.min(chroma, 0.0215), hue)
+  const line = oklch(0.885, Math.min(chroma, 0.0135), hue)
+  const ink = readable(hsl(h, Math.min(s, 0.4) * 0.6, 0.1), tint, AA)
+  return {
+    paper: toHex(paper),
+    ink: toHex(ink),
+    // Darkened for the tint, the darker ground it sits on, so it reads on both.
+    primary: toHex(readable(brand, tint, AA)),
+    tint: toHex(tint),
+    accent: toHex(brand),
+    line: toHex(line),
+  }
+}
+
 export type BrandRamp = { brand: string; foreground: string; text: string }
 
 /** The three derived colours, or nothing when the value is not a hex colour. */
@@ -95,13 +209,68 @@ export function brandRamp(value: string): BrandRamp | undefined {
   }
 }
 
+const ROLES = ["paper", "ink", "primary", "tint", "accent", "line"] as const
+
 /**
- * The ramp as one CSS rule for the page head, or an empty string. `html:root`,
- * not `:root`: the linked stylesheet comes after this rule in the built page
- * and declares the defaults on `:root`, which would win a tie.
+ * Secondary text: the ink eased toward the paper as far as AA on the tint
+ * allows, the darker of the two grounds it sits on. The shared grey of
+ * tokens.css is measured against a white page, not a palette's tint.
  */
-export function brandTheme(value: string): string {
-  const ramp = brandRamp(value)
-  if (!ramp) return ""
-  return `html:root{--brand:${ramp.brand};--brand-foreground:${ramp.foreground};--brand-text:${ramp.text}}`
+export function mutedOf(palette: BrandPalette): string {
+  const [ink, paper, tint] = [palette.ink, palette.paper, palette.tint].map(
+    parse
+  ) as [Rgb, Rgb, Rgb]
+  for (let step = 9; step > 0; step--) {
+    const mix = ink.map((v, i) =>
+      Math.round(v + ((paper[i] as number) - v) * step * 0.05)
+    ) as Rgb
+    if (ratio(mix, tint) >= AA + 0.1 && ratio(mix, paper) >= AA + 0.1)
+      return toHex(mix)
+  }
+  return palette.ink
+}
+
+/**
+ * The six roles a `site.palette` value names, as `paper:#f7faf9 ink:#13201a
+ * ...` in any order, or nothing unless all six are there as hex colours. A
+ * preset's roles already hold the AA pairs, so they are taken as given.
+ */
+export function paletteOf(value: string): BrandPalette | undefined {
+  const found = new Map(
+    Array.from(
+      value.matchAll(
+        /\b(paper|ink|primary|tint|accent|line):\s*(#[0-9a-fA-F]{6})\b/g
+      ),
+      (match) => [match[1], (match[2] as string).toLowerCase()] as const
+    )
+  )
+  return ROLES.every((role) => found.has(role))
+    ? (Object.fromEntries(found) as BrandPalette)
+    : undefined
+}
+
+/**
+ * The theme as one CSS rule for the page head, or an empty string: from the
+ * palette's six roles when `palette` has them, else derived from the one
+ * brand colour. `html:root`, not `:root`: the linked stylesheet comes after
+ * this rule in the built page and declares the defaults on `:root`, which
+ * would win a tie.
+ */
+export function brandTheme(value: string, palette = ""): string {
+  const roles = paletteOf(palette)
+  // A preset's paper reads on its primary (an AA pair), so it is the label.
+  const ramp = roles
+    ? { brand: roles.primary, foreground: roles.paper }
+    : brandRamp(value)
+  const p = roles ?? paletteFromBrand(value)
+  if (!ramp || !p) return ""
+  // A palette whose paper is darker than its ink (After dark) is a dark page:
+  // the stylesheet reads --ink as the dark surface and --paper as the light
+  // text and pills on it, so the two swap names and the page keeps its logic.
+  const paper = parse(p.paper) as Rgb
+  const dark =
+    ratio(paper, WHITE) > ratio(paper, BLACK)
+      ? `;--ink:${p.paper};--paper:${p.ink};color-scheme:dark`
+      : ""
+  return `html:root{--brand:${ramp.brand};--brand-foreground:${ramp.foreground};--brand-text:${p.primary};--background:${p.paper};--foreground:${p.ink};--muted-foreground:${mutedOf(p)};--role-tint:${p.tint};--role-line:${p.line};--role-accent:${p.accent}${dark}}`
 }

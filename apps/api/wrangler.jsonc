@@ -85,11 +85,18 @@
   ],
   // The suffix the router serves sites on (ADR-030), for the live site's host
   // in `/workspace`. The orchestrator and the router carry the same value.
-  "vars": { "SITE_HOST_SUFFIX": "-stg.remeai.co.uk" },
+  "vars": {
+    "SITE_HOST_SUFFIX": "-stg.remeai.co.uk",
+    // Where Checkout sends an owner back after a redirect-based payment.
+    "WEB_ORIGIN": "https://staging.remeai.co.uk"
+  },
   // The orchestrator's site bucket. The api writes only the owner's photos,
   // under `uploads/{org_id}/{asset_id}`, and the orchestrator copies them into
   // the build's sandbox.
   "r2_buckets": [{ "binding": "SITES", "bucket_name": "reme-sites" }],
+  // Resizes generated photos to thumbnails in `GET /photos/:id`. Local
+  // `wrangler dev` runs a low-fidelity offline version (width and format).
+  "images": { "binding": "IMAGES" },
   // Each signed-in person's writes a minute; the number is argued in
   // src/limit.ts and a test holds this block to it. `period` takes 10 or 60.
   // A `namespace_id` is shared by every binding in the account that names it,
@@ -118,7 +125,7 @@
       "preview_urls": false,
       "workers_dev": false,
       // The second entry keeps this hostname off the site router. Its route is
-      // `*.remeai.co.uk/*`, and a wildcard route beats a custom domain, so
+      // `*/*` (ADR-041), and a wildcard route beats a custom domain, so
       // without this every request here would pass through that Worker first.
       // An explicit host route beats the wildcard (measured 2026-09-18 with two
       // throwaway Workers, 6 of 6). The router's `SERVICE_HOSTS` stays as the
@@ -141,7 +148,11 @@
           "entrypoint": "OwnerApi"
         }
       ],
-      "vars": { "SITE_HOST_SUFFIX": ".remeai.co.uk" },
+      "vars": {
+        "SITE_HOST_SUFFIX": ".remeai.co.uk",
+        "WEB_ORIGIN": "https://preview.remeai.co.uk"
+      },
+      "images": { "binding": "IMAGES" },
       "r2_buckets": [
         {
           "binding": "SITES",

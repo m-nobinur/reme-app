@@ -127,12 +127,15 @@ export const SiteField = z.discriminatedUnion("kind", [
 /** The starter's `fields` export: one `SiteField` per key of `site`. */
 export const SiteFields = z.record(z.string().min(1), SiteField)
 
-/** A hostname: lower-case DNS labels, each 1 to 63 characters. */
-const Hostname = z
+/**
+ * A hostname: lower-case DNS labels, each 1 to 63 characters. No lookaround
+ * in the pattern: it reaches model tool schemas, and OpenAI refuses one.
+ */
+export const Hostname = z
   .string()
   .max(253)
   .regex(
-    /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/
+    /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/
   )
 
 /**
@@ -169,7 +172,25 @@ export const SitePointer = z.strictObject({
   site_id: Uuid,
   revision_id: Uuid,
   config_version: z.int().positive(),
+  /**
+   * The owner's primary host, when the site has an active custom domain: the
+   * router rewrites the slug host baked into the build to it. Absent before.
+   */
+  canonical_host: Hostname.optional(),
+  /**
+   * The slug host the build baked in (`astro build --site`), written beside
+   * `canonical_host` so the router can rewrite it without opening Postgres.
+   * The router rewrites only when both are present.
+   */
+  origin_host: Hostname.optional(),
 })
+
+/**
+ * A pointer for a host that sends its visitors elsewhere, under
+ * `host:{hostname}`: the other half of a custom domain and the slug host once
+ * the domain is active. The router answers 301 and keeps the path and query.
+ */
+export const RedirectPointer = z.strictObject({ redirect_to: Hostname })
 
 /**
  * The header the router puts on an HTML page it serves for a published host,
@@ -210,6 +231,7 @@ export function parseSiteRevision(
 export type ComponentManifest = z.infer<typeof ComponentManifest>
 export type PreviewClaim = z.infer<typeof PreviewClaim>
 export type SitePointer = z.infer<typeof SitePointer>
+export type RedirectPointer = z.infer<typeof RedirectPointer>
 export type SiteField = z.infer<typeof SiteField>
 export type SiteFields = z.infer<typeof SiteFields>
 
@@ -234,8 +256,9 @@ export function slugFor(name: string, orgId: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
   // `preview-` opens a preview host (ADR-030), so a name whose slug would
-  // start that way, "Preview" alone included, gets a `site-` in front.
-  const reserved = `${words}-`.startsWith("preview-")
+  // start that way, "Preview" alone included, gets a `site-` in front. So
+  // does "Domains": `domains` is the Cloudflare for SaaS fallback origin.
+  const reserved = `${words}-`.startsWith("preview-") || words === "domains"
   const base = (reserved ? `site-${words}` : words).slice(0, 40)
   return [base, orgId.slice(0, 8)].filter(Boolean).join("-")
 }
@@ -296,3 +319,41 @@ export function previewHost(slug: string, version: number, suffix: string) {
  * "Preview" has a slug starting `preview-`, and its live site is a site.
  */
 export const isPreviewHost = (host: string) => /^preview-v\d+-/.test(host)
+
+/** A TCP port, 1 to 65535, as config writes it. */
+const PORT =
+  /^(?:[1-9]\d{0,3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$/
+
+/**
+ * Where a site or preview host is opened, from the environment's config: its
+ * suffix and `SITE_PORT`. A real host is https on the default port. A
+ * `.localhost` host is local dev's router, which never leaves the machine
+ * (RFC 6761) and serves plain http on `SITE_PORT`. Anything else throws, so
+ * a misconfigured environment mints no link rather than an http one or one
+ * on a stray port: a port on a real host, or a `.localhost` host without one.
+ */
+export function siteUrl(host: string, port: string | undefined): string {
+  const local = host.endsWith(".localhost")
+  if (!local && !port) return `https://${host}`
+  if (local && port && PORT.test(port)) return `http://${host}:${port}`
+  throw new Error(
+    `no site link for ${JSON.stringify(host)} on port ${JSON.stringify(port)}`
+  )
+}
+
+/**
+ * A link to a site or a preview, as `siteUrl` mints it: https, or http for a
+ * `.localhost` host alone. `meta` carries the same rule into the JSON Schema,
+ * which `protocol` and a host check cannot.
+ */
+export const SiteLink = z
+  .url({ protocol: /^https?$/ })
+  .refine((link) => {
+    // Zod runs this after a failed url check too, which has already refused it.
+    if (!URL.canParse(link)) return true
+    const { protocol, hostname } = new URL(link)
+    return protocol === "https:" || hostname.endsWith(".localhost")
+  }, "A link is https, or http on a .localhost host.")
+  .meta({
+    pattern: "^(https://|http://[^/?#@:]+\\.localhost(:[0-9]+)?([/?#]|$))",
+  })

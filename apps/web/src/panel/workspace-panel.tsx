@@ -7,6 +7,7 @@ import {
   useRouter,
 } from "@tanstack/react-router"
 import type {
+  Blueprint,
   BuildSummary,
   DecisionRequest,
   Reminder,
@@ -52,6 +53,7 @@ import { type Panel, panelFor, type Suggestion } from "@/lib/panel"
 import { anchorOf, noteOf, upcomingNotes } from "@/lib/reminders"
 import { followThumbnail } from "@/lib/thumbnail"
 import { useLiveWorkspace } from "@/lib/workspace"
+import { photoActions } from "./photo-actions"
 
 /**
  * The live panel, wired: the sections come from `@workspace/ui`, the reads
@@ -59,12 +61,6 @@ import { useLiveWorkspace } from "@/lib/workspace"
  * function and then reads the workspace again, so what the panel shows is
  * always what `/workspace` last said and never a guess about what a write did.
  */
-
-/**
- * The range a build takes, in seconds, as measured when the polling decision
- * was made (owner-workspace.md): 115 to 313 s.
- */
-const TYPICAL_BUILD = { min: 115, max: 313 }
 
 const FAILED = "That did not go through. Try again."
 
@@ -255,6 +251,7 @@ export function Decidable({
       return outcome
     })
 
+  const photos = (item.photos ?? []).length > 0
   return (
     <ApprovalItem
       error={error}
@@ -264,6 +261,19 @@ export function Decidable({
       onExpiry={item.onExpiry}
       onRetryPreview={retryPreview}
       pending={pending}
+      photoActions={
+        photos
+          ? photoActions((write) => {
+              void run("change", async () => {
+                const outcome = await write()
+                if (outcome.done)
+                  announce("Sent. A new version replaces this one.")
+                return outcome
+              })
+            })
+          : undefined
+      }
+      photos={item.photos ?? []}
       preview={preview}
       rationale={item.detail}
       target={item.request.target}
@@ -279,18 +289,24 @@ export function Decidable({
  */
 function Website({
   host,
+  url,
   live,
   thumbnail,
+  blueprint,
 }: {
   host: string | null
+  url: string | null
   live: number | null
   thumbnail: Thumbnail
+  blueprint: Blueprint | null
 }) {
   return (
     <YourWebsite
+      blueprint={blueprint}
       host={host}
       live={live}
       onRequestChanges={useRequestChanges()}
+      url={url}
       thumbnail={thumbnail}
     />
   )
@@ -322,10 +338,12 @@ export function useRequestChanges() {
 function Stoppable({
   build,
   queued,
+  expected,
   refresh,
 }: {
   build: BuildSummary
   queued: string[]
+  expected: Workspace["expectedSeconds"]
   refresh: Refresh
 }) {
   const stop = useWrite<"stop">(refresh)
@@ -336,8 +354,17 @@ function Stoppable({
         state: build.state,
         version: build.revision?.version ?? null,
         startedAt: build.created_at,
+        lane: build.lane ?? "full",
+        fellThrough: build.fell_through,
+        activity: build.activity ?? [],
+        plan: build.blueprint?.plan,
+        awaitingReview: build.blueprint?.awaiting ?? false,
+        photos: build.photos,
+        reviewMs: build.review_ms,
+        endedAt: build.ready_at ?? build.updated_at,
       }}
       error={stop.error}
+      expectedSeconds={expected?.[build.lane ?? "full"]}
       onStop={() =>
         void stop.run("stop", () =>
           cancelBuild({ data: { assignmentId: build.assignment_id } })
@@ -345,7 +372,6 @@ function Stoppable({
       }
       queued={queued}
       stopping={stop.pending !== null}
-      typical={TYPICAL_BUILD}
     />
   )
 }
@@ -403,7 +429,7 @@ function Suggested({ suggestion }: { suggestion: Suggestion }) {
       return (
         <a
           className={NEXT_STEP}
-          href={`https://${suggestion.host}`}
+          href={suggestion.url}
           rel="noreferrer"
           target="_blank"
           title={suggestion.host}
@@ -562,6 +588,10 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
   }
   const { live, host } = workspace
   const website = live !== null || host !== null
+  // The newest build that planned. Builds are unfinished ones only, so the
+  // plan leaves the panel once its build ends.
+  const blueprint =
+    workspace.builds.find((b) => b.blueprint)?.blueprint?.plan ?? null
   // A tab that has emptied (its last reminder done) hands back to Activity.
   const shown =
     (tab === "reminders" && upcoming.length) || (tab === "website" && website)
@@ -581,6 +611,7 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
         >
           <Stoppable
             build={build}
+            expected={workspace.expectedSeconds}
             key={build.assignment_id}
             queued={panel.queued}
             refresh={refresh}
@@ -622,7 +653,11 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
 
   return (
     <Tabs onValueChange={(value: Tab) => setTab(value)} value={shown}>
-      <TabsList className="sticky top-0 z-10 bg-popover" ref={tabList}>
+      {/* Reaches up over the scroller's 1rem padding, so nothing scrolls through the gap above it. */}
+      <TabsList
+        className="sticky -top-4 z-10 -mt-4 bg-popover pt-4"
+        ref={tabList}
+      >
         <TabsTrigger value="activity">Activity</TabsTrigger>
         {upcoming.length ? (
           <TabsTrigger value="reminders">
@@ -646,7 +681,13 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
       ) : null}
       {website ? (
         <TabsContent value="website">
-          <Website host={host} live={live} thumbnail={thumbnail} />
+          <Website
+            blueprint={blueprint}
+            host={host}
+            live={live}
+            thumbnail={thumbnail}
+            url={workspace.url}
+          />
         </TabsContent>
       ) : null}
     </Tabs>

@@ -1,12 +1,23 @@
 import {
+  type Blueprint,
   type CompletionReport,
   DeploymentManifest,
   type FactRecord,
   type GateResult,
 } from "@workspace/contracts"
-import { claimFindings } from "./claims.ts"
+import { checkAxe, parseAxe } from "./axe.ts"
+import { claimFindings, generatedImageFindings } from "./claims.ts"
+import { checkCopy } from "./copy.ts"
+import {
+  CUSTOM_CHECK,
+  checkCustomSections,
+  parseCustom,
+  withCustomSections,
+} from "./custom.ts"
 import { type Located, type Page, parsePage } from "./page.ts"
+import { limit } from "./pool.ts"
 import { resolveSitePath } from "./site-path.ts"
+import { checkSize, type SizeBudget } from "./size.ts"
 import {
   type ContentClaim,
   type ContentKind,
@@ -15,16 +26,42 @@ import {
   phoneKey,
 } from "./text.ts"
 
+export { type AxeResult, checkAxe, parseAxe } from "./axe.ts"
 export {
+  CLAIM_IMAGE_SECTIONS,
   CLAIM_VOCABULARY,
   type ClaimFinding,
   type ClaimKind,
   claimFindings,
+  generatedImageFindings,
   SUPPORTING_FACT_PREFIXES,
 } from "./claims.ts"
+export {
+  COPY_WORDS,
+  type CopyFinding,
+  type CopyKind,
+  checkCopy,
+  copyFindings,
+  copyGateRules,
+  DESCRIPTION_CHARS,
+  factWords,
+  fieldFindings,
+  NEAR as HEADING_NEAR,
+  STOCK_HEADINGS,
+  TITLE_CHARS,
+} from "./copy.ts"
+export {
+  CUSTOM_CHECK,
+  type CustomFinding,
+  checkCustomSections,
+  parseCustom,
+  withCustomSections,
+} from "./custom.ts"
 export { factsToAsk, HIDDEN_FACTS_KEY } from "./fields.ts"
 export { type Page, parsePage } from "./page.ts"
+export { limit } from "./pool.ts"
 export { resolveSitePath } from "./site-path.ts"
+export { checkSize, type SizeBudget } from "./size.ts"
 export { factsForContent } from "./text.ts"
 
 /**
@@ -72,23 +109,66 @@ export async function checkBuild(
   const { files } = parsed.data
   if (!Object.hasOwn(files, "index.html"))
     return fail("build", "the build has no index.html")
-  for (const [file, expected] of Object.entries(files)) {
-    const bytes = await read(file)
-    if (!bytes)
-      return fail(
-        "build",
-        `${file} is listed in the manifest and missing from the artifact`,
-        file
+  // Every file is read at once (the caller bounds the reads) and the first
+  // failure in manifest order is the one reported, as when they ran in turn.
+  const checked = await Promise.all(
+    Object.entries(files).map(async ([file, expected]) => {
+      const bytes = await read(file)
+      if (!bytes)
+        return fail(
+          "build",
+          `${file} is listed in the manifest and missing from the artifact`,
+          file
+        )
+      const actual = hex(
+        await crypto.subtle.digest("SHA-256", new Uint8Array(bytes))
       )
-    const actual = hex(
-      await crypto.subtle.digest("SHA-256", new Uint8Array(bytes))
-    )
-    if (actual !== expected)
-      return fail("build", `${file} does not match its manifest hash`, file)
-  }
+      return actual === expected
+        ? null
+        : fail("build", `${file} does not match its manifest hash`, file)
+    })
+  )
+  const failed = checked.find((result) => result !== null)
+  if (failed) return failed
   return pass(
     "build",
     `${Object.keys(files).length} files match their manifest hashes`
+  )
+}
+
+/**
+ * The approved Blueprint's pages are fixed: each is in the build, at the path
+ * its starter file serves (`service_area` is `service-area/`), so a lead that
+ * deletes one fails the build gate and repairs it. Null when none is missing.
+ */
+export function checkPlannedPages(
+  plan: Pick<Blueprint, "pages">,
+  files: Record<string, string>
+): GateResult | null {
+  const slug = (page: string) =>
+    page === "home"
+      ? "index"
+      : page === "service"
+        ? "services/[slug]"
+        : page.replaceAll("_", "-")
+  // `service` is one page per service under services/; the services page's
+  // links to each are the links gate's to check.
+  const servicePages = Object.keys(files).filter((f) =>
+    /^services\/[^/]+\/index\.html$/.test(f)
+  ).length
+  const missing = plan.pages
+    .map(({ page }) => page)
+    .filter((page) =>
+      page === "service"
+        ? servicePages === 0
+        : !resolveSitePath(page === "home" ? "/" : `/${slug(page)}/`, files)
+    )
+  const [first] = missing
+  if (!first) return null
+  return fail(
+    "build",
+    `the Blueprint plans ${missing.join(", ")} and the build has no page for ${missing.length > 1 ? "them" : "it"}: restore ${missing.map((page) => `src/pages/${slug(page)}.astro`).join(", ")}${missing.includes("service") ? " (it builds a page for each service with a name)" : ""}. Every planned page stays, whatever the facts`,
+    first
   )
 }
 
@@ -154,12 +234,16 @@ export function checkLinks(
   return pass("links", `${count} links checked`)
 }
 
-/** The schema.org types the starter emits, and the properties each must carry. */
+/**
+ * The schema.org types the starter emits, and the properties each must carry.
+ * The platform builds with `--site`, so the starter always writes `url`: one
+ * missing was deleted, not left out, and costs the site its search listing.
+ */
 const REQUIRED: Record<string, readonly string[]> = {
-  LocalBusiness: ["name"],
+  LocalBusiness: ["name", "url"],
   Organization: ["name"],
-  Service: ["name"],
-  WebSite: ["name"],
+  Service: ["name", "url"],
+  WebSite: ["name", "url"],
   BreadcrumbList: ["itemListElement"],
   FAQPage: ["mainEntity"],
 }
@@ -368,9 +452,13 @@ export function checkContent(
 /** The claims gate v0: every rating, count, superlative, credential, guarantee and testimonial traced to a fact (§8.5). */
 export function checkClaims(
   pages: readonly Page[],
-  facts: readonly FactRecord[]
+  facts: readonly FactRecord[],
+  plan?: Parameters<typeof generatedImageFindings>[0]
 ): GateResult {
-  const findings = claimFindings(pages, facts)
+  const findings = [
+    ...claimFindings(pages, facts),
+    ...(plan ? generatedImageFindings(plan) : []),
+  ]
   const first = findings[0]
   if (!first)
     return pass(
@@ -384,7 +472,14 @@ export function checkClaims(
   )
 }
 
-/** All six gates over one artifact, in the contract's order. */
+/** Reads in flight at once against the artifact store. */
+const READS = 8
+
+/**
+ * All nine gates over one artifact, in the contract's order. Each file is
+ * read once: the build gate hashes every file while the pages are read for
+ * the other gates, and a page both need comes from the same read.
+ */
 export async function runGates(input: {
   manifest: unknown
   read: (file: string) => Promise<Uint8Array | null>
@@ -392,38 +487,131 @@ export async function runGates(input: {
   facts: readonly FactRecord[]
   /** The site's own host names, as `astro build --site` wrote them. */
   hosts?: readonly string[]
+  /** `size-budget.json`: the home page's gzip line; fonts and images have their own. */
+  budget: SizeBudget
+  /** Reads the sandbox's evidence by the key its check reported (the axe JSON). */
+  evidence?: (key: string) => Promise<Uint8Array | null>
+  /** Filled with milliseconds per gate, and `read` for the page reads. */
+  timings?: Record<string, number>
+  /**
+   * The Blueprint's image slots and pages, so a generated photo in a claim
+   * section fails (ADR-039), and so does a planned page the build lacks. The
+   * copy gate runs only with it.
+   */
+  plan?: Parameters<typeof generatedImageFindings>[0]
 }): Promise<GateResult[]> {
-  const build = await checkBuild(input.manifest, input.read)
-  const types = checkTypes(input.report)
+  const lap = <T>(name: string, fn: () => T): T => {
+    const started = Date.now()
+    const out = fn()
+    if (input.timings) input.timings[name] = Date.now() - started
+    return out
+  }
+  const bounded = limit(READS)
+  const reads = new Map<string, Promise<Uint8Array | null>>()
+  const read = (file: string) => {
+    let once = reads.get(file)
+    if (!once) {
+      once = bounded(() => input.read(file))
+      reads.set(file, once)
+    }
+    return once
+  }
+  const customKey = input.report.checks.find(
+    (c) => c.check === CUSTOM_CHECK
+  )?.output_key
+  const customBytes =
+    customKey && input.evidence ? await input.evidence(customKey) : null
+  const types = withCustomSections(
+    checkTypes(input.report),
+    checkCustomSections(
+      input.report,
+      customBytes
+        ? parseCustom(safeJson(new TextDecoder().decode(customBytes)))
+        : null
+    )
+  )
+  const axeKey = input.report.checks.find((c) => c.check === "axe")?.output_key
+  const axeBytes =
+    axeKey && input.evidence ? await input.evidence(axeKey) : null
+  const axe = checkAxe(
+    input.report,
+    axeBytes ? parseAxe(safeJson(new TextDecoder().decode(axeBytes))) : null
+  )
   const parsed = DeploymentManifest.safeParse(input.manifest)
   if (!parsed.success) {
     const unreadable =
       "the manifest does not parse, so the pages could not be read"
     return [
-      build,
+      await checkBuild(input.manifest, read),
       types,
       fail("links", unreadable),
       fail("structured_data", unreadable),
       fail("content", unreadable),
       fail("claims", unreadable),
+      fail("copy", unreadable),
+      axe,
+      fail("size", unreadable),
     ]
   }
   const decoder = new TextDecoder()
-  const pages: Page[] = []
-  for (const file of Object.keys(parsed.data.files)
-    .filter((f) => f.endsWith(".html"))
-    .sort()) {
-    const bytes = await input.read(file)
-    if (bytes) pages.push(parsePage(file, decoder.decode(bytes)))
-  }
+  const readStarted = Date.now()
+  const [build, built] = await Promise.all([
+    (async () => {
+      const started = Date.now()
+      const result = await checkBuild(input.manifest, read)
+      if (input.timings) input.timings.build = Date.now() - started
+      return result
+    })(),
+    (async () => {
+      const found = await Promise.all(
+        Object.keys(parsed.data.files)
+          .filter((f) => f.endsWith(".html"))
+          .sort()
+          .map(async (file) => {
+            const bytes = await read(file)
+            if (!bytes) return null
+            const html = decoder.decode(bytes)
+            return { page: parsePage(file, html), html }
+          })
+      )
+      if (input.timings) input.timings.read = Date.now() - readStarted
+      return found.filter((each) => each !== null)
+    })(),
+  ])
+  const pages = built.map((each) => each.page)
+  const gap = input.plan
+    ? checkPlannedPages(input.plan, parsed.data.files)
+    : null
   return [
-    build,
+    build.passed && gap ? gap : build,
     types,
-    checkLinks(pages, parsed.data.files),
-    checkStructuredData(pages),
-    checkContent(pages, input.facts, input.hosts),
-    checkClaims(pages, input.facts),
+    lap("links", () => checkLinks(pages, parsed.data.files)),
+    lap("structured_data", () => checkStructuredData(pages)),
+    lap("content", () => checkContent(pages, input.facts, input.hosts)),
+    lap("claims", () => checkClaims(pages, input.facts, input.plan)),
+    lap("copy", () =>
+      checkCopy(
+        built.map(({ page, html }) => ({ file: page.file, html })),
+        input.plan !== undefined,
+        input.facts
+      )
+    ),
+    axe,
+    await (async () => {
+      const started = Date.now()
+      const result = await checkSize(parsed.data.files, read, input.budget)
+      if (input.timings) input.timings.size = Date.now() - started
+      return result
+    })(),
   ]
+}
+
+const safeJson = (text: string): unknown => {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return null
+  }
 }
 
 export type { Located }

@@ -6,8 +6,10 @@ import {
   InformationRequest,
 } from "./assignment.ts"
 import { Timestamp, Ulid, Uuid } from "./common.ts"
+import { Blueprint, DirectionId, FontPairId } from "./design.ts"
 import { FactRecord } from "./fact.ts"
 import { choiceFacts } from "./onboarding.ts"
+import { SiteLink } from "./site.ts"
 import { Text } from "./text.ts"
 
 /**
@@ -29,6 +31,20 @@ export const OWNER_BRIDGE_HEADERS = {
 } as const
 
 const HHMM = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+
+/**
+ * A customer's review the site may quote: their words, unedited; their name
+ * as they agreed it may be shown, such as "Marta L."; and the owner's word
+ * that the customer agreed to be quoted, which must be true. Stored only
+ * through the CoS's `record_review`, after the owner says yes on its card.
+ */
+export const ReviewValue = z.strictObject({
+  quote: Text(500),
+  name: Text(80),
+  permission: z.literal(true),
+})
+/** A phone number as the site stores it: E.164. */
+export const E164 = z.string().regex(/^\+[1-9]\d{6,14}$/)
 const fact = <K extends string, V extends z.ZodRawShape>(
   key: K,
   value: V,
@@ -52,7 +68,7 @@ const fact = <K extends string, V extends z.ZodRawShape>(
  */
 export const FactValue = z.discriminatedUnion("key", [
   fact("business.name", { name: Text(120) }),
-  fact("business.phone", { e164: z.string().regex(/^\+[1-9]\d{6,14}$/) }),
+  fact("business.phone", { e164: E164 }),
   fact("business.email", { address: z.email().max(254) }),
   fact("hours.weekday", { open: HHMM, close: HHMM }, (v) =>
     v.refine((h) => h.close === "00:00" || h.open < h.close, {
@@ -76,6 +92,12 @@ export const FactValue = z.discriminatedUnion("key", [
    * The site states only what this holds.
    */
   fact("business.proof", { text: Text(600) }),
+  /**
+   * The notice a regulated profession must carry, as the owner words it:
+   * "Authorised and regulated by ... Registration no. ...". The only source
+   * for the footer's disclaimer; with no fact the site states none.
+   */
+  fact("business.disclaimer", { text: Text(400) }),
   fact("service_area.text", { text: Text(200) }),
   fact("assistant.name", { name: Text(40) }),
   fact("assistant.pronouns", choiceFacts.pronouns),
@@ -92,10 +114,23 @@ export const FactValue = z.discriminatedUnion("key", [
       "a preset stands alone; custom needs the owner's words or a brand colour"
     )
   ),
-  fact("site.font", choiceFacts.font),
+  // A preset face, a pair id from the design tray, or `custom` with the owner's words.
+  fact("site.font", {
+    ...choiceFacts.font,
+    id: z.union([choiceFacts.font.id, FontPairId]),
+  }),
+  /**
+   * The page arrangement from the design tray: a direction id, `custom` with
+   * the owner's words in `custom`, or `builder` when the owner left the
+   * design to the builder. Neither `custom` nor `builder` is a direction.
+   */
+  fact("site.direction", { id: DirectionId, custom: Text(200).optional() }),
   fact("site.pages", choiceFacts.pages),
   fact("media.uploads", choiceFacts.uploads),
   fact("quote.form", choiceFacts.quoteForm),
+  /** One per review the starter can show; the claims gate quotes nothing else. */
+  fact("testimonials.review_1", ReviewValue.shape),
+  fact("testimonials.review_2", ReviewValue.shape),
 ])
 
 export type FactValueKey = FactValue["key"]
@@ -118,14 +153,29 @@ export const CHOICE_FACT_KEYS = [
   "site.template",
   "site.palette",
   "site.font",
+  "site.direction",
   "site.pages",
   "media.uploads",
   "quote.form",
 ] as const satisfies readonly FactValueKey[]
 export type ChoiceFactKey = (typeof CHOICE_FACT_KEYS)[number]
 
+/**
+ * The reviews, by the slot `record_review` names. Never asked for on a form
+ * and never stated by the onboarding planner: a review is stored only with
+ * the owner's word that the customer agreed to be quoted.
+ */
+export const REVIEW_FACT_KEYS = [
+  "testimonials.review_1",
+  "testimonials.review_2",
+] as const satisfies readonly FactValueKey[]
+export type ReviewFactKey = (typeof REVIEW_FACT_KEYS)[number]
+
 /** The keys an owner types an answer for, which the web gives inputs to. */
-export type AskableFactKey = Exclude<FactValueKey, ChoiceFactKey>
+export type AskableFactKey = Exclude<
+  FactValueKey,
+  ChoiceFactKey | ReviewFactKey
+>
 
 /** The longest text answer an owner can give, in characters. */
 export const ANSWER_TEXT_MAX = 500
@@ -160,9 +210,27 @@ export const SetFactsRequest = z.strictObject({
 /** `GET /facts`: the org's current facts. */
 export const FactList = z.strictObject({ facts: z.array(FactRecord) })
 
+/**
+ * How big a change is, which picks the lane it runs in. The Chief of Staff
+ * fills it in the `request_change` call it already makes, so each kind's
+ * sentence below is the field's description in the tool schema, where the
+ * model reads it. Missing reads as `creative`: an old client, or a model
+ * that skips the field, takes the full build.
+ */
+export const ChangeKind = z.enum([
+  "copy",
+  "style",
+  "section",
+  "photo",
+  "creative",
+])
+
 /** `POST /changes`: what the owner asked for, in their words. */
 export const OwnerChangeRequest = z.strictObject({
   text: Text(GOAL_MAX),
+  change_kind: ChangeKind.optional().describe(
+    "How big the change is. copy: words only, such as a headline, a phone number or a button label. style: colours, fonts or spacing across the site. section: add, remove or rework one section or page. photo: replace, add or remove a picture. creative: a new look, new pages or anything unclear. Omit it when unsure."
+  ),
 })
 
 /**
@@ -185,14 +253,11 @@ export const DecisionRequest = z.strictObject({
   revision_id: Uuid,
 })
 
-/** `meta` carries the protocol rule into the JSON Schema, which `protocol` alone does not. */
-const Https = z.url({ protocol: /^https$/ }).meta({ pattern: "^https://" })
-
 /** A signed preview of one revision: the page, and its three screenshots. */
 export const PreviewLink = z.strictObject({
   revision_id: Uuid,
-  url: Https,
-  screenshots: z.array(Https).length(3),
+  url: SiteLink,
+  screenshots: z.array(SiteLink).length(3),
   expires_at: Timestamp,
 })
 
@@ -201,13 +266,112 @@ const RevisionRef = z.strictObject({
   version: z.int().positive(),
 })
 
-/** One owner build, as the workspace panel shows it. */
+/**
+ * The lane a build runs in: the full pipeline, or the quick edit lane for a
+ * small change. Orthogonal to `AssignmentState`, which both lanes share.
+ */
+export const BuildLane = z.enum(["full", "quick"])
+
+/**
+ * One row of a build's progress, such as "Writing the pages, 3 of 5". The
+ * orchestrator writes `label` from fixed strings and counts `done` and
+ * `total` from the build's own events, so no model ever writes one.
+ */
+export const BuildActivity = z.strictObject({
+  id: z.string().regex(/^[a-z][a-z0-9_]{1,29}$/),
+  label: Text(60),
+  done: z.int().nonnegative().max(999),
+  total: z.int().positive().max(999),
+  /**
+   * The step the build is on, from its own events. A row whose count is full
+   * is not over until the build moves past it: the lead still has to put the
+   * written pages together and report.
+   */
+  now: z.literal(true).optional(),
+  /** What the row counts, by name, such as the plan's pages: fixed labels, never model text. */
+  items: z
+    .array(z.strictObject({ label: Text(60), done: z.boolean() }))
+    .max(9)
+    .optional(),
+})
+
+/** A generated photo's asset id, the hash-made UUID its object key starts with. */
+const PHOTO_ID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+
+/** The path the api serves a generated photo at: `GET /photos/{asset id}`. */
+export const PHOTO_PATH = new RegExp(`^/photos/(${PHOTO_ID})$`)
+
+/**
+ * A generated photo as the app shows it: the app's own door to the api's
+ * `GET /photos/{asset id}`, which reads `generated/{org}/{asset id}.{ext}`
+ * for the caller's org only. A pattern rather than any URL, so the wire never
+ * points an image anywhere else.
+ */
+export const PhotoThumbnail = z
+  .string()
+  .regex(new RegExp(`^/api/photos/${PHOTO_ID}$`))
+
+/** The thumbnail of a generated photo by its asset id, or null when there is no id to show. */
+export const thumbnailOf = (assetId: string | null | undefined) =>
+  assetId && new RegExp(`^${PHOTO_ID}$`).test(assetId)
+    ? `/api/photos/${assetId}`
+    : null
+
+/**
+ * One generated photo of a build while it is made: `drawing` until its slot
+ * settles, then `made` with its thumbnail, or `fallback` when no model drew it
+ * and its section uses its text layout. `alt` is the plan's, null once a
+ * fallback's slot has left the plan.
+ */
+export const BuildPhoto = z.strictObject({
+  slot_id: z.string().min(1),
+  state: z.enum(["drawing", "made", "fallback"]),
+  alt: z.string().max(200).nullable(),
+  thumbnail: PhotoThumbnail.nullable(),
+})
+
+/** The most progress rows a build shows at once: planning, photos, pages, putting them together, design, its polish, a repair and the checks. */
+export const BUILD_ACTIVITY_MAX = 8
+
+/**
+ * The plan a build was given (ADR-038), for the Blueprint card. `round`
+ * counts plans within the build: a "Change something" re-plans and adds one.
+ * `previous` is the plan this one changed, a re-plan's last round or, for a
+ * creative change, the plan the live site was built from; the card marks the
+ * rows that differ. `awaiting` says the build waits on the owner's "Build it"
+ * or "Change something" for this round.
+ */
+export const BuildBlueprint = z.strictObject({
+  plan: Blueprint,
+  round: z.int().positive(),
+  previous: Blueprint.nullable(),
+  awaiting: z.boolean(),
+})
+
+/**
+ * One owner build, as the workspace panel shows it. `lane` and `activity`
+ * are optional while producers catch up: a build with no `lane` is `full`,
+ * and one with no `activity` shows only its state.
+ */
 export const BuildSummary = z.strictObject({
   assignment_id: Uuid,
   kind: z.enum(["site.build", "site.revise"]),
   state: AssignmentState,
   goal: z.string().min(1).max(GOAL_MAX),
+  /** The lane it runs in now: a quick edit that fell through reads `full`. */
+  lane: BuildLane.optional(),
+  /** A quick edit that could not be made quickly and moved to a fuller lane; the panel says so once. */
+  fell_through: z.boolean().optional(),
+  activity: z.array(BuildActivity).max(BUILD_ACTIVITY_MAX).optional(),
   revision: RevisionRef.nullable(),
+  /** Absent on a build that did not plan: a revise, the quick lane, an older row. */
+  blueprint: BuildBlueprint.optional(),
+  /** The photos this build makes, in the order they settle; absent before its photo step starts. */
+  photos: z.array(BuildPhoto).max(24).optional(),
+  /** Milliseconds spent waiting on the owner's decided Blueprint reviews, which the panel's clock leaves out. */
+  review_ms: z.int().nonnegative().optional(),
+  /** When the build last reached preview_ready, from its events: the panel's clock stops here, so a later approval does not move it. */
+  ready_at: Timestamp.optional(),
   created_at: Timestamp,
   updated_at: Timestamp,
 })
@@ -220,10 +384,25 @@ const ReportItem = z.strictObject({
   what: z.enum(["published"]),
   revision: RevisionRef,
 })
+/**
+ * Why a build stopped, for the owner's sentence: it went quiet, the lead
+ * could not finish a site that passes its checks, it waited too long on the
+ * owner, a service it needs kept failing, or anything else.
+ */
+export const BuildStopCause = z.enum([
+  "stalled",
+  "unfinished",
+  "unanswered",
+  "service",
+  "other",
+])
+
 const AlertItem = z.strictObject({
   kind: z.literal("alert"),
   ...Logged,
   reason: z.enum(["build_failed", "budget_parked", "publish_rolled_back"]),
+  /** Why a failed build stopped; absent on the other alerts. */
+  cause: BuildStopCause.optional(),
 })
 
 /**
@@ -237,6 +416,19 @@ export const AttentionItem = z.discriminatedUnion("kind", [
     // `/workspace` lists revision approvals only, until another target has a producer.
     request: ApprovalRequest,
     version: z.int().positive(),
+    /** The generated photos of this version, so the review can badge them (IG4). Absent when none. */
+    photos: z
+      .array(
+        z.strictObject({
+          slot_id: z.string().min(1),
+          section: z.string().min(1),
+          alt: z.string(),
+          /** Absent when the file is not known, as on an older event. */
+          thumbnail: PhotoThumbnail.optional(),
+        })
+      )
+      .max(24)
+      .optional(),
   }),
   ReportItem,
   AlertItem,
@@ -317,6 +509,8 @@ export const REMINDER_NOTES_MAX = 20
 export const WorkspaceStatus = z.strictObject({
   site: z.strictObject({
     host: z.string().min(1).nullable(),
+    /** Where `host` opens, built by `siteUrl`: http and a port on local dev. Null with `host`. */
+    url: SiteLink.nullable(),
     /**
      * The version being served, and the build that made it, so the panel can
      * read its screenshots through `GET /builds/:id/preview`.
@@ -325,6 +519,24 @@ export const WorkspaceStatus = z.strictObject({
   }),
   /** Non-terminal, newest first. */
   builds: z.array(BuildSummary).max(10),
+  /**
+   * How long each lane usually takes, in seconds from the last measurement,
+   * so the panel's "usually takes" copy is data. `p50` is not above `p95`;
+   * the producer keeps that, since a JSON Schema cannot compare two fields.
+   * Absent until the api sends it, and the panel keeps its own range.
+   */
+  expected_seconds: z
+    .strictObject({
+      full: z.strictObject({
+        p50: z.int().positive(),
+        p95: z.int().positive(),
+      }),
+      quick: z.strictObject({
+        p50: z.int().positive(),
+        p95: z.int().positive(),
+      }),
+    })
+    .optional(),
   /** Approvals by expiry, then questions, alerts, reports. */
   attention: z.array(AttentionItem),
   /** The required facts still to ask for. */
@@ -341,11 +553,17 @@ export const WorkspaceStatus = z.strictObject({
 export type FactValue = z.infer<typeof FactValue>
 export type SetFactsRequest = z.infer<typeof SetFactsRequest>
 export type FactList = z.infer<typeof FactList>
+export type ChangeKind = z.infer<typeof ChangeKind>
 export type OwnerChangeRequest = z.infer<typeof OwnerChangeRequest>
+export type BuildLane = z.infer<typeof BuildLane>
+export type BuildActivity = z.infer<typeof BuildActivity>
+export type BuildPhoto = z.infer<typeof BuildPhoto>
 export type AnswerRequest = z.infer<typeof AnswerRequest>
 export type DecisionRequest = z.infer<typeof DecisionRequest>
 export type PreviewLink = z.infer<typeof PreviewLink>
 export type BuildSummary = z.infer<typeof BuildSummary>
+export type BuildBlueprint = z.infer<typeof BuildBlueprint>
+export type BuildStopCause = z.infer<typeof BuildStopCause>
 export type AttentionItem = z.infer<typeof AttentionItem>
 export type ActivityFeed = z.infer<typeof ActivityFeed>
 export type Reminder = z.infer<typeof Reminder>

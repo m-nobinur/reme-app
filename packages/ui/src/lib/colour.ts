@@ -50,6 +50,9 @@ const ratio = (a: Rgb, b: Rgb) => {
 const toHex = (value: Rgb) =>
   `#${value.map((part) => part.toString(16).padStart(2, "0")).join("")}`
 
+/** The contrast of two `#rrggbb` colours, 1 to 21. */
+export const contrast = (a: string, b: string) => ratio(rgb(a), rgb(b))
+
 /** The contrast of white text on a `#rrggbb` colour, 1 to 21. */
 export const whiteContrast = (hex: string) => ratio(WHITE, rgb(hex))
 
@@ -94,3 +97,7 @@ export function nextShown(
   const next = [...unseen, ...rest, ...shuffled(shown, random)].slice(0, size)
   return { shown: next, seen: next }
 }
+
+/** `hex` moved `t` (0 to 1) of the way to `end`, a channel value: 255 for light, 0 for dark. */
+export const shade = (hex: string, end: number, t: number) =>
+  toHex(rgb(hex).map((part) => Math.round(part + (end - part) * t)) as Rgb)

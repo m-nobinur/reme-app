@@ -12,8 +12,14 @@ import {
   CosWorkspace,
   CreateReminderOutput,
   GetPreviewOutput,
+  RecordReviewInput,
+  RecordReviewOutput,
 } from "../src/cos.ts"
-import { ANSWER_TEXT_MAX, CreateReminderRequest } from "../src/owner.ts"
+import {
+  ANSWER_TEXT_MAX,
+  CreateReminderRequest,
+  FactValue,
+} from "../src/owner.ts"
 import { ACCEPTED, REFUSED, verdict } from "./json-schema.ts"
 import { samples } from "./samples.ts"
 
@@ -45,17 +51,23 @@ function walk(node: unknown, found: Found) {
 
 describe("COS_TOOLS", () => {
   // A tool added or dropped is a decision, so the list is written out.
-  it("has exactly the six tools, in order", () => {
-    const six = [
+  it("has exactly the twelve tools, in order", () => {
+    const twelve = [
       "get_workspace",
       "get_facts",
       "get_preview",
       "request_change",
       "answer_question",
       "create_reminder",
+      "record_review",
+      "check_domain",
+      "connect_domain",
+      "remove_domain",
+      "find_domain",
+      "buy_domain",
     ]
-    expect(Object.keys(COS_TOOLS)).toStrictEqual(six)
-    expect(CosToolName.options).toStrictEqual(six)
+    expect(Object.keys(COS_TOOLS)).toStrictEqual(twelve)
+    expect(CosToolName.options).toStrictEqual(twelve)
   })
 
   // Provider tool APIs take an object as a tool's parameters and refuse a
@@ -66,6 +78,15 @@ describe("COS_TOOLS", () => {
     expect(schema).not.toHaveProperty("anyOf")
     expect(schema).not.toHaveProperty("oneOf")
     expect(schema).not.toHaveProperty("allOf")
+  })
+
+  // OpenAI refuses a tool whose schema has a regex lookaround (seen
+  // 2026-10-16: every turn failed over the hostname pattern).
+  it.each(tools)("%s has no lookaround in any pattern", (_name, { input }) => {
+    const patterns = JSON.stringify(z.toJSONSchema(input)).match(
+      /"pattern":"(?:[^"\\]|\\.)*"/g
+    )
+    for (const p of patterns ?? []) expect(p).not.toMatch(/\(\?[=!<]/)
   })
 
   // The model never sees a tenancy id, and a signed link is a bearer
@@ -81,7 +102,13 @@ describe("COS_TOOLS", () => {
       })
       expect(open).toBe(0)
       expect(
-        keys.filter((k) => k === "org_id" || k.endsWith("_staff_id"))
+        keys.filter(
+          (k) =>
+            k === "org_id" ||
+            k.endsWith("_staff_id") ||
+            k === "cf_ids" ||
+            /cloudflare|hostname_id/.test(k)
+        )
       ).toStrictEqual([])
       expect(formats.filter((f) => f === "uri")).toStrictEqual([])
     }
@@ -182,6 +209,23 @@ describe("CosWorkspace", () => {
     questions: [{ ...question, ...over }],
   })
 
+  it("accepts a workspace with no domains field", () => {
+    const { domains: _domains, ...before } = samples.CosWorkspace as {
+      domains: unknown
+    }
+    expect(verdict("CosWorkspace", CosWorkspace, before)).toEqual(ACCEPTED)
+  })
+
+  it("refuses eleven domains", () => {
+    const [domain] = (samples.CosWorkspace as { domains: unknown[] }).domains
+    expect(
+      verdict("CosWorkspace", CosWorkspace, {
+        ...workspace,
+        domains: Array(11).fill(domain),
+      })
+    ).toEqual(REFUSED)
+  })
+
   it.each([
     ["a why at the cap", withQuestion({ why: "a".repeat(500) })],
     [
@@ -225,6 +269,7 @@ describe("the refusal a tool shows the model", () => {
     ["AnswerQuestionOutput", AnswerQuestionOutput],
     ["GetPreviewOutput", GetPreviewOutput],
     ["CreateReminderOutput", CreateReminderOutput],
+    ["RecordReviewOutput", RecordReviewOutput],
   ] as const)("%s takes code, class and message only", (name, schema) => {
     expect(verdict(name, schema, refusal)).toEqual(ACCEPTED)
     const leaky = {
@@ -283,6 +328,40 @@ describe("create_reminder", () => {
     expect(
       verdict("CreateReminderOutput", CreateReminderOutput, withId)
     ).toEqual(REFUSED)
+  })
+})
+
+describe("record_review", () => {
+  const review = samples.RecordReviewInput as Record<string, unknown>
+
+  it("takes an object at its root, every property required", () => {
+    const schema = z.toJSONSchema(RecordReviewInput) as {
+      type: string
+      properties: object
+      required: string[]
+    }
+    expect(schema.type).toBe("object")
+    expect(new Set(schema.required)).toEqual(
+      new Set(Object.keys(schema.properties))
+    )
+  })
+
+  it.each([
+    ["no permission", { ...review, permission: false }],
+    ["a missing permission", { ...review, permission: undefined }],
+    ["a third slot", { ...review, slot: 3 }],
+    ["a blank name", { ...review, name: "  " }],
+  ])("refuses %s", (_name, value) => {
+    expect(verdict("RecordReviewInput", RecordReviewInput, value)).toEqual(
+      REFUSED
+    )
+  })
+
+  it("stores as the fact for its slot", () => {
+    const { slot, ...value } = review
+    expect(
+      FactValue.parse({ key: `testimonials.review_${slot}`, value })
+    ).toEqual({ key: "testimonials.review_1", value })
   })
 })
 

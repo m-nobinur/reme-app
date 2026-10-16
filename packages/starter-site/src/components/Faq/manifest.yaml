@@ -1,15 +1,32 @@
 component: Faq
 path: src/components/Faq/Faq.astro
 summary: Questions and answers, each one a native disclosure that needs no script.
-props: []
+props:
+  - name: variant
+    type: '"split" | "stacked"'
+    required: false
+    description: split puts the heading beside the questions, stacked above them.
+  - name: items
+    type: "{ question: string; answer: string }[]"
+    required: false
+    description: The questions, where a page has its own; empty is the site's FAQ.
+  - name: heading
+    type: string
+    required: false
+    description: The h2, where a page has its own; empty is site.faqHeading.
 constraints:
   - Reads faqItems from src/structured-data.ts, which reads faq1Question to
     faq8Answer; an entry needs both halves to render. Six to eight when the
     facts answer that many.
   - A page that shows it passes faqPage() to Base's jsonLd, so the FAQPage data
     matches the questions on the page.
+  - split sets the heading beside the questions, stacked above them in a narrow
+    column. The eyebrow is site.faqEyebrow; site.faqIntro and a site.faqLink to
+    the contact page sit under the heading.
 examples:
   - "<Faq />"
+  - '<Faq variant="split" />'
+  - '<Faq variant="stacked" />'
 forbidden:
   - an answer stating a price, hour or guarantee no fact carries
   - FAQPage data on a page that does not show the questions

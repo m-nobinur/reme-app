@@ -2,10 +2,12 @@ import { useNavigate } from "@tanstack/react-router"
 import { SiteReady } from "@workspace/ui/components/assistant/site-ready"
 import { useState } from "react"
 import { decideApproval } from "@/lib/api/server"
+import type { WriteOutcome } from "@/lib/api/types"
 import { DECISION_REFUSED } from "@/lib/decision"
 import { anchorOf } from "@/lib/reminders"
 import { type ReadyReview, readyCard, readyForReview } from "@/lib/site-ready"
 import { useLiveWorkspace } from "@/lib/workspace"
+import { photoActions } from "@/panel/photo-actions"
 import { useRequestChanges } from "@/panel/workspace-panel"
 
 const FAILED = "That did not go through. Try again."
@@ -65,6 +67,19 @@ export function SiteReadyCard() {
     }
   }
 
+  // A photo change is a new version: the card waits for the workspace to say so.
+  const change = (write: () => Promise<WriteOutcome>) => {
+    setPending(true)
+    setError(null)
+    write()
+      .then(async (outcome) => {
+        if (outcome.done) await live.refresh()
+        else setError(outcome.reason)
+      })
+      .catch(() => setError(FAILED))
+      .finally(() => setPending(false))
+  }
+
   return (
     <SiteReady
       error={error}
@@ -82,6 +97,8 @@ export function SiteReadyCard() {
         })
       }
       pending={pending}
+      photoActions={review.photos?.length ? photoActions(change) : undefined}
+      photos={review.photos ?? []}
       version={review.version}
     />
   )

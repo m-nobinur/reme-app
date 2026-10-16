@@ -1,0 +1,36 @@
+---
+import { site } from "../../site-config"
+
+interface Props {
+  /** tinted puts the note on the tint band. */
+  variant?: "plain" | "tinted"
+}
+
+const { variant = "plain" } = Astro.props
+---
+
+{
+  site.calloutHeading && (
+    <section class:list={["band", `callout-${variant}`]}>
+      <div class="wrap">
+        {/* The eyebrow is optional. */}
+        {site.calloutEyebrow && <p class="eyebrow">{site.calloutEyebrow}</p>}
+        <h2>{site.calloutHeading}</h2>
+        <img src={site.calloutImage} alt={site.calloutImageAlt} />
+        <a href="/quote/" class="link">{site.ctaLabel ?? ""}</a>
+      </div>
+    </section>
+  )
+}
+
+<style>
+  .callout-tinted {
+    background: var(--secondary);
+    border-top: 1px solid var(--border);
+    color: var(--foreground);
+    font-family: var(--font-display);
+  }
+  .callout-plain h2 {
+    background: color-mix(in srgb, var(--primary) 12%, transparent);
+  }
+</style>

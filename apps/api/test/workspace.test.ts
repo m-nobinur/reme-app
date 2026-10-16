@@ -10,7 +10,12 @@ import {
 import {
   approvals as approvalRows,
   assignments,
+  conversationMessages,
+  conversations,
+  domains,
   eq,
+  postAssistantMessage,
+  serverMessageId,
   sql,
   staff,
   steerKeyHash,
@@ -28,7 +33,11 @@ import {
   vi,
 } from "vitest"
 import { startChange } from "../src/changes.ts"
-import { readQuestions, readWorkspace } from "../src/workspace.ts"
+import {
+  EXPECTED_SECONDS,
+  readQuestions,
+  readWorkspace,
+} from "../src/workspace.ts"
 import {
   type Owner,
   owner,
@@ -47,6 +56,9 @@ import { env, stubJwksFetch } from "./sealed-session.ts"
  */
 
 const url = process.env.DATABASE_URL
+
+/** A generated photo's asset id, as the photo step logs it. */
+const PHOTO_ID = "0b9c4a1e-2f3d-4c5b-8a6e-7d8f9a0b1c2d"
 
 /** The required facts a new org lacks: sign-up already gave its name. */
 const REQUIRED = [
@@ -165,6 +177,26 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     const reviewing = await s.assignment("blocked_on_approval")
     const reviewRevision = await s.revision(reviewing, 2)
     const review = await s.approval(reviewing, reviewRevision, -1)
+    // The photos this build placed: only the generated one is badged.
+    await s.event(reviewing, "site.photos", {
+      slots: [
+        {
+          id: "hero_room",
+          section: "hero",
+          alt: "A sunlit room",
+          source: "generated",
+          asset_id: PHOTO_ID,
+        },
+        {
+          id: "owner_team",
+          section: "about",
+          alt: "Our team",
+          source: "upload",
+        },
+      ],
+      brief: { industry: "cleaning", imageStyle: "airy", palette: "sage" },
+      regenerated: null,
+    })
     const dropped = await s.assignment("cancelled")
     const dangling = await s.approval(dropped, await s.revision(dropped, 3), 48)
     const failed = await s.assignment("failed")
@@ -253,11 +285,12 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     expect(response.status).toBe(200)
     const body = WorkspaceStatus.parse(await response.json())
     expect(body).toEqual({
-      site: { host: null, live: null },
+      site: { host: null, url: null, live: null },
       builds: [],
       attention: [],
       missing_facts: REQUIRED,
       assistant_name: null,
+      expected_seconds: EXPECTED_SECONDS,
       reminders: {
         notes: [],
         derived: [{ rule: "facts_missing", keys: REQUIRED }],
@@ -281,15 +314,33 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       busyIds.failure,
       busyIds.published,
     ])
-    expect(body.attention[0]).toMatchObject({ kind: "approval", version: 2 })
+    expect(body.attention[0]).toMatchObject({
+      kind: "approval",
+      version: 2,
+      photos: [
+        {
+          slot_id: "hero_room",
+          section: "hero",
+          alt: "A sunlit room",
+          thumbnail: `/api/photos/${PHOTO_ID}`,
+        },
+      ],
+    })
     expect(body.site).toEqual({
       host: `${busy.slug}${SUFFIX}`,
+      url: `https://${busy.slug}${SUFFIX}`,
       live: {
         revision_id: busyIds.liveRevision,
         version: 1,
         assignment_id: busyIds.live,
       },
     })
+    // Local dev's config links the same site to the local router instead.
+    const local = await readWorkspace(kit, busy.orgId, {
+      SITE_HOST_SUFFIX: ".reme.localhost" as Env["SITE_HOST_SUFFIX"],
+      SITE_PORT: "3004",
+    })
+    expect(local.site.url).toBe(`http://${busy.slug}.reme.localhost:3004`)
     expect(
       body.builds.map((b) => [b.assignment_id, b.state, b.revision])
     ).toEqual([
@@ -300,6 +351,189 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
         { revision_id: busyIds.reviewRevision, version: 2 },
       ],
     ])
+  })
+
+  it("names the active custom domain over https, and the slug host while the domain only connects", async () => {
+    const name = `${crypto.randomUUID().slice(0, 8)}.example`
+    const row = (state: "awaiting_dns" | "active") =>
+      kit.withOrg({ orgId: busy.orgId }, (db) =>
+        db
+          .insert(domains)
+          .values({
+            orgId: busy.orgId,
+            siteId: busy.orgId,
+            name,
+            primaryHost: `www.${name}`,
+            origin: "connected",
+            method: "records",
+            state,
+          })
+          .returning({ id: domains.id })
+      )
+    const local = {
+      SITE_HOST_SUFFIX: ".reme.localhost" as Env["SITE_HOST_SUFFIX"],
+      SITE_PORT: "3004",
+    }
+    const [connecting] = await row("awaiting_dns")
+    try {
+      expect((await readWorkspace(kit, busy.orgId, local)).site).toMatchObject({
+        host: `${busy.slug}.reme.localhost`,
+        url: `http://${busy.slug}.reme.localhost:3004`,
+      })
+      await kit.withOrg({ orgId: busy.orgId }, (db) =>
+        db
+          .update(domains)
+          .set({ state: "active" })
+          .where(eq(domains.id, connecting?.id as string))
+      )
+      // No port and no http, even on local dev: the domain is Cloudflare's.
+      expect((await readWorkspace(kit, busy.orgId, local)).site).toMatchObject({
+        host: `www.${name}`,
+        url: `https://www.${name}`,
+      })
+    } finally {
+      await kit.withOrg({ orgId: busy.orgId }, (db) =>
+        db.delete(domains).where(eq(domains.name, name))
+      )
+    }
+  })
+
+  it("shows a working build's photos as they settle and its pages by name, its clock without the plan review", async () => {
+    const who = await owner(kit, url as string, "live-build")
+    const s = seed(kit, who)
+    const build = await s.assignment("implementing")
+    const page = (id: string) => ({
+      page: id,
+      sections: [
+        { kind: "hero", variant: "wash", purpose: "Lead", content_notes: null },
+      ],
+    })
+    const slot = (id: string) => ({
+      id,
+      page: "home",
+      section: "hero",
+      aspect: "16:9",
+      resolution: "1K",
+      subject: "A clean kitchen",
+      alt: `Photo ${id}`,
+      source: "generated",
+    })
+    await kit.withOrg({ orgId: who.orgId }, (db) =>
+      db
+        .update(assignments)
+        .set({
+          blueprint: {
+            direction: "calm_daylight",
+            fonts: "outfit_figtree",
+            palette: { kind: "preset", id: "forest" },
+            pages: [page("home"), page("services")],
+            images: [slot("hero"), slot("team")],
+            voice: "Warm and plain.",
+            features: ["One", "Two", "Three", "Four"],
+          },
+        })
+        .where(eq(assignments.id, build))
+    )
+    // Proposed for review 30 minutes ago and decided 15 minutes later.
+    await s.event(build, "blueprint.proposed", { round: 1, review: true }, 0.5)
+    await s.event(build, "blueprint.decided", { round: 1 }, 0.25)
+    const progress = (payload: Record<string, unknown>) =>
+      s.event(build, "build.progress", payload)
+    await progress({ stage: "photos", item: null, total: 2 })
+    await progress({
+      stage: "photos",
+      item: "team",
+      total: 2,
+      status: "generated",
+      asset_id: PHOTO_ID,
+    })
+    await progress({ stage: "pages", item: null, total: 2 })
+    await progress({ stage: "pages", item: "services", total: 2 })
+
+    const body = WorkspaceStatus.parse(await (await workspace(who)).json())
+    const [shown] = body.builds
+    expect(shown?.photos).toEqual([
+      {
+        slot_id: "team",
+        state: "made",
+        alt: "Photo team",
+        thumbnail: `/api/photos/${PHOTO_ID}`,
+      },
+      { slot_id: "hero", state: "drawing", alt: "Photo hero", thumbnail: null },
+    ])
+    expect(shown?.activity?.find((r) => r.id === "writing")).toMatchObject({
+      done: 1,
+      total: 2,
+      items: [
+        { label: "Home", done: false },
+        { label: "Services", done: true },
+      ],
+    })
+    // 15 minutes, give or take the insert's clock.
+    expect(Math.round((shown?.review_ms ?? 0) / 60_000)).toBe(15)
+
+    // The lead reports, though no page builder said so: the pages tick, and
+    // the design look is the step it is on until it answers.
+    const stepsNow = async () => {
+      const now = WorkspaceStatus.parse(await (await workspace(who)).json())
+      const rows = now.builds[0]?.activity ?? []
+      return { rows, at: rows.find((r) => r.done < r.total)?.id }
+    }
+    await s.event(build, "assignment.completion_reported", { risks: [] })
+    const looking = await stepsNow()
+    expect(looking.at).toBe("design")
+    expect(
+      looking.rows.find((r) => r.id === "writing")?.items?.map((i) => i.done)
+    ).toEqual([true, true])
+    // It asks for a change: the lead polishes until it reports again, then the checks.
+    await s.event(build, "design.critiqued", {
+      ran: true,
+      fixes: [{ page: "home", section: "hero" }],
+    })
+    expect((await stepsNow()).at).toBe("polishing")
+    await s.event(build, "assignment.completion_reported", { risks: [] })
+    expect((await stepsNow()).at).toBe("checking")
+
+    // The gates send it back: a repair of its own, until the lead reports again.
+    await s.event(build, "assignment.state_changed", {
+      from: "validating",
+      to: "repairing",
+    })
+    const fixing = await stepsNow()
+    expect(fixing.at).toBe("fixing")
+    expect(fixing.rows.map((r) => r.id)).toEqual([
+      "planning",
+      "photos",
+      "writing",
+      "assembling",
+      "design",
+      "polishing",
+      "fixing",
+      "checking",
+    ])
+    await s.event(build, "assignment.completion_reported", { risks: [] })
+    expect((await stepsNow()).at).toBe("checking")
+
+    // The clock stops where the build got ready, and a later move does not
+    // shift it.
+    const readyAt = async () => {
+      const [first] = WorkspaceStatus.parse(
+        await (await workspace(who)).json()
+      ).builds
+      return first?.ready_at
+    }
+    expect(await readyAt()).toBeUndefined()
+    await s.event(build, "assignment.state_changed", {
+      from: "validating",
+      to: "preview_ready",
+    })
+    const ready = await readyAt()
+    expect(ready).toBeDefined()
+    await s.event(build, "assignment.state_changed", {
+      from: "preview_ready",
+      to: "release_candidate",
+    })
+    expect(await readyAt()).toBe(ready)
   })
 
   it("lists an expired review the sweep parked, since a late decision counts", async () => {
@@ -367,6 +601,44 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     expect(body.attention).toEqual([{ kind: "question", request: asked }])
   })
 
+  it("says why a build failed: its transition's reason, in the owner's terms", async () => {
+    const stopped = await owner(kit, url as string, "stopped")
+    const t = seed(kit, stopped)
+    const quiet = await t.assignment("implementing")
+    await t.transition(
+      quiet,
+      "implementing",
+      "failed",
+      4,
+      {},
+      "developer.stalled"
+    )
+    const gaveUp = await t.assignment("implementing")
+    await t.transition(
+      gaveUp,
+      "implementing",
+      "failed",
+      4,
+      {},
+      "developer.no_report"
+    )
+    const odd = await t.assignment("implementing")
+    await t.transition(odd, "implementing", "failed", 4, {}, "something.new")
+    const body = WorkspaceStatus.parse(await (await workspace(stopped)).json())
+    const causes = Object.fromEntries(
+      body.attention.flatMap((item) =>
+        item.kind === "alert" ? [[item.assignment_id, item.cause]] : []
+      )
+    )
+    expect(causes).toEqual({
+      [quiet]: "stalled",
+      [gaveUp]: "unfinished",
+      [odd]: "other",
+    })
+    // A failed build is not one being worked on: no step, no Stop.
+    expect(body.builds).toEqual([])
+  })
+
   it("drops the question once it is answered, while the build still waits", async () => {
     const waiting = await owner(kit, url as string, "answered")
     const w = seed(kit, waiting)
@@ -394,7 +666,8 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
   it("answers an unchanged poll with 304 and no body", async () => {
     const first = await workspace(busy)
     const tag = first.headers.get("etag") as string
-    expect(tag).toMatch(/^"[0-9a-f]{32}"$/)
+    // The body's hash, then the chat's newest message: onboarding's opening.
+    expect(tag).toMatch(/^"[0-9a-f]{32}\.[A-Za-z0-9_-]{1,64}"$/)
     expect(first.headers.get("cache-control")).toBe("private, no-cache")
     const again = await workspace(busy, { "if-none-match": tag })
     expect(again.status).toBe(304)
@@ -415,6 +688,43 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     expect(after.headers.get("etag")).not.toBe(tag)
     const body = WorkspaceStatus.parse(await after.json())
     expect(body.missing_facts).toEqual(REQUIRED.slice(1))
+  })
+
+  it("changes the tag when the assistant posts in the chat, the body unchanged", async () => {
+    const poster = await owner(kit, url as string, "poster")
+    const id = crypto.randomUUID()
+    await kit.withOrg({ orgId: poster.orgId }, async (db) => {
+      await db.insert(conversations).values({
+        id,
+        orgId: poster.orgId,
+        kind: "assistant",
+        createdByStaffId: poster.chiefId,
+      })
+      await db.insert(conversationMessages).values({
+        conversationId: id,
+        id: "said_1",
+        orgId: poster.orgId,
+        format: "ai-sdk/v6",
+        content: {
+          role: "assistant",
+          parts: [{ type: "text", text: "Hi", state: "done" }],
+        },
+      })
+    })
+    const first = await workspace(poster)
+    const tag = first.headers.get("etag") as string
+    expect(tag).toMatch(/^"[0-9a-f]{32}\.said_1"$/)
+    const posted = await postAssistantMessage(kit, {
+      orgId: poster.orgId,
+      key: "live:poster",
+      message: { text: ["Your website is live."] },
+    })
+    expect(posted).toBe("posted")
+    const after = await workspace(poster, { "if-none-match": tag })
+    expect(after.status).toBe(200)
+    expect(after.headers.get("etag")).toBe(
+      tag.replace("said_1", serverMessageId("live:poster"))
+    )
   })
 
   it("names the assistant once the owner chose a name", async () => {
@@ -457,7 +767,8 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
 
   describe("derived reminders", () => {
     const derived = async (who: Owner, now?: Date) =>
-      (await readWorkspace(kit, who.orgId, SUFFIX, now)).reminders.derived
+      (await readWorkspace(kit, who.orgId, { SITE_HOST_SUFFIX: SUFFIX }, now))
+        .reminders.derived
 
     it("reminds of a review under 24 hours from expiry until it is decided", async () => {
       const who = await owner(kit, url as string, "expiring")
@@ -535,7 +846,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     })
   })
 
-  it("reads the workspace in one transaction of seven statements", async () => {
+  it("reads the workspace in one transaction of eight statements", async () => {
     let transactions = 0
     let statements = 0
     const counted: Tenancy = {
@@ -554,9 +865,10 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
         )
       },
     }
-    await readWorkspace(counted, busy.orgId, SUFFIX)
+    await readWorkspace(counted, busy.orgId, { SITE_HOST_SUFFIX: SUFFIX })
     expect(transactions).toBe(1)
-    expect(statements).toBe(7)
+    // The eighth reads the generated photos of the waiting approval.
+    expect(statements).toBe(8)
   })
 
   it("lists 30 days of reports and alerts as activity, newest first", async () => {
@@ -702,7 +1014,10 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       const response = await changes.call(
         stub,
         "/changes",
-        json({ text: "Make the hero say we clean ovens." }, "change-build-1")
+        json(
+          { text: "Make the hero say we clean ovens.", change_kind: "copy" },
+          "change-build-1"
+        )
       )
       expect(response.status).toBe(201)
       expect(BuildSummary.parse(await response.json()).kind).toBe("site.build")
@@ -717,6 +1032,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       expect(call?.body).toEqual({
         kind: "site.build",
         goal: "Make the hero say we clean ovens.",
+        change_kind: "copy",
       })
     })
 
@@ -744,7 +1060,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       const response = await changes.call(
         stub,
         "/changes",
-        json({ text: "Use a darker blue." })
+        json({ text: "Use a darker blue.", change_kind: "style" })
       )
       expect(response.status).toBe(202)
       expect(BuildSummary.parse(await response.json()).assignment_id).toBe(
@@ -1501,6 +1817,40 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       expect(response.status).toBe(202)
       expect(InformationAnswer.parse(await response.json())).toEqual(receipt)
       expect(stub.calls).toHaveLength(1)
+    })
+
+    it("relays the builder's receipt for a Blueprint decision", async () => {
+      // What the orchestrator's `/blueprint` answers: the round and the decision.
+      const stub = stubOrchestrator(() =>
+        Response.json({ round: 1, decision: "build" }, { status: 202 })
+      )
+      const response = await asker.call(
+        stub,
+        `/builds/${askIds.asking}/blueprint`,
+        json({ decision: "build" }, "blueprint-1")
+      )
+      expect(response.status).toBe(202)
+      expect(await response.json()).toEqual({ round: 1, decision: "build" })
+      expect(stub.calls[0]?.body).toEqual({ decision: "build" })
+    })
+
+    it("relays a preview that opens on the local router", async () => {
+      const host = "preview-v1-brightclean.reme.localhost:3004"
+      const link = {
+        revision_id: crypto.randomUUID(),
+        url: `http://${host}/open?t=abc.def`,
+        screenshots: [390, 768, 1440].map(
+          (w) => `http://${host}/screenshots/home-${w}.png?t=abc.def`
+        ),
+        expires_at: new Date().toISOString(),
+      }
+      const stub = stubOrchestrator(() => Response.json(link))
+      const response = await asker.call(
+        stub,
+        `/builds/${askIds.asking}/preview`
+      )
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual(link)
     })
 
     it.each([

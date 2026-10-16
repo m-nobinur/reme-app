@@ -498,18 +498,20 @@ export const brightclean: GoldenOrg = {
       verifiedAt: AT,
       validFrom: AT,
     },
-    // Two reviews, each as a quote and an author, because the starter's
-    // `testimonials.quote_1` and `testimonials.author_1` are two fields. The
-    // quotes carry no number: a testimonial is matched as text, so a figure
-    // inside one would be a second claim to support.
+    // Two reviews as `record_review` stores them: the customer's words, their
+    // name as they agreed it be shown, and the owner's word that they agreed.
+    // The quotes carry no number: a testimonial is matched as text, so a
+    // figure inside one would be a second claim to support.
     {
       id: bc(69),
       orgId: bc(0),
-      key: "testimonials.quote_1",
+      key: "testimonials.review_1",
       factType: "testimonials",
       value: {
         quote:
           "They worked around my hours and the kitchen has never looked so clean.",
+        name: "Marta L.",
+        permission: true,
       },
       provenanceSource: "owner_stated",
       provenanceConfidence: 1,
@@ -520,36 +522,14 @@ export const brightclean: GoldenOrg = {
     {
       id: bc(70),
       orgId: bc(0),
-      key: "testimonials.author_1",
-      factType: "testimonials",
-      value: { author: "Marta L." },
-      provenanceSource: "owner_stated",
-      provenanceConfidence: 1,
-      verifiedByStaffId: BC_ROOT,
-      verifiedAt: AT,
-      validFrom: AT,
-    },
-    {
-      id: bc(71),
-      orgId: bc(0),
-      key: "testimonials.quote_2",
+      key: "testimonials.review_2",
       factType: "testimonials",
       value: {
         quote:
           "Booking was simple and the team left the place spotless without me having to chase anyone.",
+        name: "Owen B.",
+        permission: true,
       },
-      provenanceSource: "owner_stated",
-      provenanceConfidence: 1,
-      verifiedByStaffId: BC_ROOT,
-      verifiedAt: AT,
-      validFrom: AT,
-    },
-    {
-      id: bc(72),
-      orgId: bc(0),
-      key: "testimonials.author_2",
-      factType: "testimonials",
-      value: { author: "Owen B." },
       provenanceSource: "owner_stated",
       provenanceConfidence: 1,
       verifiedByStaffId: BC_ROOT,

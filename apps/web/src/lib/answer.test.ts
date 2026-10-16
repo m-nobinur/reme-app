@@ -77,6 +77,7 @@ const TYPED: Record<AskableFactKey, Record<string, string>> = {
   "business.audience": { text: "Busy families" },
   "business.overview": { text: "Two crews, booked a week ahead" },
   "business.proof": { text: "Ten years trading, fully insured" },
+  "business.disclaimer": { text: "Regulated by the Anytown Law Society" },
   "service_area.text": { text: "Anytown and the villages around it" },
   "assistant.name": { name: "Sam" },
   "owner.preferred_name": { name: "Jo" },

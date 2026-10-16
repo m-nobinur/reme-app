@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { Uuid } from "./common.ts"
 import { ConversationMessage } from "./conversation.ts"
+import { Blueprint, SectionVariant } from "./design.ts"
 import { ToolCallId } from "./ids.ts"
 import {
   Asset,
@@ -120,6 +121,16 @@ const ChoiceVisual = z.discriminatedUnion("kind", [
   }),
   z.strictObject({ kind: z.literal("font"), family: Text(80) }),
   z.strictObject({ kind: z.literal("template"), id: Text(20) }),
+  z.strictObject({
+    kind: z.literal("font_pair"),
+    display: Text(80),
+    body: Text(80),
+  }),
+  z.strictObject({
+    kind: z.literal("layout"),
+    hero: SectionVariant,
+    services: SectionVariant,
+  }),
 ])
 
 /**
@@ -150,6 +161,12 @@ export const AskChoiceInput = z
       .strictObject({ label: Text(60), placeholder: Text(120) })
       .nullable(),
     skippable: z.boolean(),
+    /**
+     * The owner's own words, held from an earlier answer to this card: the
+     * design tray reads it as that question already answered, so a reload
+     * resumes after it rather than asking again.
+     */
+    own: Text(200).optional(),
     /**
      * The options the card shows first, when the list is long. The owner
      * reaches the rest with a Show others button, as many at a time.
@@ -184,6 +201,85 @@ export const AskChoiceOutput = z.discriminatedUnion("answer", [
   }),
   z.strictObject({ answer: z.literal("skipped") }),
 ])
+
+/** What a design question shows beside its options. */
+export const DesignVisual = z.enum(["palette", "font_pair", "layout", "text"])
+
+/** A question id: how an answer finds its question. */
+const QuestionId = z.string().regex(/^[a-z][a-z0-9_]{1,39}$/)
+
+/** The most questions one tray holds. */
+export const DESIGN_QUESTIONS_MAX = 8
+
+/**
+ * `ask_design`'s input: the design questions of a build, shown as one tray
+ * the owner works through in any order. Each `card` is an ordinary
+ * `AskChoiceInput`, so its limits, `other` and `skippable` mean what they do
+ * there; `visual` says how the tray draws it. The api builds every card from
+ * the contracts' lists, so an option is never the model's, and checks that
+ * question ids are distinct and that only a `multiple` card takes several
+ * answers.
+ */
+export const AskDesignInput = z.strictObject({
+  questions: z
+    .array(
+      z.strictObject({
+        id: QuestionId,
+        /** The question the tray shows; absent only in calls written before it existed. */
+        question: Text(120).optional(),
+        visual: DesignVisual,
+        card: AskChoiceInput,
+      })
+    )
+    .min(1)
+    .max(DESIGN_QUESTIONS_MAX),
+})
+
+/**
+ * One answer in the tray: an option's id, several on a `multiple` card, the
+ * owner's own words, or a skip.
+ */
+const DesignAnswer = z.union([
+  z.strictObject({ choice: Text(40) }),
+  z.strictObject({ choices: z.array(Text(40)).min(1).max(16) }),
+  z.strictObject({ own: Text(200) }),
+  z.strictObject({ skipped: z.literal(true) }),
+])
+
+/**
+ * `ask_design`'s output, keyed by question id. A question the owner left
+ * unopened has no entry; `skip_all` means they chose the defaults for every
+ * question not answered. Card answers stay code-answered (ADR-037): the api
+ * reads this against the call's own questions and no model sees the tray.
+ */
+export const AskDesignOutput = z.strictObject({
+  answers: z.record(QuestionId, DesignAnswer),
+  skip_all: z.boolean(),
+})
+
+/**
+ * `review_blueprint`'s input: the plan the owner reads before a build starts.
+ * `revision_of` is the assignment this plan revises, when it is a re-plan.
+ */
+export const BlueprintReviewInput = z.strictObject({
+  blueprint: Blueprint,
+  revision_of: Uuid.optional(),
+})
+
+/** Build it as planned, or change it: `note` is the owner's words and is data. */
+export const BlueprintReviewOutput = z.discriminatedUnion("decision", [
+  z.strictObject({ decision: z.literal("build"), note: Text(500).optional() }),
+  z.strictObject({ decision: z.literal("change"), note: Text(500) }),
+])
+
+/**
+ * What `POST /builds/:id/blueprint` answers (202): the round decided and the
+ * decision on record. Not the build's state, which the decision has not moved yet.
+ */
+export const BlueprintReceipt = z.strictObject({
+  round: z.int().positive(),
+  decision: z.enum(["build", "change"]),
+})
 
 /**
  * `ask_upload`'s input: a drop zone for the owner's photos. The limits ride
@@ -297,6 +393,8 @@ const ChatResult = z.discriminatedUnion("kind", [
       AskFactOutput,
       AskDetailsOutput,
       AskChoiceOutput,
+      AskDesignOutput,
+      BlueprintReviewOutput,
       AskUploadOutput,
       ReviewQuoteFormOutput,
     ]),
@@ -376,6 +474,11 @@ export const ChatRequest = z.strictObject({
 export type ChoiceStep = z.infer<typeof ChoiceStep>
 export type AskChoiceInput = z.infer<typeof AskChoiceInput>
 export type AskChoiceOutput = z.infer<typeof AskChoiceOutput>
+export type AskDesignInput = z.infer<typeof AskDesignInput>
+export type BlueprintReviewInput = z.infer<typeof BlueprintReviewInput>
+export type BlueprintReviewOutput = z.infer<typeof BlueprintReviewOutput>
+export type BlueprintReceipt = z.infer<typeof BlueprintReceipt>
+export type AskDesignOutput = z.infer<typeof AskDesignOutput>
 export type ReviewQuoteFormInput = z.infer<typeof ReviewQuoteFormInput>
 export type ReviewQuoteFormOutput = z.infer<typeof ReviewQuoteFormOutput>
 export type AskUploadInput = z.infer<typeof AskUploadInput>

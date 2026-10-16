@@ -9,9 +9,11 @@ import {
   SealQuestionIcon,
 } from "@phosphor-icons/react"
 import { AskChoice } from "@workspace/ui/components/assistant/ask-choice"
+import { AskDesign } from "@workspace/ui/components/assistant/ask-design"
 import { AskDetails } from "@workspace/ui/components/assistant/ask-details"
 import { AskFact } from "@workspace/ui/components/assistant/ask-fact"
 import { AskUpload } from "@workspace/ui/components/assistant/ask-upload"
+import { ReviewBlueprint } from "@workspace/ui/components/assistant/blueprint-card"
 import {
   COS_CARDS,
   COS_READS,
@@ -34,7 +36,7 @@ import { cn } from "@workspace/ui/lib/utils"
  * rather than from a local flag.
  *
  * This is the component the thread's tool-call slot renders. `ask_fact`,
- * `ask_details`, `ask_choice`, `ask_upload`, `review_quote_form` and `request_change` get
+ * `ask_details`, `ask_choice`, `ask_design`, `ask_upload`, `review_quote_form` and `request_change` get
  * their own cards. Any other tool call the runtime is
  * waiting on a human for is an approval, whatever it is called, and anything
  * else falls through to `ToolFallback`.
@@ -147,8 +149,10 @@ export const OWNER_CARDS: Record<string, ToolCallMessagePartComponent> = {
   ask_fact: AskFact,
   ask_details: AskDetails,
   ask_choice: AskChoice,
+  ask_design: AskDesign,
   ask_upload: AskUpload,
   review_quote_form: ReviewQuoteForm,
+  review_blueprint: ReviewBlueprint,
   request_change: RequestChange,
   ...COS_CARDS,
 }

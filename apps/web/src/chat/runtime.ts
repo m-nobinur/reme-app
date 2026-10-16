@@ -9,11 +9,13 @@ import { useAISDKRuntime } from "@assistant-ui/react-ai-sdk"
 import type { ChatRequest } from "@workspace/contracts"
 import { SESSION_ENDED } from "@workspace/ui/lib/tool-state"
 import { DefaultChatTransport } from "ai"
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { getConversationMessages, rateMessage } from "@/lib/api/server"
-import { toUIMessage } from "./history"
+import { planNote } from "./blueprint-plan"
+import { followThread, toUIMessage } from "./history"
 import type { ChatMessage } from "./message"
 import {
+  blueprintChanges,
   cancelOvertaken,
   chatFetch,
   quoteChanges,
@@ -51,6 +53,8 @@ export function useConversationRuntime({
   suggestions,
   intent,
   onIntentSent,
+  planChange,
+  tail,
 }: {
   onFinish: () => void
   suggestions: ThreadSuggestion[]
@@ -61,6 +65,18 @@ export function useConversationRuntime({
    */
   intent?: { current: ChatRequest["intent"] }
   onIntentSent?: () => void
+  /**
+   * Set while a Blueprint card waits (blueprint-plan.tsx): a message that
+   * finishes its "Change something" goes there as the owner's note, not to
+   * the chat. A ref for the same reason as `intent`.
+   */
+  planChange?: { current: ((note: string) => Promise<boolean>) | null }
+  /**
+   * The polled `/workspace` tag's tail (`tailOf`), kept by the page: this
+   * hook renders apart from it and never sees the workspace change, so the
+   * page calls `moved` when the tail does.
+   */
+  tail?: { current: string | null; moved?: () => void }
 }) {
   const aui = useAui()
   const id = useAuiState((s) => s.threadListItem.id)
@@ -95,12 +111,31 @@ export function useConversationRuntime({
     onFinish,
     onError: (error) => restore.current(error),
   })
-  restore.current = (error) => {
+  // The owner's message carries the time it was sent, as a stored row does:
+  // without it the thread shows the converter's clock, which moves on every
+  // render. The api writes the same on its own new messages.
+  const send: typeof chat.sendMessage = (message, options) =>
+    chat.sendMessage(
+      message && {
+        ...message,
+        metadata: {
+          ...message.metadata,
+          custom: { createdAt: new Date().toISOString() },
+        },
+      },
+      options
+    )
+  // The open thread's stored rows, or null when it is not stored yet.
+  const storedRows = () => {
     const remoteId = aui.threadListItem.getState().remoteId
+    return remoteId ? getConversationMessages({ data: { id: remoteId } }) : null
+  }
+  restore.current = (error) => {
     // A session that ended can read nothing back; the error offers sign-in.
-    if (!remoteId || error.message === SESSION_ENDED) return
+    const read = error.message === SESSION_ENDED ? null : storedRows()
+    if (!read) return
     const last = sending.current
-    void getConversationMessages({ data: { id: remoteId } })
+    void read
       .then((rows) => {
         const stored = rows.map(toUIMessage)
         chat.setMessages(stored)
@@ -116,6 +151,32 @@ export function useConversationRuntime({
       })
       .catch(() => undefined)
   }
+  // A message the assistant posted on its own: the polled tag names it, and
+  // the thread reads its rows again between turns. Through a ref, because a
+  // read lands after the render that started it.
+  const latest = useRef(chat)
+  latest.current = chat
+  const [follow] = useState(() =>
+    followThread({
+      read: async () => storedRows(),
+      now: () => ({
+        idle: ["ready", "error"].includes(latest.current.status),
+        messages: latest.current.messages,
+      }),
+      apply: (rows) => latest.current.setMessages(rows.map(toUIMessage)),
+    })
+  )
+  useEffect(() => {
+    if (!tail) return
+    tail.moved = () => void follow(tail.current)
+    return () => {
+      tail.moved = undefined
+    }
+  }, [follow, tail])
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a turn ending is a time to read a tail it held back.
+  useEffect(() => {
+    void follow(tail?.current ?? null)
+  }, [follow, chat.status])
   // The owner's thumb on a reply. It is kept on the chat's own message, so
   // the next update keeps it pressed, and sent with a key of this press's
   // own, so up, down, up records three ratings and a retry of one records
@@ -152,7 +213,7 @@ export function useConversationRuntime({
   ) => {
     const reply = replyTo(chat.messages, given)
     await chat.addToolOutput(given)
-    if (reply) await chat.sendMessage(reply)
+    if (reply) await send(reply)
   }
   const runtime = useAISDKRuntime(
     {
@@ -160,14 +221,25 @@ export function useConversationRuntime({
       addToolOutput,
       sendMessage: (message, options) => {
         const carried = intent?.current
-        // Typed while a proposed quote form waits: the words answer it, and
-        // go out as the owner's reply.
-        const changes = quoteChanges(chat.messages, typedText(message), carried)
+        // Typed while a proposed quote form or a plan waits: the words answer
+        // it, and go out as the owner's reply.
+        const text = typedText(message)
+        const changes =
+          quoteChanges(chat.messages, text, carried) ??
+          blueprintChanges(chat.messages, text, carried)
         if (changes) return addToolOutput(changes)
+        const note = carried ? null : planNote(text)
+        const decide = planChange?.current
+        if (note !== null && decide) {
+          // A refused note goes back into the composer, as a failed turn's words do.
+          return decide(note).then((done) => {
+            if (!done) runtime.thread.composer.setText(text)
+          })
+        }
         chat.setMessages(cancelOvertaken)
-        if (!carried) return chat.sendMessage(message, options)
+        if (!carried) return send(message, options)
         onIntentSent?.()
-        return chat.sendMessage(message, {
+        return send(message, {
           ...options,
           body: { ...options?.body, intent: carried },
         })
@@ -175,6 +247,10 @@ export function useConversationRuntime({
     },
     {
       cancelPendingToolCallsOnSend: false,
+      // A turn is one stored row that grows, and an owner row separates
+      // turns, so two assistant rows in a row are never one reply: a message
+      // the assistant posted on its own is a message of its own.
+      joinStrategy: "none",
       suggestions,
       adapters: { feedback },
     }

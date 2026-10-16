@@ -4,6 +4,7 @@ import { PgDialect } from "drizzle-orm/pg-core"
 import type { Sql, TransactionSql } from "postgres"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { connect, connectionString } from "../src/client.ts"
+import { activeDomainHost, domainHeldElsewhere } from "../src/domains.ts"
 import {
   APP_ROLE,
   ENTER_APP_ROLE,
@@ -12,6 +13,7 @@ import {
   ORG_SETTING,
   type OrgScopedDb,
   pgCode,
+  resolveDomainHost,
   resolveOrg,
   resolveOrgBySlug,
   setContext,
@@ -22,6 +24,8 @@ import {
 } from "../src/tenancy.ts"
 import {
   clearTwoOrgs,
+  DOMAIN_OF,
+  DOMAIN_PENDING,
   ORG_A,
   ORG_ABSENT,
   ORG_B,
@@ -156,6 +160,60 @@ const SECURITY_DEFINER_FUNCTIONS: Record<
       }
     },
   },
+  // The router's way from a custom hostname to a site (migration 0015): an
+  // active domain's apex or its `www.`, three columns back, and nothing for a
+  // host that is pending, unknown or empty.
+  resolve_domain_host: {
+    probe: async (raw) => {
+      const call = async (host: string) => {
+        const [row] = await raw<{ org_id: string | null }[]>`
+          select org_id from public.resolve_domain_host(${host})`
+        return row?.org_id ?? null
+      }
+      return {
+        granted: [
+          await call(DOMAIN_OF.a),
+          await call(`www.${DOMAIN_OF.b}`),
+          await call(DOMAIN_OF.b.toUpperCase()),
+        ],
+        refused: [
+          await call(DOMAIN_PENDING),
+          await call(`www.${DOMAIN_PENDING}`),
+          await call("tenancy-probe-c.example.com"),
+          await call(`blog.${DOMAIN_OF.a}`),
+          await call(""),
+        ],
+      }
+    },
+  },
+  // The connect path's takeover guard (migration 0016): whether an org other
+  // than the context's ever held a name. A yes is the only answer it gives,
+  // so a no counts as a refusal: an org's own name, a name nobody holds.
+  domain_held_elsewhere: {
+    probe: async (raw) => {
+      const call = (org: string | null, name: string) =>
+        raw.begin(async (tx) => {
+          if (org) await tx`select set_config('app.org_id', ${org}, true)`
+          const [row] = await tx<{ held: boolean }[]>`
+            select public.domain_held_elsewhere(${name}) as held`
+          return row?.held ? "held" : null
+        })
+      return {
+        granted: [
+          await call(ORG_B, DOMAIN_OF.a),
+          await call(ORG_A, DOMAIN_OF.b.toUpperCase()),
+          // No context: every holder is another org's.
+          await call(null, DOMAIN_OF.a),
+        ],
+        refused: [
+          await call(ORG_A, DOMAIN_OF.a),
+          await call(ORG_A, DOMAIN_PENDING),
+          await call(ORG_B, "tenancy-probe-c.example.com"),
+          await call(ORG_B, ""),
+        ],
+      }
+    },
+  },
   // The retention sweep's way in (ADR-032, amended): every org id, and
   // nothing else. It takes no argument, so there is no other way in to
   // refuse here; the refusal that matters, that an id from it reads nothing
@@ -167,6 +225,22 @@ const SECURITY_DEFINER_FUNCTIONS: Record<
       const ids = new Set(rows.map((row) => row.id))
       return {
         granted: [ids.has(ORG_A) ? ORG_A : null, ids.has(ORG_B) ? ORG_B : null],
+        refused: [],
+      }
+    },
+  },
+  // The planner's diversity note (ADR-038, migration 0014). What crosses
+  // tenants is the row shape, so the shape is the probe: three library ids,
+  // no org id, no text. A column added to it fails here. The caller's own org
+  // is excluded in the body; the fixtures hold no planned site to drive that.
+  recent_designs: {
+    probe: async (raw) => {
+      const [row] = await raw<{ result: string }[]>`
+        select pg_get_function_result(
+          'public.recent_designs(uuid, text)'::regprocedure) as result`
+      const shape = "TABLE(direction text, hero text, services text)"
+      return {
+        granted: [row?.result === shape ? shape : null],
         refused: [],
       }
     },
@@ -1574,5 +1648,240 @@ describe("reminders hold their shape", () => {
         reminder(tx, { conversation: CONVERSATION_B })
       )
     ).toBe(FOREIGN_KEY)
+  })
+})
+
+describe("domains hold their shape", () => {
+  /** Org A's pending fixture, and each org's approval from `fixtures.ts`. */
+  const PENDING_A = "00000000-0000-4000-a000-000000000018"
+  const APPROVAL_A = "00000000-0000-4000-a000-000000000013"
+  const APPROVAL_B = "00000000-0000-4000-b000-000000000013"
+
+  const PRICE = { tld: "com", retail_gbp: 12, cost_usd: 10.46 }
+
+  const domain = (
+    tx: TransactionSql,
+    options: {
+      org?: string
+      name?: string
+      host?: string
+      state?: string
+      origin?: string
+      method?: string
+      price?: object | null
+    }
+  ) => tx`
+    insert into domains (org_id, site_id, name, primary_host, origin, method, state, price)
+    values (${options.org ?? ORG_A}, ${options.org ?? ORG_A},
+      ${options.name ?? "newco.example.com"},
+      ${options.host ?? options.name ?? "newco.example.com"},
+      ${options.origin ?? "connected"}, ${options.method ?? "records"},
+      ${options.state ?? "awaiting_dns"},
+      ${options.price ? JSON.stringify(options.price) : null}::jsonb)`
+
+  /** A purchase of `name` by `org`, waiting on its Checkout unless `state` says. */
+  const purchase = (
+    tx: TransactionSql,
+    options: { org?: string; name?: string; state?: string }
+  ) =>
+    domain(tx, {
+      state: "awaiting_payment",
+      ...options,
+      origin: "purchased",
+      method: "purchased",
+      price: PRICE,
+    })
+
+  it("refuses a second live claim on a name, in any org", async () => {
+    for (const state of ["awaiting_dns", "verifying", "active"]) {
+      expect(
+        await inTransaction((tx) =>
+          domain(tx, { org: ORG_B, name: DOMAIN_OF.a, state })
+        ),
+        state
+      ).toBe(UNIQUE)
+    }
+    // A purchase waiting on payment holds the name too.
+    expect(
+      await inTransaction((tx) =>
+        purchase(tx, { org: ORG_B, name: DOMAIN_OF.a })
+      )
+    ).toBe(UNIQUE)
+  })
+
+  it("lets an expired purchase free its name, and holds it while unpaid", async () => {
+    const name = "buyme.example.com"
+    expect(
+      await inTransaction(async (tx) => {
+        await purchase(tx, { name })
+        await purchase(tx, { org: ORG_B, name })
+      })
+    ).toBe(UNIQUE)
+    expect(
+      await inTransaction(async (tx) => {
+        await purchase(tx, { name, state: "abandoned" })
+        await purchase(tx, { org: ORG_B, name })
+      })
+    ).toBeUndefined()
+  })
+
+  it("prices a purchase, and lets only a purchase wait on payment", async () => {
+    for (const [why, options] of [
+      ["a connect waiting on payment", { state: "awaiting_payment" }],
+      ["a connect abandoned", { state: "abandoned" }],
+      [
+        "a purchase with no price",
+        { origin: "purchased", method: "purchased", state: "awaiting_payment" },
+      ],
+      [
+        "a purchase pointed by records",
+        { origin: "purchased", method: "records", price: PRICE },
+      ],
+      [
+        "a connect with the purchased method",
+        { method: "purchased", price: PRICE },
+      ],
+    ] as const) {
+      expect(await inTransaction((tx) => domain(tx, options)), why).toBe(CHECK)
+    }
+    for (const state of ["awaiting_payment", "verifying", "active"]) {
+      expect(
+        await inTransaction((tx) => purchase(tx, { state })),
+        state
+      ).toBeUndefined()
+    }
+  })
+
+  it("gives each org its own Stripe customer", async () => {
+    expect(
+      await inTransaction(async (tx) => {
+        await tx`update orgs set stripe_customer_id = 'cus_tenancy' where id = ${ORG_A}`
+        await tx`update orgs set stripe_customer_id = 'cus_tenancy' where id = ${ORG_B}`
+      })
+    ).toBe(UNIQUE)
+  })
+
+  it("lets a name be claimed again once the claim ended", async () => {
+    for (const state of ["removed", "failed"]) {
+      expect(
+        await inTransaction(async (tx) => {
+          await tx`update domains set state = ${state} where name = ${DOMAIN_OF.a}`
+          await domain(tx, { org: ORG_B, name: DOMAIN_OF.a })
+        }),
+        state
+      ).toBeUndefined()
+    }
+  })
+
+  it("takes a lowercase apex name and a primary host of its own", async () => {
+    for (const name of [
+      "Newco.example.com",
+      "newco",
+      "-a.example.com",
+      "a b.example.com",
+      "new_co.example.com",
+      // The definer strips a `www.`, so a name carrying one would share a host.
+      "www.newco.example.com",
+    ]) {
+      expect(await inTransaction((tx) => domain(tx, { name })), name).toBe(
+        CHECK
+      )
+    }
+    expect(
+      await inTransaction((tx) =>
+        domain(tx, { name: "newco.example.com", host: "other.example.com" })
+      )
+    ).toBe(CHECK)
+    expect(
+      await inTransaction((tx) =>
+        domain(tx, {
+          name: "xn--bcher-kva.example",
+          host: "www.xn--bcher-kva.example",
+        })
+      )
+    ).toBeUndefined()
+  })
+
+  it("takes an approval from its own org only, and once", async () => {
+    // Org B's own domain lets go of its approval first, so the foreign key
+    // is what refuses, not the unique constraint.
+    expect(
+      await inTransaction(async (tx) => {
+        await tx`update domains set approval_id = null where org_id = ${ORG_B}`
+        await tx`update domains set approval_id = ${APPROVAL_B} where id = ${PENDING_A}`
+      })
+    ).toBe(FOREIGN_KEY)
+    // Org A's live fixture already holds org A's approval.
+    expect(
+      await inTransaction(
+        (tx) =>
+          tx`update domains set approval_id = ${APPROVAL_A} where id = ${PENDING_A}`
+      )
+    ).toBe(UNIQUE)
+  })
+
+  it("lets an org read and change only its own domains", async () => {
+    const seen = await withOrg({ orgId: ORG_B }, (db) =>
+      db.execute<{ name: string }>(sql`select name from domains`)
+    )
+    expect(seen.map((row) => row.name)).toEqual([DOMAIN_OF.b])
+    const touched = await withOrg({ orgId: ORG_B }, (db) =>
+      db.execute(
+        sql`update domains set state = 'removed' where name = ${DOMAIN_OF.a}`
+      )
+    )
+    expect(touched.count).toBe(0)
+  })
+
+  it("tells a new claim that another org held the name, removed or failed, which its own rows hide", async () => {
+    for (const state of ["removed", "failed"]) {
+      const seen: unknown[] = []
+      const code = await inTransaction(async (tx) => {
+        await tx`update domains set state = ${state} where name = ${DOMAIN_OF.a}`
+        await tx.unsafe(`set local role ${APP_ROLE}`)
+        await tx`select set_config('app.org_id', ${ORG_B}, true)`
+        const [visible] = await tx<{ n: number }[]>`
+          select count(*)::int as n from domains where name = ${DOMAIN_OF.a}`
+        const [held] = await tx<{ held: boolean }[]>`
+          select public.domain_held_elsewhere(${DOMAIN_OF.a}) as held`
+        await tx`select set_config('app.org_id', ${ORG_A}, true)`
+        const [own] = await tx<{ held: boolean }[]>`
+          select public.domain_held_elsewhere(${DOMAIN_OF.a}) as held`
+        seen.push(visible?.n, held?.held, own?.held)
+      })
+      expect(code, state).toBeUndefined()
+      // Org B sees no row, yet learns the name was held; org A's own row is not another's.
+      expect(seen, state).toEqual([0, true, false])
+    }
+    expect(
+      await withOrg({ orgId: ORG_B }, (db) =>
+        domainHeldElsewhere(db, DOMAIN_OF.a)
+      )
+    ).toBe(true)
+    expect(
+      await withOrg({ orgId: ORG_A }, (db) =>
+        domainHeldElsewhere(db, DOMAIN_OF.a)
+      )
+    ).toBe(false)
+  })
+
+  it("answers the router for an active host and no other, and the org for its redirect", async () => {
+    const kit = tenancy(connectionString())
+    try {
+      expect(await resolveDomainHost(kit, `www.${DOMAIN_OF.a}`)).toEqual({
+        orgId: ORG_A,
+        siteId: ORG_A,
+        primaryHost: `www.${DOMAIN_OF.a}`,
+      })
+      expect(await resolveDomainHost(kit, DOMAIN_PENDING)).toBeNull()
+      expect(
+        await withOrg({ orgId: ORG_A }, (db) => activeDomainHost(db))
+      ).toBe(`www.${DOMAIN_OF.a}`)
+      expect(
+        await withOrg({ orgId: ORG_B }, (db) => activeDomainHost(db))
+      ).toBe(DOMAIN_OF.b)
+    } finally {
+      await kit.close()
+    }
   })
 })

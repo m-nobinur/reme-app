@@ -1,11 +1,14 @@
+/* biome-ignore-all lint/style/noDescendingSpecificity: the rule compares any two selectors ending alike, as a hero pill's li and a FAQ's li, which never match one element; order here follows the page, not specificity */
 /* Every colour here comes from a token: tokens.css, which is a byte-identical
    copy of packages/ui/src/styles/tokens.css, or the marketing layer over it in
    theme.css. Light only: the tokens flip under a `.dark` class, and a static
    page with no script has nothing to set it.
 
-   One system, three templates. Every section is a band of the same padding
-   holding one container; the templates below change type, shape and surface
-   by data-template, never the spacing. */
+   One system, many directions. Every section is a band of the same padding
+   holding one container, and the bands alternate base, tint, base, dark down
+   the page. A direction (src/directions.ts) picks the variants, and the root's
+   data-radius, data-bands and data-direction change shape, dark bands and one
+   ornament at the end of this file, never the spacing. */
 
 *,
 *::before,
@@ -26,11 +29,15 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans);
   font-size: var(--text-base);
-  line-height: 1.65;
+  line-height: 1.7;
 }
 
+/* height: auto, because Astro writes the file's own height onto every <img>
+   and that attribute would otherwise beat a class's aspect-ratio: a portrait
+   upload then stood 1,500 px tall in a hero cropped to 5:4. */
 img {
   max-width: 100%;
+  height: auto;
 }
 
 .wrap {
@@ -58,22 +65,28 @@ h3 {
   line-height: 1.1;
   letter-spacing: var(--display-tracking);
   text-wrap: balance;
+  /* A heading is a grid or flex child often: it may shrink and break a long
+     word rather than push its column wider. */
+  min-width: 0;
+  overflow-wrap: break-word;
 }
 
 h1 {
   font-size: var(--text-page);
+  line-height: 1.07;
   margin: 0 0 var(--space-sm);
   text-transform: var(--display-case);
 }
 
 h2 {
   font-size: var(--text-2xl);
+  line-height: 1.2;
   margin: 0 0 var(--space-md);
 }
 
 h3 {
-  font-size: var(--text-lg);
-  letter-spacing: -0.01em;
+  font-size: var(--text-xl);
+  line-height: 1.3;
   margin: 0 0 var(--space-2xs);
 }
 
@@ -87,7 +100,14 @@ p {
   max-width: var(--measure);
   color: var(--muted-foreground);
   font-size: var(--text-lg);
-  line-height: 1.55;
+  line-height: 1.7;
+}
+
+/* The hero's reassurance line, under its buttons. */
+.hero-note {
+  margin: var(--space-sm) 0 0;
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
 }
 
 .mark {
@@ -97,15 +117,28 @@ p {
   color: var(--brand-text);
 }
 
-/* Bands. A band after a plain band drops its top padding, so two plain
-   sections sit one section apart rather than two; a tinted band keeps both. */
+/* Bands. Every band keeps both paddings. The tint is used the way the
+   reference uses it, sparingly: every third band, never beside a band a
+   variant tints itself (.band-tint), and the page ends on the dark closing
+   band (the CTA's brand surface). `of .band` counts bands only, so the hero
+   and the trust strip do not shift the beat. :where() keeps this at zero
+   specificity: a direction or a component that sets its own surface wins. */
 
 .band {
   padding-block: var(--section-pad);
 }
 
-.band:not(.band-tint) + .band:not(.band-tint) {
-  padding-block-start: 0;
+:where(
+  main
+    > .band:nth-child(3n + 2 of .band):not(
+      .cta-band,
+      .band-tint + .band,
+      :has(+ .band-tint)
+    )
+) {
+  /* What the band is painted, for a drawing's label halo (.area-label). */
+  --band-ground: var(--brand-soft);
+  background: var(--brand-soft);
 }
 
 .section-head {
@@ -121,8 +154,12 @@ p {
   margin: var(--space-lg) 0 0;
 }
 
+/* Every secondary link carries the arrow, and it moves under the pointer. */
 .more-link {
-  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  font-weight: 500;
   text-decoration-thickness: 1px;
 }
 
@@ -130,31 +167,33 @@ p {
   text-decoration-thickness: 2px;
 }
 
-/* A titled block with its heading beside the text on a wide screen. The FAQ,
-   the reasons and the area use the same split, so the page has one rhythm. */
+/* A titled block with its heading beside the text on a wide screen. The FAQ
+   and the reasons use the same split, so the page has one rhythm. */
 .section-inner,
-.faq-inner,
-.value-inner,
-.area-inner {
+.faq-split .faq-inner,
+.value-inner {
   display: grid;
   gap: var(--section-head-gap) var(--space-2xl);
 }
 
 @media (min-width: 56rem) {
   .section-inner,
-  .faq-inner,
-  .value-inner,
-  .area-inner {
+  .value-inner {
     grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
     align-items: start;
   }
 
-  :is(.faq-inner, .value-inner) > .section-head {
+  .faq-split .faq-inner {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+    align-items: start;
+  }
+
+  .value-head .section-head {
     margin: 0;
   }
 }
 
-.section-inner > h2 {
+.section-inner > .section-head {
   margin: 0;
 }
 
@@ -199,6 +238,29 @@ p {
   text-decoration: none;
 }
 
+/* minimal's wordmark: the name over the trade, set small and tracked. */
+.header-minimal .site-name {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.site-line {
+  color: var(--muted-foreground);
+  font-family: var(--font-sans);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+/* <picture> wraps every optimised photo; it must not change the layout around
+   the <img>. */
+picture {
+  display: block;
+}
+
 /* The owner's logo, at a fixed height whatever its file's size. */
 .site-logo {
   display: block;
@@ -233,9 +295,8 @@ p {
   display: inline-flex;
   align-items: center;
   min-height: 2.75rem;
-  color: var(--foreground);
+  color: var(--muted-foreground);
   font-size: var(--text-sm);
-  font-weight: 500;
   text-decoration: none;
 }
 
@@ -245,7 +306,8 @@ p {
 
 .nav-wide a[aria-current="page"] {
   color: var(--brand-text);
-  box-shadow: inset 0 -2px 0 var(--brand);
+  text-decoration: underline 1px;
+  text-underline-offset: 0.45em;
 }
 
 /* The phone menu is a native disclosure: it opens with no script, and the
@@ -261,7 +323,7 @@ p {
   color: var(--foreground);
   cursor: pointer;
   font-size: var(--text-sm);
-  font-weight: 600;
+  font-weight: 500;
   list-style: none;
 }
 
@@ -290,7 +352,6 @@ p {
   padding: var(--space-2xs) var(--gutter) var(--space-md);
   border-bottom: 1px solid var(--border);
   background: var(--background);
-  box-shadow: var(--shadow-card);
 }
 
 .nav-narrow a {
@@ -315,6 +376,35 @@ p {
   .nav-narrow {
     display: none;
   }
+
+  /* minimal keeps the menu behind its button at every width. */
+  .header-minimal .nav-wide {
+    display: none;
+  }
+
+  .header-minimal .nav-narrow {
+    display: block;
+  }
+
+  /* centered: the links, the name in the middle, the action. */
+  .header-centered .header-inner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  }
+
+  .header-centered .site-name {
+    grid-area: 1 / 2;
+    margin: 0;
+  }
+
+  .header-centered .nav-wide {
+    grid-area: 1 / 1;
+  }
+
+  .header-centered .header-action {
+    grid-area: 1 / 3;
+    justify-self: end;
+  }
 }
 
 /* Actions */
@@ -332,16 +422,57 @@ p {
   justify-content: center;
   min-height: 3rem;
   padding-inline: var(--space-md);
-  border: 1.5px solid transparent;
+  border: 1px solid transparent;
   border-radius: var(--radius-button);
-  font-size: 0.9375rem;
-  font-weight: 600;
-  letter-spacing: 0.01em;
+  gap: var(--space-2xs);
+  font-size: var(--text-sm);
+  font-weight: 500;
   text-decoration: none;
   transition:
     background-color 160ms ease,
     border-color 160ms ease,
-    color 160ms ease;
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+/* The arrow is drawn, not typed: a mask in the text colour, so it follows
+   every surface the button sits on and needs no glyph from any font. It is
+   decoration and carries no text, so it is not in the accessible name. */
+.action::after,
+.more-link::after,
+.card-arrow::after,
+.row-arrow::after {
+  content: "";
+  flex: none;
+  width: 1.125em;
+  height: 1.125em;
+  background: currentColor;
+  mask:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cpath d='M221.66,133.66l-72,72a8,8,0,0,1-11.32-11.32L196.69,136H40a8,8,0,0,1,0-16H196.69L138.34,61.66a8,8,0,0,1,11.32-11.32l72,72A8,8,0,0,1,221.66,133.66Z'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  transition: transform 160ms ease;
+}
+
+.action:hover {
+  transform: translateY(-2px);
+}
+
+.action:hover::after,
+.more-link:hover::after,
+.card-linked:hover .card-arrow::after,
+.rows-linked li:hover .row-arrow::after {
+  transform: translateX(3px);
+}
+
+/* The header's button is small and shares a row with the menu on a phone. */
+.header-action .action::after {
+  display: none;
+}
+
+/* The hero's two actions are pills on the reference; the header's and the
+   closing band's keep the button radius. */
+.hero-home .action {
+  border-radius: var(--radius-hero-action);
 }
 
 .action-primary {
@@ -365,19 +496,30 @@ p {
 
 .header-action .action {
   min-height: 2.75rem;
-  padding-inline: var(--space-sm);
+  padding-inline: var(--space-md);
   white-space: nowrap;
 }
 
+/* On a phone the name needs the row, so the action moves into the menu, where
+   it stays one tap away, and the hero below carries the same button. */
+.menu-action {
+  display: none;
+}
+
+/* A menu holding only the action has nothing to open once the button shows. */
+@media (min-width: 30rem) {
+  .nav-solo {
+    display: none;
+  }
+}
+
 @media (max-width: 29.99rem) {
-  .header-action .action {
-    padding-inline: var(--space-xs);
-    font-size: 0.8125rem;
+  .header-action {
+    display: none;
   }
 
-  [data-template="bold"] .header-action .action {
-    font-size: 0.75rem;
-    letter-spacing: 0.02em;
+  .menu-action {
+    display: block;
   }
 }
 
@@ -391,32 +533,96 @@ p {
   max-width: 44rem;
 }
 
+/* The label above a heading: small, tracked, uppercase, led by a dot in the
+   brand colour. One look for the hero and every section. */
 .eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
   margin: 0 0 var(--space-sm);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.eyebrow::before {
+  content: "";
+  flex: none;
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 50%;
+  background: var(--brand-text);
+}
+
+/* The last word of a headline, never the whole line: in the italic face
+   when the pair draws one (src/fonts.ts writes --accent-style). */
+.accent {
   color: var(--brand-text);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  font-style: var(--accent-style, normal);
 }
 
 .hero-home h1 {
   font-size: var(--text-hero);
-  line-height: 1.02;
+  line-height: 1.07;
 }
 
+/* An inner page's header is type on the page, as on the reference: 70 px
+   above and 50 below at 1440, 50 and 30 at 390, no band and no rule. */
 .hero-page {
-  padding-block: clamp(3rem, 2rem + 4vw, 5.5rem)
-    clamp(2.5rem, 1.75rem + 3vw, 4.5rem);
-  border-bottom: 1px solid var(--brand-line);
-  background: var(--brand-soft);
+  padding-block: clamp(3.125rem, 2.66rem + 1.905vw, 4.375rem)
+    clamp(1.875rem, 1.41rem + 1.905vw, 3.125rem);
 }
 
 .hero-page h1 {
   max-width: 22ch;
 }
 
+/* The heading takes the left of a wide screen and the lede and actions the
+   right, so a three-line h1 never stands beside an empty half. */
+@media (min-width: 56rem) {
+  .hero-page .hero-text {
+    display: grid;
+    max-width: none;
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+    gap: 0 var(--space-2xl);
+    align-items: end;
+  }
+
+  .hero-page h1 {
+    max-width: none;
+    grid-column: 1;
+    grid-row: 2 / span 2;
+  }
+
+  .hero-page .eyebrow {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .hero-page :is(.lede, .actions, .hero-note) {
+    grid-column: 2;
+    margin-block-end: 0;
+  }
+
+  .hero-page .lede {
+    grid-row: 2;
+  }
+
+  .hero-page .actions {
+    grid-row: 3;
+  }
+
+  .hero-page .hero-note {
+    grid-row: 4;
+  }
+}
+
 /* The owner's photo, cropped to a fixed shape so no upload stretches the
-   hero. Each template places it: beside the text, behind it, or under it. */
+   hero. Each hero variant places it: beside the text, behind it, or under it. */
 .hero-image {
   display: block;
   width: 100%;
@@ -446,81 +652,405 @@ p {
   line-height: 1.25;
 }
 
-/* Trust strip */
+.hero-list .mark {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+/* Home heroes. The variant sets the composition; the direction sets only
+   type, shape and surface. A photo variant with no photo lists the services in the
+   photo's place, never an empty frame. */
+
+.hero-home {
+  padding-block: clamp(3rem, 2rem + 5vw, 6.5rem);
+  overflow-x: clip;
+}
+
+.hero-home .hero-inner {
+  display: grid;
+  width: 100%;
+  gap: var(--space-xl);
+  align-items: center;
+}
+
+.hero-media {
+  position: relative;
+}
+
+.hero-plain .hero-list {
+  padding: var(--space-md) var(--space-lg);
+  border: 1px solid var(--brand-line);
+  border-radius: var(--radius-card);
+  background: var(--card);
+}
+
+.hero-plain .hero-list li {
+  padding-block: var(--space-sm);
+}
+
+.hero-plain .hero-list li + li {
+  border-top: 1px solid var(--border);
+}
+
+/* The one overlay on the photo that carries copy: a small pill in the page's
+   colours on every variant, as the reference's caption. */
+.hero-caption {
+  position: absolute;
+  z-index: 1;
+  inset-block-end: var(--space-md);
+  inset-inline-end: var(--space-md);
+  max-width: 16rem;
+  margin: 0;
+  padding: 0.625rem 0.9375rem;
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+@media (min-width: 56rem) {
+  .hero-home:not(.hero-dark_center) .hero-inner {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  }
+}
+
+/* split_frame: the reference's split. The copy on the page, the photo a crisp
+   panel beside it with only the media radius: no mat, no border, no tinted
+   band, and the caption pill is the one thing on the photo. */
+
+/* split_arch: the photo under an arch, a hairline arch offset behind it. */
+.hero-split_arch .hero-media {
+  isolation: isolate;
+  width: 100%;
+  max-width: 30rem;
+  justify-self: center;
+}
+
+.hero-split_arch .hero-image {
+  aspect-ratio: 4 / 5;
+  border-radius: 999px 999px 0 0;
+}
+
+.hero-split_arch .hero-media::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: calc(var(--space-md) * -1) var(--space-md) var(--space-md)
+    calc(var(--space-md) * -1);
+  border: 1px solid var(--brand-line);
+  border-radius: 999px 999px 0 0;
+}
+
+/* wash and dark_center: the photo full-bleed behind the copy. wash keeps it
+   under the copy on a phone, where a wash would sit behind every line. */
+.hero-wash .hero-text,
+.hero-dark_center .hero-text {
+  position: relative;
+  z-index: 1;
+}
+
+.hero-dark_center.hero-photo .hero-media,
+.hero-dark_center.hero-photo .hero-media::after {
+  position: absolute;
+  inset: 0;
+}
+
+.hero-dark_center.hero-photo .hero-image {
+  height: 100%;
+  aspect-ratio: auto;
+  border-radius: 0;
+}
+
+/* A photo that fills its box fills it through the <picture> around it too:
+   left at its own height, the image overflowed the hero under the next band. */
+.hero-media picture {
+  height: 100%;
+}
+
+/* wash on a wide screen: the photo is a full-height panel on the right half,
+   untouched to its edge, and the copy sits on the plain page beside it, so the
+   type needs no wash and the photo keeps its detail. */
+@media (min-width: 56rem) {
+  .hero-wash.hero-photo {
+    display: grid;
+    align-items: center;
+    min-height: clamp(32rem, 70vh, 44rem);
+  }
+
+  .hero-wash.hero-photo .hero-media {
+    position: absolute;
+    inset-block: 0;
+    inset-inline: 50% 0;
+  }
+
+  .hero-wash.hero-photo .hero-image {
+    height: 100%;
+    aspect-ratio: auto;
+    border-radius: 0;
+  }
+
+  /* The copy ends 3rem short of the photo, wherever the container sits. */
+  .hero-wash.hero-photo .hero-text {
+    max-width: calc(
+      50vw -
+      max(var(--gutter), (100vw - var(--container)) / 2) -
+      3rem
+    );
+  }
+}
+
+.hero-dark_center {
+  text-align: center;
+}
+
+.hero-dark_center :is(.hero-text, .lede, .hero-note) {
+  margin-inline: auto;
+}
+
+.hero-dark_center :is(.eyebrow, .actions, .hero-list) {
+  justify-content: center;
+}
+
+.hero-dark_center.hero-photo {
+  --foreground: var(--paper);
+  --muted-foreground: color-mix(in oklch, var(--paper) 86%, var(--ink));
+  --brand-text: var(--paper);
+  --brand-line: color-mix(in oklch, var(--paper) 55%, transparent);
+  display: grid;
+  align-items: end;
+  min-height: clamp(32rem, 80vh, 50rem);
+  color: var(--foreground);
+}
+
+.hero-dark_center.hero-photo .hero-media::after {
+  content: "";
+  /* A scrim where the copy is, at the foot, thinning to a light veil at the
+     top so the photo's upper half keeps its own light. */
+  background: linear-gradient(
+    to top,
+    color-mix(in oklch, var(--ink) 88%, transparent) 0%,
+    color-mix(in oklch, var(--ink) 72%, transparent) 50%,
+    color-mix(in oklch, var(--ink) 40%, transparent) 78%,
+    color-mix(in oklch, var(--ink) 18%, transparent) 100%
+  );
+}
+
+/* The copy fills the photo's foot, so the caption takes its top corner. */
+.hero-dark_center .hero-caption {
+  inset-block: var(--space-md) auto;
+}
+
+.hero-dark_center.hero-plain {
+  --foreground: var(--brand-foreground);
+  --muted-foreground: var(--brand-foreground);
+  --brand-text: var(--brand-foreground);
+  background: var(--brand);
+  color: var(--brand-foreground);
+}
+
+.hero-dark_center.hero-plain .hero-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs);
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.hero-dark_center.hero-plain .hero-list li {
+  gap: var(--space-2xs);
+  padding: var(--space-2xs) var(--space-sm);
+  border: 1px solid
+    color-mix(in oklch, var(--brand-foreground) 40%, transparent);
+  border-radius: 999px;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.hero-dark_center.hero-plain .hero-list .mark {
+  width: 1.125rem;
+  height: 1.125rem;
+  color: inherit;
+}
+
+/* text_led: the type leads, the photo a portrait inset beside it. */
+.hero-text_led h1 {
+  max-width: 15ch;
+}
+
+.hero-text_led .hero-media {
+  max-width: 17rem;
+}
+
+.hero-text_led .hero-image {
+  aspect-ratio: 3 / 4;
+}
+
+.hero-text_led .hero-caption {
+  inset-inline: var(--space-sm);
+  inset-block-end: var(--space-sm);
+  max-width: none;
+  text-align: center;
+}
+
+@media (min-width: 56rem) {
+  .hero-home.hero-text_led .hero-inner {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 17rem);
+    align-items: end;
+  }
+}
+
+/* Trust strip: the figures and points as icon columns split by hairlines. */
 
 .trust-strip {
   border-bottom: 1px solid var(--border);
   background: var(--background);
 }
 
-.trust-inner {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md) var(--space-xl);
-  padding-block: var(--space-lg);
-}
-
-.trust-figures {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-md) var(--space-xl);
+.trust-list {
+  display: grid;
+  gap: var(--space-md) 0;
   margin: 0;
-}
-
-.trust-figures div {
-  display: flex;
-  flex-direction: column-reverse;
-}
-
-.trust-figures dt {
-  color: var(--muted-foreground);
-  font-size: var(--text-sm);
-}
-
-.trust-figures dd {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: var(--text-2xl);
-  font-weight: var(--display-weight);
-  line-height: 1.05;
-  font-variant-numeric: tabular-nums;
-}
-
-.trust-points {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-xs) var(--space-lg);
-  margin: 0;
-  padding: 0;
+  padding: 2.25rem 0;
   list-style: none;
 }
 
-.trust-points li {
+.trust-list li {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: var(--space-2xs);
-  font-weight: 600;
+  gap: 0.6875rem;
+  padding-inline: var(--space-md);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.trust-text {
+  display: grid;
+  min-width: 0;
+}
+
+/* The icon on its own, in the brand, one size on every item. */
+.trust-icon {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  color: var(--brand-text);
+}
+
+.trust-icon .mark {
+  width: 1.25rem;
+  height: 1.25rem;
+  color: inherit;
+}
+
+/* Two columns on a phone, so four items sit 2 by 2; on a wide screen one row
+   of up to four, rows of three past that (TrustStrip sets --trust-cols). Every item draws a hairline
+   on its start edge and the list clips the first column's, so the dividers
+   sit only between neighbours whatever the count. */
+.trust-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow: hidden;
+}
+
+.trust-list li {
+  margin-inline-start: -1px;
+  border-inline-start: 1px solid var(--border);
+}
+
+@media (max-width: 29.99rem) {
+  .trust-list li {
+    padding-inline: var(--space-sm);
+  }
+}
+
+@media (min-width: 56rem) {
+  .trust-list {
+    grid-template-columns: repeat(var(--trust-cols, 4), minmax(0, 1fr));
+  }
+
+  .trust-list li {
+    padding-inline: var(--space-lg);
+  }
+}
+
+.trust-value {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: var(--display-weight);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.trust-label {
+  color: var(--muted-foreground);
 }
 
 /* Cards */
 
+/* Balanced for any count up to six, by counting the cards: one column on a
+   phone; two from 40rem, an odd last card centred; on a wide screen four in
+   one row, otherwise rows of three, five as three and a centred two, two as
+   halves and one alone in the middle. */
 .card-grid {
   display: grid;
   gap: var(--grid-gap);
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
+  grid-template-columns: minmax(0, 1fr);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
+@media (min-width: 40rem) {
+  .card-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .card-grid > li {
+    grid-column: span 2;
+  }
+
+  .card-grid > li:last-child:nth-child(odd) {
+    grid-column: 2 / span 2;
+  }
+}
+
+@media (min-width: 64rem) {
+  .card-grid {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+  }
+
+  .card-grid > li,
+  .card-grid > li:last-child:nth-child(odd) {
+    grid-column: span 4;
+  }
+
+  .card-grid:has(> li:nth-child(4):last-child) > li {
+    grid-column: span 3;
+  }
+
+  .card-grid > li:nth-child(4):nth-last-child(2) {
+    grid-column: 3 / span 4;
+  }
+
+  .card-grid:has(> li:nth-child(2):last-child) > li {
+    grid-column: span 6;
+  }
+
+  .card-grid > li:last-child:nth-child(1) {
+    grid-column: 4 / span 6;
+  }
+}
+
 .card {
   position: relative;
-  display: grid;
-  align-content: start;
+  display: flex;
+  flex-direction: column;
   gap: var(--space-2xs);
-  padding: var(--space-lg) var(--space-md);
+  padding: var(--space-md);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
   background: var(--card);
@@ -531,75 +1061,249 @@ p {
   margin: 0;
 }
 
-.card p {
+/* Card, step and answer copy is the reference's 14 px, in the muted ink. */
+:is(.card, .step-list, .value-list, .row-text) p {
   color: var(--muted-foreground);
+  font-size: var(--text-sm);
 }
 
+/* Every item icon sits in a hairline circle, the outline of the reference's
+   step numbers, one size. */
 .card-icon {
   display: inline-grid;
+  flex: none;
   place-items: center;
   width: 2.75rem;
   height: 2.75rem;
-  border-radius: var(--radius-md);
-  background: var(--brand-soft);
+  border: 1px solid var(--brand-line);
+  border-radius: 50%;
   color: var(--brand-text);
 }
 
 .card-icon .mark {
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 1.375rem;
+  height: 1.375rem;
   color: inherit;
 }
 
 /* A linked card: the name is the link, stretched over the card, and the
    card answers the pointer and shows the focus ring. */
-.card-linked h3 a {
+.card-linked h3 a,
+.rows-linked h3 a {
   color: inherit;
   text-decoration: none;
 }
 
-.card-linked h3 a::after {
+.card-linked h3 a::after,
+.rows-linked h3 a::after {
   content: "";
   position: absolute;
   inset: 0;
   border-radius: inherit;
 }
 
-.card-linked h3 a:focus-visible {
+.card-linked h3 a:focus-visible,
+.rows-linked h3 a:focus-visible {
   outline: none;
 }
 
-.card-linked:has(a:focus-visible) {
+.card-linked:has(a:focus-visible),
+.rows-linked li:has(a:focus-visible) {
   outline: 2px solid var(--brand-text);
   outline-offset: 3px;
 }
 
 .card-linked {
-  transition:
-    border-color 160ms ease,
-    box-shadow 160ms ease;
+  transition: border-color 160ms ease;
 }
 
 .card-linked:hover {
   border-color: var(--brand-line);
-  box-shadow: var(--shadow-card);
 }
 
-.card-linked:hover h3 {
+.card-linked:hover h3,
+.rows-linked li:hover h3 {
   color: var(--brand-text);
 }
 
-/* Reasons to choose */
+/* Service patterns. photo_cards and fleet put a photo across the card's top,
+   numbered_rows and practice_list are hairline rows, alternating is the
+   services page. */
 
-.value-props {
-  background: var(--brand-soft);
+.card-media {
+  position: relative;
+  overflow: hidden;
+  margin: calc(var(--space-md) * -1) calc(var(--space-md) * -1) var(--space-xs);
+  border-radius: var(--radius-card) var(--radius-card) 0 0;
 }
+
+/* 3:2 on a phone, 7:4 in a row of three: the reference's crop at both. */
+.card-photo {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+  background: var(--brand-soft);
+  transition: transform var(--motion-zoom) var(--motion-ease);
+}
+
+@media (min-width: 64rem) {
+  .card-photo {
+    aspect-ratio: 7 / 4;
+  }
+}
+
+.services-fleet .card-photo {
+  aspect-ratio: 16 / 9;
+}
+
+.card-linked:hover .card-photo {
+  transform: scale(1.035);
+}
+
+/* The card's own link, in words, at its foot so a row of cards lines up. */
+.card-arrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  margin-block-start: auto;
+  padding-block-start: var(--space-sm);
+  color: var(--brand-text);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.spec-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs);
+  margin: var(--space-2xs) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.spec-pills li {
+  padding: var(--space-3xs) var(--space-xs);
+  border: 1px solid var(--brand-line);
+  border-radius: 999px;
+  font-size: 0.8125rem;
+}
+
+.service-rows {
+  counter-reset: row;
+  margin: 0;
+  padding: 0;
+  border-block-start: 1px solid var(--brand-line);
+  list-style: none;
+}
+
+.service-rows li {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-sm) var(--space-md);
+  align-items: center;
+  padding-block: var(--space-md);
+  border-block-end: 1px solid var(--brand-line);
+  counter-increment: row;
+}
+
+.services-numbered_rows .service-rows li {
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+}
+
+/* On a phone the number, icon and arrow share one line and the words take the
+   full width under it, so three fixed items never squeeze the text. */
+@media (max-width: 47.99rem) {
+  .services-numbered_rows .service-rows li {
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+    row-gap: var(--space-xs);
+  }
+
+  .services-numbered_rows .service-rows li::before {
+    grid-area: 1 / 1;
+  }
+
+  .services-numbered_rows .service-rows .card-icon {
+    grid-area: 1 / 2;
+  }
+
+  .services-numbered_rows .service-rows .row-arrow {
+    grid-area: 1 / 4;
+  }
+
+  .services-numbered_rows .service-rows .row-text {
+    grid-area: 2 / 1 / 3 / -1;
+  }
+}
+
+.service-rows li::before {
+  content: counter(row, decimal-leading-zero);
+  min-width: 1.5rem;
+  color: var(--muted-foreground);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: var(--display-weight);
+  font-variant-numeric: tabular-nums;
+}
+
+.rows-linked li {
+  padding-inline: var(--space-sm);
+  transition: background-color 160ms ease;
+}
+
+.rows-linked li:hover {
+  background: color-mix(in oklch, var(--brand-soft) 60%, transparent);
+}
+
+.row-text :is(h3, p) {
+  margin: 0;
+}
+
+.row-text p {
+  color: var(--muted-foreground);
+}
+
+.services-practice_list .row-text h3 {
+  font-size: var(--text-xl);
+}
+
+@media (min-width: 56rem) {
+  .services-practice_list .row-text {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+    gap: var(--space-xl);
+    align-items: baseline;
+  }
+}
+
+.row-arrow {
+  display: inline-grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 1px solid var(--brand-line);
+  border-radius: 50%;
+  color: var(--brand-text);
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.rows-linked li:hover .row-arrow {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: var(--brand-foreground);
+}
+
+/* Reasons to choose: the heading, the reasons beside it. */
 
 .value-list {
   display: grid;
   gap: var(--space-lg);
   margin: 0;
   padding: 0;
+  counter-reset: reason;
   list-style: none;
 }
 
@@ -608,10 +1312,19 @@ p {
   grid-template-columns: auto 1fr;
   gap: var(--space-sm) var(--space-md);
   align-items: start;
+  counter-increment: reason;
 }
 
-.value-list .card-icon {
-  background: var(--background);
+/* Design rule 7: a list of reasons is numbered 01, 02, 03. */
+.value-list li > div::before {
+  content: counter(reason, decimal-leading-zero);
+  display: block;
+  margin-block-end: var(--space-3xs);
+  color: var(--muted-foreground);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: var(--display-weight);
+  font-variant-numeric: tabular-nums;
 }
 
 .value-list p {
@@ -628,12 +1341,12 @@ p {
   border-top: 1px solid var(--border);
 }
 
-.service-detail:first-child {
+.service-detail:first-of-type {
   padding-block-start: 0;
   border-top: 0;
 }
 
-.service-detail:last-child {
+.service-detail:last-of-type {
   padding-block-end: 0;
 }
 
@@ -643,13 +1356,62 @@ p {
   }
 }
 
+.service-photo {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: var(--radius-media);
+  background: var(--brand-soft);
+}
+
+/* A photo takes one side and the text the other, swapping on every second
+   service. */
+@media (min-width: 56rem) {
+  .service-detail:has(> :is(picture, .service-photo)) {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .service-detail > :is(picture, .service-photo) {
+    grid-row: 1 / span 2;
+  }
+
+  .service-detail:nth-of-type(even) > :is(picture, .service-photo) {
+    grid-column: 2;
+  }
+}
+
 .service-detail-main .mark {
   width: 2rem;
   height: 2rem;
   margin-block-end: var(--space-sm);
 }
 
-.service-detail-main h2 {
+.service-details {
+  counter-reset: service;
+}
+
+.service-detail {
+  counter-increment: service;
+}
+
+/* The number is drawn, so the label stays the site's own word. */
+.service-detail-main .eyebrow {
+  margin-block-end: var(--space-2xs);
+}
+
+.service-detail-main .eyebrow::after {
+  content: counter(service, decimal-leading-zero);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A page about one service has no list to number it in. */
+.service-single .service-detail-main .eyebrow::after {
+  content: none;
+}
+
+.service-detail-main :is(h2, h3) {
   margin-block-end: var(--space-sm);
 }
 
@@ -666,7 +1428,7 @@ p {
 .facts-label {
   font-family: var(--font-sans);
   font-size: var(--text-sm);
-  font-weight: 700;
+  font-weight: 500;
   letter-spacing: 0.02em;
 }
 
@@ -700,11 +1462,21 @@ p {
   gap: var(--space-2xs) var(--space-md);
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
   margin: 0;
-  padding-inline-start: 1.1em;
+  padding: 0;
+  counter-reset: offering;
+  list-style: none;
 }
 
-.offerings li::marker {
+.offerings li {
+  display: flex;
+  gap: var(--space-xs);
+  counter-increment: offering;
+}
+
+.offerings li::before {
+  content: counter(offering, decimal-leading-zero);
   color: var(--brand-text);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Steps */
@@ -726,7 +1498,7 @@ p {
 
 /* The number is a badge sitting on the rule, so the steps read as one line. */
 .step-list li::before {
-  content: counter(step);
+  content: counter(step, decimal-leading-zero);
   display: grid;
   place-items: center;
   width: 2.5rem;
@@ -738,13 +1510,114 @@ p {
   color: var(--brand-text);
   font-family: var(--font-display);
   font-size: var(--text-lg);
-  font-weight: 600;
+  font-weight: var(--display-weight);
   font-variant-numeric: tabular-nums;
 }
 
 .step-list p {
   margin: 0;
   color: var(--muted-foreground);
+}
+
+/* timeline: the badges on one line across, a line down the side on a phone. */
+@media (max-width: 47.99rem) {
+  .steps-timeline .step-list {
+    gap: var(--space-lg);
+    padding: 0;
+  }
+
+  .steps-timeline .step-list li {
+    position: relative;
+    display: grid;
+    grid-template-columns: 2.5rem minmax(0, 1fr);
+    column-gap: var(--space-md);
+    border: 0;
+  }
+
+  .steps-timeline .step-list li::before {
+    grid-row: span 2;
+    margin: 0;
+  }
+
+  .steps-timeline .step-list li > * {
+    grid-column: 2;
+  }
+
+  .steps-timeline .step-list li:not(:last-child)::after {
+    content: "";
+    position: absolute;
+    inset-block: 2.5rem calc(var(--space-lg) * -1);
+    inset-inline-start: 1.25rem;
+    border-inline-start: 1px solid var(--brand-line);
+  }
+}
+
+/* circles: a small outlined number over each step, on the tint, the steps
+   reading left to right under a left-aligned heading. */
+.steps-circles {
+  background: var(--brand-soft);
+}
+
+.steps-circles .step-list {
+  gap: var(--space-xl) var(--space-2xl);
+  padding: 0;
+}
+
+.steps-circles .step-list li {
+  border: 0;
+}
+
+.steps-circles .step-list li::before {
+  width: 2.25rem;
+  height: 2.25rem;
+  margin: 0 0 var(--space-md);
+  border-color: var(--brand-text);
+  background: transparent;
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-weight: 400;
+}
+
+.steps-circles .step-list h3 {
+  margin-block-end: var(--space-xs);
+}
+
+/* dark_band: the heading beside the steps, one to a row, on the ink. */
+.steps-dark_band .step-list {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  padding: 0;
+}
+
+.steps-dark_band .step-list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: var(--space-md);
+  padding-block: var(--space-md);
+  border-block-start: 1px solid var(--border);
+}
+
+.steps-dark_band .step-list li::before {
+  grid-row: span 2;
+  margin: 0;
+}
+
+.steps-dark_band .step-list li > * {
+  grid-column: 2;
+}
+
+@media (min-width: 56rem) {
+  .steps-dark_band .steps-inner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+    gap: var(--space-2xl);
+    align-items: start;
+  }
+
+  .steps-dark_band .section-head {
+    margin: 0;
+  }
 }
 
 /* Testimonials */
@@ -758,20 +1631,41 @@ p {
 .testimonials figure {
   margin: 0;
   gap: var(--space-sm);
-  border-inline-start: 3px solid var(--brand);
 }
 
 .testimonials blockquote {
   margin: 0;
   font-family: var(--font-display);
+  font-weight: var(--display-weight);
   font-size: var(--text-xl);
   line-height: 1.35;
+}
+
+/* featured: the first review larger, on the tint. */
+@media (min-width: 48rem) {
+  .testimonials-featured .quote-grid {
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  }
+}
+
+.testimonials-featured figure:first-child {
+  border-color: transparent;
+  background: var(--brand-soft);
+}
+
+.testimonials-featured figure:first-child blockquote {
+  font-size: var(--text-2xl);
+  line-height: 1.2;
+}
+
+.testimonials-featured figure:only-child {
+  grid-column: 1 / -1;
 }
 
 .testimonials figcaption {
   color: var(--muted-foreground);
   font-size: var(--text-sm);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 /* Gallery */
@@ -787,6 +1681,12 @@ p {
   list-style: none;
 }
 
+/* A photo in a frame zooms a little under the pointer. */
+:is(.gallery-grid li, .gallery-single) {
+  overflow: hidden;
+  border-radius: var(--radius-media);
+}
+
 .gallery-grid img {
   display: block;
   width: 100%;
@@ -794,6 +1694,7 @@ p {
   object-fit: cover;
   border-radius: var(--radius-media);
   background: var(--brand-soft);
+  transition: transform var(--motion-zoom) var(--motion-ease);
 }
 
 /* Three photos: one large, two stacked beside it. */
@@ -824,6 +1725,11 @@ p {
   object-fit: cover;
   border-radius: var(--radius-media);
   background: var(--brand-soft);
+  transition: transform var(--motion-zoom) var(--motion-ease);
+}
+
+:is(.gallery-grid li, .gallery-single):hover img {
+  transform: scale(1.035);
 }
 
 /* About: the story beside the owner's photo on a wide screen, stacked on a
@@ -862,68 +1768,332 @@ p {
   background: var(--brand-soft);
 }
 
-/* Service area */
+/* About's record: the paragraph beside the proof items on a wide screen. */
 
-.area-body {
-  font-size: var(--text-lg);
+.proof-record {
+  display: grid;
+  gap: var(--space-lg) var(--space-2xl);
+  align-items: start;
 }
 
-.area-copy h2 {
+.proof-record > p,
+.proof-record .check-list {
+  margin: 0;
+}
+
+@media (min-width: 56rem) {
+  .proof-record:has(> p) {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+/* Service area */
+
+/* deep: the band on a dark tone of the brand, the page's pair turned over
+   so every rule below reads on it unchanged, the accent clause in a pale
+   tint of the accent. The service area page's cover wears it too. */
+.area-deep {
+  --background: color-mix(in oklch, var(--brand) 34%, var(--ink));
+  --band-ground: var(--background);
+  --foreground: var(--paper);
+  --muted-foreground: color-mix(in oklch, var(--paper) 76%, var(--ink));
+  --border: color-mix(in oklch, var(--paper) 24%, var(--ink));
+  --brand-text: color-mix(in oklch, var(--brand-accent) 40%, var(--paper));
+  --brand-line: color-mix(in oklch, var(--paper) 30%, var(--ink));
+  --brand-soft: color-mix(in oklch, var(--paper) 8%, var(--ink));
+  border: 0;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.area-inner {
+  display: grid;
+  gap: var(--space-2xl);
+  align-items: center;
+}
+
+@media (min-width: 56rem) {
+  .area-inner {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    column-gap: var(--space-2xl);
+  }
+}
+
+.area-copy .section-head {
   margin-block-end: var(--space-md);
 }
 
-.area-places {
-  display: grid;
-  gap: var(--space-md);
-  padding: var(--space-lg) var(--space-md);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  background: var(--card);
-}
-
-.area-place {
-  display: flex;
-  align-items: start;
-  gap: var(--space-xs);
+.area-body {
+  max-width: 34rem;
   margin: 0;
-  font-family: var(--font-display);
-  font-size: var(--text-xl);
-  font-weight: var(--display-weight);
-  line-height: 1.3;
+  color: var(--muted-foreground);
+  font-size: var(--text-lg);
+  line-height: 1.7;
 }
 
-.area-place .mark {
-  margin-block-start: 0.3rem;
+/* Two rows, each a line icon in an outlined circle beside a small label
+   and its value. */
+.area-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md) var(--space-xl);
+  margin: var(--space-lg) 0 0;
 }
 
+.area-fact {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: var(--space-sm);
+  align-items: start;
+  align-content: start;
+  min-width: min(100%, 14rem);
+  flex: 1 1 14rem;
+}
+
+.area-fact dt {
+  display: contents;
+}
+
+.area-fact-icon {
+  display: grid;
+  grid-row: 1 / span 2;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  border: 1px solid var(--brand-line);
+  border-radius: 50%;
+  color: var(--brand-text);
+}
+
+.area-fact-icon .mark {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.area-fact-label {
+  padding-block-start: 0.25rem;
+  color: var(--muted-foreground);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.area-fact dd {
+  margin: var(--space-3xs) 0 0;
+  font-weight: 500;
+}
+
+.area-fact dd p {
+  margin: 0;
+}
+
+.area-fact .area-radius {
+  margin-block-start: var(--space-3xs);
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+  font-weight: 400;
+}
+
+/* The towns as one line of text, a middle dot between them. */
 .area-towns {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2xs);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.area-towns li {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-3xs);
-  padding: var(--space-3xs) var(--space-xs);
-  border: 1px solid var(--brand-line);
-  border-radius: 999px;
-  background: var(--brand-soft);
+.area-towns li:not(:last-child)::after {
+  content: "\00b7";
+  padding-inline: 0.5em;
+  color: var(--brand-text);
+}
+
+/* The drawing (src/layouts/AreaArt.astro): hairline rings and links in the
+   line colour, the loop in the accent, the main town a filled pin. It
+   scales to its column and never past it; the card overlaps its lower left. */
+.area-art {
+  position: relative;
+  width: 100%;
+  max-width: 34rem;
+  margin-inline: auto;
+  color: var(--brand-line);
+}
+
+.area-art svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.area-ring,
+.area-link {
+  stroke: currentColor;
+  stroke-width: 1;
+}
+
+.area-ring-dashed {
+  stroke-dasharray: 2 6;
+}
+
+.area-link {
+  stroke-dasharray: 1 5;
+  stroke-linecap: round;
+}
+
+.area-loop {
+  stroke: var(--brand-accent);
+  stroke-width: 1.25;
+}
+
+.area-deep .area-loop {
+  stroke: var(--brand-text);
+}
+
+.area-point {
+  fill: var(--foreground);
+}
+
+/* A label wears a halo in its band's own colour, painted under the glyphs,
+   so a link or ring that passes behind it never runs through the text. */
+.area-label {
+  fill: var(--muted-foreground);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  letter-spacing: 0.02em;
+  paint-order: stroke;
+  stroke: var(--band-ground, var(--background));
+  stroke-width: 5px;
+  stroke-linejoin: round;
+}
+
+.hero-cover.area-light {
+  --band-ground: var(--brand-soft);
+}
+
+.area-label-main {
+  fill: var(--foreground);
   font-weight: 500;
 }
 
-.area-towns .mark {
-  width: 1rem;
-  height: 1rem;
+.area-pin {
+  fill: var(--brand-accent);
 }
 
-.area-radius {
+.area-deep .area-pin {
+  fill: var(--brand-text);
+}
+
+.area-spark {
+  stroke: var(--paper);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+
+.area-deep .area-spark {
+  stroke: var(--ink);
+}
+
+.area-card {
+  position: absolute;
+  inset-inline-start: 2%;
+  inset-block-end: 0;
+  max-width: min(17rem, 62%);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.area-deep .area-card {
+  border-color: transparent;
+}
+
+/* Where the drawing is drawn large enough, the card rides up over the ring. */
+@media (min-width: 56rem) {
+  .area-card {
+    inset-block-end: 5%;
+  }
+}
+
+.area-card-label {
+  margin: 0 0 var(--space-3xs);
+  color: color-mix(in oklch, var(--ink) 64%, var(--paper));
+  font-size: var(--text-xs);
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.area-card-line {
   margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.125rem, 1rem + 0.5vw, 1.5rem);
+  font-weight: var(--display-weight);
+  line-height: 1.2;
+}
+
+/* The service area page: the cover holds the drawing, larger, and the
+   section under it lists the towns, each with its line. */
+.hero-cover .hero-inner {
+  display: grid;
+  gap: var(--space-xl);
+  align-items: center;
+}
+
+@media (min-width: 56rem) {
+  .hero-cover .hero-inner {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: var(--space-2xl);
+  }
+
+  .hero-cover .hero-text {
+    display: block;
+  }
+
+  .hero-cover .lede {
+    margin-block-start: var(--space-md);
+  }
+}
+
+.area-art-cover {
+  max-width: 38rem;
+}
+
+.area-index-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 13rem), 1fr));
+  gap: 0 var(--space-lg);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.area-index-list li {
+  display: grid;
+  gap: var(--space-3xs);
+  padding-block: var(--space-sm);
+  border-block-start: 1px solid var(--brand-line);
+}
+
+.area-index-town {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: var(--display-weight);
+  line-height: 1.25;
+}
+
+.area-index-note {
   color: var(--muted-foreground);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+
+.area-page .area-inner {
+  align-items: start;
 }
 
 /* Quote */
@@ -953,6 +2123,10 @@ p {
   background: var(--brand-soft);
 }
 
+.quote-aside .section-head {
+  margin: 0;
+}
+
 .quote-aside h2 {
   margin: 0;
   font-size: var(--text-xl);
@@ -969,22 +2143,24 @@ p {
 
 .next-list li {
   display: grid;
-  grid-template-columns: 2rem 1fr;
+  grid-template-columns: 2.25rem 1fr;
   gap: var(--space-xs);
+  align-items: center;
   counter-increment: next;
 }
 
+/* The reference's step number: a hairline circle in the brand, the numeral
+   in the ink, as the steps band draws it. */
 .next-list li::before {
-  content: counter(next);
+  content: counter(next, decimal-leading-zero);
   display: grid;
   place-items: center;
-  width: 2rem;
-  height: 2rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid var(--brand-text);
   border-radius: 50%;
-  background: var(--brand);
-  color: var(--brand-foreground);
-  font-size: var(--text-sm);
-  font-weight: 700;
+  color: var(--foreground);
+  font-size: 0.8125rem;
 }
 
 .quote-form {
@@ -1016,7 +2192,7 @@ p {
 }
 
 .quote-field label {
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .quote-optional {
@@ -1076,31 +2252,65 @@ p {
   font-size: var(--text-sm);
 }
 
-/* Frequently asked questions */
+/* Frequently asked questions. split: the heading beside the questions;
+   stacked: the heading centred above a narrow column of them. */
 
-.faq-list {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  background: var(--card);
+.faq-stacked .faq-inner {
+  max-width: calc(var(--container-narrow) + var(--gutter) * 2);
 }
 
+.faq-stacked .faq-intro {
+  text-align: center;
+}
+
+.faq-stacked .eyebrow {
+  justify-content: center;
+}
+
+.faq-stacked .faq-lede {
+  margin-inline: auto;
+}
+
+.faq-intro .section-head {
+  margin-block-end: var(--space-sm);
+}
+
+.faq-lede {
+  max-width: 28rem;
+  color: var(--muted-foreground);
+}
+
+.faq-intro .section-more {
+  margin-block-start: var(--space-md);
+}
+
+.faq-stacked .faq-intro {
+  margin-block-end: var(--section-head-gap);
+}
+
+/* The intro stays in view beside a long list of answers. */
+@media (min-width: 56rem) {
+  .faq-split .faq-intro {
+    position: sticky;
+    top: calc(var(--header-h) + var(--space-lg));
+  }
+}
+
+/* Questions between hairlines, a plus that turns to a cross when open. */
 .faq details {
-  padding-inline: var(--space-md);
-}
-
-.faq details + details {
-  border-block-start: 1px solid var(--border);
+  border-block-end: 1px solid var(--border);
 }
 
 .faq summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-sm);
-  min-height: 3.5rem;
-  padding-block: var(--space-sm);
+  gap: var(--space-md);
+  min-height: 4rem;
+  padding-block: 1.25rem;
   cursor: pointer;
-  font-weight: 600;
+  font-weight: 500;
+  line-height: 1.5;
   list-style: none;
 }
 
@@ -1115,22 +2325,25 @@ p {
 .faq summary::after {
   content: "";
   flex: none;
-  width: 0.5rem;
-  height: 0.5rem;
-  border-right: 2px solid var(--brand-text);
-  border-bottom: 2px solid var(--brand-text);
-  transform: rotate(45deg) translate(-0.125rem, -0.125rem);
+  width: 1.125rem;
+  height: 1.125rem;
+  background: currentColor;
+  mask:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cpath d='M224,128a8,8,0,0,1-8,8H136v80a8,8,0,0,1-16,0V136H40a8,8,0,0,1,0-16h80V40a8,8,0,0,1,16,0v80h80A8,8,0,0,1,224,128Z'/%3E%3C/svg%3E")
+    center / contain no-repeat;
   transition: transform 160ms ease;
 }
 
 .faq details[open] summary::after {
-  transform: rotate(225deg) translate(-0.125rem, -0.125rem);
+  transform: rotate(45deg);
 }
 
 .faq details p {
-  margin: 0 0 var(--space-md);
-  max-width: 60ch;
+  margin: 0;
+  padding-block-end: 1.25rem;
+  max-width: 62ch;
   color: var(--muted-foreground);
+  font-size: var(--text-sm);
 }
 
 /* Contact details. A dl's rows may hold only dt and dd, so the icon sits
@@ -1177,7 +2390,6 @@ p {
   translate: 0 -50%;
   width: 2.25rem;
   height: 2.25rem;
-  background: var(--background);
 }
 
 .contact-list .card-icon .mark {
@@ -1203,14 +2415,39 @@ p {
 }
 
 .contact-cards dd {
-  font-weight: 600;
+  font-weight: 500;
 }
 
 /* Call to action */
 
 .cta-band {
+  padding-block: var(--space-xl);
   background: var(--brand);
   color: var(--brand-foreground);
+}
+
+/* photo: the picture under the brand colour, which still carries the copy. */
+.cta-photo {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.cta-image {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cta-photo::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: color-mix(in oklch, var(--brand) 86%, transparent);
 }
 
 .cta-inner {
@@ -1225,13 +2462,24 @@ p {
   max-width: 36rem;
 }
 
+.cta-text .eyebrow {
+  --brand-text: var(--brand-foreground);
+  color: var(--brand-foreground);
+}
+
 .cta-text h2 {
   margin: 0 0 var(--space-2xs);
   color: var(--brand-foreground);
+  font-size: clamp(1.75rem, 1.56rem + 0.76vw, 2.25rem);
+}
+
+.cta-text .accent {
+  color: inherit;
 }
 
 .cta-body {
   margin: 0;
+  font-size: var(--text-sm);
 }
 
 .cta-band .actions {
@@ -1239,35 +2487,34 @@ p {
 }
 
 /* On a brand surface the actions turn over: the page colour on the brand. */
-:is(.cta-band, [data-template="modern"] .hero-plain) .action-primary {
+:is(.cta-band, .hero-dark_center.hero-plain) .action-primary {
   background: var(--brand-foreground);
   color: var(--brand);
 }
 
-:is(.cta-band, [data-template="modern"] .hero-plain) .action-primary:hover {
+:is(.cta-band, .hero-dark_center.hero-plain) .action-primary:hover {
   background: color-mix(in oklch, var(--brand-foreground) 88%, var(--brand));
 }
 
-:is(.cta-band, [data-template="modern"] .hero-plain) .action-secondary {
+:is(.cta-band, .hero-dark_center.hero-plain) .action-secondary {
   border-color: color-mix(in oklch, var(--brand-foreground) 50%, transparent);
   color: var(--brand-foreground);
 }
 
-:is(.cta-band, [data-template="modern"] .hero-plain) .action-secondary:hover {
+:is(.cta-band, .hero-dark_center.hero-plain) .action-secondary:hover {
   border-color: var(--brand-foreground);
   background: color-mix(in oklch, var(--brand-foreground) 12%, transparent);
 }
 
-:is(.cta-band, [data-template="modern"] .hero-plain) a:focus-visible {
+:is(.cta-band, .hero-dark_center.hero-plain) a:focus-visible {
   outline-color: var(--brand-foreground);
 }
 
 /* Footer */
 
 .site-footer {
-  padding-block: var(--section-pad) var(--space-xl);
+  padding-block: var(--space-xl) var(--space-lg);
   border-top: 1px solid var(--border);
-  background: var(--brand-soft);
 }
 
 .footer-grid {
@@ -1292,6 +2539,28 @@ p {
   margin: 0;
 }
 
+/* The site's mark beside its name, the same tile as its favicon. */
+.footer-name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.footer-mark {
+  width: 2rem;
+  height: 2rem;
+  flex: none;
+}
+
+.footer-base {
+  margin: var(--space-xl) 0 0;
+  padding-block-start: var(--space-md);
+  border-block-start: 1px solid var(--border);
+  max-width: none;
+  color: var(--muted-foreground);
+  font-size: var(--text-xs);
+}
+
 .site-footer .site-logo {
   height: 2rem;
 }
@@ -1302,12 +2571,20 @@ p {
   color: var(--muted-foreground);
 }
 
+.footer-disclaimer {
+  margin: var(--space-lg) 0 0;
+  padding-block-start: var(--space-sm);
+  border-block-start: 1px solid var(--border);
+  max-width: 72ch;
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+}
+
 .footer-heading {
   margin: 0 0 var(--space-sm);
   font-family: var(--font-sans);
   font-size: var(--text-sm);
-  font-weight: 700;
-  letter-spacing: 0.02em;
+  font-weight: 500;
   text-transform: none;
 }
 
@@ -1322,7 +2599,8 @@ p {
 .site-footer nav a {
   display: inline-block;
   padding-block: var(--space-3xs);
-  color: var(--foreground);
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
   text-decoration: none;
 }
 
@@ -1348,16 +2626,74 @@ p {
 
 @media (prefers-reduced-motion: reduce) {
   .action,
+  .action::after,
+  .more-link::after,
+  .card-arrow::after,
+  .row-arrow,
+  .row-arrow::after,
+  .rows-linked li,
+  .card-photo,
   .card-linked,
   .faq summary::after,
-  .menu-toggle::after {
+  .menu-toggle::after,
+  :is(.gallery-grid, .gallery-single) img {
     transition: none;
+  }
+
+  .action:hover,
+  .action:hover::after,
+  .more-link:hover::after,
+  .card-linked:hover .card-photo,
+  .card-linked:hover .card-arrow::after,
+  .rows-linked li:hover .row-arrow::after,
+  :is(.gallery-grid li, .gallery-single):hover img {
+    transform: none;
+  }
+}
+
+/* Fade-up on entry. src/layouts/Base.astro marks each block .reveal and the
+   root [data-reveal] only when motion is allowed and the script runs, so with
+   no script, with reduced motion (as the build's axe scan and screenshots
+   set it) and in print, every block is plain and visible. Each block rises
+   0.75rem and fades in once as it enters, siblings a beat apart; opacity and
+   a translate only, so nothing shifts layout. A block holding focus shows at
+   once, so a keyboard never lands on something invisible. */
+@media screen and (prefers-reduced-motion: no-preference) {
+  [data-reveal] .reveal:not(.is-in, :focus-within) {
+    opacity: 0;
+  }
+
+  [data-reveal] .reveal.is-in {
+    animation: fade-up var(--motion-reveal) var(--motion-ease)
+      var(--reveal-delay, 0ms) backwards;
+  }
+
+  [data-reveal] .reveal:nth-child(2) {
+    --reveal-delay: 70ms;
+  }
+
+  [data-reveal] .reveal:nth-child(3) {
+    --reveal-delay: 140ms;
+  }
+
+  [data-reveal] .reveal:nth-child(n + 4) {
+    --reveal-delay: 210ms;
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    translate: 0 0.75rem;
   }
 }
 
 /* An ink surface: the page's pair turned over, so every rule above reads on
-   it unchanged. Bold's header, hero and footer wear it. */
-[data-template="bold"] :is(.site-header, .hero, .site-footer) {
+   it unchanged. A dark band of steps wears it, so does every steps band of a
+   direction with two dark bands, and the whole page of an inverted one. */
+.steps-dark_band,
+[data-bands="two_dark"] .steps,
+[data-bands="inverted"] body {
   --background: var(--ink);
   --foreground: var(--paper);
   --card: color-mix(in oklch, var(--paper) 8%, var(--ink));
@@ -1371,456 +2707,91 @@ p {
   color: var(--foreground);
 }
 
-/* Classic: a steady, warm layout. A light header, the copy beside the
-   photo on a tinted field, bordered cards with the icon beside the name. */
-
-[data-template="classic"] .hero-home {
-  padding-block: clamp(3rem, 2rem + 5vw, 6rem);
-  border-bottom: 1px solid var(--brand-line);
-  background: var(--brand-soft);
+/* Bands. one_dark is the closing band on the brand; two_dark adds the steps
+   above. light puts the closing band on the tint, in ink. inverted is a dark
+   page whose one light band is the closing band: the brand turns to the
+   paper there, so buttons stay readable whatever the palette's primary. */
+[data-bands="light"] .cta-band {
+  --brand: var(--brand-soft);
+  --brand-foreground: var(--ink);
 }
 
-[data-template="classic"] .hero-home .hero-inner {
-  display: grid;
-  gap: var(--space-xl);
-  align-items: center;
+[data-bands="inverted"] {
+  color-scheme: dark;
 }
 
-@media (min-width: 56rem) {
-  [data-template="classic"] .hero-home .hero-inner {
-    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-  }
+[data-bands="inverted"] body {
+  --brand: var(--paper);
+  --brand-foreground: var(--ink);
 }
 
-[data-template="classic"] .hero-home .hero-image {
-  box-shadow: 1rem 1rem 0 var(--brand-line);
+/* On the inverted page a hero with no photo stays dark, on the card. */
+[data-bands="inverted"] .hero-dark_center.hero-plain {
+  --brand: var(--card);
+  --brand-foreground: var(--paper);
 }
 
-[data-template="classic"] .hero-list {
-  padding: var(--space-md) var(--space-lg);
-  border: 1px solid var(--brand-line);
-  border-radius: var(--radius-card);
-  background: var(--card);
-  box-shadow: var(--shadow-card);
+/* Ornaments: each direction's one signature, beyond what its variants draw.
+   calm_daylight's and fresh_modern's pill captions are the wash and
+   split_frame heroes' own. */
+
+/* warm_editorial: an eight-spoked mark leads the eyebrow. */
+[data-direction="warm_editorial"] .eyebrow::before {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 0;
+  mask:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2v20M2 12h20M4.9 4.9l14.2 14.2M19.1 4.9 4.9 19.1' stroke='%23000' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E")
+    center / contain no-repeat;
 }
 
-[data-template="classic"] .hero-list li {
-  padding-block: var(--space-sm);
-}
-
-[data-template="classic"] .hero-list .mark {
+/* counsel, quiet_luxury, after_dark: a short rule leads the eyebrow. */
+:is(
+  [data-direction="counsel"],
+  [data-direction="quiet_luxury"],
+  [data-direction="after_dark"]
+) .eyebrow::before {
   width: 1.75rem;
-  height: 1.75rem;
-}
-
-[data-template="classic"] .card {
-  column-gap: var(--space-sm);
-  box-shadow: var(--shadow-card);
-}
-
-[data-template="classic"] .card:has(> .card-icon) {
-  grid-template-columns: auto 1fr;
-}
-
-[data-template="classic"] .card:has(> .card-icon) > :not(.card-icon) {
-  grid-column: 2;
-}
-
-[data-template="classic"] .card-icon {
-  grid-row: span 2;
-}
-
-[data-template="classic"] .card-linked:hover {
-  box-shadow:
-    0 1px 2px color-mix(in oklch, var(--foreground) 8%, transparent),
-    0 14px 32px -14px color-mix(in oklch, var(--foreground) 28%, transparent);
-}
-
-/* Modern: led by the picture. The photo fills the hero behind the copy with
-   a dark wash for legibility; with no photo the hero is the brand colour.
-   Pill buttons, borderless tinted cards, large light type. */
-
-[data-template="modern"] .site-header {
-  border-bottom-color: transparent;
-  box-shadow: 0 1px 0 var(--border);
-}
-
-[data-template="modern"] .hero-home {
-  display: grid;
-  align-items: end;
-  min-height: clamp(30rem, 72vh, 46rem);
-  padding-block: var(--section-pad);
-}
-
-[data-template="modern"] .hero-home .hero-inner {
-  width: 100%;
-}
-
-[data-template="modern"] .hero-home .hero-text {
-  position: relative;
-  z-index: 2;
-}
-
-[data-template="modern"] .hero-photo .hero-image {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  height: 100%;
-  aspect-ratio: auto;
+  height: 1px;
   border-radius: 0;
 }
 
-[data-template="modern"] .hero-photo::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  background: linear-gradient(
-    to top,
-    color-mix(in oklch, var(--ink) 88%, transparent) 0%,
-    color-mix(in oklch, var(--ink) 70%, transparent) 55%,
-    color-mix(in oklch, var(--ink) 25%, transparent) 100%
-  );
+/* quiet_luxury: a hairline over every section heading. */
+[data-direction="quiet_luxury"] .band .section-head {
+  padding-block-start: var(--space-md);
+  border-block-start: 1px solid var(--brand-line);
 }
 
-[data-template="modern"] .hero-photo {
-  --foreground: var(--paper);
-  --muted-foreground: color-mix(in oklch, var(--paper) 86%, var(--ink));
-  --brand-text: var(--paper);
-  --brand-line: color-mix(in oklch, var(--paper) 55%, transparent);
-  color: var(--foreground);
+/* after_dark: wide tracking on the small type. */
+[data-direction="after_dark"] .eyebrow {
+  letter-spacing: 0.32em;
 }
 
-[data-template="modern"] .hero-plain {
-  --foreground: var(--brand-foreground);
-  --muted-foreground: var(--brand-foreground);
-  --brand-text: var(--brand-foreground);
-  background: var(--brand);
-  color: var(--brand-foreground);
+[data-direction="after_dark"] :is(.nav-wide a, .action) {
+  font-size: 0.8125rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
-[data-template="modern"] .hero-page {
-  border-bottom: 0;
-  background: var(--background);
+/* bright_local: the accent clause is underlined in the accent. It wraps like
+   any text, and each line takes its own underline, so a long clause never
+   runs out of its column at any width. */
+[data-direction="bright_local"] .accent {
+  text-decoration: underline var(--brand-accent) 0.12em;
+  text-underline-offset: 0.12em;
+  text-decoration-skip-ink: none;
 }
 
-[data-template="modern"] .trust-inner {
-  justify-content: center;
-}
-
-[data-template="modern"]
-  :is(.card, .faq-list, .area-places, .contact-cards div) {
-  border-color: transparent;
-  background: var(--brand-soft);
-}
-
-[data-template="modern"] .card-icon {
+/* bold_young: the step numbers set large, without their badge. */
+[data-direction="bold_young"] .step-list li::before {
   width: auto;
   height: auto;
-  justify-self: start;
-  background: none;
-}
-
-[data-template="modern"] .card-icon .mark {
-  width: 1.75rem;
-  height: 1.75rem;
-}
-
-[data-template="modern"] .card-linked:hover {
-  border-color: var(--brand-line);
-  box-shadow: none;
-}
-
-[data-template="modern"] .value-props {
-  padding-block-start: 0;
-  background: var(--background);
-}
-
-[data-template="modern"] .value-props + .band {
-  padding-block-start: 0;
-}
-
-[data-template="modern"] .value-list li {
-  padding: var(--space-lg) var(--space-md);
-  border-radius: var(--radius-card);
-  background: var(--brand-soft);
-}
-
-[data-template="modern"] .step-list li::before {
-  border-color: transparent;
-  background: var(--brand-soft);
-}
-
-[data-template="modern"] .testimonials figure {
-  border-inline-start: 0;
-}
-
-[data-template="modern"] .cta-inner {
-  flex-direction: column;
-  text-align: center;
-}
-
-[data-template="modern"] .cta-body {
-  margin-inline: auto;
-}
-
-[data-template="modern"] .site-footer {
-  background: var(--background);
-}
-
-/* Bold: a poster. Oversized type on an ink hero, the lede and actions on a
-   brand block stacked under it, hard edges, ink rules between sections. */
-
-[data-template="bold"] .site-header {
-  border-bottom: 0;
-}
-
-[data-template="bold"] .nav-wide a {
-  font-size: 0.8125rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-[data-template="bold"] .nav-wide a[aria-current="page"] {
-  box-shadow: inset 0 -3px 0 var(--brand);
-}
-
-[data-template="bold"] .action {
-  border-width: 2px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-size: 0.875rem;
-}
-
-[data-template="bold"] .site-header .site-logo {
-  padding: var(--space-3xs);
-  background: var(--paper);
-}
-
-[data-template="bold"] .hero-home {
-  padding-block: clamp(2.5rem, 1.5rem + 4vw, 5rem) 0;
-}
-
-[data-template="bold"] .hero-home .hero-inner {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-}
-
-/* The text's parts join the hero's grid, so the lede and the actions can
-   share a brand block while the heading spans the page above them. */
-[data-template="bold"] .hero-home .hero-text {
-  display: contents;
-}
-
-[data-template="bold"] .hero-home h1 {
-  margin-block-end: var(--space-xl);
-  max-width: 14ch;
-  line-height: 0.92;
-}
-
-[data-template="bold"] .hero-home :is(.lede, .actions) {
-  max-width: none;
-  margin: 0;
-  padding-inline: var(--space-lg);
-  background: var(--brand);
-  color: var(--brand-foreground);
-}
-
-[data-template="bold"] .hero-home .lede {
-  padding-block-start: var(--space-lg);
-  font-weight: 500;
-}
-
-[data-template="bold"] .hero-home .actions {
-  padding-block: var(--space-lg);
-}
-
-[data-template="bold"] .hero-home .action-primary {
-  background: var(--brand-foreground);
-  color: var(--brand);
-}
-
-[data-template="bold"] .hero-home .action-secondary {
-  border-color: var(--brand-foreground);
-  color: var(--brand-foreground);
-}
-
-[data-template="bold"] .hero-home .actions a:focus-visible {
-  outline-color: var(--brand-foreground);
-}
-
-[data-template="bold"] .hero-home .actions {
-  align-items: center;
-  align-content: start;
-}
-
-@media (min-width: 56rem) {
-  [data-template="bold"] .hero-home .hero-inner {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  }
-
-  [data-template="bold"] .hero-home :is(.eyebrow, h1) {
-    grid-column: 1 / -1;
-  }
-
-  [data-template="bold"] .hero-home :is(.lede, .actions) {
-    grid-column: 1;
-  }
-
-  [data-template="bold"] .hero-home :is(.hero-image, .hero-list) {
-    grid-column: 2;
-    grid-row: 3 / span 2;
-  }
-}
-
-[data-template="bold"] .hero-home .hero-image {
-  height: 100%;
-  min-height: 18rem;
-  aspect-ratio: auto;
-}
-
-[data-template="bold"] .hero-list {
-  counter-reset: offer;
-  align-content: center;
-  padding: var(--space-lg);
-  background: var(--card);
-}
-
-[data-template="bold"] .hero-list li {
-  counter-increment: offer;
-  padding-block: var(--space-xs);
-  border-bottom: 2px solid var(--border);
-  text-transform: uppercase;
-}
-
-[data-template="bold"] .hero-list li::before {
-  content: counter(offer, decimal-leading-zero);
-  color: var(--muted-foreground);
-  font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
-}
-
-[data-template="bold"] .hero-list .mark {
-  color: var(--foreground);
-}
-
-[data-template="bold"] .hero-page {
-  border-bottom: 0;
-}
-
-[data-template="bold"] .hero-page .lede {
-  color: var(--muted-foreground);
-}
-
-[data-template="bold"] :is(h2, .site-name) {
-  text-transform: uppercase;
-}
-
-[data-template="bold"] .band:not(.band-tint) + .band:not(.band-tint) {
-  padding-block-start: var(--section-pad);
-  border-top: 2px solid var(--foreground);
-}
-
-[data-template="bold"] .trust-strip {
-  border-bottom: 2px solid var(--foreground);
-}
-
-[data-template="bold"] .trust-figures dd {
-  font-size: var(--text-page);
-}
-
-[data-template="bold"] :is(.card, .faq-list, .area-places, .contact-cards div) {
-  border: 2px solid var(--foreground);
-  box-shadow: 0.375rem 0.375rem 0 var(--foreground);
-}
-
-[data-template="bold"] .card-linked:hover {
-  border-color: var(--foreground);
-  box-shadow: 0.625rem 0.625rem 0 var(--brand);
-}
-
-[data-template="bold"] .card-icon {
-  background: var(--brand);
-  color: var(--brand-foreground);
-}
-
-[data-template="bold"] .value-props {
-  background: var(--brand);
-  color: var(--brand-foreground);
-}
-
-[data-template="bold"] .value-list p {
-  color: var(--brand-foreground);
-}
-
-[data-template="bold"] .value-list .card-icon {
-  background: var(--brand-foreground);
-  color: var(--brand);
-}
-
-[data-template="bold"] .step-list li {
-  border-block-start: 2px solid var(--foreground);
-}
-
-[data-template="bold"] .step-list li::before {
+  margin-block-start: 0;
   border: 0;
   border-radius: 0;
-  background: var(--brand);
-  color: var(--brand-foreground);
-}
-
-[data-template="bold"] .testimonials figure {
-  border-inline-start: 2px solid var(--foreground);
-}
-
-[data-template="bold"] :is(.service-detail-facts, .quote-aside) {
-  border: 2px solid var(--foreground);
-}
-
-[data-template="bold"] .area-towns li {
-  border-radius: 0;
-}
-
-[data-template="bold"] .next-list li::before {
-  border-radius: 0;
-}
-
-[data-template="bold"] .footer-heading {
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-[data-template="bold"] .site-footer .site-logo {
-  padding: var(--space-3xs);
-  background: var(--paper);
-}
-
-[data-template="modern"] .hero-plain .hero-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2xs);
-  margin-block-start: var(--space-xl);
-}
-
-[data-template="modern"] .hero-plain .hero-list li {
-  gap: var(--space-2xs);
-  padding: var(--space-2xs) var(--space-sm);
-  border: 1px solid
-    color-mix(in oklch, var(--brand-foreground) 40%, transparent);
-  border-radius: 999px;
-  font-family: var(--font-sans);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  letter-spacing: 0;
-}
-
-[data-template="modern"] .hero-plain .hero-list .mark {
-  width: 1.125rem;
-  height: 1.125rem;
-  color: inherit;
-}
-
-[data-template="classic"] .hero-home .hero-list li + li {
-  border-top: 1px solid var(--border);
+  background: none;
+  place-items: start;
+  font-size: clamp(2.75rem, 2rem + 3vw, 4.5rem);
+  line-height: 1;
+  letter-spacing: -0.04em;
 }

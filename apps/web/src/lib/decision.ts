@@ -10,4 +10,5 @@ export const DECISION_REFUSED: Record<
   replaced:
     "A newer version replaced that one. Check the latest before you decide.",
   gone: "That is no longer waiting on you. It was already decided, or the build stopped.",
+  checking: "Checking accessibility. Approve again in a few seconds.",
 }

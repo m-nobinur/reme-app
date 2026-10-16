@@ -1,0 +1,5 @@
+{
+  "_": "The mark's colours for a site with no palette and no brand colour: the default theme's primary (tokens.css) on white. Colour literals live here because the repo's lint plugin refuses them in TypeScript.",
+  "primary": "#0f766e",
+  "paper": "#ffffff"
+}

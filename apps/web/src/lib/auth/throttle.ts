@@ -37,7 +37,7 @@ export type Limiter = {
  * each is keyed on: the address, except `reset`, which has none and is keyed
  * on its link's token.
  */
-export type Throttled =
+type Throttled =
   | "sign-in"
   | "sign-in-code"
   | "sign-up"

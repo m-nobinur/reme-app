@@ -2,11 +2,14 @@
 import "../styles/tokens.css"
 import "../styles/theme.css"
 import "../styles/site.css"
+import { Font } from "astro:assets"
 import { brandTheme } from "../brand"
 import Seo from "../components/Seo/Seo.astro"
 import SiteFooter from "../components/SiteFooter/SiteFooter.astro"
 import SiteHeader from "../components/SiteHeader/SiteHeader.astro"
-import { fontTheme, templateOf } from "../presets"
+import { directionOf } from "../directions"
+import { markColours } from "../favicon"
+import { BODY_VAR, DISPLAY_VAR, fontTheme, pairOf } from "../fonts"
 import { site } from "../site-config"
 
 interface Props {
@@ -17,17 +20,46 @@ interface Props {
 }
 
 const props = Astro.props
-// Empty unless the owner chose a colour, and empty again if what they chose is
-// not a hex colour. See src/brand.ts. The font rule likewise, from src/presets.ts.
-const theme = brandTheme(site.brandColor) + fontTheme(site.font)
+// Empty unless the site has a palette or a colour, and empty again if neither
+// parses. See src/brand.ts. The font rule likewise, from src/fonts.ts. The
+// direction's radius, bands and ornament key off the root's attributes.
+const pair = pairOf(site.font)
+const theme = brandTheme(site.brandColor, site.palette) + fontTheme(pair)
+const direction = directionOf(site.direction)
+const mark = markColours(site.palette, site.brandColor)
 ---
 
-<html lang="en" data-template={templateOf(site.template)}>
+<html
+  lang="en"
+  data-direction={direction.id}
+  data-radius={direction.radius}
+  data-bands={direction.bands}
+>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <Seo {...props} />
+    {/* The favicon set src/pages writes from the brand; see src/favicon.ts. */}
+    <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta name="theme-color" content={mark.primary} />
     {theme && <style is:inline set:html={theme} />}
+    {
+      pair && (
+        <>
+          {/* The display face is on screen at once, so it is preloaded; the body face is not.
+              The variable names come from a computed config, so Astro's generated
+              CssVariable type is `never`; the cast is the whole workaround. */}
+          <Font
+            cssVariable={DISPLAY_VAR as never}
+            preload={[{ weight: pair.display.weights[0], style: "normal" }]}
+          />
+          <Font cssVariable={BODY_VAR as never} />
+        </>
+      )
+    }
   </head>
   <body>
     <a class="skip-link" href="#main">{site.skipLink}</a>
@@ -36,5 +68,32 @@ const theme = brandTheme(site.brandColor) + fontTheme(site.font)
       <slot />
     </main>
     <SiteFooter />
+    {/* The entrance reveal (site.css, "Fade-up on entry"). Without this script,
+        or with reduced motion, nothing is ever hidden. At the end of the body,
+        so the blocks are marked before the first paint. */}
+    <script is:inline>
+      if (
+        matchMedia("(prefers-reduced-motion: no-preference)").matches &&
+        "IntersectionObserver" in window
+      ) {
+        const seen = new IntersectionObserver(
+          (entries) => {
+            for (const entry of entries) {
+              if (!entry.isIntersecting) continue
+              entry.target.classList.add("is-in")
+              seen.unobserve(entry.target)
+            }
+          },
+          { rootMargin: "0px 0px -40px 0px" }
+        )
+        for (const block of document.querySelectorAll(
+          ".band :is(.section-head, .card, .service-rows li, .value-list li, .step-list li, .testimonials figure, .gallery-grid li, .gallery-single)"
+        )) {
+          block.classList.add("reveal")
+          seen.observe(block)
+        }
+        document.documentElement.dataset.reveal = ""
+      }
+    </script>
   </body>
 </html>

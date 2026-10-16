@@ -105,3 +105,17 @@ centre that read the pointer from Postgres believes it for a minute (the router'
 Each preview host's open or closed answer is believed for a minute the same way.
 
 Erasing the org's rows stays the §10.5 job. So do the R2 artifacts, which are never mutated.
+
+## Amendment, 2026-10-14: deletion deletes the org's R2 objects
+
+This replaces "So do the R2 artifacts" above. Owner uploads and generated photos are the owner's
+material, and nothing else would ever remove them.
+
+Step 2 now ends, after the takedown answers 204, with `removeObjects` in `apps/api/src/account.ts`
+over the sites bucket: every key under `uploads/{org}/`, `generated/{org}/` and `sites/{org}/`
+(built revisions and checkpoints; the site id is the org id), listed a page at a time and each page
+deleted, then the one key `sandboxes/{org}`. Each prefix ends in a slash, so no other org's keys can
+match. It runs after the takedown so no build is left to write an object back, and before the
+membership ends so a failure fails the route and a retry still resolves the org and runs it again;
+deleting a key already gone is not an error. `apps/api/test/account.test.ts` proves another org's
+objects survive, including an org whose id starts with this one's.

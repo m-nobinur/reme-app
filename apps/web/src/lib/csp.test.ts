@@ -40,16 +40,26 @@ describe("the content security policy header", () => {
     expect(header).toBe(contentSecurityPolicy(handed as string))
     expect(header?.split("; ")).toEqual([
       "default-src 'self'",
-      `script-src 'self' 'nonce-${handed}'`,
+      `script-src 'self' 'nonce-${handed}' https://js.stripe.com https://*.js.stripe.com https://checkout.stripe.com`,
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob: https://*.remeai.co.uk",
+      expect.stringContaining(
+        "img-src 'self' data: blob: https://*.remeai.co.uk"
+      ),
       "font-src 'self' data:",
-      "connect-src 'self'",
+      "connect-src 'self' https://api.stripe.com https://checkout.stripe.com",
+      "frame-src https://js.stripe.com https://*.js.stripe.com https://checkout.stripe.com https://hooks.stripe.com",
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",
       "frame-ancestors 'none'",
     ])
+  })
+
+  it("allows the local preview host's images under vite dev, and only there", () => {
+    const img = (dev: boolean) =>
+      contentSecurityPolicy("n", dev).match(/img-src [^;]*/)?.[0]
+    expect(img(true)).toContain("http://*.reme.localhost:*")
+    expect(img(false)).not.toContain("localhost")
   })
 
   it("never lets inline script run without the nonce", async () => {

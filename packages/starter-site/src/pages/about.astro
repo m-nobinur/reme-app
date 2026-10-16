@@ -1,11 +1,7 @@
 ---
-import CtaBand from "../components/CtaBand/CtaBand.astro"
-import Hero from "../components/Hero/Hero.astro"
-import Section from "../components/Section/Section.astro"
-import Testimonials from "../components/Testimonials/Testimonials.astro"
-import TrustStrip from "../components/TrustStrip/TrustStrip.astro"
-import ValueProps from "../components/ValueProps/ValueProps.astro"
+import { plain } from "../accent"
 import Base from "../layouts/Base.astro"
+import Sections from "../layouts/Sections.astro"
 import { site } from "../site-config"
 import { localBusiness } from "../structured-data"
 
@@ -13,58 +9,12 @@ import { localBusiness } from "../structured-data"
 // business.audience and business.proof. Without overview or proof this page
 // has too little to say: the Developer deletes it, and the home page's about
 // section carries the audience instead.
-const story = site.overviewBody || site.overview
-const audience = site.audienceBody || site.audience
-const proof = site.proofBody || site.proof
-// The story's photo: the first gallery photo, else the home hero's, since
-// neither shows on this page. Both halves or none.
-const photo = [
-  { src: site.photo1Src, alt: site.photo1Alt },
-  { src: site.heroImage, alt: site.heroImageAlt },
-].find((each) => each.src && each.alt)
-const storyHeading = story ? site.overviewHeading : site.audienceHeading
 ---
 
 <Base
-  title={site.aboutTitle || site.aboutHeading}
+  title={site.aboutTitle || plain(site.aboutHeading)}
   description={site.aboutDescription || site.aboutIntro}
   jsonLd={localBusiness(Astro.site)}
 >
-  <Hero heading={site.aboutHeading} lede={site.aboutIntro} />
-  <TrustStrip />
-  {
-    (story || audience) && (
-      <section class="band about-story">
-        <div class:list={["wrap", "story-inner", photo && "story-split"]}>
-          <div class="story-text">
-            {storyHeading && <h2>{storyHeading}</h2>}
-            {story && <p class="section-lede">{story}</p>}
-            {story && audience && site.audienceHeading && (
-              <h3>{site.audienceHeading}</h3>
-            )}
-            {audience && <p>{audience}</p>}
-          </div>
-          {photo && (
-            <img
-              class="story-photo"
-              src={photo.src}
-              alt={photo.alt}
-              loading="lazy"
-              decoding="async"
-            />
-          )}
-        </div>
-      </section>
-    )
-  }
-  {
-    proof && (
-      <Section heading={site.proofHeading}>
-        <p>{proof}</p>
-      </Section>
-    )
-  }
-  <ValueProps />
-  <Testimonials />
-  <CtaBand />
+  <Sections page="about" />
 </Base>

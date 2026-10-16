@@ -228,11 +228,13 @@ it("has no Reminders tab, and no add form, with nothing ahead", async () => {
   expect(container.querySelector('[name="title"]')).toBeNull()
 })
 
-it("links the live site by name, with the host as its title", async () => {
+it("links the live site by name, where the api says it opens, with the host as its title", async () => {
+  // Local dev's link: the local router, over http on its port.
   live.workspace = {
     ...EMPTY_WORKSPACE,
     live: 3,
-    host: "brightclean-demo.example.invalid",
+    host: "brightclean-demo.reme.localhost",
+    url: "http://brightclean-demo.reme.localhost:3004",
   }
   await render()
   await act(async () => tab("Website")?.click())
@@ -240,9 +242,9 @@ it("links the live site by name, with the host as its title", async () => {
     anchor.textContent?.startsWith("Visit your website")
   )
   expect(visit?.getAttribute("href")).toBe(
-    "https://brightclean-demo.example.invalid"
+    "http://brightclean-demo.reme.localhost:3004"
   )
-  expect(visit?.title).toBe("brightclean-demo.example.invalid")
+  expect(visit?.title).toBe("brightclean-demo.reme.localhost")
   expect(visit?.target).toBe("_blank")
   expect(visit?.rel).toBe("noreferrer")
   expect(container.textContent).toContain("Version 3 is live")
@@ -330,6 +332,7 @@ it("offers the next steps a live site has, and they do what they say", async () 
     ...EMPTY_WORKSPACE,
     live: 3,
     host: "fixture.example.invalid",
+    url: "https://fixture.example.invalid",
   }
   await render()
   const steps = container.querySelector('[data-slot="next-steps"]')
@@ -363,4 +366,39 @@ it("announces a new line on the same page, and not a build's next stage", async 
   expect(status()).toBe("")
   await say("Version 4 is ready", "for your review")
   expect(status()).toBe("Version 4 is ready for your review")
+})
+
+it("says once that a quick edit moved to a longer build, and says nothing for any other", async () => {
+  const now = new Date().toISOString()
+  const build = (extra: Record<string, unknown>) => ({
+    ...EMPTY_WORKSPACE,
+    building: true,
+    open: true,
+    builds: [
+      {
+        assignment_id: "00000000-0000-4000-8000-0000000000b1",
+        kind: "site.revise",
+        state: "implementing",
+        goal: "Move the FAQ above the steps",
+        lane: "full",
+        revision: null,
+        created_at: now,
+        updated_at: now,
+        ...extra,
+      },
+    ],
+  })
+  const line = () => container.querySelectorAll('[data-slot="fell-through"]')
+  live.workspace = build({ fell_through: true }) as Workspace
+  await render()
+  expect(line()).toHaveLength(1)
+  expect(line()[0]?.textContent).toContain("needs more than a quick edit")
+  // The lane it runs in now is the full one, so the stepper is back.
+  expect(
+    container.querySelector('[aria-label="Build progress"]')
+  ).not.toBeNull()
+
+  live.workspace = build({}) as Workspace
+  await act(async () => root.render(createElement(Frame)))
+  expect(line()).toHaveLength(0)
 })

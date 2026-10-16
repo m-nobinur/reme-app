@@ -1,36 +1,34 @@
 ---
+import Photo from "../../layouts/Photo.astro"
+import SectionHead from "../../layouts/SectionHead.astro"
+import { hasPhoto } from "../../photo-files"
 import { site } from "../../site-config"
 
-// Both halves are facts: the path names a file the owner supplied and the alt
-// text says what it shows. A photo with no alt text does not render.
+// The path names a file a gallery image slot placed and the alt text says what
+// it shows. A photo with no alt text does not render.
 const items = ([1, 2, 3] as const)
   .map((n) => ({ src: site[`photo${n}Src`], alt: site[`photo${n}Alt`] }))
-  .filter((item) => item.src && item.alt)
+  .filter((item) => item.alt && hasPhoto(item.src))
 ---
 
 {
   items.length > 0 && (
     <section class="band gallery">
       <div class="wrap">
-      {site.galleryHeading && (
-        <div class="section-head">
-          <h2>{site.galleryHeading}</h2>
-        </div>
-      )}
+      <SectionHead eyebrow={site.galleryEyebrow} heading={site.galleryHeading} />
       {items.length === 1 ? (
         <figure class="gallery-single">
-          <img
-            src={items[0]?.src}
-            alt={items[0]?.alt}
-            loading="lazy"
-            decoding="async"
+          <Photo
+            src={items[0]?.src ?? ""}
+            alt={items[0]?.alt ?? ""}
+            sizes="(min-width: 48rem) 44rem, 100vw"
           />
         </figure>
       ) : (
         <ul class:list={["gallery-grid", `gallery-${items.length}`]}>
           {items.map((item) => (
             <li>
-              <img src={item.src} alt={item.alt} loading="lazy" decoding="async" />
+              <Photo src={item.src} alt={item.alt} sizes="(min-width: 64rem) 33vw, 100vw" />
             </li>
           ))}
         </ul>

@@ -32,7 +32,7 @@ describe("the seed", () => {
           ["astro.config.mjs", "tsconfig.json", ".gitignore"].includes(path)
       )
     expect(Object.keys(STARTER_FILES).sort()).toEqual(
-      [...expected, "package.json"].sort()
+      [...expected, "package.json", "src/node-shims.d.ts"].sort()
     )
   })
 
@@ -41,7 +41,9 @@ describe("the seed", () => {
       const source =
         path === "package.json"
           ? "infra/sandbox/astro/package.json"
-          : `packages/starter-site/${path}`
+          : path === "src/node-shims.d.ts"
+            ? "infra/sandbox/astro/node-shims.d.ts"
+            : `packages/starter-site/${path}`
       expect(content, path).toBe(readFileSync(`${repo}${source}`, "utf8"))
     }
   })
@@ -130,6 +132,21 @@ describe("the quote form a site asks", () => {
     expect(quoteFormFile([])).toBe(starter)
     expect(quoteFormFile([quoteForm([LIMOUSINE[0]])])).toBe(starter)
     expect(seedFiles([])).toEqual(STARTER_FILES)
+  })
+})
+
+describe("the quote form with no approved list", () => {
+  it("is the industry pack's own questions", () => {
+    const industry: FactRecord = {
+      ...quoteForm([]),
+      key: "business.industry",
+      fact_type: "business",
+      value: { name: "Bright Clean", category: "cleaning" },
+    }
+    const file = JSON.parse(quoteFormFile([industry]))
+    expect(file.fields.map((f: { label: string }) => f.label)).toContain(
+      "Type of clean"
+    )
   })
 })
 

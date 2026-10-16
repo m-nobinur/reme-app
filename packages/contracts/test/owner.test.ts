@@ -73,6 +73,9 @@ const facts = {
   "business.proof": {
     text: "Trading since 2009, fully insured, every driver DBS checked",
   },
+  "business.disclaimer": {
+    text: "Authorised and regulated by the Fairhaven Law Society. Reg. 4471.",
+  },
   "service_area.text": { text: "Greater Fairhaven and the airports" },
   "assistant.name": { name: "Sam" },
   "assistant.pronouns": { id: "she_her" },
@@ -82,6 +85,7 @@ const facts = {
   "site.template": { id: "classic", custom: "A bit more like a magazine" },
   "site.palette": { id: "ocean" },
   "site.font": { id: "custom", custom: "Something like a newspaper headline" },
+  "site.direction": { id: "calm_daylight" },
   "site.pages": { ids: ["home", "services", "quote"] },
   "quote.form": {
     fields: [
@@ -112,6 +116,16 @@ const facts = {
         bytes: 482113,
       },
     ],
+  },
+  "testimonials.review_1": {
+    quote: "Never late, and the car was spotless.",
+    name: "Priya S.",
+    permission: true,
+  },
+  "testimonials.review_2": {
+    quote: "They waited forty minutes for a delayed flight without a word.",
+    name: "Tom",
+    permission: true,
   },
 }
 
@@ -158,6 +172,13 @@ describe("FactValue", () => {
 
   const refused: [string, unknown][] = [
     ["an unknown key", { key: "business.fax", value: { e164: "+15550142" } }],
+    [
+      "a review the customer did not agree to",
+      {
+        key: "testimonials.review_1",
+        value: { ...facts["testimonials.review_1"], permission: false },
+      },
+    ],
     [
       "another key's value",
       { key: "business.name", value: facts["business.phone"] },
@@ -233,6 +254,20 @@ describe("FactValue", () => {
         value: { id: "custom", brand: brand?.slice(1) },
       })
     ).toEqual(REFUSED)
+  })
+
+  it("takes a font pair id and a design direction, and refuses a made-up font", () => {
+    const check = (key: string, value: unknown) =>
+      verdict("FactValue", FactValue, { key, value })
+    expect(check("site.font", { id: "sora_manrope" })).toEqual(ACCEPTED)
+    expect(check("site.font", { id: "clean_sans" })).toEqual(ACCEPTED)
+    expect(check("site.font", { id: "comic_sans" })).toEqual(REFUSED)
+    expect(check("site.direction", { id: "calm_daylight" })).toEqual(ACCEPTED)
+    expect(
+      check("site.direction", { id: "custom", custom: "Navy and gold" })
+    ).toEqual(ACCEPTED)
+    expect(check("site.direction", { id: "builder" })).toEqual(ACCEPTED)
+    expect(check("site.direction", { id: "Calm Daylight" })).toEqual(REFUSED)
   })
 
   it("refuses hours that close before or as they open, or past midnight", () => {
@@ -351,14 +386,35 @@ describe("the requests around them", () => {
     expect(live({ ...sample.site.live, assignment_id: "a1" })).toEqual(REFUSED)
   })
 
-  it("links a preview over https only, with exactly three screenshots", () => {
+  it("links a preview over https, or http on a .localhost host, with exactly three screenshots", () => {
     const link = samples.PreviewLink as { screenshots: string[] }
+    const local = "http://preview-v1-brightclean.reme.localhost:3004"
     expect(
       verdict("PreviewLink", PreviewLink, {
         ...link,
-        url: "http://example.invalid/open",
+        url: `${local}/open?t=abc.def`,
+        screenshots: link.screenshots.map((_, i) => `${local}/s${i}.png?t=x`),
       })
-    ).toEqual(REFUSED)
+    ).toEqual(ACCEPTED)
+    for (const url of [
+      "http://example.invalid/open",
+      "http://brightclean.localhost.evil.com/open",
+      "http://evil.com/x.localhost",
+      "http://user@evil.com:80/.localhost",
+      "javascript:alert(1)",
+    ]) {
+      expect(
+        verdict("PreviewLink", PreviewLink, { ...link, url }),
+        url
+      ).toEqual(REFUSED)
+      expect(
+        verdict("PreviewLink", PreviewLink, {
+          ...link,
+          screenshots: [url, ...link.screenshots.slice(1)],
+        }),
+        url
+      ).toEqual(REFUSED)
+    }
     expect(
       verdict("PreviewLink", PreviewLink, {
         ...link,
@@ -382,6 +438,7 @@ describe("the bridge's building blocks", () => {
       "business.audience",
       "business.overview",
       "business.proof",
+      "business.disclaimer",
       "service_area.text",
       "assistant.name",
       "assistant.pronouns",
@@ -391,9 +448,12 @@ describe("the bridge's building blocks", () => {
       "site.template",
       "site.palette",
       "site.font",
+      "site.direction",
       "site.pages",
       "media.uploads",
       "quote.form",
+      "testimonials.review_1",
+      "testimonials.review_2",
     ])
     expect(FactValueKey.safeParse("business.fax").success).toBe(false)
   })
@@ -573,9 +633,13 @@ describe("the onboarding presets", () => {
     const { PaletteId } = await import("../src/onboarding.ts")
     expect(PALETTES.map((p) => p.id)).toEqual(PaletteId.options)
     for (const palette of PALETTES) {
-      expect(palette.swatches[0]).toBe(palette.brand)
-      expect(palette.swatches).toHaveLength(3)
-      expect(palette.source).not.toBe("")
+      expect(palette.swatches).toEqual([
+        palette.paper,
+        palette.tint,
+        palette.primary,
+        palette.ink,
+      ])
+      expect(palette.brand).toBe(palette.primary)
     }
     // No two presets share a brand colour.
     expect(new Set(PALETTES.map((p) => p.brand)).size).toBe(PALETTES.length)

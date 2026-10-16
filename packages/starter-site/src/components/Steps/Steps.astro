@@ -1,25 +1,42 @@
 ---
+import { plain } from "../../accent"
+import SectionHead from "../../layouts/SectionHead.astro"
 import { site } from "../../site-config"
 
-const items = ([1, 2, 3] as const)
-  .map((n) => ({ title: site[`step${n}Title`], body: site[`step${n}Body`] }))
-  .filter((item) => item.title || item.body)
+interface Props {
+  /** circles on a tint band, dark_band beside its heading, timeline on a line. */
+  variant?: "circles" | "dark_band" | "timeline"
+  /** The h2, where a page has its own; empty is site.stepsHeading. */
+  heading?: string
+  /** The steps, where a page has its own; empty is the site's step1 to step4. */
+  items?: { title: string; body: string }[]
+}
+
+const {
+  variant = "timeline",
+  heading = site.stepsHeading,
+  items = ([1, 2, 3, 4] as const)
+    .map((n) => ({ title: site[`step${n}Title`], body: site[`step${n}Body`] }))
+    .filter((item) => item.title || item.body),
+} = Astro.props
 ---
 
 {
   items.length > 0 && (
-    <section class="band steps">
-      <div class="wrap">
-        {site.stepsHeading && (
-          <div class="section-head">
-            <h2>{site.stepsHeading}</h2>
-          </div>
-        )}
+    <section
+      class:list={[
+        "band steps",
+        `steps-${variant}`,
+        variant !== "timeline" && "band-tint",
+      ]}
+    >
+      <div class="wrap steps-inner">
+        <SectionHead eyebrow={site.stepsEyebrow} heading={heading} />
         <ol class="step-list">
           {items.map((item) => (
             <li>
-              {item.title && <h3>{item.title}</h3>}
-              {item.body && <p>{item.body}</p>}
+              {item.title && <h3>{plain(item.title)}</h3>}
+              {item.body && <p data-copy="step_body">{item.body}</p>}
             </li>
           ))}
         </ol>

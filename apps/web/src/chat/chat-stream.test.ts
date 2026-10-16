@@ -8,12 +8,15 @@ import {
 } from "@assistant-ui/react"
 import { ChatRequest, TOOL_CALL_CANCELLED } from "@workspace/contracts"
 import { Approval } from "@workspace/ui/components/assistant/approval"
+import { SaveDesignAnswerProvider } from "@workspace/ui/components/assistant/ask-design"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
+import { ServerButtonUI } from "@workspace/ui/components/assistant/server-button"
 import { Thread } from "@workspace/ui/components/assistant/thread"
-import { act, createElement } from "react"
+import { act, createElement, useEffect, useState } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { conversationList } from "./conversations"
+import { saveDesignAnswer } from "./design"
 import { useConversationRuntime } from "./runtime"
 import { sendsOn } from "./turn"
 
@@ -172,6 +175,7 @@ afterEach(async () => {
   }
   mounted = []
   vi.unstubAllGlobals()
+  churn = false
 })
 
 /** The runtime the chat page builds per thread. */
@@ -183,23 +187,42 @@ const useThreadRuntime = () =>
     suggestions: [{ prompt: "Build my website" }],
   })
 
+/** The chat page re-renders on every workspace poll and builds its runtime hook inline. */
+let churn = false
+
 function Chat() {
+  const [, tick] = useState(0)
+  useEffect(() => {
+    if (!churn) return
+    const timer = setInterval(() => tick((n) => n + 1), 15)
+    return () => clearInterval(timer)
+  }, [])
+  const useInline = () =>
+    useConversationRuntime({
+      onFinish: () => undefined,
+      suggestions: [{ prompt: "Build my website" }],
+    })
   const runtime = useRemoteThreadListRuntime({
     adapter: conversationList,
-    runtimeHook: useThreadRuntime,
+    runtimeHook: churn ? useInline : useThreadRuntime,
     threadId: ID,
   })
   return createElement(
     AssistantRuntimeProvider,
     { runtime },
+    createElement(ServerButtonUI),
     createElement(
       CosToolsProvider,
       { value: tools },
-      createElement(Thread, {
-        autoFocus: false,
-        stored: ID,
-        components: { ToolFallback: Approval },
-      })
+      createElement(
+        SaveDesignAnswerProvider,
+        { value: saveDesignAnswer },
+        createElement(Thread, {
+          autoFocus: false,
+          stored: ID,
+          components: { ToolFallback: Approval },
+        })
+      )
     )
   )
 }
@@ -297,6 +320,120 @@ async function matches(container: HTMLElement, history: unknown) {
     transcript(reloaded).filter((line) => line?.startsWith("folded:"))
   ).toEqual([])
 }
+
+it("a message the assistant posted on its own is a message of its own, with its own time", async () => {
+  const start = FIXTURE.histories.start as {
+    messages: { id: string; parent_id: string | null; content: unknown }[]
+  }
+  const [first] = start.messages
+  const posted = {
+    ...first,
+    id: "srv_0123456789abcdef",
+    parent_id: first?.id ?? null,
+    content: {
+      role: "assistant",
+      parts: [
+        { type: "text", text: "Your domain is live." },
+        {
+          type: "data-button",
+          data: {
+            label: "Open DNS settings",
+            action: { kind: "open", url: "https://dcc.godaddy.com/manage/dns" },
+          },
+        },
+      ],
+      metadata: { custom: { createdAt: "2026-09-26T19:45:00.000Z" } },
+    },
+  }
+  const container = await open({ messages: [first, posted] })
+  const roots = container.querySelectorAll(
+    '[data-slot="aui_assistant-message-root"]'
+  )
+  expect(roots).toHaveLength(2)
+  expect(roots[1]?.textContent).toContain("Your domain is live.")
+  expect(
+    roots[1]?.querySelector('[data-slot="aui_assistant-message-footer"]')
+  ).not.toBeNull()
+  // Its button opens a new tab, and says so to a screen reader.
+  const link = roots[1]?.querySelector("a")
+  expect(link?.getAttribute("href")).toBe("https://dcc.godaddy.com/manage/dns")
+  expect(link?.textContent).toBe("Open DNS settings (opens in a new tab)")
+})
+
+it("every message keeps the time it was sent, as a reload shows it", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] })
+  try {
+    /** The api's stream with the time it writes on a new message's row. */
+    const stamped = (response: string, at: string) =>
+      response.replace(
+        'data: {"type":"finish"}',
+        `data: ${JSON.stringify({
+          type: "message-metadata",
+          messageMetadata: { custom: { createdAt: at } },
+        })}\n\ndata: {"type":"finish"}`
+      )
+    const times = (container: HTMLElement) =>
+      [
+        ...container.querySelectorAll(
+          '[data-slot="aui_user-message-meta"] time, [data-slot="aui_assistant-message-footer"] time'
+        ),
+        // To the minute, as the owner reads it; the fake clock ticks on.
+      ].map((time) => time.getAttribute("datetime")?.slice(0, 16))
+    vi.setSystemTime(new Date("2026-10-16T18:33:20.000Z"))
+    const chat = await open(FIXTURE.histories.typed)
+    const before = times(chat).length
+    turns.push(() =>
+      sse({
+        ...FIXTURE.streams.name,
+        response: stamped(
+          FIXTURE.streams.name.response,
+          "2026-10-16T18:33:30.000Z"
+        ),
+      })()
+    )
+    await press(chat, "Save")
+    await vi.waitFor(() =>
+      expect(transcript(chat).at(-1)).toContain(
+        "What number should customers ring?"
+      )
+    )
+    // Minutes later the owner writes again, and the thread converts every
+    // message once more.
+    vi.setSystemTime(new Date("2026-10-16T18:36:50.000Z"))
+    turns.push(() =>
+      sse({
+        request: null,
+        response: stamped(
+          [
+            { type: "start", messageId: "late" },
+            { type: "start-step" },
+            { type: "text-start", id: "t" },
+            { type: "text-delta", id: "t", delta: "Noted." },
+            { type: "text-end", id: "t" },
+            { type: "finish-step" },
+            { type: "finish" },
+          ]
+            .map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`)
+            .join("")
+            .concat("data: [DONE]\n\n"),
+          "2026-10-16T18:36:51.000Z"
+        ),
+      })()
+    )
+    await type(chat, "Hello again")
+    await vi.waitFor(() => expect(chat.textContent).toContain("Noted."))
+    await vi.waitFor(() =>
+      expect(times(chat).slice(before)).toEqual([
+        "2026-10-16T18:33",
+        "2026-10-16T18:33",
+        "2026-10-16T18:36",
+        "2026-10-16T18:36",
+      ])
+    )
+  } finally {
+    vi.useRealTimers()
+  }
+})
 
 it("a stored conversation loading shows a skeleton, never the welcome or a suggestion", async () => {
   const release: { open?: () => void } = {}
@@ -1310,4 +1447,181 @@ it("a reply that is only a card offers no thumb", async () => {
   expect(changeCard(chat)).not.toBeNull()
   expect(thumb(chat, "Helpful")).toBeUndefined()
   expect(thumb(chat, "Not helpful")).toBeUndefined()
+})
+
+const TRAY = row(COS, "msg_owner", {
+  role: "assistant",
+  parts: [
+    { type: "step-start" },
+    {
+      type: "tool-ask_design",
+      toolCallId: "call_design",
+      state: "input-available",
+      input: {
+        questions: [
+          {
+            id: "pages",
+            question: "Which pages should the site have?",
+            visual: "text",
+            card: {
+              step: "pages",
+              options: [
+                {
+                  id: "essentials",
+                  label: "The essentials",
+                  hint: null,
+                  visual: null,
+                },
+                {
+                  id: "everything",
+                  label: "Everything",
+                  hint: null,
+                  visual: null,
+                },
+              ],
+              multiple: false,
+              preselected: [],
+              other: null,
+              skippable: false,
+            },
+          },
+        ],
+      },
+    },
+  ],
+})
+
+/** The design tray, open, in a conversation that has reached it. */
+async function openTray() {
+  stored = { messages: [OWNER_ROW, TRAY] }
+  const container = document.createElement("div")
+  document.body.appendChild(container)
+  const root = createRoot(container)
+  mounted.push({ root, container })
+  await act(async () => root.render(createElement(Chat)))
+  await vi.waitFor(() =>
+    expect(
+      container.querySelector('[data-slot="question-tray"]')
+    ).not.toBeNull()
+  )
+  return container
+}
+
+/** Picks an option of the open tray. */
+const pick = (container: HTMLElement, label: string) =>
+  act(async () => {
+    const option = [...container.querySelectorAll("label")].find(
+      (each) => each.textContent?.trim() === label
+    )
+    option?.querySelector("input")?.click()
+  })
+
+it("the design tray's last answer is saved before Build my site is sent, and a refused send keeps the pick", async () => {
+  const chat = await openTray()
+  let saved: () => void = () => undefined
+  turns.push(
+    // The save of the last answer, still running when the owner has pressed Build.
+    () =>
+      new Promise<Response>((resolve) => {
+        saved = () => resolve(new Response(null, { status: 200 }))
+      }),
+    refusal(409, "chat.busy", BUSY)
+  )
+  await pick(chat, "Everything")
+  await press(chat, "Build my site")
+  await vi.waitFor(() => expect(sent).toHaveLength(1))
+  // Both at once is what made the api answer chat.busy.
+  await new Promise((resolve) => setTimeout(resolve, 100))
+  expect(sent).toHaveLength(1)
+  saved()
+  await vi.waitFor(() => expect(sent).toHaveLength(2))
+  expect(sent[1]).toMatchObject({
+    turn: {
+      results: [
+        {
+          output: { answers: { pages: { choice: "everything" } } },
+        },
+      ],
+    },
+  })
+  // The refusal reopens the tray with the pick still in it, and Build goes again.
+  await vi.waitFor(() =>
+    expect(chat.querySelector('[role="alert"]')?.textContent).toContain(BUSY)
+  )
+  await vi.waitFor(() =>
+    expect(
+      chat.querySelector<HTMLInputElement>('input[value="everything"]')?.checked
+    ).toBe(true)
+  )
+  turns.push(
+    () => Promise.resolve(new Response(null, { status: 200 })),
+    () =>
+      Promise.resolve(
+        new Response(frames({ type: "finish" }), {
+          headers: { "content-type": "text/event-stream" },
+        })
+      )
+  )
+  await press(chat, "Build my site")
+  // The save of the answer, then the whole tray again, as before.
+  await vi.waitFor(() => expect(sent).toHaveLength(4))
+  const turn = (n: number) => (sent[n] as { turn: object }).turn
+  expect(turn(3)).toMatchObject({
+    results: (turn(1) as { results: object }).results,
+    reply: { text: "Which pages should the site have?: Everything" },
+  })
+})
+
+/** A reply that streams over time, as the planner's words do. */
+const slowReply = () => {
+  const encoder = new TextEncoder()
+  const frame = (chunk: object) =>
+    encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`)
+  const pause = () => new Promise((resolve) => setTimeout(resolve, 60))
+  return Promise.resolve(
+    new Response(
+      new ReadableStream<Uint8Array>({
+        async start(controller) {
+          for (const chunk of [
+            { type: "start", messageId: "reply-1" },
+            { type: "start-step" },
+            { type: "text-start", id: "t1" },
+            { type: "text-delta", id: "t1", delta: "Lovely, " },
+            { type: "text-delta", id: "t1", delta: "I am starting " },
+            { type: "text-delta", id: "t1", delta: "your site now." },
+            { type: "text-end", id: "t1" },
+            { type: "finish-step" },
+            { type: "finish" },
+          ]) {
+            controller.enqueue(frame(chunk))
+            await pause()
+          }
+          controller.close()
+        },
+      }),
+      { headers: { "content-type": "text/event-stream" } }
+    )
+  )
+}
+
+it("shows the whole reply when the tab is hidden while it streams", async () => {
+  churn = true
+  // A hidden tab runs the first animation frame at most, then none.
+  let requested = 0
+  vi.stubGlobal("requestAnimationFrame", (run: FrameRequestCallback) => {
+    if (requested++ === 0) setTimeout(() => run(performance.now()), 30)
+    return requested
+  })
+  vi.stubGlobal("cancelAnimationFrame", () => undefined)
+  const chat = await openTray()
+  turns.push(
+    () => Promise.resolve(new Response(null, { status: 200 })),
+    slowReply
+  )
+  await pick(chat, "Everything")
+  await press(chat, "Build my site")
+  await vi.waitFor(() => expect(sent).toHaveLength(2))
+  await vi.waitFor(() =>
+    expect(chat.textContent).toContain("Lovely, I am starting your site now.")
+  )
 })

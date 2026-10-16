@@ -1,6 +1,13 @@
-import type { FactRecord } from "@workspace/contracts"
-import { eq, type OrgScopedDb, siteRevisions } from "@workspace/db"
-import { ownerPhotos, photoFile } from "./developer-rules.ts"
+import { Blueprint, type FactRecord } from "@workspace/contracts"
+import {
+  assignments,
+  eq,
+  type OrgScopedDb,
+  siteRevisions,
+  sql,
+} from "@workspace/db"
+import { ownerPhotos } from "./developer-rules.ts"
+import { photoFile, photoKey } from "./photo-files.ts"
 import { activeDeployment } from "./publish.ts"
 import { repoMap } from "./repo-map.ts"
 
@@ -10,7 +17,8 @@ import { repoMap } from "./repo-map.ts"
  * preview, with the change request delivered to the Developer as a signal
  * rather than baked into its instructions. The Workflow restores the
  * snapshot into the container before it admits the Developer so the map in
- * the stable segment is the restored site's from the first turn; the agent
+ * the stable segment is the restored site's from the first turn, or maps the
+ * warm sandbox's disk when it already holds that revision; the agent
  * restores again at its own start, which is idempotent and guards against
  * a container that slept in between.
  */
@@ -44,8 +52,26 @@ export async function publishedSource(
   }
 }
 
+/**
+ * The latest plan that built a revision (ADR-038), for a section change's
+ * short prompt. A plan the owner never built, or a revise that did not plan,
+ * is not the site's plan; null for a site built before planning.
+ */
+export async function latestBlueprint(
+  db: OrgScopedDb
+): Promise<Blueprint | null> {
+  const [row] = await db
+    .select({ blueprint: assignments.blueprint })
+    .from(assignments)
+    .innerJoin(siteRevisions, eq(siteRevisions.assignmentId, assignments.id))
+    .where(sql`${assignments.blueprint} is not null`)
+    .orderBy(sql`${assignments.createdAt} desc`)
+    .limit(1)
+  return Blueprint.safeParse(row?.blueprint).data ?? null
+}
+
 /** The slice of the Sandbox SDK the restore uses. */
-export type Restorable = {
+type Restorable = {
   exec: (
     command: string,
     options?: { timeout?: number }
@@ -67,7 +93,8 @@ type Sites = {
 /**
  * Restore a snapshot into the container. The tarball carries `.git` and no
  * `node_modules`; the toolchain is linked in, as the seed does for a fresh
- * site.
+ * site. Whatever the disk held goes first: a warm sandbox's other revision
+ * would otherwise leave its files behind.
  */
 export async function restore(
   sandbox: Restorable,
@@ -78,7 +105,7 @@ export async function restore(
   if (!object) throw new Error(`no source snapshot at ${sourceKey}`)
   await sandbox.writeFile("/tmp/source.tar.zst", object.body)
   const restored = await sandbox.exec(
-    `mkdir -p ${SITE_ROOT} && tar --zstd -xf /tmp/source.tar.zst -C ${SITE_ROOT} && cd ${SITE_ROOT} && ln -sfn /opt/astro/node_modules node_modules`,
+    `rm -rf ${SITE_ROOT} && mkdir -p ${SITE_ROOT} && tar --zstd -xf /tmp/source.tar.zst -C ${SITE_ROOT} && cd ${SITE_ROOT} && ln -sfn /opt/astro/node_modules node_modules`,
     { timeout: 120_000 }
   )
   if (restored.exitCode !== 0)
@@ -92,6 +119,11 @@ export async function restoreAndMap(
   sourceKey: string
 ): Promise<string> {
   await restore(sandbox, sites, sourceKey)
+  return mapSite(sandbox)
+}
+
+/** The map of the site on the container's disk, restored or warm. */
+export async function mapSite(sandbox: Restorable): Promise<string> {
   const listing = await sandbox.exec(`cd ${SITE_ROOT} && ${MAPPED}`)
   const files: Record<string, string> = {}
   for (const line of listing.stdout.split("\n").filter(Boolean)) {
@@ -104,15 +136,8 @@ export async function restoreAndMap(
 }
 
 /**
- * Where `apps/api` stores an owner's photo (its `uploadKey`): the site
- * bucket, under the org.
- */
-export const photoKey = (orgId: string, assetId: string) =>
-  `uploads/${orgId}/${assetId}`
-
-/**
- * Copies the owner's photos from the bucket into the site's `public/`, where
- * the build serves them and the source snapshot keeps them for a revise. The
+ * Copies the owner's photos from the bucket into the site's `src/assets/`,
+ * where `astro:assets` resizes them and the source snapshot keeps them for a revise. The
  * sandbox reaches no network, so the bytes go in through the SDK. Returns
  * the ids it could not find, for the log.
  */
@@ -131,7 +156,7 @@ export async function placePhotos(
 ): Promise<string[]> {
   const photos = ownerPhotos(facts)
   if (photos.length === 0) return []
-  await sandbox.exec(`mkdir -p ${SITE_ROOT}/public/uploads`)
+  await sandbox.exec(`mkdir -p ${SITE_ROOT}/src/assets/uploads`)
   const missing: string[] = []
   for (const photo of photos) {
     const object = await sites.get(photoKey(orgId, photo.id))
@@ -140,7 +165,7 @@ export async function placePhotos(
       continue
     }
     await sandbox.writeFile(
-      `${SITE_ROOT}/public/${photoFile(photo)}`,
+      `${SITE_ROOT}/src/assets/${photoFile(photo)}`,
       new Uint8Array(await object.arrayBuffer())
     )
   }

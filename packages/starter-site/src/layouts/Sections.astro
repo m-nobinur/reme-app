@@ -1,0 +1,339 @@
+---
+// A page's body, from layout[page] in site-config. The page file keeps what
+// is its own (title, description, structured data); the order and variants of
+// its sections are data.
+import { plain } from "../accent"
+import { areaDeep, areaTowns } from "../area-map"
+import ActionLink from "../components/ActionLink/ActionLink.astro"
+import AreaSection from "../components/AreaSection/AreaSection.astro"
+import ContactDetails from "../components/ContactDetails/ContactDetails.astro"
+import CtaBand from "../components/CtaBand/CtaBand.astro"
+import Faq from "../components/Faq/Faq.astro"
+import Gallery from "../components/Gallery/Gallery.astro"
+import Hero from "../components/Hero/Hero.astro"
+import QuoteForm from "../components/QuoteForm/QuoteForm.astro"
+import Section from "../components/Section/Section.astro"
+import ServiceCards from "../components/ServiceCards/ServiceCards.astro"
+import Steps from "../components/Steps/Steps.astro"
+import Testimonials from "../components/Testimonials/Testimonials.astro"
+import TrustStrip from "../components/TrustStrip/TrustStrip.astro"
+import ValueProps from "../components/ValueProps/ValueProps.astro"
+import { directionOf } from "../directions"
+import { headerPhoto } from "../header-photo"
+import { phoneText } from "../phone"
+import { hasRoute, primaryAction } from "../routes"
+import {
+  type LayoutPage,
+  type LayoutSection,
+  layout,
+  site,
+} from "../site-config"
+import {
+  type ServiceItem,
+  serviceItems,
+  servicesFaqItems,
+} from "../structured-data"
+import AboutSection from "./AboutSection.astro"
+import AreaArt from "./AreaArt.astro"
+import SectionHead from "./SectionHead.astro"
+
+interface Props {
+  page: LayoutPage
+  /** On a service's own page (page "service"), the service it is about. */
+  service?: ServiceItem
+}
+
+const { page, service } = Astro.props
+// The page's h1 and lede, which are its own fields.
+const HEAD = {
+  home: [site.heroHeading || site.businessName, site.homeIntro || site.tagline],
+  about: [site.aboutHeading, site.aboutIntro],
+  services: [site.servicesHeading, site.servicesIntro],
+  service_area: [site.serviceAreaHeading, site.serviceAreaIntro],
+  contact: [site.contactHeading, site.contactIntro],
+  quote: [site.quoteHeading, site.quoteIntro],
+  service: [service?.heading || service?.name || "", service?.body ?? ""],
+} as const
+const [marked, lede] = HEAD[page]
+// Each page's closing band, the home page's where a page has none of its own.
+const CTA: Record<LayoutPage, [string, string]> = {
+  home: [site.ctaHeading, site.ctaBody],
+  about: [site.aboutCtaHeading, site.aboutCtaBody],
+  services: [site.servicesCtaHeading, site.servicesCtaBody],
+  service_area: [site.serviceAreaCtaHeading, site.serviceAreaCtaBody],
+  contact: [site.contactCtaHeading, site.contactCtaBody],
+  quote: ["", ""],
+  service: [service?.ctaHeading ?? "", service?.ctaBody ?? ""],
+}
+const [ctaHeading, ctaBody] = CTA[page]
+// An inner page's header shows its own photo when the build has one, in the
+// hero's photo form; without one it is the plain text header.
+const pagePhoto = headerPhoto(service ? `service:${service.id}` : page)
+// The h1 shares a field with a section heading elsewhere, and shows no accent marks.
+const heading = plain(marked)
+const home = page === "home"
+// The service area page's header is a cover with the area drawn beside it.
+const areaCover = page === "service_area" && !pagePhoto
+// Offerings are work beyond the service rows; a line that only repeats a
+// service's name would list the same services twice on one page.
+const named = new Set(
+  [1, 2, 3, 4, 5, 6].map((n) =>
+    String(site[`service${n}Name` as keyof typeof site] ?? "")
+      .trim()
+      .toLowerCase()
+  )
+)
+const offerings = site.offerings
+  .split("\n")
+  .map((item) => item.trim())
+  .filter((item) => item && !named.has(item.toLowerCase()))
+const next = [site.quoteNext1, site.quoteNext2, site.quoteNext3].filter(Boolean)
+const about = page === "about"
+// The about page's own principles and visit steps, apart from the home page's.
+const approach = ([1, 2, 3, 4] as const).map((n) => ({
+  title: site[`approach${n}Title`],
+  body: site[`approach${n}Body`],
+  icon: site[`approach${n}Icon`],
+}))
+const visit = ([1, 2, 3, 4] as const)
+  .map((n) => ({
+    title: site[`aboutStep${n}Title`],
+    body: site[`aboutStep${n}Body`],
+  }))
+  .filter((item) => item.title || item.body)
+const talk = site.phone || site.email
+
+// A section with no variant of its own takes the direction's; a page hero
+// other than home's stays the plain one. Each component types its own
+// variants and a test checks the layout's and the directions' strings against
+// the contract, so one cast stands for all of them.
+const direction = directionOf(site.direction)
+const OF_DIRECTION: Partial<Record<string, string>> = {
+  hero: home ? direction.hero : undefined,
+  service_cards: direction.services,
+  steps: direction.steps,
+  faq: direction.faq,
+  cta_band: direction.cta,
+}
+// A service page always shows its service's detail, what is included and who
+// it suits, whatever the plan laid out: the copy gate fails one without them,
+// and a plan with no service_cards cost the second perf run a repair round.
+const planned = layout[page]
+const afterHero = planned.findIndex((s) => s.kind === "hero") + 1
+const sections: LayoutSection[] =
+  page === "service" && !planned.some((s) => s.kind === "service_cards")
+    ? [
+        ...planned.slice(0, afterHero),
+        { kind: "service_cards" },
+        ...planned.slice(afterHero),
+      ]
+    : planned
+---
+
+{
+  sections.map(({ kind, variant }) => {
+    const v = (variant ?? OF_DIRECTION[kind]) as never
+    switch (kind) {
+      case "hero":
+        return (
+          <Hero
+            variant={pagePhoto ? (v ?? "split_frame") : v}
+            inner={!home}
+            eyebrow={home ? site.industry : ""}
+            heading={heading}
+            lede={lede}
+            image={
+              home
+                ? { src: site.heroImage, alt: site.heroImageAlt }
+                : pagePhoto
+            }
+            caption={home ? site.heroCaption : ""}
+            highlights={home ? serviceItems.slice(0, 3) : []}
+            note={home ? site.heroNote : ""}
+            deep={areaCover && areaDeep(site.direction)}
+          >
+            {areaCover && (
+              <AreaArt
+                slot="art"
+                class="area-art-cover"
+                towns={areaTowns(site.areaTowns)}
+                seed={site.serviceAreaText}
+                label={site.areaCardLabel}
+                line={site.areaCardLine || site.serviceAreaText}
+              />
+            )}
+            {home && primaryAction && (
+              <ActionLink href={primaryAction.href} label={primaryAction.label} />
+            )}
+            {home && site.phone && (
+              <ActionLink
+                href={`tel:${site.phone}`}
+                label={phoneText(site.phone)}
+                variant="secondary"
+              />
+            )}
+          </Hero>
+        )
+      case "trust_strip":
+        return <TrustStrip variant={v} />
+      case "service_cards":
+        return (
+          <>
+            <ServiceCards variant={v} only={service?.id} />
+            {page === "services" && site.servicesHelpBody && (
+              <Section
+                eyebrow={site.servicesHelpEyebrow}
+                heading={site.servicesHelpHeading}
+              >
+                <p data-copy="services_help">{site.servicesHelpBody}</p>
+                {primaryAction && (
+                  <p class="section-more">
+                    <a class="more-link" href={primaryAction.href}>
+                      {primaryAction.label}
+                    </a>
+                  </p>
+                )}
+              </Section>
+            )}
+            {page === "services" && offerings.length > 0 && (
+              <Section
+                eyebrow={site.offeringsEyebrow}
+                heading={site.offeringsHeading}
+              >
+                <ol class="offerings">
+                  {offerings.map((item) => (
+                    <li>{item}</li>
+                  ))}
+                </ol>
+              </Section>
+            )}
+          </>
+        )
+      case "value_props":
+        return about ? (
+          <ValueProps
+            eyebrow={site.approachEyebrow}
+            heading={site.approachHeading}
+            items={approach}
+            copy="approach_body"
+          />
+        ) : (
+          <ValueProps />
+        )
+      case "steps":
+        return (
+          <Steps
+            variant={v}
+            heading={
+              (about ? site.aboutStepsHeading : service?.stepsHeading) ||
+              undefined
+            }
+            items={
+              about ? visit : service?.steps.length ? service.steps : undefined
+            }
+          />
+        )
+      case "about":
+        return <AboutSection page={home ? "home" : "about"} />
+      case "testimonials":
+        return <Testimonials variant={v} />
+      case "gallery":
+        return <Gallery />
+      case "service_area":
+        return (
+          <AreaSection
+            heading={
+              home
+                ? site.homeAreaHeading || site.serviceAreaHeading
+                : about
+                  ? site.aboutAreaHeading
+                  : undefined
+            }
+          />
+        )
+      case "faq":
+        return (
+          <Faq
+            variant={v}
+            items={page === "services" ? servicesFaqItems : service?.faqs}
+            heading={
+              (page === "services"
+                ? site.servicesFaqHeading
+                : service?.faqHeading) || undefined
+            }
+          />
+        )
+      case "cta_band":
+        return (
+          <CtaBand
+            variant={v}
+            heading={ctaHeading || site.ctaHeading}
+            body={ctaBody || site.ctaBody}
+          />
+        )
+      case "contact":
+        return (
+          <>
+            <section class="band">
+              <div class="wrap">
+                <ContactDetails variant="cards" />
+              </div>
+            </section>
+            {site.contactIncludeBody && (
+              <Section
+                eyebrow={site.contactIncludeEyebrow}
+                heading={site.contactIncludeHeading}
+              >
+                <p data-copy="contact_body">{site.contactIncludeBody}</p>
+                {hasRoute("/quote/") && site.contactFormLink && (
+                  <p class="section-more">
+                    <a class="more-link" href="/quote/">
+                      {site.contactFormLink}
+                    </a>
+                  </p>
+                )}
+              </Section>
+            )}
+          </>
+        )
+      case "quote_form":
+        // The quote form sends by email until the platform has an endpoint
+        // for it; see QuoteForm. Beside it, what happens next and the
+        // business's own phone and email. A response time shows only when a
+        // fact gives one, in quoteNext2.
+        return (
+          <section class="band">
+            <div class="wrap quote-layout">
+              <QuoteForm />
+              {(next.length > 0 || talk) && (
+                <aside class="quote-aside">
+                  {next.length > 0 && (
+                    <>
+                      <SectionHead
+                        eyebrow={site.quoteEyebrow}
+                        heading={site.quoteAsideHeading}
+                      />
+                      <ol class="next-list">
+                        {next.map((line) => (
+                          <li>{line}</li>
+                        ))}
+                      </ol>
+                    </>
+                  )}
+                  {talk && (
+                    <>
+                      <SectionHead
+                        eyebrow={next.length > 0 ? "" : site.quoteEyebrow}
+                        heading={site.quoteTalkHeading}
+                      />
+                      <ContactDetails />
+                    </>
+                  )}
+                </aside>
+              )}
+            </div>
+          </section>
+        )
+    }
+  })
+}

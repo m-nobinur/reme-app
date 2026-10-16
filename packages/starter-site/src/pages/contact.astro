@@ -1,22 +1,15 @@
 ---
-import ContactDetails from "../components/ContactDetails/ContactDetails.astro"
-import CtaBand from "../components/CtaBand/CtaBand.astro"
-import Hero from "../components/Hero/Hero.astro"
+import { plain } from "../accent"
 import Base from "../layouts/Base.astro"
+import Sections from "../layouts/Sections.astro"
 import { site } from "../site-config"
 import { localBusiness } from "../structured-data"
 ---
 
 <Base
-  title={site.contactTitle || site.contactHeading}
+  title={site.contactTitle || plain(site.contactHeading)}
   description={site.contactDescription || site.contactIntro}
   jsonLd={localBusiness(Astro.site)}
 >
-  <Hero heading={site.contactHeading} lede={site.contactIntro} />
-  <section class="band">
-    <div class="wrap">
-      <ContactDetails variant="cards" />
-    </div>
-  </section>
-  <CtaBand />
+  <Sections page="contact" />
 </Base>

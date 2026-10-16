@@ -1,11 +1,12 @@
 import type { BuildSummary, Conversation } from "@workspace/contracts"
 import { BUILD_STAGES } from "@workspace/ui/components/live-panel"
-import { WORKING } from "@workspace/ui/lib/build-state"
+import { currentRow, WORKING } from "@workspace/ui/lib/build-state"
 import { factLabel } from "@workspace/ui/lib/facts"
 import type { AttentionItem, Workspace } from "./api/types"
 import { askerOf, assistantOf, digestOf } from "./briefing"
 import { onboardingFor } from "./onboarding"
 import { dayOf, dueLine, upcomingNotes } from "./reminders"
+import { stoppedOf } from "./stopped"
 
 /**
  * What the floating panel says, from what the frame has already read: the
@@ -15,7 +16,7 @@ import { dayOf, dueLine, upcomingNotes } from "./reminders"
  */
 
 /** The pages the panel words itself for. Any other /app page is "elsewhere". */
-export type PanelPage =
+type PanelPage =
   | "home"
   | "chat"
   | "onboarding"
@@ -30,7 +31,7 @@ export type Suggestion =
   | { kind: "onboarding"; id: string }
   | { kind: "start-website" }
   | { kind: "request-change" }
-  | { kind: "visit-site"; host: string }
+  | { kind: "visit-site"; host: string; url: string }
   | { kind: "set-reminder" }
 
 /** Something with a time: what is coming up, or what just happened. */
@@ -40,6 +41,8 @@ export type Line = {
   tone: "working" | "live" | "idle"
   lead: string
   detail?: string
+  /** The step a working build is on, of how many. */
+  progress?: { done: number; total: number }
 }
 
 export type Panel = {
@@ -189,7 +192,7 @@ function remindersSentence(
 
 export function panelFor(input: PanelInput): Panel | null {
   const { workspace, business, names, now, zone } = input
-  const { live, host, builds, attention, missingFacts } = workspace
+  const { live, host, url, builds, attention, missingFacts } = workspace
   const onboarding = business
     ? onboardingFor(workspace, input.conversations)
     : null
@@ -265,6 +268,10 @@ export function panelFor(input: PanelInput): Panel | null {
         ]
       : null
 
+  // A build that failed, while nothing has happened since: the owner is told
+  // why, and the suggestions below are how to try again or ask for changes.
+  const stopped = stoppedOf(workspace)
+
   const digest = () =>
     digestOf({ ...workspace, attention: waiting }, names, zone ? now : null)
 
@@ -273,6 +280,7 @@ export function panelFor(input: PanelInput): Panel | null {
       return [`Name your business and ${assistant} can start on its website.`]
     }
     if (page === "reminders" && reminders) return [reminders]
+    if (stopped) return stopped
     if (steps) {
       const intro = onboarding
         ? `Getting ${business} ready for its first website.`
@@ -357,6 +365,11 @@ export function panelFor(input: PanelInput): Panel | null {
   const line = ((): Line => {
     const tone = live ? "live" : "idle"
     if (working) {
+      // A full build names the step it is on and how far through them it is,
+      // which the minimised pill keeps in view.
+      const rows = working.lane === "quick" ? [] : (working.activity ?? [])
+      const at = currentRow(rows)
+      const step = rows[at]
       return {
         tone: "working",
         lead: working.revision?.version
@@ -364,7 +377,13 @@ export function panelFor(input: PanelInput): Panel | null {
           : live
             ? "Building a new version,"
             : "Building your first version,",
-        detail: BUILD_STAGES[working.state].note.toLowerCase().slice(0, -1),
+        detail:
+          working.state === "planning" && working.blueprint?.awaiting
+            ? "waiting for your review"
+            : step
+              ? step.label.toLowerCase()
+              : BUILD_STAGES[working.state].note.toLowerCase().slice(0, -1),
+        ...(step ? { progress: { done: at + 1, total: rows.length } } : {}),
       }
     }
     const [approval] = approvals
@@ -393,6 +412,7 @@ export function panelFor(input: PanelInput): Panel | null {
     }
     if (!business)
       return { tone, lead: "Name your business", detail: "to get started" }
+    if (stopped) return { tone, lead: "The build stopped" }
     if (steps && onboarding) {
       return {
         tone,
@@ -434,8 +454,8 @@ export function panelFor(input: PanelInput): Panel | null {
     if (!reviewing && page !== "website") {
       suggestions.push({ kind: "request-change" })
     }
-    if (host && page !== "website")
-      suggestions.push({ kind: "visit-site", host })
+    if (host && url && page !== "website")
+      suggestions.push({ kind: "visit-site", host, url })
   }
 
   return {

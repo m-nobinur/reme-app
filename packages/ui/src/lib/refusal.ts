@@ -32,6 +32,13 @@ const COPY: Record<string, string> = {
     "Other people still belong to this business. Remove them first.",
   "account.not_owner": "Only the owner can delete this account.",
   "preview.unconfigured": "Previews are not available right now.",
+  "domain.unavailable":
+    "That name isn't free to register any more. Nothing was charged.",
+  "domain.buy_unavailable": "Buying a domain isn't available yet.",
+  "domain.registrant_invalid":
+    "The registration details aren't complete. Edit them and try again.",
+  "domain.price_changed":
+    "That domain's price has changed, so nothing was charged. Ask me for a fresh price.",
   "rate.limited":
     "Too many changes in a short time. Wait a minute and try again.",
 }

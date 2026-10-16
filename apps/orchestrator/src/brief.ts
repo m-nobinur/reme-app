@@ -1,4 +1,10 @@
-import { FactSnapshot, type RuntimeSpec } from "@workspace/contracts"
+import {
+  type Blueprint,
+  type BuildLane,
+  ChangeKind,
+  FactSnapshot,
+  type RuntimeSpec,
+} from "@workspace/contracts"
 import {
   appendEvent,
   assignments,
@@ -18,6 +24,7 @@ import {
   signSpec,
 } from "@workspace/facade"
 import { HIDDEN_FACTS_KEY } from "@workspace/gates"
+import type { PhotoFile } from "./photo-step.ts"
 import { NPM_REGISTRY_HOST } from "./sandbox.ts"
 import type { Ids } from "./state.ts"
 
@@ -39,6 +46,14 @@ export type Brief = {
   restore_key: string | null
   /** The restored site's map for the stable segment, or null for the starter's. */
   map: string | null
+  /** The routing role the Developer starts on when not `build`: a section change's quick lane. */
+  role?: "quick_section"
+  /** The plan this build follows (ADR-038); absent when the build did not plan. */
+  blueprint?: Blueprint | null
+  /** The site's latest approved plan, for a section change's short prompt; never a plan to build from. */
+  site_plan?: Blueprint | null
+  /** The plan's generated photos the Workflow made, which the Developer copies into the site (BA4). */
+  photos?: PhotoFile[]
 }
 
 /**
@@ -88,6 +103,11 @@ export async function creationChoices(
   withhold: string[]
   model: ModelChoice
   origin: "owner" | "console"
+  lane: BuildLane
+  change_kind: ChangeKind | null
+  kind: string
+  /** The owner chose "Skip all" in onboarding: build from the plan without the card's wait. */
+  skip_review: boolean
 }> {
   const [row] = await db
     .select({ payload: events.payload })
@@ -104,6 +124,11 @@ export async function creationChoices(
     withhold,
     model: payload.model === "B" ? "B" : "A",
     origin: payload.origin === "owner" ? "owner" : "console",
+    // A row written before lanes existed ran full.
+    lane: payload.lane === "quick" ? "quick" : "full",
+    change_kind: ChangeKind.safeParse(payload.change_kind).data ?? null,
+    kind: typeof payload.kind === "string" ? payload.kind : "site.build",
+    skip_review: payload.review === "skip",
   }
 }
 
@@ -119,7 +144,7 @@ const shape = (value: unknown): string => {
 
 type WrittenFact = { key: string; fact_id: string; version: number }
 
-export type FactsUpdate =
+type FactsUpdate =
   | { outcome: "written"; replayed: boolean; facts: WrittenFact[] }
   | { outcome: "unknown_key"; key: string }
   | { outcome: "shape_changed"; key: string }
@@ -194,7 +219,7 @@ export async function updateFacts(
   return { outcome: "written", replayed: false, facts: written }
 }
 
-export type HiddenUpdate =
+type HiddenUpdate =
   | { outcome: "written"; replayed: boolean; hidden: string[] }
   | { outcome: "unknown_key"; key: string }
 

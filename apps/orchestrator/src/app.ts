@@ -1,4 +1,7 @@
 import {
+  BlueprintReviewOutput,
+  type BuildLane,
+  type ChangeKind,
   type EnvelopeBody,
   envelope,
   GOAL_MAX,
@@ -10,6 +13,7 @@ import {
   previewHost,
   REQUEST_FAILED,
   siteHost,
+  siteUrl,
   type TaintLabel,
   Uuid,
 } from "@workspace/contracts"
@@ -56,6 +60,15 @@ import { HTTPException } from "hono/http-exception"
 import { Developer } from "./agents/developer.ts"
 import { hideFacts, updateFacts } from "./brief.ts"
 import type { AssignmentParams } from "./cloudflare.ts"
+import { buy, checkoutSession, find, paymentEvent } from "./domain-buy.ts"
+import {
+  checkNow,
+  connect,
+  type Refusal,
+  remove,
+  revokeDomains,
+} from "./domain-flow.ts"
+import { PLAN_ROUNDS } from "./planner.ts"
 import {
   activeDeployment,
   clearPointers,
@@ -65,8 +78,9 @@ import {
   requestReview,
 } from "./publish.ts"
 import { answers } from "./question.ts"
+import { pickLane } from "./quick.ts"
 import { publishedSource } from "./revise.ts"
-import { endSandbox, probe } from "./sandbox.ts"
+import { endSandbox, endSite, probe } from "./sandbox.ts"
 import { assignmentCost, cancel, lockRow, TransitionError } from "./state.ts"
 
 /**
@@ -275,6 +289,8 @@ bridge.post("/", async (c) => {
     goal?: unknown
     model?: unknown
     withhold?: unknown
+    change_kind?: unknown
+    review?: unknown
   }
   const kind = typeof body.kind === "string" ? body.kind : "site.build"
   // Both are the console's test levers; an owner gets the defaults.
@@ -316,7 +332,15 @@ bridge.post("/", async (c) => {
       detail: { length: goal.length, max: GOAL_MAX },
     })
   }
-  return createAssignment(c, key, { kind, goal, model, withhold })
+  return createAssignment(c, key, {
+    kind,
+    goal,
+    model,
+    withhold,
+    ...pickLane(kind, body.change_kind),
+    // "Skip all" in onboarding (ADR-038): the plan is built without the card's wait.
+    skip_review: body.review === "skip",
+  })
 })
 
 /** Builds an owner may start in 24 hours (open item 76: a guess until someone hits it). */
@@ -339,9 +363,12 @@ async function createAssignment(
     goal: string
     model: "A" | "B"
     withhold: string[]
+    lane: BuildLane
+    change_kind: ChangeKind | null
+    skip_review: boolean
   }
 ) {
-  const { kind, goal, model, withhold } = input
+  const { kind, goal, model, withhold, lane, change_kind, skip_review } = input
   const orgId = c.get("orgId")
   const owner = byOwner(c)
   const taint: TaintLabel[] =
@@ -415,6 +442,10 @@ async function createAssignment(
         model,
         goal,
         withhold,
+        // The lane is chosen once, here, and read back by the Workflow and EV3.
+        lane,
+        change_kind,
+        ...(skip_review ? { review: "skip" } : {}),
         origin: owner ? "owner" : "console",
         ...(source ? { revises_revision_id: source.revision_id } : {}),
       },
@@ -748,7 +779,101 @@ ownerOnly.post("/site/takedown", async (c) => {
     )
     await halt(c.env, orgId, id)
   }
+  // QE2: a published site's sandbox can still be warm with no build open.
+  // One per site, which the site lock makes safe, keyed by the org.
+  await endSite(c.env, orgId)
   await clearPointers(c.env, c.get("kit"), orgId)
+  await revokeDomains(c.env, c.get("kit"), orgId)
+  return c.body(null, 204)
+})
+
+/** A domain route's refusal, as the §28.1 envelope. */
+const domainRefused = (c: Context, r: Refusal) =>
+  failure(c, r.status, {
+    class: r.class,
+    code: r.code,
+    message: r.message,
+    detail: {},
+  })
+
+/**
+ * Custom domains, connect path (domain-flow.ts): claim a domain and start
+ * its Workflow, check it now and nudge the Workflow, or remove it. The org
+ * is the bridge's; the name is the only thing the caller says.
+ */
+ownerOnly.post("/domains", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as {
+    name?: unknown
+    approval_id?: unknown
+  }
+  const result = await connect(c.env, c.get("kit"), c.get("orgId"), body)
+  if ("refused" in result) return domainRefused(c, result)
+  return c.json(result.output, result.status)
+})
+
+/**
+ * Buying a domain (domain-buy.ts): find names, open a purchase, record the
+ * Checkout Session the api made, and apply a Stripe event the api verified.
+ */
+ownerOnly.post("/domains/find", async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const result = await find(c.env, c.get("kit"), c.get("orgId"), body)
+  if ("refused" in result) return domainRefused(c, result)
+  return c.json(result)
+})
+
+ownerOnly.post("/domains/buy", async (c) => {
+  const body = await c.req.json().catch(() => null)
+  const result = await buy(c.env, c.get("kit"), c.get("orgId"), body)
+  if ("refused" in result) return domainRefused(c, result)
+  return c.json(result.output, result.status)
+})
+
+ownerOnly.post("/domains/:id/checkout-session", async (c) => {
+  const body = await c.req.json().catch(() => null)
+  const refusal = await checkoutSession(
+    c.env,
+    c.get("kit"),
+    c.get("orgId"),
+    c.req.param("id"),
+    body
+  )
+  if (refusal) return domainRefused(c, refusal)
+  return c.body(null, 204)
+})
+
+ownerOnly.post("/domains/:id/stripe", async (c) => {
+  const body = await c.req.json().catch(() => null)
+  const refusal = await paymentEvent(
+    c.env,
+    c.get("kit"),
+    c.get("orgId"),
+    c.req.param("id"),
+    body
+  )
+  if (refusal) return domainRefused(c, refusal)
+  return c.body(null, 204)
+})
+
+ownerOnly.post("/domains/:name/check", async (c) => {
+  const result = await checkNow(
+    c.env,
+    c.get("kit"),
+    c.get("orgId"),
+    c.req.param("name")
+  )
+  if ("refused" in result) return domainRefused(c, result)
+  return c.json(result)
+})
+
+ownerOnly.delete("/domains/:name", async (c) => {
+  const refusal = await remove(
+    c.env,
+    c.get("kit"),
+    c.get("orgId"),
+    c.req.param("name")
+  )
+  if (refusal) return domainRefused(c, refusal)
   return c.body(null, 204)
 })
 
@@ -929,6 +1054,125 @@ bridge.post("/:id/answer", async (c) => {
     }
   }
   return c.json(result.answer, 202)
+})
+
+/**
+ * The owner's decision on the Blueprint card (ADR-038, OI4): "Build it" or
+ * "Change something" with their words. Stored as `blueprint.decided` for the
+ * round the build waits on; the `blueprint` event only nudges the Workflow to
+ * look. The same decision again is a retry and gets the same answer; a
+ * different one for a decided round is refused. A change past the last
+ * re-plan is refused, so the owner builds or cancels.
+ */
+bridge.post("/:id/blueprint", async (c) => {
+  const id = c.req.param("id")
+  const orgId = c.get("orgId")
+  const parsed = BlueprintReviewOutput.safeParse(
+    await c.req.json().catch(() => null)
+  )
+  if (!parsed.success) {
+    return failure(c, 400, {
+      class: "validation",
+      code: "blueprint.decision_malformed",
+      message:
+        'A decision is {decision: "build"} or {decision: "change", note}.',
+      detail: {},
+    })
+  }
+  const decided = parsed.data
+  const result = await c.get("kit").withOrg({ orgId }, async (db) => {
+    // Locked first, so two decisions on one round queue here.
+    const [row] = await db
+      .select()
+      .from(assignments)
+      .where(eq(assignments.id, id))
+      .for("update")
+    if (!row) return { missing: true as const }
+    const [proposed] = await db
+      .select({ payload: events.payload })
+      .from(events)
+      .where(
+        sql`${events.assignmentId} = ${id} and ${events.type} = 'blueprint.proposed'`
+      )
+      .orderBy(sql`${events.eventId} desc`)
+      .limit(1)
+    const round = Number(proposed?.payload.round)
+    if (proposed?.payload.review !== true || !round) {
+      return { state: row.state }
+    }
+    const [given] = await db
+      .select({ payload: events.payload })
+      .from(events)
+      .where(
+        sql`${events.assignmentId} = ${id} and ${events.type} = 'blueprint.decided' and (${events.payload}->>'round')::int = ${round}`
+      )
+      .limit(1)
+    if (given) {
+      return given.payload.decision === decided.decision
+        ? { round, nudge: row.state === "planning" }
+        : { given: given.payload.decision as string }
+    }
+    if (row.state !== "planning") return { state: row.state }
+    if (decided.decision === "change" && round >= PLAN_ROUNDS) {
+      return { exhausted: round }
+    }
+    await appendEvent(db, {
+      orgId,
+      assignmentId: id,
+      staffId: row.createdByStaffId,
+      type: "blueprint.decided",
+      payload: { round, ...decided },
+      // The note is the owner's words, read by the planner as data (§28.3).
+      taint: decided.note ? ["untrusted_input"] : [],
+    })
+    return { round, nudge: true }
+  })
+  if ("missing" in result) return notFound(c, id)
+  if ("state" in result) {
+    return failure(c, 409, {
+      class: "validation",
+      code: "blueprint.not_waiting",
+      message: "This build is not waiting on a decision about its plan.",
+      detail: { state: result.state },
+    })
+  }
+  if ("given" in result) {
+    return failure(c, 409, {
+      class: "validation",
+      code: "blueprint.already_decided",
+      message: "This plan already has a decision.",
+      detail: { decision: result.given },
+    })
+  }
+  if ("exhausted" in result) {
+    return failure(c, 409, {
+      class: "validation",
+      code: "blueprint.replans_exhausted",
+      message: `A build is planned at most ${PLAN_ROUNDS} times. Build this plan or cancel the build.`,
+      detail: { round: result.exhausted, max: PLAN_ROUNDS },
+    })
+  }
+  if (result.nudge) {
+    // The decision is committed; a lost nudge costs only time, since the
+    // Workflow looks again within six hours.
+    try {
+      const instance = await c.env.ASSIGNMENTS.get(id)
+      await instance.sendEvent({
+        type: "blueprint",
+        payload: { round: result.round },
+      })
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          code: "blueprint.nudge_failed",
+          assignment_id: id,
+          round: result.round,
+          error: error instanceof Error ? error.name : "unknown",
+        })
+      )
+    }
+  }
+  return c.json({ round: result.round, decision: decided.decision }, 202)
 })
 
 /**
@@ -1119,7 +1363,7 @@ bridge.get("/:id/preview", async (c) => {
       c.env.PREVIEW_KEY
     )
   const [token, shots] = await Promise.all([sign("site"), sign("screenshots")])
-  const base = `https://${host}`
+  const base = siteUrl(host, c.env.SITE_PORT)
   return c.json({
     revision_id: found.revision.id,
     url: `${base}/open?t=${token}`,

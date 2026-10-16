@@ -1,6 +1,6 @@
 import type { ToolCallMessagePartComponent } from "@assistant-ui/react"
 import {
-  OwnerChangeRequest,
+  CosChangeRequest,
   type RequestChangeOutput,
   RequestChangeOutput as RequestChangeResult,
 } from "@workspace/contracts"
@@ -33,7 +33,11 @@ const RequestChange: ToolCallMessagePartComponent = (props) => (
     }
     done={(output) => (
       <>
-        <Done>Started. Follow it under Working on.</Done>
+        <Done>
+          {output?.outcome === "started" && output.build.lane === "quick"
+            ? "Updating your preview."
+            : "Started. Follow it under Working on."}
+        </Done>
         {output?.outcome === "started" ? (
           <p className="text-[0.8125rem] text-muted-foreground">
             {builtAs(output)}
@@ -44,7 +48,7 @@ const RequestChange: ToolCallMessagePartComponent = (props) => (
     props={props}
     slot="request-change"
     title={(input) => input.text}
-    view={decisionView(props, OwnerChangeRequest, RequestChangeResult)}
+    view={decisionView(props, CosChangeRequest, RequestChangeResult)}
     yes="Approve"
   />
 )

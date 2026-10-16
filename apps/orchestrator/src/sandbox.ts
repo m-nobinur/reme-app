@@ -4,11 +4,20 @@ import {
   type Sandbox,
 } from "@cloudflare/sandbox"
 import { restore, SITE_ROOT } from "./revise.ts"
+import {
+  CROP_WIDTHS,
+  CROPS_MAX,
+  cropKey,
+  SHOTS_SCRIPT,
+  VIEWPORTS,
+} from "./shots.ts"
 
 /**
- * The sandbox as the orchestrator uses it (ADR-031): one container per
- * assignment, keyed by the assignment id, a filesystem and a shell and
- * nothing else. The egress and sleep rules are class fields on `RemeSandbox`
+ * The sandbox as the orchestrator uses it (ADR-031): one container per site,
+ * keyed by the site id (the org id while an org has one site), a filesystem
+ * and a shell and nothing else. The site lock (`assignments_site_writer_key`)
+ * means one assignment at a time works in it; after `preview_ready` it stays
+ * up, warm, for the next edit. The egress and sleep rules are class fields on `RemeSandbox`
  * in cloudflare.ts; this module is the two things the Workflow and the
  * console do with a container before the Developer attaches to it.
  */
@@ -21,12 +30,21 @@ import { restore, SITE_ROOT } from "./revise.ts"
 export const NPM_REGISTRY_HOST = "registry.npmjs.org"
 
 /**
- * Idle time before the container stops. The Developer's loop spends most of
- * its wall time waiting on tokens, and containers bill active CPU, so a short
- * window keeps an idle container off the bill. A stopped container's disk is
- * gone (Cloudflare's containers FAQ), which is why a block checkpoints first.
+ * Idle seconds before the container stops, which is also how long a site's
+ * sandbox stays warm after its last edit. A stopped container's disk is gone
+ * (Cloudflare's containers FAQ: "it uses a fresh disk from the container
+ * image"), so a sleep is a cold start and a block checkpoints first. An idle
+ * container still holds a pool slot and bills memory: this number is the
+ * owner's cost call (index open item 1).
  */
-export const SLEEP_AFTER = "5m"
+export const SLEEP_AFTER = 30 * 60
+
+/**
+ * What a warm sandbox holds: the revision it built, written at
+ * `preview_ready`. Outside the site, so no snapshot or build carries it, and
+ * outside the Developer's tool root, so the model cannot write it.
+ */
+const REVISION_FILE = "/workspace/.reme/revision"
 
 /** The reasons of `ContainerUnavailableError` that mean the pool is full. */
 const POOL_FULL = new Set([
@@ -50,31 +68,214 @@ export const sandboxFor = (env: Env, id: string) =>
   })
 
 /**
- * Start the assignment's container and run one command in it, so the
- * Workflow knows a slot exists before it admits the Developer. Returns the
- * cold start in milliseconds; throws `PoolExhaustedError` when the platform
- * cannot allocate an instance, and anything else as it came.
+ * The site's sandbox as the build tail reads it (`tail.ts`), for a step that
+ * runs the tail outside the Developer's harness: the quick edit lane.
+ */
+export const tailSandbox = (sandbox: ReturnType<typeof sandboxFor>) => ({
+  exec: (command: string, options?: { timeoutMs?: number }) =>
+    sandbox.exec(command, { timeout: options?.timeoutMs }),
+  readFile: (path: string) => sandbox.readFile(path),
+  readFileBuffer: async (path: string) => {
+    const file = await sandbox.readFile(path, { encoding: "base64" })
+    return Uint8Array.from(atob(file.content), (c) => c.charCodeAt(0))
+  },
+  writeFile: (path: string, content: string) =>
+    sandbox.writeFile(path, content),
+  writeBytes: (path: string, content: Uint8Array) =>
+    sandbox.writeFile(path, new Blob([content]).stream()),
+})
+
+type Ids = { orgId: string; assignmentId: string }
+
+/**
+ * Which assignment holds a site's sandbox, and the revision it holds when it
+ * is warm: execution state, in R2 because R2 lists and reads its own writes.
+ * The object's `uploaded` time is the last edit, which eviction orders by.
+ */
+const holderKey = (siteId: string) => `sandboxes/${siteId}`
+
+/**
+ * Start the site's container for this assignment and run one command in it,
+ * so the Workflow knows a slot exists before it admits the Developer. A warm
+ * sandbox answers at once. A full pool evicts the least recently used warm
+ * sandbox and tries once more before it refuses: builds beat warm edits.
+ * Returns the cold start in milliseconds; throws `PoolExhaustedError` when no
+ * slot comes free, and anything else as it came.
  */
 export async function provision(
   env: Env,
-  assignmentId: string
-): Promise<{ cold_start_ms: number }> {
+  ids: Ids
+): Promise<{ cold_start_ms: number; evicted: string | null }> {
   const started = Date.now()
+  // Held before the container starts, so no eviction takes it from under us.
+  await env.SITES.put(holderKey(ids.orgId), "", {
+    customMetadata: { holder: ids.assignmentId },
+  })
+  const start = () => sandboxFor(env, ids.orgId).exec("true")
+  let evicted: string | null = null
   try {
-    await sandboxFor(env, assignmentId).exec("true")
+    await start()
   } catch (error) {
     if (
-      error instanceof ContainerUnavailableError &&
-      POOL_FULL.has(error.reason)
+      !(error instanceof ContainerUnavailableError) ||
+      !POOL_FULL.has(error.reason)
     ) {
-      throw new PoolExhaustedError(error.reason)
+      throw error
     }
-    throw error
+    evicted = await evictWarm(env, ids.orgId)
+    if (!evicted) throw new PoolExhaustedError(error.reason)
+    try {
+      await start()
+    } catch (again) {
+      if (
+        again instanceof ContainerUnavailableError &&
+        POOL_FULL.has(again.reason)
+      ) {
+        throw new PoolExhaustedError(again.reason)
+      }
+      throw again
+    }
   }
-  return { cold_start_ms: Date.now() - started }
+  return { cold_start_ms: Date.now() - started, evicted }
 }
 
-type Ids = { orgId: string; assignmentId: string }
+/**
+ * Destroy the least recently edited warm sandbox other than `siteId`'s, and
+ * return its site, or null when none is warm. An entry older than the TTL is
+ * a container that already slept: it holds no slot, so it is pruned, never
+ * chosen. A sandbox mid-build has no revision and is never a candidate.
+ *
+ * Every act re-reads the entry first and skips it when its etag moved: the
+ * site's own next build may have taken the sandbox since the listing. The
+ * window left is that read to the destroy; a build caught in it finds a
+ * fresh container and restores, as after any replacement.
+ */
+async function evictWarm(
+  env: Env,
+  siteId: string,
+  now = Date.now()
+): Promise<string | null> {
+  const warm: { site: string; at: number; etag: string }[] = []
+  const unchanged = async (site: string, etag: string) =>
+    (await env.SITES.head(holderKey(site)))?.etag === etag
+  let cursor: string | undefined
+  do {
+    const page = await env.SITES.list({
+      prefix: "sandboxes/",
+      include: ["customMetadata"],
+      cursor,
+    })
+    for (const entry of page.objects) {
+      if (!entry.customMetadata?.revision) continue
+      const site = entry.key.slice("sandboxes/".length)
+      const at = entry.uploaded.getTime()
+      if (now - at < SLEEP_AFTER * 1000) {
+        if (site !== siteId) warm.push({ site, at, etag: entry.etag })
+      } else if (await unchanged(site, entry.etag)) {
+        await env.SITES.delete(entry.key)
+      }
+    }
+    cursor = page.truncated ? page.cursor : undefined
+  } while (cursor)
+  for (const candidate of warm.sort((a, b) => a.at - b.at)) {
+    if (!(await unchanged(candidate.site, candidate.etag))) continue
+    await endSite(env, candidate.site)
+    return candidate.site
+  }
+  return null
+}
+
+/**
+ * The site's sandbox and its holder entry, whoever holds it: eviction, and
+ * the owner deleting their account while a published site is still warm.
+ * Idempotent.
+ */
+export async function endSite(env: Env, siteId: string): Promise<void> {
+  await sandboxFor(env, siteId).destroy()
+  await env.SITES.delete(holderKey(siteId))
+}
+
+/**
+ * Leave the site's sandbox up after `preview_ready`, naming the revision on
+ * its disk, instead of destroying it. The TTL runs from this call, the last
+ * request the container sees.
+ *
+ * A compare-and-set on the holder entry: a newer edit that claimed the site
+ * since (it superseded this preview) holds the sandbox, and this build
+ * neither marks its disk nor takes the entry back.
+ */
+export async function keepWarm(
+  env: Env,
+  ids: Ids,
+  revisionId: string
+): Promise<void> {
+  try {
+    const held = await env.SITES.head(holderKey(ids.orgId))
+    if (!held || held.customMetadata?.holder !== ids.assignmentId) return
+    const sandbox = sandboxFor(env, ids.orgId)
+    // A container replaced since the build has the image's empty disk: no
+    // marker may claim it holds the revision, so it ends as before.
+    const kept = await sandbox.exec(
+      `test -d ${SITE_ROOT}/.git && mkdir -p /workspace/.reme`
+    )
+    if (kept.exitCode !== 0) return await endSandbox(env, ids)
+    await sandbox.writeFile(REVISION_FILE, revisionId)
+    const set = await env.SITES.put(holderKey(ids.orgId), "", {
+      customMetadata: { holder: ids.assignmentId, revision: revisionId },
+      onlyIf: { etagMatches: held.etag },
+    })
+    // A claim landed between the read and the write. Its build may already
+    // have looked for a marker and started on the disk, so ours would lie.
+    if (!set) {
+      await sandbox.exec(
+        `grep -qx '${revisionId}' ${REVISION_FILE} && rm -f ${REVISION_FILE}`
+      )
+    }
+  } finally {
+    await env.SITES.delete(checkpointKey(ids))
+  }
+}
+
+/**
+ * Whether this assignment still holds its site's sandbox: false once a newer
+ * edit claimed the site, whose work the disk is from then on.
+ */
+export const holds = async (env: Env, ids: Ids) =>
+  (await env.SITES.head(holderKey(ids.orgId)))?.customMetadata?.holder ===
+  ids.assignmentId
+
+/**
+ * `fn`'s result on the site's sandbox, or null when this assignment did not
+ * hold the sandbox throughout: a newer edit that claimed the site may have
+ * changed the disk under `fn`. A claim writes the holder entry before it
+ * touches the disk, so an unchanged etag means an unchanged disk.
+ */
+export async function whileHeld<T>(
+  env: Env,
+  ids: Ids,
+  fn: () => Promise<T>
+): Promise<T | null> {
+  const before = await env.SITES.head(holderKey(ids.orgId))
+  if (before?.customMetadata?.holder !== ids.assignmentId) return null
+  const out = await fn()
+  const after = await env.SITES.head(holderKey(ids.orgId))
+  return after?.etag === before.etag ? out : null
+}
+
+/**
+ * The revision a warm sandbox holds, or null for a fresh or reused disk. The
+ * marker goes either way: from here on the disk is the caller's to change,
+ * and a build that ends without `preview_ready` must not leave it naming a
+ * revision its disk no longer matches.
+ */
+export async function takeWarm(sandbox: {
+  exec: (command: string) => Promise<{ stdout: string }>
+}): Promise<string | null> {
+  const read = await sandbox.exec(
+    `cat ${REVISION_FILE} 2>/dev/null; rm -f ${REVISION_FILE}`
+  )
+  return read.stdout.trim() || null
+}
 
 /** Where a blocked build's site waits for its answer, one object per assignment. */
 export const checkpointKey = (ids: Ids) =>
@@ -91,7 +292,7 @@ export async function checkpoint(
   ids: Ids
 ): Promise<{ taken: boolean; key: string; bytes: number; ms: number }> {
   const started = Date.now()
-  const sandbox = sandboxFor(env, ids.assignmentId)
+  const sandbox = sandboxFor(env, ids.orgId)
   const key = checkpointKey(ids)
   // The container can sleep before this runs, and `exec` then starts a fresh
   // one from the image with no site on it. There is nothing left to save, so
@@ -102,7 +303,7 @@ export async function checkpoint(
     return { taken: false, key, bytes: 0, ms: Date.now() - started }
   }
   const packed = await sandbox.exec(
-    `tar --zstd -cf /tmp/checkpoint.tar.zst --exclude=./node_modules --exclude=./dist --exclude=./.vite -C ${SITE_ROOT} .`,
+    `tar --zstd -cf /tmp/checkpoint.tar.zst --exclude=./node_modules --exclude=./dist --exclude=./.vite --exclude=./.astro-cache -C ${SITE_ROOT} .`,
     { timeout: 120_000 }
   )
   if (packed.exitCode !== 0) {
@@ -127,7 +328,7 @@ export async function rehydrate(
   ids: Ids
 ): Promise<{ restored: boolean; ms: number }> {
   const started = Date.now()
-  const sandbox = sandboxFor(env, ids.assignmentId)
+  const sandbox = sandboxFor(env, ids.orgId)
   const kept = await sandbox.exec(`test -d ${SITE_ROOT}/.git`)
   if (kept.exitCode === 0) return { restored: false, ms: Date.now() - started }
   await restore(sandbox, env.SITES, checkpointKey(ids))
@@ -147,7 +348,7 @@ export async function recover(
   ids: Ids
 ): Promise<{ site: "kept" | "restored" | "gone"; ms: number }> {
   const started = Date.now()
-  const sandbox = sandboxFor(env, ids.assignmentId)
+  const sandbox = sandboxFor(env, ids.orgId)
   const kept = await sandbox.exec(`test -d ${SITE_ROOT}/.git`)
   if (kept.exitCode === 0) return { site: "kept", ms: Date.now() - started }
   const key = checkpointKey(ids)
@@ -160,10 +361,17 @@ export async function recover(
 
 /**
  * §13 rule 3: an assignment's container does not outlive it, and neither
- * does its checkpoint. Both calls are idempotent.
+ * does its checkpoint. The site's container goes only when this assignment
+ * holds it: cancelling a queued build must not stop the one running. Both
+ * calls are idempotent.
  */
 export async function endSandbox(env: Env, ids: Ids): Promise<void> {
-  await sandboxFor(env, ids.assignmentId).destroy()
+  const held = await env.SITES.head(holderKey(ids.orgId))
+  const holder = held?.customMetadata?.holder
+  if (!holder || holder === ids.assignmentId) {
+    await sandboxFor(env, ids.orgId).destroy()
+    await env.SITES.delete(holderKey(ids.orgId))
+  }
   await env.SITES.delete(checkpointKey(ids))
 }
 
@@ -198,7 +406,7 @@ const PROBE_COMMANDS = [
   },
 ] as const
 
-export type ProbeResult = {
+type ProbeResult = {
   sandbox_id: string
   cold_start_ms: number
   checks: {
@@ -240,4 +448,77 @@ export async function probe(env: Env, label: string): Promise<ProbeResult> {
   } finally {
     await sandbox.destroy()
   }
+}
+
+/**
+ * The home page at three widths, from the build the sandbox still holds,
+ * stored under the revision's prefix, and for the design critic its first
+ * viewport-height pieces per width (a full page is too tall for it). Taken after the preview is ready: the
+ * owner's preview does not wait for them, and the review card shows them as
+ * they land. Never throws; a screenshot that was not taken is a 404 the card
+ * handles, and the count says how many there were.
+ */
+export async function takeScreenshots(
+  env: Env,
+  ids: Ids,
+  revisionId: string
+): Promise<{ taken: number; ms: number }> {
+  const started = Date.now()
+  const prefix = `sites/${ids.orgId}/${revisionId}/`
+  let taken = 0
+  try {
+    // A superseded preview's shots would hold up, and could capture, the
+    // newer edit now working on the disk.
+    if (!(await holds(env, ids))) return { taken, ms: Date.now() - started }
+    const sandbox = sandboxFor(env, ids.orgId)
+    // `[a]stro` cannot match the shell running this very line, which `-f` reads.
+    const script = [
+      "pkill -f '[a]stro preview' || true",
+      "(./node_modules/.bin/astro preview --host 127.0.0.1 --port 4321 > /tmp/preview.log 2>&1 &)",
+      "for i in $(seq 1 20); do curl -sf -o /dev/null http://127.0.0.1:4321/ && break; sleep 1; done",
+      `node /tmp/shots.mjs http://127.0.0.1:4321/ /tmp ${CROPS_MAX}`,
+      "pkill -f '[a]stro preview' || true",
+    ].join("; ")
+    await sandbox.writeFile("/tmp/shots.mjs", SHOTS_SCRIPT)
+    await sandbox.exec(
+      `cd ${SITE_ROOT} && rm -f /tmp/home-*.png /tmp/crop-*.png /tmp/crop-*.jpg; ${script}`,
+      { timeout: 120_000 }
+    )
+    const bytes = async (path: string) => {
+      const file = await sandbox
+        .readFile(path, { encoding: "base64" })
+        .catch(() => null)
+      return file
+        ? Uint8Array.from(atob(file.content), (c) => c.charCodeAt(0))
+        : null
+    }
+    for (const w of VIEWPORTS) {
+      const full = await bytes(`/tmp/home-${w}.png`)
+      if (full) {
+        await env.SITES.put(`${prefix}screenshots/home-${w}.png`, full)
+        taken++
+      }
+    }
+    for (const w of CROP_WIDTHS) {
+      const parts = await Promise.all(
+        Array.from({ length: CROPS_MAX }, (_, n) =>
+          bytes(`/tmp/crop-${w}-${n + 1}.jpg`)
+        )
+      )
+      // A page shorter than the cap leaves the later pieces unmade.
+      for (const [n, part] of parts.entries()) {
+        if (!part) break
+        await env.SITES.put(cropKey(ids.orgId, revisionId, w, n + 1), part)
+      }
+    }
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        type: "screenshots.failed",
+        assignment_id: ids.assignmentId,
+        error: String(error),
+      })
+    )
+  }
+  return { taken, ms: Date.now() - started }
 }

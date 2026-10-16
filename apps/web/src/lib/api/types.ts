@@ -1,16 +1,23 @@
 import type {
   ApprovalRequest,
+  BlueprintReviewOutput,
+  BuildStopCause,
   BuildSummary,
+  ChangeKind,
   Conversation,
   ConversationMessage,
   ConversationPatch,
   CreateReminderRequest,
   DecisionRequest,
   DerivedReminder,
+  DomainCheckout,
+  DomainPurchaseStatus,
   FactRecord,
   FactValueKey,
   MessageFeedback,
+  RegistrantDetails,
   Reminder,
+  WorkspaceStatus,
 } from "@workspace/contracts"
 import type { AnswerSpec } from "@workspace/ui/lib/answer"
 
@@ -75,7 +82,8 @@ type AttentionBase = {
 }
 
 export type AttentionItem =
-  | (AttentionBase & { kind: "report" | "alert" })
+  // A failed build's alert carries why it stopped.
+  | (AttentionBase & { kind: "report" | "alert"; stopped?: BuildStopCause })
   // A question carries what answering it needs: the build it blocks, and the
   // inputs, derived on the server so the raw `answer_schema` never travels.
   | (AttentionBase & {
@@ -90,6 +98,8 @@ export type AttentionItem =
       request: ApprovalRequest
       /** The version number of the revision the approval is bound to. */
       version: number
+      /** The pictures the assistant generated for this version (IG4), each with its thumbnail when the api has one. */
+      photos?: { slot_id: string; section: string; alt: string; src?: string }[]
     })
 
 /** The frame's one read of `/workspace`: what needs the owner, and where the site is. */
@@ -105,8 +115,12 @@ export type Workspace = {
   open: boolean
   /** Unfinished builds, newest first, as `/workspace` lists them. */
   builds: BuildSummary[]
+  /** How long each lane usually takes; absent until the api sends it. */
+  expectedSeconds?: WorkspaceStatus["expected_seconds"]
   /** The site's host, once it has one. */
   host: string | null
+  /** Where `host` opens: https, or the local router on local dev. Null with `host`. */
+  url: string | null
   /** The required facts still to ask for. */
   missingFacts: FactValueKey[]
   /** The name the owner gave their assistant, or null before they chose one. */
@@ -210,7 +224,7 @@ export type TransportedFact = Omit<FactRecord, "value"> & { value: Json }
  */
 export type DecisionOutcome =
   | { recorded: true }
-  | { recorded: false; reason: "expired" | "replaced" | "gone" }
+  | { recorded: false; reason: "expired" | "replaced" | "gone" | "checking" }
 
 /**
  * Every read the owner screens make. One object, so implementations are
@@ -254,6 +268,12 @@ export type OwnerDataSource = {
     value: unknown,
     key: string
   ) => Promise<WriteOutcome>
+  /** The owner's decision on a plan: build it, or change it in their words. Idempotent on `key`. */
+  decideBlueprint: (
+    assignmentId: string,
+    decision: BlueprintReviewOutput,
+    key: string
+  ) => Promise<WriteOutcome>
   cancelBuild: (assignmentId: string) => Promise<WriteOutcome>
   /** The owner's own account, ended (ADR-035). A second call finishes the first. */
   deleteAccount: () => Promise<WriteOutcome>
@@ -263,10 +283,22 @@ export type OwnerDataSource = {
     input: CreateReminderRequest,
     key: string
   ) => Promise<WriteOutcome>
+  /** A domain purchase's Checkout, or the api's refusal code. Keyed by `key`. */
+  domainCheckout: (
+    name: string,
+    details: RegistrantDetails,
+    key: string
+  ) => Promise<DomainCheckout | { refused: string | null }>
+  /** The newest purchase of a domain, or null when there is none. */
+  domainStatus: (name: string) => Promise<DomainPurchaseStatus | null>
   /** Mark one reminder done. Doing it twice changes nothing. */
   completeReminder: (id: string) => Promise<WriteOutcome>
   /** What the owner wants changed, in their words; the api routes it. */
-  requestChange: (text: string, key: string) => Promise<WriteOutcome>
+  requestChange: (
+    text: string,
+    key: string,
+    changeKind?: ChangeKind
+  ) => Promise<WriteOutcome>
   conversations: () => Promise<Conversation[]>
   conversation: (id: string) => Promise<Conversation | null>
   /**
@@ -303,4 +335,9 @@ export type OwnerDataSource = {
     length: number
     key: string
   }) => Promise<Response | null>
+  /**
+   * One generated photo of the owner's org, answered as `apps/api`'s
+   * `GET /photos/:id` answers. Null when there is no session.
+   */
+  photo: (assetId: string) => Promise<Response | null>
 }

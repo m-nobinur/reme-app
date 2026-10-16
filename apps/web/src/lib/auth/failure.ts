@@ -13,7 +13,7 @@
  * `invalid_credentials` arrives as "Invalid credentials for '<email>'.", which
  * would put an address into a page that may be shared or screenshotted.
  */
-export type FailureField = "email" | "password" | "code" | "newPassword"
+type FailureField = "email" | "password" | "code" | "newPassword"
 
 export type AuthFailure = {
   /** Stable identifier for the case, for tests and for logs. */

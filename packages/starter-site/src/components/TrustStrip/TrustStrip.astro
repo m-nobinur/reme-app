@@ -1,42 +1,97 @@
 ---
+import { iconFor } from "../../icons"
+import { hasRoute } from "../../routes"
 import { site } from "../../site-config"
+import { servicePages } from "../../structured-data"
 import Icon from "../Icon/Icon.astro"
 
+interface Props {
+  /** Kept so a stored plan that says "phrases" still builds; both draw the icon columns. */
+  variant?: "icons" | "phrases"
+}
+
 // Figures are fact fields; a figure with no value does not render, label or
-// no label. The points restate business.proof and are empty without it. So
-// with no proof and no figures there is no strip at all.
+// no label. The points restate business.proof and are empty without it.
 const figures = [
-  { value: site.statYearsValue, label: site.statYearsLabel },
-  { value: site.statClientsValue, label: site.statClientsLabel },
-  { value: site.statRatingValue, label: site.statRatingLabel },
+  {
+    value: site.statYearsValue,
+    label: site.statYearsLabel,
+    icon: "calendarCheck",
+  },
+  { value: site.statClientsValue, label: site.statClientsLabel, icon: "users" },
+  { value: site.statRatingValue, label: site.statRatingLabel, icon: "star" },
 ].filter((item) => item.value)
-const points = [site.trust1, site.trust2, site.trust3].filter(Boolean)
+// Each point shows the icon its words call for, no two alike where another fits.
+const taken = new Set<string>(figures.map((item) => item.icon))
+const points: { text: string; icon: string }[] = [
+  site.trust1,
+  site.trust2,
+  site.trust3,
+]
+  .filter(Boolean)
+  .map((text) => {
+    const icon = iconFor("", text, "checkCircle", taken)
+    taken.add(icon)
+    return { text, icon }
+  })
+const towns = site.areaTowns.split("\n").filter((line) => line.trim())
+// Plain facts the site already states, claiming nothing: they fill the strip
+// to four columns after the proof, or stand alone when there is no proof.
+const plain = [
+  {
+    text:
+      site.serviceArea ||
+      (towns.length > 1 ? `Covering ${towns.length} local areas` : ""),
+    icon: "mapPin",
+  },
+  {
+    text: site.weekdayHours ? `Open weekdays ${site.weekdayHours}` : "",
+    icon: "clock",
+  },
+  {
+    text: hasRoute("/quote/") ? "Request a quote online" : "",
+    icon: "clipboardText",
+  },
+  {
+    text:
+      servicePages.length > 1
+        ? `${servicePages.length} services to choose from`
+        : "",
+    icon: "listChecks",
+  },
+].filter((item) => item.text)
+const proof = figures.length + points.length
+if (proof > 0 || plain.length >= 2) {
+  points.push(...plain.slice(0, Math.max(0, 4 - proof)))
+}
+const count = figures.length + points.length
 ---
 
 {
-  (figures.length > 0 || points.length > 0) && (
+  count > 0 && (
     <section class="trust-strip">
-      <div class="wrap trust-inner">
-        {figures.length > 0 && (
-          <dl class="trust-figures">
-            {figures.map((item) => (
-              <div>
-                {item.label && <dt>{item.label}</dt>}
-                <dd>{item.value}</dd>
-              </div>
-            ))}
-          </dl>
-        )}
-        {points.length > 0 && (
-          <ul class="trust-points">
-            {points.map((point) => (
-              <li>
-                <Icon name="checkCircle" />
-                <span>{point}</span>
-              </li>
-            ))}
-          </ul>
-        )}
+      <div class="wrap">
+        <ul class="trust-list" style={`--trust-cols: ${count <= 4 ? count : 3}`}>
+          {figures.map((item) => (
+            <li>
+              <span class="trust-icon">
+                <Icon name={item.icon} />
+              </span>
+              <span class="trust-text">
+                <span class="trust-value">{item.value}</span>
+                {item.label && <span class="trust-label">{item.label}</span>}
+              </span>
+            </li>
+          ))}
+          {points.map((point) => (
+            <li>
+              <span class="trust-icon">
+                <Icon name={point.icon} />
+              </span>
+              <span class="trust-text">{point.text}</span>
+            </li>
+          ))}
+        </ul>
       </div>
     </section>
   )

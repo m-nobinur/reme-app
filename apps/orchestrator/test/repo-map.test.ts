@@ -67,7 +67,7 @@ describe("the repository map", () => {
     expect(cut.length).toBeLessThanOrEqual(REPO_MAP_MAX_CHARS)
     const notice = cut.split("\n").at(-1) ?? ""
     expect(notice).toMatch(
-      /^\[Map cut at 8000 characters: \d+ files not listed/
+      /^\[Map cut at 14000 characters: \d+ files not listed/
     )
     const listed = cut.split("\n").length - 1
     expect(notice).toContain(
@@ -110,6 +110,6 @@ describe("the manifest digest", () => {
 
   it("throws past the cap rather than hiding a forbidden use", () => {
     const many = Array.from({ length: 60 }, (_, i) => manifest(`Component${i}`))
-    expect(() => manifestDigest(many)).toThrow(/3000 characters/)
+    expect(() => manifestDigest(many)).toThrow(/6000 characters/)
   })
 })

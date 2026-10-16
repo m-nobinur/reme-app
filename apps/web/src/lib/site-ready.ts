@@ -11,6 +11,8 @@ export type ReadyReview = {
   approvalId: string
   revisionId: string
   version: number
+  /** Generated pictures, for the card to badge. */
+  photos?: { slot_id: string; section: string; alt: string }[]
 }
 
 /** The newest review of a built version, or null when none waits. */
@@ -27,6 +29,7 @@ export function readyForReview(
       approvalId: item.request.approval_id,
       revisionId: item.request.target.revision_id,
       version: item.version,
+      ...(item.photos ? { photos: item.photos } : {}),
       at: item.raisedAt,
     }
   }
@@ -41,7 +44,7 @@ export function readyForReview(
  * nothing, when the review went some other way (the panel, an expiry, a
  * replacement).
  */
-export type ReadyCard =
+type ReadyCard =
   | { kind: "review"; review: ReadyReview }
   | { kind: "approved"; version: number }
   | null

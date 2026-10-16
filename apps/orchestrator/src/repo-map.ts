@@ -12,8 +12,8 @@
 
 import type { ComponentManifest } from "@workspace/contracts"
 
-/** 8,000 characters is about 2,000 tokens at the ratio measured on the starter, in the cached segment. The starter with its marketing components needs about 6,400; `seed.test.ts` fails if the seed's own map is ever cut. */
-export const REPO_MAP_MAX_CHARS = 8_000
+/** 14,000 characters is about 3,500 tokens at the ratio measured on the starter, in the cached segment. The starter with its fonts, palettes, directions and section heads needed about 10,200 (2026-10-14); the 99 ICONS keys the Developer may name, the favicon set and the motifs bring it to 13,487 (2026-10-15). `seed.test.ts` fails if the seed's own map is ever cut. */
+export const REPO_MAP_MAX_CHARS = 14_000
 
 /** Room kept for the notice that says what a cut map left out. */
 const NOTICE_CHARS = 600
@@ -39,7 +39,11 @@ function describeFile(path: string, text: string): string {
   if (exported.length > 0) bits.push(`exports ${exported.join(", ")}`)
 
   const props = text.match(/interface Props\s*\{([^}]*)\}/)?.[1]
-  if (props) bits.push(`props {${props.trim().replace(/\s+/g, " ")}}`)
+  // The doc comments on props live in the file and the manifests; the map keeps names and types.
+  if (props) {
+    const bare = props.replace(/\/\*[\s\S]*?\*\//g, "")
+    bits.push(`props {${bare.trim().replace(/\s+/g, " ")}}`)
+  }
 
   const imported = [
     ...text.matchAll(
@@ -112,8 +116,8 @@ export function repoMap(files: Record<string, string>): string {
   return [...kept, notice].join("\n")
 }
 
-/** 3,000 characters is about 880 tokens at the measured 3.4 characters a token. */
-const DIGEST_MAX_CHARS = 3_000
+/** 6,000 characters is about 1,760 tokens at the measured 3.4 characters a token. */
+const DIGEST_MAX_CHARS = 6_000
 
 /**
  * The starter's components as the Developer is shown them (architect ruling

@@ -10,27 +10,49 @@
    The brand ramp defaults to the shared accent. When the owner has chosen a
    colour, src/brand.ts derives --brand, --brand-foreground and --brand-text
    from it at build time, checks both pairs against WCAG AA and writes them into
-   the page head, which overrides the three below and leaves the rest to follow. */
+   the page head, which overrides the three below and leaves the rest to follow.
+   It writes the other roles too, read below as --role-*. */
 
 :root {
-  --font-sans:
-    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  /* The chosen pair, when there is one: Astro writes --face-body and
+     --face-display from src/fonts.ts, each with a metric-matched fallback so
+     the swap does not move the layout. With no pair the page keeps these system
+     stacks and downloads no font. */
+  --font-sans: var(
+    --face-body,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    "Helvetica Neue",
+    sans-serif
+  );
   /* A system serif for headings. It ships with every desktop and phone, costs
      no download, and is what keeps the page from reading as another sans-serif
-     template. */
-  --font-display: ui-serif, Georgia, "Times New Roman", serif;
+     site. */
+  --font-display: var(
+    --face-display,
+    ui-serif,
+    Georgia,
+    "Times New Roman",
+    serif
+  );
 
-  /* Type. One scale for the body; the display steps are tokens each
-     template sets for itself below. Steps sit at least 1.25 apart. */
+  /* Type, measured from the reference (spotless-templates.lovable.app) at 1440
+     and 390 px: h1 72 / 48 px at 1.07, h2 42 / 32 px at 1.2, h3 23 px, body
+     16 px at 1.7, card and step copy 14 px, eyebrows 11 px. Every step is
+     fluid between those two widths and fixed outside them. Display type is set
+     at one weight and normal tracking, body type at 400 and 500 only. */
+  --text-xs: 0.6875rem;
   --text-sm: 0.875rem;
-  --text-base: 1.0625rem;
-  --text-lg: clamp(1.125rem, 1.05rem + 0.35vw, 1.3125rem);
-  --text-xl: clamp(1.3rem, 1.15rem + 0.7vw, 1.6rem);
-  --text-2xl: clamp(1.75rem, 1.35rem + 1.7vw, 2.625rem);
-  --text-page: clamp(2.25rem, 1.6rem + 2.8vw, 3.75rem);
-  --text-hero: clamp(2.5rem, 1.6rem + 3.8vw, 4.5rem);
-  --display-weight: 600;
-  --display-tracking: -0.02em;
+  --text-base: 1rem;
+  --text-lg: 1.0625rem;
+  --text-xl: 1.4375rem;
+  --text-2xl: clamp(2rem, 1.768rem + 0.952vw, 2.625rem);
+  --text-page: clamp(2.5rem, 2.03rem + 1.9vw, 3.5rem);
+  --text-hero: clamp(3rem, 2.443rem + 2.286vw, 4.5rem);
+  --display-weight: 500;
+  --display-tracking: 0em;
   --display-case: none;
 
   --space-3xs: 0.25rem;
@@ -42,34 +64,78 @@
   --space-xl: 3rem;
   --space-2xl: 4rem;
 
-  /* Rhythm. Every section is a band with the same padding, every band holds
-     one container, and every grid uses one gap, so nothing on a page sits at
-     a spacing of its own. */
-  --gutter: clamp(1rem, 0.4rem + 2.6vw, 2.5rem);
-  --container: 72rem;
+  /* Rhythm, measured the same way: a 1,280 px container with 80 px gutters at
+     1440 and 20 px at 390, sections 82 px apart on a wide screen and 56 px on
+     a phone. Every section is a band with the same padding, every band holds
+     one container, and every grid uses one gap. */
+  --gutter: clamp(1.25rem, 5.714vw - 0.143rem, 5rem);
+  --container: 80rem;
   --container-narrow: 46rem;
-  --measure: 38rem;
-  --section-pad: clamp(3.5rem, 2.25rem + 5vw, 6.5rem);
-  --section-head-gap: clamp(1.75rem, 1.25rem + 1.5vw, 2.75rem);
-  --grid-gap: clamp(1rem, 0.7rem + 1.2vw, 1.75rem);
+  /* A lede line, 365 to 460 px on the reference. */
+  --measure: 28rem;
+  --section-pad: clamp(3.5rem, 2.896rem + 2.476vw, 5.125rem);
+  --section-head-gap: clamp(1.75rem, 1.5rem + 0.8vw, 2.25rem);
+  --grid-gap: clamp(1rem, 0.75rem + 0.8vw, 1.5rem);
   --header-h: 4.5rem;
+
+  /* Motion, after the reference: colour and arrow changes at 160 ms, a photo
+     zoom of 1.035 over 400 ms, and the entrance reveal at 560 ms, all on one
+     gentle ease-out. Off under prefers-reduced-motion (site.css). */
+  --motion-quick: 160ms;
+  --motion-zoom: 400ms;
+  --motion-reveal: 560ms;
+  --motion-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
 
   --radius-sm: calc(var(--radius) - 0.15rem);
   --radius-md: var(--radius);
   --radius-lg: calc(var(--radius) * 2.5);
-  --shadow-card:
-    0 1px 2px color-mix(in oklch, var(--foreground) 6%, transparent),
-    0 8px 24px -12px color-mix(in oklch, var(--foreground) 18%, transparent);
 
   --brand: var(--primary);
   --brand-foreground: var(--primary-foreground);
   --brand-text: var(--primary);
-  --brand-soft: color-mix(in oklch, var(--brand) 7%, var(--background));
-  --brand-line: color-mix(in oklch, var(--brand) 22%, var(--border));
+  /* The palette's roles. brandTheme writes --role-tint, --role-line and
+     --role-accent (and sets --background to paper, --foreground to ink) from
+     the owner's colour; a site with none keeps the mixes. */
+  --brand-soft: var(
+    --role-tint,
+    color-mix(in oklch, var(--brand) 7%, var(--background))
+  );
+  --brand-line: var(
+    --role-line,
+    color-mix(in oklch, var(--brand) 22%, var(--border))
+  );
+  --brand-accent: var(--role-accent, var(--brand));
 
-  --radius-card: var(--radius-lg);
-  --radius-button: var(--radius-md);
-  --radius-media: var(--radius-lg);
+  /* Design rule 5: neutrals lean toward the hue. tokens.css ships greys with
+     no chroma, shared with an app whose own neutral is grey; a tenant site
+     leads each of them to the brand, so no surface, border or text is a pure
+     grey or white. A palette's paper, ink, line and tint (brandTheme) take
+     over from these. */
+  --background: color-mix(in oklch, var(--primary) 2.5%, oklch(0.995 0 0));
+  --foreground: color-mix(in oklch, var(--primary) 14%, oklch(0.145 0 0));
+  --card: var(--background);
+  --card-foreground: var(--foreground);
+  --popover: var(--background);
+  --popover-foreground: var(--foreground);
+  --secondary: var(--brand-soft);
+  --secondary-foreground: var(--foreground);
+  --muted: var(--brand-soft);
+  --muted-foreground: color-mix(in oklch, var(--primary) 12%, oklch(0.53 0 0));
+  --accent: var(--brand-soft);
+  --accent-foreground: var(--foreground);
+  --border: var(
+    --role-line,
+    color-mix(in oklch, var(--primary) 18%, oklch(0.922 0 0))
+  );
+  --input: var(--border);
+  --ring: color-mix(in oklch, var(--primary) 40%, oklch(0.63 0 0));
+
+  /* The reference's finish: 8 px cards and photos, 6 px buttons in the
+     header and the closing band, pills for the hero's two actions. */
+  --radius-card: 0.5rem;
+  --radius-button: 0.375rem;
+  --radius-media: 0.5rem;
+  --radius-hero-action: 999px;
 
   /* The page's own pair, kept by name so a surface can turn it over: a dark
      band sets --background to --ink and --foreground to --paper. */
@@ -77,29 +143,26 @@
   --paper: var(--background);
 }
 
-/* The templates' own type and shape. Plain attribute selectors, so the
-   owner's font, written as html:root in the page head, still wins. */
-[data-template="modern"] {
-  --font-display: var(--font-sans);
-  --text-hero: clamp(2.75rem, 1.4rem + 5.2vw, 5.75rem);
-  --text-page: clamp(2.5rem, 1.6rem + 3.6vw, 4.25rem);
-  --display-weight: 500;
-  --display-tracking: -0.035em;
-  --radius-card: 1.25rem;
-  --radius-button: 999px;
-  --radius-media: 1.25rem;
-  --header-h: 5rem;
+/* A pair ships the weights it is drawn at, two to four files, so a 600 label
+   in a body set in 400 and 500 takes the 500 face rather than a smeared
+   fake bold. A system font has real weights and is unaffected. */
+html {
+  font-synthesis-weight: none;
 }
 
-[data-template="bold"] {
-  --font-display: var(--font-sans);
-  --text-2xl: clamp(2rem, 1.4rem + 2.4vw, 3.25rem);
-  --text-page: clamp(2.75rem, 1.5rem + 5vw, 5.5rem);
-  --text-hero: clamp(3rem, 0.9rem + 8.6vw, 8.5rem);
-  --display-weight: 800;
-  --display-tracking: -0.035em;
-  --display-case: uppercase;
-  --radius-card: 0;
-  --radius-button: 0;
-  --radius-media: 0;
+/* The direction's radius language (src/directions.ts). soft is the default
+   above; square is the 2 to 4 px of an editorial site, round the larger cards
+   and pill buttons of a friendly one. Pills on captions and tags keep their
+   own shape in every direction. */
+[data-radius="square"] {
+  --radius-card: 0.25rem;
+  --radius-button: 0.125rem;
+  --radius-media: 0.125rem;
+  --radius-hero-action: var(--radius-button);
+}
+
+[data-radius="round"] {
+  --radius-card: 1rem;
+  --radius-button: 999px;
+  --radius-media: 1rem;
 }

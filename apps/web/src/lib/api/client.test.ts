@@ -143,7 +143,7 @@ const alert = {
   reason: "build_failed",
 }
 const workspace = {
-  site: { host: null, live: null },
+  site: { host: null, url: null, live: null },
   builds: [],
   attention: [approval, question, alert, report],
   missing_facts: [],
@@ -313,6 +313,7 @@ it("reads the live version, and a build only while it is working", async () => {
     ...workspace,
     site: {
       host: "fictional.invalid",
+      url: "https://fictional.invalid",
       live: { revision_id: REVISION, version: 3, assignment_id: ASSIGNMENT },
     },
     builds: [build("awaiting_review")],
@@ -450,6 +451,7 @@ for (const [status, code, reason] of [
   [409, "approval.not_requested", "gone"],
   [404, "approval.not_found", "gone"],
   [404, "assignment.not_found", "gone"],
+  [409, "revision.a11y_unchecked", "checking"],
 ] as const) {
   it(`says why a decision was refused: ${code}`, async () => {
     answers[`POST /approvals/${APPROVAL}/decision`] = refusal(status, code)
@@ -515,8 +517,16 @@ it("polls with the last tag and keeps what it has on a 304", async () => {
 it("reads a changed workspace with its tag, builds, facts and reminders", async () => {
   answers["GET /workspace"] = Response.json(
     {
-      site: { host: "fictional.example.invalid", live: null },
+      site: {
+        host: "fictional.reme.localhost",
+        url: "http://fictional.reme.localhost:3004",
+        live: null,
+      },
       builds: [building],
+      expected_seconds: {
+        full: { p50: 180, p95: 330 },
+        quick: { p50: 15, p95: 45 },
+      },
       attention: [],
       missing_facts: ["business.phone"],
       assistant_name: "Ava",
@@ -532,13 +542,49 @@ it("reads a changed workspace with its tag, builds, facts and reminders", async 
     etag: '"b2"',
     building: true,
     builds: [building],
-    host: "fictional.example.invalid",
+    expectedSeconds: { quick: { p50: 15, p95: 45 } },
+    host: "fictional.reme.localhost",
+    url: "http://fictional.reme.localhost:3004",
     missingFacts: ["business.phone"],
     assistantName: "Ava",
     derivedReminders: [{ rule: "facts_missing", keys: ["business.phone"] }],
   })
   // Nothing to name, so the directory is not read.
   expect(calls.map((call) => call.path)).toEqual(["/workspace"])
+})
+
+it("shows a review's generated photo from its thumbnail, and one without as before", async () => {
+  const id = "0b9c4a1e-2f3d-4c5b-8a6e-7d8f9a0b1c2d"
+  answers["GET /workspace"] = {
+    ...workspace,
+    attention: [
+      {
+        ...approval,
+        photos: [
+          {
+            slot_id: "hero",
+            section: "hero",
+            alt: "A van",
+            thumbnail: `/api/photos/${id}`,
+          },
+          { slot_id: "team", section: "about", alt: "The team" },
+        ],
+      },
+    ],
+  }
+  const read = await apiSource.pollWorkspace(null)
+  expect(read !== "unchanged" && read.attention[0]).toMatchObject({
+    photos: [
+      { slot_id: "hero", alt: "A van", src: `/api/photos/${id}` },
+      { slot_id: "team", alt: "The team" },
+    ],
+  })
+  const [, team] =
+    (read !== "unchanged" &&
+      read.attention[0]?.kind === "approval" &&
+      read.attention[0].photos) ||
+    []
+  expect(team).not.toHaveProperty("src")
 })
 
 it("polls in one request, naming the asker by id for the frame to resolve", async () => {
@@ -646,6 +692,22 @@ it("says why an answer was refused, including one already answered differently",
   ).rejects.toThrow()
 })
 
+it("sends the owner's decision on a plan with their own key, and words a stale one", async () => {
+  answers[`POST /builds/${ASSIGNMENT}/blueprint`] = {
+    assignment_id: ASSIGNMENT,
+    state: "implementing",
+  }
+  const change = { decision: "change" as const, note: "Add a gallery page" }
+  expect(await apiSource.decideBlueprint(ASSIGNMENT, change, "k1")).toEqual({
+    done: true,
+  })
+  expect(JSON.parse(String(calls[0]?.init?.body))).toEqual(change)
+  expect(headerOf(calls[0], "idempotency-key")).toBe("k1")
+  await expect(
+    apiSource.decideBlueprint("../changes", change, "k1")
+  ).rejects.toThrow()
+})
+
 it("stops a build once, however often Stop is pressed", async () => {
   answers[`POST /builds/${ASSIGNMENT}/cancel`] = {
     assignment_id: ASSIGNMENT,
@@ -698,6 +760,15 @@ it("sends a change in the owner's words, and says why one is refused", async () 
   })
   expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
     text: "Bigger logo",
+  })
+})
+
+it("sends the change kind a photo action names", async () => {
+  answers["POST /changes"] = refusal(409, "change.question_open")
+  await apiSource.requestChange("Try another photo", "k-4", "photo")
+  expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
+    text: "Try another photo",
+    change_kind: "photo",
   })
 })
 
@@ -805,6 +876,63 @@ it("marks a reminder done once, however often Done is pressed", async () => {
     done: false,
     gone: true,
   })
+})
+
+const DETAILS = {
+  registrant: {
+    name: "Jane Smith",
+    business_name: "Sparkle Clean",
+    email: "jane@sparkle.example",
+    phone: "+447700900123",
+    address: {
+      street: "12 Mill Lane",
+      city: "Bristol",
+      postal_code: "BS1 4AB",
+      country_code: "GB",
+    },
+  },
+  registrant_type: "STRA",
+} as const
+
+it("opens a domain's Checkout with the details shown, and hands back a refusal's code", async () => {
+  const checkout = {
+    name: "sparkleclean.co.uk",
+    price_gbp: 8,
+    client_secret: "cs_x",
+    expires_at: AT,
+  }
+  answers["POST /domains/sparkleclean.co.uk/checkout"] = checkout
+  expect(
+    await apiSource.domainCheckout("sparkleclean.co.uk", DETAILS, "k-9")
+  ).toEqual(checkout)
+  expect(JSON.parse(String(calls[0]?.init?.body))).toEqual(DETAILS)
+  expect(headerOf(calls[0], "idempotency-key")).toBe("k-9")
+
+  answers["POST /domains/sparkleclean.co.uk/checkout"] = refusal(
+    409,
+    "domain.unavailable"
+  )
+  expect(
+    await apiSource.domainCheckout("sparkleclean.co.uk", DETAILS, "k-10")
+  ).toEqual({ refused: "domain.unavailable" })
+
+  // A name that is not a hostname never becomes a path.
+  await expect(
+    apiSource.domainCheckout("../account", DETAILS, "k-11")
+  ).rejects.toThrow()
+  expect(calls).toHaveLength(2)
+})
+
+it("reads a domain purchase's status, and none when the api has no such purchase", async () => {
+  const status = {
+    name: "sparkleclean.co.uk",
+    state: "verifying",
+    test: true,
+    outcome: "test_registered",
+  }
+  answers["GET /domains/sparkleclean.co.uk"] = status
+  expect(await apiSource.domainStatus("sparkleclean.co.uk")).toEqual(status)
+  expect(await apiSource.domainStatus("other.co.uk")).toBeNull()
 })
 
 it("reads the open reminders in the order /workspace lists them", async () => {

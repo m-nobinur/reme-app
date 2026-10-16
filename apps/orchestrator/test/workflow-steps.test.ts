@@ -32,7 +32,10 @@ vi.mock("../src/agents/developer.ts", () => ({ Developer: {} }))
 // publish.test.ts; here only the assignment paths run.
 vi.mock("../src/publish.ts", () => ({
   PROBE_MINUTES: [0, 2, 5, 10],
+  accessible: async () => true,
   activate: async () => ({}),
+  // The superseded preview's revision: the one the served site now names.
+  latestRevision: async () => ({ id: "rev-live", status: "preview" }),
   probeHost: async () => ({ ok: true }),
   readTarget: async () => ({}),
   redriveQueued: async () => [],
@@ -53,7 +56,14 @@ const { AgentInstanceExistsError } = vi.hoisted(() => {
   class InstanceExists extends Error {}
   return { AgentInstanceExistsError: InstanceExists }
 })
-const dispatched: { message: unknown }[] = []
+const dispatched: { message: unknown; photosSettled?: boolean }[] = []
+// Whether the photo step had settled when the Developer was dispatched,
+// whether it throws, and every event type the Workflow appended.
+const photoStep = vi.hoisted(() => ({
+  settled: false,
+  fail: false,
+  appended: [] as string[],
+}))
 // The real module underneath, so the gate reasons the Workflow matches on are
 // the ones the gate actually emits. Only the agent entry point is stood in for.
 vi.mock("@workspace/facade", async (importOriginal) => ({
@@ -61,13 +71,14 @@ vi.mock("@workspace/facade", async (importOriginal) => ({
   AgentInstanceExistsError,
   init: () => ({
     dispatch: async (request: { message: unknown }) => {
-      dispatched.push(request)
+      dispatched.push({ ...request, photosSettled: photoStep.settled })
       return { submissionId: "s" }
     },
   }),
 }))
 
 const ROW = {
+  kind: "site.build",
   id: "10000001-0000-4000-8000-000000000001",
   orgId: "10000001-0000-4000-8000-000000000000",
   goal: "probe",
@@ -77,7 +88,10 @@ const ROW = {
 }
 const orgList: string[] = []
 vi.mock("@workspace/db", () => ({
-  appendEvent: async () => "e",
+  appendEvent: async (_db: unknown, event: { type: string }) => {
+    photoStep.appended.push(event.type)
+    return "e"
+  },
   assignments: {},
   facts: {},
   eq: () => ({}),
@@ -114,6 +128,9 @@ vi.mock("../src/brief.ts", () => ({
     withhold: [],
     model: "A",
     origin: script.origin,
+    kind: "site.build",
+    skip_review: script.skipReview,
+    ...script.lane,
   }),
   takeSnapshot: async () => ({}),
   issueSpec: async () => ({}),
@@ -124,10 +141,33 @@ const script = {
   claims: [] as { claimed: boolean; superseded: string | null }[],
   provisions: [] as boolean[],
   verdicts: [] as string[],
+  a11y: [] as string[],
   checkpoints: [] as boolean[],
   origin: "console" as "owner" | "console",
   reviews: 0,
   reviewRefusal: null as string | null,
+  /** The revision a warm sandbox names, if any. */
+  held: null as string | null,
+  /** The lane the created event recorded; none is an instance from before lanes. */
+  lane: {} as { lane?: string; change_kind?: string | null },
+  /** Whether the one-call quick edit gets to a report. */
+  quickDone: true as boolean,
+  /** What each look at the plan's decision finds; none left is "build". */
+  decisions: [] as ("build" | "change" | null)[],
+  /** The owner chose "Skip all": the plan is built without the card's wait. */
+  skipReview: false as boolean,
+  planned: [] as number[],
+  /** The axe run each `validateRevision` call was handed. */
+  gated: [] as unknown[],
+  /** The fixes each look of the design critic finds; none left is none. */
+  critic: [] as {
+    page: string
+    section: string
+    problem: string
+    change: string
+  }[][],
+  /** How long ago each stall check finds the build's newest event; none left is never. */
+  quiet: [] as number[],
   looks: [] as {
     request_id: string
     fact_id: string | null
@@ -151,8 +191,19 @@ vi.mock("../src/sandbox.ts", () => ({
     }
     return { cold_start_ms: 1 }
   },
-  sandboxFor: () => ({ destroy: async () => undefined }),
+  sandboxFor: () => ({
+    destroy: async () => undefined,
+    exec: async (command: string) => {
+      if (command.startsWith("rm -rf")) prepared.push("wipe")
+      return { exitCode: 0, stdout: "", stderr: "" }
+    },
+  }),
   endSandbox: async () => undefined,
+  tailSandbox: (sandbox: unknown) => sandbox,
+  keepWarm: async () => undefined,
+  takeScreenshots: async () => ({ taken: 3, ms: 1 }),
+  takeWarm: async () => script.held,
+  whileHeld: async () => ({ exit_code: 0, key: null, ms: 1 }),
   checkpoint: async () => ({
     taken: script.checkpoints.shift() ?? true,
     key: "k",
@@ -162,6 +213,8 @@ vi.mock("../src/sandbox.ts", () => ({
   rehydrate: async () => ({ restored: true, ms: 1 }),
 }))
 const advanced: [string, string | undefined][] = []
+/** How the developer step readied the site's disk. */
+const prepared: string[] = []
 const resumedOn: Record<string, unknown>[] = []
 vi.mock("../src/state.ts", () => ({
   TransitionError: class TransitionError extends Error {
@@ -183,12 +236,83 @@ vi.mock("../src/state.ts", () => ({
     return {}
   },
   parkForBudget: async () => ({}),
+  lastEventAt: async () => {
+    const ago = script.quiet.shift()
+    return ago === undefined ? 0 : Date.now() - ago
+  },
   claim: async () =>
     script.claims.shift() ?? { claimed: true, superseded: null },
 }))
 vi.mock("../src/revise.ts", () => ({
-  publishedSource: async () => null,
-  restoreAndMap: async () => "",
+  SITE_ROOT: "/workspace/site",
+  latestBlueprint: async () => null,
+  publishedSource: async () =>
+    ROW.kind === "site.revise"
+      ? { revision_id: "rev-live", assignment_id: "x", source_key: "k" }
+      : null,
+  restoreAndMap: async () => {
+    prepared.push("restore")
+    return ""
+  },
+  mapSite: async () => {
+    prepared.push("warm")
+    return ""
+  },
+}))
+vi.mock("../src/quick.ts", () => ({
+  quickEdit: async () =>
+    script.quickDone
+      ? {
+          done: true,
+          base: "abc123",
+          report_id: "r",
+          revision_id: "v",
+          model_ms: 1,
+          attempts: 1,
+        }
+      : { done: false, reason: "apply: no match", model_ms: 1 },
+}))
+// The planner's bodies are driven in planner.test.ts; here only its rounds.
+vi.mock("../src/planner.ts", () => ({
+  PLAN_ROUNDS: 6,
+  planRound: async ({ round }: { round: number }) => {
+    script.planned.push(round)
+    return { round, source: "model", attempts: 1 }
+  },
+  readDecision: async () =>
+    script.decisions.length > 0 ? script.decisions.shift() : "build",
+}))
+// BA4's photos: one generated file, drawn over a few milliseconds, so the
+// Developer is seen to start before they settle.
+vi.mock("../src/photo-step.ts", () => ({
+  makePhotos: async () => {
+    photoStep.settled = false
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    photoStep.settled = true
+    if (photoStep.fail) throw new Error("every draw failed")
+    return photoFiles
+  },
+}))
+const photoFiles = vi.hoisted(() => ({
+  generated: 1,
+  fell_back: 0,
+  files: [
+    {
+      slot_id: "hero",
+      status: "generated",
+      key: "generated/o/a.png",
+      content_type: "image/png",
+    },
+  ],
+}))
+// BA5: the critic's rounds are driven in critic.test.ts; here each look finds
+// what the path scripts, none by default.
+vi.mock("../src/critic.ts", () => ({
+  critiqueRound: async ({ round }: { round: number }) => ({
+    round,
+    fixes: script.critic.shift() ?? [],
+  }),
+  repairMessage: (fixes: unknown[]) => JSON.stringify({ fixes }),
 }))
 const sweepFailures = new Set<string>()
 vi.mock("../src/retention.ts", () => ({
@@ -198,9 +322,35 @@ vi.mock("../src/retention.ts", () => ({
     return { parked: 1, redriven: 0, deleted: 2 }
   },
 }))
+// The daily domain look finds one message for org-1; its post is a step of its own.
+vi.mock("../src/domain-flow.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/domain-flow.ts")>()),
+  sweepDomains: async (
+    _env: unknown,
+    _kit: unknown,
+    orgId: string,
+    hour: string
+  ) =>
+    orgId === "org-1" ? [{ key: `dom-1:sweep:${hour}`, text: "moved" }] : [],
+  postStatus: async () => undefined,
+}))
 vi.mock("../src/validate.ts", () => ({
   assignmentFacts: async () => [],
-  validateRevision: async () => {
+  // What a quick edit's accessibility gate finds after its preview; none left is a pass.
+  checkA11y: async () => {
+    const outcome = script.a11y.shift() ?? "preview_ready"
+    return outcome === "preview_ready"
+      ? { outcome, report_id: "r" }
+      : { outcome, report_id: "r", failed: [] }
+  },
+  // Everywhere else the accessibility gate is one `validateRevision` decides.
+  validateRevision: async (
+    _kit: unknown,
+    _sites: unknown,
+    _ids: unknown,
+    input: { axe: unknown }
+  ) => {
+    script.gated.push(input.axe)
     const outcome = script.verdicts.shift() ?? "preview_ready"
     return outcome === "repairing"
       ? { outcome, report_id: "r", failed: [] }
@@ -241,7 +391,7 @@ function drive(wakes: Wake[], answers: Answer[] = []) {
       opts: { type: string; timeout?: unknown }
     ) => {
       names.push(name)
-      if (opts.type === "answer") {
+      if (opts.type === "answer" || opts.type === "blueprint") {
         waits.push(opts.timeout)
         const answer = answers.shift() ?? {}
         if (answer.after) vi.setSystemTime(Date.now() + answer.after)
@@ -258,7 +408,10 @@ function drive(wakes: Wake[], answers: Answer[] = []) {
   } as unknown as Env
   const run = () =>
     new AssignmentWorkflow({} as never, env).run(
-      { payload: { org_id: ROW.orgId, assignment_id: ROW.id } } as never,
+      {
+        payload: { org_id: ROW.orgId, assignment_id: ROW.id },
+        timestamp: new Date(),
+      } as never,
       step as never
     )
   return { names, waits, run }
@@ -277,6 +430,12 @@ const budget: Wake = { payload: { kind: "budget", cap_usd: 1, spent_usd: 1 } }
 const interrupted: Wake = {
   payload: { kind: "interrupted", reason: "stream" },
 }
+const unreported: Wake = {
+  payload: { kind: "unreported", reason: "developer.no_report" },
+}
+const cannotStart: Wake = {
+  payload: { kind: "start_failed", reason: "FacadeError" },
+}
 
 const expected: Record<string, string[]> = steps.AssignmentWorkflow
 
@@ -284,10 +443,26 @@ type Setup = {
   claims?: typeof script.claims
   provisions?: boolean[]
   verdicts?: string[]
+  a11y?: string[]
   checkpoints?: boolean[]
   answers?: Answer[]
   looks?: typeof script.looks
   origin?: "owner"
+  lane?: typeof script.lane
+  quickDone?: boolean
+  decisions?: typeof script.decisions
+  skipReview?: boolean
+  critic?: typeof script.critic
+  quiet?: number[]
+  photosFail?: boolean
+}
+const full = { lane: "full" }
+const copy = { lane: "quick", change_kind: "copy" }
+const FIX = {
+  page: "home",
+  section: "Hero",
+  problem: "The headline runs to nine words.",
+  change: "Cut it to five.",
 }
 const paths: [string, Wake[], Setup, { outcome: string }][] = [
   ["build", [completion], {}, { outcome: "preview_ready" }],
@@ -325,6 +500,48 @@ const paths: [string, Wake[], Setup, { outcome: string }][] = [
     { outcome: "failed" },
   ],
   ["budget park", [budget], {}, { outcome: "blocked_on_approval" }],
+  // QE4: one model call and one build, reported without a Developer.
+  [
+    "quick edit",
+    [],
+    { origin: "owner", lane: copy },
+    { outcome: "preview_ready" },
+  ],
+  // The edit did not apply twice: the Developer takes it at the section role.
+  [
+    "quick edit handed on",
+    [completion],
+    { origin: "owner", lane: copy, quickDone: false },
+    { outcome: "preview_ready" },
+  ],
+  // The edit built but failed a gate: its files go back, then the same.
+  [
+    "quick edit failed a gate",
+    [completion],
+    { origin: "owner", lane: copy, verdicts: ["repairing"] },
+    { outcome: "preview_ready" },
+  ],
+  // A quick edit runs axe once its preview exists; a failure there goes to
+  // the section lane, whose second preview waits on axe.
+  [
+    "accessibility failed after a quick edit",
+    [completion],
+    { origin: "owner", lane: copy, a11y: ["repairing"] },
+    { outcome: "preview_ready" },
+  ],
+  // The site went to a newer edit before axe could run: this build stops.
+  [
+    "superseded before accessibility",
+    [],
+    { origin: "owner", lane: copy, a11y: ["stopped"] },
+    { outcome: "stopped" },
+  ],
+  [
+    "section change",
+    [completion],
+    { origin: "owner", lane: { lane: "quick", change_kind: "section" } },
+    { outcome: "preview_ready" },
+  ],
   [
     "interrupted then resumed",
     [interrupted, completion],
@@ -337,7 +554,19 @@ const paths: [string, Wake[], Setup, { outcome: string }][] = [
     {},
     { outcome: "failed" },
   ],
-  ["developer timed out", ["timeout"], {}, { outcome: "failed" }],
+  // A whole lead turn with nothing in the log: the build is failed as stalled.
+  ["developer went quiet", ["timeout"], {}, { outcome: "failed" }],
+  // The lead logged ten minutes ago, so it is still at work: wait again.
+  [
+    "developer still working past a wait",
+    ["timeout", completion],
+    { quiet: [10 * 60 * 1000] },
+    { outcome: "preview_ready" },
+  ],
+  // The lead's turn ended with no accepted report: fail now, not later.
+  ["developer ended without a report", [unreported], {}, { outcome: "failed" }],
+  // The lead threw before its first turn: fail now, with no resume.
+  ["developer could not start", [cannotStart], {}, { outcome: "failed" }],
   [
     "superseded a preview",
     [completion],
@@ -363,6 +592,55 @@ const paths: [string, Wake[], Setup, { outcome: string }][] = [
     "checkpoint found the site gone",
     [information],
     { checkpoints: [false] },
+    { outcome: "failed" },
+  ],
+  // ADR-038: a first build plans; the console's builds from the plan at once.
+  ["planned build", [completion], { lane: full }, { outcome: "preview_ready" }],
+  // The photo step throws for good: one step logs `site.photos_failed`, which
+  // ends write_pages's wait, and the build goes on without the photos.
+  [
+    "photos failed",
+    [completion],
+    { lane: full, photosFail: true },
+    { outcome: "preview_ready" },
+  ],
+  // BA5: the critic finds two things, the lead is sent back once and the
+  // second look finds them fixed.
+  [
+    "design critique repaired",
+    [completion, completion],
+    { lane: full, critic: [[FIX, FIX], []] },
+    { outcome: "preview_ready" },
+  ],
+  // An owner's waits on the card: the first look finds no decision, the
+  // nudge sends it to look again and finds "Build it".
+  [
+    "owner reviews the plan",
+    [completion],
+    { origin: "owner", lane: full, decisions: [null, "build"] },
+    { outcome: "preview_ready" },
+  ],
+  [
+    "owner changes the plan",
+    [completion],
+    { origin: "owner", lane: full, decisions: ["change", "build"] },
+    { outcome: "preview_ready" },
+  ],
+  [
+    "owner skipped the review",
+    [completion],
+    { origin: "owner", lane: full, skipReview: true },
+    { outcome: "preview_ready" },
+  ],
+  [
+    "nobody decided on the plan",
+    [],
+    {
+      origin: "owner",
+      lane: full,
+      decisions: Array(29).fill(null),
+      answers: Array(28).fill({ timeout: true, after: 6 * HOUR }),
+    },
     { outcome: "failed" },
   ],
   [
@@ -395,11 +673,24 @@ describe("the assignment Workflow's step names", () => {
     script.claims = [...(setup.claims ?? [])]
     script.provisions = [...(setup.provisions ?? [])]
     script.verdicts = [...(setup.verdicts ?? [])]
+    script.a11y = [...(setup.a11y ?? [])]
     script.checkpoints = [...(setup.checkpoints ?? [])]
     script.origin = setup.origin ?? "console"
+    script.lane = setup.lane ?? {}
+    script.quickDone = setup.quickDone ?? true
+    script.decisions = [...(setup.decisions ?? [])]
+    script.skipReview = setup.skipReview ?? false
+    script.planned = []
+    script.critic = [...(setup.critic ?? [])]
+    script.quiet = [...(setup.quiet ?? [])]
+    photoStep.fail = setup.photosFail ?? false
+    photoStep.appended.length = 0
     const { names, run } = drive([...wakes], [...(setup.answers ?? [])])
     expect(await run()).toMatchObject(outcome)
     expect(names).toEqual(expected[path])
+    expect(photoStep.appended.includes("site.photos_failed")).toBe(
+      Boolean(setup.photosFail)
+    )
   })
 
   it("keeps a round's deadline through a stale nudge, and resumes on its answer", async () => {
@@ -449,6 +740,23 @@ describe("the assignment Workflow's step names", () => {
     expect(names).toContain("resume 1")
   })
 
+  it("starts a section change on the section role and steps up to build once", async () => {
+    script.lane = { lane: "quick", change_kind: "section" }
+    script.verdicts = ["repairing", "repairing", "preview_ready"]
+    dispatched.length = 0
+    await drive([completion, completion, completion]).run()
+    script.lane = {}
+    const [first, ...repairs] = dispatched as {
+      message: { attributes?: Record<string, string> }
+      initialData?: { role?: string }
+    }[]
+    expect(first?.initialData?.role).toBe("quick_section")
+    expect(repairs.map((r) => r.message.attributes?.role)).toEqual([
+      "build",
+      undefined,
+    ])
+  })
+
   it("opens a review for an owner's preview only", async () => {
     const reviews = async (origin: "owner" | "console", verdict: string) => {
       script.reviews = 0
@@ -489,6 +797,86 @@ describe("the assignment Workflow's step names", () => {
     expect(console_.initialData.goal_tainted).toBe(false)
   })
 
+  it("starts a planned build's Developer while its photos draw, with none in its brief", async () => {
+    const admitted = async (lane: typeof script.lane) => {
+      dispatched.length = 0
+      script.verdicts = ["preview_ready"]
+      script.lane = lane
+      await drive([completion]).run()
+      return dispatched[0] as unknown as {
+        photosSettled: boolean
+        initialData: { photos?: unknown[] }
+      }
+    }
+    // write_pages places each photo as it lands; the brief names none.
+    const planned = await admitted(full)
+    expect(planned.photosSettled).toBe(false)
+    expect(planned.initialData.photos).toBeUndefined()
+    // The run waited for the step before it ended.
+    expect(photoStep.settled).toBe(true)
+    expect((await admitted({})).initialData.photos).toBeUndefined()
+  })
+
+  it("sends the lead back once with the critic's fixes, and not at all for a build that did not plan", async () => {
+    const signals = () =>
+      dispatched
+        .map((d) => d.message as { type?: string; body?: string })
+        .filter((m) => m.type === "design.critique")
+    script.lane = full
+    // The second look still sees the fix: no second repair, the gates decide.
+    script.critic = [[FIX], [FIX]]
+    await drive([completion, completion]).run()
+    expect(signals()).toHaveLength(1)
+    expect(JSON.parse(signals()[0]?.body ?? "")).toEqual({ fixes: [FIX] })
+    script.lane = {}
+    script.critic = [[FIX]]
+    const unplanned = drive([completion])
+    await unplanned.run()
+    expect(unplanned.names.some((n) => n.startsWith("critique"))).toBe(false)
+  })
+
+  it("hands the gates an axe run from before the preview: the critic's step when planned, its own step otherwise", async () => {
+    script.lane = full
+    script.critic = [[]]
+    script.gated = []
+    const planned = drive([completion])
+    await planned.run()
+    expect(planned.names.some((n) => n.startsWith("a11y"))).toBe(false)
+    expect(script.gated).toEqual([{ exit_code: 0, key: null, ms: 1 }])
+    script.lane = {}
+    script.gated = []
+    const quick = drive([completion])
+    await quick.run()
+    expect(quick.names.indexOf("a11y 1")).toBeLessThan(
+      quick.names.indexOf("gates 1")
+    )
+    expect(quick.names.indexOf("a11y 1")).toBeGreaterThan(
+      quick.names.indexOf("validating 1")
+    )
+    expect(script.gated).toEqual([{ exit_code: 0, key: null, ms: 1 }])
+  })
+
+  it("runs a quick edit's axe after its preview, and the section lane's before", async () => {
+    script.lane = copy
+    script.a11y = ["repairing"]
+    script.gated = []
+    const quick = drive([completion])
+    await quick.run()
+    // The quick edit's gates are handed no axe run; the section lane's are.
+    expect(script.gated).toEqual(["later", { exit_code: 0, key: null, ms: 1 }])
+    expect(quick.names.indexOf("a11y 1")).toBeGreaterThan(
+      quick.names.indexOf("gates 1")
+    )
+    expect(quick.names.indexOf("a11y 2")).toBeLessThan(
+      quick.names.indexOf("gates 2")
+    )
+    // The Developer is told what axe found.
+    expect(dispatched.map((d) => JSON.stringify(d))).toEqual(
+      expect.arrayContaining([expect.stringContaining("validation.failed")])
+    )
+    script.lane = {}
+  })
+
   it("leaves an owner's build as it ended when it left preview_ready before the review", async () => {
     script.verdicts = ["preview_ready"]
     script.origin = "owner"
@@ -514,15 +902,60 @@ describe("the assignment Workflow's step names", () => {
         "budget park",
         "interrupted then resumed",
         "interrupted past the resume budget",
-        "developer timed out",
+        "developer went quiet",
+        "developer still working past a wait",
+        "developer ended without a report",
+        "developer could not start",
         "superseded a preview",
         "site busy then claimed",
         "pool full then provisioned",
         "checkpoint found the site gone",
         "nobody answered",
         "a stale nudge, then the answer",
+        "quick edit",
+        "quick edit handed on",
+        "quick edit failed a gate",
+        "accessibility failed after a quick edit",
+        "superseded before accessibility",
+        "section change",
+        "planned build",
+        "photos failed",
+        "design critique repaired",
+        "owner reviews the plan",
+        "owner changes the plan",
+        "owner skipped the review",
+        "nobody decided on the plan",
       ].sort()
     )
+  })
+})
+
+describe("a Developer that stops without a report", () => {
+  it("fails as developer.no_report when its turn ended with nothing that woke the build", async () => {
+    advanced.length = 0
+    expect(await drive([unreported]).run()).toMatchObject({
+      outcome: "failed",
+    })
+    expect(advanced.at(-1)).toEqual(["failed", "developer.no_report"])
+  })
+
+  it("fails as developer.start_failed when the lead could not start, without resuming it", async () => {
+    advanced.length = 0
+    expect(await drive([cannotStart]).run()).toMatchObject({
+      outcome: "failed",
+    })
+    expect(advanced.at(-1)).toEqual(["failed", "developer.start_failed"])
+  })
+
+  it("fails as developer.stalled only once a whole lead turn has nothing in the log", async () => {
+    advanced.length = 0
+    // Forty minutes quiet: still inside a turn, so it waits again; the next
+    // check finds the full window empty.
+    script.quiet = [40 * 60 * 1000, 45 * 60 * 1000]
+    const { names, run } = drive(["timeout", "timeout"])
+    expect(await run()).toMatchObject({ outcome: "failed" })
+    expect(names).toContain("developer 1.2")
+    expect(advanced.at(-1)).toEqual(["failed", "developer.stalled"])
   })
 })
 
@@ -568,7 +1001,11 @@ describe("an interrupted Developer run", () => {
 })
 
 describe("the sweep Workflow's step names", () => {
-  const sweep = async (orgs: number, failing: string[] = []) => {
+  const sweep = async (
+    orgs: number,
+    failing: string[] = [],
+    hour = "2026091612"
+  ) => {
     orgList.length = 0
     for (let i = 1; i <= orgs; i++) orgList.push(`org-${i}`)
     sweepFailures.clear()
@@ -588,7 +1025,7 @@ describe("the sweep Workflow's step names", () => {
       HYPERDRIVE: { connectionString: "postgres://stub" },
     } as unknown as Env
     const totals = await new SweepWorkflow({} as never, env).run(
-      { payload: { hour: "2026091612" } } as never,
+      { payload: { hour } } as never,
       step as never
     )
     return { names, totals }
@@ -618,6 +1055,12 @@ describe("the sweep Workflow's step names", () => {
       deleted: 98,
       failed: 2,
     })
+  })
+
+  it("looks at live domains once a day, after the orgs, and posts each message in its own step", async () => {
+    const daily = await sweep(51, [], "2026091606")
+    expect(daily.names).toEqual(steps.SweepWorkflow["daily domains"])
+    expect(daily.totals.orgs).toBe(51)
   })
 
   it("names the hour the way the cron does", () => {
@@ -674,5 +1117,43 @@ describe("the scheduled handler", () => {
       (m) => JSON.parse(m[1] ?? "[]") as string[]
     )
     expect(crons).toEqual([["0 * * * *"], ["0 * * * *", UPTIME_CRON]])
+  })
+})
+
+// QE2: a revise whose site's sandbox is still warm with the revision it
+// starts from skips the restore; any other disk is replaced.
+describe("the disk a build starts on", () => {
+  it.each([
+    ["site.revise", "rev-live", "warm"],
+    ["site.revise", "rev-older", "restore"],
+    ["site.revise", null, "restore"],
+    ["site.build", "rev-live", "wipe"],
+  ])("%s on a sandbox holding %s: %s", async (kind, held, outcome) => {
+    ROW.kind = kind
+    script.held = held
+    script.verdicts = ["preview_ready"]
+    prepared.length = 0
+    try {
+      await drive([completion]).run()
+      expect(prepared).toEqual([outcome])
+    } finally {
+      ROW.kind = "site.build"
+      script.held = null
+    }
+  })
+
+  // Back to back: the preview this edit superseded is still taking its
+  // screenshots, so it has not marked the disk, but the disk is its revision.
+  it("maps the disk a superseded preview left, before that preview marks it", async () => {
+    ROW.kind = "site.revise"
+    script.claims = [{ claimed: true, superseded: SUPERSEDED }]
+    script.verdicts = ["preview_ready"]
+    prepared.length = 0
+    try {
+      await drive([completion]).run()
+      expect(prepared).toEqual(["warm"])
+    } finally {
+      ROW.kind = "site.build"
+    }
   })
 })

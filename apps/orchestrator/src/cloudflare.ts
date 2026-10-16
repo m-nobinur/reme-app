@@ -7,6 +7,11 @@ import {
 import { NonRetryableError } from "cloudflare:workflows"
 import { Sandbox } from "@cloudflare/sandbox"
 import {
+  Blueprint,
+  type BuildLane,
+  type ChangeKind,
+} from "@workspace/contracts"
+import {
   appendEvent,
   assignments,
   eq,
@@ -34,8 +39,15 @@ import {
   issueSpec,
   takeSnapshot,
 } from "./brief.ts"
+import { critiqueRound, type Fix, repairMessage } from "./critic.ts"
+import { postStatus, type Say, sweepDomains } from "./domain-flow.ts"
+import { SAY_RETRIES } from "./domain-workflow.ts"
+import { makePhotos } from "./photo-step.ts"
+import { PLAN_ROUNDS, planRound, readDecision } from "./planner.ts"
 import {
+  accessible,
   activate,
+  latestRevision,
   PROBE_MINUTES,
   type PublishParams,
   probeHost,
@@ -46,29 +58,50 @@ import {
   verifyArtifact,
   writePointer,
 } from "./publish.ts"
+import { quickEdit } from "./quick.ts"
 import { retireOthers, type SweepCounts, sweepOrg } from "./retention.ts"
-import { publishedSource, restoreAndMap } from "./revise.ts"
+import {
+  latestBlueprint,
+  mapSite,
+  publishedSource,
+  restoreAndMap,
+  SITE_ROOT,
+} from "./revise.ts"
 import {
   checkpoint,
   endSandbox,
+  keepWarm,
   NPM_REGISTRY_HOST,
   PoolExhaustedError,
   provision,
   rehydrate,
   SLEEP_AFTER,
   sandboxFor,
+  tailSandbox,
+  takeScreenshots,
+  takeWarm,
+  whileHeld,
 } from "./sandbox.ts"
-import { advance, claim, parkForBudget, TransitionError } from "./state.ts"
+import {
+  advance,
+  claim,
+  lastEventAt,
+  parkForBudget,
+  TransitionError,
+} from "./state.ts"
+import { GIT, runAxe } from "./tail.ts"
+import { LEAD_TURN_MS, logTiming, since, type ToolTimings } from "./timing.ts"
 import { checkUptime, UPTIME_CRON } from "./uptime.ts"
-import { assignmentFacts, validateRevision } from "./validate.ts"
+import { assignmentFacts, checkA11y, validateRevision } from "./validate.ts"
 
 // The outbound proxy the platform routes container egress through; the SDK
 // needs it exported from the Worker for its own internal hosts.
 export { ContainerProxy } from "@cloudflare/sandbox"
+export { DomainWorkflow } from "./domain-workflow.ts"
 
 /**
- * The container behind every assignment (ADR-031): egress denied by default
- * with the registry as the one exception, asleep after a short idle, and
+ * The container behind every site (ADR-031): egress denied by default
+ * with the registry as the one exception, asleep after `SLEEP_AFTER`, and
  * holding nothing the Worker holds. The image is infra/sandbox/Dockerfile;
  * the instance type and the pool size are in wrangler.jsonc.
  */
@@ -116,9 +149,16 @@ export type AssignmentParams = { assignment_id: string; org_id: string }
 /** What the Developer's tools send the Workflow: a kind and ids, never a body (R8). */
 type DeveloperEvent =
   | { kind: "information"; request_id: string }
-  | { kind: "completion"; report_id: string; revision_id: string }
+  | {
+      kind: "completion"
+      report_id: string
+      revision_id: string
+      timings?: ToolTimings
+    }
   | { kind: "budget"; cap_usd: number; spent_usd: number }
   | { kind: "interrupted"; reason: string }
+  | { kind: "unreported"; reason: string }
+  | { kind: "start_failed"; reason: string }
 
 /**
  * How long a round waits for its answer, from the block, and how long one
@@ -184,41 +224,147 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
     }
     const run = <T>(fn: (kit: Tenancy) => Promise<T>) => withKit(this.env, fn)
 
+    // The instance's creation time is durable; a clock read between steps
+    // would restart on every replay.
+    const t0 = event.timestamp.getTime()
     let claimed = false
+    let claimedAt = t0
+    let superseded: string | null = null
     for (let attempt = 1; attempt <= CLAIM_ATTEMPTS && !claimed; attempt++) {
-      const result = await step.do(`claim ${attempt}`, () =>
-        run((kit) => claim(kit, ids, attempt === 1))
-      )
+      const result = await step.do(`claim ${attempt}`, async () => ({
+        ...(await run((kit) => claim(kit, ids, attempt === 1))),
+        at: Date.now(),
+      }))
       claimed = result.claimed
-      const superseded = result.superseded
-      if (superseded) {
-        // §13 rule 3: a cancelled assignment's container does not outlive it.
-        await step.do(`destroy ${superseded}`, async () => {
-          await endSandbox(this.env, {
-            orgId: ids.orgId,
-            assignmentId: superseded,
-          })
-          return { destroyed: superseded }
-        })
-      }
+      claimedAt = result.at
+      superseded = result.superseded
+      // A superseded preview's container is the site's warm one, which this
+      // assignment takes over below, so it is not destroyed here.
       if (!claimed) await step.sleep(`site busy ${attempt}`, "30 seconds")
     }
     if (!claimed) return { outcome: "queued" }
 
-    // The container, after the site lock and not before: the lock is one
-    // org's, the pool is everyone's, so the scarce thing is taken last. The
+    // A build that cannot continue ends in `failed` and destroys its sandbox,
+    // if it holds one (`endSandbox` leaves a warm one another build holds),
+    // which releases the site lock (§13): a provider that keeps failing, a
+    // Developer that never reports or a plan nobody decides on must not hold
+    // the site for good.
+    const fail = async (name: string, reason: string) => {
+      await step.do(`fail ${name}`, () =>
+        run((kit) => advance(kit, ids, "failed", { reason }))
+      )
+      await step.do("destroy sandbox", async () => {
+        await endSandbox(this.env, ids)
+        return { destroyed: ids.assignmentId }
+      })
+      return { outcome: "failed" as const }
+    }
+
+    // The lane rides the planning step's return rather than a step of its
+    // own, so a full build keeps its step list. An instance replayed from
+    // before lanes existed gets the old return, with no lane: full.
+    // `plan` and `review` ride it the same way: an instance from before
+    // planning gets neither and builds as it did.
+    const route: {
+      lane?: BuildLane
+      change_kind?: ChangeKind | null
+      plan?: boolean
+      review?: boolean
+    } = await step.do("planning", () =>
+      run(async (kit) => {
+        await advance(kit, ids, "planning")
+        const { lane, change_kind, kind, origin, skip_review } =
+          await kit.withOrg({ orgId: ids.orgId }, (db) =>
+            creationChoices(db, ids)
+          )
+        // ADR-038: a first build plans, and so does a creative change; the
+        // quick lane never does. Only an owner's build waits on the card,
+        // and "Skip all" in onboarding skips that wait.
+        const plan =
+          lane === "full" &&
+          (kind === "site.build" || change_kind === "creative")
+        return {
+          lane,
+          change_kind,
+          plan,
+          review: plan && origin === "owner" && !skip_review,
+        }
+      })
+    )
+    if (route.plan) {
+      for (let round = 1; round <= PLAN_ROUNDS; round++) {
+        await step.do(`plan ${round}`, () =>
+          run((kit) =>
+            planRound({
+              env: this.env,
+              kit,
+              ids,
+              round,
+              review: route.review === true,
+            })
+          )
+        )
+        if (!route.review) break
+        // The owner's "Build it" or "Change something" is a row the bridge
+        // writes; the `blueprint` event only nudges a look, as an answer's
+        // does, and the six-hourly look recovers a nudge that never came.
+        const deadline = await step.do(
+          `plan deadline ${round}`,
+          async () => Date.now() + ANSWER_DEADLINE_MS
+        )
+        let decision: "build" | "change" | null = null
+        for (let look = 1; decision === null; look++) {
+          const seen = await step.do(
+            `plan look ${round}.${look}`,
+            async () => ({
+              decision: await run((kit) =>
+                kit.withOrg({ orgId: ids.orgId }, (db) =>
+                  readDecision(db, ids.assignmentId, round)
+                )
+              ),
+              left: deadline - Date.now(),
+            })
+          )
+          decision = seen.decision
+          if (decision) break
+          if (seen.left <= 0) {
+            return fail(`undecided ${round}`, "blueprint.undecided")
+          }
+          try {
+            await step.waitForEvent(`blueprint ${round}.${look}`, {
+              type: "blueprint",
+              timeout: Math.min(LOOK_EVERY_MS, seen.left),
+            })
+          } catch {
+            // No nudge in time: look anyway.
+          }
+        }
+        if (decision === "build") break
+      }
+    }
+    // The container, after the site lock and the owner's plan decision and
+    // not before: the lock is one org's, the pool is everyone's, so the
+    // scarce thing is taken last, and an owner who has not decided on a
+    // Blueprint for days holds no slot (ADR-038). The
     // same loop as the claim, with one `pool.exhausted` event on the first
     // refusal only. Only a full pool waits; any other error takes the step's
     // retry policy, so a bad image fails rather than retrying for ten minutes.
     let ready = false
+    let coldStartMs = 0
+    let readyAt = claimedAt
+    let askedAt = claimedAt
     for (let attempt = 1; attempt <= CLAIM_ATTEMPTS && !ready; attempt++) {
-      ready = await step.do(`sandbox ${attempt}`, async () => {
+      const got = await step.do(`sandbox ${attempt}`, async () => {
+        const started = Date.now()
         try {
-          const { cold_start_ms } = await provision(this.env, ids.assignmentId)
+          const { cold_start_ms, evicted } = await provision(this.env, ids)
           await run((kit) =>
-            appendAudit(kit, ids, "sandbox.provisioned", { cold_start_ms })
+            appendAudit(kit, ids, "sandbox.provisioned", {
+              cold_start_ms,
+              evicted,
+            })
           )
-          return true
+          return { ready: true, cold_start_ms, started, at: Date.now() }
         } catch (error) {
           if (!(error instanceof PoolExhaustedError)) throw error
           if (attempt === 1) {
@@ -226,24 +372,54 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
               appendAudit(kit, ids, "pool.exhausted", { reason: error.reason })
             )
           }
-          return false
+          return { ready: false, cold_start_ms: 0, started, at: Date.now() }
         }
       })
+      ready = got.ready
+      if (attempt === 1) askedAt = got.started
+      coldStartMs = got.cold_start_ms
+      readyAt = got.at
       if (!ready) await step.sleep(`pool full ${attempt}`, "30 seconds")
     }
     if (!ready) return { outcome: "pool_exhausted" }
 
-    await step.do("planning", () => run((kit) => advance(kit, ids, "planning")))
     await step.do("implementing", () =>
       run((kit) => advance(kit, ids, "implementing"))
     )
+    // BA4: a planned build's photos draw while the lead writes the shell and
+    // the pages (each writer names its slot's planned path). The lead's
+    // `write_pages` places each one as its progress row lands and, once the
+    // `site.photos` event is written, empties the fields of slots that fell
+    // back. Started before "developer", so the recorded step order holds. A
+    // step that throws costs the site its photos, not the build: its
+    // `site.photos_failed` event tells `write_pages` to stop waiting at once.
+    const photos = route.plan
+      ? step
+          .do("photos", () =>
+            run((kit) => makePhotos({ env: this.env, kit, ids }))
+          )
+          .catch(async (error: unknown) => {
+            await step.do("photos failed", () =>
+              run((kit) =>
+                appendAudit(kit, ids, "site.photos_failed", {
+                  reason: String(error).slice(0, 300),
+                })
+              )
+            )
+            return null
+          })
+      : null
 
-    // The brief and the admission in one step, create-only, so a retried
-    // step cannot admit the Developer twice: the second attempt finds the
-    // instance and returns. The spec and the snapshot are bodies, so they
-    // travel inside the step and never cross its boundary (R8).
-    const admitted = await step.do("developer", async () => {
-      const { brief, origin } = await run((kit) =>
+    /**
+     * The brief and the site's disk, inside whichever step runs the change.
+     * The spec and the snapshot are bodies, so they never cross a step
+     * boundary (R8). `handedOn` says a quick attempt before this one left
+     * the disk at the revision the change starts from, so it is mapped as
+     * it is.
+     */
+    const prepare = async (role: "quick_section" | null, handedOn: boolean) => {
+      const briefStarted = Date.now()
+      const { brief, origin, kind, from, left } = await run((kit) =>
         kit.withOrg({ orgId: ids.orgId }, async (db) => {
           const [row] = await db
             .select()
@@ -261,6 +437,11 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           if (row.kind === "site.revise" && !source) {
             throw new NonRetryableError("site.not_published")
           }
+          // The preview this edit superseded built its revision on the disk
+          // and may not have marked it yet: it is still taking screenshots.
+          const previewed = superseded
+            ? await latestRevision(db, superseded)
+            : null
           const built: Brief = {
             spec,
             snapshot,
@@ -270,73 +451,211 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             acceptance_criteria: row.acceptanceCriteria,
             restore_key: source?.source_key ?? null,
             map: null,
+            ...(role ? { role } : {}),
+            blueprint: Blueprint.safeParse(row.blueprint).data ?? null,
+            // The section lane's short prompt reads the site's last plan.
+            ...(role === "quick_section"
+              ? { site_plan: await latestBlueprint(db) }
+              : {}),
           }
-          return { brief: built, origin: choices.origin }
+          return {
+            brief: built,
+            origin: choices.origin,
+            kind: row.kind,
+            from: source?.revision_id ?? null,
+            left: previewed?.status === "preview" ? previewed.id : null,
+          }
         })
       )
+      const briefMs = since(briefStarted)
+      const restoreStarted = Date.now()
+      // The container is provisioned. A warm one that holds the revision this
+      // assignment starts from is mapped as it is; anything else on the disk
+      // is replaced. The site's map goes into the stable segment before the
+      // Developer's first turn.
+      const sandbox = sandboxFor(this.env, ids.orgId)
+      // Always taken, so a first build clears the marker too.
+      let held = handedOn ? from : await takeWarm(sandbox)
+      if (
+        !held &&
+        left &&
+        (await sandbox.exec(`test -d ${SITE_ROOT}/.git`)).exitCode === 0
+      ) {
+        held = left
+      }
+      const warm = from !== null && held === from
       if (brief.restore_key) {
-        // The container is provisioned; the restored site's map goes into the
-        // stable segment before the Developer's first turn.
-        brief.map = await restoreAndMap(
-          sandboxFor(this.env, ids.assignmentId),
-          this.env.SITES,
-          brief.restore_key
-        )
+        brief.map = warm
+          ? await mapSite(sandbox)
+          : await restoreAndMap(sandbox, this.env.SITES, brief.restore_key)
+      } else {
+        // A first build seeds an empty site; a warm disk's site would linger.
+        await sandbox.exec(`rm -rf ${SITE_ROOT}`)
       }
-      try {
-        const receipt = await init(Developer, {
-          id: ids.assignmentId,
-          uid: null,
-        }).dispatch({
-          // An owner's words are data, not an instruction: a revise's change
-          // request and an owner's build goal travel as a signal, tainted on
-          // the log (§28.3). A console goal keeps its plain message.
-          message: brief.goal_tainted
-            ? {
-                kind: "signal",
-                type: "site.change_requested",
-                body: brief.goal,
-                attributes: { taint: "untrusted_input" },
-              }
-            : `Build the site from the canonical facts. ${brief.goal}`,
-          initialData: brief,
-        })
-        return { submission_id: receipt.submissionId, origin }
-      } catch (error) {
-        if (error instanceof AgentInstanceExistsError) {
-          return { submission_id: null, origin }
+      return {
+        brief,
+        origin,
+        kind,
+        warm,
+        brief_ms: briefMs,
+        restore_ms: since(restoreStarted),
+        dispatched_at: Date.now(),
+      }
+    }
+
+    // The admission in one step, create-only, so a retried step cannot admit
+    // the Developer twice: the second attempt finds the instance and returns.
+    const admit = (role: "quick_section" | null, handedOn: boolean) =>
+      step.do("developer", async () => {
+        const { brief, ...timing } = await prepare(role, handedOn)
+        const origin = timing.origin
+        try {
+          const receipt = await init(Developer, {
+            id: ids.assignmentId,
+            uid: null,
+          }).dispatch({
+            // An owner's words are data, not an instruction: a revise's change
+            // request and an owner's build goal travel as a signal, tainted on
+            // the log (§28.3). A console goal keeps its plain message.
+            message: brief.goal_tainted
+              ? {
+                  kind: "signal",
+                  type: "site.change_requested",
+                  body: brief.goal,
+                  attributes: { taint: "untrusted_input" },
+                }
+              : `Build the site from the canonical facts. ${brief.goal}`,
+            initialData: brief,
+          })
+          return { submission_id: receipt.submissionId, ...timing, origin }
+        } catch (error) {
+          if (error instanceof AgentInstanceExistsError) {
+            return { submission_id: null, ...timing, origin }
+          }
+          throw error
         }
-        throw error
+      })
+
+    // QE4, the quick lane. A copy or style change is one model call and one
+    // build, with no Developer; a section change is the Developer at low
+    // effort. Whatever fails moves one lane up: copy and style to section,
+    // section to the full build role. The owner sees no failure for a lane.
+    const oneCall =
+      route.lane === "quick" &&
+      (route.change_kind === "copy" ||
+        route.change_kind === "style" ||
+        route.change_kind === "photo")
+        ? route.change_kind
+        : null
+    /** The Developer runs at the section role and moves to the build role on trouble. */
+    let section = route.lane === "quick" && route.change_kind === "section"
+    let pending: DeveloperEvent | null = null
+    let quickBase: string | null = null
+    let quick: "done" | "fell" | null = null
+    let admitted: Awaited<ReturnType<typeof admit>>
+    if (oneCall) {
+      const tried = await step.do("quick edit", async () => {
+        const { brief, ...timing } = await prepare(null, false)
+        const result = await run((kit) =>
+          quickEdit({
+            env: this.env,
+            kit,
+            sandbox: tailSandbox(sandboxFor(this.env, ids.orgId)),
+            brief,
+            kind: oneCall,
+          })
+        )
+        if (!result.done) {
+          await run((kit) =>
+            appendAudit(kit, ids, "quick.fell_through", {
+              from: oneCall,
+              to: "section",
+              reason: result.reason,
+            })
+          )
+        }
+        return { submission_id: null, ...timing, result }
+      })
+      admitted = tried
+      if (tried.result.done) {
+        quick = "done"
+        quickBase = tried.result.base
+        pending = {
+          kind: "completion",
+          report_id: tried.result.report_id,
+          revision_id: tried.result.revision_id,
+          timings: tried.result.timings,
+        }
+      } else {
+        quick = "fell"
+        section = true
+        admitted = await admit("quick_section", true)
       }
-    })
+    } else {
+      admitted = await admit(section ? "quick_section" : null, false)
+    }
+    /** The resume and repair signals' attributes that move a section run to the build role, once. */
+    const escalate = (): Record<string, string> => {
+      if (!section) return {}
+      section = false
+      return { role: "build" }
+    }
 
     // The nanoclaw pair (§8.3): the tools wake this Workflow with an id, the
     // Workflow answers the Developer with a new submission.
-    // A build that cannot continue ends in `failed` and destroys its sandbox,
-    // which releases the site lock (§13): a provider that keeps failing or a
-    // Developer that never reports must not hold the site for good.
-    const fail = async (name: string, reason: string) => {
-      await step.do(`fail ${name}`, () =>
-        run((kit) => advance(kit, ids, "failed", { reason }))
-      )
-      await step.do("destroy sandbox", async () => {
-        await endSandbox(this.env, ids)
-        return { destroyed: ids.assignmentId }
-      })
-      return { outcome: "failed" as const }
-    }
     let resumes = 0
+    let looks = 0
+    let asked: Fix[] = []
+    let shotsOf: { revision_id: string; taken: number; ms: number } | null =
+      null
     for (let round = 1; round <= ROUNDS; round++) {
       let woke: { payload: DeveloperEvent }
-      try {
-        woke = await step.waitForEvent<DeveloperEvent>(`developer ${round}`, {
-          type: "developer",
-          timeout: "2 hours",
-        })
-      } catch {
-        return fail(`timed out ${round}`, "developer.timed_out")
+      if (pending) {
+        // The quick edit's own completion, already reported: no wait.
+        woke = { payload: pending }
+        pending = null
+      } else {
+        // The watchdog: a wait that times out looks at the build's log, and
+        // a build that has logged nothing for a whole lead turn is stalled.
+        // A lead still working logs every model call and tool, so it waits
+        // again for what is left of the window.
+        let wait = LEAD_TURN_MS
+        let got: { payload: DeveloperEvent } | null = null
+        for (let n = 1; !got; n++) {
+          try {
+            got = await step.waitForEvent<DeveloperEvent>(
+              n === 1 ? `developer ${round}` : `developer ${round}.${n}`,
+              { type: "developer", timeout: wait }
+            )
+          } catch {
+            const quiet = await step.do(`quiet ${round}.${n}`, async () => {
+              const at = await run((kit) =>
+                kit.withOrg({ orgId: ids.orgId }, (db) =>
+                  lastEventAt(db, ids.assignmentId)
+                )
+              )
+              return Date.now() - at
+            })
+            if (quiet >= LEAD_TURN_MS) {
+              return fail(`stalled ${round}`, "developer.stalled")
+            }
+            wait = LEAD_TURN_MS - quiet
+          }
+        }
+        woke = got
       }
       const payload = woke.payload
+      // The lead ended its turn with no report the tool accepted, no
+      // question and no failure: it gave up, ran out of turns or was
+      // refused every time. Nothing will wake this build again.
+      if (payload.kind === "unreported") {
+        return fail(`unreported ${round}`, "developer.no_report")
+      }
+      // The lead threw before its first turn (its agent or tools could not be
+      // built). A resume builds the same agent, so the build ends here.
+      if (payload.kind === "start_failed") {
+        return fail(`start ${round}`, "developer.start_failed")
+      }
       if (payload.kind === "interrupted") {
         const reason = GATE_REASONS.has(payload.reason)
           ? payload.reason
@@ -348,6 +667,8 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         // failure is not the model's fault (open item 50, architect ruling).
         const fallback =
           resumes === RESUMES && reason === "provider.unavailable"
+        // Outside the step, so a replay flips `section` the same way.
+        const lift = escalate()
         await step.sleep(`resume wait ${round}`, "30 seconds")
         await step.do(`resume run ${round}`, async () => {
           await init(Developer, { id: ids.assignmentId }).dispatch({
@@ -357,6 +678,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
               body: JSON.stringify({ reason: payload.reason }),
               attributes: {
                 attempt: String(resumes),
+                ...lift,
                 ...(fallback
                   ? { model: "fallback", reason: payload.reason }
                   : {}),
@@ -368,6 +690,93 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         continue
       }
       if (payload.kind === "completion") {
+        // Settled already: `write_pages` waited for its event. Awaited so the
+        // step never outlives the instance.
+        await photos
+        // Axe over this revision's build, from the sandbox the build still
+        // holds. Null when a newer edit took the sandbox, which fails the gate.
+        const axeOf = () =>
+          whileHeld(this.env, ids, () => {
+            const sandbox = tailSandbox(sandboxFor(this.env, ids.orgId))
+            return runAxe(
+              {
+                exec: (command) =>
+                  sandbox.exec(`cd ${SITE_ROOT} && ${command}`, {
+                    timeoutMs: 180_000,
+                  }),
+                readFileBuffer: sandbox.readFileBuffer,
+              },
+              this.env.SITES,
+              `sites/${ids.orgId}/${payload.revision_id}/`
+            )
+          })
+        // Set by the look below when it ran axe on this very build.
+        let looked: Awaited<ReturnType<typeof axeOf>> | undefined
+        // BA5: a planned build is looked at before the gates, while the
+        // sandbox still holds it and the state is still `implementing`, so a
+        // repair is a signal and costs none of the gate repairs. The first
+        // look may send the lead back once; the second records which fixes
+        // held. Advice only: it never fails a build, and the gates decide.
+        if (route.plan && looks < 2) {
+          looks++
+          const look = looks as 1 | 2
+          const seen = await step.do(`critique ${look}`, async () => {
+            const taken = await takeScreenshots(
+              this.env,
+              ids,
+              payload.revision_id
+            )
+            // Axe runs in the sandbox while the critic's model call, which
+            // does not touch it, is in flight: the a11y gate costs the first
+            // preview no wall time. A look that sends the lead back changes
+            // the build, and its axe run is dropped with it.
+            const [result, axe] = await Promise.all([
+              run((kit) =>
+                critiqueRound({
+                  env: this.env,
+                  kit,
+                  ids,
+                  round: look,
+                  revisionId: payload.revision_id,
+                  earlier: asked,
+                  // The fields and variants each fix names, before and after the lead's round.
+                  readSource: () =>
+                    whileHeld(this.env, ids, async () => {
+                      const file = await sandboxFor(
+                        this.env,
+                        ids.orgId
+                      ).readFile(`${SITE_ROOT}/src/site-config.ts`)
+                      return file.content
+                    }),
+                })
+              ),
+              axeOf().catch(() => undefined),
+            ])
+            return {
+              ...result,
+              axe,
+              shots: { revision_id: payload.revision_id, ...taken },
+            }
+          })
+          shotsOf = seen.shots
+          looked = seen.axe
+          if (look === 1 && seen.fixes.length > 0) {
+            asked = seen.fixes
+            await step.do(`design repair ${round}`, async () => {
+              await init(Developer, { id: ids.assignmentId }).dispatch({
+                message: {
+                  kind: "signal",
+                  type: "design.critique",
+                  body: repairMessage(seen.fixes),
+                },
+              })
+              return { fixes: seen.fixes.length }
+            })
+            continue
+          }
+          // Nothing to repair, or this was the check: no second look.
+          looks = 2
+        }
         await step.do(`validating ${round}`, () =>
           run((kit) =>
             advance(kit, ids, "validating", {
@@ -378,8 +787,24 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             })
           )
         )
-        const verdict = await step.do(`gates ${round}`, () =>
-          run((kit) =>
+        // The accessibility gate comes before the preview, so a build never
+        // announces one and then repairs it. The look above ran axe already
+        // when this build was planned; any other build (the quick lane, a
+        // repair round) has nothing to overlap it with and runs it here, in
+        // `validating`, where the owner already reads "Checking the site".
+        // A quick edit's first pass is the exception: it runs axe after its
+        // preview instead (owner's choice), and a failure there goes to the
+        // section lane, whose repair rounds run axe before the preview.
+        const late = quickBase !== null
+        const axe = late
+          ? undefined
+          : looked !== undefined
+            ? looked
+            : await step.do(`a11y ${round}`, async () => axeOf())
+        const gated = await step.do(`gates ${round}`, async () => {
+          const gateMs: Record<string, number> = {}
+          const started = Date.now()
+          const result = await run((kit) =>
             validateRevision(
               kit,
               this.env.SITES,
@@ -387,14 +812,84 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
               {
                 report_id: payload.report_id,
                 revision_id: payload.revision_id,
+                axe: late ? "later" : (axe ?? null),
               },
-              this.env.SITE_HOST_SUFFIX
+              this.env.SITE_HOST_SUFFIX,
+              gateMs
             )
           )
-        )
+          return {
+            ...result,
+            gate_ms: { ...gateMs, total: since(started) },
+            at: Date.now(),
+          }
+        })
+        // The quick edit's accessibility gate, once its preview exists: axe in
+        // the sandbox takes about ten seconds, which the preview does not wait
+        // on. The review below does, and so do the approval and the publish.
+        const a11y =
+          late && gated.outcome === "preview_ready"
+            ? await step.do(`a11y ${round}`, async () => {
+                const started = Date.now()
+                const ran = await axeOf()
+                const result = await run((kit) =>
+                  checkA11y(kit, this.env.SITES, ids, payload.revision_id, ran)
+                )
+                return { ...result, ms: since(started) }
+              })
+            : null
+        const verdict =
+          a11y && a11y.outcome !== "preview_ready"
+            ? { ...gated, ...a11y }
+            : gated
+        if (verdict.outcome === "repairing" && quickBase) {
+          // The quick edit failed a gate: its files go back to where it
+          // started and the Developer takes the change at the section role.
+          const base = quickBase
+          quickBase = null
+          await step.do("quick reset", async () => {
+            const reset = await sandboxFor(this.env, ids.orgId).exec(
+              `cd ${SITE_ROOT} && ${GIT} reset -q --hard ${base}`
+            )
+            if (reset.exitCode !== 0) throw new Error(reset.stderr)
+            await run((kit) =>
+              appendAudit(kit, ids, "quick.fell_through", {
+                from: oneCall,
+                to: "section",
+                reason: "gates",
+                failed: verdict.failed,
+              })
+            )
+            return { base }
+          })
+          quick = "fell"
+          section = true
+          admitted = await admit("quick_section", true)
+          // A fall-through for axe carries its findings (rule, impact, page,
+          // targets, summary, html) to the Developer, who reruns the gate's
+          // script until it is clean.
+          if (a11y?.outcome === "repairing") {
+            await step.do(`a11y handoff ${round}`, async () => {
+              await init(Developer, { id: ids.assignmentId }).dispatch({
+                message: {
+                  kind: "signal",
+                  type: "validation.failed",
+                  body: JSON.stringify({
+                    report_id: a11y.report_id,
+                    failed: a11y.failed,
+                  }),
+                  attributes: { report_id: a11y.report_id },
+                },
+              })
+              return { report_id: a11y.report_id }
+            })
+          }
+          continue
+        }
         if (verdict.outcome === "repairing") {
           // The failed rows go back to the same conversation, the way an
           // answer does; the Developer fixes them and reports again.
+          const lift = escalate()
           await step.do(`repair ${round}`, async () => {
             await init(Developer, { id: ids.assignmentId }).dispatch({
               message: {
@@ -404,28 +899,24 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
                   report_id: verdict.report_id,
                   failed: verdict.failed,
                 }),
-                attributes: { report_id: verdict.report_id },
+                attributes: { report_id: verdict.report_id, ...lift },
               },
             })
             return { report_id: verdict.report_id }
           })
           continue
         }
-        // ADR-032: the sandbox ends with the build, not at publish.
-        await step.do("destroy sandbox", async () => {
-          await endSandbox(this.env, ids)
-          return { destroyed: ids.assignmentId }
-        })
+        // ADR-032: the build's work ends here, not at publish. A preview
+        // leaves the site's sandbox warm for the next edit; anything else
+        // destroys it.
+        const warmAfter = verdict.outcome === "preview_ready"
         // An owner's build goes in front of the owner as soon as the preview
         // exists, so the 72 h clock starts then. `requestReview` answers a
         // retry with the request it already holds. A build superseded or
         // cancelled since the gates has nothing to review and ends as it is.
         // The console asks for its own review, so its builds stop at
         // `preview_ready` as before.
-        if (
-          verdict.outcome === "preview_ready" &&
-          admitted.origin === "owner"
-        ) {
+        if (warmAfter && admitted.origin === "owner") {
           await step.do("review", () =>
             run(async (kit) => {
               try {
@@ -443,6 +934,77 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             })
           )
         }
+        // The screenshots come after the preview exists, not before it: the
+        // review card above is already in front of the owner, and the
+        // router serves each image once it lands. The sandbox is still the
+        // build's own here, which `keep warm` ends.
+        const shots = warmAfter
+          ? shotsOf?.revision_id === payload.revision_id
+            ? shotsOf
+            : await step.do("screenshots", () =>
+                takeScreenshots(this.env, ids, payload.revision_id)
+              )
+          : null
+        const endMs = await step.do(
+          warmAfter ? "keep warm" : "destroy sandbox",
+          async () => {
+            const started = Date.now()
+            if (warmAfter) {
+              await keepWarm(this.env, ids, payload.revision_id)
+            } else await endSandbox(this.env, ids)
+            return since(started)
+          }
+        )
+        const done = Date.now()
+        const t = payload.timings
+        logTiming({
+          assignment_id: ids.assignmentId,
+          org_id: ids.orgId,
+          kind: admitted.kind,
+          lane: route.lane ?? "full",
+          change_kind: route.change_kind ?? null,
+          quick,
+          outcome: verdict.outcome,
+          rounds: round,
+          warm: admitted.warm,
+          lock_ms: claimedAt - t0,
+          // Planning and the owner's wait on the Blueprint come before the
+          // container, so they are their own line.
+          plan_ms: askedAt - claimedAt,
+          provision_ms: readyAt - askedAt,
+          cold_start_ms: coldStartMs,
+          brief_ms: admitted.brief_ms,
+          restore_ms: admitted.restore_ms,
+          // Dispatch to report_complete, less the tool's own time: the agent's
+          // restore, its model turns and every tool it ran. It includes any
+          // wait on an owner's answer.
+          agent_ms: t
+            ? t.reported_at - admitted.dispatched_at - t.tool_ms
+            : null,
+          model_turns: t?.model_turns ?? null,
+          check_ms: t?.check_ms ?? null,
+          build_ms: t?.build_ms ?? null,
+          // The preview exists once the gates step returns; everything after
+          // is the owner's wait for screenshots and the warm keep.
+          preview_ready_ms:
+            verdict.outcome === "preview_ready" ? verdict.at - t0 : null,
+          screenshots_ms: shots?.ms ?? null,
+          screenshots_taken: shots?.taken ?? null,
+          upload_ms: t?.upload_ms ?? null,
+          upload_files: t?.upload_files ?? null,
+          upload_reused: t?.upload_reused ?? null,
+          upload_bytes: t?.upload_bytes ?? null,
+          source_ms: t?.source_ms ?? null,
+          axe_ms: a11y?.ms ?? axe?.ms ?? null,
+          gates_ms: verdict.gate_ms.total,
+          ...Object.fromEntries(
+            Object.entries(verdict.gate_ms)
+              .filter(([k]) => k !== "total")
+              .map(([k, v]) => [`gate_${k}_ms`, v])
+          ),
+          [warmAfter ? "keep_warm_ms" : "destroy_ms"]: endMs,
+          end_to_end_ms: done - t0,
+        })
         return { outcome: verdict.outcome }
       }
       if (payload.kind === "budget") {
@@ -591,9 +1153,24 @@ export class PublishWorkflow extends WorkflowEntrypoint<Env, PublishParams> {
       rollback_id: crypto.randomUUID(),
     }))
 
-    const artifact = await step.do("verify artifact", () =>
-      verifyArtifact(this.env.SITES, target.site_id, target.revision_id)
-    )
+    const artifact = await step.do("verify artifact", async () => {
+      const files = await verifyArtifact(
+        this.env.SITES,
+        target.site_id,
+        target.revision_id
+      )
+      if (!files.ok) return files
+      // The accessibility gate runs after the preview; no pass, no publish.
+      const passed = await run((kit) =>
+        kit.withOrg({ orgId }, (db) => accessible(db, target.revision_id))
+      )
+      return passed
+        ? files
+        : {
+            ok: false as const,
+            message: "the revision has no passing accessibility check",
+          }
+    })
     if (!artifact.ok) {
       await step.do("refuse", () =>
         run((kit) =>
@@ -649,7 +1226,10 @@ export class PublishWorkflow extends WorkflowEntrypoint<Env, PublishParams> {
       run((kit) =>
         writePointer(this.env, kit, orgId, target.site_id, target.host)
       )
-    if (deployment) await step.do("pointer", point)
+    // The host the site is served on: its custom domain once one is active.
+    const served = deployment
+      ? (await step.do("pointer", point)).host
+      : target.host
 
     // The content gate runs on the live HTML with the facts the assignment
     // was validated against; a rollback has no assignment and takes the
@@ -673,11 +1253,18 @@ export class PublishWorkflow extends WorkflowEntrypoint<Env, PublishParams> {
         const factRecords = assignmentId
           ? await run((kit) => assignmentFacts(kit, { orgId, assignmentId }))
           : null
-        const probe = await probeHost(target.host, factRecords, undefined, {
-          revision_id: target.revision_id,
-          config_version: deployment.config_version,
-          proof: await probeProof(target.host, this.env.PREVIEW_KEY),
-        })
+        const probe = await probeHost(
+          served,
+          factRecords,
+          undefined,
+          {
+            revision_id: target.revision_id,
+            config_version: deployment.config_version,
+            proof: await probeProof(served, this.env.PREVIEW_KEY),
+          },
+          undefined,
+          this.env.SITE_PORT
+        )
         return run((kit) =>
           kit.withOrg({ orgId }, async (db) => {
             const at = `probe ${minute}`
@@ -836,6 +1423,9 @@ export class PublishWorkflow extends WorkflowEntrypoint<Env, PublishParams> {
 /** Orgs per sweep step: idempotent work, so a retried step redoing a finished org changes nothing. */
 const SWEEP_CHUNK = 50
 
+/** The UTC hour whose sweep also looks at every live custom domain, once a day. */
+export const DOMAIN_SWEEP_HOUR = "06"
+
 /** The hour the sweep runs for, `YYYYMMDDHH`, which is also its instance id's suffix. */
 export const sweepHour = (at: number) =>
   new Date(at).toISOString().slice(0, 13).replace(/[-T]/g, "")
@@ -907,6 +1497,55 @@ export class SweepWorkflow extends WorkflowEntrypoint<Env, { hour: string }> {
       totals.redriven += counts.redriven
       totals.deleted += counts.deleted
       totals.failed += counts.failed
+    }
+    // Once a day, every live custom domain (domain-flow.ts): a hostname that
+    // moved or a certificate gone inactive raises one alert, and each message
+    // is posted in a step of its own so a busy chat retries the post alone.
+    if (event.payload.hour.endsWith(DOMAIN_SWEEP_HOUR)) {
+      for (let i = 0; i < orgIds.length; i += SWEEP_CHUNK) {
+        const chunk = orgIds.slice(i, i + SWEEP_CHUNK)
+        const says = await step.do(
+          `domains ${i / SWEEP_CHUNK + 1}`,
+          async () => {
+            const kit = kitFor()
+            const found: { orgId: string; say: Say }[] = []
+            try {
+              for (const orgId of chunk) {
+                try {
+                  for (const say of await sweepDomains(
+                    this.env,
+                    kit,
+                    orgId,
+                    event.payload.hour
+                  )) {
+                    found.push({ orgId, say })
+                  }
+                } catch (error) {
+                  console.error(
+                    JSON.stringify({
+                      sweep: event.payload.hour,
+                      org_id: orgId,
+                      code: failureCode(error),
+                    })
+                  )
+                }
+              }
+            } finally {
+              await kit.close()
+            }
+            return found
+          }
+        )
+        for (const { orgId, say } of says) {
+          try {
+            await step.do(`say ${say.key}`, SAY_RETRIES, () =>
+              withKit(this.env, (kit) => postStatus(kit, orgId, say))
+            )
+          } catch {
+            // The chat stayed busy past every retry; the alert row keeps it.
+          }
+        }
+      }
     }
     // The run's one line, for the alert on a sweep that deletes nothing for a week.
     console.log(JSON.stringify({ sweep: event.payload.hour, ...totals }))

@@ -298,6 +298,34 @@ export async function resolveOrgBySlug(
 }
 
 /**
+ * The site a custom hostname serves, for the router's Postgres fallback when
+ * KV holds no pointer for the host. The same definer path as `resolveOrg`
+ * (migration 0015): the apex or its `www.`, an active domain only, and null
+ * for anything else, so a host cannot be probed for what state it is in.
+ */
+export async function resolveDomainHost(
+  kit: Tenancy,
+  host: string
+): Promise<{ orgId: string; siteId: string; primaryHost: string } | null> {
+  return kit[pool].transaction(async (tx) => {
+    await tx.execute(ENTER_APP_ROLE)
+    const rows = await tx.execute<{
+      org_id: string
+      site_id: string
+      primary_host: string
+    }>(sql`select * from public.resolve_domain_host(${host})`)
+    const row = rows[0]
+    return row
+      ? {
+          orgId: row.org_id,
+          siteId: row.site_id,
+          primaryHost: row.primary_host,
+        }
+      : null
+  })
+}
+
+/**
  * Every org id, for a platform job that then opens each org's own `withOrg`:
  * the hourly retention sweep is the caller today, and nothing enforces that
  * it stays the only one. The function is SECURITY DEFINER (migration 0009)
@@ -312,6 +340,37 @@ export async function listOrgIds(kit: Tenancy): Promise<string[]> {
       sql`select public.list_org_ids() as id`
     )
     return rows.map((row) => row.id)
+  })
+}
+
+/** A design another business in the same industry was planned with. */
+export type RecentDesign = {
+  direction: string | null
+  hero: string | null
+  services: string | null
+}
+
+/**
+ * The planner's diversity note (ADR-038): the direction and home hero and
+ * services variants of up to 20 other businesses in `industry`, newest first,
+ * never `orgId`'s own. SECURITY DEFINER (migration 0014), returning three
+ * library ids per row and nothing that names or belongs to a business.
+ */
+export async function recentDesigns(
+  kit: Tenancy,
+  orgId: string,
+  industry: string
+): Promise<RecentDesign[]> {
+  return kit[pool].transaction(async (tx) => {
+    await tx.execute(ENTER_APP_ROLE)
+    const rows = await tx.execute<RecentDesign>(
+      sql`select direction, hero, services from public.recent_designs(${orgId}::uuid, ${industry})`
+    )
+    return rows.map(({ direction, hero, services }) => ({
+      direction,
+      hero,
+      services,
+    }))
   })
 }
 

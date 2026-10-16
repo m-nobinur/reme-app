@@ -1,4 +1,6 @@
 import type { ContractName } from "../src/registry.ts"
+// Colour literals are data here: the lint rule that keeps them out of code reads only code.
+import paletteSample from "./palette-sample.json" with { type: "json" }
 
 const ORG = "9f1c0b52-6d3a-4d0e-8a44-0c1f2b3a4d5e"
 const STAFF = "1a2b3c4d-5e6f-4a8b-9c0d-1e2f3a4b5c6d"
@@ -10,6 +12,87 @@ const ULID = "01JZ8QK5M7N9P0R2T4V6W8X0Y2"
 const REVISION = "6f708192-a3b4-4f80-8132-6d7e8f900112"
 const CONVERSATION = "7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c0d"
 const SHA = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+const REGISTRANT = {
+  registrant: {
+    name: "Jane Smith",
+    business_name: "Bright Clean",
+    email: "jane@brightclean.example",
+    phone: "+447700900123",
+    address: {
+      street: "12 Mill Lane",
+      city: "Bristol",
+      postal_code: "BS1 4AB",
+      country_code: "GB",
+    },
+  },
+  registrant_type: "STRA",
+}
+
+const BLUEPRINT = {
+  direction: "calm_daylight",
+  fonts: "outfit_figtree",
+  palette: { kind: "preset", id: "forest" },
+  pages: [
+    {
+      page: "home",
+      sections: [
+        {
+          kind: "hero",
+          variant: "wash",
+          purpose: "Say what Fictional Fox Cleaning does and where",
+          content_notes:
+            "Lead with the weekly clean; phone number beside the button",
+        },
+        {
+          kind: "service_cards",
+          variant: "photo_cards",
+          purpose: "Three services, each with a photo and a link",
+          content_notes: null,
+        },
+        {
+          kind: "cta_band",
+          variant: "solid",
+          purpose: "Ask for a quote",
+          content_notes: null,
+        },
+      ],
+    },
+    {
+      page: "quote",
+      sections: [
+        {
+          kind: "quote_form",
+          variant: "default",
+          purpose: "Collect what a quote needs",
+          content_notes: null,
+        },
+      ],
+    },
+  ],
+  images: [
+    {
+      id: "home_hero",
+      page: "home",
+      section: "hero",
+      aspect: "16:9",
+      resolution: "2K",
+      subject: "An empty sunlit living room, one green plant on the sill",
+      text_side: "left",
+      source: "generated",
+      alt: "A bright, tidy living room",
+    },
+  ],
+  voice: "Plain and warm, first person plural, no exclamation marks",
+  features: [
+    "A home page that leads with the weekly clean",
+    "Three service cards with photos",
+    "A quote form that asks for rooms and access",
+    "Your phone number on every page",
+  ],
+  custom_sections: [
+    { name: "SeasonalOffer", purpose: "A strip for the spring clean offer" },
+  ],
+}
 
 /**
  * One valid instance per contract. The round-trip suite mutates these, so they
@@ -116,6 +199,47 @@ export const samples: Record<ContractName, unknown> = {
     skippable: false,
   },
   AskChoiceOutput: { answer: "chosen", ids: ["friendly"], other: null },
+  AskDesignInput: {
+    questions: [
+      {
+        id: "palette",
+        visual: "palette",
+        card: {
+          step: "palette",
+          options: [
+            { id: "forest", label: "Forest", hint: null, visual: null },
+            { id: "sage", label: "Sage", hint: null, visual: null },
+          ],
+          multiple: false,
+          preselected: [],
+          other: { label: "Your own colour", placeholder: "A colour code" },
+          skippable: true,
+        },
+      },
+      {
+        id: "typeface",
+        visual: "font_pair",
+        card: {
+          step: "font",
+          options: [
+            { id: "outfit_figtree", label: "Outfit", hint: null, visual: null },
+            { id: "sora_manrope", label: "Sora", hint: null, visual: null },
+          ],
+          multiple: false,
+          preselected: [],
+          other: null,
+          skippable: true,
+        },
+      },
+    ],
+  },
+  AskDesignOutput: {
+    answers: {
+      palette: { choice: "forest" },
+      typeface: { own: "Something rounder" },
+    },
+    skip_all: false,
+  },
   AskUploadInput: {
     accept: ["image/jpeg", "image/png", "image/webp"],
     max_files: 12,
@@ -239,14 +363,30 @@ export const samples: Record<ContractName, unknown> = {
       expires_at: null,
     },
   },
+  Blueprint: BLUEPRINT,
+  BlueprintReviewInput: {
+    blueprint: BLUEPRINT,
+    revision_of: ASSIGNMENT,
+  },
+  BlueprintReceipt: { round: 1, decision: "build" },
+  BlueprintReviewOutput: { decision: "change", note: "Add a gallery page" },
   BuildSummary: {
     assignment_id: ASSIGNMENT,
     kind: "site.revise",
     state: "implementing",
     goal: "Put the weekend hours on the contact page.",
+    lane: "quick",
+    activity: [{ id: "edit", label: "Changing the page", done: 1, total: 2 }],
     revision: { revision_id: REVISION, version: 4 },
     created_at: NOW,
     updated_at: NOW,
+  },
+  BuyDomainInput: { name: "brightclean.co.uk", ...REGISTRANT },
+  BuyDomainOutput: {
+    outcome: "awaiting_payment",
+    name: "brightclean.co.uk",
+    price_gbp: 8,
+    checkout: "embedded",
   },
   CapabilityCall: {
     call_id: "8192a3b4-c5d6-4192-a354-8f9001122334",
@@ -281,6 +421,18 @@ export const samples: Record<ContractName, unknown> = {
         },
       ],
     },
+  },
+  CheckDomainInput: { name: "brightclean.example" },
+  CheckDomainOutput: {
+    outcome: "checked",
+    state: "awaiting_dns",
+    status: {
+      status: "conflicting_record",
+      conflicts: [
+        { type: "A", name: "www.brightclean.example", value: "192.0.2.1" },
+      ],
+    },
+    next_step: "Remove the A record for www, then add the CNAME.",
   },
   CompletionReport: {
     report_id: "d6e7f809-1a2b-46e7-a8a9-334455667788",
@@ -326,6 +478,24 @@ export const samples: Record<ContractName, unknown> = {
     examples: ["<ContactDetails phone={site.phone} />"],
     forbidden: ["A placeholder number when the phone is empty"],
     source: "generated",
+  },
+  ConnectDomainInput: { name: "brightclean.example" },
+  ConnectDomainOutput: {
+    outcome: "connecting",
+    method: "records",
+    email_affected: false,
+    steps: [
+      {
+        type: "CNAME",
+        name: "www.brightclean.example",
+        value: "sites.remeai.co.uk",
+      },
+    ],
+    apex: "forward",
+    provider: {
+      name: "GoDaddy",
+      settings_url: "https://dcc.godaddy.com/manage/dns",
+    },
   },
   Conversation: {
     id: CONVERSATION,
@@ -476,6 +646,13 @@ export const samples: Record<ContractName, unknown> = {
     ],
     approvals: [{ version: 2, expires_at: LATER }],
     missing_facts: ["business.tagline"],
+    domains: [
+      {
+        name: "brightclean.example",
+        state: "awaiting_dns",
+        last_check: { status: "pending_verification" },
+      },
+    ],
   },
   CreateOrgRequest: {
     name: "Brightclean Cleaning Co. (fixture)",
@@ -508,11 +685,73 @@ export const samples: Record<ContractName, unknown> = {
     },
     built_at: NOW,
   },
+  DesignDirection: {
+    id: "calm_daylight",
+    label: "Calm daylight",
+    industries: ["cleaning", "health"],
+    fonts: "outfit_figtree",
+    palettes: ["forest", "sage"],
+    hero: "wash",
+    services: "photo_cards",
+    steps: "circles",
+    faq: "split",
+    cta: "solid",
+    radius: "soft",
+    bands: "one_dark",
+    ornament: "Pill captions on photos",
+    image_style: "Empty sunlit interiors, one prop in the brand hue",
+    voice: "Calm and plain, short sentences",
+  },
   DerivedReminder: {
     rule: "approval_expiring",
     approval_id: "4d5e6f70-8192-4d8e-af10-4b5c6d7e8f90",
     version: 4,
     expires_at: LATER,
+  },
+  DnsRecord: {
+    type: "CNAME",
+    name: "www.brightclean.example",
+    value: "sites.remeai.co.uk",
+  },
+  DomainCheck: { status: "valid" },
+  DomainCheckout: {
+    name: "brightclean.co.uk",
+    price_gbp: 8,
+    client_secret: "cs_1_sec_2",
+    expires_at: LATER,
+  },
+  DomainCheckoutRequest: REGISTRANT,
+  DomainPaymentEvent: {
+    type: "paid",
+    event_id: "evt_1Q2w3E4r5T6y",
+    domain_id: "8a9b0c1d-2e3f-4a5b-9c6d-7e8f9a0b1c2d",
+    checkout_session: "cs_test_a1B2c3",
+    payment_intent: "pi_3Q2w3E4r5T6y",
+  },
+  DomainPrice: { tld: "co.uk", retail_gbp: 8, cost_usd: 5.3 },
+  DomainProvider: {
+    name: "GoDaddy",
+    settings_url: "https://dcc.godaddy.com/manage/dns",
+  },
+  DomainPurchaseStatus: {
+    name: "brightclean.com",
+    state: "removed",
+    test: true,
+    outcome: "test_registered",
+  },
+  DomainRegistration: {
+    sandbox: false,
+    status: "registered",
+    outcome: "registered",
+    years: 1,
+    auto_renew: true,
+    expires_at: LATER,
+    registrant_type: "STRA",
+  },
+  DomainStripe: {
+    customer: "cus_Q2w3E4r5T6y",
+    checkout_session: "cs_test_a1B2c3",
+    payment_intent: "pi_3Q2w3E4r5T6y",
   },
   ErrorEnvelope: {
     class: "permission",
@@ -618,12 +857,45 @@ export const samples: Record<ContractName, unknown> = {
     attempt: 2,
     reported_at: NOW,
   },
+  FindDomainInput: { query: "bright clean bristol" },
+  FindDomainOutput: {
+    outcome: "found",
+    best: {
+      name: "brightclean.co.uk",
+      price_gbp_year: 8,
+      why: "Short, matches the business name, and .co.uk says UK-based.",
+    },
+    options: [
+      {
+        name: "brightcleanbristol.co.uk",
+        price_gbp_year: 8,
+        why: "Names the city customers search for.",
+      },
+    ],
+  },
+  FontPair: {
+    id: "outfit_figtree",
+    label: "Outfit and Figtree",
+    display: { family: "Outfit", weights: [500, 600], italic: false },
+    body: { family: "Figtree", weights: [400, 500] },
+  },
   GetPreviewInput: { assignment_id: ASSIGNMENT },
   GetPreviewOutput: {
     outcome: "ready",
     assignment_id: ASSIGNMENT,
     version: 3,
     expires_at: LATER,
+  },
+  ImageSlot: {
+    id: "about_team",
+    page: "about",
+    section: "about",
+    aspect: "4:3",
+    resolution: "1K",
+    subject: "The owner's own photo of the two of them with the van",
+    source: "upload",
+    asset_id: "4e5f6071-8293-4a0e-9f10-4c5d6e7f8091",
+    alt: "Two cleaners beside a white van",
   },
   InformationAnswer: {
     answer_id: "e7f8091a-2b3c-47f8-b9ba-445566778899",
@@ -659,7 +931,9 @@ export const samples: Record<ContractName, unknown> = {
   },
   OwnerChangeRequest: {
     text: "Add a line saying we bring our own supplies.",
+    change_kind: "copy",
   },
+  Palette: paletteSample,
   PreviewClaim: {
     org_id: ORG,
     site_id: ORG,
@@ -694,6 +968,17 @@ export const samples: Record<ContractName, unknown> = {
     updated_at: NOW,
   },
   ReminderPatch: { done: true },
+  RecordReviewInput: {
+    slot: 1,
+    quote:
+      "They worked around my hours and the kitchen has never looked so clean.",
+    name: "Marta L.",
+    permission: true,
+  },
+  RecordReviewOutput: { outcome: "recorded", slot: 1 },
+  RedirectPointer: { redirect_to: "brightclean.example" },
+  RemoveDomainInput: { name: "brightclean.example" },
+  RemoveDomainOutput: { outcome: "removed" },
   RequestChangeOutput: {
     outcome: "started",
     build: {
@@ -742,6 +1027,21 @@ export const samples: Record<ContractName, unknown> = {
     expires_at: LATER,
     signature: "ed25519:AbC123",
   },
+  ServerButtonPart: {
+    type: "data-button",
+    data: {
+      label: "Open GoDaddy DNS settings",
+      action: { kind: "open", url: "https://dcc.godaddy.com/manage/dns" },
+    },
+  },
+  ServerMessage: {
+    id: "domain-live-0c1f2b3a",
+    text: ["brightclean.example is live."],
+    button: {
+      label: "See the site",
+      action: { kind: "open", url: "https://brightclean.example" },
+    },
+  },
   SetFactsRequest: {
     facts: [
       { key: "business.phone", value: { e164: "+15550142" } },
@@ -758,6 +1058,7 @@ export const samples: Record<ContractName, unknown> = {
     site_id: ORG,
     revision_id: REVISION,
     config_version: 4,
+    canonical_host: "brightclean.example",
   },
   SiteRevision: {
     revision_id: REVISION,
@@ -809,6 +1110,7 @@ export const samples: Record<ContractName, unknown> = {
   WorkspaceStatus: {
     site: {
       host: "brightclean.remeai.co.uk",
+      url: "https://brightclean.remeai.co.uk",
       live: { revision_id: REVISION, version: 3, assignment_id: ASSIGNMENT },
     },
     builds: [
@@ -817,11 +1119,20 @@ export const samples: Record<ContractName, unknown> = {
         kind: "site.revise",
         state: "awaiting_review",
         goal: "Put the weekend hours on the contact page.",
+        lane: "full",
+        activity: [
+          { id: "pages", label: "Writing the pages", done: 3, total: 5 },
+          { id: "photos", label: "Making photos", done: 4, total: 7 },
+        ],
         revision: null,
         created_at: NOW,
         updated_at: NOW,
       },
     ],
+    expected_seconds: {
+      full: { p50: 240, p95: 420 },
+      quick: { p50: 20, p95: 45 },
+    },
     attention: [
       {
         kind: "approval",

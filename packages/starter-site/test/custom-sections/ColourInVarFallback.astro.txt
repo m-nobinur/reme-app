@@ -1,0 +1,9 @@
+---
+import { site } from "../../site-config"
+---
+
+{ site.x && (<p>{site.x}</p>) }
+
+<style>
+  p { color: var(--primary, #fff); }
+</style>

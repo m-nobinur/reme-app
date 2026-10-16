@@ -74,7 +74,7 @@ export function dueRevisions(
 }
 
 /** The slice of R2 the delete uses. */
-export type Deletable = {
+type Deletable = {
   list: (options: { prefix: string; cursor?: string }) => Promise<{
     objects: { key: string }[]
     truncated: boolean

@@ -3,26 +3,35 @@ import { env } from "cloudflare:workers"
 import { getSandbox, OperationInterruptedError } from "@cloudflare/sandbox"
 import {
   CompletionReport,
-  DeploymentManifest,
   FactSnapshot,
   InformationRequest,
   RuntimeSpec,
-  siteHost,
 } from "@workspace/contracts"
-import { orgs, siteRevisions, sql, type Tenancy, tenancy } from "@workspace/db"
+import {
+  assignments,
+  eq,
+  events,
+  sql,
+  type Tenancy,
+  tenancy,
+} from "@workspace/db"
 import {
   type AgentProps,
   type BudgetGuard,
+  completeOnce,
   createBudgetGuard,
+  createMutationQueue,
   createTee,
   createTurnGate,
   defineTool,
   guardedTools,
   instrument,
+  type MutationQueue,
   observe,
   type ResolvedRuntime,
   registerProviders,
   resolveRuntime,
+  roleOf,
   SANDBOX_UPDATING,
   type Tee,
   type TurnGate,
@@ -35,27 +44,47 @@ import {
   useResponseFinish,
   useSandbox,
   useTool,
+  withOutputCap,
 } from "@workspace/facade"
 import { cloudflareSandbox } from "@workspace/facade/cloudflare"
+import { z } from "zod"
 import type { Brief } from "../brief.ts"
-import { assignmentGoal, goalTainted, siteRules } from "../developer-rules.ts"
+import {
+  copyInstructions,
+  FAN_OUT,
+  fansOut,
+  fieldsOfPrompt,
+  pageInstructions,
+  pageOfPrompt,
+  serviceCount,
+  writerTasks,
+} from "../fanout.ts"
+import { placeGenerated } from "../images.ts"
+import { instructions, sectionInstructions } from "../instructions.ts"
 import {
   ASK_CHIEF_DESCRIPTION,
   AskChiefInput,
   askedOptions,
   refuseQuestion,
 } from "../question.ts"
-import { repoMap } from "../repo-map.ts"
+import { logTurn } from "../quick.ts"
 import { placePhotos, SITE_ROOT } from "../revise.ts"
 import { checkpoint, recover } from "../sandbox.ts"
-import {
-  QUOTE_FORM_FILE,
-  quoteFormFile,
-  SEED_DIGEST,
-  seedFiles,
-} from "../seed.ts"
+import { QUOTE_FORM_FILE, quoteFormFile, seedFiles } from "../seed.ts"
 import { eventSink } from "../sink.ts"
-import { assignmentCost } from "../state.ts"
+import { assignmentCost, turnCount } from "../state.ts"
+import { checksOf, finishRevision, GIT, SEAL_PHOTOS } from "../tail.ts"
+import { LEAD_TURN_MS, since } from "../timing.ts"
+import {
+  createWarmer,
+  followPhotos,
+  type Landed,
+  landedOf,
+  reconcilePhotos,
+  replySchema,
+  WARM_BUILD,
+  writePages,
+} from "../write-pages.ts"
 
 /**
  * The Developer (§8, ADR-031): one Durable Object conversation per
@@ -66,7 +95,6 @@ import { assignmentCost } from "../state.ts"
  */
 
 const POLICY = { siteRoot: SITE_ROOT, readOnlyRoots: ["/opt/astro"] }
-const GIT = "git -c user.name=reme -c user.email=developer@reme.invalid"
 
 // The transport, once per isolate; a missing key fails here, before a model.
 registerProviders(env)
@@ -79,6 +107,8 @@ type Session = {
   kit: Tenancy
   brief: Brief
   gate: TurnGate
+  /** One per assignment, so the lead's and `write_pages`' writes to one file take turns. */
+  mutations: MutationQueue
   /** Operations already reported as interrupted, so one failure wakes the Workflow once. */
   interruptions: Set<string>
   budgetExhausted: boolean
@@ -101,15 +131,19 @@ observe((observation, ctx) => {
  * this the assignment waits on an event that never comes and holds the site
  * lock. The log is flushed first, then the Workflow is told once per failed
  * operation; it retries and, failing that, releases the lock (§13). A budget
- * refusal is left to the budget path, which already wakes it.
+ * refusal is left to the budget path, which already wakes it. A subagent's
+ * failed run is not one: it returns to the lead as its `task` result, and
+ * the lead's turn goes on.
  */
 function interrupted(found: Session, observation: unknown) {
   const o = observation as {
     type?: string
     operationId?: string
+    taskId?: string
     error?: { meta?: { reason?: unknown }; name?: unknown }
   }
-  if (o.type !== "operation" || !o.error || found.budgetExhausted) return
+  if (o.type !== "operation" || !o.error || o.taskId || found.budgetExhausted)
+    return
   const reason = String(
     o.error.meta?.reason ?? o.error.name ?? "operation failed"
   ).slice(0, 300)
@@ -119,23 +153,32 @@ function interrupted(found: Session, observation: unknown) {
 /**
  * Wake the Workflow once per key with an `interrupted` reason: an operation
  * that failed, or the turn gate ending the turn on the model's behalf
- * (open item 55). The log gets the reason first, then the wake.
+ * (open item 55). Or with `unreported`: the lead's turn ended with nothing
+ * that woke it. The log gets the reason first, then the wake.
  */
-function wake(found: Session, key: string, reason: string) {
+function wake(
+  found: Session,
+  key: string,
+  reason: string,
+  kind: "interrupted" | "unreported" = "interrupted"
+) {
   if (found.interruptions.has(key)) return
   found.interruptions.add(key)
-  found.tee.emit("developer.interrupted", { reason })
+  found.tee.emit(`developer.${kind}`, { reason })
   found.tee
     .flush()
     .then(() => workflow(found.brief.snapshot.assignment_id))
     .then((instance) =>
       instance.sendEvent({
         type: "developer",
-        payload: { kind: "interrupted", reason },
+        payload: { kind, reason },
       })
     )
     .catch(() => undefined)
 }
+
+/** The tools that wake the Workflow themselves when they succeed. */
+const WAKING_TOOLS = new Set(["report_complete", "ask_chief"])
 
 /**
  * The sandbox SDK's own class for a container the platform replaced under a
@@ -224,6 +267,7 @@ function session(id: string, brief: Brief, runtime: ResolvedRuntime): Session {
     kit,
     brief,
     gate: undefined as unknown as TurnGate,
+    mutations: createMutationQueue(),
     interruptions: new Set(),
     budgetExhausted: false,
   }
@@ -231,6 +275,10 @@ function session(id: string, brief: Brief, runtime: ResolvedRuntime): Session {
     onInterrupt: (reason) => wake(created, `gate:${reason}`, reason),
     interruptNow: platformInterrupted,
     onToolDone: (name) => (name === "checkpoint" ? save(created) : undefined),
+    // Which subagents the lead's interrupted turn cut short, so its resume
+    // knows what to send again.
+    onCancel: (taskId, reason) =>
+      tee.emit("developer.task_cancelled", { task_id: taskId, reason }),
   })
   const budget = createBudgetGuard({
     capUsd: runtime.budget.model_usd_cap,
@@ -270,57 +318,36 @@ function session(id: string, brief: Brief, runtime: ResolvedRuntime): Session {
 }
 
 /**
- * The stable prompt segment, ordered from what every build shares to what
- * only this one has, so a provider that caches the longest repeated prefix
- * reuses it across builds: the role and the rules that never change, the
- * starter's components, then this business's rules and facts, the site map,
- * and last the assignment's goal and budget. The whole segment is fixed for
- * a build, so its calls reuse all of it.
+ * A render that throws (a bad brief or spec, an agent or tool that cannot be
+ * built, a missing binding) fails the submission inside the runtime, which
+ * defers it and never retries: no turn is logged and nothing wakes the
+ * Workflow. So the Workflow is told here, and fails the build at once.
  */
-function instructions(brief: Brief, runtime: ResolvedRuntime): string {
-  const facts = brief.snapshot.facts
-    .map((f) => `- ${f.key} (${f.fact_type}): ${JSON.stringify(f.value)}`)
-    .join("\n")
-  const revising = brief.restore_key !== null
-  return [
-    revising
-      ? "You are the Developer at Reme, revising a small business's published website in the Astro site under /workspace/site. The site is restored as it is live; you change only what the change request asks and keep everything else exactly as it is. You build from canonical facts and from nothing else."
-      : "You are the Developer at Reme, building a small business's website in the Astro site under /workspace/site. You build from canonical facts and from nothing else.",
-    "",
-    "Rules:",
-    "- Build pages from the components listed below, as their manifests say, and never in a way a manifest forbids.",
-    "- Read every file you need in one turn; reads run together.",
-    "- node_modules is a read-only link to the image's toolchain; never run pnpm install, npm install or anything that reaches the network.",
-    "- Run ./node_modules/.bin/astro check and ./node_modules/.bin/astro build with bash before you report. Fix what they report.",
-    "- Call checkpoint after a coherent set of edits.",
-    "- A run.interrupted message means your turn ended before you finished it. Your work up to your last checkpoint is there; anything after it may not be. Look at git log and git status, then continue from what you find.",
-    "- A validation.failed message lists the gates your reported build failed, each with its message and the node it names. Fix exactly those, check and build again, and call report_complete again.",
-    "- End your turn with exactly one of: ask_chief (a fact is missing) or report_complete (the site builds and every claim traces to a fact). Do not end a turn any other way.",
-    "",
-    "Components (name, file, props, never):",
-    SEED_DIGEST,
-    "",
-    "Rules for this site:",
-    ...siteRules(revising, brief.snapshot.facts, goalTainted(brief, revising)),
-    "",
-    `Canonical facts (snapshot ${brief.snapshot.snapshot_id}):`,
-    facts || "- (none)",
-    "",
-    "Site map (every file, in path order):",
-    // The seed's own map, built from the files the sandbox is seeded with so
-    // it cannot drift from them. A restored site (`site.revise`) carries its
-    // own map in the brief, built from the container by the Workflow.
-    brief.map ?? repoMap(seedFiles(brief.snapshot.facts)),
-    "",
-    assignmentGoal(brief, revising),
-    "Acceptance criteria:",
-    ...brief.acceptance_criteria.map((c) => `- ${c}`),
-    "",
-    `Budget: ${runtime.budget.model_usd_cap} USD of model spend for this assignment. Be brief.`,
-  ].join("\n")
+export function Developer(props: AgentProps) {
+  try {
+    return render(props)
+  } catch (error) {
+    startFailed(props.id, error)
+    throw error
+  }
 }
 
-export function Developer({ id }: AgentProps) {
+function startFailed(id: string, error: unknown) {
+  const reason = String(error).slice(0, 300)
+  const found = sessions.get(id)
+  found?.tee.emit("developer.start_failed", { reason })
+  Promise.resolve(found?.tee.flush())
+    .then(() => workflow(id))
+    .then((instance) =>
+      instance.sendEvent({
+        type: "developer",
+        payload: { kind: "start_failed", reason },
+      })
+    )
+    .catch(() => undefined)
+}
+
+function render({ id }: AgentProps) {
   const raw = useInitialData<Brief | undefined>()
   if (!raw) throw new Error("the Developer needs a brief at creation")
   // Verified before anything renders (§6.1): a forged, widened or expired
@@ -344,20 +371,48 @@ export function Developer({ id }: AgentProps) {
   )
   const askedForFallback =
     delivery.kind === "signal" && delivery.attributes?.model === "fallback"
+  // QE4: a section change starts on the quick section role (Sonnet, low) and
+  // moves to the build role, for good, when the Workflow's resume or repair
+  // signal asks for it: the quick lane's last step up.
+  const [onBuildRole, setOnBuildRole] = usePersistentState<boolean>(
+    "build_role",
+    false
+  )
+  const askedForBuildRole =
+    delivery.kind === "signal" && delivery.attributes?.role === "build"
+  // The section lane's short prompt lasts as long as its role does.
+  const sectionRole =
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: the value is whatever the hook persisted, not its default
+    brief.role && !(onBuildRole || askedForBuildRole) ? brief.role : null
+  const route = sectionRole ? roleOf(runtime.spec, sectionRole) : runtime
+  // The wire cap is the role's, found by these instructions (withOutputCap).
+  const shown = () =>
+    withOutputCap(
+      (sectionRole ? sectionInstructions : instructions)(
+        brief,
+        runtime.budget.model_usd_cap
+      ),
+      sectionRole
+        ? roleOf(runtime.spec, sectionRole).maxTokens
+        : runtime.maxOutputTokens
+    )
   const model =
     // biome-ignore lint/suspicious/noUnnecessaryConditions: the value is whatever the hook persisted, not its default
     (onFallback || askedForFallback) && runtime.fallback
       ? runtime.fallback
-      : runtime.model
-  // Sonnet 5.5's own default is adaptive thinking at effort high. pi-ai sends
-  // effort "none" when no level is given, so the default is named here.
-  useModel(model, { thinkingLevel: "high" })
-  const stub = getSandbox(env.SANDBOX as never, id)
+      : route.model
+  // pi-ai sends effort "none" when no level is given, so the role's effort
+  // (build: medium, the Blueprint is the specification) is named here.
+  useModel(model, { thinkingLevel: route.effort })
+  // QE2: the site's sandbox, the one the Workflow provisioned and may have
+  // found warm. One per site is safe because the site lock
+  // (`assignments_site_writer_key`) lets one assignment at a time write it.
+  const stub = getSandbox(env.SANDBOX as never, runtime.spec.org_id)
   const base = cloudflareSandbox(stub as never)
   useSandbox(
     {
-      createSandbox: base.createSandbox,
-      tools: guardedTools(POLICY, { git: GIT }),
+      createSandbox: unlisted(base.createSandbox),
+      tools: sandboxTools(current),
     },
     { cwd: SITE_ROOT }
   )
@@ -373,10 +428,18 @@ export function Developer({ id }: AgentProps) {
     // here, and a failure that woke the Workflow before may wake it again.
     current.gate.open()
     current.interruptions.clear()
-    if (model !== runtime.model && !onFallback) {
+    if (askedForBuildRole && brief.role && !onBuildRole) {
+      setOnBuildRole(true)
+      current.tee.emit("model.switched", {
+        from: roleOf(runtime.spec, brief.role).model,
+        to: runtime.model,
+        reason: "quick.fell_through",
+      })
+    }
+    if (model !== route.model && !onFallback) {
       setOnFallback(true)
       current.tee.emit("model.switched", {
-        from: runtime.model,
+        from: route.model,
         to: model,
         reason:
           (delivery.kind === "signal" ? delivery.attributes?.reason : null) ??
@@ -388,14 +451,15 @@ export function Developer({ id }: AgentProps) {
       // §10.6: what the model was shown is in the log before it is shown.
       current.tee.emit("runtime.context_segment", {
         snapshot_id: brief.snapshot.snapshot_id,
-        instructions: instructions(brief, runtime),
+        instructions: shown(),
       })
       setSegmentLogged(true)
     }
     // biome-ignore lint/suspicious/noUnnecessaryConditions: same, the persisted value
     if (restored && (await siteKept(current))) return
     const sandbox = harness.sandbox
-    // The owner's photos, which the instructions list, copied in from the bucket.
+    // The owner's photos and the plan's generated ones, which the
+    // instructions list, copied in from the bucket.
     const photos = async (into: typeof sandbox) => {
       const missing = await placePhotos(
         into,
@@ -406,20 +470,40 @@ export function Developer({ id }: AgentProps) {
       if (missing.length > 0) {
         current.tee.emit("sandbox.photos_missing", { asset_ids: missing })
       }
+      // BA4: the plan's generated photos the Workflow made, by slot.
+      const files = brief.photos ?? []
+      if (files.length === 0) return
+      const placed = await placeGenerated(into, env.SITES, files)
+      const lost = files.filter((f) => !placed[f.slot_id])
+      if (lost.length > 0) {
+        current.tee.emit("sandbox.photos_missing", {
+          slot_ids: lost.map((f) => f.slot_id),
+        })
+      }
     }
     await sandbox.exec(`mkdir -p ${SITE_ROOT}`)
     if (brief.restore_key) {
-      const object = await env.SITES.get(brief.restore_key)
-      if (!object) throw new Error(`no source snapshot at ${brief.restore_key}`)
-      await sandbox.writeFile(
-        "/tmp/source.tar.zst",
-        new Uint8Array(await object.arrayBuffer())
-      )
-      const restore = await sandbox.exec(
-        `tar --zstd -xf /tmp/source.tar.zst -C ${SITE_ROOT} && cd ${SITE_ROOT} && ln -sfn /opt/astro/node_modules node_modules`
-      )
-      if (restore.exitCode !== 0)
-        throw new Error(`restore failed: ${restore.stderr}`)
+      // QE2, one restore and not two: `brief.map` is set only when the
+      // Workflow restored this revision or found it warm before admitting
+      // us. A container replaced since has no `.git`, and restores here.
+      const prepared =
+        brief.map !== null &&
+        (await sandbox.exec(`test -d ${SITE_ROOT}/.git`)).exitCode === 0
+      if (!prepared) {
+        const object = await env.SITES.get(brief.restore_key)
+        if (!object) {
+          throw new Error(`no source snapshot at ${brief.restore_key}`)
+        }
+        await sandbox.writeFile(
+          "/tmp/source.tar.zst",
+          new Uint8Array(await object.arrayBuffer())
+        )
+        const restore = await sandbox.exec(
+          `tar --zstd -xf /tmp/source.tar.zst -C ${SITE_ROOT} && cd ${SITE_ROOT} && ln -sfn /opt/astro/node_modules node_modules`
+        )
+        if (restore.exitCode !== 0)
+          throw new Error(`restore failed: ${restore.stderr}`)
+      }
       // The owner's quote questions as the facts hold them now: a newer
       // `quote.form` replaces the restored file, the same one keeps it.
       await sandbox.writeFile(
@@ -441,21 +525,239 @@ export function Developer({ id }: AgentProps) {
       if (seeded.exitCode !== 0)
         throw new Error(`seed failed: ${seeded.stderr}`)
     }
+    // The photos as placed are the baseline the report holds the lead to.
+    const sealed = await sandbox.exec(`cd ${SITE_ROOT} && ${SEAL_PHOTOS}`)
+    if (sealed.exitCode !== 0)
+      throw new Error(`photo seal failed: ${sealed.stderr}`)
     setRestored(true)
   })
 
-  useTool(askChief(current))
-  useTool(reportComplete(current))
+  // BA4: registered on every run so the lead's tool list, and the prefix it
+  // caches, is the same for every build; only a planned first build's
+  // instructions call it.
+  for (const tool of developerTools(current)) useTool(tool)
 
-  useResponseFinish(() => {
-    current.tee.flush().catch(() => undefined)
+  useResponseFinish(({ response }) => {
+    // A turn that wakes the Workflow ends in an accepted report or a
+    // question, or woke it on the way (a failure, the budget). One that ends
+    // any other way, the lead giving up after refused reports or running out
+    // of turns, would leave the build waiting on a wake that never comes.
+    const reported = response.toolCalls.some(
+      (call) => !call.isError && WAKING_TOOLS.has(call.tool)
+    )
+    if (reported || current.budgetExhausted || current.interruptions.size > 0)
+      current.tee.flush().catch(() => undefined)
+    else wake(current, "unreported", "developer.no_report", "unreported")
   })
 
-  return instructions(brief, runtime)
+  return shown()
 }
 
 Developer.agentName = "developer"
-Developer.durability = { maxAttempts: 3, timeoutMs: 45 * 60 * 1000 }
+Developer.durability = { maxAttempts: 3, timeoutMs: LEAD_TURN_MS }
+
+/** The lead's own tools, built exactly as at agent start (the render test builds them too). */
+export const developerTools = (current: Session) => [
+  writePagesTool(current),
+  askChief(current),
+  reportComplete(current),
+]
+
+/** The lead's sandbox tools (read, write, edit, bash, grep, glob, checkpoint) behind the guard. */
+export const sandboxTools = (current: Session) =>
+  guardedTools(POLICY, {
+    git: GIT,
+    mutations: current.mutations,
+    fromChild: current.gate.fromChild,
+  })
+
+/**
+ * The site's sandbox with the site's own directory listed as empty. Flue
+ * appends a listing of the cwd to the system prompt at the start of every
+ * delivery: none at a first build's start, then dist, .astro and the rest
+ * once it has built. In perf run 2 the prompt grew 130 characters when the
+ * critique arrived, so the turn after it read only the tools from cache
+ * (3,052 tokens) and wrote the other 34,827 again, 28% of the lead's cost.
+ * The instructions carry the site map, and the lead's tools list with bash
+ * and glob, never readdir.
+ */
+export const unlisted =
+  <O, S extends { readdir: (path: string) => Promise<string[]> }>(
+    create: (options: O) => Promise<S>
+  ) =>
+  async (options: O): Promise<S> => {
+    const made = await create(options)
+    return {
+      ...made,
+      readdir: (path: string) =>
+        path.replace(/\/+$/, "") === SITE_ROOT
+          ? Promise.resolve([])
+          : made.readdir(path),
+    }
+  }
+
+/** How long `write_pages` waits for the photo step, from its start. */
+const PHOTO_WAIT_MS = 5 * 60_000
+const CONFIG = `${SITE_ROOT}/src/site-config.ts`
+
+/**
+ * BA4's fan-out, in code (write-pages.ts): every page writer and the copy
+ * writer as one model call each, FAN_OUT at once, while the plan's photos
+ * land in the site and warm Astro's image cache; then each photo's path
+ * as it landed, the photo seal and one "pages" commit, saved like a
+ * checkpoint. Durable: a replay after an interruption returns each writer's
+ * recorded reply, and every write it makes is the same again.
+ */
+const writePagesTool = (current: Session) =>
+  defineTool({
+    name: "write_pages",
+    description:
+      "Writes every page's site fields and the SEO and FAQ copy, one writer per page in parallel, places the plan's photos as they are made and commits. Call it once, alone, after the shell's checkpoint. Returns one line per writer.",
+    input: toolInput(z.object({})),
+    harness: true,
+    durable: true,
+    async run({ harness, step }) {
+      const { brief } = current
+      if (!fansOut(brief)) {
+        return {
+          output:
+            "Nothing to do: write_pages is for a planned first build only.",
+        }
+      }
+      const { spec } = current.runtime
+      const orgId = spec.org_id
+      const assignmentId = brief.snapshot.assignment_id
+      const sandbox = harness.sandbox
+      const stub = getSandbox(env.SANDBOX as never, orgId)
+      const plan = brief.blueprint
+      const tasks = writerTasks(plan, serviceCount(brief))
+      const total = plan.pages.length
+      const shown = new Set<string>()
+      current.tee.emit("build.progress", { stage: "pages", item: null, total })
+
+      // One change at a time, through the assignment's queue for this file.
+      const edit = (change: (source: string) => string) =>
+        current.mutations(CONFIG, async () => {
+          const { content } = await stub.readFile(CONFIG)
+          const next = change(content)
+          if (next !== content) await stub.writeFile(CONFIG, next)
+          return next
+        })
+      const roles = {
+        page: roleOf(spec, "page"),
+        copy: roleOf(spec, "copy"),
+      }
+      // One string per agent, so siblings share a cached prefix.
+      const systems = {
+        page: pageInstructions(brief),
+        copy: copyInstructions(brief),
+      }
+      const call = (
+        index: number,
+        attempt: 1 | 2,
+        user: string,
+        strict: boolean
+      ) =>
+        step.do(`writer ${index + 1}.${attempt}`, async () => {
+          const task = tasks[index] as (typeof tasks)[number]
+          const route = roles[task.agent]
+          const reply = await completeOnce(env, {
+            model: route.model,
+            effort: route.effort,
+            maxTokens: route.maxTokens,
+            system: systems[task.agent],
+            user,
+            sessionId: assignmentId,
+            // Strict only to retry an unparsable reply (write-pages.ts).
+            ...(strict
+              ? { schema: replySchema(fieldsOfPrompt(task.prompt)) }
+              : {}),
+          })
+          await logTurn(
+            current.kit,
+            { orgId, assignmentId },
+            spec.staff_id,
+            task.agent,
+            reply
+          )
+          return reply.text
+        })
+
+      // The photo step's progress rows carry each slot's key as it lands;
+      // its `site.photos` event is the final list, and a `site.photos_failed`
+      // from the Workflow settles it with what landed.
+      const slots = plan.images
+        .filter((s) => s.source === "generated" && !s.asset_id)
+        .map((s) => s.id)
+      const landed = (): Promise<Landed> =>
+        current.kit.withOrg({ orgId }, async (db) =>
+          landedOf(
+            await db
+              .select({ type: events.type, payload: events.payload })
+              .from(events)
+              .where(
+                sql`${events.assignmentId} = ${assignmentId} and (${events.type} in ('site.photos', 'site.photos_failed') or (${events.type} = 'build.progress' and ${events.payload}->>'stage' = 'photos' and ${events.payload}->>'key' is not null))`
+              )
+              .orderBy(events.eventId)
+          )
+        )
+      const warm = createWarmer(() => sandbox.exec(WARM_BUILD))
+      const following = followPhotos({
+        slots,
+        landed,
+        place: (files) => placeGenerated(sandbox, env.SITES, files),
+        onPlaced: warm.kick,
+        pollMs: 2000,
+        timeoutMs: PHOTO_WAIT_MS,
+      })
+      const lines = await writePages({
+        tasks,
+        max: FAN_OUT,
+        staggerMs: 3000,
+        call,
+        edit,
+        onWritten: (task) => {
+          warm.kick()
+          const page = pageOfPrompt(task.prompt)
+          if (!page || shown.has(page)) return
+          shown.add(page)
+          current.tee.emit("build.progress", {
+            stage: "pages",
+            item: page,
+            total,
+          })
+        },
+      })
+      const photos = await following
+      const before = await edit((s) => s)
+      if (
+        (await edit((s) => reconcilePhotos(s, slots, photos.files))) !== before
+      )
+        warm.kick()
+      // The photos as placed are the baseline the report holds the lead to.
+      await sandbox.exec(`cd ${SITE_ROOT} && ${SEAL_PHOTOS}`)
+      await warm.idle()
+      await sandbox.exec(
+        `cd ${SITE_ROOT} && ${GIT} add -A && ${GIT} commit -qm pages || true`
+      )
+      await save(current)
+      const missing = slots.filter(
+        (id) => !photos.files.some((f) => f.slot_id === id)
+      )
+      return {
+        output: [
+          `Wrote ${tasks.length} writers' fields and committed them as "pages":`,
+          ...lines,
+          ...(missing.length > 0
+            ? [
+                `No photo for ${missing.join(", ")} (${photos.timedOut ? "the photo step did not finish in time" : "it fell back"}): its field is empty, so its section takes the no-image form.`,
+              ]
+            : []),
+          "The photos are placed and the image cache is warm. Integrate now.",
+        ].join("\n"),
+      }
+    },
+  })
 
 /**
  * The only escalation (§7.2): name the fact, why, and the shape an answer
@@ -500,34 +802,22 @@ export const askChief = (current: Session) =>
     },
   })
 
-const VIEWPORTS = [390, 768, 1440] as const
-
-const SECURITY_HEADERS = {
-  "content-security-policy":
-    "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'",
-  "x-content-type-options": "nosniff",
-  "referrer-policy": "strict-origin-when-cross-origin",
-  "x-frame-options": "DENY",
-}
-
-const sha256 = async (bytes: Uint8Array) =>
-  Array.from(
-    new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)),
-    (b) => b.toString(16).padStart(2, "0")
-  ).join("")
-
 /**
  * The end of a build (§8.2 "Verify before claiming done"): the tool itself
- * runs the checks, takes the screenshots, uploads the artifact and the
- * source snapshot as durable steps, writes the revision row, logs the
+ * runs the checks, uploads the artifact and the source snapshot as durable
+ * steps (the screenshots follow the preview, in the Workflow), writes the revision row, logs the
  * `CompletionReport` and wakes the Workflow. A report with nothing checked
  * cannot exist, because this is the only way to make one.
+ *
+ * Only while the assignment is `implementing`: a lead resumed after an
+ * interruption can call it again for a report the Workflow already took,
+ * and that run would rebuild the disk under the preview's own steps.
  */
-const reportComplete = (current: Session) =>
+export const reportComplete = (current: Session) =>
   defineTool({
     name: "report_complete",
     description:
-      "Report the build done. Runs astro check and astro build, takes screenshots, uploads the site, and ends your turn. Call it only when every claim on the site traces to a fact and the site builds.",
+      "Report the build done. Runs astro check and astro build, uploads the site, and ends your turn. Call it only when every claim on the site traces to a fact and the site builds.",
     input: toolInput(
       CompletionReport.pick({
         summary: true,
@@ -542,123 +832,32 @@ const reportComplete = (current: Session) =>
       const { spec } = current.runtime
       const orgId = spec.org_id
       const assignmentId = current.brief.snapshot.assignment_id
-      const sandbox = harness.sandbox
-      const run = (command: string) =>
-        sandbox.exec(`cd ${SITE_ROOT} && ${command}`, { timeoutMs: 180_000 })
-
-      // The quote questions are the owner's, never the Developer's: the
-      // build renders the facts' list whatever happened to the file.
-      await sandbox.writeFile(
-        `${SITE_ROOT}/${QUOTE_FORM_FILE}`,
-        quoteFormFile(current.brief.snapshot.facts)
+      const [row] = await current.kit.withOrg({ orgId }, (db) =>
+        db
+          .select({ state: assignments.state })
+          .from(assignments)
+          .where(eq(assignments.id, assignmentId))
       )
-      const check = await step.do("astro check", async () => {
-        const r = await run("./node_modules/.bin/astro check 2>&1 | tail -20")
-        return { exit_code: r.exitCode, output: r.stdout.slice(-2000) }
-      })
-      // Canonical URLs, the sitemap and robots name the tenant host; without
-      // --site the starter leaves them out rather than invent one.
-      const host = await step.do("site host", async () =>
-        current.kit.withOrg({ orgId }, async (db) => {
-          const [org] = await db
-            .select({ slug: orgs.slug })
-            .from(orgs)
-            .where(sql`${orgs.id} = ${orgId}`)
-          if (!org) throw new Error(`no org row for ${orgId}`)
-          return siteHost(org.slug, env.SITE_HOST_SUFFIX)
-        })
-      )
-      const build = await step.do("astro build", async () => {
-        const r = await run(
-          `./node_modules/.bin/astro build --site https://${host} 2>&1 | tail -20`
-        )
-        return { exit_code: r.exitCode, output: r.stdout.slice(-2000) }
-      })
-      if (build.exit_code !== 0) {
-        throw new Error(
-          `astro build failed, fix it before reporting:\n${build.output}`
-        )
+      if (row?.state !== "implementing") {
+        return {
+          output: `Nothing to report: the build is ${row?.state ?? "gone"}, not implementing. Your turn is over.`,
+          terminate: true,
+        }
       }
-
-      const revisionId = await step.do("revision", async () =>
-        current.kit.withOrg({ orgId }, async (db) => {
-          // No version yet: the gates step numbers the revision if it passes.
-          const id = crypto.randomUUID()
-          const prefix = `sites/${orgId}/${id}/`
-          await db.insert(siteRevisions).values({
-            id,
-            orgId,
-            siteId: orgId,
-            assignmentId,
-            sourceKey: `${prefix}source.tar.zst`,
-            artifactPrefix: `${prefix}dist/`,
-            manifestKey: `${prefix}manifest.json`,
-          })
-          return id
+      const sandbox = harness.sandbox
+      const toolStarted = Date.now()
+      const { revisionId, check, build, manifest, custom, source } =
+        await finishRevision({
+          steps: step,
+          sandbox,
+          kit: current.kit,
+          sites: env.SITES,
+          hostSuffix: env.SITE_HOST_SUFFIX,
+          orgId,
+          assignmentId,
+          facts: current.brief.snapshot.facts,
+          holdPhotos: true,
         })
-      )
-      const prefix = `sites/${orgId}/${revisionId}/`
-
-      const screenshots = await step.do("screenshots", async () => {
-        const script = [
-          "(./node_modules/.bin/astro preview --host 127.0.0.1 --port 4321 > /tmp/preview.log 2>&1 &)",
-          "for i in $(seq 1 20); do curl -sf -o /dev/null http://127.0.0.1:4321/ && break; sleep 1; done",
-          ...VIEWPORTS.map(
-            (w) =>
-              `playwright screenshot --browser chromium --viewport-size=${w},900 --full-page http://127.0.0.1:4321/ /tmp/home-${w}.png`
-          ),
-          "pkill -f 'astro preview' || true",
-        ].join(" && ")
-        const r = await run(script)
-        const keys: string[] = []
-        for (const w of VIEWPORTS) {
-          const path = `/tmp/home-${w}.png`
-          if (!(await sandbox.exists(path))) continue
-          const key = `${prefix}screenshots/home-${w}.png`
-          await env.SITES.put(key, await sandbox.readFileBuffer(path))
-          keys.push(key)
-        }
-        return { keys, exit_code: r.exitCode, output: r.stdout.slice(-500) }
-      })
-
-      const manifest = await step.do("upload dist", async () => {
-        const listing = await run("find dist -type f | sort")
-        const files: Record<string, string> = {}
-        const routes: { path: string; file: string }[] = []
-        for (const line of listing.stdout.split("\n").filter(Boolean)) {
-          const file = line.replace(/^dist\//, "")
-          const bytes = await sandbox.readFileBuffer(`${SITE_ROOT}/${line}`)
-          files[file] = await sha256(bytes)
-          await env.SITES.put(`${prefix}dist/${file}`, bytes)
-          if (file.endsWith("index.html")) {
-            routes.push({ path: `/${file.replace(/index\.html$/, "")}`, file })
-          }
-        }
-        const parsed = DeploymentManifest.parse({
-          revision_id: revisionId,
-          site_id: orgId,
-          org_id: orgId,
-          routes,
-          headers: SECURITY_HEADERS,
-          files,
-          built_at: new Date().toISOString(),
-        })
-        await env.SITES.put(`${prefix}manifest.json`, JSON.stringify(parsed))
-        return { files: Object.keys(files).length }
-      })
-
-      await step.do("upload source", async () => {
-        const r = await run(
-          `${GIT} add -A && (${GIT} commit -qm "report_complete" || true) && tar --zstd -cf /tmp/source.tar.zst --exclude=./node_modules --exclude=./dist --exclude=./.vite -C ${SITE_ROOT} .`
-        )
-        if (r.exitCode !== 0)
-          throw new Error(`source snapshot failed: ${r.stderr}`)
-        await env.SITES.put(
-          `${prefix}source.tar.zst`,
-          await sandbox.readFileBuffer("/tmp/source.tar.zst")
-        )
-        return { key: `${prefix}source.tar.zst` }
-      })
 
       const report = CompletionReport.parse({
         report_id: crypto.randomUUID(),
@@ -668,39 +867,40 @@ const reportComplete = (current: Session) =>
         revision_id: revisionId,
         summary: data.summary,
         changes: data.changes,
-        screenshots: screenshots.keys,
-        checks: [
-          {
-            check: "astro check",
-            exit_code: check.exit_code,
-            output_key: null,
-          },
-          {
-            check: "astro build",
-            exit_code: build.exit_code,
-            output_key: null,
-          },
-        ],
-        risks: [
-          ...data.risks,
-          ...(screenshots.keys.length < VIEWPORTS.length
-            ? [
-                `only ${screenshots.keys.length} of ${VIEWPORTS.length} screenshots were taken`,
-              ]
-            : []),
-        ],
+        // Taken after the preview is ready, by the Workflow; the router serves
+        // them by name from this revision's prefix.
+        screenshots: [],
+        checks: checksOf({ check, build, custom }),
+        risks: data.risks,
         decisions_needed: data.decisions_needed,
         reported_at: new Date().toISOString(),
       })
       // Model output: nothing downstream may promote it (§28.3).
       current.tee.emit("assignment.completion_reported", report, ["inferred"])
       await current.tee.flush()
+      const turns = await current.kit
+        .withOrg({ orgId }, (db) => turnCount(db, assignmentId))
+        .catch(() => null)
       await (await workflow(assignmentId)).sendEvent({
         type: "developer",
         payload: {
           kind: "completion",
           report_id: report.report_id,
           revision_id: revisionId,
+          timings: {
+            check_ms: check.ms,
+            build_ms: build.ms,
+            upload_ms: manifest.ms,
+            upload_files: manifest.files,
+            upload_reused: manifest.reused,
+            upload_bytes: manifest.bytes,
+            source_ms: source.ms,
+            // Replayed steps return their first run's ms, so the tool's own
+            // wall time is the one that says what the whole call cost.
+            tool_ms: since(toolStarted),
+            model_turns: turns,
+            reported_at: Date.now(),
+          },
         },
       })
       return {

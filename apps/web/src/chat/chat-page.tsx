@@ -12,8 +12,11 @@ import {
   useRouter,
 } from "@tanstack/react-router"
 import { Approval } from "@workspace/ui/components/assistant/approval"
+import { SaveDesignAnswerProvider } from "@workspace/ui/components/assistant/ask-design"
 import { UploadPhotosProvider } from "@workspace/ui/components/assistant/ask-upload"
+import { DomainPurchaseProvider } from "@workspace/ui/components/assistant/buy-domain"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
+import { ServerButtonUI } from "@workspace/ui/components/assistant/server-button"
 import {
   OWNER_QUICK_ACTIONS,
   SITE_CHANGE_MODE,
@@ -32,8 +35,12 @@ import {
 import { assistantOf, briefingOf } from "@/lib/briefing"
 import { OPENING_REVEAL } from "@/lib/reveal"
 import { useLiveWorkspace } from "@/lib/workspace"
+import { usePlanCard } from "./blueprint-plan"
+import { BuildStopped } from "./build-stopped"
 import { conversationList, unstored } from "./conversations"
-import { asked, missingConversations, startsNewChat } from "./history"
+import { saveDesignAnswer } from "./design"
+import { domainPurchase } from "./domain-purchase"
+import { asked, missingConversations, startsNewChat, tailOf } from "./history"
 import { useConversationRuntime } from "./runtime"
 import { SiteReadyCard } from "./site-ready"
 import { uploadPhotos } from "./upload"
@@ -85,6 +92,21 @@ export function ChatPage() {
   )
   const intent = useRef<"site_change" | undefined>(undefined)
   intent.current = siteChange ? "site_change" : undefined
+  // A Blueprint waiting on the owner, from the polled workspace like the
+  // ready card; a typed "Change the plan: …" goes to it.
+  const plan = usePlanCard(live)
+  const planChange = useRef(plan.change)
+  planChange.current = plan.change
+  // A message the assistant posted on its own, named by the polled tag. Set
+  // here, where the workspace re-renders, for the runtime hook to follow.
+  const tail = useRef<{ current: string | null; moved?: () => void }>({
+    current: null,
+  }).current
+  const liveTail = tailOf(live.workspace?.etag)
+  tail.current = liveTail
+  useEffect(() => {
+    if (liveTail) tail.moved?.()
+  }, [liveTail, tail])
   const useThreadRuntime = () =>
     useConversationRuntime({
       // A turn can change what waits on the owner and the conversation's
@@ -96,11 +118,14 @@ export function ChatPage() {
       // The option, not `adapters.suggestion`: in @assistant-ui/ai-sdk 0.0.2
       // the adapter runs only after an assistant turn ends and then replaces
       // these, and the empty thread is the only place suggestions show.
-      // A stored conversation never offers them: one pressed while its
-      // history loaded started a second conversation.
-      suggestions: id ? [] : briefing.suggestions,
+      // A stored conversation shows them only when it is empty, and the thread
+      // calls it empty only once its history is in: one pressed while it
+      // loaded started a second conversation.
+      suggestions: briefing.suggestions,
       intent,
       onIntentSent: () => setSiteChange(null),
+      planChange,
+      tail,
     })
   const runtime = useRemoteThreadListRuntime({
     adapter: conversationList,
@@ -158,6 +183,7 @@ export function ChatPage() {
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
+      <ServerButtonUI />
       {/* The shell's main scrolls; the thread owns its own scroll instead. */}
       <div className="h-full">
         {missing ? (
@@ -180,16 +206,27 @@ export function ChatPage() {
         ) : (
           <CosToolsProvider value={tools}>
             <UploadPhotosProvider value={uploadPhotos}>
-              <Thread
-                after={<SiteReadyCard />}
-                briefing={briefing.line}
-                components={{ ToolFallback: Approval }}
-                mode={mode}
-                placeholder={`Ask ${assistantOf(live.workspace)} anything…`}
-                quickActions={OWNER_QUICK_ACTIONS}
-                reveal={onboarding ? OPENING_REVEAL : undefined}
-                stored={id}
-              />
+              <SaveDesignAnswerProvider value={saveDesignAnswer}>
+                <DomainPurchaseProvider value={domainPurchase}>
+                  <Thread
+                    after={
+                      <>
+                        {plan.card}
+                        <SiteReadyCard />
+                        <BuildStopped />
+                      </>
+                    }
+                    briefing={briefing.line}
+                    components={{ ToolFallback: Approval }}
+                    mode={mode}
+                    placeholder={`Ask ${assistantOf(live.workspace)} anything…`}
+                    questionPlaceholder={`Or tell ${assistantOf(live.workspace)} something else…`}
+                    quickActions={OWNER_QUICK_ACTIONS}
+                    reveal={onboarding ? OPENING_REVEAL : undefined}
+                    stored={id}
+                  />
+                </DomainPurchaseProvider>
+              </SaveDesignAnswerProvider>
             </UploadPhotosProvider>
           </CosToolsProvider>
         )}

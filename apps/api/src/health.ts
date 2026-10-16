@@ -21,7 +21,7 @@ import { sql, type Tenancy } from "@workspace/db"
  */
 export const PROBE_ORG = "00000000-0000-4000-8000-0000000000ff"
 
-export type HealthReport = {
+type HealthReport = {
   status: "ok" | "degraded"
   /** The role the transaction ran as. `reme_app`, or the policies are moot. */
   role: string

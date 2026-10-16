@@ -1,0 +1,101 @@
+---
+import { getImage } from "astro:assets"
+import { photoFile } from "../photo-files"
+
+// An image from the owner's uploads (src/assets/uploads/) or the photo
+// director (src/assets/generated/), resized and re-encoded at build time.
+// `src` is the path the site config holds: "/uploads/<id>.jpg" or
+// "src/assets/generated/<slot>.png". A path no file answers to renders
+// nothing: the site serves no file outside the build's own, so a plain <img>
+// would be a broken image.
+interface Props {
+  src: string
+  alt: string
+  class?: string
+  /** Widths to emit, never above the source's own. The default stops at 960, a card, gallery or header box at 2x. */
+  widths?: number[]
+  /** What the browser picks from the srcset with. */
+  sizes?: string
+  /** The one image above the fold: eager, high priority, preloaded. */
+  priority?: boolean
+  /** Encoding quality, 1 to 100, of the fallback WebP and, without `avifQuality`, the AVIF. */
+  quality?: number
+  /** AVIF quality by candidate width: a bigger candidate can take a lower one, since a screen that fetches it is dense. */
+  avifQuality?: (width: number) => number
+}
+
+const {
+  src,
+  alt,
+  class: className,
+  widths = [480, 768, 960],
+  sizes = "(min-width: 64rem) 50vw, 100vw",
+  priority = false,
+  quality = 55,
+  avifQuality = () => quality,
+} = Astro.props
+const load = photoFile(src)
+const meta = load ? (await load()).default : undefined
+// A source under the largest width asked for is offered at its own width too.
+const emitted = meta
+  ? [
+      ...new Set([
+        ...widths.filter((w: number) => w <= meta.width),
+        ...(meta.width < Math.max(...widths) ? [meta.width] : []),
+      ]),
+    ].sort((a, b) => a - b)
+  : []
+if (meta && emitted.length === 0) emitted.push(meta.width)
+// One getImage a width: Picture takes a single quality for every candidate.
+const avif = meta
+  ? await Promise.all(
+      emitted.map((w) =>
+        getImage({
+          src: meta,
+          width: w,
+          format: "avif",
+          quality: avifQuality(w),
+        })
+      )
+    )
+  : []
+const avifSet = avif.map((image, i) => `${image.src} ${emitted[i]}w`).join(", ")
+// Every current browser takes AVIF. The one WebP is the <img> an older browser
+// falls back to, so it has no srcset: one file a photo, not one a width.
+const fallbackWidth = emitted.filter((w) => w <= 960).pop() ?? emitted[0]
+const webp = meta
+  ? await getImage({
+      src: meta,
+      alt,
+      width: fallbackWidth,
+      format: "webp",
+      quality,
+      loading: priority ? "eager" : "lazy",
+      decoding: "async",
+      fetchpriority: priority ? "high" : undefined,
+    })
+  : null
+// Picture's own: the picture takes the caller's scoped-style class.
+const scoped = className?.match(/\bastro-\w{8}\b/)?.[0]
+---
+
+{
+  meta && priority && (
+    <link
+      rel="preload"
+      as="image"
+      type="image/avif"
+      imagesrcset={avifSet}
+      imagesizes={sizes}
+      fetchpriority="high"
+    />
+  )
+}
+{
+  webp && (
+    <picture class={scoped}>
+      <source srcset={avifSet} type="image/avif" sizes={sizes} />
+      <img src={webp.src} {...webp.attributes} class={className} />
+    </picture>
+  )
+}

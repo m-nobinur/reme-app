@@ -1,14 +1,22 @@
 ---
+import Photo from "../../layouts/Photo.astro"
+import { hasPhoto } from "../../photo-files"
 import { navLinks, primaryAction } from "../../routes"
 import { site } from "../../site-config"
 import ActionLink from "../ActionLink/ActionLink.astro"
 
+interface Props {
+  /** split, centered on the name, or minimal: a two-line wordmark and the menu. */
+  variant?: "split" | "centered" | "minimal"
+}
+
+const { variant = "split" } = Astro.props
 const current = Astro.url.pathname
 // The action is one of the nav links, and a header that offers the same page
 // twice reads as a mistake, so the button takes it and the list drops it.
 const links = navLinks.filter((link) => link.href !== primaryAction?.href)
 // The owner's logo stands in for the name only with alt text to name it.
-const logo = site.logo && site.logoAlt
+const logo = site.logo && site.logoAlt && hasPhoto(site.logo)
 // One list for both menus: inline on a wide screen, behind a native
 // disclosure on a phone, so the menu opens with no script.
 const items = links.map((link) => ({
@@ -19,16 +27,19 @@ const items = links.map((link) => ({
 
 {
   (site.businessName || links.length > 0) && (
-    <header class="site-header">
+    <header class:list={["site-header", `header-${variant}`]}>
       <div class="wrap header-inner">
         {logo ? (
           <a class="site-name" href="/">
-            <img class="site-logo" src={site.logo} alt={site.logoAlt} />
+            <Photo class="site-logo" src={site.logo} alt={site.logoAlt} widths={[160, 320, 480]} sizes="160px" />
           </a>
         ) : (
           site.businessName && (
             <a class="site-name" href="/">
               {site.businessName}
+              {variant === "minimal" && site.industry && (
+                <span class="site-line">{site.industry}</span>
+              )}
             </a>
           )
         )}
@@ -50,8 +61,8 @@ const items = links.map((link) => ({
             <ActionLink href={primaryAction.href} label={primaryAction.label} />
           </span>
         )}
-        {items.length > 0 && site.navMenu && (
-          <details class="nav-narrow">
+        {(items.length > 0 || primaryAction) && site.navMenu && (
+          <details class:list={["nav-narrow", items.length === 0 && "nav-solo"]}>
             <summary class="menu-toggle">{site.navMenu}</summary>
             <nav aria-label={site.primaryNavLabel}>
               <ul>
@@ -62,6 +73,11 @@ const items = links.map((link) => ({
                     </a>
                   </li>
                 ))}
+                {primaryAction && (
+                  <li class="menu-action">
+                    <a href={primaryAction.href}>{primaryAction.label}</a>
+                  </li>
+                )}
               </ul>
             </nav>
           </details>

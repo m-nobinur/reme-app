@@ -53,9 +53,10 @@ const MARKETING = [
   fact("guarantees.satisfaction", { statement: "100% satisfaction guarantee" }),
   fact("awards.local", { name: "Award-winning cleaner of the year" }),
   fact("differentiators.value", { statement: "Best value in Fairhaven" }),
-  fact("testimonials.jane", {
+  fact("testimonials.review_1", {
     quote: "They left the kitchen spotless and were on time",
-    author: "Jane R",
+    name: "Jane R",
+    permission: true,
   }),
 ]
 
@@ -123,6 +124,36 @@ describe("the claims gate", () => {
     }
   })
 
+  it("fails the promises longer copy reaches for unless business.proof states them", () => {
+    const promises = [
+      "<p>We reply within 24 hours</p>",
+      "<p>Open 7 days a week</p>",
+      "<p>Get a free quote today</p>",
+      "<p>A no-obligation estimate</p>",
+      "<p>Our trained cleaners</p>",
+      "<p>A qualified solicitor</p>",
+      "<p>Trusted by local families</p>",
+      "<p>Available 24/7</p>",
+    ]
+    for (const main of promises)
+      expect(verdict(main, PLAIN).passed, main).toBe(false)
+    const proof = [
+      ...PLAIN,
+      fact("business.proof", {
+        text: "Free quotes, no-obligation. Trained cleaners, available 24/7, 7 days a week, replies within 24 hours.",
+      }),
+    ]
+    for (const main of promises.filter((m) => !/qualified|Trusted/.test(m)))
+      expect(verdict(main, proof).passed, main).toBe(true)
+    // General trade practice with no promise in it passes on the plain facts.
+    expect(
+      verdict(
+        "<p>A deep clean reaches the places a weekly visit skips, from the tops of cupboards to the grout.</p>",
+        PLAIN
+      ).passed
+    ).toBe(true)
+  })
+
   it("lets the owner's business.proof support what it says, and nothing more", () => {
     const proof = [
       ...PLAIN,
@@ -185,6 +216,42 @@ describe("the claims gate", () => {
     }
   })
 
+  it("fails a widening word the fact does not hold: 'Fully insured' is broader than a stated limit", () => {
+    const limited = [
+      ...PLAIN,
+      fact("credentials.insurance", { statement: "Insured up to $5 million" }),
+    ]
+    for (const main of [
+      "<p>Fully insured</p>",
+      "<p>Completely insured and bonded</p>",
+      "<p>Comprehensive insurance</p>",
+      "<p>Full coverage on every clean</p>",
+      "<p>Fully covered</p>",
+      "<p>Totally guaranteed</p>",
+    ]) {
+      const result = verdict(main, limited)
+      expect(result.passed, main).toBe(false)
+      expect(result.message, main).toContain("index.html")
+    }
+    // What the fact says, and its plain claim word, still pass.
+    for (const main of ["<p>Insured up to $5 million</p>", "<p>Insured</p>"])
+      expect(verdict(main, limited).passed, main).toBe(true)
+    // A widening word that sits before nothing the gate watches is copy, not a claim.
+    for (const main of [
+      "<p>Full-service cleaning</p>",
+      "<p>A complete clean, start to finish</p>",
+      "<p>We cover Fairhaven fully</p>",
+    ])
+      expect(verdict(main, limited).passed, main).toBe(true)
+    // The fact that holds the widening word supports it.
+    const full = [
+      ...PLAIN,
+      fact("credentials.insurance", { statement: "Fully insured" }),
+    ]
+    expect(verdict("<p>Fully insured</p>", full).passed).toBe(true)
+    expect(verdict("<p>Comprehensive insurance</p>", full).passed).toBe(false)
+  })
+
   it("passes a testimonial a fact carries and fails a quote it does not", () => {
     const real =
       '<blockquote><p>"They left the kitchen spotless and were on time"</p><cite>Jane R</cite></blockquote>'
@@ -194,6 +261,17 @@ describe("the claims gate", () => {
     const result = verdict(invented, MARKETING)
     expect(result.passed).toBe(false)
     expect(result.offending_node).toContain("blockquote")
+  })
+
+  it("fails a quote whose review the customer never agreed to have shown", () => {
+    const real =
+      '<blockquote><p>"They left the kitchen spotless and were on time"</p><cite>Jane R</cite></blockquote>'
+    const unagreed = MARKETING.map((f) =>
+      f.key === "testimonials.review_1"
+        ? { ...f, value: { ...(f.value as object), permission: false } }
+        : f
+    )
+    expect(verdict(real, unagreed).passed).toBe(false)
   })
 
   it("reads a rating, a review count and an award out of structured data", () => {
@@ -237,6 +315,35 @@ describe("the claims gate", () => {
     }
   })
 
+  it("fails who the business is unless a fact says it", () => {
+    const owner = [
+      ...PLAIN,
+      fact("business.overview", { text: "A friendly local team in Fairhaven" }),
+    ]
+    for (const main of [
+      "<h1>Fairhaven home cleaning, run by a local</h1>",
+      "<p>A family-run business</p>",
+      "<p>Independent and owner-run</p>",
+      "<p>Locally owned since the start</p>",
+      "<p>A small team you can trust</p>",
+    ]) {
+      const result = verdict(main, owner)
+      expect(result.passed, main).toBe(false)
+      expect(result.offending_node, main).toContain("index.html html>body>main")
+    }
+    // A fact's own phrase passes whatever its key; a bare "local" never claims.
+    for (const main of [
+      "<p>Meet the local team</p>",
+      "<p>Local cleaners for Fairhaven homes</p>",
+    ])
+      expect(verdict(main, owner).passed, main).toBe(true)
+    const stated = [
+      ...PLAIN,
+      fact("about.story", { text: "We are a family-run business" }),
+    ]
+    expect(verdict("<p>A family-run business</p>", stated).passed).toBe(true)
+  })
+
   it("publishes the vocabulary and the fact prefixes that support it", () => {
     const words = Object.values(CLAIM_VOCABULARY).flat()
     for (const word of ["best", "#1", "certified", "insured", "guaranteed"])
@@ -245,5 +352,55 @@ describe("the claims gate", () => {
     expect(SUPPORTING_FACT_PREFIXES).toContain("testimonials.")
     for (const prefix of SUPPORTING_FACT_PREFIXES)
       expect(prefix.endsWith(".")).toBe(true)
+  })
+})
+
+describe("generated images in a claim section", () => {
+  const slot = (
+    id: string,
+    section: "hero" | "about" | "gallery" | "service_cards",
+    source: "generated" | "upload"
+  ) => ({
+    id,
+    page: "home",
+    section,
+    aspect: "4:3",
+    resolution: "1K",
+    subject: "a cleaner holding a bucket",
+    alt: "A cleaner at work",
+    source,
+    asset_id: "20000001-0000-4000-8000-000000000000",
+  })
+  const sections = [
+    { kind: "hero", variant: "wash" },
+    { kind: "about", variant: "default" },
+    { kind: "gallery", variant: "default" },
+    { kind: "service_cards", variant: "fleet" },
+  ].map((s) => ({ ...s, purpose: "x", content_notes: null }))
+  const plan = (...images: ReturnType<typeof slot>[]) =>
+    ({ images, pages: [{ page: "home", sections }] }) as never
+
+  it("fails a generated slot in a claim section and names the slot", () => {
+    const r = checkClaims([], PLAIN, plan(slot("team", "about", "generated")))
+    expect(r.passed).toBe(false)
+    expect(r.offending_node).toContain("images.team")
+  })
+
+  it("fails a generated slot in a fleet services section", () => {
+    const r = checkClaims(
+      [],
+      PLAIN,
+      plan(slot("cars", "service_cards", "generated"))
+    )
+    expect(r.passed).toBe(false)
+  })
+
+  it("passes a generated hero and an uploaded photo in a claim section", () => {
+    const r = checkClaims(
+      [],
+      PLAIN,
+      plan(slot("hero", "hero", "generated"), slot("work", "gallery", "upload"))
+    )
+    expect(r.passed).toBe(true)
   })
 })

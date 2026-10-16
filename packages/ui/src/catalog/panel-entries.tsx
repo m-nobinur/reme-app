@@ -26,7 +26,9 @@ import {
   TabsTrigger,
 } from "@workspace/ui/components/tabs"
 import { type AnswerSpec, askable } from "@workspace/ui/lib/answer"
+import { paletteStops } from "@workspace/ui/lib/blueprint"
 import type { ReactNode } from "react"
+import { BLUEPRINT } from "./blueprint-fixtures"
 
 /**
  * Catalog entries for the live panel. Every state a component has is its own
@@ -43,7 +45,7 @@ const STARTED = "2026-10-01T09:00:00.000Z"
 /** Four minutes ten seconds in, pinned so the snapshot does not tick. */
 const NOW = Date.parse(STARTED) + 250_000
 const NOW_ISO = new Date(NOW).toISOString()
-const TYPICAL = { min: 115, max: 313 }
+const EXPECTED = { p50: 180, p95: 330 }
 const EXPIRES = "2026-10-04T09:00:00.000Z"
 const REVISION: ApprovalTarget = {
   kind: "revision",
@@ -133,6 +135,119 @@ const approval = (extra = {}) => (
   />
 )
 
+/**
+ * A drawn room in one palette's own colours, standing in for a generated
+ * photo whatever the app's theme. Nothing real.
+ */
+const scene = (id: "mint" | "sage" | "pebble") => {
+  const [paper, tint, primary, ink] = paletteStops({ kind: "preset", id })
+  return `data:image/svg+xml,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="90" viewBox="0 0 120 90"><rect width="120" height="90" fill="${tint}"/><rect x="14" y="12" width="34" height="30" fill="${paper}"/><rect y="62" width="120" height="28" fill="${ink}" fill-opacity=".55"/><rect x="66" y="44" width="38" height="20" rx="3" fill="${primary}"/><circle cx="24" cy="56" r="7" fill="${primary}" fill-opacity=".7"/></svg>`
+  )}`
+}
+
+/** The fixture plan with a gallery and a contact page, so the pages count to six. */
+const PLAN = {
+  ...BLUEPRINT,
+  pages: [
+    ...BLUEPRINT.pages,
+    ...(["gallery", "contact"] as const).map((id) => ({
+      page: id,
+      sections: BLUEPRINT.pages[0]?.sections.slice(0, 2) ?? [],
+    })),
+  ],
+}
+
+const row = (id: string, label: string, done: number, total = 1) => ({
+  id,
+  label,
+  done,
+  total,
+})
+
+/** The plan's six pages as the writing step names them, the first `done` written. */
+const pages = (done: number) =>
+  ["Home", "Services", "About", "Request a quote", "Gallery", "Contact"].map(
+    (label, i) => ({ label, done: i < done })
+  )
+
+/** A full build's steps as the api lists them, at `step` with these counts. */
+const steps = (
+  at: "planning" | "photos" | "writing" | "design" | "fixing" | "checking",
+  counts: { photos?: number; pages?: number } = {}
+) => {
+  const order = [
+    "planning",
+    "photos",
+    "writing",
+    "design",
+    "fixing",
+    "checking",
+  ]
+  const passed = (id: string) => order.indexOf(id) < order.indexOf(at)
+  const whole = (id: string, label: string) =>
+    row(id, label, passed(id) ? 1 : 0)
+  return [
+    whole("planning", "Planning the layout"),
+    row(
+      "photos",
+      "Making photos",
+      passed("photos") ? 4 : (counts.photos ?? 0),
+      4
+    ),
+    {
+      ...row(
+        "writing",
+        "Writing the pages",
+        passed("writing") ? 6 : (counts.pages ?? 0),
+        6
+      ),
+      items: pages(passed("writing") ? 6 : (counts.pages ?? 0)),
+    },
+    whole("design", "Looking over the design"),
+    // The gates sent it back once: the row stays, before the checks it comes back to.
+    ...(at === "fixing"
+      ? [whole("fixing", "Fixing what the checks found")]
+      : []),
+    whole("checking", "Checking the site"),
+  ]
+}
+
+const PHOTOS = {
+  hero: scene("mint"),
+  kitchen: scene("sage"),
+  bath: scene("pebble"),
+}
+
+const photo = (
+  slot_id: string,
+  state: "drawing" | "made" | "fallback",
+  thumbnail: string | null = null,
+  alt: string | null = "A bright room after a clean"
+) => ({ slot_id, state, alt, thumbnail })
+
+/** A full build of the fixture plan, at `state`, with its steps, at the panel's width. */
+const building = (
+  state: AssignmentState,
+  activity: ReturnType<typeof steps>,
+  extra: Record<string, unknown> = {}
+) => (
+  <div className="max-w-[22rem]">
+    {working(state, {
+      build: {
+        goal: "Build my website from the details I gave you",
+        state,
+        version: null,
+        startedAt: STARTED,
+        lane: "full",
+        activity,
+        plan: PLAN,
+        ...extra,
+      },
+    })}
+  </div>
+)
+
 const working = (state: AssignmentState, extra = {}) => (
   <WorkingOn
     build={{
@@ -143,7 +258,7 @@ const working = (state: AssignmentState, extra = {}) => (
     }}
     now={NOW}
     onStop={noop}
-    typical={TYPICAL}
+    expectedSeconds={EXPECTED}
     {...extra}
   />
 )
@@ -365,6 +480,133 @@ const panelCatalog: Entry[] = [
   },
   { name: "WorkingOn", render: () => working("implementing") },
   {
+    name: "WorkingOn with activity",
+    render: () =>
+      working("implementing", {
+        build: {
+          goal: "Lead the hero with end of tenancy cleans",
+          state: "implementing",
+          version: null,
+          startedAt: STARTED,
+          lane: "full",
+          activity: [
+            { id: "planning", label: "Planning the layout", done: 1, total: 1 },
+            { id: "writing", label: "Writing the pages", done: 3, total: 5 },
+            { id: "photos", label: "Making photos", done: 0, total: 7 },
+          ],
+        },
+      }),
+  },
+  // A full build's steps as it moves, from planning to ready.
+  {
+    // No plan yet: nothing decided to show, so no photo or design step.
+    name: "WorkingOn planning",
+    render: () =>
+      building(
+        "planning",
+        [
+          row("planning", "Planning the layout", 0),
+          row("writing", "Writing the pages", 0),
+          row("checking", "Checking the site", 0),
+        ],
+        { plan: undefined }
+      ),
+  },
+  {
+    name: "WorkingOn review wait",
+    render: () =>
+      building("planning", steps("planning"), { awaitingReview: true }),
+  },
+  {
+    name: "WorkingOn photos",
+    render: () =>
+      building("implementing", steps("photos", { photos: 2 }), {
+        reviewMs: 95_000,
+        photos: [
+          photo("slot_1", "made", PHOTOS.hero),
+          photo("slot_3", "made", PHOTOS.kitchen),
+          photo("slot_4", "drawing"),
+          photo("slot_5", "drawing"),
+        ],
+      }),
+  },
+  {
+    name: "WorkingOn pages",
+    render: () =>
+      building("implementing", steps("writing", { pages: 3 }), {
+        reviewMs: 95_000,
+        photos: [
+          photo("slot_1", "made", PHOTOS.hero),
+          photo("slot_3", "made", PHOTOS.kitchen),
+          photo("slot_4", "made", PHOTOS.bath),
+          photo("slot_5", "fallback", null, null),
+        ],
+      }),
+  },
+  {
+    name: "WorkingOn design look",
+    render: () =>
+      building("implementing", steps("design"), {
+        reviewMs: 95_000,
+        photos: [
+          photo("slot_1", "made", PHOTOS.hero),
+          photo("slot_3", "made", PHOTOS.kitchen),
+          photo("slot_4", "made", PHOTOS.bath),
+          photo("slot_5", "made", PHOTOS.hero),
+        ],
+      }),
+  },
+  {
+    name: "WorkingOn repair",
+    render: () =>
+      building("implementing", steps("fixing"), {
+        reviewMs: 95_000,
+        photos: [
+          photo("slot_1", "made", PHOTOS.hero),
+          photo("slot_3", "made", PHOTOS.kitchen),
+          photo("slot_4", "made", PHOTOS.bath),
+          photo("slot_5", "made", PHOTOS.hero),
+        ],
+      }),
+  },
+  {
+    name: "WorkingOn checking",
+    render: () =>
+      building("validating", steps("checking"), {
+        reviewMs: 95_000,
+        photos: [
+          photo("slot_1", "made", PHOTOS.hero),
+          photo("slot_3", "made", PHOTOS.kitchen),
+          photo("slot_4", "made", PHOTOS.bath),
+          photo("slot_5", "made", PHOTOS.hero),
+        ],
+      }),
+  },
+  {
+    // Ready: the api lists no steps, and the clock stopped when it got ready.
+    name: "WorkingOn ready",
+    render: () =>
+      building("awaiting_review", [], {
+        version: 2,
+        reviewMs: 95_000,
+        endedAt: new Date(Date.parse(STARTED) + 400_000).toISOString(),
+      }),
+  },
+  {
+    name: "WorkingOn quick lane",
+    render: () =>
+      working("revising", {
+        build: {
+          goal: "Change the hero title",
+          state: "revising",
+          version: null,
+          startedAt: STARTED,
+          lane: "quick",
+        },
+        expectedSeconds: { p50: 15, p95: 45 },
+      }),
+  },
+  {
     name: "WorkingOn with a queue",
     render: () =>
       working("queued", {
@@ -464,6 +706,23 @@ const panelCatalog: Entry[] = [
   {
     name: "ApprovalItem preview unavailable",
     render: () => approval({ preview: "error", onRetryPreview: retry }),
+  },
+  // Generated photos badged in the review: the hero from the laptop shot, the
+  // other a tile until it has a thumbnail of its own.
+  {
+    name: "ApprovalItem with generated photos",
+    render: () =>
+      approval({
+        photoActions: { onRemove: noop, onTryAnother: noop, onUseOwn: noop },
+        photos: [
+          {
+            alt: "A bright kitchen after a clean",
+            section: "hero",
+            slot_id: "hero",
+          },
+          { alt: "The team at work", section: "about", slot_id: "about" },
+        ],
+      }),
   },
   // The preview was read but its screenshots do not load: the link stays.
   {
@@ -569,6 +828,20 @@ const panelCatalog: Entry[] = [
     ),
   },
   {
+    // Minimised at 390, the step fraction stays in view as the words truncate.
+    name: "LiveLine building",
+    render: () => (
+      <div className="w-64">
+        <LiveLine
+          detail="writing the pages"
+          lead="Building your first version,"
+          progress={{ done: 3, total: 5 }}
+          tone="working"
+        />
+      </div>
+    ),
+  },
+  {
     name: "LiveLine live",
     render: () => (
       <LiveLine detail="on version 3" lead="Your website is live" tone="live" />
@@ -616,6 +889,18 @@ const panelCatalog: Entry[] = [
     name: "YourWebsite",
     render: () => (
       <YourWebsite
+        host="brightclean-demo.example.invalid"
+        live={3}
+        onRequestChanges={noop}
+        thumbnail={THUMBNAIL}
+      />
+    ),
+  },
+  {
+    name: "YourWebsite with its plan",
+    render: () => (
+      <YourWebsite
+        blueprint={BLUEPRINT}
         host="brightclean-demo.example.invalid"
         live={3}
         onRequestChanges={noop}

@@ -1,25 +1,22 @@
 /**
  * The accessibility gate for a tenant site: axe against the built pages of the
- * golden fixture, in a real browser, at WCAG 2.2 AA, once per template.
+ * golden fixture, in a real browser, at WCAG 2.2 AA, in three directions.
  *
  * It is vitest rather than a Playwright runner so that scripts/floor.mjs can
  * count it, and it lives outside `test/` so that `pnpm test` stays browser-free
  * and CI, which installs no browser, keeps running. Run it with
  * `pnpm --filter @workspace/starter-site test:a11y`.
  *
- * The pages are served over HTTP rather than opened from disk: the stylesheet
- * is linked absolutely, and a file:// page loads none of it, which is the one
- * thing a contrast check cannot do without.
+ * The pages are served over HTTP rather than opened from disk; see serve in
+ * test/build.ts.
  */
 
-import { existsSync, readFileSync, statSync } from "node:fs"
-import { createServer, type Server } from "node:http"
-import { join } from "node:path"
+import type { Server } from "node:http"
 import AxeBuilder from "@axe-core/playwright"
 import { type Browser, chromium, type Page } from "@playwright/test"
 import { PALETTES } from "@workspace/contracts"
 import { afterAll, beforeAll, expect, test } from "vitest"
-import { type Built, build, clean } from "../test/build"
+import { type Built, build, clean, serve } from "../test/build"
 import { FILLED, LIMOUSINE_FORM } from "../test/fixture"
 
 const PAGES = [
@@ -31,27 +28,25 @@ const PAGES = [
   "/quote/",
 ]
 const TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]
-const TYPES: Record<string, string> = {
-  ".html": "text/html; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".xml": "application/xml; charset=utf-8",
-  ".txt": "text/plain; charset=utf-8",
-}
 
-/** Each template, each in a palette and a font of its own. */
+/** Three directions, each in a palette and a font of its own. */
 const brand = (id: string) =>
   PALETTES.find((each) => each.id === id)?.brand ?? ""
 const VARIANTS: Record<string, Record<string, string>> = {
-  classic: { ...FILLED, template: "classic", brandColor: brand("forest") },
-  modern: {
+  fresh_modern: {
     ...FILLED,
-    template: "modern",
+    direction: "fresh_modern",
+    brandColor: brand("forest"),
+  },
+  calm_daylight: {
+    ...FILLED,
+    direction: "calm_daylight",
     brandColor: brand("sunset"),
     font: "classic_serif",
   },
-  bold: {
+  after_dark: {
     ...FILLED,
-    template: "bold",
+    direction: "after_dark",
     brandColor: brand("midnight"),
     font: "soft_rounded",
   },
@@ -64,37 +59,15 @@ let page: Page | undefined
 /** A phone-width page, where the menu and the stacked heroes show. */
 let phone: Page | undefined
 
-function serve(dist: string): Server {
-  return createServer((request, response) => {
-    const path = new URL(request.url ?? "/", "http://site.invalid").pathname
-    const file = join(dist, path.endsWith("/") ? `${path}index.html` : path)
-    if (
-      !file.startsWith(dist) ||
-      !existsSync(file) ||
-      statSync(file).isDirectory()
-    ) {
-      response.writeHead(404).end()
-      return
-    }
-    const type = TYPES[file.slice(file.lastIndexOf("."))]
-    response.writeHead(200, type ? { "Content-Type": type } : {})
-    response.end(readFileSync(file))
-  })
-}
-
 beforeAll(async () => {
   for (const [name, site] of Object.entries(VARIANTS)) {
-    // The bold build asks a chauffeur firm's questions, so a select, a
+    // The after_dark build asks a chauffeur firm's questions, so a select, a
     // number and a date are scanned as well as the default text inputs.
     const built = await build({
       site,
-      ...(name === "bold" ? { quoteForm: LIMOUSINE_FORM } : {}),
+      ...(name === "after_dark" ? { quoteForm: LIMOUSINE_FORM } : {}),
     })
-    const server = serve(built.dist)
-    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
-    const address = server.address()
-    const port = typeof address === "object" && address ? address.port : 0
-    sites.push({ name, built, server, origin: `http://127.0.0.1:${port}` })
+    sites.push({ name, built, ...(await serve(built.dist)) })
   }
   browser = await chromium.launch()
   // A context of its own: axe refuses a page made straight off the browser.

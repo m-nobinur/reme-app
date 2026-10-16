@@ -1,235 +1,1163 @@
 {
-  "_": "A recipe is a page already composed from the starter's components: the pages below are the composition, so a build is filling fields rather than assembling sections. Every component listed renders nothing until its fields are set, so a page with few facts is short rather than broken. A second pack adds a key beside service-business and its own pages; nothing here is a template engine.",
-  "packs": {
-    "service-business": {
-      "label": "Service businesses, any industry",
-      "recipes": [
-        {
-          "name": "home",
-          "page": "src/pages/index.astro",
-          "purpose": "The page a visitor lands on: what the business does, why it, how it works, where, the questions people ask, and how to ask for a quote. The template sets the hero, header and type.",
-          "components": [
-            "Hero",
-            "ActionLink",
-            "TrustStrip",
-            "ServiceCards",
-            "ValueProps",
-            "Steps",
-            "Section",
-            "Testimonials",
-            "Gallery",
-            "AreaSection",
-            "Faq",
-            "CtaBand"
-          ],
-          "fields": [
-            "homeTitle",
-            "homeDescription",
-            "industry",
-            "heroHeading",
-            "tagline",
-            "homeIntro",
-            "trust1",
-            "trust2",
-            "trust3",
-            "service1Name",
-            "service1Body",
-            "service1Icon",
-            "service2Name",
-            "service2Body",
-            "service2Icon",
-            "service3Name",
-            "service3Body",
-            "service3Icon",
-            "service4Name",
-            "service4Body",
-            "service4Icon",
-            "service5Name",
-            "service5Body",
-            "service5Icon",
-            "service6Name",
-            "service6Body",
-            "service6Icon",
-            "valueProp1Title",
-            "valueProp1Body",
-            "valueProp1Icon",
-            "valueProp2Title",
-            "valueProp2Body",
-            "valueProp2Icon",
-            "valueProp3Title",
-            "valueProp3Body",
-            "valueProp3Icon",
-            "step1Title",
-            "step1Body",
-            "step2Title",
-            "step2Body",
-            "step3Title",
-            "step3Body",
-            "overview",
-            "overviewBody",
-            "audience",
-            "audienceBody",
-            "areaTowns",
-            "areaBody",
-            "faq1Question",
-            "faq1Answer",
-            "faq2Question",
-            "faq2Answer",
-            "faq3Question",
-            "faq3Answer",
-            "faq4Question",
-            "faq4Answer",
-            "faq5Question",
-            "faq5Answer",
-            "faq6Question",
-            "faq6Answer",
-            "faq7Question",
-            "faq7Answer",
-            "faq8Question",
-            "faq8Answer",
-            "ctaHeading",
-            "ctaBody"
-          ]
-        },
-        {
-          "name": "about",
-          "page": "src/pages/about.astro",
-          "purpose": "Who runs the business, how it works and for whom, and what sets it apart, from business.overview, business.audience and business.proof: the story beside the owner's photo, then the proof. Kept when business.overview or business.proof is known; deleted otherwise, and the home page's about section then carries business.audience.",
-          "components": [
-            "Hero",
-            "TrustStrip",
-            "Section",
-            "ValueProps",
-            "Testimonials",
-            "CtaBand"
-          ],
-          "fields": [
-            "aboutTitle",
-            "aboutDescription",
-            "aboutHeading",
-            "aboutIntro",
-            "overviewHeading",
-            "overview",
-            "overviewBody",
-            "audienceHeading",
-            "audience",
-            "audienceBody",
-            "proofHeading",
-            "proof",
-            "proofBody",
-            "valueProp1Title",
-            "valueProp1Body",
-            "valueProp1Icon",
-            "valueProp2Title",
-            "valueProp2Body",
-            "valueProp2Icon",
-            "valueProp3Title",
-            "valueProp3Body",
-            "valueProp3Icon"
-          ]
-        },
-        {
-          "name": "services",
-          "page": "src/pages/services.astro",
-          "purpose": "Each service in full: what it is, what is included, who it suits and a quote link, then how it works and the questions.",
-          "components": [
-            "Hero",
-            "ServiceCards",
-            "Section",
-            "Steps",
-            "Faq",
-            "CtaBand"
-          ],
-          "fields": [
-            "servicesTitle",
-            "servicesDescription",
-            "servicesHeading",
-            "servicesIntro",
-            "service1Name",
-            "service1Body",
-            "service1Icon",
-            "service1Includes",
-            "service1For",
-            "service2Name",
-            "service2Body",
-            "service2Icon",
-            "service2Includes",
-            "service2For",
-            "service3Name",
-            "service3Body",
-            "service3Icon",
-            "service3Includes",
-            "service3For",
-            "service4Name",
-            "service4Body",
-            "service4Icon",
-            "service4Includes",
-            "service4For",
-            "service5Name",
-            "service5Body",
-            "service5Icon",
-            "service5Includes",
-            "service5For",
-            "service6Name",
-            "service6Body",
-            "service6Icon",
-            "service6Includes",
-            "service6For",
-            "offerings"
-          ]
-        },
-        {
-          "name": "service area",
-          "page": "src/pages/service-area.astro",
-          "purpose": "Where the business works, for the visitor checking whether that includes them.",
-          "components": ["Hero", "AreaSection", "CtaBand"],
-          "fields": [
-            "serviceAreaTitle",
-            "serviceAreaDescription",
-            "serviceAreaHeading",
-            "serviceAreaIntro",
-            "areaTowns",
-            "areaBody",
-            "serviceAreaText",
-            "serviceArea"
-          ]
-        },
-        {
-          "name": "contact",
-          "page": "src/pages/contact.astro",
-          "purpose": "How to reach the business, with nothing in the way.",
-          "components": ["Hero", "ContactDetails", "CtaBand"],
-          "fields": [
-            "contactTitle",
-            "contactDescription",
-            "contactHeading",
-            "contactIntro",
-            "phone",
-            "email",
-            "weekdayHours",
-            "serviceArea"
-          ]
-        },
-        {
-          "name": "quote",
-          "page": "src/pages/quote.astro",
-          "purpose": "How a visitor asks for a quote: the form, and beside it what happens next and the phone and email.",
-          "components": ["Hero", "QuoteForm", "ContactDetails"],
-          "fields": [
-            "quoteTitle",
-            "quoteDescription",
-            "quoteHeading",
-            "quoteIntro",
-            "quoteNext1",
-            "quoteNext2",
-            "quoteNext3",
-            "quoteSubmit",
-            "quoteNextSteps",
-            "phone",
-            "email"
-          ]
-        }
+  "_": "A recipe is the page a build starts from. `pages` says, for each page file, what it is for, the section kinds it may hold and the site fields those sections read. A pack gives, per page, the sections and variants the page starts with, for one of the contract's INDUSTRY_PACK ids; cleaning, legal and limousine start from service_business and change what their trade reads differently. The order is `layout` in src/site-config.ts, which the build edits: reorder, drop or change a variant, within `kinds` and the contract's SECTION_VARIANTS. A section with no variant takes site.direction's (a hero only on the home page; elsewhere it is the plain page hero); a pack names one only where its trade needs it. Every section renders nothing until its fields are set, so a page with few facts is short rather than broken.",
+  "pages": {
+    "home": {
+      "page": "src/pages/index.astro",
+      "purpose": "The page a visitor lands on: what the business does, why it, how it works, where, the questions people ask, and how to ask for a quote. The direction sets the hero, the type and the shape.",
+      "kinds": [
+        "hero",
+        "trust_strip",
+        "service_cards",
+        "value_props",
+        "steps",
+        "about",
+        "testimonials",
+        "gallery",
+        "service_area",
+        "faq",
+        "cta_band"
+      ],
+      "fields": [
+        "homeTitle",
+        "homeDescription",
+        "industry",
+        "heroHeading",
+        "tagline",
+        "homeIntro",
+        "heroNote",
+        "trust1",
+        "trust2",
+        "trust3",
+        "serviceCardsEyebrow",
+        "serviceCardsHeading",
+        "serviceCardsLink",
+        "service1Name",
+        "service1Body",
+        "service1Icon",
+        "service2Name",
+        "service2Body",
+        "service2Icon",
+        "service3Name",
+        "service3Body",
+        "service3Icon",
+        "service4Name",
+        "service4Body",
+        "service4Icon",
+        "service5Name",
+        "service5Body",
+        "service5Icon",
+        "service6Name",
+        "service6Body",
+        "service6Icon",
+        "valuePropsEyebrow",
+        "valuePropsHeading",
+        "valueProp1Title",
+        "valueProp1Body",
+        "valueProp1Icon",
+        "valueProp2Title",
+        "valueProp2Body",
+        "valueProp2Icon",
+        "valueProp3Title",
+        "valueProp3Body",
+        "valueProp3Icon",
+        "stepsEyebrow",
+        "stepsHeading",
+        "step1Title",
+        "step1Body",
+        "step2Title",
+        "step2Body",
+        "step3Title",
+        "step3Body",
+        "step4Title",
+        "step4Body",
+        "aboutEyebrow",
+        "homeAboutHeading",
+        "overview",
+        "overviewBody",
+        "audience",
+        "audienceBody",
+        "testimonialsEyebrow",
+        "testimonialsHeading",
+        "galleryEyebrow",
+        "galleryHeading",
+        "areaEyebrow",
+        "homeAreaHeading",
+        "areaTowns",
+        "areaBody",
+        "areaCardLine",
+        "faq1Question",
+        "faq1Answer",
+        "faq2Question",
+        "faq2Answer",
+        "faq3Question",
+        "faq3Answer",
+        "faq4Question",
+        "faq4Answer",
+        "faq5Question",
+        "faq5Answer",
+        "faq6Question",
+        "faq6Answer",
+        "faq7Question",
+        "faq7Answer",
+        "faq8Question",
+        "faq8Answer",
+        "ctaHeading",
+        "ctaEyebrow",
+        "ctaBody"
       ]
+    },
+    "about": {
+      "page": "src/pages/about.astro",
+      "purpose": "Who the business serves and how it works, from business.overview and business.audience (two paragraphs, 120 to 200 words); how the work is done, as three or four principles from the facts and the trade's good practice (a title and 25 to 45 words each, never a credential no fact states); what to expect on a visit, as three or four steps of the visit itself; the record from business.proof, a short paragraph beside its items and only when the fact exists; the places served; the closing band. Kept when business.overview or business.proof is known; deleted otherwise, and the home page's about section then carries business.audience.",
+      "kinds": [
+        "hero",
+        "about",
+        "value_props",
+        "steps",
+        "service_area",
+        "trust_strip",
+        "testimonials",
+        "gallery",
+        "faq",
+        "cta_band"
+      ],
+      "fields": [
+        "aboutTitle",
+        "aboutDescription",
+        "aboutHeading",
+        "aboutIntro",
+        "overviewHeading",
+        "overview",
+        "overviewBody",
+        "audienceHeading",
+        "audience",
+        "audienceBody",
+        "proofHeading",
+        "proof",
+        "proofBody",
+        "approachEyebrow",
+        "approachHeading",
+        "approach1Title",
+        "approach1Body",
+        "approach1Icon",
+        "approach2Title",
+        "approach2Body",
+        "approach2Icon",
+        "approach3Title",
+        "approach3Body",
+        "approach3Icon",
+        "approach4Title",
+        "approach4Body",
+        "approach4Icon",
+        "aboutStepsHeading",
+        "aboutStep1Title",
+        "aboutStep1Body",
+        "aboutStep2Title",
+        "aboutStep2Body",
+        "aboutStep3Title",
+        "aboutStep3Body",
+        "aboutStep4Title",
+        "aboutStep4Body",
+        "aboutAreaHeading",
+        "aboutCtaHeading",
+        "aboutCtaBody"
+      ]
+    },
+    "services": {
+      "page": "src/pages/services.astro",
+      "purpose": "Every service in brief: an intro of two or three sentences, each service's summary linking to its own page, a helper paragraph for the visitor not sure which service they need, the page's own questions about choosing and scope, and the closing band.",
+      "kinds": [
+        "hero",
+        "trust_strip",
+        "service_cards",
+        "value_props",
+        "steps",
+        "testimonials",
+        "faq",
+        "cta_band"
+      ],
+      "fields": [
+        "servicesTitle",
+        "servicesDescription",
+        "servicesHeading",
+        "servicesIntro",
+        "service1Name",
+        "service1Body",
+        "service1Icon",
+        "service2Name",
+        "service2Body",
+        "service2Icon",
+        "service3Name",
+        "service3Body",
+        "service3Icon",
+        "service4Name",
+        "service4Body",
+        "service4Icon",
+        "service5Name",
+        "service5Body",
+        "service5Icon",
+        "service6Name",
+        "service6Body",
+        "service6Icon",
+        "offerings",
+        "offeringsEyebrow",
+        "offeringsHeading",
+        "servicesHelpEyebrow",
+        "servicesHelpHeading",
+        "servicesHelpBody",
+        "servicesFaqHeading",
+        "servicesFaq1Question",
+        "servicesFaq1Answer",
+        "servicesFaq2Question",
+        "servicesFaq2Answer",
+        "servicesFaq3Question",
+        "servicesFaq3Answer",
+        "servicesFaq4Question",
+        "servicesFaq4Answer",
+        "servicesCtaHeading",
+        "servicesCtaBody"
+      ]
+    },
+    "service": {
+      "page": "src/pages/services/[slug].astro",
+      "purpose": "One page for each service, at /services/<slug>/, so each can be found on its own: what the job involves, what is included, who it suits, how this service goes, in its own steps, questions about it and the call to action. One plan entry builds every service page.",
+      "kinds": ["hero", "service_cards", "steps", "faq", "cta_band"],
+      "fields": [
+        "service1Heading",
+        "service1Title",
+        "service1Description",
+        "service1Detail",
+        "service1Includes",
+        "service1For",
+        "service1StepsHeading",
+        "service1Step1Title",
+        "service1Step1Body",
+        "service1Step2Title",
+        "service1Step2Body",
+        "service1Step3Title",
+        "service1Step3Body",
+        "service1Step4Title",
+        "service1Step4Body",
+        "service1FaqHeading",
+        "service1Faq1Question",
+        "service1Faq1Answer",
+        "service1Faq2Question",
+        "service1Faq2Answer",
+        "service1Faq3Question",
+        "service1Faq3Answer",
+        "service1Faq4Question",
+        "service1Faq4Answer",
+        "service1CtaHeading",
+        "service1CtaBody",
+        "service2Heading",
+        "service2Title",
+        "service2Description",
+        "service2Detail",
+        "service2Includes",
+        "service2For",
+        "service2StepsHeading",
+        "service2Step1Title",
+        "service2Step1Body",
+        "service2Step2Title",
+        "service2Step2Body",
+        "service2Step3Title",
+        "service2Step3Body",
+        "service2Step4Title",
+        "service2Step4Body",
+        "service2FaqHeading",
+        "service2Faq1Question",
+        "service2Faq1Answer",
+        "service2Faq2Question",
+        "service2Faq2Answer",
+        "service2Faq3Question",
+        "service2Faq3Answer",
+        "service2Faq4Question",
+        "service2Faq4Answer",
+        "service2CtaHeading",
+        "service2CtaBody",
+        "service3Heading",
+        "service3Title",
+        "service3Description",
+        "service3Detail",
+        "service3Includes",
+        "service3For",
+        "service3StepsHeading",
+        "service3Step1Title",
+        "service3Step1Body",
+        "service3Step2Title",
+        "service3Step2Body",
+        "service3Step3Title",
+        "service3Step3Body",
+        "service3Step4Title",
+        "service3Step4Body",
+        "service3FaqHeading",
+        "service3Faq1Question",
+        "service3Faq1Answer",
+        "service3Faq2Question",
+        "service3Faq2Answer",
+        "service3Faq3Question",
+        "service3Faq3Answer",
+        "service3Faq4Question",
+        "service3Faq4Answer",
+        "service3CtaHeading",
+        "service3CtaBody",
+        "service4Heading",
+        "service4Title",
+        "service4Description",
+        "service4Detail",
+        "service4Includes",
+        "service4For",
+        "service4StepsHeading",
+        "service4Step1Title",
+        "service4Step1Body",
+        "service4Step2Title",
+        "service4Step2Body",
+        "service4Step3Title",
+        "service4Step3Body",
+        "service4Step4Title",
+        "service4Step4Body",
+        "service4FaqHeading",
+        "service4Faq1Question",
+        "service4Faq1Answer",
+        "service4Faq2Question",
+        "service4Faq2Answer",
+        "service4Faq3Question",
+        "service4Faq3Answer",
+        "service4Faq4Question",
+        "service4Faq4Answer",
+        "service4CtaHeading",
+        "service4CtaBody",
+        "service5Heading",
+        "service5Title",
+        "service5Description",
+        "service5Detail",
+        "service5Includes",
+        "service5For",
+        "service5StepsHeading",
+        "service5Step1Title",
+        "service5Step1Body",
+        "service5Step2Title",
+        "service5Step2Body",
+        "service5Step3Title",
+        "service5Step3Body",
+        "service5Step4Title",
+        "service5Step4Body",
+        "service5FaqHeading",
+        "service5Faq1Question",
+        "service5Faq1Answer",
+        "service5Faq2Question",
+        "service5Faq2Answer",
+        "service5Faq3Question",
+        "service5Faq3Answer",
+        "service5Faq4Question",
+        "service5Faq4Answer",
+        "service5CtaHeading",
+        "service5CtaBody",
+        "service6Heading",
+        "service6Title",
+        "service6Description",
+        "service6Detail",
+        "service6Includes",
+        "service6For",
+        "service6StepsHeading",
+        "service6Step1Title",
+        "service6Step1Body",
+        "service6Step2Title",
+        "service6Step2Body",
+        "service6Step3Title",
+        "service6Step3Body",
+        "service6Step4Title",
+        "service6Step4Body",
+        "service6FaqHeading",
+        "service6Faq1Question",
+        "service6Faq1Answer",
+        "service6Faq2Question",
+        "service6Faq2Answer",
+        "service6Faq3Question",
+        "service6Faq3Answer",
+        "service6Faq4Question",
+        "service6Faq4Answer",
+        "service6CtaHeading",
+        "service6CtaBody"
+      ]
+    },
+    "service_area": {
+      "page": "src/pages/service-area.astro",
+      "purpose": "Where the business works, for the visitor checking whether that includes them.",
+      "kinds": ["hero", "trust_strip", "service_area", "faq", "cta_band"],
+      "fields": [
+        "serviceAreaTitle",
+        "serviceAreaDescription",
+        "serviceAreaHeading",
+        "serviceAreaIntro",
+        "areaTowns",
+        "areaBody",
+        "areaCardLine",
+        "areaTownNotes",
+        "serviceAreaText",
+        "serviceArea",
+        "serviceAreaCtaHeading",
+        "serviceAreaCtaBody"
+      ]
+    },
+    "contact": {
+      "page": "src/pages/contact.astro",
+      "purpose": "How to reach the business, with nothing in the way: phone, email and the quote form; what to put in a message so the reply can be useful; hours and the area served as the facts give them; a reply time only when a fact states one.",
+      "kinds": ["hero", "contact", "faq", "cta_band"],
+      "fields": [
+        "contactTitle",
+        "contactDescription",
+        "contactHeading",
+        "contactIntro",
+        "phone",
+        "email",
+        "weekdayHours",
+        "serviceArea",
+        "contactIncludeEyebrow",
+        "contactIncludeHeading",
+        "contactIncludeBody",
+        "contactFormLink",
+        "contactCtaHeading",
+        "contactCtaBody"
+      ]
+    },
+    "quote": {
+      "page": "src/pages/quote.astro",
+      "purpose": "How a visitor asks for a quote: the form, and beside it what happens after sending, the details that help, the phone and email, and under the form a privacy line true of how it sends.",
+      "kinds": ["hero", "quote_form", "trust_strip"],
+      "fields": [
+        "quoteTitle",
+        "quoteDescription",
+        "quoteHeading",
+        "quoteIntro",
+        "quoteNext1",
+        "quoteNext2",
+        "quoteNext3",
+        "quoteSubmit",
+        "quoteNextSteps",
+        "quotePrivacy",
+        "phone",
+        "email"
+      ]
+    }
+  },
+  "packs": {
+    "service_business": {
+      "label": "Service businesses, any industry",
+      "order": {
+        "home": [
+          {
+            "kind": "hero"
+          },
+          {
+            "kind": "trust_strip",
+            "variant": "icons"
+          },
+          {
+            "kind": "service_cards"
+          },
+          {
+            "kind": "value_props"
+          },
+          {
+            "kind": "steps"
+          },
+          {
+            "kind": "about"
+          },
+          {
+            "kind": "testimonials",
+            "variant": "wall"
+          },
+          {
+            "kind": "gallery"
+          },
+          {
+            "kind": "service_area"
+          },
+          {
+            "kind": "faq"
+          },
+          {
+            "kind": "cta_band"
+          }
+        ],
+        "about": [
+          {
+            "kind": "hero"
+          },
+          {
+            "kind": "about"
+          },
+          {
+            "kind": "value_props"
+          },
+          {
+            "kind": "steps"
+          },
+          {
+            "kind": "service_area"
+          },
+          {
+            "kind": "cta_band"
+          }
+        ],
+        "services": [
+          {
+            "kind": "hero"
+          },
+          {
+            "kind": "service_cards",
+            "variant": "photo_cards"
+          },
+          {
+            "kind": "faq"
+          },
+          {
+            "kind": "cta_band"
+          }
+        ],
+        "service": [
+          {
+            "kind": "hero"
+          },
+          {
+            "kind": "service_cards",
+            "variant": "alternating"
+          },
+          {
+            "kind": "steps"
+          },
+          {
+            "kind": "faq"
+          },
+          {
+            "kind": "cta_band"
+          }
+        ],
+        "service_area": [
+          {
+            "kind": "hero"
+          },
+          {
+            "kind": "service_area"
+          },
+          {
+            "kind": "cta_band"
+          }
+        ],
+        "contact": [
+          {
+            "kind": "hero"
+          },
+          {
+            "kind": "contact"
+          },
+          {
+            "kind": "cta_band"
+          }
+        ],
+        "quote": [
+          {
+            "kind": "hero"
+          },
+          {
+            "kind": "quote_form"
+          }
+        ]
+      }
+    },
+    "cleaning": {
+      "label": "Cleaning",
+      "cta": "Get a quote",
+      "headings": {
+        "serviceCardsEyebrow": "Cleaning services",
+        "serviceCardsHeading": "Rooms we leave spotless",
+        "valuePropsHeading": "Why homes stay with us",
+        "stepsHeading": "From first message to clean",
+        "testimonialsHeading": "Kept clean, kept booked",
+        "galleryHeading": "Fresh from the last visit",
+        "faqHeading": "Before your first clean",
+        "serviceAreaHeading": "Where our cleaners work",
+        "servicesHeading": "What we clean",
+        "contactHeading": "Tell us about your home",
+        "quoteHeading": "Get a cleaning quote"
+      },
+      "icons": [
+        "broom",
+        "sprayBottle",
+        "house",
+        "bathtub",
+        "washingMachine",
+        "tShirt",
+        "couch",
+        "key",
+        "leaf",
+        "plant",
+        "calendarCheck",
+        "checkCircle"
+      ],
+      "quoteForm": [
+        {
+          "key": "service",
+          "label": "Type of clean",
+          "type": "select",
+          "required": true,
+          "hint": null,
+          "options": [
+            "Regular clean",
+            "Deep clean",
+            "End of tenancy",
+            "Something else"
+          ]
+        },
+        {
+          "key": "location",
+          "label": "Postcode",
+          "type": "text",
+          "required": true,
+          "hint": "Where the clean is",
+          "options": null
+        },
+        {
+          "key": "bedrooms",
+          "label": "Bedrooms",
+          "type": "number",
+          "required": false,
+          "hint": null,
+          "options": null
+        },
+        {
+          "key": "date",
+          "label": "Preferred start date",
+          "type": "date",
+          "required": false,
+          "hint": null,
+          "options": null
+        },
+        {
+          "key": "details",
+          "label": "Anything we should know",
+          "type": "textarea",
+          "required": true,
+          "hint": "Pets, access, areas that need extra attention",
+          "options": null
+        }
+      ],
+      "order": {
+        "home": [
+          {
+            "kind": "hero"
+          },
+          {
+            "kind": "trust_strip",
+            "variant": "icons"
+          },
+          {
+            "kind": "service_cards"
+          },
+          {
+            "kind": "value_props"
+          },
+          {
+            "kind": "steps"
+          },
+          {
+            "kind": "about"
+          },
+          {
+            "kind": "testimonials",
+            "variant": "wall"
+          },
+          {
+            "kind": "gallery"
+          },
+          {
+            "kind": "service_area"
+          },
+          {
+            "kind": "faq"
+          },
+          {
+            "kind": "cta_band"
+          }
+        ],
+        "about": [
+          {
+            "kind": "hero"
+          },
+          {
+            "kind": "about"
+          },
+          {
+            "kind": "value_props"
+          },
+          {
+            "kind": "steps"
+          },
+          {
+            "kind": "service_area"
+          },
+          {
+            "kind": "cta_band"
+          }
+        ],
+        "services": [
+          {
+            "kind": "hero"
+          },
+          {
+            "kind": "service_cards",
+            "variant": "photo_cards"
+          },
+          {
+            "kind": "faq"
+          },
+          {
+            "kind": "cta_band"
+          }
+        ],
+        "service": [
+          {
+            "kind": "hero"
+          },
+          {
+            "kind": "service_cards",
+            "variant": "alternating"
+          },
+          {
+            "kind": "steps"
+          },
+          {
+            "kind": "faq"
+          },
+          {
+            "kind": "cta_band"
+          }
+        ],
+        "service_area": [
+          {
+            "kind": "hero"
+          },
+          {
+            "kind": "service_area"
+          },
+          {
+            "kind": "cta_band"
+          }
+        ],
+        "contact": [
+          {
+            "kind": "hero"
+          },
+          {
+            "kind": "contact"
+          },
+          {
+            "kind": "cta_band"
+          }
+        ],
+        "quote": [
+          {
+            "kind": "hero"
+          },
+          {
+            "kind": "quote_form"
+          }
+        ]
+      }
+    },
+    "legal": {
+      "label": "Legal",
+      "cta": "Book a consultation",
+      "headings": {
+        "serviceCardsEyebrow": "Practice areas",
+        "serviceCardsHeading": "Where we can act for you",
+        "valuePropsHeading": "How we work with clients",
+        "stepsHeading": "What happens after you call",
+        "testimonialsHeading": "In clients' words",
+        "galleryHeading": "The practice",
+        "faqHeading": "Questions before you instruct us",
+        "serviceAreaHeading": "Who we act for, and where",
+        "servicesHeading": "Practice areas",
+        "contactHeading": "Speak to a solicitor",
+        "quoteHeading": "Book a consultation"
+      },
+      "icons": [
+        "scales",
+        "briefcase",
+        "gavel",
+        "fileText",
+        "handshake",
+        "buildings",
+        "clock",
+        "checkCircle",
+        "chatCircle",
+        "clipboardText",
+        "mapPin",
+        "phone"
+      ],
+      "quoteForm": [
+        {
+          "key": "service",
+          "label": "Area of law",
+          "type": "text",
+          "required": true,
+          "hint": "For example family, property or employment",
+          "options": null
+        },
+        {
+          "key": "location",
+          "label": "Where you are based",
+          "type": "text",
+          "required": true,
+          "hint": "A town or postcode",
+          "options": null
+        },
+        {
+          "key": "date",
+          "label": "Preferred consultation date",
+          "type": "date",
+          "required": false,
+          "hint": null,
+          "options": null
+        },
+        {
+          "key": "details",
+          "label": "Brief outline of your matter",
+          "type": "textarea",
+          "required": true,
+          "hint": "A few lines is enough. Please leave out sensitive details for now",
+          "options": null
+        }
+      ],
+      "order": {
+        "home": [
+          {
+            "kind": "hero"
+          },
+          {
+            "kind": "trust_strip",
+            "variant": "icons"
+          },
+          {
+            "kind": "service_cards",
+            "variant": "practice_list"
+          },
+          {
+            "kind": "steps"
+          },
+          {
+            "kind": "about"
+          },
+          {
+            "kind": "value_props"
+          },
+          {
+            "kind": "testimonials",
+            "variant": "featured"
+          },
+          {
+            "kind": "service_area"
+          },
+          {
+            "kind": "faq"
+          },
+          {
+            "kind": "cta_band"
+          }
+        ],
+        "about": [
+          {
+            "kind": "hero"
+          },
+          {
+            "kind": "about"
+          },
+          {
+            "kind": "value_props"
+          },
+          {
+            "kind": "steps"
+          },
+          {
+            "kind": "service_area"
+          },
+          {
+            "kind": "cta_band"
+          }
+        ],
+        "services": [
+          {
+            "kind": "hero"
+          },
+          {
+            "kind": "service_cards",
+            "variant": "practice_list"
+          },
+          {
+            "kind": "faq"
+          },
+          {
+            "kind": "cta_band"
+          }
+        ],
+        "service": [
+          {
+            "kind": "hero"
+          },
+          {
+            "kind": "service_cards",
+            "variant": "alternating"
+          },
+          {
+            "kind": "steps"
+          },
+          {
+            "kind": "faq"
+          },
+          {
+            "kind": "cta_band"
+          }
+        ],
+        "service_area": [
+          {
+            "kind": "hero"
+          },
+          {
+            "kind": "service_area"
+          },
+          {
+            "kind": "cta_band"
+          }
+        ],
+        "contact": [
+          {
+            "kind": "hero"
+          },
+          {
+            "kind": "contact"
+          },
+          {
+            "kind": "cta_band"
+          }
+        ],
+        "quote": [
+          {
+            "kind": "hero"
+          },
+          {
+            "kind": "quote_form"
+          }
+        ]
+      }
+    },
+    "limousine": {
+      "label": "Limousine and chauffeur",
+      "cta": "Reserve a car",
+      "headings": {
+        "serviceCardsEyebrow": "The fleet",
+        "serviceCardsHeading": "The car for your journey",
+        "valuePropsHeading": "Why clients ride with us",
+        "stepsHeading": "From booking to drop-off",
+        "testimonialsHeading": "After the ride",
+        "galleryHeading": "On the road",
+        "faqHeading": "Before you reserve",
+        "serviceAreaHeading": "Where we pick up and drop off",
+        "servicesHeading": "Occasions and journeys",
+        "contactHeading": "Talk to our bookings team",
+        "quoteHeading": "Reserve a car"
+      },
+      "icons": [
+        "carProfile",
+        "steeringWheel",
+        "champagne",
+        "airplaneTakeoff",
+        "suitcase",
+        "clock",
+        "car",
+        "calendarCheck",
+        "mapPin",
+        "handshake",
+        "checkCircle",
+        "phone"
+      ],
+      "quoteForm": [
+        {
+          "key": "service",
+          "label": "Occasion",
+          "type": "select",
+          "required": true,
+          "hint": null,
+          "options": [
+            "Airport transfer",
+            "Wedding",
+            "Corporate travel",
+            "Night out",
+            "Something else"
+          ]
+        },
+        {
+          "key": "location",
+          "label": "Pick-up address",
+          "type": "text",
+          "required": true,
+          "hint": "Street and town or postcode",
+          "options": null
+        },
+        {
+          "key": "destination",
+          "label": "Drop-off address",
+          "type": "text",
+          "required": true,
+          "hint": null,
+          "options": null
+        },
+        {
+          "key": "date",
+          "label": "Date of travel",
+          "type": "date",
+          "required": true,
+          "hint": null,
+          "options": null
+        },
+        {
+          "key": "passengers",
+          "label": "Passengers",
+          "type": "number",
+          "required": true,
+          "hint": null,
+          "options": null
+        },
+        {
+          "key": "details",
+          "label": "Luggage, stops and anything else",
+          "type": "textarea",
+          "required": false,
+          "hint": "Flight number, child seats, return journey",
+          "options": null
+        }
+      ],
+      "order": {
+        "home": [
+          {
+            "kind": "hero"
+          },
+          {
+            "kind": "trust_strip",
+            "variant": "icons"
+          },
+          {
+            "kind": "service_cards",
+            "variant": "fleet"
+          },
+          {
+            "kind": "steps"
+          },
+          {
+            "kind": "value_props"
+          },
+          {
+            "kind": "gallery"
+          },
+          {
+            "kind": "testimonials",
+            "variant": "featured"
+          },
+          {
+            "kind": "service_area"
+          },
+          {
+            "kind": "faq"
+          },
+          {
+            "kind": "cta_band"
+          }
+        ],
+        "about": [
+          {
+            "kind": "hero"
+          },
+          {
+            "kind": "about"
+          },
+          {
+            "kind": "value_props"
+          },
+          {
+            "kind": "steps"
+          },
+          {
+            "kind": "service_area"
+          },
+          {
+            "kind": "cta_band"
+          }
+        ],
+        "services": [
+          {
+            "kind": "hero"
+          },
+          {
+            "kind": "service_cards",
+            "variant": "fleet"
+          },
+          {
+            "kind": "faq"
+          },
+          {
+            "kind": "cta_band"
+          }
+        ],
+        "service": [
+          {
+            "kind": "hero"
+          },
+          {
+            "kind": "service_cards",
+            "variant": "alternating"
+          },
+          {
+            "kind": "steps"
+          },
+          {
+            "kind": "faq"
+          },
+          {
+            "kind": "cta_band"
+          }
+        ],
+        "service_area": [
+          {
+            "kind": "hero"
+          },
+          {
+            "kind": "service_area"
+          },
+          {
+            "kind": "cta_band"
+          }
+        ],
+        "contact": [
+          {
+            "kind": "hero"
+          },
+          {
+            "kind": "contact"
+          },
+          {
+            "kind": "cta_band"
+          }
+        ],
+        "quote": [
+          {
+            "kind": "hero"
+          },
+          {
+            "kind": "quote_form"
+          }
+        ]
+      }
     }
   }
 }

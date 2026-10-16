@@ -26,7 +26,7 @@ type Part = Result["stream"] extends ReadableStream<infer P> ? P : never
  */
 
 /** Pauses before the second and third attempts. */
-export const RETRY_PAUSES_MS = [300, 800] as const
+const RETRY_PAUSES_MS = [300, 800] as const
 
 /** What the owner or the next step can use: once one has passed, never retry. */
 const CONTENT = new Set<Part["type"]>([

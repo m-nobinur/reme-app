@@ -1,0 +1,38 @@
+---
+// The eyebrow and h2 every section opens with, so the label above the heading
+// and the accent clause in it are one thing in one place. `bare` leaves out the
+// wrapping div for a heading that sits in a layout of its own.
+import { accentParts } from "../accent"
+
+interface Props {
+  heading: string
+  eyebrow?: string
+  bare?: boolean
+}
+
+const { heading, eyebrow = "", bare = false } = Astro.props
+const { lead, accent, tail } = accentParts(heading)
+---
+
+{
+  heading &&
+    (bare ? (
+      <>
+        {eyebrow && <p class="eyebrow">{eyebrow}</p>}
+        <h2>
+          {lead}
+          {accent && <span class="accent">{accent}</span>}
+          {tail}
+        </h2>
+      </>
+    ) : (
+      <div class="section-head">
+        {eyebrow && <p class="eyebrow">{eyebrow}</p>}
+        <h2>
+          {lead}
+          {accent && <span class="accent">{accent}</span>}
+          {tail}
+        </h2>
+      </div>
+    ))
+}

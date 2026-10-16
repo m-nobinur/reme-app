@@ -6,8 +6,12 @@ import {
   OwnerAnswerText,
 } from "@workspace/contracts"
 import {
+  appendSessionEvent,
   assignments,
+  domains,
   eq,
+  facts,
+  memberships,
   reminders,
   sql,
   supersedeFact,
@@ -25,10 +29,17 @@ import {
 } from "vitest"
 import {
   answerQuestion,
+  buyDomain,
+  CONNECT_RETRY_MS,
+  checkDomain,
+  connectDomain,
   createReminder,
+  findDomain,
   getFacts,
   getPreview,
   getWorkspace,
+  recordReview,
+  removeDomain,
   requestChange,
   type ToolContext,
   ToolFailed,
@@ -45,7 +56,7 @@ import {
 import { env, stubJwksFetch } from "./sealed-session.ts"
 
 /**
- * The CoS's six tool bodies on a live connection, the orchestrator stood in
+ * The CoS's tool bodies on a live connection, the orchestrator stood in
  * for. What they return is what the model reads, so every output is kept and
  * walked at the end for anything a model must never see.
  */
@@ -64,12 +75,15 @@ function leaks(value: unknown, at = "$"): string[] {
   if (Array.isArray(value))
     return value.flatMap((v, i) => leaks(v, `${at}[${i}]`))
   if (typeof value === "string") {
-    return /https?:\/\//i.test(value) ? [`${at}: a URL`] : []
+    // The provider's settings link is our own allowlisted one, shown on purpose.
+    return /https?:\/\//i.test(value) && !at.endsWith(".settings_url")
+      ? [`${at}: a URL`]
+      : []
   }
   if (typeof value === "object" && value !== null) {
     return Object.entries(value).flatMap(([key, v]) => [
-      ...(/(^|_)(org|staff)_id$/.test(key)
-        ? [`${at}.${key}: a tenancy id`]
+      ...(/(^|_)(org|staff)_id$|^cf_/.test(key)
+        ? [`${at}.${key}: a tenancy or Cloudflare id`]
         : []),
       ...leaks(v, `${at}.${key}`),
     ])
@@ -150,6 +164,67 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
     },
   })
 
+  /** A domain row for `who`, `check` its last check; its name, unique to this run. */
+  const run = crypto.randomUUID().slice(0, 8)
+  const domain = async (
+    who: Owner,
+    label: string,
+    state: "awaiting_dns" | "active" | "removed",
+    check: unknown = null
+  ) => {
+    const name = `${label}-${run}.example`
+    await kit.withOrg({ orgId: who.orgId }, (db) =>
+      db.insert(domains).values({
+        orgId: who.orgId,
+        siteId: crypto.randomUUID(),
+        name,
+        primaryHost: name,
+        origin: "connected",
+        method: "records",
+        state,
+        lastCheck: check,
+      })
+    )
+    return name
+  }
+
+  /** A turn of a new conversation of `who`'s, as the agent hands it over. */
+  const turnOf = async (who: Owner, said: string[] = []) => {
+    const made = await who.call(stubOrchestrator(), "/conversations", {
+      method: "POST",
+      headers: { "idempotency-key": crypto.randomUUID() },
+    })
+    expect(made.status).toBe(201)
+    const { id } = (await made.json()) as { id: string }
+    // What the owner typed, as the turn's opening logged it.
+    for (const [n, text] of said.entries()) {
+      await kit.withOrg({ orgId: who.orgId }, (db) =>
+        appendSessionEvent(db, {
+          orgId: who.orgId,
+          staffId: who.chiefId,
+          assignmentId: null,
+          sessionId: id,
+          type: "cos.message",
+          payload: {
+            turn_id: "01J00000000000000000000000",
+            message: {
+              id: `owner-${n}`,
+              role: "user",
+              parts: [{ type: "text", text }],
+            },
+          },
+          taint: ["untrusted_input"],
+        })
+      )
+    }
+    return {
+      orgId: who.orgId,
+      staffId: who.chiefId,
+      sessionId: id,
+      turnId: "01J00000000000000000000000",
+    }
+  }
+
   describe("get_workspace", () => {
     it("shows builds, questions and reviews without ids or links, and cuts a long why", async () => {
       const s = seed(kit, me)
@@ -228,8 +303,31 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         questions: [],
         approvals: [],
         missing_facts: expect.any(Array),
+        domains: [],
+        expected_seconds: expect.any(Object),
       })
       expect(output.missing_facts.length).toBeGreaterThan(0)
+    })
+
+    it("lists the org's domains newest first, without removed ones or another org's", async () => {
+      const mine = await owner(kit, url as string, "cos-domains")
+      const stranger = await owner(kit, url as string, "cos-domains-other")
+      const older = await domain(mine, "older", "awaiting_dns")
+      await domain(mine, "gone", "removed")
+      const newer = await domain(mine, "newer", "active", { status: "valid" })
+      await domain(stranger, "theirs", "active")
+      const output = kept(
+        "get_workspace",
+        await getWorkspace(context(mine), {})
+      )
+      expect(output.domains).toEqual([
+        {
+          name: newer,
+          state: "active",
+          last_check: { status: "valid" },
+        },
+        { name: older, state: "awaiting_dns", last_check: null },
+      ])
     })
 
     it("cuts a why at a character, never through one", async () => {
@@ -441,7 +539,8 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         await requestChange(
           context(me, stub),
           { text: "Add Saturdays" },
-          approval
+          approval,
+          await turnOf(me)
         )
       )
       const again = kept(
@@ -449,7 +548,8 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         await requestChange(
           context(me, stub),
           { text: "Add Saturdays" },
-          approval
+          approval,
+          await turnOf(me)
         )
       )
       // The second run finds the build the key made and replays it.
@@ -477,7 +577,8 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         failed = await requestChange(
           context(me, hung),
           { text: "Add Mondays" },
-          approval
+          approval,
+          await turnOf(me)
         ).catch((error: unknown) => error)
       } finally {
         restore()
@@ -494,7 +595,8 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         await requestChange(
           context(me, retry),
           { text: "Add Mondays" },
-          approval
+          approval,
+          await turnOf(me)
         )
       )
       expect(again).toMatchObject({
@@ -502,6 +604,100 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         build: { assignment_id: made },
       })
       expect(retry.calls).toHaveLength(0)
+    })
+
+    const phoneNow = async () =>
+      (await getFacts(context(me), {})).facts.find(
+        (f) => f.key === "business.phone"
+      )?.value
+
+    it("records a number the owner typed in full as their fact, then starts the change", async () => {
+      await kit.withOrg({ orgId: me.orgId }, (db) =>
+        supersedeFact(db, {
+          orgId: me.orgId,
+          key: "business.phone",
+          factType: "business",
+          value: { e164: "+441174960123" },
+          provenance: { source: "owner_stated", confidence: 1 },
+        })
+      )
+      const turn = await turnOf(me, [
+        "Please change the phone number on the website to 0117 496 0124",
+      ])
+      const stub = creating(me)
+      const approval = crypto.randomUUID()
+      const input = {
+        text: "Change the phone number to 0117 496 0124",
+        change_kind: "copy",
+        contact: { phone: "+441174960124" },
+      } as const
+      const output = kept(
+        "request_change",
+        await requestChange(context(me, stub), input, approval, turn)
+      )
+      expect(output).toMatchObject({ outcome: "started" })
+      expect(await phoneNow()).toEqual({ e164: "+441174960124" })
+      // A replay under the same approval restates the same value and writes nothing.
+      await requestChange(context(me, stub), input, approval, turn)
+      const [held] = await kit.withOrg({ orgId: me.orgId }, (db) =>
+        db
+          .select()
+          .from(facts)
+          .where(eq(facts.key, "business.phone"))
+          .orderBy(sql`${facts.version} desc`)
+      )
+      expect(held?.value).toEqual({ e164: "+441174960124" })
+      expect(held?.provenanceSource).toBe("owner_stated")
+    })
+
+    it.each([
+      ["phone", { phone: "+441174960199" }],
+      ["email", { email: "someone@invented.example" }],
+    ])(
+      "refuses a %s the owner never typed, changes no fact and starts nothing",
+      async (_what, contact) => {
+        const before = await phoneNow()
+        const turn = await turnOf(me, [
+          "Change the phone number to 0117 496 0124",
+        ])
+        const stub = creating(me)
+        const output = kept(
+          "request_change",
+          await requestChange(
+            context(me, stub),
+            { text: "Change the contact details", contact },
+            crypto.randomUUID(),
+            turn
+          )
+        )
+        expect(output).toMatchObject({
+          outcome: "refused",
+          error: { class: "validation", code: "contact.not_typed" },
+        })
+        expect(stub.calls).toHaveLength(0)
+        expect(await phoneNow()).toEqual(before)
+      }
+    )
+
+    it("refuses a typed number the change text the owner approves does not name", async () => {
+      const turn = await turnOf(me, [
+        "Change the phone number to 0117 496 0125",
+      ])
+      const stub = creating(me)
+      const output = await requestChange(
+        context(me, stub),
+        {
+          text: "Update the contact details",
+          contact: { phone: "+441174960125" },
+        },
+        crypto.randomUUID(),
+        turn
+      )
+      expect(output).toMatchObject({
+        outcome: "refused",
+        error: { code: "contact.not_typed" },
+      })
+      expect(stub.calls).toHaveLength(0)
     })
 
     it("refuses as the closed shape, detail dropped", async () => {
@@ -522,7 +718,8 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         await requestChange(
           context(me, stub),
           { text: "Add Sundays" },
-          crypto.randomUUID()
+          crypto.randomUUID(),
+          await turnOf(me)
         )
       )
       expect(output).toEqual({
@@ -793,6 +990,34 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       await s.state(asking, "cancelled")
     })
 
+    it("refuses a review, which only record_review's card may store", async () => {
+      const s = seed(kit, me)
+      const asking = await s.assignment("blocked_on_information")
+      const asked = question(me, asking, "testimonials.review_1")
+      await s.event(asking, "information.requested", asked)
+      const stub = answering({ [asked.request_id]: asked.field })
+      const output = kept(
+        "answer_question",
+        await answerQuestion(
+          context(me, stub),
+          {
+            request_id: asked.request_id,
+            value: {
+              key: "testimonials.review_1",
+              value: { quote: "Spotless.", name: "Ann", permission: true },
+            },
+          },
+          crypto.randomUUID()
+        )
+      )
+      expect(output).toMatchObject({
+        outcome: "refused",
+        error: { class: "validation", code: "answer.review" },
+      })
+      expect(stub.calls).toHaveLength(0)
+      await s.state(asking, "cancelled")
+    })
+
     it("refuses an id no build asked, without calling the orchestrator", async () => {
       const stub = stubOrchestrator()
       const output = kept(
@@ -864,21 +1089,6 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
   })
 
   describe("create_reminder", () => {
-    /** A turn of a new conversation of `who`'s, as the agent hands it over. */
-    const turnOf = async (who: Owner) => {
-      const made = await who.call(stubOrchestrator(), "/conversations", {
-        method: "POST",
-        headers: { "idempotency-key": crypto.randomUUID() },
-      })
-      expect(made.status).toBe(201)
-      const { id } = (await made.json()) as { id: string }
-      return {
-        orgId: who.orgId,
-        staffId: who.chiefId,
-        sessionId: id,
-        turnId: "01J00000000000000000000000",
-      }
-    }
     const rowsKeyed = (who: Owner, key: string) =>
       kit.withOrg({ orgId: who.orgId }, (db) =>
         db.select().from(reminders).where(eq(reminders.idempotencyKey, key))
@@ -1024,12 +1234,457 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
     })
   })
 
+  describe("record_review", () => {
+    const versions = (who: Owner, key: string) =>
+      kit.withOrg({ orgId: who.orgId }, (db) =>
+        db
+          .select({
+            value: facts.value,
+            version: facts.version,
+            source: facts.provenanceSource,
+            validTo: facts.validTo,
+          })
+          .from(facts)
+          .where(eq(facts.key, key))
+          .orderBy(facts.version)
+      )
+    const MARTA = {
+      quote: "They worked around my hours and the kitchen shines.",
+      name: "Marta L.",
+      permission: true,
+    } as const
+
+    it("stores the owner's review in its slot once, however often it runs, and replaces it on a new one", async () => {
+      const first = kept(
+        "record_review",
+        await recordReview(context(me), { slot: 1, ...MARTA })
+      )
+      expect(await recordReview(context(me), { slot: 1, ...MARTA })).toEqual(
+        first
+      )
+      expect(first).toEqual({ outcome: "recorded", slot: 1 })
+      expect(await versions(me, "testimonials.review_1")).toEqual([
+        { value: MARTA, version: 1, source: "owner_stated", validTo: null },
+      ])
+
+      const owen = {
+        quote: "Simple to book.",
+        name: "Owen",
+        permission: true,
+      } as const
+      await recordReview(context(me), { slot: 1, ...owen })
+      const rows = await versions(me, "testimonials.review_1")
+      expect(rows.map((r) => [r.version, r.value, r.validTo === null])).toEqual(
+        [
+          [1, MARTA, false],
+          [2, owen, true],
+        ]
+      )
+      expect(await versions(me, "testimonials.review_2")).toEqual([])
+      expect(await versions(other, "testimonials.review_1")).toEqual([])
+      expect((await getFacts(context(me), {})).facts).toContainEqual({
+        key: "testimonials.review_1",
+        value: owen,
+      })
+    })
+  })
+
+  describe("check_domain", () => {
+    const checked = {
+      outcome: "checked",
+      state: "awaiting_dns",
+      status: { status: "pending_verification" },
+      next_step: "Add the CNAME record at your DNS provider.",
+    }
+
+    it("wakes the domain's check and returns its state, status and next step", async () => {
+      const name = await domain(me, "check", "awaiting_dns")
+      const stub = stubOrchestrator(() => Response.json(checked))
+      const output = kept(
+        "check_domain",
+        await checkDomain(context(me, stub), { name })
+      )
+      expect(output).toEqual(checked)
+      const [call] = stub.calls
+      expect(call?.request.method).toBe("POST")
+      expect(new URL(call?.request.url ?? "").pathname).toBe(
+        `/assignments/domains/${name}/check`
+      )
+    })
+
+    it("refuses another org's domain, a removed one and an unknown one without calling the orchestrator", async () => {
+      const theirs = await domain(other, "theirs-check", "awaiting_dns")
+      const gone = await domain(me, "gone-check", "removed")
+      const stub = stubOrchestrator(() => Response.json(checked))
+      for (const name of [theirs, gone, `none-${run}.example`]) {
+        expect(
+          kept("check_domain", await checkDomain(context(me, stub), { name }))
+        ).toMatchObject({
+          outcome: "refused",
+          error: { class: "resource", code: "domain.not_found" },
+        })
+      }
+      expect(stub.calls).toHaveLength(0)
+    })
+
+    it("throws, never refuses, on a 500 from the orchestrator", async () => {
+      const name = await domain(me, "down", "awaiting_dns")
+      const stub = stubOrchestrator(() =>
+        Response.json(
+          {
+            class: "transient",
+            code: "orchestrator.unavailable",
+            message: "down",
+            detail: {},
+            occurred_at: AT,
+          },
+          { status: 503 }
+        )
+      )
+      await expect(
+        checkDomain(context(me, stub), { name })
+      ).rejects.toBeInstanceOf(ToolFailed)
+    })
+  })
+
+  describe("connect_domain", () => {
+    const connecting = {
+      outcome: "connecting",
+      method: "records",
+      email_affected: false,
+      steps: [{ type: "CNAME", name: "www", value: "sites.reme.example" }],
+      apex: "forward",
+      provider: { name: "GoDaddy", settings_url: "https://dcc.godaddy.com/" },
+    }
+
+    it("sends the name under the approval as body and key, and returns the contract's output", async () => {
+      const approval = crypto.randomUUID()
+      const stub = stubOrchestrator(() => Response.json(connecting))
+      const output = kept(
+        "connect_domain",
+        await connectDomain(
+          context(me, stub),
+          { name: "sparkleclean.co.uk" },
+          approval
+        )
+      )
+      expect(output).toEqual(connecting)
+      const [call] = stub.calls
+      expect(call?.request.method).toBe("POST")
+      expect(new URL(call?.request.url ?? "").pathname).toBe(
+        "/assignments/domains"
+      )
+      expect(call?.request.headers.get("idempotency-key")).toBe(approval)
+      expect(call?.body).toEqual({
+        name: "sparkleclean.co.uk",
+        approval_id: approval,
+      })
+      // The org comes from the session on the bridge, never from the body.
+      expect(call?.request.headers.get("x-reme-org-id")).toBe(me.orgId)
+    })
+
+    it.each([
+      [409, "domain.in_use", "resource"],
+      [429, "domain.too_many_pending", "budgetary"],
+      [409, "site.not_published", "resource"],
+      [400, "domain.invalid", "validation"],
+    ])(
+      "refuses as the closed shape on %i %s, detail dropped",
+      async (status, code, cls) => {
+        const stub = stubOrchestrator(() =>
+          Response.json(
+            {
+              class: cls,
+              code,
+              message: "Not this one.",
+              detail: { org_id: other.orgId },
+              occurred_at: AT,
+            },
+            { status }
+          )
+        )
+        const output = kept(
+          "connect_domain",
+          await connectDomain(
+            context(me, stub),
+            { name: "taken.example" },
+            crypto.randomUUID()
+          )
+        )
+        expect(output).toEqual({
+          outcome: "refused",
+          error: { class: cls, code, message: "Not this one." },
+        })
+      }
+    )
+
+    const passing = (code: string) =>
+      Response.json(
+        {
+          class: "transient",
+          code,
+          message: "Try again in a minute.",
+          detail: {},
+          occurred_at: AT,
+        },
+        { status: 503 }
+      )
+
+    /** A connect whose first answer is `first`, then `then`, run past the retry pause. */
+    async function connectThrough(first: Response, then: () => Response) {
+      const answers = [first]
+      const stub = stubOrchestrator(() => answers.shift() ?? then())
+      vi.useFakeTimers({ toFake: ["setTimeout"] })
+      try {
+        const connected = connectDomain(
+          context(me, stub),
+          { name: "blip.example" },
+          "approval-blip"
+        ).then(
+          (output) => ({ output, error: null }),
+          (error: unknown) => ({ output: null, error })
+        )
+        await vi.advanceTimersByTimeAsync(CONNECT_RETRY_MS)
+        return { ...(await connected), stub }
+      } finally {
+        vi.useRealTimers()
+      }
+    }
+
+    it.each(["dns.unavailable", "domain.records_pending"])(
+      "asks once more under the same key after a passing %s, so one approval survives it",
+      async (code) => {
+        const { output, stub } = await connectThrough(passing(code), () =>
+          Response.json(connecting)
+        )
+        expect(kept("connect_domain", output)).toEqual(connecting)
+        expect(
+          stub.calls.map((c) => c.request.headers.get("idempotency-key"))
+        ).toEqual(["approval-blip", "approval-blip"])
+      }
+    )
+
+    it("throws when the second look fails too, and never retries any other 503", async () => {
+      const twice = await connectThrough(passing("dns.unavailable"), () =>
+        passing("dns.unavailable")
+      )
+      expect(twice.error).toBeInstanceOf(ToolFailed)
+      expect(twice.stub.calls).toHaveLength(2)
+      const down = await connectThrough(
+        passing("orchestrator.unavailable"),
+        () => Response.json(connecting)
+      )
+      expect(down.error).toBeInstanceOf(ToolFailed)
+      expect(down.stub.calls).toHaveLength(1)
+    })
+
+    it("throws, never refuses, when the orchestrator answers off the contract", async () => {
+      const stub = stubOrchestrator(() =>
+        Response.json({ ...connecting, cf_hostname_id: "abc" })
+      )
+      await expect(
+        connectDomain(
+          context(me, stub),
+          { name: "odd.example" },
+          crypto.randomUUID()
+        )
+      ).rejects.toBeInstanceOf(ToolFailed)
+    })
+  })
+
+  describe("remove_domain", () => {
+    it("deletes the domain under the approval as key, and says it is removed", async () => {
+      const approval = crypto.randomUUID()
+      const stub = stubOrchestrator(() => new Response(null, { status: 204 }))
+      const output = kept(
+        "remove_domain",
+        await removeDomain(
+          context(me, stub),
+          { name: "sparkleclean.co.uk" },
+          approval
+        )
+      )
+      expect(output).toEqual({ outcome: "removed" })
+      const [call] = stub.calls
+      expect(call?.request.method).toBe("DELETE")
+      expect(new URL(call?.request.url ?? "").pathname).toBe(
+        "/assignments/domains/sparkleclean.co.uk"
+      )
+      expect(call?.request.headers.get("idempotency-key")).toBe(approval)
+    })
+
+    it("refuses as the closed shape when the orchestrator holds no such domain, and throws on a 503", async () => {
+      const refusal = stubOrchestrator(() =>
+        Response.json(
+          {
+            class: "resource",
+            code: "domain.not_found",
+            message: "gone.example isn't connected to this site.",
+            detail: { org_id: other.orgId },
+            occurred_at: AT,
+          },
+          { status: 404 }
+        )
+      )
+      expect(
+        kept(
+          "remove_domain",
+          await removeDomain(
+            context(me, refusal),
+            { name: "gone.example" },
+            crypto.randomUUID()
+          )
+        )
+      ).toEqual({
+        outcome: "refused",
+        error: {
+          class: "resource",
+          code: "domain.not_found",
+          message: "gone.example isn't connected to this site.",
+        },
+      })
+      const down = stubOrchestrator(() =>
+        Response.json(
+          {
+            class: "transient",
+            code: "orchestrator.unavailable",
+            message: "down",
+            detail: {},
+            occurred_at: AT,
+          },
+          { status: 503 }
+        )
+      )
+      await expect(
+        removeDomain(
+          context(me, down),
+          { name: "gone.example" },
+          crypto.randomUUID()
+        )
+      ).rejects.toBeInstanceOf(ToolFailed)
+    })
+  })
+
+  describe("find_domain and buy_domain", () => {
+    const paying = (who: Owner, stub: Stub): ToolContext => {
+      const base = context(who, stub)
+      return {
+        ...base,
+        env: {
+          ...base.env,
+          STRIPE_SECRET_KEY: "sk_fixture",
+          STRIPE_WEBHOOK_SECRET: "whsec_fix",
+        },
+      }
+    }
+    const registrant = {
+      registrant: {
+        name: "Jane Smith",
+        email: "jane@sparkle.invalid",
+        phone: "+447700900123",
+        address: {
+          street: "12 Mill Lane",
+          city: "Bristol",
+          postal_code: "BS1 4AB",
+          country_code: "GB",
+        },
+      },
+    }
+
+    it("find_domain relays the orchestrator's offers, with or without the Stripe keys", async () => {
+      const found = {
+        outcome: "found",
+        best: { name: "sparkleclean.com", price_gbp_year: 12, why: "Short." },
+        options: [
+          { name: "sparkleclean.net", price_gbp_year: 12, why: "Close." },
+        ],
+      }
+      const stub = stubOrchestrator(() => Response.json(found))
+      expect(
+        kept(
+          "find_domain",
+          await findDomain(context(me, stub), { query: "sparkle" })
+        )
+      ).toEqual(found)
+      const [call] = stub.calls
+      expect(new URL(call?.request.url ?? "").pathname).toBe(
+        "/assignments/domains/find"
+      )
+      expect(call?.body).toEqual({ query: "sparkle" })
+    })
+
+    it("buy_domain prepares the purchase keyed by the call, and charges nothing", async () => {
+      const answer = {
+        outcome: "awaiting_payment",
+        name: "sparkleclean.com",
+        price_gbp: 12,
+        checkout: "embedded",
+      }
+      const stub = stubOrchestrator(() =>
+        Response.json(answer, { status: 201 })
+      )
+      const input = { name: "sparkleclean.com", ...registrant }
+      expect(
+        kept(
+          "buy_domain",
+          await buyDomain(paying(me, stub), input, "toolu_buy_1")
+        )
+      ).toEqual(answer)
+      const [call] = stub.calls
+      expect(new URL(call?.request.url ?? "").pathname).toBe(
+        "/assignments/domains/buy"
+      )
+      expect(call?.request.headers.get("idempotency-key")).toBe("toolu_buy_1")
+      expect(call?.body).toEqual(input)
+    })
+
+    it("buy_domain refuses without the Stripe keys and for a member who is not the owner, before the orchestrator", async () => {
+      const quiet = stubOrchestrator()
+      const input = { name: "sparkleclean.com", ...registrant }
+      expect(
+        kept(
+          "buy_domain",
+          await buyDomain(context(me, quiet), input, "toolu_buy_2")
+        )
+      ).toEqual({
+        outcome: "refused",
+        error: {
+          class: "resource",
+          code: "domain.buy_unavailable",
+          message: "Buying a domain isn't available yet.",
+        },
+      })
+      const member = await owner(kit, url as string, "cos-member")
+      await kit.withOrg({ orgId: member.orgId }, (db) =>
+        db
+          .update(memberships)
+          .set({ role: "member" })
+          .where(sql`${memberships.orgId} = ${member.orgId}`)
+      )
+      expect(
+        await buyDomain(paying(member, quiet), input, "toolu_buy_3")
+      ).toMatchObject({
+        outcome: "refused",
+        error: { code: "domain.not_owner" },
+      })
+      expect(quiet.calls).toEqual([])
+    })
+  })
+
   // Last, over everything the cases above returned.
   it("returns nothing a model must not see, and only what each contract allows", () => {
-    // The walk itself: bare and suffixed tenancy ids, and a link.
+    // The walk itself: bare and suffixed tenancy ids, a Cloudflare id and a
+    // link, but not the provider's settings link.
     expect(
-      leaks({ org_id: 1, staff_id: 2, approver_staff_id: 3, note: HTTPS })
-    ).toHaveLength(4)
+      leaks({
+        org_id: 1,
+        staff_id: 2,
+        approver_staff_id: 3,
+        cf_hostname_id: 4,
+        note: HTTPS,
+        provider: { settings_url: HTTPS },
+      })
+    ).toHaveLength(5)
     expect(new Set(seen.map(([tool]) => tool))).toEqual(
       new Set(Object.keys(COS_TOOLS))
     )

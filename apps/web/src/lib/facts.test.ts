@@ -79,6 +79,14 @@ const SHAPES: [FactValue, string, string][] = [
     "Trading since 2009",
   ],
   [
+    {
+      key: "business.disclaimer",
+      value: { text: "Regulated by the Law Society" },
+    },
+    "Regulatory notice",
+    "Regulated by the Law Society",
+  ],
+  [
     { key: "service_area.text", value: { text: "Greater Fairhaven" } },
     "Area you cover",
     "Greater Fairhaven",
@@ -118,6 +126,11 @@ const SHAPES: [FactValue, string, string][] = [
     { key: "site.font", value: { id: "clean_sans" } },
     "Website font",
     "clean_sans",
+  ],
+  [
+    { key: "site.direction", value: { id: "counsel" } },
+    "Website look",
+    "counsel",
   ],
   [
     { key: "site.pages", value: { ids: ["home", "quote"] } },
@@ -167,6 +180,22 @@ const SHAPES: [FactValue, string, string][] = [
     },
     "Quote request questions",
     "Pick-up address, Passengers",
+  ],
+  [
+    {
+      key: "testimonials.review_1",
+      value: { quote: "Always on time.", name: "Marta L.", permission: true },
+    },
+    "First review",
+    '"Always on time." Marta L.',
+  ],
+  [
+    {
+      key: "testimonials.review_2",
+      value: { quote: "Spotless.", name: "Owen", permission: true },
+    },
+    "Second review",
+    '"Spotless." Owen',
   ],
 ]
 

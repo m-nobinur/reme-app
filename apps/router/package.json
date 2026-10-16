@@ -4,6 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "dev": "node scripts/dev.mjs",
     "cf-typegen": "wrangler types --env-file /dev/null",
     "typecheck": "tsc --noEmit",
     "test": "node ../../scripts/floor.mjs router-unit -- vitest run --dir test",

@@ -1,9 +1,9 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs"
+import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { SiteFields } from "@workspace/contracts"
 import { afterAll, beforeAll, describe, expect, test } from "vitest"
 import { QUOTE_FIELD_TYPES, quoteFields } from "../src/quote-form"
-import { fields, site } from "../src/site-config"
+import { fields, layout, site } from "../src/site-config"
 import {
   type Built,
   build,
@@ -58,9 +58,10 @@ const MARKED_FORM = {
 let filled: Built | undefined
 let planted: Built | undefined
 let marked: Built | undefined
+let reordered: Built | undefined
 
 beforeAll(async () => {
-  ;[filled, planted, marked] = await Promise.all([
+  ;[filled, planted, marked, reordered] = await Promise.all([
     build({ site: FILLED }),
     build({
       site: { ...FILLED, phone: "", email: "" },
@@ -68,11 +69,22 @@ beforeAll(async () => {
       remove: ["quote.astro", "booking.astro", "about.astro"],
     }),
     build({ site: MARKED, quoteForm: MARKED_FORM }),
+    build({
+      site: FILLED,
+      layout: {
+        ...layout,
+        home: [
+          { kind: "cta_band", variant: "solid" },
+          { kind: "hero" },
+          { kind: "service_cards", variant: "numbered_rows" },
+        ],
+      },
+    }),
   ])
 }, 120_000)
 
 afterAll(() => {
-  for (const built of [filled, planted, marked]) clean(built)
+  for (const built of [filled, planted, marked, reordered]) clean(built)
 })
 
 const pagesOf = (built: Built | undefined) => {
@@ -215,21 +227,107 @@ describe("a component with its fields filled", () => {
   test("Hero renders", () => {
     const pages = pagesOf(filled)
     expect(hasClass(pages, "hero")).toBe(true)
-    expect(visible(pages)).toContain("A home you come back to")
+    // The home h1 keeps its words whole, its last one in the accent.
+    expect(pages.find((p) => p.file === "index.html")?.html).toContain(
+      'A home you come back <span class="accent">to</span></h1>'
+    )
+  })
+
+  test("marks the copy the copy gate reads (packages/gates/src/copy.ts)", () => {
+    const html = (file: string) =>
+      pagesOf(filled).find((p) => p.file === file)?.html ?? ""
+    const home = html("index.html")
+    // The subhead is homeIntro; the owner's tagline moves to the about section.
+    expect(home).toMatch(
+      new RegExp(`data-copy="hero_lede"[^>]*>\\s*${FILLED.homeIntro}`)
+    )
+    expect(home).toContain(`<p class="hero-note">${FILLED.heroNote}</p>`)
+    expect(home).toContain(FILLED.tagline)
+    expect(home).toContain('<span class="accent">Fairhaven homes</span>')
+    for (const kind of ["service_body", "step_body", "faq_answer"])
+      expect(home, kind).toContain(`data-copy="${kind}"`)
+    expect(home).toContain(FILLED.step4Body)
+    expect(html("services/weekly-clean/index.html")).toMatch(
+      new RegExp(`data-copy="service_detail"[^>]*>\\s*${FILLED.service1Detail}`)
+    )
+  })
+
+  test("gives each named service its own page, linked, in the sitemap and as a Service", () => {
+    const pages = pagesOf(filled)
+    const html = (file: string) =>
+      pages.find((p) => p.file === file)?.html ?? ""
+    const slugs = ["weekly-clean", "deep-clean", "end-of-tenancy"]
+    for (const slug of slugs) {
+      expect(html(`services/${slug}/index.html`), slug).toContain("<h1")
+      // Linked from the home cards and the services page.
+      for (const from of ["index.html", "services/index.html"])
+        expect(html(from), `${from} ${slug}`).toContain(
+          `href="/services/${slug}/"`
+        )
+    }
+    const page = html("services/weekly-clean/index.html")
+    expect(page).toContain(`<title>${FILLED.service1Title}</title>`)
+    expect(page).toContain(FILLED.service1Description)
+    expect(page).toContain(`<h1>${FILLED.service1Heading}</h1>`)
+    for (const text of [
+      FILLED.service1StepsHeading,
+      FILLED.service1FaqHeading,
+      FILLED.service1Faq1Answer,
+      FILLED.service1CtaHeading,
+      FILLED.service1CtaBody,
+      "Bathrooms cleaned",
+    ])
+      expect(page, text).toContain(text)
+    // Its questions are its own, never the site's.
+    expect(page).not.toContain(FILLED.faq2Answer)
+    const ld = jsonLdOf(
+      pages.find((p) => p.file === "services/weekly-clean/index.html") as never
+    )
+    expect(ld.map((t) => t["@type"])).toEqual(["Service", "FAQPage"])
+    expect(ld[0]?.url).toBe(`${ORIGIN}/services/weekly-clean/`)
+    const sitemap = sitemapUrls(fileOf(filled, "sitemap.xml"))
+    for (const slug of slugs)
+      expect(sitemap).toContain(`${ORIGIN}/services/${slug}/`)
+    // A service page without its own band fields takes the home page's.
+    expect(html("services/deep-clean/index.html")).toContain(FILLED.ctaHeading)
+    // Each page's own closing band.
+    expect(html("about/index.html")).toContain(FILLED.aboutCtaHeading)
+    expect(html("about/index.html")).not.toContain(FILLED.ctaHeading)
   })
 })
 
 describe("proof", () => {
   let bare: Built | undefined
+  let nothing: Built | undefined
   beforeAll(async () => {
-    bare = await build({ site: NO_PROOF })
+    ;[bare, nothing] = await Promise.all([
+      build({ site: NO_PROOF }),
+      // No proof, no area, no hours, one service: only the quote link is left to say.
+      build({
+        site: {
+          ...NO_PROOF,
+          serviceArea: "",
+          areaTowns: "",
+          weekdayHours: "",
+          service2Name: "",
+          service3Name: "",
+        },
+      }),
+    ])
   }, 120_000)
-  afterAll(() => clean(bare))
+  afterAll(() => {
+    clean(bare)
+    clean(nothing)
+  })
+
+  const strip = (built: Built | undefined) =>
+    pagesOf(built)
+      .find((p) => p.file === "index.html")
+      ?.html.match(/<section class="trust-strip[\s\S]*?<\/section>/)?.[0]
 
   test("shows no figure, review or proof point without the facts behind them", () => {
     const pages = pagesOf(bare)
-    for (const name of ["trust-strip", "testimonials"])
-      expect(hasClass(pages, name), name).toBe(false)
+    expect(hasClass(pages, "testimonials")).toBe(false)
     const texts = visible(pages)
     for (const text of [
       FILLED.statYearsValue,
@@ -238,6 +336,48 @@ describe("proof", () => {
       FILLED.testimonial1Quote,
     ])
       expect(texts, text).not.toContain(text)
+  })
+
+  test("the trust strip falls back to plain facts when there is no proof, and claims nothing", () => {
+    const html = strip(bare) ?? ""
+    expect(html).toContain(FILLED.serviceArea)
+    expect(html).toContain(`Open weekdays ${FILLED.weekdayHours}`)
+    expect(html).toContain("Request a quote online")
+    expect(html).toMatch(/\d+ services to choose from/)
+    expect(html).not.toMatch(/insured|since|years|rated|award|guarantee|free/i)
+  })
+
+  test("leaves the trust strip out when fewer than two plain facts exist", () => {
+    expect(strip(nothing)).toBeUndefined()
+  })
+
+  test("keeps the owner's own proof in place of the fallback", () => {
+    const html = pagesOf(filled)
+      .find((p) => p.file === "index.html")
+      ?.html.match(/<section class="trust-strip[\s\S]*?<\/section>/)?.[0]
+    expect(html).toContain(FILLED.trust2)
+    expect(html).not.toContain("Request a quote online")
+  })
+
+  test("the trust strip shows an icon for every item, four in a row at most", () => {
+    const html = strip(filled) ?? ""
+    const items = html.match(/<li>/g)?.length ?? 0
+    expect(items).toBeGreaterThanOrEqual(2)
+    expect(html.match(/class="trust-icon"/g)?.length).toBe(items)
+    expect(html).toMatch(/--trust-cols: [2-4]/)
+  })
+
+  test("the about record is a paragraph and a list, and no band when the proof is thin", () => {
+    const about = (built: Built | undefined) =>
+      pagesOf(built).find((p) => p.file === "about/index.html")?.html ?? ""
+    const record = about(filled).match(
+      /<div class="proof-record">[\s\S]*?<\/ul>/
+    )?.[0]
+    expect(record).toContain(
+      `<p data-copy="proof_body">${FILLED.proofBody}</p>`
+    )
+    expect(record?.match(/<li>/g)?.length).toBeGreaterThanOrEqual(2)
+    expect(about(bare)).not.toContain("proof-record")
   })
 
   test("shows the owner's proof, as given or rephrased, on the about page", () => {
@@ -268,8 +408,51 @@ describe("the about page", () => {
     const photo = about.elements.find((el) =>
       (el.attrs.class ?? "").split(" ").includes("story-photo")
     )
-    expect(photo?.attrs.src).toBe(FILLED.photo1Src)
+    expect(photo?.attrs.src).toMatch(/^\/_astro\//)
     expect(photo?.attrs.alt).toBe(FILLED.photo1Alt)
+  })
+
+  test("says how the work is done, what a visit is like and where, in its own words", () => {
+    const about = page(filled, "about/index.html")
+    for (const text of [
+      FILLED.approachHeading,
+      FILLED.approach1Title,
+      FILLED.approach3Body,
+      FILLED.aboutStepsHeading,
+      FILLED.aboutStep2Body,
+      FILLED.aboutAreaHeading,
+      FILLED.areaBody,
+    ])
+      expect(about.texts, text).toContain(text)
+    // The home page's reasons and steps stay on the home page.
+    for (const text of [FILLED.valueProp1Body, FILLED.step1Body])
+      expect(about.texts, text).not.toContain(text)
+    expect(about.html.match(/data-copy="approach_body"/g)).toHaveLength(3)
+    expect(about.html.match(/data-copy="step_body"/g)).toHaveLength(3)
+    // The record says each fact once: no trust strip beside it.
+    expect(about.html).not.toContain("trust-strip")
+  })
+
+  test("the services page helps a visitor choose and asks its own questions", () => {
+    const services = page(filled, "services/index.html")
+    expect(services.texts).toContain(FILLED.servicesHelpBody)
+    expect(services.texts).toContain(FILLED.servicesFaq1Question)
+    expect(services.texts).not.toContain(FILLED.faq1Question)
+    const faq = services.scripts
+      .filter((s) => s.type === "application/ld+json")
+      .map((s) => s.body)
+      .join("")
+    expect(faq).toContain(FILLED.servicesFaq1Question)
+    expect(faq).not.toContain(FILLED.faq1Question)
+  })
+
+  test("the contact page says what to send and links the form; the quote page says where details go", () => {
+    const contact = page(filled, "contact/index.html")
+    expect(contact.texts).toContain(FILLED.contactIncludeBody)
+    expect(contact.elements.map((el) => el.attrs.href)).toContain("/quote/")
+    expect(page(filled, "quote/index.html").texts).toContain(
+      FILLED.quotePrivacy
+    )
   })
 
   test("without one, the home page says who the business serves and links nowhere", () => {
@@ -367,43 +550,17 @@ describe("the quote form", () => {
   })
 })
 
-describe("the page recipes", () => {
-  const recipes = JSON.parse(
-    readFileSync(join(ROOT, "src/recipes.json"), "utf8")
-  ) as {
-    packs: Record<
-      string,
-      {
-        recipes: { page: string; components: string[]; fields: string[] }[]
-      }
-    >
-  }
-  const all = Object.values(recipes.packs).flatMap((pack) => pack.recipes)
-
-  test("name a page that exists, components that exist and fields that exist", () => {
-    expect(all.length).toBeGreaterThan(0)
-    const components = readdirSync(join(ROOT, "src/components"))
-    for (const recipe of all) {
-      expect(existsSync(join(ROOT, recipe.page)), recipe.page).toBe(true)
-      for (const component of recipe.components) {
-        expect(components, recipe.page).toContain(component)
-      }
-      for (const field of recipe.fields) {
-        expect(Object.keys(site), recipe.page).toContain(field)
-      }
-    }
-  })
-
-  test("list the components their page actually renders", () => {
-    for (const recipe of all) {
-      const source = readFileSync(join(ROOT, recipe.page), "utf8")
-      const used = [...source.matchAll(/<([A-Z]\w+)/g)].map((match) =>
-        String(match[1])
-      )
-      expect(new Set(recipe.components), recipe.page).toEqual(
-        new Set(used.filter((name) => name !== "Base"))
-      )
-    }
+describe("the pages' sections as data", () => {
+  test("render in the order layout gives, and a dropped kind is gone", () => {
+    const home = pagesOf(reordered).find((page) => page.file === "index.html")
+    const classes = [
+      ...(home?.html.matchAll(/<section class="([^"]*)"/g) ?? []),
+    ].map((match) => String(match[1]))
+    // The CTA band, the hero, then the services; no trust strip, no steps.
+    expect(classes).toHaveLength(3)
+    expect(classes[0]).toContain("cta-band")
+    expect(classes[1]).toContain("hero")
+    expect(classes[2]).toContain("services-numbered_rows")
   })
 })
 
@@ -555,6 +712,8 @@ describe("templates", () => {
       leftovers(page)
         .map((text) => text.replace(/«[A-Za-z0-9]+»/g, ""))
         .filter((rest) => /[\p{L}\p{N}]/u.test(rest))
+        // A card's ordinal (01, 02) is design rule 7's numbering, not copy.
+        .filter((rest) => !/^\s*\d{2}\s*$/.test(rest))
         .map((rest) => `${page.file}: "${rest.trim()}"`)
     )
     expect(inline).toEqual([])
@@ -563,11 +722,19 @@ describe("templates", () => {
   test("every page renders with no JavaScript", () => {
     for (const built of [filled, planted, marked]) {
       if (!built) throw new Error("the build did not run")
-      const scripts = readPages(built.dist).flatMap((page) =>
+      const pages = readPages(built.dist)
+      // The one inline script is the entrance reveal (Base.astro): it marks
+      // blocks only once it runs, so without it nothing is hidden.
+      const scripts = pages.flatMap((page) =>
         page.scripts
           .filter((script) => script.type !== "application/ld+json")
+          .filter((script) => !script.body.includes("dataset.reveal"))
           .map(() => page.file)
       )
+      const hiddenWithoutScript = pages
+        .filter((page) => /class="[^"]*\breveal\b|data-reveal/.test(page.html))
+        .map((page) => page.file)
+      expect(hiddenWithoutScript).toEqual([])
       const bundles = readdirSync(built.dist, { recursive: true })
         .map(String)
         .filter((file) => /\.m?js$/.test(file))

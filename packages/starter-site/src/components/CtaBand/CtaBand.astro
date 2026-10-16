@@ -1,17 +1,42 @@
 ---
+import Photo from "../../layouts/Photo.astro"
+import SectionHead from "../../layouts/SectionHead.astro"
 import { phoneText } from "../../phone"
+import { hasPhoto } from "../../photo-files"
 import { primaryAction } from "../../routes"
 import { site } from "../../site-config"
 import ActionLink from "../ActionLink/ActionLink.astro"
+
+interface Props {
+  /** solid is the brand colour, photo puts site.ctaImage under it. */
+  variant?: "solid" | "photo"
+  /** The h2, the page's own; empty is site.ctaHeading. */
+  heading?: string
+  /** The sentence under it, the page's own; empty is site.ctaBody. */
+  body?: string
+}
+
+const {
+  variant = "solid",
+  heading = site.ctaHeading,
+  body = site.ctaBody,
+} = Astro.props
+const image =
+  variant === "photo" && hasPhoto(site.ctaImage) ? site.ctaImage : ""
 ---
 
 {
-  (site.ctaHeading || site.ctaBody) && (
-    <section class="band band-tint cta-band">
+  (heading || body) && (
+    <section
+      class:list={["band band-tint cta-band", image && "cta-photo"]}
+    >
+      {image && (
+        <Photo class="cta-image" src={image} alt="" sizes="100vw" widths={[640, 960, 1280]} />
+      )}
       <div class="wrap cta-inner">
         <div class="cta-text">
-          {site.ctaHeading && <h2>{site.ctaHeading}</h2>}
-          {site.ctaBody && <p class="cta-body">{site.ctaBody}</p>}
+          <SectionHead bare eyebrow={site.ctaEyebrow} heading={heading} />
+          {body && <p class="cta-body">{body}</p>}
         </div>
         <div class="actions">
           {primaryAction && (

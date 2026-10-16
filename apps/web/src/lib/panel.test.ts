@@ -7,6 +7,7 @@ import { type PanelInput, pageOf, panelFor } from "./panel"
 const ONBOARDING = "00000000-0000-4000-8000-00000000000a"
 const CHAT = "00000000-0000-4000-8000-00000000000b"
 const HOST = "fixture-clean.example.invalid"
+const URL_ = `https://${HOST}`
 /** 10:00 in London. */
 const NOW = new Date("2026-10-01T09:00:00.000Z")
 const ZONE = "Europe/London"
@@ -83,7 +84,7 @@ const input = (over: Partial<PanelInput> = {}): PanelInput => ({
 })
 
 const live = (over: Partial<Workspace> = {}) =>
-  workspace({ live: 3, host: HOST, ...over })
+  workspace({ live: 3, host: HOST, url: URL_, ...over })
 
 describe("pageOf", () => {
   it("names each page, and tells the getting-started chat apart", () => {
@@ -258,7 +259,9 @@ describe("in a chat", () => {
       "Version 4 is ready for your review.",
       "Approve it here, or say what to change.",
     ])
-    expect(panel?.suggestions).toEqual([{ kind: "visit-site", host: HOST }])
+    expect(panel?.suggestions).toEqual([
+      { kind: "visit-site", host: HOST, url: URL_ },
+    ])
   })
 
   it("names who asked a question, from the directory", () => {
@@ -289,7 +292,7 @@ describe("in a chat", () => {
     ])
     expect(panel?.suggestions).toEqual([
       { kind: "request-change" },
-      { kind: "visit-site", host: HOST },
+      { kind: "visit-site", host: HOST, url: URL_ },
     ])
   })
 })
@@ -485,6 +488,77 @@ describe("what is coming up and what just happened", () => {
   })
 })
 
+it("names the step the api marks, even one whose count is full", () => {
+  const rows = [
+    { id: "planning", label: "Planning the layout", done: 1, total: 1 },
+    { id: "writing", label: "Writing the pages", done: 6, total: 6, now: true },
+    { id: "design", label: "Looking over the design", done: 0, total: 1 },
+  ]
+  const working = {
+    ...build("implementing"),
+    lane: "full",
+    activity: rows,
+  } as Workspace["builds"][number]
+  const line = panelFor(
+    input({ workspace: workspace({ builds: [working], building: true }) })
+  )?.line
+  expect(line).toMatchObject({
+    detail: "writing the pages",
+    progress: { done: 2, total: 3 },
+  })
+})
+
+describe("a build that stopped", () => {
+  const failed = {
+    kind: "alert",
+    id: "fail",
+    title: "A build failed",
+    raisedAt: "2026-10-01T08:00:00.000Z",
+    stopped: "stalled",
+  } as unknown as AttentionItem
+  const published = {
+    kind: "report",
+    id: "v3",
+    title: "Published v3",
+    raisedAt: "2026-10-01T08:30:00.000Z",
+  } as unknown as AttentionItem
+  const STOPPED = [
+    "The build stopped: it went quiet for too long.",
+    "Try again or ask for changes.",
+  ]
+
+  it("says why and what to do, with the way to ask for changes", () => {
+    const panel = panelFor(
+      input({
+        route: ROUTES.chat,
+        conversation: CHAT,
+        workspace: live({ attention: [failed] }),
+      })
+    )
+    expect(panel?.headline).toEqual(STOPPED)
+    expect(panel?.line.lead).toBe("The build stopped")
+    expect(panel?.build).toBeNull()
+    expect(panel?.suggestions.map((s) => s.kind)).toContain("request-change")
+  })
+
+  it("says nothing of it once a build is open or something newer happened", () => {
+    const open = panelFor(
+      input({
+        workspace: live({
+          attention: [failed],
+          open: true,
+          builds: [build("implementing")],
+        }),
+      })
+    )
+    expect(open?.headline).not.toEqual(STOPPED)
+    const after = panelFor(
+      input({ workspace: live({ attention: [failed, published] }) })
+    )
+    expect(after?.headline).not.toEqual(STOPPED)
+  })
+})
+
 describe("the one line", () => {
   const line = (over: Partial<Workspace>, names = {}) =>
     panelFor(input({ workspace: workspace(over), names }))?.line
@@ -531,6 +605,59 @@ describe("the one line", () => {
       lead: "Building a new version,",
       detail: "reading your brief",
     })
+  })
+
+  it("names a full build's step and how far through its steps it is", () => {
+    const row = (id: string, label: string, done: number, total = 1) => ({
+      id,
+      label,
+      done,
+      total,
+    })
+    const activity = [
+      row("planning", "Planning the layout", 1),
+      row("photos", "Making photos", 4, 4),
+      row("writing", "Writing the pages", 3, 6),
+      row("design", "Looking over the design", 0),
+      row("checking", "Checking the site", 0),
+    ]
+    expect(line({ builds: [{ ...build("implementing"), activity }] })).toEqual({
+      tone: "working",
+      lead: "Building your first version,",
+      detail: "writing the pages",
+      progress: { done: 3, total: 5 },
+    })
+    // The gates sent it back: the pill says so, in a sixth step.
+    const repairing = [
+      ...activity.slice(0, 2).map((r) => ({ ...r, done: r.total })),
+      row("writing", "Writing the pages", 6, 6),
+      row("design", "Looking over the design", 1),
+      row("fixing", "Fixing what the checks found", 0),
+      row("checking", "Checking the site", 0),
+    ]
+    expect(
+      line({ builds: [{ ...build("implementing"), activity: repairing }] })
+    ).toMatchObject({
+      detail: "fixing what the checks found",
+      progress: { done: 5, total: 6 },
+    })
+    // The plan waiting on the owner is not the team planning.
+    const waiting = {
+      ...build("planning"),
+      activity: [
+        row("planning", "Planning the layout", 0),
+        ...activity.slice(2),
+      ],
+      blueprint: { awaiting: true },
+    } as unknown as Workspace["builds"][number]
+    expect(line({ builds: [waiting] })).toMatchObject({
+      detail: "waiting for your review",
+      progress: { done: 1, total: 4 },
+    })
+    // A quick edit has no steps to count.
+    expect(
+      line({ builds: [{ ...build("revising"), lane: "quick", activity }] })
+    ).not.toHaveProperty("progress")
   })
 })
 

@@ -56,14 +56,23 @@ const ENTERED_FROM: Record<AssignmentState, readonly AssignmentState[]> = {
   published: ["release_candidate"],
   blocked_on_information: ["implementing"],
   blocked_on_approval: ["awaiting_review", "implementing"],
-  repairing: ["implementing", "validating"],
+  // A preview goes back when the accessibility gate, which runs after the
+  // preview exists, fails.
+  repairing: ["implementing", "validating", "preview_ready"],
   paused: [],
   // A fourth gate failure cannot enter `repairing`, so it ends here directly.
-  failed: ["repairing", "validating", "implementing"],
+  // A plan nobody decided on in seven days ends from `planning` (ADR-038).
+  failed: [
+    "planning",
+    "repairing",
+    "validating",
+    "implementing",
+    "preview_ready",
+  ],
   cancelled: [],
 }
 
-export type TransitionErrorClass = "transient" | "validation" | "resource"
+type TransitionErrorClass = "transient" | "validation" | "resource"
 
 /** R4: the code and class travel; the message is for a log, never a model. */
 export class TransitionError extends Error {
@@ -156,14 +165,40 @@ export async function assignmentCost(
   return Number(row?.usd ?? 0)
 }
 
-export type TransitionInput = Ids & {
+/** How many model turns the assignment's log holds, for the timing line. */
+export async function turnCount(
+  db: OrgScopedDb,
+  assignmentId: string
+): Promise<number> {
+  const [row] = await db
+    .select({ n: sql<string>`count(*)` })
+    .from(events)
+    .where(
+      sql`${events.assignmentId} = ${assignmentId} and ${events.type} = 'runtime.turn'`
+    )
+  return Number(row?.n ?? 0)
+}
+
+/** Epoch ms of the assignment's newest event, or 0 with none: the Workflow's stall check. */
+export async function lastEventAt(
+  db: OrgScopedDb,
+  assignmentId: string
+): Promise<number> {
+  const [row] = await db
+    .select({ at: sql<Date | null>`max(${events.occurredAt})` })
+    .from(events)
+    .where(sql`${events.assignmentId} = ${assignmentId}`)
+  return row?.at ? new Date(row.at).getTime() : 0
+}
+
+type TransitionInput = Ids & {
   to: AssignmentState
   expectedVersion: number
   reason?: string
   payload?: Record<string, unknown>
 }
 
-export type Transition = {
+type Transition = {
   from: AssignmentState
   to: AssignmentState
   version: number

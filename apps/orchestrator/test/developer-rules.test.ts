@@ -5,8 +5,12 @@ import {
 } from "@workspace/contracts"
 import {
   CLAIM_VOCABULARY,
+  COPY_WORDS,
+  DESCRIPTION_CHARS,
   factsToAsk,
+  HEADING_NEAR,
   HIDDEN_FACTS_KEY,
+  TITLE_CHARS,
 } from "@workspace/gates"
 import { brandRamp } from "@workspace/starter-site/brand"
 import { BANNED_PHRASES } from "@workspace/starter-site/copy-check"
@@ -15,9 +19,11 @@ import {
   assignmentGoal,
   COPY_RULES,
   ownerChoices,
-  photoFile,
+  paletteRoles,
   siteRules,
 } from "../src/developer-rules.ts"
+import { COPY_WRITER_RULES } from "../src/fanout.ts"
+import { photoFile } from "../src/photo-files.ts"
 import { SEED_FIELDS } from "../src/seed.ts"
 
 const hidden = (keys: string[]): FactRecord => ({
@@ -81,10 +87,16 @@ describe("the Developer's site rules", () => {
     expect(rules).toContain("local copywriter for this trade")
     expect(rules).toContain("heroHeading names the main service and the area")
     expect(rules).toContain("50 to 60 characters")
-    expect(rules).toContain("140 to 155 characters")
+    expect(rules).toContain("140 to 160 characters")
     expect(rules).toContain("ICONS key in src/icons.ts")
     expect(rules).toContain("astro build ends with a copy check")
     expect(rules).not.toContain(String.fromCharCode(0x2014))
+  })
+
+  it("quotes a review only from the facts the owner recorded", () => {
+    const rules = text(false)
+    expect(rules).toContain("testimonials.review_1 and testimonials.review_2")
+    expect(rules).toContain("Never write, shorten or correct a review")
   })
 
   it("keeps proof to what the owner said and asks the owner rarely", () => {
@@ -109,19 +121,50 @@ describe("the Developer's site rules", () => {
     expect(rules).toContain("Write the line without the claim instead")
   })
 
+  it("tells the builder to state a fact once per page, not again in other words", () => {
+    expect(text(false)).toContain(
+      'State each fact once per page, never again in other words ("8 Years in business" beside "8 years trading")'
+    )
+  })
+
+  it("tells the builder a widening word needs the fact to carry it", () => {
+    expect(text(false)).toContain('does not make "Fully insured"')
+  })
+
   it("has the About page's copy rephrase its facts under headings written for the business", () => {
     const rules = text(false)
     expect(rules).toContain(
       "overviewBody and audienceBody put business.overview and business.audience in the site's voice: rephrase, never add"
     )
     expect(rules).toContain(
-      "overviewHeading, audienceHeading and proofHeading name this business's service or area, never one bare word or a stock label"
+      "proofHeading, approachHeading, aboutStepsHeading, aboutAreaHeading, servicesHelpHeading, servicesFaqHeading and contactIncludeHeading name this business's service or area, never one bare word or a stock label"
     )
+  })
+
+  it("briefs each inner page's blocks with the gate's ranges and the truth rules", () => {
+    const rules = text(false)
+    for (const line of [
+      "The approach: three or four principles of how the work is done (approach1Title to approach4Body, a title of 2 to 5 words and a body of 25 to 45 words",
+      "never a credential, guarantee, count or response time no fact states",
+      "What to expect on a visit: three or four steps of the visit itself",
+      "proofBody 30 to 60 words on what each point means for the customer, beside the points themselves, never a lone sentence",
+      "servicesHelpBody (40 to 80 words) under servicesHelpHeading helps a visitor not sure which service they need",
+      "contactIncludeBody (25 to 60 words) under contactIncludeHeading says what to put in a message",
+      "A reply time only when a fact states one; without it, promise neither a time nor a reply to every message.",
+      "quotePrivacy is one sentence on what happens to the details sent",
+    ])
+      expect(rules).toContain(line)
+  })
+
+  it("asks for an eyebrow and an accent clause in every section heading", () => {
+    const rules = text(false)
+    expect(rules).toContain("Every section heading has an eyebrow field")
+    expect(rules).toContain("*rebooking us*")
   })
 
   it("keeps the copy guidance short enough for the cached segment", () => {
     expect(siteRules(false, [])).toEqual(expect.arrayContaining(COPY_RULES))
-    expect(COPY_RULES.join(" ").split(/\s+/).length).toBeLessThan(560)
+    expect(COPY_RULES.join(" ").split(/\s+/).length).toBeLessThan(750)
   })
 })
 
@@ -191,7 +234,8 @@ describe("the owner's onboarding choices in the rules", () => {
     expect(rules).toContain(
       "The site never shows a price, a rate, a fee or a pricing tier"
     )
-    expect(rules).toContain('label it "Request a quote" and link it to /quote/')
+    expect(rules).toContain("links it to /quote/")
+    expect(rules).toContain('"Book a consultation" for legal')
     expect(rules).not.toContain("Book a clean")
   })
 
@@ -208,7 +252,16 @@ describe("the owner's onboarding choices in the rules", () => {
     }
   })
 
-  it("turns presets into values: the template, the palette's brand colour, the font stack, the pages and the voice", () => {
+  it("tells the Developer the starter's layouts and components are read-only, custom sections apart", () => {
+    for (const revising of [false, true]) {
+      const rules = text(revising)
+      expect(rules).toContain(
+        "Every file under src/layouts/ and src/components/, except your own custom sections in src/components/custom/, is the starter's and read-only"
+      )
+    }
+  })
+
+  it("turns presets into values: the direction, the palette's roles, the font pair, the pages and the voice", () => {
     const rules = ownerChoices([
       fact("site.template", { id: "modern" }),
       fact("site.palette", { id: "forest" }),
@@ -216,13 +269,19 @@ describe("the owner's onboarding choices in the rules", () => {
       fact("site.pages", { ids: ["home", "about", "gallery", "quote"] }),
       fact("assistant.tone", { id: "professional" }),
     ]).join("\n")
+    const forest = PALETTES.find((p) => p.id === "forest")
+    if (!forest) throw new Error("no forest palette")
     expect(rules).toContain('Modern template (site.template "modern")')
+    expect(rules).toContain("pick calm_daylight for the Blueprint")
+    expect(rules).toContain(`the brand colour is ${forest.brand}`)
     expect(rules).toContain(
-      `the brand colour is ${PALETTES.find((p) => p.id === "forest")?.brand}`
+      `Set palette in src/site-config.ts to "${paletteRoles(forest)}" exactly`
     )
-    expect(rules).toContain("ui-serif, Georgia, serif")
     expect(rules).toContain(
-      "Home and Request a quote, plus About, Gallery. Delete src/pages/services.astro, src/pages/service-area.astro, src/pages/contact.astro: the owner did not pick those pages"
+      'set font in src/site-config.ts to "newsreader_inter"'
+    )
+    expect(rules).toContain(
+      "Home and Request a quote, plus About. Gallery is a section on the home page, not a page: build no page file for it, and the Blueprint says which the home page holds. Delete src/pages/services.astro, src/pages/services/[slug].astro, src/pages/service-area.astro, src/pages/contact.astro: the owner did not pick those pages"
     )
     expect(rules).toContain(
       "Build any other extra page from the existing components"
@@ -230,17 +289,24 @@ describe("the owner's onboarding choices in the rules", () => {
     expect(rules).toContain("a professional tone")
   })
 
-  it("keeps the About page only with an overview or proof to show", () => {
+  it("never deletes a page the owner picked, however thin its facts", () => {
     const rules = ownerChoices([
       fact("site.pages", { ids: ["home", "about", "quote"] }),
     ]).join("\n")
-    expect(rules).toContain(
-      "Delete src/pages/about.astro if business.overview and business.proof are both missing; the home page's about section then shows business.audience."
-    )
-    const without = ownerChoices([
-      fact("site.pages", { ids: ["home", "quote"] }),
+    expect(rules).not.toContain("src/pages/about.astro")
+    expect(rules).toContain("Delete src/pages/services.astro")
+  })
+
+  it("names the design tray's direction and font pair", () => {
+    const rules = ownerChoices([
+      fact("site.direction", { id: "counsel" }),
+      fact("site.font", { id: "sora_manrope" }),
     ]).join("\n")
-    expect(without).not.toContain("if business.overview and business.proof")
+    expect(rules).toContain('set direction in src/site-config.ts to "counsel"')
+    expect(rules).toContain('set font in src/site-config.ts to "sora_manrope"')
+    expect(
+      ownerChoices([fact("site.direction", { id: "builder" })]).join("\n")
+    ).not.toContain("Direction:")
   })
 
   it("quotes the owner's own words as guidance", () => {
@@ -306,6 +372,68 @@ describe("the owner's onboarding choices in the rules", () => {
     expect(ownerChoices([]).join("\n")).not.toContain("Photos:")
   })
 
+  it("tells the writer never to mention facts or gaps, to leave a question out, and names the gate", () => {
+    const rules = text(false)
+    expect(rules).toContain("Never write about your inputs.")
+    for (const phrase of [
+      "our facts don't say",
+      "isn't set out",
+      "the owner hasn't said",
+      "as an AI",
+    ])
+      expect(rules, phrase).toContain(phrase)
+    expect(rules).toContain(
+      "A question the facts do not answer is left out: write fewer questions rather than one that admits a gap"
+    )
+    expect(rules).toContain("exactly as service_area.text spells it")
+    // The old advice that invited the notes is gone.
+    expect(rules).not.toContain("answered only as far as the facts go")
+    expect(rules).not.toContain(
+      "tells the visitor to mention it in their quote request"
+    )
+    expect(COPY_WRITER_RULES).toContain(
+      "Leave a question out rather than answer that you do not know"
+    )
+    expect(COPY_WRITER_RULES).toContain(
+      "the copy gate accepts 50 to 60 and 140 to 165"
+    )
+    expect(rules).toContain("the copy gate fails under 100")
+    expect(rules).toContain("the copy gate fails a service page without either")
+  })
+
+  it("carries every threshold the copy gate enforces, from the gate's own constants", () => {
+    const rules = text(false)
+    for (const range of [TITLE_CHARS, DESCRIPTION_CHARS])
+      expect(rules).toContain(`${range.min} to ${range.max} characters`)
+    for (const { aim, min } of Object.values(COPY_WORDS))
+      expect(rules).toContain(
+        `${aim[0]} to ${aim[1]} words, never under ${min}`
+      )
+    expect(rules).toContain(`${Math.round(HEADING_NEAR * 100)} percent`)
+    expect(rules).toContain("never the same as or close to its own page's h1")
+    expect(rules).toContain("no two steps on the site share their words")
+  })
+
+  it("spells service names as given and keeps scenarios free of invented places and customers", () => {
+    const rules = text(false)
+    expect(rules).toContain(
+      "Spell each service name in business.offerings, and the trade in business.industry, exactly as given"
+    )
+    expect(rules).toContain('("conservative" for "conservatory")')
+    expect(rules).toContain("no street, building, shop or customer")
+    expect(rules).toContain("A flat above a shop in Bishopston")
+  })
+
+  it("keeps who the business is and what a service includes to the facts", () => {
+    const rules = text(false)
+    expect(rules).toContain(
+      "Who the business is comes from a fact or not at all: local, family-run, independent, owner-run, years in business, team size"
+    )
+    expect(rules).toContain(
+      "in neutral wording: no guarantee, no named product or brand, no count or measure"
+    )
+  })
+
   it("traces every service line to a fact and names the specifics a build once invented", () => {
     const rules = text(false)
     expect(rules).toContain(
@@ -320,9 +448,11 @@ describe("the owner's onboarding choices in the rules", () => {
     ]) {
       expect(rules, specific).toContain(specific)
     }
-    expect(rules).toContain("When the facts are thin, write less")
     expect(rules).toContain(
-      "An FAQ answer only restates a fact below or points the visitor to Request a quote"
+      "When the facts are thin, write from the trade's usual practice, never from invention"
+    )
+    expect(rules).toContain(
+      "what this business itself does (its supplies, access, pets, insurance, timing, rebooking) it says only as a fact says it"
     )
   })
 

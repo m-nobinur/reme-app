@@ -2,6 +2,7 @@ import {
   BuildSummary,
   ChatRequest,
   type ChatResult,
+  CosChangeRequest,
   type CosTurn,
   ErrorEnvelope,
   type FactRecord,
@@ -29,14 +30,13 @@ import {
   type UIMessage,
   type UIMessageChunk,
 } from "ai"
-import { type Owner, startChange, stateFacts } from "./changes.ts"
+import { type Owner, stateFacts } from "./changes.ts"
 import { holdsNul, notFound } from "./conversations.ts"
 import {
   type AgentTurn,
   activeTools,
   contextOf,
   cosPrefix,
-  DEFAULT_MODEL,
   knownZone,
   LIMITS,
   messageTaint,
@@ -45,6 +45,7 @@ import {
   personaOf,
   priceOf,
   reservation,
+  routeOf,
 } from "./cos/agent.ts"
 import {
   CONTEXT_POLICY,
@@ -60,8 +61,9 @@ import {
   ranTurn,
   settle,
   streamTurn,
+  writtenAt,
 } from "./cos/run.ts"
-import { getWorkspace, type ToolFailed } from "./cos/tools.ts"
+import { getWorkspace, startOwnerChange, type ToolFailed } from "./cos/tools.ts"
 import {
   beginTurn,
   closeLapsedTurn,
@@ -91,6 +93,7 @@ import {
   built,
   cardAnswer,
   decided as decidedAnswer,
+  designCard,
   factValue,
   isCard,
   ONBOARDING_GOAL,
@@ -104,6 +107,7 @@ import {
   type ScriptRow,
   ended as scriptEnded,
   text as textPart,
+  trayOption,
   typedAnswer,
   voiceOf,
   applied as withAnswer,
@@ -166,6 +170,10 @@ export { ONBOARDING_GOAL }
 export const ASK_REPLY =
   "I can't answer right now. Try again in a moment, or switch to Act and tell me what to change on your site."
 
+/** The one line, in either mode, when the model was asked and failed: never a card it did not propose. */
+export const NO_ANSWER =
+  "I couldn't answer that just now. Try again in a moment."
+
 /** assistant-ui's words when a new message cancels a pending call, so a reload matches. */
 export const CANCELLED = TOOL_CALL_CANCELLED
 
@@ -177,6 +185,7 @@ export type ToolPart = {
     | "tool-ask_fact"
     | "tool-ask_details"
     | "tool-ask_choice"
+    | "tool-ask_design"
     | "tool-ask_upload"
     | "tool-review_quote_form"
     | "tool-request_change"
@@ -605,6 +614,7 @@ export async function chat(
   deps: ChatDeps = {}
 ): Promise<Response> {
   const newId = deps.newId ?? (() => crypto.randomUUID())
+  const arrived = new Date()
   const body = await readBody(request)
   const parsed = ChatRequest.safeParse(body)
   if (!parsed.success) return invalid(parsed.error.issues)
@@ -628,7 +638,7 @@ export async function chat(
         ? (card: ToolPart, asked: string, reply: string) =>
             jev(env.OPENROUTER_API_KEY as string, card, asked, reply)
         : null
-  const modelId = env.COS_MODEL ?? DEFAULT_MODEL
+  const modelId = env.COS_MODEL ?? routeOf("owner_turn").model
   const price = priceOf(modelId)
   const model =
     deps.model !== undefined
@@ -662,12 +672,23 @@ export async function chat(
         )
       : null
   const racing = planner && planPrice ? jevGate : null
+  // A reply that is one option's label on the design tray is that question's
+  // answer, read by code; every other reply to the tray is the planner's.
+  const trayHit =
+    turn.kind === "message" && ahead.card?.type === "tool-ask_design"
+      ? trayOption(ahead.card, turn.text)
+      : null
   const gate: Gate | null =
-    toCard && exact
-      ? { callId: toCard.card.toolCallId, decision: exact }
-      : racing
-        ? null
-        : await jevGate
+    trayHit && ahead.card
+      ? {
+          callId: ahead.card.toolCallId,
+          decision: { kind: "answer", option: trayHit },
+        }
+      : toCard && exact
+        ? { callId: toCard.card.toolCallId, decision: exact }
+        : racing
+          ? null
+          : await jevGate
   let onboardingTurn = false
   const preparer =
     deps.prepare !== undefined
@@ -816,6 +837,7 @@ export async function chat(
       request: parsed.data,
       newId,
       rowId: newId(),
+      sentAt: arrived,
       model: planner as LanguageModel,
       modelId: plannerId,
       price: planPrice as NonNullable<typeof planPrice>,
@@ -888,7 +910,8 @@ function scriptTurn(
   { mode, turn }: ChatRequest,
   newId: () => string,
   given: Given | null = null,
-  rowId?: string
+  rowId?: string,
+  sentAt?: Date
 ): Promise<Response> {
   if (turn.kind === "message") {
     return typed(
@@ -902,7 +925,8 @@ function scriptTurn(
       turn.message_id,
       newId,
       given,
-      rowId
+      rowId,
+      sentAt
     )
   }
   // The script's steps each wait on one call, so its results turn
@@ -912,7 +936,19 @@ function scriptTurn(
   if (!result || more.length > 0) return Promise.resolve(stale())
   const one = { message_id: turn.message_id, ...result }
   if (one.kind === "answer") {
-    return answer(db, env, kit, owner, held, id, one, turn.reply, newId, rowId)
+    return answer(
+      db,
+      env,
+      kit,
+      owner,
+      held,
+      id,
+      one,
+      turn.reply,
+      newId,
+      rowId,
+      sentAt
+    )
   }
   return approve(db, env, kit, owner, held, id, one)
 }
@@ -1015,9 +1051,10 @@ async function openCos(
       cancelled && log.named && held.tail
         ? await loggedMessage(db, id, held.tail.id)
         : null
+    const posts = await unloggedPosts(db, id)
     const messages = logged
-      ? [{ ...logged, parts: cancelParts(logged.parts) }, user]
-      : [user]
+      ? [...posts, { ...logged, parts: cancelParts(logged.parts) }, user]
+      : [...posts, user]
     return {
       messages: messages.map((m) => ({ message: m, taint: messageTaint(m) })),
       tail: null,
@@ -1227,8 +1264,9 @@ function settledLead(messages: UIMessage[], tailId: string): UIMessageChunk[] {
 
 /**
  * The turn without the model: the script's step for a typed message, not
- * logged, so the model learns its effect from the next context; for a
- * results turn, the resolved message, logged with no model text.
+ * logged, so the model learns its effect from the next context, or
+ * `NO_ANSWER` once the provider failed; for a results turn, the resolved
+ * message, logged with no model text.
  */
 async function fallbackTurn(
   run: AgentTurn,
@@ -1237,11 +1275,14 @@ async function fallbackTurn(
   payload: CosTurn
 ): Promise<Response> {
   if (a.turn.kind === "message") {
-    const step = nextStep({
-      onboarding: null,
-      message: { mode: a.mode, text: a.turn.text },
-      newId: a.newId,
-    })
+    const step: Part[] =
+      payload.outcome === "fallback" && payload.reason === "provider"
+        ? [{ type: "text", text: NO_ANSWER, state: "done" }]
+        : nextStep({
+            onboarding: null,
+            message: { mode: a.mode, text: a.turn.text },
+            newId: a.newId,
+          })
     const assistantId = a.newId()
     await run.kit.withOrg({ orgId: run.turn.orgId }, async (db) => {
       await writeAsTurn(db, run.turn, [{ type: "cos.turn", payload }])
@@ -1251,7 +1292,7 @@ async function fallbackTurn(
         parts: [{ type: "step-start" }, ...step],
       })
     })
-    return stream(assistantId, step)
+    return stream(assistantId, step, [writtenAt()])
   }
   const history = await run.kit.withOrg({ orgId: run.turn.orgId }, (db) =>
     readSession(db, run.turn.sessionId)
@@ -1265,6 +1306,31 @@ async function fallbackTurn(
   }
   await closeTurn(run, payload, message, rows)
   return stream(tailId, [], settledLead(messages, tailId))
+}
+
+/**
+ * The messages the assistant posted on its own (`postAssistantMessage`,
+ * ids `srv_…`) that the session's log does not hold yet, oldest first, cut
+ * to their text. A typed turn logs them before the owner's message, so the
+ * model's history, which reads the log alone, holds what it already told
+ * the owner.
+ */
+async function unloggedPosts(db: OrgScopedDb, id: string) {
+  const rows = await db.execute<{ id: string; parts: Part[] }>(sql`
+    select m.id, m.content->'parts' as parts from ${conversationMessages} m
+    where m.conversation_id = ${id} and m.id like 'srv\_%'
+      and m.content->>'role' = 'assistant'
+      and not exists (select 1 from ${events} e
+        where e.session_id = ${id} and e.type = 'cos.message'
+          and e.payload->'message'->>'id' = m.id)
+    order by m.seq`)
+  return rows.map((row) => ({
+    id: row.id,
+    role: "assistant" as const,
+    parts: row.parts.filter(
+      (p) => p.type === "step-start" || p.type === "text"
+    ),
+  }))
 }
 
 /** A message id is written once. A retried send is refused, never merged. */
@@ -1367,7 +1433,8 @@ async function typed(
   messageId: string,
   newId: () => string,
   given: Given | null = null,
-  rowId?: string
+  rowId?: string,
+  sentAt?: Date
 ): Promise<Response> {
   if (await messageTaken(db, id, messageId)) return messageExists()
   const { tail } = held
@@ -1390,7 +1457,7 @@ async function typed(
     owner,
     id,
     tail?.id ?? null,
-    { id: messageId, text: message.text },
+    { id: messageId, text: message.text, at: sentAt },
     step,
     newId,
     rowId
@@ -1400,7 +1467,7 @@ async function typed(
     .update(conversations)
     .set({ updatedAt: sql`now()` })
     .where(eq(conversations.id, id))
-  return stream(assistantId, step)
+  return stream(assistantId, step, [writtenAt()])
 }
 
 /**
@@ -1412,7 +1479,7 @@ async function ownerThenStep(
   owner: Owner,
   id: string,
   parentId: string | null,
-  message: { id: string; text: string },
+  message: { id: string; text: string; at?: Date | undefined },
   step: Part[],
   newId: () => string,
   rowId?: string
@@ -1423,6 +1490,8 @@ async function ownerThenStep(
       id: message.id,
       parentId,
       content: { role: "user", parts: [{ type: "text", text: message.text }] },
+      // Written late, the owner's row keeps the time it arrived.
+      ...(message.at ? { createdAt: message.at } : {}),
     },
     {
       id: assistantId,
@@ -1467,13 +1536,13 @@ async function advance(
   reply: Answer | undefined,
   newId: () => string
 ): Promise<Part[]> {
-  if (reply?.kind === "facts") {
+  if (reply?.kind === "facts" || reply?.kind === "design") {
     await stateFacts(
       db,
       owner,
       reply.facts,
       onboarding.facts as FactRecord[],
-      reply.chose ? "inferred" : "owner_stated"
+      reply.kind === "facts" && reply.chose ? "inferred" : "owner_stated"
     )
   }
   const next = reply ? withAnswer(onboarding, reply) : onboarding
@@ -1488,7 +1557,8 @@ async function advance(
     env,
     kit,
     owner,
-    ONBOARDING_GOAL,
+    id,
+    { text: ONBOARDING_GOAL },
     `onboarding:${id}`
   )
   if (output instanceof Response) throw new Refusal(output)
@@ -1541,7 +1611,8 @@ async function answer(
   turn: Resolved<"answer">,
   reply: Reply,
   newId: () => string,
-  rowId?: string
+  rowId?: string,
+  sentAt?: Date
 ): Promise<Response> {
   // A reply is written once, as a typed message is: a retry is refused.
   if (reply && (await messageTaken(db, id, reply.message_id))) {
@@ -1568,8 +1639,27 @@ async function answer(
   const onboarding = await onboardingOf(db, held, id, owner)
   if (!onboarding) return stale()
   const uploads = factValue(onboarding.facts, "media.uploads")?.items ?? []
-  const meant = output.success ? cardAnswer(call, output.data, uploads) : null
+  const meant = output.success
+    ? cardAnswer(call, output.data, uploads, onboarding.facts)
+    : null
   if (!meant || meant.kind === "retry") return answerInvalid()
+  // A tray answer sent as the owner leaves its question: stated now, so a
+  // reload resumes after it, and the tray stays open for the rest.
+  if (meant.kind === "design" && !meant.settled) {
+    await stateFacts(db, owner, meant.facts, onboarding.facts as FactRecord[])
+    // The stored tray opens ticked where the owner has answered, so a reload
+    // resumes after it. Losing a race to another save only loses the ticks:
+    // the facts are stated, and the next save rebuilds them all.
+    const ticked = designCard(
+      withAnswer(onboarding, meant),
+      () => call.toolCallId
+    )
+    await swapTail(db, id, tail, {
+      ...tail.content,
+      parts: shown(tail.content.parts.map((p) => (p === call ? ticked : p))),
+    })
+    return new Response(null, { status: 204 })
+  }
   const done: ToolPart = {
     ...call,
     state: "output-available",
@@ -1591,12 +1681,12 @@ async function answer(
       owner,
       id,
       tail.id,
-      { id: reply.message_id, text: reply.text },
+      { id: reply.message_id, text: reply.text, at: sentAt },
       step,
       newId,
       rowId
     )
-    return stream(assistantId, step)
+    return stream(assistantId, step, [writtenAt()])
   }
   const parts = [...answered, { type: "step-start" } as const, ...step]
   if (
@@ -1636,8 +1726,17 @@ async function approve(
   const approval = { id: turn.approval_id, approved: turn.approved }
   let done: ToolPart = { ...call, state: "output-denied", approval }
   if (turn.approved) {
-    const text = (call.input as { text: string }).text
-    const output = await changed(env, kit, owner, text, turn.approval_id)
+    // The orchestrator checks change_kind again; an unknown one runs full.
+    const input = CosChangeRequest.safeParse(call.input)
+    if (!input.success) return answerInvalid()
+    const output = await changed(
+      env,
+      kit,
+      owner,
+      id,
+      input.data,
+      turn.approval_id
+    )
     if (output instanceof Response) return output
     done = { ...call, state: "output-available", approval, output }
   }
@@ -1675,10 +1774,16 @@ async function changed(
   env: Env,
   kit: Tenancy,
   owner: Owner,
-  text: string,
+  sessionId: string,
+  input: CosChangeRequest,
   key: string
 ): Promise<RequestChangeOutput | Response> {
-  const response = await startChange(env, kit, owner, text, key)
+  const response = await startOwnerChange(
+    { env, kit, owner },
+    sessionId,
+    input,
+    key
+  )
   const body: unknown = await response.clone().json()
   if (response.ok) {
     return { outcome: "started", build: BuildSummary.parse(body) }
@@ -1849,7 +1954,7 @@ function answerOf(
   )
   if (!output.success) return null
   const uploads = factValue(onboarding.facts, "media.uploads")?.items ?? []
-  const meant = cardAnswer(found.call, output.data, uploads)
+  const meant = cardAnswer(found.call, output.data, uploads, onboarding.facts)
   if (!meant || meant.kind === "retry") return null
   return { ...found, output: output.data, meant }
 }
@@ -1867,6 +1972,11 @@ type Planning = {
    * last. A second id mid-stream made the client draw the reply twice.
    */
   rowId: string
+  /**
+   * When the owner's message arrived. Its row is written after the planner,
+   * and keeps this time rather than the database's, as the owner saw it sent.
+   */
+  sentAt: Date
   model: LanguageModel
   modelId: string
   price: NonNullable<ReturnType<typeof priceOf>>
@@ -2116,6 +2226,7 @@ async function plannedTurn(
     const rest =
       outcome.shown && parts[0]?.type === "text" ? parts.slice(1) : parts
     for (const part of rest) for (const chunk of made(part)) write(chunk)
+    if (!continued) write(writtenAt())
     write({ type: "finish-step" })
     write({ type: "finish" })
   }
@@ -2140,7 +2251,8 @@ async function plannedTurn(
           p.request,
           p.newId,
           given,
-          p.rowId
+          p.rowId,
+          p.sentAt
         )
         if (response.ok && outcome.shown) {
           await keepShown(db, p.id, held, continued, outcome.shown)
@@ -2241,7 +2353,8 @@ async function startPlannedBuild(
     p.env,
     p.kit,
     p.owner,
-    ONBOARDING_GOAL,
+    p.id,
+    { text: ONBOARDING_GOAL },
     `onboarding:${p.id}`
   )
   const shownBuild: Part[] =
@@ -2335,7 +2448,7 @@ async function commitPlan(
       p.owner,
       p.id,
       held.tail?.id ?? null,
-      { id: turn.message_id, text: turn.text },
+      { id: turn.message_id, text: turn.text, at: p.sentAt },
       step,
       p.newId,
       p.rowId
@@ -2375,7 +2488,7 @@ async function commitPlan(
       p.owner,
       p.id,
       tail.id,
-      { id: reply.message_id, text: reply.text },
+      { id: reply.message_id, text: reply.text, at: p.sentAt },
       step,
       p.newId,
       p.rowId

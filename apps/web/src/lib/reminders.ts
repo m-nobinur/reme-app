@@ -110,7 +110,7 @@ export type Needed = {
   action: { label: string } & ({ focus: string } | { chat: true })
 }
 
-export type ReminderGroup = {
+type ReminderGroup = {
   id: "overdue" | "today" | "upcoming" | "dated" | "undated"
   title: string
   notes: Reminder[]

@@ -35,7 +35,7 @@ export type FactInput = {
  * A UK number as the owner types it, to E.164. Anything it does not
  * recognise goes through unchanged, and `FactValue` refuses it.
  */
-function toE164(raw: string): string {
+export function toE164(raw: string): string {
   // "+44 (0)7700 900123": the bracketed trunk zero is dropped after a
   // country code, or it would land inside the number.
   const digits = raw
@@ -156,6 +156,10 @@ export const FACT_INPUTS = {
   "business.proof": {
     ask: "What sets you apart from others in your trade?",
     fields: line("text", "Years trading, accreditations, guarantees", 600),
+  },
+  "business.disclaimer": {
+    ask: "What regulatory notice must your site carry?",
+    fields: line("text", "For example: authorised and regulated by ...", 400),
   },
   "service_area.text": {
     ask: "Which areas do you cover?",

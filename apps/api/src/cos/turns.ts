@@ -79,7 +79,7 @@ export class NoSuchSession extends Error {
  * output, so it is always `inferred`, plus the labels of the tool outputs
  * it carries; `cos.call` and `cos.turn` carry no text and no label.
  */
-export type TurnEvent =
+type TurnEvent =
   | { type: "cos.message"; payload: CosMessage; taint: TaintLabel[] }
   | { type: "cos.tool_result"; payload: CosToolResult; taint: TaintLabel[] }
   | { type: "cos.step"; payload: CosStep; taint?: TaintLabel[] }

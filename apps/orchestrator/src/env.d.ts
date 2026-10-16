@@ -17,6 +17,24 @@ interface __BaseEnv_Env {
   RUNTIME_SPEC_KEY: string
   /** Signs preview claims here; the router verifies them (ADR-032). */
   PREVIEW_KEY: string
+  /**
+   * Local dev only, from `.dev.vars` with `SITE_HOST_SUFFIX=.reme.localhost`:
+   * the local router's port, for preview links and the publish probe. Never
+   * in `wrangler.jsonc`; `siteUrl` refuses it on a real host.
+   */
+  SITE_PORT?: string
+  /**
+   * Cloudflare for SaaS custom hostnames on `CF_DOMAINS_ZONE_ID`
+   * (src/domains.ts). Optional until the owner's one-time setup (D0) creates
+   * the token; without it a connect fails as `domains.not_configured`.
+   */
+  CF_DOMAINS_TOKEN?: string
+  /**
+   * Stripe's secret key, for a bought domain's hold (capture or release) and
+   * its renewal Subscription (src/stripe.ts). Unset, `buy_domain` refuses
+   * with `domain.buy_unavailable` and finding a domain still works.
+   */
+  STRIPE_SECRET_KEY?: string
   OPENROUTER_API_KEY: string
   /** The model plane's settings, set as secrets so one list says what the Worker reads. */
   REME_MODEL_PRIMARY: string

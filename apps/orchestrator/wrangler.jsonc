@@ -14,7 +14,7 @@
   "preview_urls": true,
   "workers_dev": false,
   // The zone route keeps this hostname off the production site router's
-  // `*.remeai.co.uk/*`: see apps/api/wrangler.jsonc.
+  // `*/*`: see apps/api/wrangler.jsonc.
   "routes": [
     { "pattern": "staging-orchestrator.remeai.co.uk", "custom_domain": true },
     {
@@ -31,7 +31,16 @@
   "vars": {
     "SANDBOX_TRANSPORT": "rpc",
     "SITE_HOST_SUFFIX": "-stg.remeai.co.uk",
-    "CONSOLE_APPROVALS": "allow"
+    "CONSOLE_APPROVALS": "allow",
+    // The Cloudflare for SaaS zone custom hostnames live in (src/domains.ts).
+    // Staging shares it with production; `CF_DOMAINS_TOKEN` is the secret.
+    "CF_DOMAINS_ZONE_ID": "a786a7b1f7e583b37a42936788d877c3",
+    // Buying a domain (src/registrar.ts): the account the registrar bills,
+    // Cloudflare's sandbox registrar here and locally (no money, never
+    // served), and the Worker a bought domain is served by.
+    "CF_ACCOUNT_ID": "f161d624d34c45dd59579f9ee45c4396",
+    "REGISTRAR_API": "registrar-sandbox",
+    "ROUTER_SERVICE": "reme-router"
   },
   "hyperdrive": [
     { "binding": "HYPERDRIVE", "id": "51fda187d78445c6852dbc334d9ac7ed" }
@@ -51,6 +60,12 @@
       "name": "reme-sweep",
       "binding": "SWEEPS",
       "class_name": "SweepWorkflow"
+    },
+    // One instance per custom domain claim (src/domain-workflow.ts).
+    {
+      "name": "reme-domain",
+      "binding": "DOMAINS",
+      "class_name": "DomainWorkflow"
     }
   ],
   // The hourly retention sweep (ADR-032), created by the `scheduled` handler
@@ -70,7 +85,7 @@
   "containers": [
     {
       "class_name": "RemeSandbox",
-      "image": "registry.cloudflare.com/f161d624d34c45dd59579f9ee45c4396/reme-sandbox@sha256:aa763dd04f43f42b46fc76056550ebf7fe7f2d9efee75cbcc7c1957f67135c22",
+      "image": "registry.cloudflare.com/f161d624d34c45dd59579f9ee45c4396/reme-sandbox@sha256:7ee0e400c961d6720b2ff412150a5a796e5cbf65647b02cbe6a2515914ef4ee2",
       "instance_type": "standard-2",
       "max_instances": 5
     }
@@ -108,6 +123,12 @@
       "vars": {
         "SANDBOX_TRANSPORT": "rpc",
         "SITE_HOST_SUFFIX": ".remeai.co.uk",
+        "CF_DOMAINS_ZONE_ID": "a786a7b1f7e583b37a42936788d877c3",
+        // The live registrar: real, non-refundable registrations, so buying
+        // stays off until STRIPE_SECRET_KEY is set here.
+        "CF_ACCOUNT_ID": "f161d624d34c45dd59579f9ee45c4396",
+        "REGISTRAR_API": "registrar",
+        "ROUTER_SERVICE": "reme-router-production",
         // What the five-minute uptime check fetches (src/uptime.ts). Not the
         // orchestrator's own hostname: a Worker fetching itself through its
         // custom domain gets 522 (measured 2026-09-29), and the check running
@@ -138,6 +159,11 @@
           "name": "reme-sweep-production",
           "binding": "SWEEPS",
           "class_name": "SweepWorkflow"
+        },
+        {
+          "name": "reme-domain-production",
+          "binding": "DOMAINS",
+          "class_name": "DomainWorkflow"
         }
       ],
       "kv_namespaces": [
@@ -146,7 +172,7 @@
       "containers": [
         {
           "class_name": "RemeSandbox",
-          "image": "registry.cloudflare.com/f161d624d34c45dd59579f9ee45c4396/reme-sandbox@sha256:aa763dd04f43f42b46fc76056550ebf7fe7f2d9efee75cbcc7c1957f67135c22",
+          "image": "registry.cloudflare.com/f161d624d34c45dd59579f9ee45c4396/reme-sandbox@sha256:7ee0e400c961d6720b2ff412150a5a796e5cbf65647b02cbe6a2515914ef4ee2",
           "instance_type": "standard-2",
           "max_instances": 5
         }

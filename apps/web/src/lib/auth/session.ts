@@ -12,7 +12,7 @@ import { workos } from "./workos"
  * one of these three and never sees an exception.
  */
 /** Where a signed-in account with no business names one. */
-export const NAME_BUSINESS = "/name-your-business"
+const NAME_BUSINESS = "/name-your-business"
 
 export type AuthOutcome =
   | { status: "signed-in"; redirectTo: string }

@@ -20,19 +20,32 @@ import { createMiddleware } from "@tanstack/react-start"
  * `{slug}.remeai.co.uk/api/*` (Phase 3, reserved in apps/router/src/index.ts),
  * since an image request could then deliver what its URL carries to that
  * site's API. Screenshots must then come from one fixed host or through
- * 'self', and this narrows to match.
+ * 'self', and this narrows to match. Under `vite dev` only, the local
+ * preview host (http, `*.reme.localhost`, any port) is allowed too, since a
+ * local build is not served from remeai.co.uk. A built Worker never has it.
  *
  * `connect-src 'self'`: the browser calls only this Worker. `apps/api` and
- * WorkOS are reached from the server.
+ * WorkOS are reached from the server. The one exception is Stripe: a domain
+ * purchase pays in embedded Checkout, which must load Stripe.js from
+ * js.stripe.com and talk to Stripe itself. The hosts are Stripe's own list
+ * for Stripe.js and Checkout (docs.stripe.com/security/guide, 2026-10-16);
+ * hooks.stripe.com is the 3D Secure frame.
  */
-export function contentSecurityPolicy(nonce: string): string {
+const STRIPE_SCRIPTS =
+  "https://js.stripe.com https://*.js.stripe.com https://checkout.stripe.com"
+
+export function contentSecurityPolicy(
+  nonce: string,
+  dev = import.meta.env.DEV
+): string {
   return [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}'`,
+    `script-src 'self' 'nonce-${nonce}' ${STRIPE_SCRIPTS}`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob: https://*.remeai.co.uk",
+    `img-src 'self' data: blob: https://*.remeai.co.uk${dev ? " http://*.reme.localhost:*" : ""}`,
     "font-src 'self' data:",
-    "connect-src 'self'",
+    "connect-src 'self' https://api.stripe.com https://checkout.stripe.com",
+    `frame-src ${STRIPE_SCRIPTS} https://hooks.stripe.com`,
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

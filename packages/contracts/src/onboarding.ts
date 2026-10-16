@@ -14,10 +14,12 @@ import { Text } from "./text.ts"
 type Preset<Id extends string> = { id: Id; label: string; hint?: string }
 
 type PaletteSpec = Omit<Preset<string>, "id"> & {
-  brand: string
-  swatches: string[]
-  /** Where the colours come from, for whoever edits the list next. */
-  source: string
+  paper: string
+  ink: string
+  primary: string
+  tint: string
+  accent: string
+  line: string
 }
 
 const ids = <T extends readonly { id: string }[]>(list: T) =>
@@ -76,9 +78,9 @@ export const TemplateId = z.enum(ids(TEMPLATES))
 export const HexColour = z.string().regex(/^#[0-9a-f]{6}$/)
 
 /**
- * `brand` is the colour the site derives the rest from; `swatches` is what
- * the owner sees, the brand, a tint and a surface. Every brand carries white
- * text at WCAG AA and reads at AA as text on white. The values are in
+ * Each palette is the six roles of `Palette` (design.ts); `brand` is its
+ * `primary` and `swatches` the four the owner sees. The AA pairs
+ * `PALETTE_AA_PAIRS` names hold for every palette. The values are in
  * `palettes.json`: colour literals are data here, and the lint rule that
  * keeps them out of code reads only code.
  */
@@ -99,11 +101,24 @@ export const PaletteId = z.enum([
   "ultra_violet",
   "graphite",
   "onyx",
+  "mint",
+  "royal",
+  "meadow",
+  "pebble",
+  "counsel",
+  "after_dark",
 ])
-export const PALETTES = PaletteId.options.map((id) => ({
-  id,
-  ...(palettes as Record<PaletteId, PaletteSpec>)[id],
-}))
+export const PALETTES = PaletteId.options.map((id) => {
+  const spec = (palettes as Record<PaletteId, PaletteSpec>)[id]
+  return {
+    id,
+    ...spec,
+    /** The colour the site derives the rest from: the role `primary`. */
+    brand: spec.primary,
+    /** What the owner sees, in `PALETTE_SWATCH` order. */
+    swatches: [spec.paper, spec.tint, spec.primary, spec.ink],
+  }
+})
 
 /** System stacks only: the starter site ships no font files and no script. */
 export const FONTS = [
@@ -128,14 +143,26 @@ export const FONTS = [
 ] as const satisfies readonly (Preset<string> & { family: string })[]
 export const FontId = z.enum(ids(FONTS))
 
-/** `home` and `quote` are always built; the rest are the owner's pick. */
+/**
+ * `home` and `quote` are always built; the rest are the owner's pick. The
+ * starter has no page of its own for gallery, testimonials or faq: each
+ * becomes a section on the home page, so the hint says so.
+ */
 export const PAGES = [
   { id: "home", label: "Home", hint: "Always included" },
   { id: "services", label: "Services", hint: "What you offer" },
   { id: "about", label: "About", hint: "Who is behind the business" },
-  { id: "gallery", label: "Gallery", hint: "Photos of your work" },
-  { id: "testimonials", label: "Reviews", hint: "What customers say" },
-  { id: "faq", label: "FAQ", hint: "Answers to common questions" },
+  {
+    id: "gallery",
+    label: "Gallery",
+    hint: "Photos of your work, as a home page section",
+  },
+  {
+    id: "testimonials",
+    label: "Reviews",
+    hint: "What customers say, as a home page section",
+  },
+  { id: "faq", label: "FAQ", hint: "Common questions, as a home page section" },
   {
     id: "service_area",
     label: "Areas we cover",
@@ -144,7 +171,21 @@ export const PAGES = [
   { id: "contact", label: "Contact", hint: "Phone, email and hours" },
   { id: "quote", label: "Request a quote", hint: "Always included" },
 ] as const satisfies readonly Preset<string>[]
-export const PageId = z.enum(ids(PAGES))
+
+/**
+ * Every page a Blueprint may plan: the owner's picks and `service`, one page
+ * per service at /services/<slug>/, which comes with the services page and is
+ * never picked on its own.
+ */
+export const PLANNED_PAGES = [
+  ...PAGES,
+  {
+    id: "service",
+    label: "Each service",
+    hint: "A page for each service, with the services page",
+  },
+] as const satisfies readonly Preset<string>[]
+export const PageId = z.enum(ids(PLANNED_PAGES))
 
 /** The pages a site has whether or not the owner picks them. */
 export const FIXED_PAGES = [
@@ -243,7 +284,10 @@ export const choiceFacts = {
   },
   font: { id: orCustom(FontId), custom: Text(200).optional() },
   pages: {
-    ids: z.array(PageId).min(1).max(PAGES.length),
+    ids: z
+      .array(z.enum(ids(PAGES)))
+      .min(1)
+      .max(PAGES.length),
     custom: Text(200).optional(),
   },
   uploads: { items: z.array(Asset).min(1).max(UPLOAD_MAX_FILES) },

@@ -1,4 +1,5 @@
 import {
+  Blueprint,
   CompletionReport,
   type FactRecord,
   FactSnapshot,
@@ -19,9 +20,10 @@ import {
   type Tenancy,
   toFactRecord,
 } from "@workspace/db"
-import { runGates } from "@workspace/gates"
-import { lockSite } from "./publish.ts"
-import { type Ids, TransitionError, transition } from "./state.ts"
+import { checkAxe, parseAxe, runGates } from "@workspace/gates"
+import budget from "@workspace/starter-site/size-budget.json"
+import { A11Y_CHECKED, lockSite } from "./publish.ts"
+import { type Ids, lockRow, TransitionError, transition } from "./state.ts"
 
 /** The slice of the R2 binding the gates step reads and writes. */
 export type Artifacts = {
@@ -98,6 +100,14 @@ export async function assignmentFacts(
   return [...snapshot.facts, ...answered]
 }
 
+/** The planned build's slots and pages for the claims gate; nothing for a build that did not plan. */
+const planned = (blueprint: unknown) => {
+  const plan = Blueprint.safeParse(blueprint)
+  return plan.success
+    ? { plan: { images: plan.data.images, pages: plan.data.pages } }
+    : {}
+}
+
 export type Verdict =
   | { outcome: "preview_ready"; report_id: string }
   | { outcome: "repairing"; report_id: string; failed: GateResult[] }
@@ -118,8 +128,15 @@ export async function validateRevision(
   kit: Tenancy,
   sites: Artifacts,
   ids: Ids,
-  input: { report_id: string; revision_id: string },
-  hostSuffix: string
+  input: {
+    report_id: string
+    revision_id: string
+    /** `"later"`: the quick lane checks it after the preview (`checkA11y`). */
+    axe: AxeRun | null | "later"
+  },
+  hostSuffix: string,
+  /** Filled with milliseconds per gate for the timing line. */
+  timings?: Record<string, number>
 ): Promise<Verdict> {
   const loaded = await kit.withOrg({ orgId: ids.orgId }, async (db) => {
     const [row] = await db
@@ -156,7 +173,12 @@ export async function validateRevision(
   if (row.state !== "validating")
     return recordedVerdict(row.state, logged, input.revision_id)
 
-  const factsUsed = await assignmentFacts(kit, ids)
+  // The facts and the manifest are independent reads: one database, one bucket.
+  const base = revision.manifestKey.replace(/manifest\.json$/, "")
+  const [factsUsed, manifestObject] = await Promise.all([
+    assignmentFacts(kit, ids),
+    sites.get(revision.manifestKey),
+  ])
   const reportEvent = logged.find(
     (e) =>
       e.type === "assignment.completion_reported" &&
@@ -170,28 +192,42 @@ export async function validateRevision(
     )
   const report = CompletionReport.parse(reportEvent.payload)
 
-  const base = revision.manifestKey.replace(/manifest\.json$/, "")
-  const manifestObject = await sites.get(revision.manifestKey)
   const manifest = manifestObject
     ? JSON.parse(new TextDecoder().decode(await manifestObject.arrayBuffer()))
     : null
-  const results = await runGates({
-    manifest,
-    read: async (file) => {
-      const object = await sites.get(`${base}dist/${file}`)
-      return object ? new Uint8Array(await object.arrayBuffer()) : null
-    },
-    report,
-    facts: factsUsed,
-    hosts: [siteHost(slug ?? "", hostSuffix)],
-  })
-
-  const gates: GateResult[] = []
-  for (const result of results) {
-    const key = `${base}gates/${result.gate}.json`
-    await sites.put(key, JSON.stringify(result))
-    gates.push({ ...result, evidence_key: result.evidence_key ?? key })
+  const bytesOf = async (key: string) => {
+    const object = await sites.get(key)
+    return object ? new Uint8Array(await object.arrayBuffer()) : null
   }
+  // The accessibility gate is axe's own run in the sandbox, handed in by the
+  // Workflow, which ran it while the critic read the screenshots. It gates the
+  // first preview, so a build never announces one and then repairs it. A quick
+  // edit has nothing to hide axe behind, so it runs after the preview.
+  const results = [
+    ...(
+      await runGates({
+        manifest,
+        read: (file) => bytesOf(`${base}dist/${file}`),
+        evidence: bytesOf,
+        // The starter's line for the home page; its baseline is the starter's own.
+        budget: { limit: budget.limit },
+        report,
+        facts: factsUsed,
+        hosts: [siteHost(slug ?? "", hostSuffix)],
+        timings,
+        ...planned(row.blueprint),
+      })
+    ).filter((result) => result.gate !== "a11y"),
+    ...(input.axe === "later" ? [] : [await axeGate(sites, input.axe)]),
+  ]
+
+  const gates: GateResult[] = await Promise.all(
+    results.map(async (result) => {
+      const key = `${base}gates/${result.gate}.json`
+      await sites.put(key, JSON.stringify(result))
+      return { ...result, evidence_key: result.evidence_key ?? key }
+    })
+  )
   const validation = ValidationReport.parse({
     report_id: crypto.randomUUID(),
     org_id: ids.orgId,
@@ -289,6 +325,134 @@ export async function validateRevision(
         report_id: validation.report_id,
         failed,
       } as const
+    }
+  })
+}
+
+/** A sandbox script's run, as `runAxe` reports it. */
+type AxeRun = { exit_code: number; key: string | null }
+
+/**
+ * The accessibility gate (§8.5): axe ran in the sandbox over the built site
+ * before the preview exists, and its JSON is the evidence. `axe` is null when
+ * the site's sandbox went to a newer edit first: nothing ran, nothing passed.
+ * The JSON is the sandbox's, so unreadable is the same as absent, which fails.
+ */
+async function axeGate(sites: Artifacts, axe: AxeRun | null) {
+  if (!axe)
+    return {
+      gate: "a11y" as const,
+      passed: false,
+      evidence_key: null,
+      offending_node: null,
+      message: "axe did not run: a newer edit took the site's sandbox first",
+    }
+  const evidence = axe.key ? await sites.get(axe.key) : null
+  let result: ReturnType<typeof parseAxe> = null
+  try {
+    result = evidence
+      ? parseAxe(
+          JSON.parse(new TextDecoder().decode(await evidence.arrayBuffer()))
+        )
+      : null
+  } catch {
+    // Left null: the gate fails on it.
+  }
+  return checkAxe(
+    {
+      checks: [{ check: "axe", exit_code: axe.exit_code, output_key: axe.key }],
+    },
+    result
+  )
+}
+
+/** What the `a11y` step decided: a gate verdict, or nothing to do for a build that moved on. */
+type A11yVerdict = Verdict | { outcome: "stopped" }
+
+/**
+ * A quick edit's accessibility gate, once its preview exists: axe ran in the
+ * sandbox after `preview_ready`, so the preview does not wait on it. The
+ * result is logged against the revision, which the review, the approval and
+ * the publisher refuse without. A failure sends a preview that is still
+ * `preview_ready` back through `repairing`, as a failure in `validating`
+ * does, or to `failed` once the repairs are spent. `axe` is null when the
+ * site's sandbox went to a newer edit first: nothing ran, nothing passed. A
+ * retried step answers with what it logged the first time.
+ */
+export async function checkA11y(
+  kit: Tenancy,
+  sites: Artifacts,
+  ids: Ids,
+  revisionId: string,
+  axe: AxeRun | null
+): Promise<A11yVerdict> {
+  const gate: GateResult = await axeGate(sites, axe)
+  const reportId = crypto.randomUUID()
+  await sites.put(
+    `sites/${ids.orgId}/${revisionId}/gates/a11y.json`,
+    JSON.stringify(gate)
+  )
+  return kit.withOrg({ orgId: ids.orgId }, async (db) => {
+    const row = await lockRow(db, ids.assignmentId)
+    const [logged] = await db
+      .select({ payload: events.payload })
+      .from(events)
+      .where(
+        sql`${events.assignmentId} = ${ids.assignmentId} and ${events.type} = ${A11Y_CHECKED} and ${events.payload}->>'revision_id' = ${revisionId}`
+      )
+      .limit(1)
+    if (logged) {
+      const was = logged.payload as GateResult & { report_id: string }
+      const failed = was.passed ? [] : [was]
+      if (was.passed)
+        return { outcome: "preview_ready", report_id: was.report_id }
+      if (row.state === "implementing")
+        return { outcome: "repairing", report_id: was.report_id, failed }
+      if (row.state === "failed")
+        return { outcome: "failed", report_id: was.report_id, failed }
+      return { outcome: "stopped" }
+    }
+    // `offending_node` quotes model output, so nothing downstream may promote it (§28.3).
+    await appendEvent(db, {
+      orgId: ids.orgId,
+      assignmentId: ids.assignmentId,
+      staffId: null,
+      type: A11Y_CHECKED,
+      payload: { ...gate, report_id: reportId, revision_id: revisionId },
+      taint: gate.passed ? [] : ["inferred"],
+    })
+    if (gate.passed) return { outcome: "preview_ready", report_id: reportId }
+    if (!axe || row.state !== "preview_ready") return { outcome: "stopped" }
+    const payload = { report_id: reportId, revision_id: revisionId }
+    try {
+      const repair = await transition(db, {
+        ...ids,
+        to: "repairing",
+        expectedVersion: row.version,
+        reason: "gates.failed",
+        payload,
+      })
+      await transition(db, {
+        ...ids,
+        to: "implementing",
+        expectedVersion: repair.version,
+        payload,
+      })
+      return { outcome: "repairing", report_id: reportId, failed: [gate] }
+    } catch (error) {
+      if (
+        !(error instanceof TransitionError) ||
+        error.code !== "assignment.repair_budget_exhausted"
+      )
+        throw error
+      await transition(db, {
+        ...ids,
+        to: "failed",
+        expectedVersion: row.version,
+        reason: "gates.repair_budget_exhausted",
+        payload,
+      })
+      return { outcome: "failed", report_id: reportId, failed: [gate] }
     }
   })
 }

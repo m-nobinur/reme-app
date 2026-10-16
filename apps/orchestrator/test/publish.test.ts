@@ -8,6 +8,7 @@ import {
   approvals,
   assignments,
   deployments,
+  domains,
   eq,
   events,
   siteRevisions,
@@ -53,6 +54,7 @@ const {
   activate,
   activeDeployment,
   decideApproval,
+  dropDomainPointers,
   probeHost,
   redriveQueued,
   FETCH_TIMEOUT_MS,
@@ -105,6 +107,14 @@ live("a review", () => {
         Date.parse(first.request.requested_at)) /
       3_600_000
     expect(hours).toBe(72)
+  })
+
+  it("waits for the accessibility gate, which runs after the preview", async () => {
+    const { ids } = await previewed(storage(), GOOD_HTML, 0, false)
+    await expect(requestReview(kit, ids)).rejects.toMatchObject({
+      code: "revision.a11y_unchecked",
+    })
+    expect(await stateOf(ids)).toBe("preview_ready")
   })
 
   it("refuses from any state but preview_ready, and without a preview revision", async () => {
@@ -617,11 +627,21 @@ describe("the artifact check and the probe", () => {
     expect(worst).toBeLessThan(10 * 60_000)
     expect((SERVE_TRIES - 1) * SERVE_WAIT_MS).toBeGreaterThanOrEqual(120_000)
     let signal: AbortSignal | undefined
-    await probeHost("x", null, (async (_: string, init: RequestInit) => {
+    const asked: string[] = []
+    await probeHost("x", null, (async (url: string, init: RequestInit) => {
+      asked.push(url)
       signal = init.signal ?? undefined
       return new Response(GOOD_HTML)
     }) as unknown as typeof fetch)
     expect(signal).toBeInstanceOf(AbortSignal)
+    // Local dev probes the local router, on the port its config names.
+    const pause = async () => undefined
+    const fetcher = (async (url: string) => {
+      asked.push(url)
+      return new Response(GOOD_HTML)
+    }) as unknown as typeof fetch
+    await probeHost("x.reme.localhost", null, fetcher, undefined, pause, "3004")
+    expect(asked).toEqual(["https://x/", "http://x.reme.localhost:3004/"])
   })
 
   it("points nothing at an org whose owner deleted their account, and says so for good", async () => {
@@ -692,6 +712,55 @@ describe("the artifact check and the probe", () => {
       revision_id: newest.revisionId,
       config_version: 3,
     })
+  })
+
+  it("serves an active custom domain on its primary host and redirects the other two there", async () => {
+    const store = storage()
+    const site = "10000001-0000-4000-8000-000000000001"
+    const newest = {
+      revisionId: "10000001-0000-4000-8000-000000000003",
+      configVersion: 3,
+    }
+    const db = {
+      execute: async () => [{ open: true }],
+      select: () => ({
+        from: (table: unknown) => ({
+          where: () => ({
+            orderBy: () => ({
+              limit: async () =>
+                table === domains
+                  ? [{ primaryHost: "sparkleclean.co.uk" }]
+                  : [newest],
+            }),
+          }),
+        }),
+      }),
+    }
+    const reading = {
+      withOrg: async (_ctx: unknown, fn: (db: never) => Promise<unknown>) =>
+        fn(db as never),
+    }
+    const env = { ROUTES: store.ROUTES } as unknown as Env
+    const slug = "sparkle-stg.remeai.co.uk"
+    expect(await writePointer(env, reading as never, site, site, slug)).toEqual(
+      { host: "sparkleclean.co.uk" }
+    )
+    const read = (host: string) =>
+      JSON.parse(store.pointers.get(`host:${host}`) ?? "null")
+    expect(read("sparkleclean.co.uk")).toEqual({
+      org_id: site,
+      site_id: site,
+      revision_id: newest.revisionId,
+      config_version: 3,
+      canonical_host: "sparkleclean.co.uk",
+      origin_host: slug,
+    })
+    for (const host of ["www.sparkleclean.co.uk", slug]) {
+      expect(read(host)).toEqual({ redirect_to: "sparkleclean.co.uk" })
+    }
+    // Removal drops the domain's two keys; the slug is pointed back after.
+    await dropDomainPointers(env, "sparkleclean.co.uk", site)
+    expect([...store.pointers.keys()]).toEqual([`host:${slug}`])
   })
 
   it("finds a deployment no longer live and records it once, the same way everywhere", async () => {
@@ -778,6 +847,73 @@ describe("the artifact check and the probe", () => {
 })
 
 live("the publish workflow", () => {
+  /**
+   * A review opened on a revision with no passing accessibility check, which
+   * `requestReview` no longer does: written the way it writes one, so the
+   * approval and the publisher are seen to refuse on their own.
+   */
+  async function uncheckedReview(store = storage()) {
+    const built = await previewed(store, GOOD_HTML, 0, false)
+    const { orgId, ids, revisionId } = built
+    const [request] = await kit.withOrg({ orgId }, async (db) => {
+      const [row] = await db
+        .select()
+        .from(assignments)
+        .where(eq(assignments.id, ids.assignmentId))
+      if (!row) throw new Error("gone")
+      return db
+        .insert(approvals)
+        .values({
+          orgId,
+          assignmentId: row.id,
+          requestedByStaffId: row.staffId,
+          approverStaffId: row.createdByStaffId,
+          actionKind: "site.publish",
+          target: { kind: "revision", revision_id: revisionId },
+          revisionId,
+          rationale: "Publish v1 of the site.",
+          expiresAt: new Date(Date.now() + 3_600_000),
+        })
+        .returning()
+    })
+    if (!request) throw new Error("no request")
+    await advance(kit, ids, "awaiting_review")
+    return { ...built, approvalId: request.id }
+  }
+
+  it("approves nothing and publishes nothing without a passing accessibility check", async () => {
+    const store = storage()
+    const { orgId, ids, revisionId, approvalId } = await uncheckedReview(store)
+    await expect(
+      decideApproval(kit, ids, { revisionId, decidedBy: { kind: "console" } })
+    ).rejects.toMatchObject({ code: "revision.a11y_unchecked" })
+    expect(await stateOf(ids)).toBe("awaiting_review")
+    // Decided anyway, as a row from before the gate moved could be.
+    await kit.withOrg({ orgId }, (db) =>
+      db
+        .update(approvals)
+        .set({
+          decision: "approved",
+          decidedBy: { kind: "console" },
+          decidedAt: new Date(),
+        })
+        .where(eq(approvals.id, approvalId))
+    )
+    await advance(kit, ids, "release_candidate")
+    const { env } = workflowEnv(store)
+    const names: string[] = []
+    const outcome = await new PublishWorkflow({} as never, env).run(
+      { payload: { org_id: orgId, approval_id: approvalId } } as never,
+      fakeStep(names)
+    )
+    expect(outcome).toMatchObject({
+      outcome: "refused",
+      reason: "the revision has no passing accessibility check",
+    })
+    expect(names).toEqual(steps.PublishWorkflow.refused)
+    expect(store.pointers.size).toBe(0)
+  })
+
   async function approved(store = storage(), html = GOOD_HTML) {
     const built = await previewed(store, html)
     await requestReview(kit, built.ids)
@@ -858,6 +994,32 @@ live("the publish workflow", () => {
       db.select().from(siteRevisions).where(eq(siteRevisions.id, revisionId))
     )
     expect(revision?.status).toBe("published")
+  })
+
+  it("publishes on local dev to the local router's host, and probes it there", async () => {
+    const store = storage()
+    const { orgId, revisionId, approvalId } = await approved(store)
+    const { env } = workflowEnv(store)
+    const local = {
+      ...env,
+      SITE_HOST_SUFFIX: ".reme.localhost",
+      SITE_PORT: "3004",
+    } as unknown as Env
+    const router = serveFromPointer(store)
+    vi.stubGlobal("fetch", router)
+    const outcome = await new PublishWorkflow({} as never, local).run(
+      { payload: { org_id: orgId, approval_id: approvalId } } as never,
+      fakeStep([])
+    )
+    vi.unstubAllGlobals()
+    expect(outcome).toMatchObject({ outcome: "published" })
+    const host = `state-test-${orgId.slice(0, 8)}.reme.localhost`
+    expect(
+      JSON.parse(store.pointers.get(`host:${host}`) ?? "{}")
+    ).toMatchObject({ revision_id: revisionId })
+    expect(new Set(router.mock.calls.map(([input]) => String(input)))).toEqual(
+      new Set([`http://${host}:3004/`])
+    )
   })
 
   it("never activates a half-uploaded artifact", async () => {

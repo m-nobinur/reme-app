@@ -32,6 +32,7 @@ import {
   XIcon,
 } from "@phosphor-icons/react"
 import { OWNER_CARDS } from "@workspace/ui/components/assistant/approval"
+import { TraySlotProvider } from "@workspace/ui/components/assistant/ask-design"
 import { MarkdownText } from "@workspace/ui/components/assistant/markdown-text"
 import {
   ReasoningGroup as DefaultReasoningGroup,
@@ -51,10 +52,14 @@ import {
 import { LogoMark } from "@workspace/ui/components/logo"
 import { ComposerInputContext } from "@workspace/ui/hooks/use-composer-input"
 import {
+  PLAN_CHANGES_PLACEHOLDER,
+  waitsOnBlueprint,
+} from "@workspace/ui/lib/blueprint"
+import {
   QUOTE_CHANGES_PLACEHOLDER,
   waitsOnQuoteForm,
 } from "@workspace/ui/lib/quote-form"
-import { SESSION_ENDED } from "@workspace/ui/lib/tool-state"
+import { SESSION_ENDED, waitsOnDesign } from "@workspace/ui/lib/tool-state"
 import { cn } from "@workspace/ui/lib/utils"
 import { localMidnight } from "@workspace/ui/lib/zone"
 import {
@@ -129,10 +134,13 @@ export type ThreadProps = {
    * The id of a stored conversation, at its own address. It is never a new
    * chat: while its history loads it shows a skeleton, never the welcome or
    * suggestions, and nothing sends until the thread is that conversation.
+   * Once loaded and still empty it shows the welcome, like a new chat.
    */
   stored?: string | undefined
   autoFocus?: boolean | undefined
   placeholder?: string | undefined
+  /** The composer's placeholder while design questions are open above it. */
+  questionPlaceholder?: string | undefined
   /** One line under the welcome heading, built from state rather than a model. */
   briefing?: string | null | undefined
   quickActions?: readonly ThreadQuickAction[] | undefined
@@ -250,16 +258,47 @@ export const Thread: FC<ThreadProps> = ({
   autoFocus = true,
   stored,
   placeholder,
+  questionPlaceholder,
   briefing,
   quickActions,
   mode,
   after,
   reveal,
 }) => {
-  const isEmpty = useAuiState((s) => !stored && isNewChatView(s))
+  // A stored conversation with nothing in it is as empty as a new chat, once
+  // its history is in: the same welcome and suggestions, with the composer in
+  // the middle. Until then it is loading, and the held flag keeps the render
+  // in between from showing the welcome.
+  const loadingStored = useAuiState((s) =>
+    stored
+      ? s.thread.isLoading ||
+        s.threads.isLoading ||
+        s.threadListItem.remoteId !== stored
+      : false
+  )
+  const holdStored = useHeld(loadingStored, 300)
+  const isEmpty = useAuiState((s) =>
+    stored ? !holdStored && s.thread.messages.length === 0 : isNewChatView(s)
+  )
   const settings = useMemo(
-    () => ({ stored, placeholder, briefing, quickActions, mode, reveal }),
-    [stored, placeholder, briefing, quickActions, mode, reveal]
+    () => ({
+      stored,
+      placeholder,
+      questionPlaceholder,
+      briefing,
+      quickActions,
+      mode,
+      reveal,
+    }),
+    [
+      stored,
+      placeholder,
+      questionPlaceholder,
+      briefing,
+      quickActions,
+      mode,
+      reveal,
+    ]
   )
   // The composer's input, which a card can hand the owner to.
   const input = useRef<HTMLTextAreaElement>(null)
@@ -314,6 +353,39 @@ const KeepTurnAnchor: FC = () => {
   return null
 }
 
+/**
+ * The slot after the last message, from app state. The space assistant-ui
+ * holds below a pinned reply is sized from the reply alone and never from
+ * this slot, so when a card here shrinks or goes (the ready card on Approve)
+ * that space stays and the view settles on blank above the composer until a
+ * reload. A shrink with no run going ends the pinned turn, which takes the
+ * space away.
+ */
+const AfterSlot: FC<{ children: ReactNode }> = ({ children }) => {
+  const viewport = useThreadViewportStore()
+  const aui = useAui()
+  const [slot, setSlot] = useState<HTMLElement | null>(null)
+  useEffect(() => {
+    if (!slot) return
+    let height = slot.offsetHeight
+    const observer = new ResizeObserver(() => {
+      const next = slot.offsetHeight
+      if (next < height && !aui.thread().getState().isRunning) {
+        viewport.getState().setTopAnchorTurn(null)
+      }
+      height = next
+    })
+    observer.observe(slot)
+    return () => observer.disconnect()
+  }, [slot, viewport, aui])
+  return (
+    // Always in the page, so a card that appears in it is read out.
+    <div aria-live="polite" className="-mt-8 mb-14 empty:m-0" ref={setSlot}>
+      {children}
+    </div>
+  )
+}
+
 const ThreadRoot: FC<{
   isEmpty: boolean
   autoFocus: boolean
@@ -321,70 +393,75 @@ const ThreadRoot: FC<{
   after: ReactNode
 }> = ({ isEmpty, autoFocus, stored, after }) => {
   const { Welcome = ThreadWelcome } = useContext(ThreadComponentsContext)
+  // Where the design tray docks, above the composer; the tray's call sits in
+  // the transcript and draws itself here.
+  const [tray, setTray] = useState<HTMLElement | null>(null)
 
   return (
-    <ThreadPrimitive.Root
-      className="aui-root aui-thread-root @container flex h-full flex-col bg-background"
-      style={{
-        ["--thread-max-width" as string]: "44rem",
-        ["--composer-bg" as string]: "var(--color-card)",
-        ["--composer-radius" as string]: "var(--radius-4xl)",
-        ["--composer-padding" as string]: "8px",
-      }}
-    >
-      <ThreadPrimitive.Viewport
-        turnAnchor="top"
-        data-slot="aui_thread-viewport"
-        // Clear of the workspace's floating panel, where there is one; the
-        // padding sits inside the scroller, so its bar stays at the edge.
-        className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll scroll-smooth pe-(--panel-inset)"
+    <TraySlotProvider value={tray}>
+      <ThreadPrimitive.Root
+        className="aui-root aui-thread-root @container flex h-full flex-col bg-background"
+        style={{
+          ["--thread-max-width" as string]: "44rem",
+          ["--composer-bg" as string]: "var(--color-card)",
+          ["--composer-radius" as string]: "var(--radius-4xl)",
+          ["--composer-padding" as string]: "8px",
+        }}
       >
-        <KeepTurnAnchor />
-        <div
-          className={cn(
-            "mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4",
-            isEmpty && "justify-center"
-          )}
+        <ThreadPrimitive.Viewport
+          turnAnchor="top"
+          data-slot="aui_thread-viewport"
+          // Clear of the workspace's floating panel, where there is one; the
+          // padding sits inside the scroller, so its bar stays at the edge.
+          className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll scroll-smooth pe-(--panel-inset)"
         >
-          {isEmpty ? (
-            <Welcome />
-          ) : (
-            // The welcome carries the page's heading; a conversation has
-            // its title in the top bar, and this names the page for a
-            // screen reader.
-            <h1 className="sr-only">Conversation</h1>
-          )}
-          <HistoryLoading stored={stored} />
-
+          <KeepTurnAnchor />
           <div
-            data-slot="aui_message-group"
-            className="mb-14 flex flex-col gap-y-6 empty:hidden"
-          >
-            <ThreadPrimitive.Messages>
-              {() => <ThreadMessage />}
-            </ThreadPrimitive.Messages>
-          </div>
-          {/* Always in the page, so a card that appears in it is read out. */}
-          <div aria-live="polite" className="-mt-8 mb-14 empty:m-0">
-            {after}
-          </div>
-
-          <ThreadPrimitive.ViewportFooter
             className={cn(
-              "aui-thread-viewport-footer flex flex-col gap-4 overflow-visible bg-background pb-4 md:pb-6",
-              !isEmpty &&
-                "sticky bottom-0 mt-auto rounded-t-(--composer-radius)"
+              "mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4",
+              isEmpty && "justify-center"
             )}
           >
-            <ThreadScrollToBottom />
-            <Composer autoFocus={autoFocus} />
-            <AuiIf condition={(s) => isEmpty && s.composer.isEmpty}>
-              <ThreadSuggestions />
-            </AuiIf>
-          </ThreadPrimitive.ViewportFooter>
-        </div>
-      </ThreadPrimitive.Viewport>
-    </ThreadPrimitive.Root>
+            {isEmpty ? (
+              <Welcome />
+            ) : (
+              // The welcome carries the page's heading; a conversation has
+              // its title in the top bar, and this names the page for a
+              // screen reader.
+              <h1 className="sr-only">Conversation</h1>
+            )}
+            <HistoryLoading stored={stored} />
+
+            <div
+              data-slot="aui_message-group"
+              className="mb-14 flex flex-col gap-y-6 empty:hidden"
+            >
+              <ThreadPrimitive.Messages>
+                {() => <ThreadMessage />}
+              </ThreadPrimitive.Messages>
+            </div>
+            <AfterSlot>{after}</AfterSlot>
+
+            <ThreadPrimitive.ViewportFooter
+              className={cn(
+                "aui-thread-viewport-footer flex flex-col gap-4 overflow-visible bg-background pb-4 md:pb-6",
+                !isEmpty &&
+                  "sticky bottom-0 mt-auto rounded-t-(--composer-radius)"
+              )}
+            >
+              <ThreadScrollToBottom />
+              <div className="flex flex-col gap-2">
+                <div className="empty:hidden" ref={setTray} />
+                <Composer autoFocus={autoFocus} />
+              </div>
+              <AuiIf condition={(s) => isEmpty && s.composer.isEmpty}>
+                <ThreadSuggestions />
+              </AuiIf>
+            </ThreadPrimitive.ViewportFooter>
+          </div>
+        </ThreadPrimitive.Viewport>
+      </ThreadPrimitive.Root>
+    </TraySlotProvider>
   )
 }
 
@@ -525,14 +602,22 @@ const ThreadSuggestionItem: FC = () => {
 }
 
 const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
-  const { placeholder = "Send a message", mode } = useContext(
-    ThreadSettingsContext
-  )
+  const {
+    placeholder = "Send a message",
+    questionPlaceholder,
+    mode,
+  } = useContext(ThreadSettingsContext)
   const input = useContext(ComposerInputContext)
   // A proposed quote form waits on the owner: what they type next is their
   // change to it, and the placeholder says so.
   const reviewing = useAuiState((s) =>
     waitsOnQuoteForm(s.thread.messages.at(-1)?.parts)
+  )
+  const planning = useAuiState((s) =>
+    waitsOnBlueprint(s.thread.messages.at(-1)?.parts)
+  )
+  const asking = useAuiState((s) =>
+    waitsOnDesign(s.thread.messages.at(-1)?.parts)
   )
   // Disabled, not only kept from sending: words typed into the placeholder
   // thread would stay behind with it when the stored one replaces it. The
@@ -553,7 +638,13 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
           ref={input}
           placeholder={
             mode?.placeholder ??
-            (reviewing ? QUOTE_CHANGES_PLACEHOLDER : placeholder)
+            (reviewing
+              ? QUOTE_CHANGES_PLACEHOLDER
+              : planning
+                ? PLAN_CHANGES_PLACEHOLDER
+                : asking && questionPlaceholder
+                  ? questionPlaceholder
+                  : placeholder)
           }
           className="aui-composer-input max-h-48 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base leading-6 caret-primary outline-none placeholder:text-muted-foreground/60"
           rows={1}
@@ -725,18 +816,33 @@ const MessageError: FC = () => {
   )
 }
 
-/** The dot a reply shows until its first words arrive. */
-const TypingIndicator: FC = () => (
-  <span data-slot="aui_assistant-message-indicator" role="status">
-    <span
-      aria-hidden
-      className="animate-pulse font-sans motion-reduce:animate-none"
-    >
-      {"●"}
+/**
+ * The dot a reply shows until its first words arrive. Quiet, and not under a
+ * card that already says it is working (Saving, Stopping): the owner has
+ * answered it and its own line is the progress.
+ */
+const TypingIndicator: FC = () => {
+  const answered = useAuiState((s) =>
+    s.message.parts.some(
+      (part) =>
+        part.type === "tool-call" &&
+        part.result === undefined &&
+        part.approval?.approved !== undefined
+    )
+  )
+  if (answered) return null
+  return (
+    <span data-slot="aui_assistant-message-indicator" role="status">
+      <span
+        aria-hidden
+        className="animate-pulse font-sans text-muted-foreground motion-reduce:animate-none"
+      >
+        {"●"}
+      </span>
+      <span className="sr-only">Working</span>
     </span>
-    <span className="sr-only">Working</span>
-  </span>
-)
+  )
+}
 
 /** How long a played-in message shows the typing dot, then takes over its words. */
 const REVEAL_TYPING_MS = 700

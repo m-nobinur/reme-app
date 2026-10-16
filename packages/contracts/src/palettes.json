@@ -2,113 +2,221 @@
   "ocean": {
     "label": "Ocean",
     "hint": "Clear, trusted blue",
-    "brand": "#0369a1",
-    "swatches": ["#0369a1", "#e0f2fe", "#f0f9ff"],
-    "source": "Tailwind CSS default palette, sky 700, 100 and 50"
+    "paper": "#f7f9fa",
+    "ink": "#131b20",
+    "primary": "#0369a1",
+    "tint": "#e0f0f9",
+    "accent": "#3745be",
+    "line": "#d0dbe0"
   },
   "classic_blue": {
     "label": "Classic blue",
     "hint": "Steady mid blue",
-    "brand": "#0f4c81",
-    "swatches": ["#0f4c81", "#dbe4ec", "#f5f8fa"],
-    "source": "Pantone Colour of the Year 2020, Classic Blue 19-4052; tint and surface mixed with white"
+    "paper": "#f7f9fa",
+    "ink": "#131a20",
+    "primary": "#0f4c81",
+    "tint": "#e0effa",
+    "accent": "#3837be",
+    "line": "#d2dae1"
   },
   "harbour": {
     "label": "Harbour",
     "hint": "Deep, authoritative navy",
-    "brand": "#1b2a4a",
-    "swatches": ["#1b2a4a", "#dddfe4", "#f6f6f8"],
-    "source": "Hue Blender, best colour combinations for websites: the navy of Mustard + Navy + White; tint and surface mixed with white"
+    "paper": "#f7f8fa",
+    "ink": "#131720",
+    "primary": "#1b2a4a",
+    "tint": "#e7edfc",
+    "accent": "#5537be",
+    "line": "#d5d9e2"
   },
   "lagoon": {
     "label": "Lagoon",
     "hint": "Fresh, calm teal",
-    "brand": "#0f766e",
-    "swatches": ["#0f766e", "#ccfbf1", "#f0fdfa"],
-    "source": "Tailwind CSS default palette, teal 700, 100 and 50"
+    "paper": "#f7fafa",
+    "ink": "#13201f",
+    "primary": "#0f766e",
+    "tint": "#ddf2f0",
+    "accent": "#377fbe",
+    "line": "#d1dedd"
   },
   "forest": {
     "label": "Forest",
     "hint": "Deep green",
-    "brand": "#1b4332",
-    "swatches": ["#1b4332", "#dde3e0", "#f6f7f7"],
-    "source": "Hue Blender, best colour combinations for websites: Forest Green + Sand; tint and surface mixed with white"
+    "paper": "#f7faf9",
+    "ink": "#13201a",
+    "primary": "#1b4332",
+    "tint": "#e0f2ea",
+    "accent": "#37aebe",
+    "line": "#d2ddd8"
   },
   "sage": {
     "label": "Sage",
     "hint": "Soft, quiet green",
-    "brand": "#54705c",
-    "swatches": ["#54705c", "#e5eae7", "#f8f9f8"],
-    "source": "Dan Gilroy, best colours for law firm websites: muted green; tint and surface mixed with white"
+    "paper": "#f7f9f7",
+    "ink": "#171c19",
+    "primary": "#54705c",
+    "tint": "#e3f1e6",
+    "accent": "#37bea6",
+    "line": "#d2dcd6"
   },
   "sunset": {
     "label": "Sunset",
     "hint": "Warm orange",
-    "brand": "#c2410c",
-    "swatches": ["#c2410c", "#ffedd5", "#fff7ed"],
-    "source": "Tailwind CSS default palette, orange 700, 100 and 50"
+    "paper": "#faf8f7",
+    "ink": "#201713",
+    "primary": "#c2410c",
+    "tint": "#ffece6",
+    "accent": "#bea737",
+    "line": "#e1d6d2"
   },
   "mocha": {
     "label": "Mocha",
     "hint": "Warm coffee brown",
-    "brand": "#946c5a",
-    "swatches": ["#946c5a", "#efe9e6", "#fbf9f8"],
-    "source": "Pantone Colour of the Year 2025, Mocha Mousse 17-1230, darkened from its published value to reach 4.5:1 on white; tint and surface mixed with white"
+    "paper": "#faf8f8",
+    "ink": "#1d1816",
+    "primary": "#8b6452",
+    "tint": "#fbeee2",
+    "accent": "#beaa37",
+    "line": "#e1d7d2"
   },
   "cardinal": {
     "label": "Cardinal",
     "hint": "Strong, confident red",
-    "brand": "#b3262d",
-    "swatches": ["#b3262d", "#f4dee0", "#fcf6f7"],
-    "source": "Dan Gilroy, best colours for law firm websites: vermilion; tint and surface mixed with white"
+    "paper": "#faf7f7",
+    "ink": "#201314",
+    "primary": "#b3262d",
+    "tint": "#fbe7e9",
+    "accent": "#be7937",
+    "line": "#e2d6d6"
   },
   "berry": {
     "label": "Berry",
     "hint": "Vivid magenta",
-    "brand": "#bb2649",
-    "swatches": ["#bb2649", "#f5dee4", "#fcf6f8"],
-    "source": "Pantone Colour of the Year 2023, Viva Magenta 18-1750; tint and surface mixed with white"
+    "paper": "#faf7f8",
+    "ink": "#201316",
+    "primary": "#bb2649",
+    "tint": "#fae7ec",
+    "accent": "#be6037",
+    "line": "#e1d6d8"
   },
   "burgundy": {
     "label": "Burgundy",
     "hint": "Rich wine red",
-    "brand": "#722f37",
-    "swatches": ["#722f37", "#eae0e1", "#f9f7f7"],
-    "source": "Hue Blender, best colour combinations for websites: Rich Burgundy + Ivory; tint and surface mixed with white"
+    "paper": "#faf7f8",
+    "ink": "#201315",
+    "primary": "#722f37",
+    "tint": "#fbe7ea",
+    "accent": "#be7037",
+    "line": "#e2d6d7"
   },
   "midnight": {
     "label": "Midnight",
     "hint": "Rich indigo",
-    "brand": "#3730a3",
-    "swatches": ["#3730a3", "#e0e7ff", "#eef2ff"],
-    "source": "Tailwind CSS default palette, indigo 800, 100 and 50"
+    "paper": "#f7f7fa",
+    "ink": "#141320",
+    "primary": "#3730a3",
+    "tint": "#ecebfb",
+    "accent": "#8837be",
+    "line": "#d8d8e2"
   },
   "damson": {
     "label": "Damson",
     "hint": "Soft plum purple",
-    "brand": "#953ea3",
-    "swatches": ["#953ea3", "#fbebfb", "#fbf7fb"],
-    "source": "Radix Colors, plum steps 11 and 3; surface mixed with white"
+    "paper": "#faf7fa",
+    "ink": "#1e1320",
+    "primary": "#953ea3",
+    "tint": "#f4e8f6",
+    "accent": "#be3788",
+    "line": "#ded6de"
   },
   "ultra_violet": {
     "label": "Ultra violet",
     "hint": "Muted lavender purple",
-    "brand": "#5f4b8b",
-    "swatches": ["#5f4b8b", "#e7e4ee", "#f9f8fa"],
-    "source": "Pantone Colour of the Year 2018, Ultra Violet 18-3838; tint and surface mixed with white"
+    "paper": "#f8f8fa",
+    "ink": "#18151e",
+    "primary": "#5f4b8b",
+    "tint": "#efeafa",
+    "accent": "#aa37be",
+    "line": "#dad7e1"
   },
   "graphite": {
     "label": "Graphite",
     "hint": "Cool slate grey",
-    "brand": "#475569",
-    "swatches": ["#475569", "#f1f5f9", "#f8fafc"],
-    "source": "Tailwind CSS default palette, slate 600, 100 and 50"
+    "paper": "#f8f9fb",
+    "ink": "#17191c",
+    "primary": "#475569",
+    "tint": "#e2eefb",
+    "accent": "#4837be",
+    "line": "#d2dae2"
   },
   "onyx": {
     "label": "Onyx",
     "hint": "Near black, understated",
-    "brand": "#1c1917",
-    "swatches": ["#1c1917", "#dddddc", "#f6f6f6"],
-    "source": "Tailwind CSS default palette, stone 900; tint and surface mixed with white"
+    "paper": "#f9f9f7",
+    "ink": "#1b1918",
+    "primary": "#1c1917",
+    "tint": "#f7eade",
+    "accent": "#beb637",
+    "line": "#dfd8d0"
+  },
+  "mint": {
+    "label": "Mint",
+    "hint": "Fresh white, mint and teal",
+    "paper": "#fbfdfc",
+    "ink": "#0d2b24",
+    "primary": "#0b7a6a",
+    "tint": "#e0f2eb",
+    "accent": "#2a9d8f",
+    "line": "#d2ded9"
+  },
+  "royal": {
+    "label": "Royal",
+    "hint": "Crisp ice blue and navy",
+    "paper": "#fafbfe",
+    "ink": "#0c1b3d",
+    "primary": "#1d4ed8",
+    "tint": "#e4eefc",
+    "accent": "#5b8def",
+    "line": "#d4d9e2"
+  },
+  "meadow": {
+    "label": "Meadow",
+    "hint": "Cream, lime and forest",
+    "paper": "#fcfdf9",
+    "ink": "#14291c",
+    "primary": "#1f5130",
+    "tint": "#f1f1e0",
+    "accent": "#8cc63f",
+    "line": "#ddddd3"
+  },
+  "pebble": {
+    "label": "Pebble",
+    "hint": "Warm stone, charcoal and sage",
+    "paper": "#f9fbfa",
+    "ink": "#262a28",
+    "primary": "#4f6b58",
+    "tint": "#e2f1e7",
+    "accent": "#9bb09f",
+    "line": "#d3dcd5"
+  },
+  "counsel": {
+    "label": "Counsel",
+    "hint": "Ivory paper, ink navy and brass",
+    "paper": "#faf7ef",
+    "ink": "#111a2e",
+    "primary": "#1f2f52",
+    "tint": "#f2eddd",
+    "accent": "#b08d3c",
+    "line": "#dcd9cf"
+  },
+  "after_dark": {
+    "label": "After dark",
+    "hint": "Near-black, champagne and warm text",
+    "paper": "#0f0d0b",
+    "ink": "#f1e9da",
+    "primary": "#d8c08a",
+    "tint": "#1d1914",
+    "accent": "#e6d3a3",
+    "line": "#3a342b"
   }
 }

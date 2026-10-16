@@ -2,16 +2,22 @@ import {
   ActivityFeed,
   ApprovalDecision,
   type AttentionItem as Attention,
+  type BlueprintReviewOutput,
   CHAT_TURN_MS,
+  type ChangeKind,
   Conversation,
   ConversationHistory,
   ConversationList,
   type CreateReminderRequest,
+  DomainCheckout,
+  DomainName,
+  DomainPurchaseStatus,
   ErrorEnvelope,
   FactList,
   type MessageFeedback,
   Org,
   PreviewLink,
+  type RegistrantDetails,
   StaffDirectory,
   Uuid,
   WorkspaceStatus,
@@ -20,6 +26,7 @@ import { answerSpecOf } from "@workspace/ui/lib/answer"
 import { WORKING } from "@workspace/ui/lib/build-state"
 import { factLabel } from "@workspace/ui/lib/facts"
 import { refusalText } from "@workspace/ui/lib/refusal"
+import { stoppedLines } from "../stopped"
 import { apiFetch, COOKIE, forwardedSession } from "./transport"
 import type {
   AttentionItem,
@@ -227,7 +234,7 @@ function logged(item: Logged): { title: string; detail: string } {
     case "build_failed":
       return {
         title: "A build failed",
-        detail: "It stopped before it had a version to show you.",
+        detail: stoppedLines(item.cause).join(" "),
       }
     case "budget_parked":
       return {
@@ -266,7 +273,7 @@ async function workspaceStatus(
   if (!response || response.status === 401 || response.status === 403) {
     return {
       status: {
-        site: { host: null, live: null },
+        site: { host: null, url: null, live: null },
         builds: [],
         attention: [],
         missing_facts: [],
@@ -305,6 +312,13 @@ function toAttention(
         kind: "approval",
         request: item.request,
         version: item.version,
+        ...(item.photos
+          ? {
+              photos: item.photos.map(({ thumbnail, ...photo }) =>
+                thumbnail ? { ...photo, src: thumbnail } : photo
+              ),
+            }
+          : {}),
         id: item.request.approval_id,
         title: approvalTitle(item.version),
         detail: item.request.rationale,
@@ -335,6 +349,9 @@ function toAttention(
         kind: item.kind,
         id: item.event_id,
         ...logged(item),
+        ...(item.kind === "alert" && item.reason === "build_failed"
+          ? { stopped: item.cause ?? "other" }
+          : {}),
         raisedBy: SYSTEM,
         raisedById: null,
         raisedAt: item.at,
@@ -360,7 +377,9 @@ function workspaceOf(
     building: status.builds.some((build) => WORKING.has(build.state)),
     open: status.builds.length > 0,
     builds: status.builds,
+    expectedSeconds: status.expected_seconds,
     host: status.site.host,
+    url: status.site.url,
     missingFacts: status.missing_facts,
     assistantName: status.assistant_name,
     derivedReminders: status.reminders.derived,
@@ -399,6 +418,7 @@ const REFUSED: Record<
   "approval.not_requested": "gone",
   "approval.not_found": "gone",
   "assignment.not_found": "gone",
+  "revision.a11y_unchecked": "checking",
 }
 
 /**
@@ -463,6 +483,16 @@ async function answer(
   return await outcome(response, path)
 }
 
+async function decideBlueprint(
+  assignmentId: string,
+  decision: BlueprintReviewOutput,
+  key: string
+): Promise<WriteOutcome> {
+  const path = `/builds/${segment(assignmentId)}/blueprint`
+  // The same decision again is a retry and gets its receipt.
+  return await outcome(await post(path, decision, key), path)
+}
+
 async function cancelBuild(assignmentId: string): Promise<WriteOutcome> {
   const path = `/builds/${segment(assignmentId)}/cancel`
   // One build is stopped once: a second press is the same request.
@@ -494,8 +524,15 @@ async function preview(assignmentId: string): Promise<PreviewLinks | null> {
   }
 }
 
-async function requestChange(text: string, key: string): Promise<WriteOutcome> {
-  return await outcome(await post("/changes", { text }, key), "/changes")
+async function requestChange(
+  text: string,
+  key: string,
+  changeKind?: ChangeKind
+): Promise<WriteOutcome> {
+  return await outcome(
+    await post("/changes", { text, change_kind: changeKind }, key),
+    "/changes"
+  )
 }
 
 async function createReminder(
@@ -503,6 +540,42 @@ async function createReminder(
   key: string
 ): Promise<WriteOutcome> {
   return await outcome(await post("/reminders", input, key), "/reminders")
+}
+
+/**
+ * A domain purchase's Checkout, created with the registrant as the card
+ * shows it. A refusal is the owner's to read (the name was taken, the price
+ * changed, buying is off), so it comes back as its code. Each press is its
+ * own Checkout, keyed by the caller.
+ */
+async function domainCheckout(
+  name: string,
+  details: RegistrantDetails,
+  key: string
+): Promise<DomainCheckout | { refused: string | null }> {
+  // A hostname never holds "/" or a lone dot, so it cannot reach another route.
+  const path = `/domains/${DomainName.parse(name)}/checkout`
+  const response = await post(path, details, key)
+  const body = await response.json().catch(() => null)
+  if (response.ok) return DomainCheckout.parse(body)
+  const refusal = ErrorEnvelope.safeParse(body)
+  if (response.status >= 400 && response.status < 500 && refusal.success) {
+    return { refused: refusal.data.code }
+  }
+  throw new Error(`apps/api answered ${response.status} for ${path}`)
+}
+
+/** The newest purchase of a domain in the owner's business, or null when there is none. */
+async function domainStatus(
+  name: string
+): Promise<DomainPurchaseStatus | null> {
+  const path = `/domains/${DomainName.parse(name)}`
+  const response = await call(path)
+  if (!response || response.status === 404) return null
+  if (!response.ok) {
+    throw new Error(`apps/api answered ${response.status} for ${path}`)
+  }
+  return DomainPurchaseStatus.parse(await response.json())
 }
 
 async function completeReminder(id: string): Promise<WriteOutcome> {
@@ -624,12 +697,15 @@ export const apiSource: OwnerDataSource = {
   },
   pollWorkspace,
   answer,
+  decideBlueprint,
   cancelBuild,
   deleteAccount,
   preview,
   requestChange,
   createReminder,
   completeReminder,
+  domainCheckout,
+  domainStatus,
   conversations,
   conversation,
   createConversation,
@@ -659,6 +735,7 @@ export const apiSource: OwnerDataSource = {
       UPLOAD_TIMEOUT_MS
     )
   },
+  photo: (assetId) => call(`/photos/${segment(assetId)}`),
   decideApproval: async (approvalId, revisionId, decision) => {
     const path = `/approvals/${segment(approvalId)}/decision`
     const response = await post(

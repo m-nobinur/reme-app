@@ -1,0 +1,878 @@
+import type { Blueprint, ImageSlot } from "@workspace/contracts"
+import { MODELS, ROLES } from "@workspace/facade"
+import { generatedImageFindings, limit } from "@workspace/gates"
+import { z } from "zod"
+import {
+  extension,
+  findGenerated,
+  GENERATED_DIR,
+  generatedKey,
+  generatedPath,
+  photoKey,
+} from "./photo-files.ts"
+import { framingOf, houseLine, STYLE_GUIDE, settingFor } from "./photo-style.ts"
+import { SITE_ROOT } from "./revise.ts"
+
+/**
+ * The photo director (ADR-039). Runs in this Worker, never in the sandbox,
+ * whose egress is the npm registry only and which holds no key (ADR-031).
+ * One Haiku call writes the prompts under the house style (`photo-style.ts`),
+ * a chain of image models draws each slot through OpenRouter's images
+ * endpoint (`QUALITY_MODELS` for the hero, `FAST_MODELS` for the rest), a
+ * Haiku vision call checks each picture for defects (one redraw on the next
+ * model, then the fallback), and the bytes land in the site bucket under
+ * `generated/{org}/{id}.{ext}`. A build never fails for a photo: every slot
+ * that cannot be filled comes back `fallback` and the section takes its
+ * no-image variant.
+ *
+ * There is no asset table. The id is a hash of what the picture is, so the
+ * key is the lookup (reuse), the R2 object carries model, prompt hash and
+ * cost as metadata, and the day's generations are the objects uploaded today.
+ *
+ * ponytail: the daily count lists R2 and reads `uploaded`, so it is eventually
+ * consistent and counts only photos that were kept. A draw the defect check
+ * turned down is paid for and not counted, but a slot redraws once at most,
+ * so a build pays for at most 2 x MAX_PER_BUILD draws and a day 2 x
+ * MAX_PER_DAY. A counter row in `packages/db` once a second Worker
+ * generates for the same org, or paid draws need an exact cap.
+ */
+
+type PhotoModel = {
+  id: string
+  /** Takes `input_references`, and is handed them. */
+  refs: boolean
+  /** Honours `size` and `output_format` (GPT Image); Recraft answers 400 to `size`. */
+  sized: boolean
+}
+
+/**
+ * The hero sets the grade the rest match, so it gets the best picture, and
+ * only from a model that draws it at its rendered width x 2: a fast model's
+ * "2K" was 1344 x 768 (Recraft) or a 400 (Gemini Flash Lite), so a hero
+ * neither of these can draw takes the text layout instead of a blurry photo.
+ * Bake-off 2026-10-15 under the house style, one hero each, checked by the
+ * defect check and by eye beside spotless-templates.lovable.app: Flare was
+ * the closest to the reference and clean. Sunburst is out: 198 s at
+ * 2560 x 1440 timed out to Muse every time.
+ */
+export const QUALITY_MODELS: readonly PhotoModel[] = [
+  { id: "openai/gpt-image-2.5-flare", refs: true, sized: true }, // 20.2 to 23.3 s, $0.0079 at 2560 x 1440, $0.0118 at 2560 x 1920; no defect
+  { id: "meta/muse-image", refs: true, sized: false }, // 17.4 s, $0.010; draws 1920 x 1280 (3:2) whatever the aspect
+]
+/**
+ * Every other slot. Same bake-off, three cards a model in a cleaning set and
+ * three in a landscaping set: Flare drew the cleanest, most reference-like
+ * set with no defect, for Recraft's price but slower; Recraft is the fast
+ * fallback (two cards with a minor flaw, none failing); Gemini Flash Lite
+ * drew clean cards at five times the cost and once the wrong subject. Muse
+ * drew one unbuildable basin and always 3:2. Flare takes references, but a
+ * card with the hero beside it cost $0.034 against $0.007: the shared style
+ * line keeps the set together, so it draws without.
+ */
+export const FAST_MODELS: readonly PhotoModel[] = [
+  { id: "openai/gpt-image-2.5-flare", refs: false, sized: true }, // 14.1 to 19.4 s (one 58 s), $0.0071 to $0.0073, 1536 x 1152
+  { id: "recraft/recraft-v4.1-flash", refs: false, sized: false }, // 2.1 to 15.4 s, $0.007, 1216 x 896
+  { id: "google/gemini-3.1-flash-lite-image", refs: true, sized: false }, // 4.0 to 6.0 s, $0.034, 1200 x 896; 1K only
+]
+/**
+ * The hero's pixel size by aspect, 2560 px on the long edge in multiples of
+ * 16: sharp at 1440 to 1920 px wide on a 2x screen. "2K" alone gave GPT Image
+ * 2.5 Flare 1536 x 864 and "4K" the same; an explicit `size` it honours, also
+ * beside `resolution` (2560 x 1440 in 19.6 to 22.2 s, $0.0064; 3840 x 2160 in
+ * 29 s, $0.0113, twice the cost for pixels only a 4K screen fetches). Muse
+ * ignores it and draws 2048 x 1152. Probed 2026-10-15.
+ */
+const HERO_SIZE: Record<Slot["aspect"], string> = {
+  "16:9": "2560x1440",
+  "4:3": "2560x1920",
+  "3:4": "1920x2560",
+  "1:1": "2048x2048",
+  "21:9": "2560x1088",
+}
+/** Models a slot tries before it falls back. */
+const TRIES = 3
+
+/**
+ * The home hero draws on its own chain only (see `QUALITY_MODELS`); every other
+ * slot on the fast one in its listed order, the About and Contact headers
+ * too: their box is one a card's 1536 px covers, and on the quality chain
+ * they drew with the hero as a reference at 2.6 to 3.6 times a card. A slot
+ * with references to match does not reorder it: the first model draws without them (the shared style
+ * line keeps the set coherent), and a model further down gets them only if
+ * it takes them. A lone redraw has no style line and only its siblings to
+ * match, so there the models that read references go first.
+ */
+const chainFor = (hero: boolean, redraw: boolean): readonly PhotoModel[] =>
+  hero
+    ? QUALITY_MODELS
+    : redraw
+      ? [
+          ...FAST_MODELS.filter((m) => m.refs),
+          ...FAST_MODELS.filter((m) => !m.refs),
+        ]
+      : FAST_MODELS
+export const MAX_PER_BUILD = 8
+export const MAX_PER_DAY = 30
+const PARALLEL = 4
+/** Owner photos passed as references beside the hero: the grade matches theirs. */
+const OWNER_REFERENCES = 2
+/** The site's other generated photos a lone redraw is graded against. */
+const SIBLING_REFERENCES = 4
+const GENERATE_TIMEOUT_MS = 60_000
+const PROMPT_TIMEOUT_MS = 30_000
+const CHECK_TIMEOUT_MS = 30_000
+/** Bumped when the house style changes, so a fresh plan draws in the new style instead of reusing the old. */
+const STYLE_VERSION = "house-2026-10-16"
+/** Dollars, for a result whose response carried no cost. Verified 2026-10-14. */
+const ESTIMATE = { "1K": 0.034, "2K": 0.05 } as const
+const OPENROUTER = "https://openrouter.ai/api/v1"
+
+/** Appended to every prompt, word for word the never-list of ADR-039. */
+export const NEVER =
+  "Show no face that could pass for a member of staff or a customer: any person is seen from behind or at a distance. " +
+  "No text, logos, signage, number plates or brand badges. No certificates, awards, prices or before-and-after pairs. No watermark."
+
+export type PhotoBrief = {
+  industry: string
+  /** The direction's `image_style`. */
+  imageStyle: string
+  /** The palette in words, such as "warm paper, sage primary, deep ink". */
+  palette: string
+}
+
+export type PhotoResult = {
+  slot_id: string
+  status: "generated" | "reused" | "fallback"
+  asset_id: string | null
+  key: string | null
+  content_type: string | null
+  cost_usd: number | null
+  /** Why a slot fell back, for the log. */
+  reason: string | null
+  /** What the drawn photo shows, from its defect check or its final subject: the slot's alt and caption. Unset when reused or not drawn. */
+  alt?: string
+}
+
+type Stored = { arrayBuffer: () => Promise<ArrayBuffer> }
+export type PhotoBucket = {
+  get: (key: string) => Promise<Stored | null>
+  put: (
+    key: string,
+    value: Uint8Array,
+    options: {
+      httpMetadata: { contentType: string }
+      customMetadata: Record<string, string>
+    }
+  ) => Promise<unknown>
+  list: (options: { prefix: string; cursor?: string }) => Promise<{
+    objects: { key: string; uploaded: Date }[]
+    truncated: boolean
+    cursor?: string
+  }>
+}
+
+const sha256 = async (text: string) =>
+  Array.from(
+    new Uint8Array(
+      await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))
+    ),
+    (b) => b.toString(16).padStart(2, "0")
+  ).join("")
+
+/** A UUID v4 in shape from a hash, the way `apps/api/src/assets.ts` makes upload ids. */
+function uuidFrom(hash: string): string {
+  const hex = hash.slice(0, 32).split("")
+  hex[12] = "4"
+  hex[16] = ((Number.parseInt(hex[16] as string, 16) & 0x3) | 0x8).toString(16)
+  const h = hex.join("")
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`
+}
+
+function base64(bytes: Uint8Array): string {
+  let binary = ""
+  for (let i = 0; i < bytes.length; i += 0x8000)
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+  return btoa(binary)
+}
+
+const fromBase64 = (b64: string) =>
+  Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
+
+type Slot = Extract<ImageSlot, { source: "generated" }>
+type Planned = {
+  slot: Slot
+  resolution: "1K" | "2K"
+  /** The hero's pixel size, `HERO_SIZE` for its aspect; the rest take the model's own. */
+  size?: string
+  /** Hash of everything that makes the picture, so a rebuild finds it again. */
+  hash: string
+  assetId: string
+}
+
+type Deps = {
+  key: string
+  fetch: typeof fetch
+}
+
+const Prompts = z.object({
+  style: z.string().min(1).max(400),
+  subjects: z.record(z.string(), z.string().min(1).max(500)),
+})
+
+/** Five service cards once drew the hero's patio and table five times. */
+export const PHOTO_DISTINCT =
+  "Every slot gets a different subject, tied to the service or section its idea names: its own place, object and activity, so no two photos share a scene, a composition or a main prop. Only the style line repeats. Do not reuse the hero's scene in another slot. "
+
+/**
+ * A Bristol terrace street once drew the hero of a cleaning site: it said
+ * "Bristol", not "clean". Only the home hero: a service's own header once
+ * drew a laundry room for gutters because this rule reached every slot.
+ */
+export const PHOTO_HERO =
+  "The home page's hero (page home, section hero) shows the business's core service or its result in the customer's own space, never a street, skyline or place name, even when the idea names one. Whether that is an interior or an exterior comes from the service, not the trade: cleaning a home is a bright, clean, lived-in interior, while gutters, roofs or windows seen from outside are the finished exterior in daylight. The place is a light touch at most, such as a window view or a regional detail, never the subject. "
+
+/** A service's header and card show that service, indoors or out as the service is. */
+export const PHOTO_SERVICE =
+  "A service's own slot (page service, or a card) shows that service's own subject, as its idea and alt name it, and never the hero's scene or a room for an outdoor job. Interior or exterior comes from the service, not the trade: gutters, fascias, soffits, downpipes, roofs, conservatory roofs, patios and windows seen from outside are exteriors, drawn outdoors in daylight; ovens, bathrooms and carpets are interiors. "
+
+/** One Haiku call: a shared style line for the set and a subject line per slot. */
+async function writePrompts(
+  { key, fetch }: Deps,
+  brief: PhotoBrief,
+  slots: Planned[]
+): Promise<z.infer<typeof Prompts> | null> {
+  try {
+    const response = await fetch(`${OPENROUTER}/chat/completions`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${key}`,
+        "content-type": "application/json",
+      },
+      signal: AbortSignal.timeout(PROMPT_TIMEOUT_MS),
+      body: JSON.stringify({
+        model: MODELS.haiku.replace(/^openrouter\//, ""),
+        max_tokens: ROLES.copy.maxTokens,
+        reasoning: { effort: ROLES.copy.effort },
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a photo director for a small business website. Write prompts for an image model. " +
+              'Reply with JSON only: {"style": string, "subjects": {"<slot id>": string}}. ' +
+              "`style` is one line shared by the whole set so the photos read as one shoot: the kind of place, its materials and where the brand colour sits. " +
+              `Each subject is one concrete scene for its slot, set in ${settingFor(brief.industry)}: a place, surface or object, in plain words. ` +
+              STYLE_GUIDE +
+              PHOTO_DISTINCT +
+              PHOTO_HERO +
+              PHOTO_SERVICE +
+              "The home hero subject is a whole room or finished space, or the whole finished exterior; any other slot is one area or detail of its service; a cta_band slot is a plain, calm texture. " +
+              "Where a slot has a text side, ask for calm empty space on that side. Never ask for a face, text, a logo or a sign.",
+          },
+          {
+            role: "user",
+            content: JSON.stringify({
+              industry: brief.industry,
+              image_style: brief.imageStyle,
+              palette: brief.palette,
+              slots: slots.map(({ slot, resolution }) => ({
+                id: slot.id,
+                page: slot.page,
+                section: slot.section,
+                aspect: slot.aspect,
+                resolution,
+                idea: slot.subject,
+                alt: slot.alt,
+                text_side: slot.text_side ?? "none",
+              })),
+            }),
+          },
+        ],
+      }),
+    })
+    if (!response.ok) return null
+    const body = (await response.json()) as {
+      choices?: { message?: { content?: string } }[]
+    }
+    const text = body.choices?.[0]?.message?.content ?? ""
+    const json = text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)
+    const parsed = Prompts.safeParse(JSON.parse(json))
+    return parsed.success ? parsed.data : null
+  } catch {
+    return null
+  }
+}
+
+const SIDE_NOTE = (side: Slot["text_side"]) =>
+  side && side !== "none"
+    ? ` Keep the ${side} third of the frame calm and empty for text.`
+    : ""
+
+type Reference = { content_type: string; b64: string }
+
+type Drawn =
+  | {
+      ok: true
+      model: string
+      bytes: Uint8Array
+      b64: string
+      contentType: string
+      cost: number | null
+    }
+  /** `down`: the model, not the prompt, failed (quota, outage, timeout), so the build skips it. */
+  | { ok: false; reason: string; down: boolean; status: number | null }
+
+/** One image, or the reason there is none. A refusal is a 400 or an answer without a picture. */
+async function draw(
+  { key, fetch }: Deps,
+  { id: model, sized }: PhotoModel,
+  prompt: string,
+  planned: Planned,
+  references: Reference[]
+): Promise<Drawn> {
+  try {
+    const response = await fetch(`${OPENROUTER}/images`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${key}`,
+        "content-type": "application/json",
+      },
+      signal: AbortSignal.timeout(GENERATE_TIMEOUT_MS),
+      body: JSON.stringify({
+        model,
+        prompt,
+        resolution: planned.resolution,
+        aspect_ratio: planned.slot.aspect,
+        ...(sized && planned.size ? { size: planned.size } : {}),
+        // A 2560 x 1920 PNG was 9.4 MB, past the defect check's 5 MB image
+        // limit; the same draw as JPEG at 90 was 0.94 MB. Astro re-encodes it.
+        ...(sized ? { output_format: "jpeg", output_compression: 90 } : {}),
+        ...(references.length
+          ? {
+              input_references: references.map((r) => ({
+                type: "image_url",
+                image_url: { url: `data:${r.content_type};base64,${r.b64}` },
+              })),
+            }
+          : {}),
+      }),
+    })
+    if (!response.ok)
+      return {
+        ok: false,
+        reason: `http ${response.status}`,
+        down: response.status !== 400,
+        status: response.status,
+      }
+    const body = (await response.json()) as {
+      data?: { b64_json?: string; media_type?: string }[]
+      usage?: { cost?: number }
+    }
+    const image = body.data?.find((d) => d.b64_json)
+    if (!image?.b64_json)
+      return {
+        ok: false,
+        reason: "no image returned",
+        down: false,
+        status: response.status,
+      }
+    return {
+      ok: true,
+      model,
+      b64: image.b64_json,
+      bytes: fromBase64(image.b64_json),
+      contentType: image.media_type ?? "image/png",
+      cost: typeof body.usage?.cost === "number" ? body.usage.cost : null,
+    }
+  } catch (error) {
+    return {
+      ok: false,
+      reason: error instanceof Error ? error.name : "error",
+      down: true,
+      status: null,
+    }
+  }
+}
+
+/**
+ * What the defect check scores, each 0 (none), 1 (minor, ships) or 2 (a
+ * visitor would notice, so the photo is redrawn).
+ */
+const DEFECTS = {
+  geometry:
+    "warped, bent or impossible geometry: lines that should be straight, fittings that could not be built, objects melting into each other",
+  text: "garbled or readable text, logos, signage or labels",
+  anatomy: "malformed hands or fingers, or any face",
+  clutter: "clutter or mess where the scene should be clean and tidy",
+  grade:
+    "an oversaturated, HDR, CGI or 3D-render look, crushed blacks or a colour cast",
+  texture:
+    "painterly, smeared or mushy texture (foliage, grass, stone or fabric that dissolves into blobs or brush strokes), over-sharpened halos, or too little fine detail for a photo shown large",
+  subject:
+    "a picture that does not show the slot's scene, or shows another place or kind of work than the service it is for (a room for gutters, fascias, soffits, roofs or windows seen from outside, which are exteriors); 2 for such a mismatch",
+  style: "a mismatch with the set's style line",
+} as const
+type Defect = keyof typeof DEFECTS
+const score = z.coerce.number().int().min(0).max(2)
+const Check = z.object({
+  geometry: score,
+  text: score,
+  anatomy: score,
+  clutter: score,
+  grade: score,
+  texture: score,
+  subject: score,
+  style: score,
+  note: z.string().max(400).catch(""),
+  /** What the picture shows, in a few words: the slot's alt. */
+  shows: z.string().max(200).catch(""),
+})
+export type Check = z.infer<typeof Check>
+const failedChecks = (check: Check) =>
+  (Object.keys(DEFECTS) as Defect[]).filter((k) => check[k] === 2)
+
+/**
+ * The defect check: one Haiku vision call per drawn photo, before it ships.
+ * Haiku 5.5 at low effort cost $0.0002 to $0.0007 a photo in 3.6 to 5.2 s
+ * (bake-off 2026-10-15). Fed our old photos it failed the warped oven
+ * (geometry) and the street hero (subject, style), and passed all four
+ * spotless-templates photos. A checker that is down or answers off
+ * contract returns null and the photo ships unchecked: the check guards
+ * quality, and an outage there must not empty the site of photos.
+ */
+async function inspect(
+  { key, fetch }: Deps,
+  drawn: Extract<Drawn, { ok: true }>,
+  scene: string,
+  style: string,
+  /** What the slot is for: the picture must show this service. */
+  service: { idea: string; alt: string }
+): Promise<{ check: Check; cost: number | null } | null> {
+  try {
+    const response = await fetch(`${OPENROUTER}/chat/completions`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${key}`,
+        "content-type": "application/json",
+      },
+      signal: AbortSignal.timeout(CHECK_TIMEOUT_MS),
+      body: JSON.stringify({
+        model: MODELS.haiku.replace(/^openrouter\//, ""),
+        // Haiku 5.5 thinks by default: 400 tokens all went on reasoning and
+        // left no answer. Low effort spent about 300 and answered.
+        max_tokens: 2_000,
+        reasoning: { effort: ROLES.copy.effort },
+        messages: [
+          {
+            role: "system",
+            content:
+              "You check generated photos for a small business website before they ship. Score each defect 0 (none), 1 (minor, fine to ship) or 2 (a visitor would notice). Be strict about geometry, text, anatomy and texture: these are what make a photo look fake. " +
+              Object.entries(DEFECTS)
+                .map(([k, v]) => `${k}: ${v}.`)
+                .join(" ") +
+              ` Reply with JSON only: {${Object.keys(DEFECTS)
+                .map((k) => `"${k}": 0`)
+                .join(
+                  ", "
+                )}, "note": "the worst defect in a few words, or empty", "shows": "what the photo shows, in under twelve words"}`,
+          },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: JSON.stringify({ scene, service, style }) },
+              {
+                type: "image_url",
+                image_url: {
+                  url: `data:${drawn.contentType};base64,${drawn.b64}`,
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    })
+    if (!response.ok) return null
+    const body = (await response.json()) as {
+      choices?: { message?: { content?: string } }[]
+      usage?: { cost?: number }
+    }
+    const text = body.choices?.[0]?.message?.content ?? ""
+    const parsed = Check.safeParse(
+      JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1))
+    )
+    return parsed.success
+      ? {
+          check: parsed.data,
+          cost: typeof body.usage?.cost === "number" ? body.usage.cost : null,
+        }
+      : null
+  } catch {
+    return null
+  }
+}
+
+/** One line per draw attempt, so a build's model choices, failures and defect scores can be read off the log. */
+function logDraw(
+  slot: string,
+  model: string,
+  drawn: Drawn,
+  ms: number,
+  checked?: { check: Check; cost: number | null } | null
+) {
+  console.log(
+    JSON.stringify({
+      type: "photos.draw",
+      slot,
+      model,
+      outcome: drawn.ok ? "drawn" : drawn.down ? "down" : "refused",
+      status: drawn.ok ? 200 : drawn.status,
+      ms,
+      cost_usd: drawn.ok ? drawn.cost : null,
+      reason: drawn.ok ? null : drawn.reason,
+      ...(drawn.ok
+        ? {
+            check: checked?.check ?? null,
+            check_cost_usd: checked?.cost ?? null,
+            defects: checked ? failedChecks(checked.check) : null,
+          }
+        : {}),
+    })
+  )
+}
+
+/** The first clause of a subject: what is left when the long one is refused. */
+const simplified = (subject: string) => subject.split(/[,;.]/)[0]?.trim() ?? ""
+
+const fallback = (slot_id: string, reason: string): PhotoResult => ({
+  slot_id,
+  status: "fallback",
+  asset_id: null,
+  key: null,
+  content_type: null,
+  cost_usd: null,
+  reason,
+})
+
+async function readDaysCount(
+  sites: PhotoBucket,
+  orgId: string,
+  now: Date
+): Promise<number> {
+  const since = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate()
+  )
+  let count = 0
+  let cursor: string | undefined
+  for (let page = 0; page < 5; page++) {
+    const listed = await sites.list({ prefix: `generated/${orgId}/`, cursor })
+    count += listed.objects.filter((o) => o.uploaded.getTime() >= since).length
+    if (!listed.truncated) break
+    cursor = listed.cursor
+  }
+  return count
+}
+
+/**
+ * Fills a plan's generated slots. Claim sections are never drawn (the claims
+ * gate refuses them anyway), the eight-photo and thirty-a-day caps leave the
+ * rest to the fallback, and a slot whose picture already exists is reused.
+ * `uploads` are the owner's photos, passed as references so a generated room
+ * sits next to real ones.
+ */
+export async function directPhotos(input: {
+  env: { OPENROUTER_API_KEY: string; SITES: PhotoBucket }
+  orgId: string
+  plan: Pick<Blueprint, "images" | "pages">
+  brief: PhotoBrief
+  uploads?: { id: string; content_type: string }[]
+  /** Asset ids of the site's other generated photos, passed as references after the owner's (a lone redraw). */
+  siblings?: string[]
+  /** Makes the hash, so the picture, new: "Try another" passes its assignment id. */
+  variation?: string
+  /** Told as each slot settles, for the build's per-photo progress; a throw is ignored. */
+  onSlot?: (result: PhotoResult) => unknown
+  fetch?: typeof fetch
+  now?: Date
+}): Promise<PhotoResult[]> {
+  const { env, orgId, plan, brief } = input
+  const deps: Deps = {
+    key: env.OPENROUTER_API_KEY,
+    fetch: input.fetch ?? fetch,
+  }
+  const results = new Map<string, PhotoResult>()
+  const told: Promise<unknown>[] = []
+  const settle = (id: string, result: PhotoResult) => {
+    results.set(id, result)
+    if (input.onSlot) {
+      told.push(Promise.resolve(input.onSlot(result)).catch(() => undefined))
+    }
+  }
+  const claims = new Set(
+    generatedImageFindings(plan).map((f) => f.node.replace(/^images\./, ""))
+  )
+  const wanted = plan.images.filter(
+    (s): s is Slot => s.source === "generated" && !s.asset_id
+  )
+  const hero = wanted.find((s) => s.section === "hero") ?? wanted[0]
+  const ordered = [...(hero ? [hero] : []), ...wanted.filter((s) => s !== hero)]
+  const planned: Planned[] = []
+  for (const slot of ordered) {
+    if (claims.has(slot.id)) {
+      settle(slot.id, fallback(slot.id, "claim section"))
+    } else if (planned.length >= MAX_PER_BUILD) {
+      settle(slot.id, fallback(slot.id, "build cap"))
+    } else {
+      const resolution = slot === hero ? "2K" : "1K"
+      const size = slot === hero ? HERO_SIZE[slot.aspect] : undefined
+      const hash = await sha256(
+        JSON.stringify([
+          resolution,
+          ...(size ? [size] : []),
+          slot.aspect,
+          slot.subject,
+          slot.text_side ?? "none",
+          brief,
+          STYLE_VERSION,
+          ...(input.variation ? [input.variation] : []),
+        ])
+      )
+      planned.push({ slot, resolution, size, hash, assetId: uuidFrom(hash) })
+    }
+  }
+
+  // Reuse: the id is the hash, so the prefix is the whole lookup.
+  const misses: Planned[] = []
+  const stored = new Map<string, { key: string; contentType: string }>()
+  for (const p of planned) {
+    const found = await findGenerated(env.SITES, orgId, p.assetId)
+    if (!found) {
+      misses.push(p)
+      continue
+    }
+    stored.set(p.slot.id, found)
+    settle(p.slot.id, {
+      slot_id: p.slot.id,
+      status: "reused",
+      asset_id: p.assetId,
+      key: found.key,
+      content_type: found.contentType,
+      cost_usd: 0,
+      reason: null,
+    })
+  }
+
+  const room = Math.max(
+    0,
+    MAX_PER_DAY -
+      (misses.length
+        ? await readDaysCount(env.SITES, orgId, input.now ?? new Date())
+        : 0)
+  )
+  const toDraw = misses.slice(0, room)
+  for (const p of misses.slice(room))
+    settle(p.slot.id, fallback(p.slot.id, "daily cap"))
+
+  if (toDraw.length) {
+    const written = await writePrompts(deps, brief, toDraw)
+    const style = written?.style ?? brief.imageStyle
+    const house = houseLine(brief.palette)
+    // The scene first, where image models weigh words most; the house style after.
+    const promptFor = (p: Planned, subject: string, avoid = "") =>
+      `${subject} ${framingOf(p.slot.section)}${SIDE_NOTE(p.slot.text_side)} ${style} ${house}${avoid} ${NEVER}`
+    const subjectOf = (p: Planned) =>
+      written?.subjects[p.slot.id] ?? p.slot.subject
+
+    // Owner photos first in line as references, the hero joins once it exists.
+    const owner: Reference[] = []
+    for (const upload of (input.uploads ?? []).slice(0, OWNER_REFERENCES)) {
+      const object = await env.SITES.get(photoKey(orgId, upload.id))
+      if (object)
+        owner.push({
+          content_type: upload.content_type,
+          b64: base64(new Uint8Array(await object.arrayBuffer())),
+        })
+    }
+
+    for (const id of (input.siblings ?? []).slice(0, SIBLING_REFERENCES)) {
+      const found = await findGenerated(env.SITES, orgId, id)
+      const object = found && (await env.SITES.get(found.key))
+      if (found && object) {
+        owner.push({
+          content_type: found.contentType,
+          b64: base64(new Uint8Array(await object.arrayBuffer())),
+        })
+      }
+    }
+
+    // A model that is down for one slot is down for the rest of this build.
+    const down = new Set<string>()
+    const one = async (p: Planned, references: Reference[]) => {
+      let subject = subjectOf(p)
+      let prompt = promptFor(p, subject)
+      let shows = ""
+      let refs = references
+      let drawn: Drawn = {
+        ok: false,
+        reason: "no model up",
+        down: false,
+        status: null,
+      }
+      let tries = 0
+      let redrawn = false
+      /** Every draw and check this slot paid for, a redrawn one too. */
+      let spent = 0
+      for (const model of chainFor(
+        p.slot === hero && p.slot.section === "hero",
+        (input.siblings ?? []).length > 0
+      )) {
+        if (down.has(model.id)) continue
+        if (tries++ === TRIES) break
+        const started = Date.now()
+        drawn = await draw(deps, model, prompt, p, model.refs ? refs : [])
+        const ms = Date.now() - started
+        if (!drawn.ok) {
+          logDraw(p.slot.id, model.id, drawn, ms)
+          if (drawn.down) down.add(model.id)
+          else {
+            // A refused slot moves on with its simplest subject, no references.
+            prompt = promptFor(p, simplified(p.slot.subject) || p.slot.subject)
+            refs = []
+          }
+          continue
+        }
+        const checked = await inspect(deps, drawn, subject, style, {
+          idea: p.slot.subject,
+          alt: p.slot.alt,
+        })
+        shows = checked?.check.shows ?? ""
+        logDraw(p.slot.id, model.id, drawn, ms, checked)
+        spent += (drawn.cost ?? 0) + (checked?.cost ?? 0)
+        const defects = checked ? failedChecks(checked.check) : []
+        if (defects.length === 0) break
+        // A defect is redrawn once, on the next model, with the defect named;
+        // a second one leaves the section its no-photo layout.
+        const named = checked?.check.note || defects.join(", ")
+        drawn = {
+          ok: false,
+          reason: `defect: ${named}`,
+          down: false,
+          status: 200,
+        }
+        if (redrawn) break
+        redrawn = true
+        // The writer's subject was the wrong scene: the plan's own idea names the service.
+        if (defects.includes("subject")) subject = p.slot.subject
+        prompt = promptFor(
+          p,
+          subject,
+          ` The last draw had this defect, so avoid it: ${named}.`
+        )
+      }
+      if (!drawn.ok) {
+        settle(p.slot.id, fallback(p.slot.id, drawn.reason))
+        return null
+      }
+      const objectKey = `${generatedKey(orgId, p.assetId)}.${extension(drawn.contentType)}`
+      try {
+        await env.SITES.put(objectKey, drawn.bytes, {
+          httpMetadata: { contentType: drawn.contentType },
+          customMetadata: {
+            source: "generated",
+            model: drawn.model,
+            prompt_hash: p.hash,
+            cost_usd: String(
+              drawn.cost === null ? ESTIMATE[p.resolution] : spent
+            ),
+          },
+        })
+      } catch {
+        settle(p.slot.id, fallback(p.slot.id, "store failed"))
+        return null
+      }
+      settle(p.slot.id, {
+        slot_id: p.slot.id,
+        status: "generated",
+        asset_id: p.assetId,
+        key: objectKey,
+        content_type: drawn.contentType,
+        cost_usd: drawn.cost === null ? null : spent,
+        reason: null,
+        alt: (shows || simplified(subject)).slice(0, 200),
+      })
+      return { content_type: drawn.contentType, b64: drawn.b64 }
+    }
+
+    // The hero goes first so the rest can match its grade; a reused hero is
+    // read back from the bucket for the same reason.
+    const [first, ...rest] = toDraw
+    let shared = owner
+    const reusedHero = hero && stored.get(hero.id)
+    if (reusedHero) {
+      const object = await env.SITES.get(reusedHero.key)
+      if (object)
+        shared = [
+          {
+            content_type: reusedHero.contentType,
+            b64: base64(new Uint8Array(await object.arrayBuffer())),
+          },
+          ...owner,
+        ]
+    }
+    if (first && first.slot === hero) {
+      const heroRef = await one(first, owner)
+      if (heroRef) shared = [heroRef, ...owner]
+    } else if (first) {
+      rest.unshift(first)
+    }
+    const bounded = limit(PARALLEL)
+    await Promise.all(rest.map((p) => bounded(() => one(p, shared))))
+    console.log(
+      JSON.stringify({
+        type: "photos.summary",
+        slots: toDraw.length,
+        generated: toDraw.filter(
+          (p) => results.get(p.slot.id)?.status === "generated"
+        ).length,
+        models_down: [...down],
+      })
+    )
+  }
+
+  await Promise.all(told)
+  return ordered.map((s) => results.get(s.id) ?? fallback(s.id, "not planned"))
+}
+
+/**
+ * Copies generated photos from the bucket into the site's
+ * `src/assets/generated/{slot id}.{ext}`, where `astro:assets` finds them and
+ * the source snapshot keeps them, the way `placePhotos` does for uploads.
+ * Returns the paths it wrote; the rest fall back.
+ */
+export async function placeGenerated(
+  sandbox: {
+    exec: (command: string) => Promise<unknown>
+    writeFile: (path: string, content: Uint8Array) => Promise<unknown>
+  },
+  sites: Pick<PhotoBucket, "get">,
+  results: readonly Pick<
+    PhotoResult,
+    "slot_id" | "status" | "key" | "content_type"
+  >[]
+): Promise<Record<string, string>> {
+  const placed: Record<string, string> = {}
+  const ready = results.filter((r) => r.key && r.status !== "fallback")
+  if (ready.length === 0) return placed
+  await sandbox.exec(`mkdir -p ${SITE_ROOT}/${GENERATED_DIR}`)
+  for (const r of ready) {
+    const object = await sites.get(r.key as string)
+    if (!object) continue
+    const path = generatedPath(r.slot_id, r.content_type)
+    await sandbox.writeFile(
+      `${SITE_ROOT}/${path}`,
+      new Uint8Array(await object.arrayBuffer())
+    )
+    placed[r.slot_id] = path
+  }
+  return placed
+}

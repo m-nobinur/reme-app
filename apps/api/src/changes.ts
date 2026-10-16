@@ -1,7 +1,9 @@
 import {
   Assignment,
   type AssignmentState,
+  type BuildLane,
   type BuildSummary,
+  type ChangeKind,
   ErrorEnvelope,
   envelope,
   type FactRecord,
@@ -24,7 +26,13 @@ import {
 import { failure, issuePaths } from "./http.ts"
 import type { Session } from "./session.ts"
 import { ownerStaffId } from "./staff.ts"
-import { readApprovals, readBuilds, readFacts, readSite } from "./workspace.ts"
+import {
+  readApprovals,
+  readBuilds,
+  readFacts,
+  readLane,
+  readSite,
+} from "./workspace.ts"
 
 /**
  * An owner's writes that cross to the orchestrator, and the owner's facts:
@@ -37,7 +45,7 @@ import { readApprovals, readBuilds, readFacts, readSite } from "./workspace.ts"
 
 export type Owner = { orgId: string; session: NonNullable<Session> }
 
-type Bridged = { status: number; body: unknown }
+export type Bridged = { status: number; body: unknown }
 
 /**
  * How long a change may take, reads and every call over the binding
@@ -102,7 +110,7 @@ export async function bridge(
   owner: Owner,
   path: string,
   init: {
-    method?: "GET" | "POST"
+    method?: "GET" | "POST" | "DELETE"
     body?: unknown
     key?: string | null
     signal?: AbortSignal
@@ -222,9 +230,10 @@ export const notFound = (noun: "assignment" | "approval") =>
   })
 
 /** The build as the panel shows it, from the row the orchestrator returned. */
-const summary = (body: unknown): BuildSummary => {
+const summary = (body: unknown, lane?: BuildLane): BuildSummary => {
   const row = Assignment.parse(body)
   return {
+    ...(lane ? { lane } : {}),
     assignment_id: row.assignment_id,
     kind: row.kind as BuildSummary["kind"],
     state: row.state,
@@ -243,7 +252,7 @@ export type ChangeInput = {
   reviews: { assignment_id: string | null; revision_id: string }[]
 }
 
-export type ChangeRoute =
+type ChangeRoute =
   | { route: "build" | "revise" }
   | { route: "steer"; assignment_id: string }
   | {
@@ -401,7 +410,9 @@ export async function startChange(
   kit: Tenancy,
   owner: Owner,
   text: string,
-  key: string
+  key: string,
+  /** The CoS's read of the change's size; the orchestrator picks the lane from it. */
+  changeKind?: ChangeKind
 ): Promise<Response> {
   // One deadline for the whole change: its reads and every call it makes
   // share it, so a replace's three calls end within it too.
@@ -449,7 +460,7 @@ export async function startChange(
         const [builds, reviews, site] = await Promise.all([
           readBuilds(db, null),
           readApprovals(db),
-          readSite(db, env.SITE_HOST_SUFFIX),
+          readSite(db, env),
         ])
         return {
           made,
@@ -487,6 +498,9 @@ export async function startChange(
   })
   const call = (path: string, body?: unknown) =>
     bridge(env, owner, path, { body, key, signal })
+  // The panel and the chat line read the lane off the build the owner just started.
+  const laneOf = (id: string) =>
+    kit.withOrg({ orgId }, (db) => readLane(db, id)).catch(() => undefined)
   // The old review turned down once the new build exists. Only a definite
   // no cancels the new build: an unknown outcome may have ended the review.
   const end = async (build: Assignment, status: number, old: Replace) => {
@@ -497,7 +511,11 @@ export async function startChange(
       ),
       () => null
     )
-    if (ended.ok) return Response.json(summary(build), { status })
+    if (ended.ok) {
+      return Response.json(summary(build, await laneOf(build.assignment_id)), {
+        status,
+      })
+    }
     if (ended.status >= 500) return ended
     // The old build keeps the site, so nothing would release the new one.
     // If the cancel's outcome is not known, a retry finds the build still
@@ -543,8 +561,20 @@ export async function startChange(
     }
     return Response.json(summary(made))
   }
-  const create = async (kind: "site.build" | "site.revise") =>
-    relay(await call("/", { kind, goal: text }), summary)
+  // A steer ignores the kind: a working build takes the change whatever its size.
+  const createBody = (kind: "site.build" | "site.revise") => ({
+    kind,
+    goal: text,
+    ...(changeKind ? { change_kind: changeKind } : {}),
+  })
+  const create = async (kind: "site.build" | "site.revise") => {
+    const result = await call("/", createBody(kind))
+    const parsed = Assignment.safeParse(result.body)
+    const lane = parsed.success
+      ? await laneOf(parsed.data.assignment_id)
+      : undefined
+    return relay(result, (body) => summary(body, lane))
+  }
   switch (route.route) {
     case "refuse":
       return failure(409, {
@@ -571,7 +601,7 @@ export async function startChange(
       // The new build first: while the old one holds the site it queues
       // behind the lock and claims it once the old one ends. A refused or
       // unknown create leaves the review standing.
-      const created = await call("/", { kind: route.rebuild, goal: text })
+      const created = await call("/", createBody(route.rebuild))
       const build = Assignment.safeParse(created.body)
       if (created.status >= 300 || !build.success) {
         return relay(created, summary)
