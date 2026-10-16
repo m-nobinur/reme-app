@@ -552,6 +552,12 @@ describe("the CoS's model and price", () => {
     expect(activeTools("act")).toContain("create_reminder")
   })
 
+  it("reads a domain in Ask mode, and connects one only in Act mode", () => {
+    expect(activeTools("ask")).toContain("check_domain")
+    expect(activeTools("ask")).not.toContain("connect_domain")
+    expect(activeTools("act")).toContain("connect_domain")
+  })
+
   it("labels a reminder call with the owner's words before it has an output", () => {
     const pending = {
       role: "assistant",
@@ -884,7 +890,12 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     const names = (sent[0]?.tools ?? []).map(
       (t) => (t as { name: string }).name
     )
-    expect(names.sort()).toEqual(["get_facts", "get_preview", "get_workspace"])
+    expect(names.sort()).toEqual([
+      "check_domain",
+      "get_facts",
+      "get_preview",
+      "get_workspace",
+    ])
   })
 
   it("asks the owner before every act tool, even with a value that parses as a fact", async () => {
@@ -1462,6 +1473,42 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     ).toHaveLength(0)
     expect(plain(await replay(tail, done.chunks))).toStrictEqual(plain(after))
     await s.state(asking, "cancelled")
+  })
+
+  it("waits for the owner's yes before connect_domain, and reads check_domain without asking", async () => {
+    const id = await conversation(me)
+    const stub = stubOrchestrator()
+    const done = await turn(
+      me,
+      typed(id, "Put the site on sparkleclean.co.uk and check it."),
+      {
+        model: scripted(
+          calls(
+            {
+              id: "call_check",
+              tool: "check_domain",
+              input: { name: "sparkleclean.co.uk" },
+            },
+            {
+              id: "call_connect",
+              tool: "connect_domain",
+              input: { name: "sparkleclean.co.uk" },
+            }
+          )
+        ).model,
+      },
+      stub
+    )
+    expect(done.response.status, done.text).toBe(200)
+    // The check ran (this org holds no such domain, so it was refused here);
+    // the connect waits on its card and nothing reached the orchestrator.
+    expect(waiting(await tailOf(me, id)).map((p) => p.type)).toEqual([
+      "tool-connect_domain",
+    ])
+    expect(
+      done.chunks.filter((c) => c.type === "tool-approval-request")
+    ).toHaveLength(1)
+    expect(stub.calls).toHaveLength(0)
   })
 
   it("stores an approved reminder under the turn's conversation, zone and the CoS, keyed by its approval", async () => {

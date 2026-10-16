@@ -2,10 +2,15 @@ import {
   type AnswerQuestionInput,
   type AnswerQuestionOutput,
   BuildSummary,
+  type CheckDomainInput,
+  CheckDomainOutput,
+  type ConnectDomainInput,
+  ConnectDomainOutput,
   CosFacts,
   CosWorkspace,
   type CreateReminderOutput,
   type CreateReminderRequest,
+  DomainCheck,
   ErrorEnvelope,
   type FactRecord,
   FactValue,
@@ -24,6 +29,7 @@ import {
 } from "@workspace/contracts"
 import {
   assignments,
+  domains,
   eq,
   events,
   failureCode,
@@ -50,7 +56,7 @@ import { wallToUtc } from "./time.ts"
 import type { Turn } from "./turns.ts"
 
 /**
- * The Chief of Staff's seven tools (ADR-034), as plain functions: the
+ * The Chief of Staff's nine tools (ADR-034), as plain functions: the
  * session's org, user and session in, the contract's output out. What they
  * return is what the model reads, so each is cut to its `COS_TOOLS` output:
  * no org or staff id, no URL, no open record, and every refusal the closed
@@ -128,11 +134,26 @@ function optionsOf(requestId: string, options: string[] | null) {
   return null
 }
 
+/** A domain the org still holds. */
+const live = sql`${domains.state} <> 'removed'`
+
 export async function getWorkspace(
   { env, kit, owner }: ToolContext,
   _input: Empty
 ): Promise<CosWorkspace> {
   const status = await readWorkspace(kit, owner.orgId, env)
+  const rows = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+    db
+      .select({
+        name: domains.name,
+        state: domains.state,
+        lastCheck: domains.lastCheck,
+      })
+      .from(domains)
+      .where(live)
+      .orderBy(sql`${domains.createdAt} desc`)
+      .limit(10)
+  )
   return CosWorkspace.parse({
     site: {
       host: status.site.host,
@@ -164,6 +185,12 @@ export async function getWorkspace(
       )
       .slice(0, 10),
     missing_facts: status.missing_facts,
+    domains: rows.map((r) => ({
+      name: r.name,
+      state: r.state,
+      // A check stored before the contract changed reads as none yet.
+      last_check: DomainCheck.safeParse(r.lastCheck).data ?? null,
+    })),
     expected_seconds: status.expected_seconds,
   })
 }
@@ -424,4 +451,58 @@ export async function recordReview(
     })
   }
   return { outcome: "recorded", slot }
+}
+
+const noDomain = () =>
+  failure(404, {
+    class: "resource",
+    code: "domain.not_found",
+    message: "No domain with that name is connected to this business.",
+    detail: {},
+  })
+
+/**
+ * Where a connected domain is now. It wakes the domain's workflow to look
+ * at once, so the orchestrator answers. A name this org does not hold,
+ * another org's included, is refused here and never reaches it.
+ */
+export async function checkDomain(
+  { env, kit, owner }: ToolContext,
+  { name }: CheckDomainInput
+): Promise<CheckDomainOutput> {
+  const [held] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+    db
+      .select({ id: domains.id })
+      .from(domains)
+      .where(sql`${eq(domains.name, name)} and ${live}`)
+  )
+  if (!held) return refused(noDomain())
+  const answered = relay(
+    await bridge(env, owner, `/domains/${encodeURIComponent(name)}/check`),
+    CheckDomainOutput.parse
+  )
+  if (!answered.ok) return refused(answered)
+  return CheckDomainOutput.parse(await answered.json())
+}
+
+/**
+ * The owner's existing domain, connected through the orchestrator's
+ * `/domains`, keyed by the approval: it starts the domain's workflow once
+ * and replays its answer. Whether the name may be claimed (`domain.in_use`,
+ * `domain.too_many_pending`, `domain.invalid`) is the orchestrator's to say.
+ */
+export async function connectDomain(
+  { env, owner }: ToolContext,
+  { name }: ConnectDomainInput,
+  approvalId: string
+): Promise<ConnectDomainOutput> {
+  const answered = relay(
+    await bridge(env, owner, "/domains", {
+      body: { name, approval_id: approvalId },
+      key: approvalId,
+    }),
+    ConnectDomainOutput.parse
+  )
+  if (!answered.ok) return refused(answered)
+  return ConnectDomainOutput.parse(await answered.json())
 }
