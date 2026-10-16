@@ -1035,9 +1035,10 @@ async function openCos(
       cancelled && log.named && held.tail
         ? await loggedMessage(db, id, held.tail.id)
         : null
+    const posts = await unloggedPosts(db, id)
     const messages = logged
-      ? [{ ...logged, parts: cancelParts(logged.parts) }, user]
-      : [user]
+      ? [...posts, { ...logged, parts: cancelParts(logged.parts) }, user]
+      : [...posts, user]
     return {
       messages: messages.map((m) => ({ message: m, taint: messageTaint(m) })),
       tail: null,
@@ -1289,6 +1290,31 @@ async function fallbackTurn(
   }
   await closeTurn(run, payload, message, rows)
   return stream(tailId, [], settledLead(messages, tailId))
+}
+
+/**
+ * The messages the assistant posted on its own (`postAssistantMessage`,
+ * ids `srv_…`) that the session's log does not hold yet, oldest first, cut
+ * to their text. A typed turn logs them before the owner's message, so the
+ * model's history, which reads the log alone, holds what it already told
+ * the owner.
+ */
+async function unloggedPosts(db: OrgScopedDb, id: string) {
+  const rows = await db.execute<{ id: string; parts: Part[] }>(sql`
+    select m.id, m.content->'parts' as parts from ${conversationMessages} m
+    where m.conversation_id = ${id} and m.id like 'srv\_%'
+      and m.content->>'role' = 'assistant'
+      and not exists (select 1 from ${events} e
+        where e.session_id = ${id} and e.type = 'cos.message'
+          and e.payload->'message'->>'id' = m.id)
+    order by m.seq`)
+  return rows.map((row) => ({
+    id: row.id,
+    role: "assistant" as const,
+    parts: row.parts.filter(
+      (p) => p.type === "step-start" || p.type === "text"
+    ),
+  }))
 }
 
 /** A message id is written once. A retried send is refused, never merged. */

@@ -16,7 +16,9 @@ import {
   eq,
   events,
   failureCode,
+  postAssistantMessage,
   reminders,
+  serverMessageId,
   sql,
   type Tenancy,
   tenancy,
@@ -841,6 +843,45 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
 
   /** Everything the model was sent, as one string. */
   const wire = (sent: CallOptions[]) => JSON.stringify(sent)
+
+  it("sends the model what the assistant posted on its own since the last turn, logged once", async () => {
+    const id = await conversation(me)
+    await turn(me, typed(id, "Connect my domain", "ask"), {
+      model: scripted(said("It's on its way.")).model,
+    })
+    const key = `live:${id}`
+    expect(
+      await postAssistantMessage(kit, {
+        orgId: me.orgId,
+        key,
+        message: {
+          text: ["brightclean.example is live."],
+          button: {
+            label: "Open it",
+            action: { kind: "open", url: "https://brightclean.example" },
+          },
+        },
+      })
+    ).toBe("posted")
+    const next = scripted(said("Glad it's up."))
+    await turn(me, typed(id, "Is it working?", "ask"), { model: next.model })
+    const sent = wire(next.sent)
+    expect(sent).toContain("brightclean.example is live.")
+    // Before the owner's question, as the chat showed it.
+    expect(sent.indexOf("brightclean.example is live.")).toBeLessThan(
+      sent.indexOf("Is it working?")
+    )
+    const again = scripted(said("Yes."))
+    await turn(me, typed(id, "Thanks", "ask"), { model: again.model })
+    expect(wire(again.sent)).toContain("brightclean.example is live.")
+    const posts = (await logOf(id)).filter(
+      (e) =>
+        e.type === "cos.message" &&
+        e.payload.message.id === serverMessageId(key)
+    )
+    expect(posts).toHaveLength(1)
+    expect(posts[0]?.taint).toEqual(["inferred"])
+  })
 
   it("answers a typed message and logs the turn, and the model never sees a tenancy id", async () => {
     const id = await conversation(me)
