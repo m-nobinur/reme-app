@@ -12,13 +12,13 @@ interface Props {
   src: string
   alt: string
   class?: string
-  /** Widths to emit, never above the source's own. */
+  /** Widths to emit, never above the source's own. The default stops at 960, a card, gallery or header box at 2x. */
   widths?: number[]
   /** What the browser picks from the srcset with. */
   sizes?: string
   /** The one image above the fold: eager, high priority, preloaded. */
   priority?: boolean
-  /** Encoding quality, 1 to 100, of the WebP and, without `avifQuality`, the AVIF. */
+  /** Encoding quality, 1 to 100, of the fallback WebP and, without `avifQuality`, the AVIF. */
   quality?: number
   /** AVIF quality by candidate width: a bigger candidate can take a lower one, since a screen that fetches it is dense. */
   avifQuality?: (width: number) => number
@@ -28,7 +28,7 @@ const {
   src,
   alt,
   class: className,
-  widths = [480, 768, 1280, 1920],
+  widths = [480, 768, 960],
   sizes = "(min-width: 64rem) 50vw, 100vw",
   priority = false,
   quality = 55,
@@ -40,7 +40,7 @@ const meta = load ? (await load()).default : undefined
 const emitted = meta
   ? [
       ...new Set([
-        ...widths.filter((w) => w <= meta.width),
+        ...widths.filter((w: number) => w <= meta.width),
         ...(meta.width < Math.max(...widths) ? [meta.width] : []),
       ]),
     ].sort((a, b) => a - b)
@@ -60,12 +60,14 @@ const avif = meta
     )
   : []
 const avifSet = avif.map((image, i) => `${image.src} ${emitted[i]}w`).join(", ")
+// Every current browser takes AVIF. The one WebP is the <img> an older browser
+// falls back to, so it has no srcset: one file a photo, not one a width.
+const fallbackWidth = emitted.filter((w) => w <= 960).pop() ?? emitted[0]
 const webp = meta
   ? await getImage({
       src: meta,
       alt,
-      widths: emitted,
-      sizes,
+      width: fallbackWidth,
       format: "webp",
       quality,
       loading: priority ? "eager" : "lazy",
@@ -73,10 +75,6 @@ const webp = meta
       fetchpriority: priority ? "high" : undefined,
     })
   : null
-const imgAttributes = {
-  srcset: webp?.srcSet.attribute,
-  ...webp?.attributes,
-}
 // Picture's own: the picture takes the caller's scoped-style class.
 const scoped = className?.match(/\bastro-\w{8}\b/)?.[0]
 ---
@@ -97,8 +95,7 @@ const scoped = className?.match(/\bastro-\w{8}\b/)?.[0]
   webp && (
     <picture class={scoped}>
       <source srcset={avifSet} type="image/avif" sizes={sizes} />
-      <source srcset={webp.srcSet.attribute} type="image/webp" sizes={sizes} />
-      <img src={webp.src} {...imgAttributes} class={className} />
+      <img src={webp.src} {...webp.attributes} class={className} />
     </picture>
   )
 }

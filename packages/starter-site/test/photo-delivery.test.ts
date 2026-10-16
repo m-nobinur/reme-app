@@ -59,7 +59,12 @@ describe("a generated photo", () => {
         .split(",")
         .map((c) => c.trim().split(/\s+/)[1])
     expect(widths("image/avif")).toEqual(["640w", "960w", "1152w"])
-    expect(widths("image/webp")).toEqual(["640w", "960w", "1152w"])
+    // The fallback is one WebP at 960 in the <img>, not a source of its own.
+    const tags = home()?.elements ?? []
+    expect(tags.some((e) => e.attrs.type === "image/webp")).toBe(false)
+    const img = tags.find((e) => e.tag === "img" && e.attrs.width)
+    expect(img?.attrs.src).toMatch(/\.webp$/)
+    expect(img?.attrs.width).toBe("960")
   })
 
   test("tells the browser the box the arch hero renders in, not 1280 px", () => {
