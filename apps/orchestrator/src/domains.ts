@@ -232,8 +232,6 @@ export type Inspection = {
   target: string[]
   /** CAA at the apex, presentation format: `0 issue "pki.goog"`. */
   caa: string[]
-  /** MX at the apex, so a card can say email is not affected. */
-  mx: string[]
 }
 
 async function hostRecords(host: string): Promise<HostRecords> {
@@ -269,7 +267,7 @@ export async function zoneApex(
 /**
  * Public DNS for a domain the owner named, apex, `www` or another subdomain:
  * the zone apex from the SOA, then NS, the records at the hosts to serve
- * (the apex and `www`, or the subdomain alone), CAA and MX. Throws
+ * (the apex and `www`, or the subdomain alone) and CAA. Throws
  * `domain.not_found` for a name that does not exist.
  */
 export async function inspect(name: string): Promise<Inspection> {
@@ -278,13 +276,12 @@ export async function inspect(name: string): Promise<Inspection> {
   const sub = asked !== apex ? asked : undefined
   const www = `www.${apex}`
   const served = sub ? [sub] : [apex, www]
-  const [ns, records, a, aaaa, caa, mx] = await Promise.all([
+  const [ns, records, a, aaaa, caa] = await Promise.all([
     doh(apex, "NS"),
     Promise.all(served.map(async (h) => [h, await hostRecords(h)] as const)),
     doh(CNAME_TARGET, "A"),
     doh(CNAME_TARGET, "AAAA"),
     doh(apex, "CAA"),
-    doh(apex, "MX"),
   ])
   // A name with no records of its own is a subdomain still to be added, and
   // only under a zone in use: one with an address, a CNAME or mail. A registry
@@ -292,12 +289,12 @@ export async function inspect(name: string): Promise<Inspection> {
   // shortcut: a heuristic, not the public suffix list; add the list if a
   // registry zone with an apex address ever lets a name through.
   if (missing) {
-    const root = sub ? await hostRecords(apex) : null
+    if (!sub) throw new DomainError("domain.not_found")
+    const [root, mx] = await Promise.all([hostRecords(apex), doh(apex, "MX")])
     const inUse =
-      !!root &&
-      (!!root.cname ||
-        root.a.length + root.aaaa.length > 0 ||
-        mx.answers.some((x) => x.type === TYPES.MX))
+      !!root.cname ||
+      root.a.length + root.aaaa.length > 0 ||
+      mx.answers.some((x) => x.type === TYPES.MX)
     if (!inUse) throw new DomainError("domain.not_found")
   }
   const data = (answers: Answer[], type: number) =>
@@ -311,7 +308,6 @@ export async function inspect(name: string): Promise<Inspection> {
     hosts: Object.fromEntries(records),
     target: [...data(a.answers, TYPES.A), ...data(aaaa.answers, TYPES.AAAA)],
     caa: data(caa.answers, TYPES.CAA),
-    mx: data(mx.answers, TYPES.MX),
   }
 }
 
@@ -506,15 +502,13 @@ export type ApexMode = "alias" | "forward"
 /**
  * The records the owner adds. `www`, or the subdomain, CNAMEs to us. The apex gets an
  * ALIAS in alias mode; in forward mode it is the provider's redirect to
- * `https://www.{apex}`, which no record expresses. The TXT pair is for a
- * domain whose live site must not lose its certificate at cutover, and a
- * CAA line is added when the domain's CAA would refuse our CAs.
+ * `https://www.{apex}`, which no record expresses. A CAA line is added when
+ * the domain's CAA would refuse our CAs. A guarded claim's ownership TXT is
+ * the caller's, from the row.
  */
 export function recordsFor(input: {
   inspection: Inspection
   apex: ApexMode
-  hostnames: CustomHostname[]
-  withTxt: boolean
 }): DnsRecord[] {
   const { apex, sub } = input.inspection
   const records: DnsRecord[] = [
@@ -526,27 +520,6 @@ export function recordsFor(input: {
   ]
   if (!sub && input.apex === "alias") {
     records.push({ type: "ALIAS", name: "@", value: CNAME_TARGET })
-  }
-  if (input.withTxt) {
-    for (const h of input.hostnames) {
-      const own = h.ownership_verification
-      if (own?.name && own.value) {
-        records.push({
-          type: "TXT",
-          name: relative(own.name, apex),
-          value: own.value,
-        })
-      }
-      for (const v of h.ssl?.validation_records ?? []) {
-        if (v.txt_name && v.txt_value) {
-          records.push({
-            type: "TXT",
-            name: relative(v.txt_name, apex),
-            value: v.txt_value,
-          })
-        }
-      }
-    }
   }
   if (blockingCaa(input.inspection.caa).length > 0) {
     records.push({ type: "CAA", name: "@", value: CAA_FOR_US })

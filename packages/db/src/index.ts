@@ -2,7 +2,7 @@
 // dependency on drizzle-orm gets a second copy resolved under a different peer
 // set, and the two disagree about `SQL` in a way that only surfaces as a
 // typecheck error about a private property. Callers take the tag from here.
-export { asc, eq, sql } from "drizzle-orm"
+export { asc, eq, type SQL, sql } from "drizzle-orm"
 export { orgOpen, tombstone } from "./accounts.ts"
 export {
   type Posted,

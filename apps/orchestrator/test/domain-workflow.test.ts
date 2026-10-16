@@ -24,6 +24,8 @@ const script = vi.hoisted(() => ({
   calls: [] as string[],
   /** Whether every post finds the chat busy, as a never-answered card would. */
   busy: false,
+  /** Whether every wait is ended by a `check` nudge. */
+  nudged: false,
 }))
 vi.mock("../src/domain-flow.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/domain-flow.ts")>()),
@@ -51,7 +53,8 @@ vi.mock("../src/domain-flow.ts", async (importOriginal) => ({
   },
 }))
 
-const { DomainWorkflow, SAY_RETRIES } = await import(
+const { nextWait } = await import("../src/domain-flow.ts")
+const { DomainWorkflow, MAX_CHECKS, SAY_RETRIES } = await import(
   "../src/domain-workflow.ts"
 )
 
@@ -95,6 +98,7 @@ async function drive(
     waitForEvent: async (name: string, options: { timeout: number }) => {
       names.push(name)
       waits.push(options.timeout)
+      if (script.nudged) return { type: "check", payload: {} }
       throw new Error("timed out")
     },
   }
@@ -111,6 +115,7 @@ async function drive(
 beforeEach(() => {
   script.calls.length = 0
   script.busy = false
+  script.nudged = false
 })
 
 describe("the domain Workflow", () => {
@@ -121,7 +126,7 @@ describe("the domain Workflow", () => {
       at(7 * MIN, "valid", true),
     ])
     expect(names).toEqual(steps.DomainWorkflow.live)
-    expect(waits).toEqual([2 * MIN, 5 * MIN, "30 seconds"])
+    expect(waits).toEqual([MIN, MIN, "30 seconds"])
     expect(result).toEqual({ outcome: "active" })
     expect(script.calls).toEqual([
       "say look 2",
@@ -169,7 +174,7 @@ describe("the domain Workflow", () => {
     ])
     expect(names).toEqual(steps.DomainWorkflow["nudged then expired"])
     // The last wait before the deadline is cut to what is left of it.
-    expect(waits).toEqual([2 * MIN, 5 * MIN, 30 * 1000])
+    expect(waits).toEqual([MIN, HOUR, 30 * 1000])
     expect(result).toEqual({ outcome: "failed" })
     expect(script.calls).toEqual([
       "nudge",
@@ -184,9 +189,34 @@ describe("the domain Workflow", () => {
     expect(script.calls.filter((c) => c === "nudge")).toHaveLength(1)
   })
 
-  it("waits an hour per look after the first four", async () => {
-    const { waits } = await drive([1, 2, 3, 4, 5, 6].map((n) => at(n * MIN)))
-    expect(waits).toEqual([2, 5, 15, 30, 60, 60].map((m) => m * MIN))
+  it("waits by how long the claim has been connecting, not by how many looks", async () => {
+    const { waits } = await drive(
+      [0, 29, 30, 119, 120, 71 * 60].map((m) => at(m * MIN))
+    )
+    expect(waits).toEqual([1, 1, 10, 10, 60, 60].map((m) => m * MIN))
+  })
+
+  it("spends well under a Free plan's 1,024 steps over 72 hours, nudged or not", async () => {
+    // Every look on schedule, from the first at the start to the deadline.
+    const schedule: Seen[] = []
+    for (let t = 0; t <= 72 * HOUR; t += nextWait(t)) schedule.push(at(t))
+    const quiet = await drive(schedule)
+    expect(quiet.result).toEqual({ outcome: "failed" })
+    expect(schedule.length).toBeLessThan(120)
+    expect(quiet.names.length).toBeLessThan(250)
+
+    // A chat that nudges every wait: past MAX_CHECKS the waits are sleeps,
+    // which are not steps, on the same schedule.
+    script.nudged = true
+    const looks = MAX_CHECKS + 5
+    const nudged = await drive(
+      Array.from({ length: looks }, (_, i) => at(i * 1000))
+    )
+    expect(nudged.names.filter((n) => n.startsWith("check "))).toHaveLength(
+      MAX_CHECKS
+    )
+    expect(nudged.names.filter((n) => n.startsWith("wait "))).toHaveLength(5)
+    expect(nudged.waits.slice(MAX_CHECKS)).toEqual(Array(5).fill(MIN))
   })
 
   it("fails a claim whose hostname is held elsewhere, without looking", async () => {

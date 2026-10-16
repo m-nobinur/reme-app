@@ -1,20 +1,20 @@
 {
   "_": "How many tests each blocking suite has to pass before its exit 0 counts. Read by scripts/floor.mjs. A `+db` key is the same gate given a DATABASE_URL, which unskips its live cases; a gate without one shares a single floor, which is only safe while it fails rather than skips when the database is missing. Both tenancy suites do. Raise a number when a suite grows; lowering one is a deliberate act that belongs in the same commit as the cases it removes.",
-  "contracts-unit": 718,
+  "contracts-unit": 830,
   "db-unit": 94,
   "db-tenancy": 117,
   "db-seed": 14,
   "api-tenancy": 44,
   "api-unit": 184,
   "api-unit+db": 612,
-  "orchestrator-unit": 145,
-  "orchestrator-unit+db": 385,
+  "orchestrator-unit": 453,
+  "orchestrator-unit+db": 591,
   "orchestrator-probe": 5,
   "facade-unit": 108,
   "gates-unit": 76,
   "router-unit": 56,
-  "router-unit+db": 50,
+  "router-unit+db": 63,
   "starter-site": 215,
   "starter-site-a11y": 3,
-  "web-unit": 505
+  "web-unit": 536
 }

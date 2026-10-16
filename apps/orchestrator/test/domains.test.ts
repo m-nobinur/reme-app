@@ -241,9 +241,17 @@ describe("provider detection", () => {
 })
 
 describe("the DoH inspector", () => {
-  it("finds the apex from a www SOA and reads the records at both hosts", async () => {
-    stubNet()
+  it("finds the apex from a www SOA and reads the records at both hosts, in nine queries", async () => {
+    const fetched = stubNet()
     const inspection = await inspect("www.sparklecleanbristol.co.uk")
+    // SOA, NS, A and AAAA at both hosts and at our target, CAA. MX only
+    // decides whether a missing subdomain's zone is in use.
+    const asked = fetched.mock.calls.map(([u]) => {
+      const q = new URL(String(u)).searchParams
+      return `${q.get("name")} ${q.get("type")}`
+    })
+    expect(asked).toHaveLength(9)
+    expect(asked.filter((a) => a.endsWith(" MX"))).toEqual([])
     expect(inspection).toEqual({
       apex: "sparklecleanbristol.co.uk",
       nameservers: ["ns47.domaincontrol.com", "ns48.domaincontrol.com"],
@@ -257,7 +265,6 @@ describe("the DoH inspector", () => {
         '0 issue "digicert.com"',
         '0 iodef "mailto:it@sparklecleanbristol.co.uk"',
       ],
-      mx: ["10 mail.neomailsrvr.com."],
     })
   })
 
@@ -272,9 +279,7 @@ describe("the DoH inspector", () => {
     expect(Object.keys(inspection.hosts)).toEqual([
       "book.sparklecleanbristol.co.uk",
     ])
-    expect(
-      recordsFor({ inspection, apex: "alias", hostnames: [], withTxt: false })
-    ).toEqual([
+    expect(recordsFor({ inspection, apex: "alias" })).toEqual([
       { type: "CNAME", name: "book", value: CNAME_TARGET },
       { type: "CAA", name: "@", value: CAA_FOR_US },
     ])
@@ -346,7 +351,6 @@ function fakeInspection(overrides: Partial<Inspection> = {}): Inspection {
     },
     target: ["104.21.0.10", "172.67.0.10"],
     caa: [],
-    mx: ["10 mail.neomailsrvr.com."],
     ...overrides,
   }
 }
@@ -514,69 +518,24 @@ describe("a name that already reaches us", () => {
 })
 
 describe("the records list", () => {
-  const withTxt: CustomHostname = {
-    ...hostname(WWW, "pending", "pending_validation"),
-    ownership_verification: {
-      type: "txt",
-      name: `_cf-custom-hostname.${WWW}`,
-      value: "5cc07c04-ea62-4a5a-95f0-419334a875a4",
-    },
-    ssl: {
-      status: "pending_validation",
-      validation_records: [
-        {
-          txt_name: `_acme-challenge.${WWW}`,
-          txt_value: "810b7d5f01154524b961ba0cd578acc2",
-        },
-      ],
-    },
-  }
-
   it("forward: www CNAME only, the apex is the provider's redirect", () => {
     expect(
-      recordsFor({
-        inspection: fakeInspection(),
-        apex: "forward",
-        hostnames: [withTxt],
-        withTxt: false,
-      })
+      recordsFor({ inspection: fakeInspection(), apex: "forward" })
     ).toEqual([{ type: "CNAME", name: "www", value: CNAME_TARGET }])
   })
 
-  it("alias: www CNAME and an apex ALIAS, with the TXT pair for a live site", () => {
-    expect(
-      recordsFor({
-        inspection: fakeInspection(),
-        apex: "alias",
-        hostnames: [withTxt],
-        withTxt: true,
-      })
-    ).toEqual([
-      { type: "CNAME", name: "www", value: CNAME_TARGET },
-      { type: "ALIAS", name: "@", value: CNAME_TARGET },
-      {
-        type: "TXT",
-        name: "_cf-custom-hostname.www",
-        value: "5cc07c04-ea62-4a5a-95f0-419334a875a4",
-      },
-      {
-        type: "TXT",
-        name: "_acme-challenge.www",
-        value: "810b7d5f01154524b961ba0cd578acc2",
-      },
-    ])
+  it("alias: www CNAME and an apex ALIAS", () => {
+    expect(recordsFor({ inspection: fakeInspection(), apex: "alias" })).toEqual(
+      [
+        { type: "CNAME", name: "www", value: CNAME_TARGET },
+        { type: "ALIAS", name: "@", value: CNAME_TARGET },
+      ]
+    )
   })
 
   it("adds a CAA line for us when the domain's CAA blocks our CAs", () => {
     const blocked = fakeInspection({ caa: ['0 issue "digicert.com"'] })
-    expect(
-      recordsFor({
-        inspection: blocked,
-        apex: "forward",
-        hostnames: [],
-        withTxt: false,
-      })
-    ).toEqual([
+    expect(recordsFor({ inspection: blocked, apex: "forward" })).toEqual([
       { type: "CNAME", name: "www", value: CNAME_TARGET },
       { type: "CAA", name: "@", value: CAA_FOR_US },
     ])
