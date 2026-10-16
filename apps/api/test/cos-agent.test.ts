@@ -834,6 +834,31 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     return { id: row?.id, ...(row?.content as object) } as UIMessage
   }
 
+  /**
+   * The new message the stream showed is the stored row, with the time the
+   * row was written, as a reload reads it. A continued message gets no time
+   * of its own: replaying it onto its row must give the row exactly.
+   */
+  const shownAsStored = async (
+    who: Owner,
+    conversationId: string,
+    chunks: UIMessageChunk[]
+  ) => {
+    const row = (await rowsOf(who, conversationId)).at(-1)
+    if (!row) throw new Error("the conversation holds no rows")
+    const { metadata, ...shown } = (await replay(
+      undefined,
+      chunks
+    )) as UIMessage
+    expect(plain(shown)).toStrictEqual(
+      plain({ id: row.id, ...(row.content as object) })
+    )
+    const { createdAt } = (metadata as { custom: { createdAt: string } }).custom
+    expect(
+      Math.abs(Date.parse(createdAt) - row.createdAt.getTime())
+    ).toBeLessThan(2000)
+  }
+
   const waiting = (message: UIMessage) =>
     message.parts.filter(
       (p) => "state" in p && p.state === "approval-requested"
@@ -920,10 +945,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       "get_workspace",
     ])
     // The stored row is what the stream showed.
-    const tail = await tailOf(me, id)
-    expect(plain(await replay(undefined, done.chunks))).toStrictEqual(
-      plain(tail)
-    )
+    await shownAsStored(me, id, done.chunks)
   })
 
   it("gives Ask mode the read tools only", async () => {
@@ -1912,9 +1934,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       )
     ).toContain("The owner wants a change")
     // The stored row matches what the owner saw.
-    expect(plain(await replay(undefined, first.chunks))).toStrictEqual(
-      plain(tail)
-    )
+    await shownAsStored(me, id, first.chunks)
 
     const [call] = waiting(tail)
     const { model, sent } = scripted(said("Started."))

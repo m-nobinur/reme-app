@@ -436,8 +436,24 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       )
       expect(sent.response.status, sent.text).toBe(200)
       const chunks = chunksOf(sent.text)
-      const after = await tail(conversationId)
-      expect(plain(await replay(before, chunks))).toStrictEqual(plain(after))
+      const row = (await rows(conversationId)).at(-1)
+      if (!row) throw new Error("the conversation holds no rows")
+      const after = asMessage(row)
+      const { metadata, ...replayed } = (await replay(
+        before,
+        chunks
+      )) as UIMessage
+      expect(plain(replayed)).toStrictEqual(plain(after))
+      // A new message carries the time its row was written, as a reload
+      // reads it; a continued one keeps the time it already shows.
+      if (before) expect(metadata).toBeUndefined()
+      else {
+        const { createdAt } = (metadata as { custom: { createdAt: string } })
+          .custom
+        expect(
+          Math.abs(Date.parse(createdAt) - row.createdAt.getTime())
+        ).toBeLessThan(2000)
+      }
       return { ...sent, chunks, after }
     }
     const onboarding = async () => {
@@ -609,7 +625,8 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
     const history = await me.history(id)
     const hash = await sha256(
       // The colour card's first four are seeded by the org's id, which each
-      // run creates afresh; everything else is the same bytes.
+      // run creates afresh, and each new message carries the time it was
+      // written; everything else is the same bytes.
       (
         bodies.join("") +
         JSON.stringify(
@@ -629,7 +646,9 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
             })
           )
         )
-      ).replace(/"initial":\[[^\]]*\]/g, '"initial":[]')
+      )
+        .replace(/"initial":\[[^\]]*\]/g, '"initial":[]')
+        .replace(/"createdAt":"[^"]*"/g, '"createdAt":""')
     )
     const listed = FactList.parse(
       await (await who.call(stubOrchestrator(), "/facts")).json()

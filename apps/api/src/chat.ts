@@ -62,6 +62,7 @@ import {
   ranTurn,
   settle,
   streamTurn,
+  writtenAt,
 } from "./cos/run.ts"
 import { getWorkspace, type ToolFailed } from "./cos/tools.ts"
 import {
@@ -1276,7 +1277,7 @@ async function fallbackTurn(
         parts: [{ type: "step-start" }, ...step],
       })
     })
-    return stream(assistantId, step)
+    return stream(assistantId, step, [writtenAt()])
   }
   const history = await run.kit.withOrg({ orgId: run.turn.orgId }, (db) =>
     readSession(db, run.turn.sessionId)
@@ -1450,7 +1451,7 @@ async function typed(
     .update(conversations)
     .set({ updatedAt: sql`now()` })
     .where(eq(conversations.id, id))
-  return stream(assistantId, step)
+  return stream(assistantId, step, [writtenAt()])
 }
 
 /**
@@ -1665,7 +1666,7 @@ async function answer(
       newId,
       rowId
     )
-    return stream(assistantId, step)
+    return stream(assistantId, step, [writtenAt()])
   }
   const parts = [...answered, { type: "step-start" } as const, ...step]
   if (
@@ -2194,6 +2195,7 @@ async function plannedTurn(
     const rest =
       outcome.shown && parts[0]?.type === "text" ? parts.slice(1) : parts
     for (const part of rest) for (const chunk of made(part)) write(chunk)
+    if (!continued) write(writtenAt())
     write({ type: "finish-step" })
     write({ type: "finish" })
   }
