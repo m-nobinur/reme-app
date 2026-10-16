@@ -6,6 +6,7 @@ import {
   DomainCheck,
   DomainName,
   DomainProvider,
+  RemoveDomainOutput,
   ServerButtonPart,
   ServerMessage,
 } from "../src/index.ts"
@@ -115,6 +116,9 @@ describe("the domain tools' outputs", () => {
     expect(
       verdict("ConnectDomainOutput", ConnectDomainOutput, refused)
     ).toEqual(ACCEPTED)
+    expect(verdict("RemoveDomainOutput", RemoveDomainOutput, refused)).toEqual(
+      ACCEPTED
+    )
   })
 
   it("carry no tenant or Cloudflare id field, even when offered one", () => {
@@ -122,6 +126,7 @@ describe("the domain tools' outputs", () => {
       ["ConnectDomainOutput", ConnectDomainOutput, "org_id"],
       ["ConnectDomainOutput", ConnectDomainOutput, "cf_ids"],
       ["CheckDomainOutput", CheckDomainOutput, "custom_hostname_id"],
+      ["RemoveDomainOutput", RemoveDomainOutput, "org_id"],
     ] as const) {
       const output = { ...(samples[name] as object), [extra]: "x" }
       expect(verdict(name, schema, output)).toEqual(REFUSED)
