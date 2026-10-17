@@ -1,6 +1,7 @@
 import { domains, searchConnections } from "@workspace/db"
 import { describe, expect, it, vi } from "vitest"
-import { searchInstanceId, startSearch } from "../src/search-start.ts"
+import { searchInstanceId } from "../src/search.ts"
+import { startSearchForDomain } from "../src/search-start.ts"
 import { freshOrg, kit } from "./fixture.ts"
 
 /**
@@ -41,14 +42,14 @@ async function domainOf(
 }
 
 const fake = (create = vi.fn(async () => ({}))) =>
-  ({ SEARCHES: { create } }) as unknown as Pick<Env, "SEARCHES">
+  ({ SEARCHES: { create } }) as unknown as Env
 
 describe.skipIf(!url)("starting Search Console for a new domain", () => {
   it("starts one instance per org and host for an org connected to Google", async () => {
     const orgId = await freshOrg(kit)
     const { domainId, host } = await domainOf(orgId, "active")
     const create = vi.fn(async () => ({}))
-    await startSearch(fake(create), kit, orgId, domainId)
+    await startSearchForDomain(fake(create), kit, orgId, domainId)
     expect(create).toHaveBeenCalledExactlyOnceWith({
       id: searchInstanceId(orgId, host),
       params: { org_id: orgId, host },
@@ -60,7 +61,7 @@ describe.skipIf(!url)("starting Search Console for a new domain", () => {
     for (const connection of [undefined, "needs_reauth", "revoked"] as const) {
       const orgId = await freshOrg(kit)
       const { domainId } = await domainOf(orgId, connection)
-      await startSearch(fake(create), kit, orgId, domainId)
+      await startSearchForDomain(fake(create), kit, orgId, domainId)
     }
     expect(create).not.toHaveBeenCalled()
   })
@@ -72,7 +73,7 @@ describe.skipIf(!url)("starting Search Console for a new domain", () => {
       throw new Error("instance.already_exists")
     })
     await expect(
-      startSearch(fake(create), kit, orgId, domainId)
+      startSearchForDomain(fake(create), kit, orgId, domainId)
     ).resolves.toBeUndefined()
     expect(create).toHaveBeenCalledOnce()
   })

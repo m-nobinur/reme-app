@@ -1,4 +1,5 @@
 import { domains, eq, searchConnections, type Tenancy } from "@workspace/db"
+import { startSearch } from "./search.ts"
 
 /**
  * A domain going live starts the Search Console workflow for its new primary
@@ -8,12 +9,8 @@ import { domains, eq, searchConnections, type Tenancy } from "@workspace/db"
  * publish pick up a host this missed.
  */
 
-/** `search-{org_id}-{host}` as a Workflow id: letters, digits, `-` and `_`, 100 characters at most. */
-export const searchInstanceId = (orgId: string, host: string) =>
-  `search-${orgId}-${host}`.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 100)
-
-export async function startSearch(
-  env: Pick<Env, "SEARCHES">,
+export async function startSearchForDomain(
+  env: Env,
   kit: Tenancy,
   orgId: string,
   domainId: string
@@ -31,12 +28,9 @@ export async function startSearch(
       return domain?.host ?? null
     })
     if (!host) return
-    await env.SEARCHES.create({
-      id: searchInstanceId(orgId, host),
-      params: { org_id: orgId, host },
-    })
+    await startSearch(env, orgId, host)
   } catch (error) {
-    // Already created, or not startable now; either way the domain is live.
+    // Not startable now; either way the domain is live.
     console.warn(
       JSON.stringify({
         code: "search.start_skipped",

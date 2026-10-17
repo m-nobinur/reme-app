@@ -11,18 +11,18 @@ import {
 import { type Refusal, refuse } from "./domain-flow.ts"
 import {
   type AnalyticsRow,
-  accessFor,
   GoogleError,
   inspectUrl,
   NeedsReauth,
   searchAnalytics,
 } from "./google.ts"
+import { accessToken, ownProperty } from "./search.ts"
 
 /**
  * The two live reads the Chief of Staff makes of Google: a 90-day (or 7-day
  * break-down) performance answer, and one page's inspection. A `site_url` here
  * only ever comes from one of the org's own `search_properties` rows, read under
- * its RLS, so a caller cannot name another property; a page address must sit
+ * its RLS and checked again by `ownProperty` before each call; a page address must sit
  * on one of those hosts before Google is asked about it.
  */
 
@@ -74,23 +74,10 @@ async function connection(
     )
   }
   try {
-    const { accessToken, sealed } = await accessFor(env, orgId, conn.token)
-    if (sealed) {
-      await kit.withOrg({ orgId }, (db) =>
-        db
-          .update(searchConnections)
-          .set({ refreshToken: sealed, lastRefreshAt: new Date() })
-      )
-    }
-    return { accessToken, properties }
+    return { accessToken: await accessToken(env, kit, orgId), properties }
   } catch (error) {
-    if (error instanceof NeedsReauth) {
-      await kit.withOrg({ orgId }, (db) =>
-        db.update(searchConnections).set({ state: "needs_reauth" })
-      )
-      return needsReauth()
-    }
-    return unavailable(error)
+    // `accessToken` has marked the connection and written its audit row.
+    return error instanceof NeedsReauth ? needsReauth() : unavailable(error)
   }
 }
 
@@ -142,6 +129,7 @@ export async function livePerformance(
   try {
     const per = await Promise.all(
       live.properties.map(async ({ siteUrl }) => {
+        await ownProperty(kit, orgId, siteUrl)
         const [current, previous, rows] = await Promise.all([
           searchAnalytics(live.accessToken, siteUrl, now0),
           searchAnalytics(live.accessToken, siteUrl, before),
@@ -222,6 +210,7 @@ export async function liveInspect(
   const property = live.properties.find((p) => covers(p, url.host))
   if (!property) return foreign
   try {
+    await ownProperty(kit, orgId, property.siteUrl)
     const seen = await inspectUrl(live.accessToken, property.siteUrl, url.href)
     return UrlStatus.parse({
       url: url.href.slice(0, 2048),

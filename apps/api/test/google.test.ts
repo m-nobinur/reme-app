@@ -1,0 +1,135 @@
+import { ErrorEnvelope } from "@workspace/contracts"
+import {
+  memberships,
+  searchConnections,
+  sql,
+  type Tenancy,
+  tenancy,
+} from "@workspace/db"
+import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { connectGoogle } from "../src/google.ts"
+import {
+  type Owner,
+  owner,
+  type Stub,
+  stubOrchestrator,
+} from "./owner-fixture.ts"
+import { stubJwksFetch } from "./sealed-session.ts"
+
+/**
+ * `POST /google/connect` and `connect_google` on a live connection, the
+ * orchestrator stood in for: the owner only, the body checked before the
+ * binding, and the orchestrator's answers passed back as the web reads them.
+ */
+
+const url = process.env.DATABASE_URL
+const BODY = {
+  code: "4/code",
+  verifier: "v".repeat(43),
+  redirect_uri: "https://staging.remeai.co.uk/api/google/callback",
+}
+const WEB = "https://staging.remeai.co.uk"
+
+describe.skipIf(!url)("connecting Google through the api", () => {
+  const kit: Tenancy = tenancy(url as string, { max: 3 })
+  let me: Owner
+  let member: Owner
+
+  beforeAll(async () => {
+    globalThis.fetch = stubJwksFetch() as typeof fetch
+    me = await owner(kit, url as string, "google")
+    member = await owner(kit, url as string, "google-member")
+    await kit.withOrg({ orgId: member.orgId }, (db) =>
+      db
+        .update(memberships)
+        .set({ role: "member" })
+        .where(sql`${memberships.orgId} = ${member.orgId}`)
+    )
+  })
+  afterAll(() => kit.close())
+
+  const connect = (who: Owner, stub: Stub, body: unknown = BODY) =>
+    who.call(stub, "/google/connect", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    })
+
+  it("hands the owner's code to the orchestrator and answers 204", async () => {
+    const stub = stubOrchestrator(() => new Response(null, { status: 204 }))
+    const answered = await connect(me, stub)
+    expect(answered.status).toBe(204)
+    expect(stub.calls).toHaveLength(1)
+    expect(new URL(stub.calls[0]?.request.url ?? "").pathname).toBe(
+      "/assignments/search/connect"
+    )
+    expect(stub.calls[0]?.body).toEqual(BODY)
+  })
+
+  it("passes a partial consent back as 422 scopes_missing", async () => {
+    const stub = stubOrchestrator(() =>
+      Response.json(
+        {
+          class: "validation",
+          code: "search.scopes_missing",
+          message: "Both boxes.",
+          detail: {},
+          occurred_at: new Date().toISOString(),
+        },
+        { status: 422 }
+      )
+    )
+    const answered = await connect(me, stub)
+    expect(answered.status).toBe(422)
+    expect(ErrorEnvelope.parse(await answered.json()).code).toContain(
+      "scopes_missing"
+    )
+  })
+
+  it("refuses a member who is not the owner, and a body off the contract, before the binding", async () => {
+    const stub = stubOrchestrator()
+    const notOwner = await connect(member, stub)
+    expect(notOwner.status).toBe(403)
+    expect(ErrorEnvelope.parse(await notOwner.json()).code).toBe(
+      "search.not_owner"
+    )
+    const bad = await connect(me, stub, { ...BODY, verifier: "short" })
+    expect(bad.status).toBe(400)
+    expect(stub.calls).toEqual([])
+  })
+
+  it("connect_google: off, the consent link, the connected account, or refused for a member", async () => {
+    const as = (who: Owner) => ({
+      orgId: who.orgId,
+      session: { workosUserId: who.workosUserId } as never,
+    })
+    const env = { GOOGLE_CLIENT_ID: "client", WEB_ORIGIN: WEB } as Env
+    expect(
+      await connectGoogle(
+        { env: { WEB_ORIGIN: WEB } as Env, kit, owner: as(me) },
+        {}
+      )
+    ).toEqual({ available: false })
+    expect(await connectGoogle({ env, kit, owner: as(me) }, {})).toEqual({
+      url: `${WEB}/api/google/start`,
+    })
+    expect(
+      await connectGoogle({ env, kit, owner: as(member) }, {})
+    ).toMatchObject({
+      outcome: "refused",
+      error: { code: "search.not_owner" },
+    })
+    await kit.withOrg({ orgId: me.orgId }, (db) =>
+      db.insert(searchConnections).values({
+        orgId: me.orgId,
+        googleEmail: "owner@example.test",
+        refreshToken: "v1.aXY.Y3Q",
+        state: "active",
+      })
+    )
+    expect(await connectGoogle({ env, kit, owner: as(me) }, {})).toEqual({
+      connected: true,
+      email: "owner@example.test",
+    })
+  })
+})

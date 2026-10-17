@@ -98,10 +98,10 @@ vi.mock("../src/domain-flow.ts", async (importOriginal) => ({
   },
 }))
 
-// Starting the Search Console workflow is startSearch's job (search-start.test.ts);
+// Starting the Search Console workflow is startSearchForDomain's job (search-start.test.ts);
 // here it only has to run inside the activate step, once the domain is live.
 vi.mock("../src/search-start.ts", () => ({
-  startSearch: async () => {
+  startSearchForDomain: async () => {
     script.calls.push("search")
   },
 }))

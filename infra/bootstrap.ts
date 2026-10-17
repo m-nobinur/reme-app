@@ -68,6 +68,8 @@ const environments = {
         // .env.local only where it is missing, so a dedicated key put on the
         // Worker by hand stays.
         "OPENROUTER_API_KEY",
+        // Whether connect_google offers the button.
+        "GOOGLE_CLIENT_ID",
       ],
       // The console bearer, the spec signing key and the model plane: this
       // Worker holds no session. The REME_MODEL_* values are configuration
@@ -124,6 +126,7 @@ const environments = {
         "WORKOS_CLIENT_ID",
         "WORKOS_COOKIE_PASSWORD",
         "OPENROUTER_API_KEY",
+        "GOOGLE_CLIENT_ID",
       ],
       "reme-orchestrator-production": [
         "ORCHESTRATOR_TOKEN",

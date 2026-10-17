@@ -38,7 +38,7 @@ import {
   withKit,
 } from "./domain-flow.ts"
 import { registrarLive } from "./registrar.ts"
-import { startSearch } from "./search-start.ts"
+import { startSearchForDomain } from "./search-start.ts"
 
 const MINUTE = 60 * 1000
 /** How long a bought domain may take to answer through the router before we flag it. */
@@ -204,7 +204,7 @@ export class DomainWorkflow extends WorkflowEntrypoint<Env, DomainParams> {
       const bought = await step.do("activate", () =>
         withKit(env, async (k) => {
           const said = await activateDomain(env, k, orgId, domainId)
-          if (said) await startSearch(env, k, orgId, domainId)
+          if (said) await startSearchForDomain(env, k, orgId, domainId)
           return said
         })
       )
@@ -268,7 +268,7 @@ export class DomainWorkflow extends WorkflowEntrypoint<Env, DomainParams> {
     const live = await step.do("activate", () =>
       withKit(env, async (kit) => {
         const said = await activateDomain(env, kit, orgId, domainId)
-        if (said) await startSearch(env, kit, orgId, domainId)
+        if (said) await startSearchForDomain(env, kit, orgId, domainId)
         return said
       })
     )

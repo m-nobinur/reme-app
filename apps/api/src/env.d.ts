@@ -27,6 +27,8 @@ interface Env {
    */
   STRIPE_SECRET_KEY?: string
   STRIPE_WEBHOOK_SECRET?: string
+  /** Search Console's Google client id. Unset, `connect_google` answers that Google is not available. */
+  GOOGLE_CLIENT_ID?: string
   /**
    * Local dev only, from `.dev.vars` with `SITE_HOST_SUFFIX=.reme.localhost`:
    * the local router's port. Never in `wrangler.jsonc`; `siteUrl` refuses it
