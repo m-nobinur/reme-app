@@ -37,6 +37,8 @@ import { Route as AppStaffRouteImport } from './routes/app/staff'
 import { Route as AppWebsiteRouteImport } from './routes/app/website'
 import { Route as ApiAuthCallbackRouteImport } from './routes/api.auth.callback'
 import { Route as ApiAuthSocialRouteImport } from './routes/api.auth.social'
+import { Route as ApiGoogleCallbackRouteImport } from './routes/api.google.callback'
+import { Route as ApiGoogleStartRouteImport } from './routes/api.google.start'
 import { Route as ApiPhotosIdRouteImport } from './routes/api.photos.$id'
 import { Route as AppConversationIndexRouteImport } from './routes/app/_conversation/index'
 import { Route as AppDomainsReturnRouteImport } from './routes/app/domains.return'
@@ -181,6 +183,16 @@ const ApiAuthSocialRoute = ApiAuthSocialRouteImport.update({
   path: '/api/auth/social',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiGoogleCallbackRoute = ApiGoogleCallbackRouteImport.update({
+  id: '/api/google/callback',
+  path: '/api/google/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiGoogleStartRoute = ApiGoogleStartRouteImport.update({
+  id: '/api/google/start',
+  path: '/api/google/start',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPhotosIdRoute = ApiPhotosIdRouteImport.update({
   id: '/api/photos/$id',
   path: '/api/photos/$id',
@@ -230,6 +242,8 @@ export interface FileRoutesByFullPath {
   '/app/website': typeof AppWebsiteRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/social': typeof ApiAuthSocialRoute
+  '/api/google/callback': typeof ApiGoogleCallbackRoute
+  '/api/google/start': typeof ApiGoogleStartRoute
   '/api/photos/$id': typeof ApiPhotosIdRoute
   '/app/domains/return': typeof AppDomainsReturnRoute
   '/app/': typeof AppConversationIndexRoute
@@ -263,6 +277,8 @@ export interface FileRoutesByTo {
   '/app/website': typeof AppWebsiteRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/social': typeof ApiAuthSocialRoute
+  '/api/google/callback': typeof ApiGoogleCallbackRoute
+  '/api/google/start': typeof ApiGoogleStartRoute
   '/api/photos/$id': typeof ApiPhotosIdRoute
   '/app/domains/return': typeof AppDomainsReturnRoute
   '/app/c/$id': typeof AppConversationCIdRoute
@@ -297,6 +313,8 @@ export interface FileRoutesById {
   '/app/website': typeof AppWebsiteRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/social': typeof ApiAuthSocialRoute
+  '/api/google/callback': typeof ApiGoogleCallbackRoute
+  '/api/google/start': typeof ApiGoogleStartRoute
   '/api/photos/$id': typeof ApiPhotosIdRoute
   '/app/domains/return': typeof AppDomainsReturnRoute
   '/app/_conversation/': typeof AppConversationIndexRoute
@@ -332,6 +350,8 @@ export interface FileRouteTypes {
     | '/app/website'
     | '/api/auth/callback'
     | '/api/auth/social'
+    | '/api/google/callback'
+    | '/api/google/start'
     | '/api/photos/$id'
     | '/app/domains/return'
     | '/app/'
@@ -365,6 +385,8 @@ export interface FileRouteTypes {
     | '/app/website'
     | '/api/auth/callback'
     | '/api/auth/social'
+    | '/api/google/callback'
+    | '/api/google/start'
     | '/api/photos/$id'
     | '/app/domains/return'
     | '/app/c/$id'
@@ -398,6 +420,8 @@ export interface FileRouteTypes {
     | '/app/website'
     | '/api/auth/callback'
     | '/api/auth/social'
+    | '/api/google/callback'
+    | '/api/google/start'
     | '/api/photos/$id'
     | '/app/domains/return'
     | '/app/_conversation/'
@@ -424,6 +448,8 @@ export interface RootRouteChildren {
   ApiChatRoute: typeof ApiChatRoute
   ApiAuthCallbackRoute: typeof ApiAuthCallbackRoute
   ApiAuthSocialRoute: typeof ApiAuthSocialRoute
+  ApiGoogleCallbackRoute: typeof ApiGoogleCallbackRoute
+  ApiGoogleStartRoute: typeof ApiGoogleStartRoute
   ApiPhotosIdRoute: typeof ApiPhotosIdRoute
 }
 
@@ -625,6 +651,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSocialRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/google/callback': {
+      id: '/api/google/callback'
+      path: '/api/google/callback'
+      fullPath: '/api/google/callback'
+      preLoaderRoute: typeof ApiGoogleCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/google/start': {
+      id: '/api/google/start'
+      path: '/api/google/start'
+      fullPath: '/api/google/start'
+      preLoaderRoute: typeof ApiGoogleStartRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/photos/$id': {
       id: '/api/photos/$id'
       path: '/api/photos/$id'
@@ -718,10 +758,13 @@ const rootRouteChildren: RootRouteChildren = {
   ApiChatRoute: ApiChatRoute,
   ApiAuthCallbackRoute: ApiAuthCallbackRoute,
   ApiAuthSocialRoute: ApiAuthSocialRoute,
+  ApiGoogleCallbackRoute: ApiGoogleCallbackRoute,
+  ApiGoogleStartRoute: ApiGoogleStartRoute,
   ApiPhotosIdRoute: ApiPhotosIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
+  ._addFileTypes<FileRouteTypes>()
   ._addFileTypes<FileRouteTypes>()
 
 import type { getRouter } from './router.tsx'
