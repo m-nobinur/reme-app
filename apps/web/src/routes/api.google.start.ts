@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router"
 import { getAuth } from "@workos/authkit-tanstack-react-start"
 import { beginOAuth, pkcePair, seeOther } from "@/lib/auth/oauth"
+import { safeReturnTo } from "@/lib/auth/redirect-target"
 import { googleFlow, SCOPES } from "@/lib/google"
 import { ownerFrom } from "@/lib/tenant"
 
@@ -23,10 +24,23 @@ export const Route = createFileRoute("/api/google/start")({
           return seeOther(new URL("/app?google=unavailable", origin).href)
         }
 
+        // Back to the chat the card was in, where the result is announced.
+        let from: URL | null = null
+        try {
+          from = new URL(request.headers.get("referer") ?? "")
+        } catch {
+          // No referer, or one that does not parse: back to /app.
+        }
+        const returnTo =
+          from?.origin === origin && from.pathname.startsWith("/app/")
+            ? safeReturnTo(from.pathname)
+            : "/app"
         const { verifier, challenge } = await pkcePair()
-        const { state, redirectUri } = beginOAuth("/app", googleFlow(origin), {
-          verifier,
-        })
+        const { state, redirectUri } = beginOAuth(
+          returnTo,
+          googleFlow(origin),
+          { verifier }
+        )
         const auth = new URL("https://accounts.google.com/o/oauth2/v2/auth")
         auth.search = new URLSearchParams({
           client_id: clientId,

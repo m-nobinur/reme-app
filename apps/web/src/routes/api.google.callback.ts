@@ -14,10 +14,12 @@ export const Route = createFileRoute("/api/google/callback")({
       GET: async ({ request }) => {
         const url = new URL(request.url)
         const flow = googleFlow(url.origin)
-        const back = (result: string) =>
-          seeOther(new URL(`/app?google=${result}`, url.origin).href)
-
         const stored = consumeOAuthState(url.searchParams.get("state"), flow)
+        const back = (result: string) => {
+          const to = new URL(stored?.returnTo ?? "/app", url.origin)
+          to.searchParams.set("google", result)
+          return seeOther(to.href)
+        }
         if (url.searchParams.get("error") === "access_denied") {
           return back("cancelled")
         }
