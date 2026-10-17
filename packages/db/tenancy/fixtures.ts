@@ -16,6 +16,11 @@ import {
   orgs,
   reminders,
   roles,
+  searchConnections,
+  searchDaily,
+  searchProperties,
+  searchSnapshot,
+  searchUrlStatus,
   siteRevisions,
   staff,
   staffEvents,
@@ -60,6 +65,12 @@ export const DOMAIN_OF = {
   b: "tenancy-probe-b.example.com",
 } as const
 export const DOMAIN_PENDING = "pending.tenancy-probe-a.example.com"
+
+/** The Search Console property each org holds, as Google names it. */
+export const SEARCH_URL_OF = {
+  a: "https://tenancy-probe-a.example.com/",
+  b: "https://tenancy-probe-b.example.com/",
+} as const
 
 /**
  * One person per org, in the platform `users` table. Exported because the
@@ -330,6 +341,44 @@ export async function seedTwoOrgs() {
       state: "active",
       approvalId: per(tag, 13),
       activatedAt: new Date(),
+    })
+    // Its Google connection, the property it verified, and a row of each report.
+    await db.insert(searchConnections).values({
+      orgId: org,
+      connectedByUserId: USER_OF[tag],
+      googleEmail: `owner@tenancy-probe-${tag}.invalid`,
+      refreshToken: "v1.iv.ct",
+      scopes: ["webmasters"],
+      state: "active",
+      connectedAt: new Date(),
+    })
+    await db.insert(searchProperties).values({
+      id: per(tag, 19),
+      orgId: org,
+      host: DOMAIN_OF[tag],
+      siteUrl: SEARCH_URL_OF[tag],
+      kind: "url_prefix",
+      method: "file",
+      state: "verified",
+      verifiedAt: new Date(),
+    })
+    const property = { orgId: org, propertyId: per(tag, 19) }
+    const stats = { clicks: 3, impressions: 40, ctr: 0.075, position: 7.5 }
+    await db
+      .insert(searchDaily)
+      .values({ ...property, date: "2026-10-15", ...stats })
+    await db.insert(searchSnapshot).values({
+      ...property,
+      query: "tenancy probe",
+      page: SEARCH_URL_OF[tag],
+      windowEnd: "2026-10-15",
+      ...stats,
+    })
+    await db.insert(searchUrlStatus).values({
+      ...property,
+      url: SEARCH_URL_OF[tag],
+      verdict: "PASS",
+      inspectedAt: new Date(),
     })
   }
   // A connect still waiting on DNS: the definer must not answer for it.
