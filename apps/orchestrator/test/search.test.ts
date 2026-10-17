@@ -14,10 +14,11 @@ import {
   accessToken,
   connectGoogle,
   ownProperty,
+  placeToken,
   searchInstanceId,
 } from "../src/search.ts"
 import { freshOrg } from "./fixture.ts"
-import { kit, previewed, SUFFIX } from "./site.ts"
+import { kit, previewed, SUFFIX, storage } from "./site.ts"
 
 vi.mock("@cloudflare/sandbox", () => ({
   Sandbox: class {},
@@ -222,6 +223,24 @@ describe.skipIf(!url)("connecting Google", () => {
 })
 
 describe.skipIf(!url)("the org's own properties", () => {
+  it("serves the new file and stops serving one another account was given", async () => {
+    const orgId = await freshOrg(kit)
+    const store = storage()
+    const env = { ROUTES: store.ROUTES } as unknown as Env
+    const params = { org_id: orgId, host: `p-${orgId}.example.test` }
+    await placeToken(env, kit, params, "google1a.html")
+    await placeToken(env, kit, params, "google1a.html")
+    await placeToken(env, kit, params, "google2b.html")
+    expect([...store.pointers.keys()]).toEqual([
+      `gsv:${params.host}:google2b.html`,
+    ])
+    const property = await ownProperty(kit, orgId, `https://${params.host}/`)
+    expect([property.token, property.state]).toEqual([
+      "google2b.html",
+      "pending",
+    ])
+  })
+
   it("refuses a site_url another org holds, and finds the org's own", async () => {
     const mine = await freshOrg(kit)
     const theirs = await freshOrg(kit)

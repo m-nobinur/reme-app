@@ -855,6 +855,15 @@ export async function writeVerification(
   await env.ROUTES.put(`gsv:${host}:${file}`, "1")
 }
 
+/** A replaced verification file, so the Google account it proved for loses the host on Google's next check. */
+export async function dropVerification(
+  env: Pick<Env, "ROUTES">,
+  host: string,
+  file: string
+): Promise<void> {
+  await env.ROUTES.delete(`gsv:${host}:${file}`)
+}
+
 /** The other half of a custom domain: `www.x` for `x`, and `x` for `www.x`. */
 export const otherHost = (primary: string) =>
   primary.startsWith("www.") ? primary.slice(4) : `www.${primary}`

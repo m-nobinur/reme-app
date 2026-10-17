@@ -23,7 +23,11 @@ import {
   verificationToken,
   verifyResource,
 } from "./google.ts"
-import { activeDeployment, writeVerification } from "./publish.ts"
+import {
+  activeDeployment,
+  dropVerification,
+  writeVerification,
+} from "./publish.ts"
 
 /**
  * Search Console for the org's own Google account: the connect route, the
@@ -317,14 +321,27 @@ export async function fileToken(
   return file
 }
 
-/** `place`: the file where the router serves it, and the property row that is its truth. */
+/**
+ * `place`: the file where the router serves it, and the property row that is
+ * its truth. A file another Google account was given before is no longer
+ * served, so that account loses the host at Google's next check.
+ */
 export async function placeToken(
   env: Env,
   kit: Tenancy,
   { org_id: orgId, host }: SearchParams,
   file: string
 ): Promise<void> {
+  const [old] = await kit.withOrg({ orgId }, (db) =>
+    db
+      .select({ token: searchProperties.token })
+      .from(searchProperties)
+      .where(eq(searchProperties.siteUrl, siteUrlOf(host)))
+  )
   await writeVerification(env, host, file)
+  if (old?.token && old.token !== file) {
+    await dropVerification(env, host, old.token)
+  }
   await kit.withOrg({ orgId }, (db) =>
     db
       .insert(searchProperties)
