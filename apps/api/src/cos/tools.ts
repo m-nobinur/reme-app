@@ -119,7 +119,7 @@ export class ToolFailed extends Error {
  * An api answer as the model reads it: its class, code and message, nothing
  * else. Thrown as `ToolFailed` unless it is a definite no.
  */
-async function refused(response: Response): Promise<Refused> {
+export async function refused(response: Response): Promise<Refused> {
   const envelope = ErrorEnvelope.parse(await response.json())
   const error = {
     class: envelope.class,
@@ -578,7 +578,7 @@ const noDomain = () =>
   })
 
 /** An orchestrator domain answer as the model reads it: the output, or the closed refusal. */
-async function domainAnswer<T>(
+export async function domainAnswer<T>(
   result: Bridged,
   parse: (body: unknown) => T
 ): Promise<T | Refused> {

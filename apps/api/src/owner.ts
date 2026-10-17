@@ -27,7 +27,7 @@ import {
 import { chat } from "./chat.ts"
 import { conversationRoute } from "./conversations.ts"
 import { removal } from "./cos/tools.ts"
-import { checkout, purchaseStatus } from "./domain-buy.ts"
+import { checkout, isOrgOwner, purchaseStatus } from "./domain-buy.ts"
 import { failure, invalid, keyMissing, readBody } from "./http.ts"
 import { reminderRoute } from "./reminders.ts"
 import { readActivity, readFacts, unchanged } from "./workspace.ts"
@@ -43,7 +43,7 @@ import { readTaggedWorkspace } from "./workspace-tag.ts"
 
 /** The routes `ownerRoute` answers, for `index.ts` to resolve an org before. */
 export const OWNER_PATH =
-  /^\/(workspace|facts|assets|photos\/[^/]+|changes|activity|builds\/[^/]+\/(answer|blueprint|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback))?)?|reminders(\/[^/]+)?|domains\/[^/]+(\/checkout)?|chat)$/
+  /^\/(workspace|facts|assets|photos\/[^/]+|changes|activity|builds\/[^/]+\/(answer|blueprint|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback))?)?|reminders(\/[^/]+)?|domains\/[^/]+(\/checkout)?|google\/disconnect|chat)$/
 
 async function setFacts(request: Request, kit: Tenancy, owner: Owner) {
   if (!idempotencyKey(request)) return keyMissing()
@@ -164,6 +164,32 @@ async function removeDomain(
   return removal({ env, kit, owner }, name, key)
 }
 
+/**
+ * `POST /google/disconnect`: the owner ends the Google connection. The
+ * orchestrator revokes the grant at Google and deletes the org's search data
+ * (`/search/disconnect`); this only checks the role and bridges.
+ */
+async function disconnectGoogle(
+  request: Request,
+  env: Env,
+  kit: Tenancy,
+  owner: Owner
+) {
+  if (!(await isOrgOwner(kit, owner))) {
+    return failure(403, {
+      class: "permission",
+      code: "google.not_owner",
+      message: "Only the owner can disconnect Google.",
+      detail: {},
+    })
+  }
+  const result = await bridge(env, owner, "/search/disconnect", {
+    key: idempotencyKey(request),
+  })
+  if (result.status === 204) return new Response(null, { status: 204 })
+  return relay(result, (body) => body)
+}
+
 export async function ownerRoute(
   request: Request,
   env: Env,
@@ -198,6 +224,9 @@ export async function ownerRoute(
   }
   if (pathname === "/changes" && method === "POST") {
     return requestChange(request, env, kit, owner)
+  }
+  if (pathname === "/google/disconnect" && method === "POST") {
+    return disconnectGoogle(request, env, kit, owner)
   }
   if (pathname === "/chat" && method === "POST") {
     return chat(request, env, kit, owner, { waitUntil })
