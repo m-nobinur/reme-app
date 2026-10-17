@@ -1,5 +1,6 @@
 import { GoogleConnectRequest, siteHost } from "@workspace/contracts"
 import {
+  activeDomainHost,
   appendEvent,
   eq,
   orgs,
@@ -145,27 +146,25 @@ export async function accessToken(
 }
 
 /**
- * The hosts a connect verifies: the free subdomain once the site is
- * published, and every host the org already has a file property for.
+ * The hosts the org holds now: the free subdomain once the site is
+ * published, and its live custom domain. Only these are ever verified: the
+ * router serves a file on any host, and a property row can outlive the host
+ * (a domain that expired, moved or was taken down), which may since be
+ * another org's.
  */
-async function hostsToVerify(env: Env, kit: Tenancy, orgId: string) {
+async function heldHosts(env: Env, kit: Tenancy, orgId: string) {
   return kit.withOrg({ orgId }, async (db) => {
     const [org] = await db
       .select({ slug: orgs.slug })
       .from(orgs)
       .where(eq(orgs.id, orgId))
-    const hosts = new Set(
-      (
-        await db
-          .select({ host: searchProperties.host })
-          .from(searchProperties)
-          .where(eq(searchProperties.method, "file"))
-      ).map((p) => p.host)
-    )
+    const hosts: string[] = []
     if (org && (await activeDeployment(db, orgId))) {
-      hosts.add(siteHost(org.slug, env.SITE_HOST_SUFFIX))
+      hosts.push(siteHost(org.slug, env.SITE_HOST_SUFFIX))
     }
-    return [...hosts]
+    const domain = await activeDomainHost(db)
+    if (domain) hosts.push(domain)
+    return hosts
   })
 }
 
@@ -239,7 +238,8 @@ export async function forgetHost(
  * saves nothing. A connection to another Google account replaces the old
  * one, whose grant is revoked first; the same account's old token is not,
  * since Google revokes the whole grant and that would take the new token
- * with it. Then every host's `SearchWorkflow` from the start.
+ * with it. Then the `SearchWorkflow` of every host the org holds, from the
+ * start.
  */
 export async function connectGoogle(
   env: Env,
@@ -352,7 +352,7 @@ export async function connectGoogle(
       payload: { google_email: exchanged.email },
     })
   })
-  for (const host of await hostsToVerify(env, kit, orgId)) {
+  for (const host of await heldHosts(env, kit, orgId)) {
     await startSearch(env, orgId, host, true)
   }
   return { email: exchanged.email }
@@ -383,7 +383,8 @@ export async function fileToken(
 /**
  * `place`: the file where the router serves it, and the property row that is
  * its truth. A file another Google account was given before is no longer
- * served, so that account loses the host at Google's next check.
+ * served, so that account loses the host at Google's next check. A host
+ * the org no longer holds gets no file, whatever started the instance.
  */
 export async function placeToken(
   env: Env,
@@ -391,6 +392,9 @@ export async function placeToken(
   { org_id: orgId, host }: SearchParams,
   file: string
 ): Promise<void> {
+  if (!(await heldHosts(env, kit, orgId)).includes(host)) {
+    throw new GoogleError("search.host_not_held")
+  }
   const [old] = await kit.withOrg({ orgId }, (db) =>
     db
       .select({ token: searchProperties.token })

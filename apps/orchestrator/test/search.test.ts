@@ -1,6 +1,7 @@
 import { siteHost } from "@workspace/contracts"
 import {
   deployments,
+  domains,
   eq,
   events,
   orgs,
@@ -108,6 +109,25 @@ const typesOf = async (orgId: string) =>
 
 afterEach(() => vi.unstubAllGlobals())
 
+/** An org with a live site, and the free subdomain it holds. */
+async function published() {
+  const site = await previewed()
+  const orgId = site.orgId
+  await kit.withOrg({ orgId }, (db) =>
+    db.insert(deployments).values({
+      orgId,
+      siteId: orgId,
+      revisionId: site.revisionId,
+      configVersion: 1,
+      kind: "rollback",
+    })
+  )
+  const [org] = await kit.withOrg({ orgId }, (db) =>
+    db.select({ slug: orgs.slug }).from(orgs).where(eq(orgs.id, orgId))
+  )
+  return { orgId, slug: siteHost(org?.slug ?? "", SUFFIX) }
+}
+
 describe.skipIf(!url)("connecting Google", () => {
   it("saves nothing when a scope was unticked", async () => {
     const orgId = await freshOrg(kit)
@@ -180,35 +200,32 @@ describe.skipIf(!url)("connecting Google", () => {
     expect(searchInstanceId(orgId, host)).toMatch(/^[A-Za-z0-9_-]{1,100}$/)
   })
 
-  it("starts every host's verification over on a reconnect, ending a waiting one", async () => {
-    const site = await previewed()
-    const orgId = site.orgId
-    await kit.withOrg({ orgId }, (db) =>
-      db.insert(deployments).values({
+  it("starts every held host's verification over on a reconnect, ending a waiting one", async () => {
+    const { orgId, slug } = await published()
+    const custom = `www.c-${orgId.slice(0, 8)}.example.test`
+    // A host whose domain has gone, which may be another org's by now.
+    const gone = `www.g-${orgId.slice(0, 8)}.example.test`
+    const file = "google1a.html"
+    await kit.withOrg({ orgId }, async (db) => {
+      await db.insert(domains).values({
         orgId,
         siteId: orgId,
-        revisionId: site.revisionId,
-        configVersion: 1,
-        kind: "rollback",
+        name: custom.slice(4),
+        primaryHost: custom,
+        origin: "connected",
+        method: "records",
+        state: "active",
       })
-    )
-    const [org] = await kit.withOrg({ orgId }, (db) =>
-      db.select({ slug: orgs.slug }).from(orgs).where(eq(orgs.id, orgId))
-    )
-    const slug = siteHost(org?.slug ?? "", SUFFIX)
-    const custom = `www.c-${orgId.slice(0, 8)}.example.test`
-    const file = "google1a.html"
-    await kit.withOrg({ orgId }, (db) =>
-      db.insert(searchProperties).values({
+      await db.insert(searchProperties).values({
         orgId,
-        host: custom,
-        siteUrl: `https://${custom}/`,
+        host: gone,
+        siteUrl: `https://${gone}/`,
         kind: "url_prefix",
         method: "file",
         token: file,
-        state: "pending",
+        state: "verified",
       })
-    )
+    })
     // Instances by id, with their status; a second create of one throws.
     const status = new Map<string, string>()
     const log: string[] = []
@@ -301,10 +318,23 @@ describe.skipIf(!url)("connecting Google", () => {
 
 describe.skipIf(!url)("the org's own properties", () => {
   it("serves the new file and stops serving one another account was given", async () => {
-    const orgId = await freshOrg(kit)
+    const { orgId, slug } = await published()
     const store = storage()
-    const env = { ROUTES: store.ROUTES } as unknown as Env
-    const params = { org_id: orgId, host: `p-${orgId}.example.test` }
+    const env = {
+      ROUTES: store.ROUTES,
+      SITE_HOST_SUFFIX: SUFFIX,
+    } as unknown as Env
+    // A host the org does not hold gets no file and no row.
+    await expect(
+      placeToken(
+        env,
+        kit,
+        { org_id: orgId, host: `p-${orgId}.example.test` },
+        "google1a.html"
+      )
+    ).rejects.toThrow("search.host_not_held")
+    expect([...store.pointers.keys()]).toEqual([])
+    const params = { org_id: orgId, host: slug }
     await placeToken(env, kit, params, "google1a.html")
     await placeToken(env, kit, params, "google1a.html")
     await placeToken(env, kit, params, "google2b.html")
