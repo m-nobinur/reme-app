@@ -35,6 +35,15 @@ interface __BaseEnv_Env {
    * with `domain.buy_unavailable` and finding a domain still works.
    */
   STRIPE_SECRET_KEY?: string
+  /**
+   * Google Search Console (src/google.ts). The client id is public and the
+   * other two never leave this Worker; `GOOGLE_TOKEN_KEY` is base64 of 32
+   * random bytes sealing stored refresh tokens. Unset, `connect_google`
+   * answers that Google is not available.
+   */
+  GOOGLE_CLIENT_ID?: string
+  GOOGLE_CLIENT_SECRET?: string
+  GOOGLE_TOKEN_KEY?: string
   OPENROUTER_API_KEY: string
   /** The model plane's settings, set as secrets so one list says what the Worker reads. */
   REME_MODEL_PRIMARY: string
