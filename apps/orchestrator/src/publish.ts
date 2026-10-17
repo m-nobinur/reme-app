@@ -843,6 +843,18 @@ export async function writePointer(
   return { host: domain }
 }
 
+/**
+ * Google's verification file for `host`, which the router serves from this
+ * key (search.ts). Here because the routing KV is written by this file only.
+ */
+export async function writeVerification(
+  env: Pick<Env, "ROUTES">,
+  host: string,
+  file: string
+): Promise<void> {
+  await env.ROUTES.put(`gsv:${host}:${file}`, "1")
+}
+
 /** The other half of a custom domain: `www.x` for `x`, and `x` for `www.x`. */
 export const otherHost = (primary: string) =>
   primary.startsWith("www.") ? primary.slice(4) : `www.${primary}`
