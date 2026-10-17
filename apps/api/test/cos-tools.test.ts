@@ -44,6 +44,7 @@ import {
   type ToolContext,
   ToolFailed,
 } from "../src/cos/tools.ts"
+import { connectGoogle } from "../src/google.ts"
 import {
   type Owner,
   owner,
@@ -75,8 +76,11 @@ function leaks(value: unknown, at = "$"): string[] {
   if (Array.isArray(value))
     return value.flatMap((v, i) => leaks(v, `${at}[${i}]`))
   if (typeof value === "string") {
-    // The provider's settings link is our own allowlisted one, shown on purpose.
-    return /https?:\/\//i.test(value) && !at.endsWith(".settings_url")
+    // The provider's settings link and Google's consent start are our own
+    // allowlisted ones, shown on purpose.
+    return /https?:\/\//i.test(value) &&
+      !at.endsWith(".settings_url") &&
+      !/^https:\/\/[^/]+\/api\/google\/start$/.test(value)
       ? [`${at}: a URL`]
       : []
   }
@@ -1668,6 +1672,27 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         error: { code: "domain.not_owner" },
       })
       expect(quiet.calls).toEqual([])
+    })
+  })
+
+  it("connect_google gives the owner Google's consent start, on our own web origin", async () => {
+    const base = context(me)
+    const output = kept(
+      "connect_google",
+      await connectGoogle(
+        {
+          ...base,
+          env: {
+            ...base.env,
+            GOOGLE_CLIENT_ID: "client",
+            WEB_ORIGIN: "https://staging.remeai.co.uk",
+          },
+        },
+        {}
+      )
+    )
+    expect(output).toEqual({
+      url: "https://staging.remeai.co.uk/api/google/start",
     })
   })
 
