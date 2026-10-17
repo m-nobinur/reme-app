@@ -1,0 +1,100 @@
+// @vitest-environment happy-dom
+import { Approval } from "@workspace/ui/components/assistant/approval"
+import { act, createElement } from "react"
+import { createRoot } from "react-dom/client"
+import { expect, it, vi } from "vitest"
+
+;(
+  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true
+
+// The card reads the thread through assistant-ui's store; this stands in for
+// it, since what is checked is the card, not the runtime.
+const store = vi.hoisted(() => ({ running: false }))
+vi.mock("@assistant-ui/react", async (original) => ({
+  ...(await original<typeof import("@assistant-ui/react")>()),
+  useAuiState: (select: (state: unknown) => unknown) =>
+    select({
+      message: {
+        parts: [],
+        isLast: true,
+        status: store.running ? { type: "running" } : undefined,
+      },
+      thread: { isRunning: store.running },
+    }),
+  useAui: () => ({ thread: () => ({ append: vi.fn() }) }),
+  useThreadViewport: () => undefined,
+}))
+
+/** Draws the thread's slot for a connect_google call and returns its card. */
+async function draw(props: Record<string, unknown>) {
+  const container = document.createElement("div")
+  const root = createRoot(container)
+  await act(async () =>
+    root.render(
+      createElement(Approval, {
+        toolName: "connect_google",
+        toolCallId: "call-1",
+        args: {},
+        argsText: "{}",
+        ...props,
+      } as never)
+    )
+  )
+  const view = {
+    text: container.textContent ?? "",
+    links: [...container.querySelectorAll("a")].map((a) => ({
+      text: a.textContent?.trim(),
+      href: a.getAttribute("href"),
+      target: a.getAttribute("target"),
+    })),
+    buttons: container.querySelectorAll("button").length,
+  }
+  await act(async () => root.unmount())
+  return view
+}
+
+it("offers the link as a plain same-tab navigation", async () => {
+  const url = "https://reme.test/api/google/start"
+  const card = await draw({ result: { url } })
+  expect(card.links).toEqual([
+    { text: "Connect Google", href: url, target: null },
+  ])
+  expect(card.buttons).toBe(0)
+})
+
+it("names the connected account and offers another", async () => {
+  const card = await draw({ result: { connected: true, email: "a@b.co" } })
+  expect(card.text).toContain("Connected as a@b.co")
+  expect(card.links).toEqual([
+    {
+      text: "Use another Google account",
+      href: "/api/google/start",
+      target: null,
+    },
+  ])
+})
+
+it("says so when the feature is off, with nothing to press", async () => {
+  const card = await draw({ result: { available: false } })
+  expect(card.text).toContain("isn't available yet")
+  expect(card.links).toEqual([])
+})
+
+it("shows a refusal as a line, not the api's words", async () => {
+  const card = await draw({
+    result: {
+      outcome: "refused",
+      error: { class: "authorization", code: "forbidden", message: "internal" },
+    },
+  })
+  expect(card.text).not.toContain("internal")
+  expect(card.links).toEqual([])
+})
+
+it("keeps a call that has no result quiet, and an unreadable one honest", async () => {
+  expect((await draw({})).links).toEqual([])
+  const bad = await draw({ result: { url: "http://insecure.test" } })
+  expect(bad.text).toContain("Google was not connected.")
+  expect(bad.links).toEqual([])
+})
