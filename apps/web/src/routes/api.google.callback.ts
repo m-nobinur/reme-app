@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router"
 import { source } from "@/lib/api/source"
 import { consumeOAuthState, seeOther } from "@/lib/auth/oauth"
+import { safeReturnTo } from "@/lib/auth/redirect-target"
 import { googleFlow } from "@/lib/google"
 
 /**
@@ -14,10 +15,13 @@ export const Route = createFileRoute("/api/google/callback")({
       GET: async ({ request }) => {
         const url = new URL(request.url)
         const flow = googleFlow(url.origin)
-        const back = (result: string) =>
-          seeOther(new URL(`/app?google=${result}`, url.origin).href)
-
         const stored = consumeOAuthState(url.searchParams.get("state"), flow)
+        const back = (result: string) => {
+          // The cookie is ours, but a sibling host on the zone could toss one.
+          const to = new URL(safeReturnTo(stored?.returnTo), url.origin)
+          to.searchParams.set("google", result)
+          return seeOther(to.href)
+        }
         if (url.searchParams.get("error") === "access_denied") {
           return back("cancelled")
         }

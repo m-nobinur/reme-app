@@ -1568,7 +1568,7 @@ it("the design tray's last answer is saved before Build my site is sent, and a r
   const turn = (n: number) => (sent[n] as { turn: object }).turn
   expect(turn(3)).toMatchObject({
     results: (turn(1) as { results: object }).results,
-    reply: { text: "Which pages should the site have?: Everything" },
+    reply: { text: "Which pages should the site have: Everything" },
   })
 })
 

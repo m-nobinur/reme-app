@@ -1048,16 +1048,22 @@ function Shot({
   onGiveUp: () => void
 }) {
   const [tries, setTries] = useState(0)
+  const [failed, setFailed] = useState(false)
   const [loaded, setLoaded] = useState(false)
+  // A failed look waits before the next: a 404 comes back at once, and
+  // retrying on it straight away spent every look in about a second.
   useEffect(() => {
-    if (loaded || tries === 0) return
-    if (tries >= SHOT_TRIES) {
+    if (loaded || !failed) return
+    if (tries + 1 >= SHOT_TRIES) {
       onGiveUp()
       return
     }
-    const timer = setTimeout(() => setTries(tries + 1), SHOT_RETRY_MS)
+    const timer = setTimeout(() => {
+      setFailed(false)
+      setTries(tries + 1)
+    }, SHOT_RETRY_MS)
     return () => clearTimeout(timer)
-  }, [loaded, tries, onGiveUp])
+  }, [loaded, failed, tries, onGiveUp])
   return (
     <div className="relative aspect-[3/4]">
       {loaded ? null : (
@@ -1080,7 +1086,7 @@ function Shot({
         // A fresh element per look, so the browser asks again.
         key={tries}
         loading="lazy"
-        onError={() => setTries(tries + 1)}
+        onError={() => setFailed(true)}
         onLoad={() => setLoaded(true)}
         src={src}
         width={120}

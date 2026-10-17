@@ -420,7 +420,8 @@ export function designText(
         : "choices" in answer
           ? answer.choices.map(label).join(", ")
           : label(answer.choice)
-    return [`${each.question ?? each.id}: ${said}`]
+    // A question's own "?" before the colon read as "business?: Classic blue".
+    return [`${(each.question ?? each.id).replace(/\?$/, "")}: ${said}`]
   })
   if (lines.length > 0) return lines.join("\n")
   return output.skip_all

@@ -244,13 +244,11 @@ Before the website, let's settle who I am on your team. Choose the name I'll go 
       : ["And what would you like me to call you?"],
   // Phase 2 to 3: the new identity, then the website and the quote page.
   build_for_me: (v) => {
-    const me = v.assistant || "me"
-    const ask = `Would you like ${me} to build your website for you? I can have a first draft ready while we keep chatting.`
-    const call = v.assistant ? ` Call me ${v.assistant}.` : ""
+    const ask = "Would you like me to build your website for you?"
     return [
-      `It's an honour to be officially on the team${comma(v.owner)}!${call}
+      `Good to be officially on the team${comma(v.owner)}.
 
-Now let's turn to your digital storefront. Every growing business needs a website that turns visitors into real enquiries, so rather than a list of figures, yours will have its own Request a quote flow for your services.
+Now let's turn to your website. Every growing business needs one that turns visitors into real enquiries, so yours will have its own Request a quote page for your services.
 
 ${ask}`,
       `Lovely to meet you properly${comma(v.owner)}.${v.assistant ? ` I'm ${v.assistant}, and` : " I'm"} glad to be on board.

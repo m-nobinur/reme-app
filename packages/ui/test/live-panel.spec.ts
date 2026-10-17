@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright"
-import { expect, type Page, test } from "@playwright/test"
+import { expect, type Locator, type Page, test } from "@playwright/test"
 import { open, WCAG } from "./helpers"
 
 /**
@@ -362,6 +362,14 @@ test("a blank section's next step looks like a button, with a visible border", a
   }
 })
 
+/** Runs the clock past every screenshot look: each waits 5 s after the last one failed. */
+async function giveUpShots(page: Page, entry: Locator) {
+  await expect(async () => {
+    await page.clock.runFor(5000)
+    await expect(entry.locator("img")).toHaveCount(0, { timeout: 250 })
+  }).toPass()
+}
+
 test("an approval whose preview fails still says what the owner can do, and lets them decide", async ({
   page,
 }) => {
@@ -376,8 +384,10 @@ test("an approval whose preview fails still says what the owner can do, and lets
     entry.getByRole("button", { name: "Approve and publish v4" })
   ).toBeEnabled()
 
+  await page.clock.install()
   await open(page, "ApprovalItem screenshots failed", 400)
   entry = page.locator('[data-entry="ApprovalItem screenshots failed"]')
+  await giveUpShots(page, entry)
   await expect(entry).toContainText(
     "The screenshots did not load. Open the preview to see version 4."
   )
@@ -392,6 +402,7 @@ for (const theme of ["light", "dark"] as const) {
   test(`an approval whose preview fails has no accessibility violations in ${theme}`, async ({
     page,
   }) => {
+    await page.clock.install()
     for (const width of [390, 768, 1440]) {
       for (const entry of [
         "ApprovalItem preview unavailable",
@@ -401,9 +412,7 @@ for (const theme of ["light", "dark"] as const) {
         await page.goto(`/?entry=${encodeURIComponent(entry)}&theme=${theme}`)
         const shown = page.locator(`[data-entry="${entry}"]`)
         await expect(shown).toBeVisible()
-        if (entry.endsWith("failed")) {
-          await expect(shown.locator("img")).toHaveCount(0)
-        }
+        if (entry.endsWith("failed")) await giveUpShots(page, shown)
         const results = await new AxeBuilder({ page })
           .withTags(WCAG)
           .include(`[data-entry="${entry}"]`)
