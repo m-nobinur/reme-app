@@ -1560,6 +1560,21 @@ const CHECK_DOMAIN_STATES: ThreadMessageLike[] = [
   }),
 ]
 
+/** A connect_google call in each state: a link, connected, off, refused. */
+const CONNECT_GOOGLE_STATES: ThreadMessageLike[] = [
+  cosCall("connect_google", "google_running", {}, IN_FLIGHT),
+  cosCall("connect_google", "google_link", {
+    result: { url: "https://staging.remeai.co.uk/api/google/start" },
+  }),
+  cosCall("connect_google", "google_connected", {
+    result: { connected: true, email: "sam.sparkle@gmail.com" },
+  }),
+  cosCall("connect_google", "google_off", { result: { available: false } }),
+  cosCall("connect_google", "google_refused", {
+    result: refusal("search.not_owner", "Only the owner can connect Google."),
+  }),
+]
+
 /** Messages the assistant posted on its own, each with the button it can carry. */
 const POSTED: ThreadMessageLike[] = [
   ask("Is my domain connected?"),
@@ -2373,6 +2388,12 @@ const assistantCatalog = [
     name: "DomainCheck",
     render: () => (
       <FixtureThread height="h-[100rem]" messages={CHECK_DOMAIN_STATES} />
+    ),
+  },
+  {
+    name: "ConnectGoogle",
+    render: () => (
+      <FixtureThread height="h-[60rem]" messages={CONNECT_GOOGLE_STATES} />
     ),
   },
   {
