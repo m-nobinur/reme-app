@@ -4285,6 +4285,39 @@ export interface components {
             message: string
           }
         }
+    ConnectGoogleInput: Record<string, never>
+    ConnectGoogleOutput:
+      | {
+          url: string
+        }
+      | {
+          /** @constant */
+          connected: true
+          /** Format: email */
+          email: string
+        }
+      | {
+          /** @constant */
+          available: false
+        }
+      | {
+          /** @constant */
+          outcome: "refused"
+          error: {
+            /** @enum {string} */
+            class:
+              | "validation"
+              | "permission"
+              | "transient"
+              | "resource"
+              | "provider"
+              | "integrity"
+              | "security"
+              | "budgetary"
+            code: string
+            message: string
+          }
+        }
     Conversation: {
       /** Format: uuid */
       id: string
@@ -4388,6 +4421,9 @@ export interface components {
         | "remove_domain"
         | "find_domain"
         | "buy_domain"
+        | "connect_google"
+        | "get_search_performance"
+        | "get_indexing"
       )[]
       text: string
       reserved_usd: number
@@ -4728,6 +4764,9 @@ export interface components {
           | "remove_domain"
           | "find_domain"
           | "buy_domain"
+          | "connect_google"
+          | "get_search_performance"
+          | "get_indexing"
         description: string
         input_schema: {
           [key: string]: unknown
@@ -6171,6 +6210,153 @@ export interface components {
                 }
               }
         }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "connect_google"
+          output:
+            | {
+                url: string
+              }
+            | {
+                /** @constant */
+                connected: true
+                /** Format: email */
+                email: string
+              }
+            | {
+                /** @constant */
+                available: false
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                }
+              }
+        }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "get_search_performance"
+          output:
+            | {
+                totals: {
+                  clicks: number
+                  impressions: number
+                  ctr: number
+                  position: number
+                }
+                delta: {
+                  clicks: number
+                  impressions: number
+                  ctr: number
+                  position: number
+                } | null
+                rows: {
+                  key: string
+                  clicks: number
+                  impressions: number
+                  ctr: number
+                  position: number
+                }[]
+                /** Format: date */
+                as_of: string
+                stale: boolean
+              }
+            | {
+                /** @constant */
+                connected: false
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                }
+              }
+        }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "get_indexing"
+          output:
+            | {
+                /** @enum {string} */
+                property: "pending" | "verified" | "failed" | "stale"
+                sitemap: {
+                  submitted_at: string | null
+                  last_downloaded: string | null
+                  errors: number
+                  warnings: number
+                } | null
+                pages: {
+                  url: string
+                  /** @enum {string} */
+                  verdict:
+                    | "PASS"
+                    | "NEUTRAL"
+                    | "PARTIAL"
+                    | "FAIL"
+                    | "UNSPECIFIED"
+                  coverage_state: string | null
+                  indexing_state: string | null
+                  robots_state: string | null
+                  google_canonical: string | null
+                  last_crawl_time: string | null
+                  /** Format: date-time */
+                  inspected_at: string
+                }[]
+              }
+            | {
+                /** @constant */
+                connected: false
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                }
+              }
+        }
     CosTurn:
       | {
           /** @constant */
@@ -6196,6 +6382,9 @@ export interface components {
             | "remove_domain"
             | "find_domain"
             | "buy_domain"
+            | "connect_google"
+            | "get_search_performance"
+            | "get_indexing"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -6226,6 +6415,9 @@ export interface components {
             | "remove_domain"
             | "find_domain"
             | "buy_domain"
+            | "connect_google"
+            | "get_search_performance"
+            | "get_indexing"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -6254,6 +6446,9 @@ export interface components {
             | "remove_domain"
             | "find_domain"
             | "buy_domain"
+            | "connect_google"
+            | "get_search_performance"
+            | "get_indexing"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -6282,6 +6477,9 @@ export interface components {
             | "remove_domain"
             | "find_domain"
             | "buy_domain"
+            | "connect_google"
+            | "get_search_performance"
+            | "get_indexing"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -6310,6 +6508,9 @@ export interface components {
             | "remove_domain"
             | "find_domain"
             | "buy_domain"
+            | "connect_google"
+            | "get_search_performance"
+            | "get_indexing"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -7326,6 +7527,54 @@ export interface components {
         weights: (100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900)[]
       }
     }
+    GetIndexingInput: {
+      url?: string
+    }
+    GetIndexingOutput:
+      | {
+          /** @enum {string} */
+          property: "pending" | "verified" | "failed" | "stale"
+          sitemap: {
+            submitted_at: string | null
+            last_downloaded: string | null
+            errors: number
+            warnings: number
+          } | null
+          pages: {
+            url: string
+            /** @enum {string} */
+            verdict: "PASS" | "NEUTRAL" | "PARTIAL" | "FAIL" | "UNSPECIFIED"
+            coverage_state: string | null
+            indexing_state: string | null
+            robots_state: string | null
+            google_canonical: string | null
+            last_crawl_time: string | null
+            /** Format: date-time */
+            inspected_at: string
+          }[]
+        }
+      | {
+          /** @constant */
+          connected: false
+        }
+      | {
+          /** @constant */
+          outcome: "refused"
+          error: {
+            /** @enum {string} */
+            class:
+              | "validation"
+              | "permission"
+              | "transient"
+              | "resource"
+              | "provider"
+              | "integrity"
+              | "security"
+              | "budgetary"
+            code: string
+            message: string
+          }
+        }
     GetPreviewInput: {
       /** Format: uuid */
       assignment_id: string
@@ -7358,6 +7607,64 @@ export interface components {
             message: string
           }
         }
+    GetSearchPerformanceInput: {
+      /** @enum {number} */
+      days: 7 | 28 | 90
+      /** @enum {string} */
+      by: "none" | "query" | "page"
+    }
+    GetSearchPerformanceOutput:
+      | {
+          totals: {
+            clicks: number
+            impressions: number
+            ctr: number
+            position: number
+          }
+          delta: {
+            clicks: number
+            impressions: number
+            ctr: number
+            position: number
+          } | null
+          rows: {
+            key: string
+            clicks: number
+            impressions: number
+            ctr: number
+            position: number
+          }[]
+          /** Format: date */
+          as_of: string
+          stale: boolean
+        }
+      | {
+          /** @constant */
+          connected: false
+        }
+      | {
+          /** @constant */
+          outcome: "refused"
+          error: {
+            /** @enum {string} */
+            class:
+              | "validation"
+              | "permission"
+              | "transient"
+              | "resource"
+              | "provider"
+              | "integrity"
+              | "security"
+              | "budgetary"
+            code: string
+            message: string
+          }
+        }
+    GoogleConnectRequest: {
+      code: string
+      verifier: string
+      redirect_uri: string
+    }
     ImageSlot:
       | {
           id: string
@@ -8393,6 +8700,36 @@ export interface components {
       expires_at: string
       signature: string
     }
+    SearchConnection: {
+      /** @enum {string} */
+      state: "active" | "needs_reauth" | "revoked"
+      google_email: string | null
+      connected_at: string | null
+    }
+    SearchProperty: {
+      host: string
+      site_url: string
+      /** @enum {string} */
+      kind: "subdomain" | "domain" | "url_prefix"
+      /** @enum {string} */
+      method: "file" | "dns_txt"
+      /** @enum {string} */
+      state: "pending" | "verified" | "failed" | "stale"
+      verified_at: string | null
+    }
+    SearchRow: {
+      key: string
+      clicks: number
+      impressions: number
+      ctr: number
+      position: number
+    }
+    SearchTotals: {
+      clicks: number
+      impressions: number
+      ctr: number
+      position: number
+    }
     ServerButtonPart: {
       /** @constant */
       type: "data-button"
@@ -8845,6 +9182,18 @@ export interface components {
         bytes: number
         alt?: string
       }[]
+    }
+    UrlStatus: {
+      url: string
+      /** @enum {string} */
+      verdict: "PASS" | "NEUTRAL" | "PARTIAL" | "FAIL" | "UNSPECIFIED"
+      coverage_state: string | null
+      indexing_state: string | null
+      robots_state: string | null
+      google_canonical: string | null
+      last_crawl_time: string | null
+      /** Format: date-time */
+      inspected_at: string
     }
     ValidationReport: {
       /** Format: uuid */
