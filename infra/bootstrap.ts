@@ -57,6 +57,8 @@ const environments = {
         "WORKOS_API_KEY",
         "WORKOS_CLIENT_ID",
         "WORKOS_COOKIE_PASSWORD",
+        // Public, but per Google project, so it travels with the secrets.
+        "GOOGLE_CLIENT_ID",
       ],
       "reme-api": [
         "WORKOS_API_KEY",
@@ -82,6 +84,10 @@ const environments = {
         "REME_MODEL_FALLBACK",
         // Custom hostnames on the SaaS zone (optional, see OPTIONAL_SECRETS).
         "CF_DOMAINS_TOKEN",
+        // Search Console, the reme-dev Google project (optional).
+        "GOOGLE_CLIENT_ID",
+        "GOOGLE_CLIENT_SECRET",
+        "GOOGLE_TOKEN_KEY",
       ],
       // Verifies the claims the orchestrator signs; the same value on both.
       "reme-router": ["PREVIEW_KEY"],
@@ -111,6 +117,7 @@ const environments = {
         "WORKOS_API_KEY",
         "WORKOS_CLIENT_ID",
         "WORKOS_COOKIE_PASSWORD",
+        "GOOGLE_CLIENT_ID",
       ],
       "reme-api-production": [
         "WORKOS_API_KEY",
@@ -129,6 +136,10 @@ const environments = {
         "REME_MODEL_DEFAULT",
         "REME_MODEL_FALLBACK",
         "CF_DOMAINS_TOKEN",
+        // The production Google project, from .env.production.local only.
+        "GOOGLE_CLIENT_ID",
+        "GOOGLE_CLIENT_SECRET",
+        "GOOGLE_TOKEN_KEY",
       ],
       "reme-router-production": ["PREVIEW_KEY"],
     },
@@ -395,15 +406,23 @@ if (routesKv)
 if (!existsSync(".env.local")) {
   stop(".env.local is missing", "pnpm bootstrap   (it copies .env.example)")
 }
-const localEnv = new Map(
-  readFileSync(".env.local", "utf8")
-    .split("\n")
-    .filter((line) => line.includes("=") && !line.startsWith("#"))
-    .map((line) => {
-      const at = line.indexOf("=")
-      return [line.slice(0, at).trim(), line.slice(at + 1).trim()] as const
-    })
-)
+const readEnv = (file: string) =>
+  new Map(
+    (existsSync(file) ? readFileSync(file, "utf8") : "")
+      .split("\n")
+      .filter((line) => line.includes("=") && !line.startsWith("#"))
+      .map((line) => {
+        const at = line.indexOf("=")
+        return [line.slice(0, at).trim(), line.slice(at + 1).trim()] as const
+      })
+  )
+const localEnv = readEnv(".env.local")
+/**
+ * Staging connects through the unreviewed reme-dev Google project, so its
+ * values in .env.local must never reach production: there the GOOGLE_* names
+ * come from .env.production.local, and are skipped when it lacks them.
+ */
+const googleEnv = name === "prod" ? readEnv(".env.production.local") : localEnv
 
 /**
  * Secrets a Worker runs without. `CF_DOMAINS_TOKEN` waits on the owner's
@@ -411,7 +430,13 @@ const localEnv = new Map(
  * `domains.not_configured` and nothing else changes. Empty in .env.local
  * means skipped with a note, not a stop.
  */
-const OPTIONAL_SECRETS: ReadonlySet<string> = new Set(["CF_DOMAINS_TOKEN"])
+const OPTIONAL_SECRETS: ReadonlySet<string> = new Set([
+  "CF_DOMAINS_TOKEN",
+  // Search Console stays off until the Google project exists.
+  "GOOGLE_CLIENT_ID",
+  "GOOGLE_CLIENT_SECRET",
+  "GOOGLE_TOKEN_KEY",
+])
 
 for (const [worker, secrets] of Object.entries(config.secrets)) {
   // A Worker that has never been deployed has nowhere to hold a secret, and
@@ -436,7 +461,9 @@ for (const [worker, secrets] of Object.entries(config.secrets)) {
       ok(`${state("present")}${worker} ${secret}`)
       continue
     }
-    const value = localEnv.get(secret)
+    const value = (secret.startsWith("GOOGLE_") ? googleEnv : localEnv).get(
+      secret
+    )
     if (!value && OPTIONAL_SECRETS.has(secret)) {
       note(`${state("skipped")}${worker} ${secret}, optional and empty`)
       continue
