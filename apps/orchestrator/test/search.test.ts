@@ -180,6 +180,83 @@ describe.skipIf(!url)("connecting Google", () => {
     expect(searchInstanceId(orgId, host)).toMatch(/^[A-Za-z0-9_-]{1,100}$/)
   })
 
+  it("starts every host's verification over on a reconnect, ending a waiting one", async () => {
+    const site = await previewed()
+    const orgId = site.orgId
+    await kit.withOrg({ orgId }, (db) =>
+      db.insert(deployments).values({
+        orgId,
+        siteId: orgId,
+        revisionId: site.revisionId,
+        configVersion: 1,
+        kind: "rollback",
+      })
+    )
+    const [org] = await kit.withOrg({ orgId }, (db) =>
+      db.select({ slug: orgs.slug }).from(orgs).where(eq(orgs.id, orgId))
+    )
+    const slug = siteHost(org?.slug ?? "", SUFFIX)
+    const custom = `www.c-${orgId.slice(0, 8)}.example.test`
+    const file = "google1a.html"
+    await kit.withOrg({ orgId }, (db) =>
+      db.insert(searchProperties).values({
+        orgId,
+        host: custom,
+        siteUrl: `https://${custom}/`,
+        kind: "url_prefix",
+        method: "file",
+        token: file,
+        state: "pending",
+      })
+    )
+    // Instances by id, with their status; a second create of one throws.
+    const status = new Map<string, string>()
+    const log: string[] = []
+    const { env } = searchEnv()
+    Object.assign(env, {
+      SEARCHES: {
+        create: async ({ id }: { id: string }) => {
+          if (status.has(id)) throw new Error("instance exists")
+          status.set(id, "running")
+          log.push(`create ${id}`)
+        },
+        get: async (id: string) => ({
+          status: async () => ({ status: status.get(id) }),
+          terminate: async () => {
+            status.set(id, "terminated")
+            log.push(`terminate ${id}`)
+          },
+          restart: async () => {
+            status.set(id, "running")
+            log.push(`restart ${id}`)
+          },
+        }),
+      },
+    })
+    stubGoogle("1//first", "a@example.test")
+    await connectGoogle(env, kit, orgId, "nobody", BODY)
+    const ids = [searchInstanceId(orgId, custom), searchInstanceId(orgId, slug)]
+    expect(new Set(log)).toEqual(new Set(ids.map((id) => `create ${id}`)))
+
+    // One waits out a verify backoff, the other finished under the old account.
+    status.set(searchInstanceId(orgId, slug), "waiting")
+    status.set(searchInstanceId(orgId, custom), "complete")
+    log.length = 0
+    stubGoogle("1//second", "b@example.test")
+    await connectGoogle(env, kit, orgId, "nobody", BODY)
+    expect(log).toEqual(
+      expect.arrayContaining([
+        `terminate ${searchInstanceId(orgId, slug)}`,
+        `restart ${searchInstanceId(orgId, slug)}`,
+        `restart ${searchInstanceId(orgId, custom)}`,
+      ])
+    )
+    expect(log).toHaveLength(3)
+    expect(
+      log.indexOf(`terminate ${searchInstanceId(orgId, slug)}`)
+    ).toBeLessThan(log.indexOf(`restart ${searchInstanceId(orgId, slug)}`))
+  })
+
   it("revokes the old grant when another Google account replaces it, and not for the same account", async () => {
     const orgId = await freshOrg(kit)
     const { env, created } = searchEnv()

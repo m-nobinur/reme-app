@@ -50,6 +50,8 @@ function stubFetch(
     refresh?: "ok" | "revoked"
     sitemapPut?: number
     pages?: string[]
+    /** A property Google answers 403 for, as for one the account lost. */
+    refused?: string
   } = {}
 ) {
   const calls: Call[] = []
@@ -59,6 +61,12 @@ function stubFetch(
       const href = String(input)
       const body = String(init?.body ?? "")
       calls.push({ href, method: init?.method ?? "GET", body })
+      if (
+        answers.refused &&
+        href.includes(encodeURIComponent(answers.refused))
+      ) {
+        return Response.json({ error: { code: 403 } }, { status: 403 })
+      }
       if (href.endsWith("/token")) {
         return answers.refresh === "revoked"
           ? Response.json({ error: "invalid_grant" }, { status: 400 })
@@ -291,6 +299,64 @@ describe.skipIf(!url)("the daily pull", () => {
     expect(calls.filter((c) => c.href.includes("urlInspection"))).toHaveLength(
       1
     )
+  })
+
+  it("marks a property Google refuses stale and still pulls the org's other one", async () => {
+    const { env } = searchEnv()
+    const { orgId, siteUrl: refused } = await connected(env)
+    const other = `o-${orgId.slice(0, 8)}.example.test`
+    await kit.withOrg({ orgId }, (db) =>
+      db.insert(searchProperties).values({
+        orgId,
+        host: other,
+        siteUrl: `https://${other}/`,
+        kind: "url_prefix",
+        method: "file",
+        token: VERIFICATION_FILE,
+        state: "verified",
+      })
+    )
+    stubFetch({ refused })
+    expect(await pullProperty(env, kit, orgId, refused)).toEqual({
+      days: 0,
+      pairs: 0,
+      stale: true,
+    })
+    expect(await pullProperty(env, kit, orgId, `https://${other}/`)).toEqual({
+      days: 2,
+      pairs: 2,
+    })
+    const states = await rows(orgId, (db) =>
+      db
+        .select({
+          siteUrl: searchProperties.siteUrl,
+          state: searchProperties.state,
+          synced: searchProperties.lastSyncedAt,
+        })
+        .from(searchProperties)
+        .orderBy(searchProperties.siteUrl)
+    )
+    // `h-` sorts before `o-`.
+    expect(states.map((p) => [p.siteUrl, p.state, p.synced !== null])).toEqual([
+      [refused, "stale", false],
+      [`https://${other}/`, "verified", true],
+    ])
+    expect(
+      (await rows(orgId, (db) => db.select().from(searchDaily))).length
+    ).toBe(2)
+
+    // Google's outage is not a refusal: it throws, for the step's retries.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) =>
+        String(input).endsWith("/token")
+          ? Response.json({ access_token: "ya29.a", expires_in: 3600 })
+          : new Response(null, { status: 503 })
+      )
+    )
+    await expect(
+      pullProperty(env, kit, orgId, `https://${other}/`)
+    ).rejects.toThrow("google.unavailable")
   })
 
   it("marks the connection needs_reauth when Google refuses the refresh token", async () => {

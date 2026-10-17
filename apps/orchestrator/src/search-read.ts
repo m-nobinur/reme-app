@@ -4,6 +4,7 @@ import {
   UrlStatus,
 } from "@workspace/contracts"
 import {
+  failureCode,
   searchConnections,
   searchProperties,
   type Tenancy,
@@ -126,59 +127,70 @@ export async function livePerformance(
     startDate: day(end - (2 * days - 1) * DAY_MS),
     endDate: day(end - days * DAY_MS),
   }
-  try {
-    const per = await Promise.all(
-      live.properties.map(async ({ siteUrl }) => {
-        await ownProperty(kit, orgId, siteUrl)
-        const [current, previous, rows] = await Promise.all([
-          searchAnalytics(live.accessToken, siteUrl, now0),
-          searchAnalytics(live.accessToken, siteUrl, before),
-          by === "none"
-            ? { rows: [] }
-            : searchAnalytics(live.accessToken, siteUrl, {
-                ...now0,
-                dimensions: [by],
-                rowLimit: TOP,
-              }),
-        ])
-        return {
-          current: current.rows,
-          previous: previous.rows,
-          rows: rows.rows,
-        }
+  // One property Google refuses is left out; only all of them failing is a refusal.
+  const settled = await Promise.allSettled(
+    live.properties.map(async ({ siteUrl }) => {
+      await ownProperty(kit, orgId, siteUrl)
+      const [current, previous, rows] = await Promise.all([
+        searchAnalytics(live.accessToken, siteUrl, now0),
+        searchAnalytics(live.accessToken, siteUrl, before),
+        by === "none"
+          ? { rows: [] }
+          : searchAnalytics(live.accessToken, siteUrl, {
+              ...now0,
+              dimensions: [by],
+              rowLimit: TOP,
+            }),
+      ])
+      return {
+        current: current.rows,
+        previous: previous.rows,
+        rows: rows.rows,
+      }
+    })
+  )
+  const per = settled.flatMap((r) =>
+    r.status === "fulfilled" ? [r.value] : []
+  )
+  const failed = settled.find((r) => r.status === "rejected")
+  if (failed) {
+    console.error(
+      JSON.stringify({
+        code: "search.property_unread",
+        error: failureCode(failed.reason),
+        properties: settled.length - per.length,
       })
     )
-    const current = sum(per.flatMap((p) => p.current))
-    const previous = sum(per.flatMap((p) => p.previous))
-    return GetSearchPerformanceOutput.parse({
-      totals: { ...current, ctr: rate(current) },
-      delta:
-        previous.impressions > 0 || previous.clicks > 0
-          ? {
-              clicks: current.clicks - previous.clicks,
-              impressions: current.impressions - previous.impressions,
-              ctr: rate(current) - rate(previous),
-              position: current.position - previous.position,
-            }
-          : null,
-      rows: per
-        .flatMap((p) => p.rows)
-        .flatMap((r) => (r.keys?.[0] ? [{ ...r, key: r.keys[0] }] : []))
-        .sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions)
-        .slice(0, TOP)
-        .map((r) => ({
-          key: r.key.slice(0, 500),
-          clicks: r.clicks,
-          impressions: r.impressions,
-          ctr: r.ctr,
-          position: r.position,
-        })),
-      as_of: now0.endDate,
-      stale: false,
-    })
-  } catch (error) {
-    return unavailable(error)
+    if (per.length === 0) return unavailable(failed.reason)
   }
+  const current = sum(per.flatMap((p) => p.current))
+  const previous = sum(per.flatMap((p) => p.previous))
+  return GetSearchPerformanceOutput.parse({
+    totals: { ...current, ctr: rate(current) },
+    delta:
+      previous.impressions > 0 || previous.clicks > 0
+        ? {
+            clicks: current.clicks - previous.clicks,
+            impressions: current.impressions - previous.impressions,
+            ctr: rate(current) - rate(previous),
+            position: current.position - previous.position,
+          }
+        : null,
+    rows: per
+      .flatMap((p) => p.rows)
+      .flatMap((r) => (r.keys?.[0] ? [{ ...r, key: r.keys[0] }] : []))
+      .sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions)
+      .slice(0, TOP)
+      .map((r) => ({
+        key: r.key.slice(0, 500),
+        clicks: r.clicks,
+        impressions: r.impressions,
+        ctr: r.ctr,
+        position: r.position,
+      })),
+    as_of: now0.endDate,
+    stale: false,
+  })
 }
 
 /** Whether a verified property is the one `host` belongs to. */

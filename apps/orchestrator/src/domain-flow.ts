@@ -46,9 +46,11 @@ import {
 import {
   activeDeployment,
   dropDomainPointers,
+  otherHost,
   writePointer,
 } from "./publish.ts"
 import { detachHostname, type RegistrarEnv } from "./registrar.ts"
+import { forgetHost } from "./search.ts"
 
 /**
  * Connecting an owner's existing domain (records path): the step bodies of
@@ -947,7 +949,8 @@ export async function checkNow(
 /**
  * `DELETE /domains/{name}`: the row first, so no look can activate it again;
  * then, for a live domain, its two pointers and the slug host pointed back at
- * the site; then the hostnames and the Workflow. A repeat finds the row
+ * the site; then the hostnames, the Workflow and the hosts' Search Console
+ * verification. A repeat finds the row
  * removed and deletes the hostnames again, which is idempotent.
  */
 export async function remove(
@@ -997,6 +1000,11 @@ export async function remove(
     )
   await repoint(env, kit, orgId, found.row.id)
   await revoke(env, found.row)
+  // This org's Google files must not prove the name for whoever claims it next.
+  const primary = found.row.primaryHost
+  for (const host of [primary, otherHost(primary)]) {
+    await forgetHost(env, kit, orgId, host)
+  }
   try {
     await env.DOMAINS.create({
       id: settleInstanceId(found.row.id),

@@ -30,16 +30,12 @@ import {
   searchAnalytics,
   submitSitemap,
 } from "./google.ts"
-import {
-  activeDeployment,
-  dropVerification,
-  restoreVerification,
-} from "./publish.ts"
+import { activeDeployment, restoreVerification } from "./publish.ts"
 import {
   accessToken,
   FILE,
+  forgetHost,
   ownProperty,
-  searchInstanceId,
   siteUrlOf,
   startSearch,
 } from "./search.ts"
@@ -328,10 +324,18 @@ export async function syncTargets(
 const count = (x: number) => Math.max(0, Math.round(x))
 const timeOf = (x?: string) => (x ? new Date(x) : null)
 
+/** Google's answer about one property, not its outage or a revoked token. */
+const refusedBy = (error: unknown) =>
+  error instanceof GoogleError &&
+  !(error instanceof NeedsReauth) &&
+  error.name !== "google.unavailable"
+
 /**
  * One property's numbers: 30 days by date into `search_daily`, the rolling
  * 28 days by query and page replacing `search_snapshot`, and the sitemap as
- * Google reports it. `last_synced_at` is set with them.
+ * Google reports it. `last_synced_at` is set with them. A property Google
+ * refuses is marked `stale` and answers `stale`, so the org's others still
+ * pull; its outage and a revoked token throw.
  */
 export async function pullProperty(
   env: Env,
@@ -339,24 +343,38 @@ export async function pullProperty(
   orgId: string,
   siteUrl: string,
   now = new Date()
-): Promise<{ days: number; pairs: number }> {
+): Promise<{ days: number; pairs: number; stale?: true }> {
   const property = await ownProperty(kit, orgId, siteUrl)
   const access = await accessToken(env, kit, orgId)
   const endDate = pacificDay(now)
-  const daily = await searchAnalytics(access, property.siteUrl, {
-    startDate: pacificDay(now, 29),
-    endDate,
-    dimensions: ["date"],
-    dataState: "all",
-  })
-  const pairs = await searchAnalytics(access, property.siteUrl, {
-    startDate: pacificDay(now, 27),
-    endDate,
-    dimensions: ["query", "page"],
-    dataState: "all",
-    rowLimit: SNAPSHOT_FETCH,
-  })
-  const sitemaps = await listSitemaps(access, property.siteUrl)
+  let daily: Awaited<ReturnType<typeof searchAnalytics>>
+  let pairs: typeof daily
+  let sitemaps: Awaited<ReturnType<typeof listSitemaps>>
+  try {
+    daily = await searchAnalytics(access, property.siteUrl, {
+      startDate: pacificDay(now, 29),
+      endDate,
+      dimensions: ["date"],
+      dataState: "all",
+    })
+    pairs = await searchAnalytics(access, property.siteUrl, {
+      startDate: pacificDay(now, 27),
+      endDate,
+      dimensions: ["query", "page"],
+      dataState: "all",
+      rowLimit: SNAPSHOT_FETCH,
+    })
+    sitemaps = await listSitemaps(access, property.siteUrl)
+  } catch (error) {
+    if (!refusedBy(error)) throw error
+    await kit.withOrg({ orgId }, (db) =>
+      db
+        .update(searchProperties)
+        .set({ state: "stale" })
+        .where(eq(searchProperties.id, property.id))
+    )
+    return { days: 0, pairs: 0, stale: true }
+  }
   const ours =
     sitemaps.find((s) => s.path === `https://${property.host}/sitemap.xml`) ??
     sitemaps[0]
@@ -373,13 +391,20 @@ export async function pullProperty(
     position: r.position,
   })
   await kit.withOrg({ orgId }, async (db) => {
-    for (const r of days) {
+    if (days.length > 0) {
       await db
         .insert(searchDaily)
-        .values({ ...ids, date: r.keys?.[0] ?? "", ...metrics(r) })
+        .values(
+          days.map((r) => ({ ...ids, date: r.keys?.[0] ?? "", ...metrics(r) }))
+        )
         .onConflictDoUpdate({
           target: [searchDaily.orgId, searchDaily.propertyId, searchDaily.date],
-          set: metrics(r),
+          set: {
+            clicks: sql`excluded.clicks`,
+            impressions: sql`excluded.impressions`,
+            ctr: sql`excluded.ctr`,
+            position: sql`excluded.position`,
+          },
         })
     }
     await db
@@ -774,16 +799,7 @@ export async function disconnectSearch(
       )
     }
   }
-  for (const p of properties) {
-    // A verification still running would put its file and row back.
-    try {
-      const running = await env.SEARCHES.get(searchInstanceId(orgId, p.host))
-      await running.terminate()
-    } catch {
-      // None, or one already settled.
-    }
-    if (p.token && isFile(p)) await dropVerification(env, p.host, p.token)
-  }
+  for (const p of properties) await forgetHost(env, kit, orgId, p.host)
   await kit.withOrg({ orgId }, async (db) => {
     // The child tables go with their property (on delete cascade).
     await db.delete(searchProperties)

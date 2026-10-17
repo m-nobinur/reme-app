@@ -1,5 +1,13 @@
 import { siteHost } from "@workspace/contracts"
-import { deployments, domains, eq, events, orgs, sql } from "@workspace/db"
+import {
+  deployments,
+  domains,
+  eq,
+  events,
+  orgs,
+  searchProperties,
+  sql,
+} from "@workspace/db"
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest"
 import {
   activateDomain,
@@ -16,6 +24,7 @@ import {
   sweepDomains,
 } from "../src/domain-flow.ts"
 import { writePointer } from "../src/publish.ts"
+import { searchInstanceId } from "../src/search.ts"
 import { DOH } from "./fixtures/domains.ts"
 import { kit, previewed, SUFFIX, type storage, workflowEnv } from "./site.ts"
 
@@ -129,6 +138,7 @@ async function published() {
 
 function domainEnv(store: ReturnType<typeof storage>) {
   const created: { id: string; params: unknown }[] = []
+  const terminated: string[] = []
   const env = {
     ...workflowEnv(store).env,
     CF_DOMAINS_TOKEN: "token",
@@ -140,8 +150,15 @@ function domainEnv(store: ReturnType<typeof storage>) {
       },
       get: async () => ({ terminate: async () => undefined }),
     },
+    SEARCHES: {
+      get: async (id: string) => ({
+        terminate: async () => {
+          terminated.push(id)
+        },
+      }),
+    },
   } as unknown as Env
-  return { env, created }
+  return { env, created, terminated }
 }
 
 const rowOf = (orgId: string, name = NAME) =>
@@ -290,7 +307,7 @@ describe.skipIf(!url)("custom domains against a database", () => {
   it("activates, points every host from the row, and removal puts the slug host back", async () => {
     const net = stubNet()
     const site = await published()
-    const { env, created } = domainEnv(site.store)
+    const { env, created, terminated } = domainEnv(site.store)
     const name = unique()
     await connect(env, kit, site.orgId, { name, approval_id: "a" })
     const row = await rowOf(site.orgId, name)
@@ -335,8 +352,34 @@ describe.skipIf(!url)("custom domains against a database", () => {
     await repoint(env, kit, site.orgId, domainId)
     expect(read(site.slug)).toEqual({ redirect_to: `www.${name}` })
 
+    // The live domain verified in this org's Google account.
+    const file = "google5e.html"
+    site.store.pointers.set(`gsv:www.${name}:${file}`, "1")
+    await kit.withOrg({ orgId: site.orgId }, (db) =>
+      db.insert(searchProperties).values({
+        orgId: site.orgId,
+        host: `www.${name}`,
+        siteUrl: `https://www.${name}/`,
+        kind: "url_prefix",
+        method: "file",
+        token: file,
+        state: "verified",
+      })
+    )
+
     expect(await remove(env, kit, site.orgId, name)).toBeNull()
     expect(await rowOf(site.orgId, name)).toMatchObject({ state: "removed" })
+    // Its file and property go, so it proves nothing for the next holder.
+    expect(site.store.pointers.has(`gsv:www.${name}:${file}`)).toBe(false)
+    expect(
+      await kit.withOrg({ orgId: site.orgId }, (db) =>
+        db.select().from(searchProperties)
+      )
+    ).toEqual([])
+    expect(terminated).toEqual([
+      searchInstanceId(site.orgId, `www.${name}`),
+      searchInstanceId(site.orgId, name),
+    ])
     expect(site.store.pointers.has(`host:www.${name}`)).toBe(false)
     expect(site.store.pointers.has(`host:${name}`)).toBe(false)
     expect(read(site.slug)).toMatchObject({ org_id: site.orgId })

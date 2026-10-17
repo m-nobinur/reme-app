@@ -571,6 +571,8 @@ async function googleConnect(
   const response = await call("/google/connect", {
     method: "POST",
     body: input,
+    // Past the api's own 30 s for the connect, so its answer gets back.
+    timeoutMs: 35_000,
   }).catch(() => null)
   if (response?.ok) return "connected"
   const refusal = ErrorEnvelope.safeParse(
