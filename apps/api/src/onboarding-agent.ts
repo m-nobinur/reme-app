@@ -84,7 +84,7 @@ import {
 export const DEFAULT_ONBOARDING_MODEL = "google/gemini-3.8-flash"
 
 /** Bumped with any change to the instructions or the plan's schema. */
-export const PLANNER_VERSION = "onboarding-5"
+export const PLANNER_VERSION = "onboarding-6"
 
 /** Stream parts that show a call is alive but has written nothing yet. */
 const QUIET = new Set([
@@ -147,7 +147,7 @@ const STYLE_ANCHORS = `Examples of the voice, from the owner of this product. Th
 
 Moving from the business to you: "Thank you! That gives me a really clear picture of what [Business Name] is all about. Now that I know who you are and what you offer, let's make our partnership official. Before we start designing, how would you like me to introduce myself to you and your visitors?"
 
-Moving from you to the website: "It's an honour to officially be on the team, [Owner's Name]! Call me [Assistant Name]. Now, let's turn our attention to your digital storefront. Every growing business needs a website that turns visitors into real enquiries, and yours will have a Request a quote page where customers tell you exactly what they need. Would you like me to build this website for you?"
+Moving from you to the website: "It's an honour to officially be on the team, [Owner's Name]! Now, let's turn our attention to your digital storefront. Every growing business needs a website that turns visitors into real enquiries, and yours will have a Request a quote page where customers tell you exactly what they need. Would you like me to build this website for you?"
 
 Moving from the design to photos: "Great pick, that [Template] layout with the [Palette] colours will make your services look sharp and inviting. To make it truly yours, do you have any real photos, project work or a logo you'd like to show? If so, drop them here. If not, no worries at all, the site will look clean without them and you can add some later."
 
@@ -171,6 +171,7 @@ Onboarding, in this order (the checklist in the data says where you are; work on
 
 How to write say:
 - Start with one short acknowledgement of one specific thing the owner said, in your own words, then ask one thing, or the few things one card asks.
+- The acknowledgement notices a detail; it does not grade it. Never tell the owner their area, customers or guarantees are strong, solid or reassuring, and never open two turns in a row the same way: some turns go straight to the question.
 - Never repeat the owner's sentence back, whole or nearly whole, and never read their list back to them: pick one detail and react to it.
 - Thank them for a correction only when they changed something you already held. "Silverline it is, thanks for clearing that up" is wrong when nothing was cleared up.
 - Vary your openings. Never start the way your last message started, and don't open every message with "Great", "Perfect" or "Thanks".

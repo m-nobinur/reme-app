@@ -1195,7 +1195,7 @@ describe("the onboarding copy", () => {
         "Request a quote"
       )
       expect(question("build_for_me", voice({ org }))).toContain(
-        "Would you like Maya to build your website for you?"
+        "Would you like me to build your website for you?"
       )
     }
   })
@@ -1212,7 +1212,7 @@ describe("the onboarding copy", () => {
     for (const org of ORGS) {
       for (const pronouns of ["he_him", "she_her", "they_them"] as const) {
         const text = question("build_for_me", voice({ org, pronouns }))
-        expect(text).toContain("I can have a first draft ready")
+        expect(text).toContain("Would you like me to build")
         expect(text).not.toMatch(/\b(He|She|They) can have\b/)
       }
     }
@@ -1226,7 +1226,7 @@ describe("the onboarding copy", () => {
     expect(at("friendly")).toContain("!")
     expect(at("professional")).not.toContain("!")
     expect(at("professional")).not.toMatch(/\bI'm\b|\bit's\b/i)
-    expect(at("casual")).toMatch(/\bWant Maya to build\b/)
+    expect(at("casual")).toMatch(/\bWant me to build\b/)
   })
 
   it("opens with text only: thanks by first name, the plan, and what the business does", () => {
