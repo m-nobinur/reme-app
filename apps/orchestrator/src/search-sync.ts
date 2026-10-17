@@ -190,7 +190,9 @@ export async function afterPublish(
       p.revisionId,
       p.previousRevisionId
     )
-    if (env.INDEXNOW_KEY && urls.length > 0) {
+    // Staging sites are noindex, so search engines never hear of their URLs.
+    const staging = env.SITE_HOST_SUFFIX.startsWith("-stg")
+    if (env.INDEXNOW_KEY && !staging && urls.length > 0) {
       done.indexnow = await pingIndexNow(env.INDEXNOW_KEY, p.host, urls)
     }
   })

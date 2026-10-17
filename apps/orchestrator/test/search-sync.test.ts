@@ -165,7 +165,7 @@ function searchEnv() {
   const terminated: string[] = []
   const env = {
     HYPERDRIVE: { connectionString: url },
-    SITE_HOST_SUFFIX: "-stg.remeai.co.uk",
+    SITE_HOST_SUFFIX: ".remeai.co.uk",
     GOOGLE_CLIENT_ID: "client",
     GOOGLE_CLIENT_SECRET: "secret",
     GOOGLE_TOKEN_KEY: Buffer.from(

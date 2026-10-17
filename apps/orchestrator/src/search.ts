@@ -349,7 +349,7 @@ export async function placeToken(
         orgId,
         host,
         siteUrl: siteUrlOf(host),
-        kind: "subdomain",
+        kind: host.endsWith(env.SITE_HOST_SUFFIX) ? "subdomain" : "url_prefix",
         method: "file",
         token: file,
         state: "pending",
