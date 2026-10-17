@@ -15,6 +15,11 @@ import {
   orgs,
   reminders,
   roles,
+  searchConnections,
+  searchDaily,
+  searchProperties,
+  searchSnapshot,
+  searchUrlStatus,
   siteRevisions,
   staff,
   staffEvents,
@@ -109,6 +114,16 @@ export async function clearOrgs(
   await tx
     .delete(assignmentTransitions)
     .where(inArray(assignmentTransitions.orgId, ids))
+  // Search Console's reports cite their property, which cites the org.
+  for (const table of [
+    searchUrlStatus,
+    searchSnapshot,
+    searchDaily,
+    searchProperties,
+    searchConnections,
+  ]) {
+    await tx.delete(table).where(inArray(table.orgId, ids))
+  }
   // A domain cites its approval, so it goes before the approvals.
   await tx.delete(domains).where(inArray(domains.orgId, ids))
   // A reminder and a message cite their conversation, and a conversation its

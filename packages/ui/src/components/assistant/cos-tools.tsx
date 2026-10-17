@@ -26,6 +26,7 @@ import {
   domainStatusText,
   RemoveDomain,
 } from "@workspace/ui/components/assistant/domain"
+import { ConnectGoogle } from "@workspace/ui/components/assistant/google"
 import {
   Collapsible,
   CollapsibleContent,
@@ -436,6 +437,7 @@ export const COS_CARDS: Record<string, ToolCallMessagePartComponent> = {
   record_review: RecordReview,
   connect_domain: ConnectDomain,
   remove_domain: RemoveDomain,
+  connect_google: ConnectGoogle,
   find_domain: FindDomain,
   buy_domain: BuyDomain,
 }

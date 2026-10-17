@@ -60,7 +60,7 @@ import {
   WorkspaceShell,
 } from "@workspace/ui/components/workspace-shell"
 import { formatDate } from "@workspace/ui/lib/format"
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { lastChat } from "@/chat/history"
 import {
   getWorkspaceFrame,
@@ -75,6 +75,12 @@ import {
   titleToEdit,
   useMenuState,
 } from "@/lib/conversation-actions"
+import {
+  GoogleNotice,
+  type GoogleResult,
+  googleResult,
+  useGoogleResult,
+} from "@/lib/google-notice"
 import {
   laterSeen,
   markSeen,
@@ -117,6 +123,13 @@ export const Route = createFileRoute("/app")({
       })
     }
     return { owner, ...frame }
+  },
+  // `?google=` is where the Google connect callback sends the owner back.
+  validateSearch: (
+    search: Record<string, unknown>
+  ): { google?: GoogleResult } => {
+    const google = googleResult(search.google)
+    return google ? { google } : {}
   },
   component: AppLayout,
 })
@@ -249,6 +262,19 @@ function AppLayout() {
     )
   }, [orgPending, router])
   const navigate = useNavigate()
+  const clearGoogle = useCallback(
+    () =>
+      navigate({
+        to: ".",
+        search: (prev) => ({ ...prev, google: undefined }),
+        replace: true,
+      }),
+    [navigate]
+  )
+  const [google, dismissGoogle] = useGoogleResult(
+    Route.useSearch().google,
+    clearGoogle
+  )
   // A link here asked for the panel, or the bell's menu did.
   const arrived = useLocation({ select: (at) => at.state.panel })
   const [press, setPress] = useState(arrived)
@@ -579,6 +605,7 @@ function AppLayout() {
           </>
         }
       >
+        <GoogleNotice onDismiss={dismissGoogle} result={google} />
         {conversation ? (
           <Outlet />
         ) : (

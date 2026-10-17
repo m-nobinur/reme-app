@@ -38,6 +38,7 @@ vi.mock("../src/publish.ts", () => ({
   latestRevision: async () => ({ id: "rev-live", status: "preview" }),
   probeHost: async () => ({ ok: true }),
   readTarget: async () => ({}),
+  servedVerification: async () => "https://a-stg.remeai.co.uk/google1a.html",
   redriveQueued: async () => [],
   requestReview: async () => {
     if (script.reviewRefusal) {
@@ -333,6 +334,19 @@ vi.mock("../src/domain-flow.ts", async (importOriginal) => ({
   ) =>
     orgId === "org-1" ? [{ key: `dom-1:sweep:${hour}`, text: "moved" }] : [],
   postStatus: async () => undefined,
+}))
+// The Monday look finds one message for org-1; its post is a step of its own.
+vi.mock("../src/search-sync.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/search-sync.ts")>()),
+  startDueSyncs: async () => 0,
+  weeklyFor: async (_kit: unknown, orgId: string, now: Date) =>
+    orgId === "org-1"
+      ? {
+          key: `search-weekly-org-1-${(await import("../src/search-sync.ts")).isoWeek(now)}`,
+          message: { text: ["Search this week"] },
+        }
+      : null,
+  postWeekly: async () => undefined,
 }))
 vi.mock("../src/validate.ts", () => ({
   assignmentFacts: async () => [],
@@ -1063,6 +1077,12 @@ describe("the sweep Workflow's step names", () => {
     expect(daily.totals.orgs).toBe(51)
   })
 
+  it("sends the weekly search message on Monday at 07 UTC, each post a step of its own", async () => {
+    const monday = await sweep(51, [], "2026092107")
+    expect(monday.names).toEqual(steps.SweepWorkflow["weekly search"])
+    expect((await sweep(51, [], "2026092207")).names).not.toContain("weekly 1")
+  })
+
   it("names the hour the way the cron does", () => {
     expect(sweepHour(Date.UTC(2026, 8, 16, 12, 0, 5))).toBe("2026091612")
   })
@@ -1107,7 +1127,11 @@ describe("the scheduled handler", () => {
 
   it("runs the uptime check on the five-minute cron and sweeps nothing", async () => {
     const { created, fetched } = await fire("*/5 * * * *")
-    expect(fetched).toHaveBeenCalledTimes(1)
+    // The health URL and one verification file the router serves.
+    expect(fetched.mock.calls.map((c) => String((c as unknown[])[0]))).toEqual([
+      "https://api.example.invalid/health",
+      "https://a-stg.remeai.co.uk/google1a.html",
+    ])
     expect(created).not.toHaveBeenCalled()
   })
 

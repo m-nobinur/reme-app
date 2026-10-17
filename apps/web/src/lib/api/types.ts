@@ -289,6 +289,15 @@ export type OwnerDataSource = {
     details: RegistrantDetails,
     key: string
   ) => Promise<DomainCheckout | { refused: string | null }>
+  /**
+   * Hands Google's one-time code to the api, which connects the owner's Search
+   * Console. Never throws: anything but a connection or a missing scope is `failed`.
+   */
+  googleConnect: (input: {
+    code: string
+    verifier: string
+    redirect_uri: string
+  }) => Promise<"connected" | "scopes_missing" | "failed">
   /** The newest purchase of a domain, or null when there is none. */
   domainStatus: (name: string) => Promise<DomainPurchaseStatus | null>
   /** Mark one reminder done. Doing it twice changes nothing. */

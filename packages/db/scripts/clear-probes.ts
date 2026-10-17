@@ -42,10 +42,10 @@ import { clearOrgs } from "../fixtures/seed.ts"
 import type { connect } from "../src/client.ts"
 import * as schema from "../src/schema.ts"
 
-/** Staging's Neon project and its `main` branch, read from the Neon API 2026-09-28. */
+/** Staging's Neon project and its `main` branch, read from the Neon API 2026-10-17. */
 export const STAGING = {
-  neonProject: "sparkling-wildflower-04343187",
-  neonBranch: "br-icy-grass-b2xxiaml",
+  neonProject: "silent-sun-14056263",
+  neonBranch: "br-withered-king-baxrx6ke",
   hostSuffix: "-stg.remeai.co.uk",
 } as const
 

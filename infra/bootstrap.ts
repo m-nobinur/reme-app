@@ -37,7 +37,7 @@ function stop(message: string, ...fixes: string[]): never {
  */
 const environments = {
   staging: {
-    neonProject: "sparkling-wildflower-04343187",
+    neonProject: "silent-sun-14056263",
     neonBranch: "main",
     // Named because neonctl refuses to guess once a branch has more than one
     // role, and migration 0001 makes that true by creating `reme_app`.
@@ -57,6 +57,8 @@ const environments = {
         "WORKOS_API_KEY",
         "WORKOS_CLIENT_ID",
         "WORKOS_COOKIE_PASSWORD",
+        // Public, but per Google project, so it travels with the secrets.
+        "GOOGLE_CLIENT_ID",
       ],
       "reme-api": [
         "WORKOS_API_KEY",
@@ -66,6 +68,8 @@ const environments = {
         // .env.local only where it is missing, so a dedicated key put on the
         // Worker by hand stays.
         "OPENROUTER_API_KEY",
+        // Whether connect_google offers the button.
+        "GOOGLE_CLIENT_ID",
       ],
       // The console bearer, the spec signing key and the model plane: this
       // Worker holds no session. The REME_MODEL_* values are configuration
@@ -82,6 +86,10 @@ const environments = {
         "REME_MODEL_FALLBACK",
         // Custom hostnames on the SaaS zone (optional, see OPTIONAL_SECRETS).
         "CF_DOMAINS_TOKEN",
+        // Search Console, the reme-dev Google project (optional).
+        "GOOGLE_CLIENT_ID",
+        "GOOGLE_CLIENT_SECRET",
+        "GOOGLE_TOKEN_KEY",
       ],
       // Verifies the claims the orchestrator signs; the same value on both.
       "reme-router": ["PREVIEW_KEY"],
@@ -100,7 +108,7 @@ const environments = {
    * only fills a missing secret, so it never puts staging's back.
    */
   prod: {
-    neonProject: "super-brook-02913792",
+    neonProject: "weathered-rice-57505553",
     neonBranch: "main",
     neonOwner: "neondb_owner",
     hyperdrive: "reme-prod-postgres",
@@ -111,12 +119,14 @@ const environments = {
         "WORKOS_API_KEY",
         "WORKOS_CLIENT_ID",
         "WORKOS_COOKIE_PASSWORD",
+        "GOOGLE_CLIENT_ID",
       ],
       "reme-api-production": [
         "WORKOS_API_KEY",
         "WORKOS_CLIENT_ID",
         "WORKOS_COOKIE_PASSWORD",
         "OPENROUTER_API_KEY",
+        "GOOGLE_CLIENT_ID",
       ],
       "reme-orchestrator-production": [
         "ORCHESTRATOR_TOKEN",
@@ -129,6 +139,10 @@ const environments = {
         "REME_MODEL_DEFAULT",
         "REME_MODEL_FALLBACK",
         "CF_DOMAINS_TOKEN",
+        // The production Google project, from .env.production.local only.
+        "GOOGLE_CLIENT_ID",
+        "GOOGLE_CLIENT_SECRET",
+        "GOOGLE_TOKEN_KEY",
       ],
       "reme-router-production": ["PREVIEW_KEY"],
     },
@@ -395,15 +409,23 @@ if (routesKv)
 if (!existsSync(".env.local")) {
   stop(".env.local is missing", "pnpm bootstrap   (it copies .env.example)")
 }
-const localEnv = new Map(
-  readFileSync(".env.local", "utf8")
-    .split("\n")
-    .filter((line) => line.includes("=") && !line.startsWith("#"))
-    .map((line) => {
-      const at = line.indexOf("=")
-      return [line.slice(0, at).trim(), line.slice(at + 1).trim()] as const
-    })
-)
+const readEnv = (file: string) =>
+  new Map(
+    (existsSync(file) ? readFileSync(file, "utf8") : "")
+      .split("\n")
+      .filter((line) => line.includes("=") && !line.startsWith("#"))
+      .map((line) => {
+        const at = line.indexOf("=")
+        return [line.slice(0, at).trim(), line.slice(at + 1).trim()] as const
+      })
+  )
+const localEnv = readEnv(".env.local")
+/**
+ * Staging connects through the unreviewed reme-dev Google project, so its
+ * values in .env.local must never reach production: there the GOOGLE_* names
+ * come from .env.production.local, and are skipped when it lacks them.
+ */
+const googleEnv = name === "prod" ? readEnv(".env.production.local") : localEnv
 
 /**
  * Secrets a Worker runs without. `CF_DOMAINS_TOKEN` waits on the owner's
@@ -411,7 +433,13 @@ const localEnv = new Map(
  * `domains.not_configured` and nothing else changes. Empty in .env.local
  * means skipped with a note, not a stop.
  */
-const OPTIONAL_SECRETS: ReadonlySet<string> = new Set(["CF_DOMAINS_TOKEN"])
+const OPTIONAL_SECRETS: ReadonlySet<string> = new Set([
+  "CF_DOMAINS_TOKEN",
+  // Search Console stays off until the Google project exists.
+  "GOOGLE_CLIENT_ID",
+  "GOOGLE_CLIENT_SECRET",
+  "GOOGLE_TOKEN_KEY",
+])
 
 for (const [worker, secrets] of Object.entries(config.secrets)) {
   // A Worker that has never been deployed has nowhere to hold a secret, and
@@ -436,7 +464,9 @@ for (const [worker, secrets] of Object.entries(config.secrets)) {
       ok(`${state("present")}${worker} ${secret}`)
       continue
     }
-    const value = localEnv.get(secret)
+    const value = (secret.startsWith("GOOGLE_") ? googleEnv : localEnv).get(
+      secret
+    )
     if (!value && OPTIONAL_SECRETS.has(secret)) {
       note(`${state("skipped")}${worker} ${secret}, optional and empty`)
       continue

@@ -4,6 +4,7 @@ import {
   type ChangeKind,
   type EnvelopeBody,
   envelope,
+  GetSearchPerformanceInput,
   GOAL_MAX,
   InformationAnswer,
   idempotencyKey,
@@ -81,6 +82,9 @@ import { answers } from "./question.ts"
 import { pickLane } from "./quick.ts"
 import { publishedSource } from "./revise.ts"
 import { endSandbox, endSite, probe } from "./sandbox.ts"
+import { connectGoogle } from "./search.ts"
+import { liveInspect, livePerformance } from "./search-read.ts"
+import { disconnectSearch } from "./search-sync.ts"
 import { assignmentCost, cancel, lockRow, TransitionError } from "./state.ts"
 
 /**
@@ -96,7 +100,7 @@ import { assignmentCost, cancel, lockRow, TransitionError } from "./state.ts"
 /** R4: every failure leaves as the §28.1 envelope. */
 const failure = (
   c: Context,
-  status: 400 | 401 | 403 | 404 | 409 | 429 | 503,
+  status: 400 | 401 | 403 | 404 | 409 | 422 | 429 | 503,
   body: EnvelopeBody
 ) => c.json(envelope(body), status)
 
@@ -784,6 +788,7 @@ ownerOnly.post("/site/takedown", async (c) => {
   await endSite(c.env, orgId)
   await clearPointers(c.env, c.get("kit"), orgId)
   await revokeDomains(c.env, c.get("kit"), orgId)
+  await disconnectSearch(c.env, c.get("kit"), orgId, true)
   return c.body(null, 204)
 })
 
@@ -809,6 +814,36 @@ ownerOnly.post("/domains", async (c) => {
   const result = await connect(c.env, c.get("kit"), c.get("orgId"), body)
   if ("refused" in result) return domainRefused(c, result)
   return c.json(result.output, result.status)
+})
+
+/**
+ * Google Search Console (search.ts): the callback's code traded for the
+ * org's sealed refresh token, under the org and the person the bridge named.
+ */
+ownerOnly.post("/search/connect", async (c) => {
+  const caller = c.get("caller")
+  const result = await connectGoogle(
+    c.env,
+    c.get("kit"),
+    c.get("orgId"),
+    caller.kind === "owner_session" ? caller.user_id : "",
+    await c.req.json().catch(() => null)
+  )
+  if ("refused" in result) {
+    return failure(c, result.status, {
+      class: result.class,
+      code: result.code,
+      message: result.message,
+      detail: {},
+    })
+  }
+  return c.body(null, 204)
+})
+
+/** The owner ending the Google connection (search-sync.ts). Safe to repeat. */
+ownerOnly.post("/search/disconnect", async (c) => {
+  await disconnectSearch(c.env, c.get("kit"), c.get("orgId"))
+  return c.body(null, 204)
 })
 
 /**
@@ -861,6 +896,45 @@ ownerOnly.post("/domains/:name/check", async (c) => {
     c.get("kit"),
     c.get("orgId"),
     c.req.param("name")
+  )
+  if ("refused" in result) return domainRefused(c, result)
+  return c.json(result)
+})
+
+/**
+ * Live Search Console reads for the Chief of Staff (search-read.ts): the
+ * 90-day performance and one page's inspection. Both go to Google through
+ * the org's own properties and answer a refusal as the envelope.
+ */
+ownerOnly.get("/search/performance", async (c) => {
+  const input = GetSearchPerformanceInput.safeParse({
+    days: Number(c.req.query("days")),
+    by: c.req.query("by"),
+  })
+  if (!input.success) {
+    return failure(c, 400, {
+      class: "validation",
+      code: "search.malformed",
+      message: "days is 7, 28 or 90 and by is none, query or page.",
+      detail: {},
+    })
+  }
+  const result = await livePerformance(
+    c.env,
+    c.get("kit"),
+    c.get("orgId"),
+    input.data
+  )
+  if ("refused" in result) return domainRefused(c, result)
+  return c.json(result)
+})
+
+ownerOnly.get("/search/inspect", async (c) => {
+  const result = await liveInspect(
+    c.env,
+    c.get("kit"),
+    c.get("orgId"),
+    c.req.query("url") ?? ""
   )
   if ("refused" in result) return domainRefused(c, result)
   return c.json(result)

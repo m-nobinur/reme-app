@@ -1,6 +1,6 @@
 # Reme privacy policy
 
-Last updated: 30 September 2026
+Last updated: 17 October 2026
 
 This policy explains what Reme does with personal data when you use the Reme app at preview.remeai.co.uk, and when someone visits a website Reme publishes for a business at a remeai.co.uk address.
 
@@ -42,6 +42,16 @@ The models we use today are DeepSeek V4.1 Flash, GLM 5.3 Flash from Z.ai, and Gr
 
 AI replies can be wrong. Nothing the Developer builds goes live until you approve it. Reme makes no decision about you that has a legal or similarly significant effect.
 
+## Google Search Console
+
+If you connect Google, Reme reads how your own website performs in Google Search: the searches it appeared for, clicks, impressions, and whether Google has indexed its pages. It also adds your website to your Search Console and sends Google its sitemap. We do this so the assistant can tell you how your website is doing and keep it findable. The lawful basis is **contract**, because you asked for it by connecting.
+
+We keep your Google account email, a summary of those results for your website, and a refresh token that lets us keep reading them. The refresh token is encrypted, and only the part of Reme that talks to Google can decrypt it. We read nothing else from your Google account.
+
+You can disconnect at any time by removing Reme at myaccount.google.com/permissions, which stops our access straight away. To have us delete what we stored, email privacy@remeai.co.uk.
+
+Reme's use and transfer of information received from Google APIs adheres to the Google API Services User Data Policy, including the Limited Use requirements.
+
 ## Who else handles your data
 
 These companies process data for us under contract, and only to provide Reme:
@@ -53,7 +63,7 @@ These companies process data for us under contract, and only to provide Reme:
 | WorkOS | Sign-in, and the sign-in code, verification and password reset emails | United States |
 | OpenRouter | Routes requests to AI models | United States |
 | AI model providers reached through OpenRouter | Produce chat replies and website code | Depends on the provider OpenRouter selects, which can be in the United States or other countries. We exclude providers based in China |
-| Google | Only if you choose Sign in with Google | United States |
+| Google | Only if you choose Sign in with Google or connect Google Search Console | United States |
 
 Where your data leaves the UK, we rely on UK adequacy regulations where they exist. Otherwise we rely on the UK International Data Transfer Addendum or the UK Extension to the EU-US Data Privacy Framework, as applicable.
 
@@ -105,6 +115,7 @@ We use only cookies needed to sign you in, keep you signed in and remember choic
 | wos-session | Keeps you signed in. Its contents are encrypted | Up to 400 days, or until you sign out |
 | reme-auth-flow | Carries a sign-in or sign-up through its steps. Encrypted | 10 minutes |
 | reme-oauth-state | Protects Sign in with Google against forged requests | 10 minutes |
+| reme-google-state | Holds the sign-in state while you connect Google, and protects it against forged requests | 10 minutes |
 | reme-org-intent | Remembers your business name if sign-up stopped before your workspace was created. Encrypted | 30 days |
 | reme-notifications-seen-... | Remembers which notifications you have already seen | 1 year |
 | reme_preview | Opens a preview of an unpublished website version from a preview link | Up to 24 hours |

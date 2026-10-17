@@ -39,7 +39,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  NEON_PROJECT_ID: sparkling-wildflower-04343187
+  NEON_PROJECT_ID: silent-sun-14056263
   WEB: https://staging.remeai.co.uk
   API: https://staging-api.remeai.co.uk
   ORCHESTRATOR: https://staging-orchestrator.remeai.co.uk

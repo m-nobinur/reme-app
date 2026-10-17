@@ -387,6 +387,15 @@ async function previewOpen(
 
 const app = new Hono<App>()
 
+// Staging is not for search engines. Its suffix is the only one that starts
+// with `-stg`; a response that came back from a pass-through is not ours to mark.
+app.use("*", async (c, next) => {
+  await next()
+  if (c.env.SITE_HOST_SUFFIX.startsWith("-stg")) {
+    c.header("x-robots-tag", "noindex")
+  }
+})
+
 // Answered before any binding is read. A service hostname is checked first,
 // because on production every one of them also ends in `SITE_HOST_SUFFIX` and
 // would otherwise be read as a tenant host. A host in the zone that is not a
@@ -401,6 +410,36 @@ app.use("*", async (c, next) => {
   // A name with a dot in it, or one no business could hold, costs nothing.
   if (!SLUG.test(host.slice(0, -suffix.length))) return notHere(c)
   return next()
+})
+
+/**
+ * Search Console's verification file. Above the catch-all and its redirect
+ * pointer on purpose: Google does not follow a cross-host redirect for this
+ * file, so a host that redirects still answers it. Served only while the
+ * orchestrator holds `gsv:{host}:{file}` in KV; a preview host never does.
+ */
+app.on(["GET", "HEAD"], "/:file{google[0-9a-f]+\\.html}", async (c, next) => {
+  const host = new URL(c.req.url).hostname
+  if (isPreviewHost(host)) return next()
+  const file = c.req.param("file")
+  if ((await c.env.ROUTES.get(`gsv:${host}:${file}`)) === null) {
+    return notHere(c)
+  }
+  return c.html(`google-site-verification: ${file}`, 200, NO_STORE)
+})
+
+/** The IndexNow key file: the key itself, at `/{key}.txt`, when the Worker has one. */
+app.on(["GET", "HEAD"], "/:file{[a-zA-Z0-9-]{8,128}\\.txt}", (c, next) => {
+  const key = c.env.INDEXNOW_KEY
+  if (
+    !key ||
+    !/^[a-zA-Z0-9-]{8,128}$/.test(key) ||
+    c.req.param("file") !== `${key}.txt` ||
+    isPreviewHost(new URL(c.req.url).hostname)
+  ) {
+    return next()
+  }
+  return c.text(key, 200, NO_STORE)
 })
 
 // The site's own API surface arrives with ingest (Phase 3).

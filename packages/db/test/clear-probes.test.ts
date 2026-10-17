@@ -109,7 +109,7 @@ describe("stagingRefusal", () => {
   })
 
   it.each([
-    ["production's project", { neonProject: "super-brook-02913792" }],
+    ["production's project", { neonProject: "weathered-rice-57505553" }],
     ["another branch", { neonBranch: "br-square-voice-b2n6yblp" }],
     ["production's host suffix", { hostSuffix: ".remeai.co.uk" }],
     ["another WorkOS client", { workosClientId: "client_01PRODUCTION" }],

@@ -29,7 +29,17 @@ import { redirectUri } from "./workos"
  */
 const PROVIDERS = new Set(["GoogleOAuth"])
 
-const STATE_COOKIE = "reme-oauth-state"
+/**
+ * Where a flow keeps its state: the cookie, the path it is scoped to and the
+ * redirect URI it sends the provider to. Sign in with Google is the default.
+ */
+export type OAuthFlow = { cookie: string; path: string; redirectUri: string }
+
+const signIn = (): OAuthFlow => ({
+  cookie: "reme-oauth-state",
+  path: "/",
+  redirectUri: redirectUri(),
+})
 
 /**
  * A redirect whose headers can still be written to.
@@ -49,22 +59,46 @@ export function isSupportedProvider(value: unknown): value is string {
   return typeof value === "string" && PROVIDERS.has(value)
 }
 
-export function beginOAuth(returnTo: string): {
+export function beginOAuth(
+  returnTo: string,
+  flow: OAuthFlow = signIn(),
+  // Also kept in the cookie, e.g. a PKCE verifier. Returned by consumeOAuthState.
+  extra: Record<string, string> = {}
+): {
   state: string
   redirectUri: string
 } {
   const state = crypto.randomUUID()
-  setCookie(STATE_COOKIE, JSON.stringify({ state, returnTo }), {
-    path: "/",
+  setCookie(flow.cookie, JSON.stringify({ ...extra, state, returnTo }), {
+    path: flow.path,
     httpOnly: true,
     sameSite: "lax",
     // Lax rather than strict: the browser arrives back here from the provider
     // as a cross-site top-level navigation, and strict would withhold the
     // cookie on exactly that request.
-    secure: redirectUri().startsWith("https:"),
+    secure: flow.redirectUri.startsWith("https:"),
     maxAge: 10 * 60,
   })
-  return { state, redirectUri: redirectUri() }
+  return { state, redirectUri: flow.redirectUri }
+}
+
+const base64url = (bytes: Uint8Array) =>
+  btoa(String.fromCharCode(...bytes))
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replaceAll("=", "")
+
+/** An S256 PKCE pair (RFC 7636): a random verifier and its challenge. */
+export async function pkcePair(): Promise<{
+  verifier: string
+  challenge: string
+}> {
+  const verifier = base64url(crypto.getRandomValues(new Uint8Array(32)))
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(verifier)
+  )
+  return { verifier, challenge: base64url(new Uint8Array(digest)) }
 }
 
 /**
@@ -72,18 +106,25 @@ export function beginOAuth(returnTo: string): {
  * when there is nothing to match against or the value does not match, which is
  * the same answer for a missing cookie, an expired one and a forged `state`.
  */
-export function consumeOAuthState(state: unknown): { returnTo: string } | null {
-  const raw = getCookie(STATE_COOKIE)
-  deleteCookie(STATE_COOKIE, { path: "/" })
+export function consumeOAuthState(
+  state: unknown,
+  flow: Pick<OAuthFlow, "cookie" | "path"> = signIn()
+): { returnTo: string; verifier?: string } | null {
+  const raw = getCookie(flow.cookie)
+  deleteCookie(flow.cookie, { path: flow.path })
   if (!raw || typeof state !== "string" || state.length === 0) {
     return null
   }
   try {
-    const stored = JSON.parse(raw) as { state?: string; returnTo?: string }
+    const stored = JSON.parse(raw) as {
+      state?: string
+      returnTo?: string
+      verifier?: string
+    }
     if (stored.state !== state) {
       return null
     }
-    return { returnTo: stored.returnTo ?? "/app" }
+    return { ...stored, returnTo: stored.returnTo ?? "/app" }
   } catch {
     return null
   }
