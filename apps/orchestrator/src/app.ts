@@ -4,6 +4,7 @@ import {
   type ChangeKind,
   type EnvelopeBody,
   envelope,
+  GetSearchPerformanceInput,
   GOAL_MAX,
   InformationAnswer,
   idempotencyKey,
@@ -81,6 +82,7 @@ import { answers } from "./question.ts"
 import { pickLane } from "./quick.ts"
 import { publishedSource } from "./revise.ts"
 import { endSandbox, endSite, probe } from "./sandbox.ts"
+import { liveInspect, livePerformance } from "./search-read.ts"
 import { assignmentCost, cancel, lockRow, TransitionError } from "./state.ts"
 
 /**
@@ -861,6 +863,45 @@ ownerOnly.post("/domains/:name/check", async (c) => {
     c.get("kit"),
     c.get("orgId"),
     c.req.param("name")
+  )
+  if ("refused" in result) return domainRefused(c, result)
+  return c.json(result)
+})
+
+/**
+ * Live Search Console reads for the Chief of Staff (search-read.ts): the
+ * 90-day performance and one page's inspection. Both go to Google through
+ * the org's own properties and answer a refusal as the envelope.
+ */
+ownerOnly.get("/search/performance", async (c) => {
+  const input = GetSearchPerformanceInput.safeParse({
+    days: Number(c.req.query("days")),
+    by: c.req.query("by"),
+  })
+  if (!input.success) {
+    return failure(c, 400, {
+      class: "validation",
+      code: "search.malformed",
+      message: "days is 7, 28 or 90 and by is none, query or page.",
+      detail: {},
+    })
+  }
+  const result = await livePerformance(
+    c.env,
+    c.get("kit"),
+    c.get("orgId"),
+    input.data
+  )
+  if ("refused" in result) return domainRefused(c, result)
+  return c.json(result)
+})
+
+ownerOnly.get("/search/inspect", async (c) => {
+  const result = await liveInspect(
+    c.env,
+    c.get("kit"),
+    c.get("orgId"),
+    c.req.query("url") ?? ""
   )
   if ("refused" in result) return domainRefused(c, result)
   return c.json(result)

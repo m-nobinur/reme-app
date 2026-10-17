@@ -98,6 +98,14 @@ vi.mock("../src/domain-flow.ts", async (importOriginal) => ({
   },
 }))
 
+// Starting the Search Console workflow is startSearch's job (search-start.test.ts);
+// here it only has to run inside the activate step, once the domain is live.
+vi.mock("../src/search-start.ts", () => ({
+  startSearch: async () => {
+    script.calls.push("search")
+  },
+}))
+
 const { nextWait } = await import("../src/domain-flow.ts")
 const { HOLD_MS, PAYMENT_ROUNDS } = await import("../src/domain-buy.ts")
 const { DomainWorkflow, MAX_CHECKS, SAY_RETRIES } = await import(
@@ -178,6 +186,7 @@ describe("the domain Workflow", () => {
     expect(script.calls).toEqual([
       "say look 2",
       "activate",
+      "search",
       "say live",
       "repoint",
     ])
@@ -190,7 +199,7 @@ describe("the domain Workflow", () => {
     const { names, result } = await drive([at(MIN, "valid", true, "look 1")])
     expect(result).toEqual({ outcome: "active" })
     expect(names).toContain("say live")
-    expect(script.calls).toEqual(["activate", "repoint"])
+    expect(script.calls).toEqual(["activate", "search", "repoint"])
   })
 
   it("backs off a busy chat from 10 seconds, doubling, capped at 30 minutes", () => {
@@ -332,6 +341,7 @@ describe("the domain Workflow, buying", () => {
       "renewal",
       "serve",
       "activate",
+      "search",
       "say live",
       "repoint",
     ])
