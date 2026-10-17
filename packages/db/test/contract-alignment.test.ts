@@ -11,6 +11,10 @@ import {
   FactRecord,
   Org,
   Reminder,
+  SearchConnectionState,
+  SearchPropertyKind,
+  SearchPropertyState,
+  SearchVerifyMethod,
   SiteRevision,
   StaffMember,
   TaintLabel,
@@ -42,6 +46,10 @@ import {
   domainState,
   factSource,
   reminderSource,
+  searchConnectionState,
+  searchPropertyKind,
+  searchPropertyState,
+  searchVerifyMethod,
   siteRevisionStatus,
   staffKind,
   staffStatus,
@@ -107,6 +115,15 @@ describe("enums match the contract", () => {
     expect(domainState.enumValues).toEqual(DomainState.options)
     expect(domainOrigin.enumValues).toEqual(DomainOrigin.options)
     expect(connectMethod.enumValues).toEqual(ConnectMethod.options)
+  })
+
+  it("search connection and property states, kinds and methods", () => {
+    expect(searchConnectionState.enumValues).toEqual(
+      SearchConnectionState.options
+    )
+    expect(searchPropertyKind.enumValues).toEqual(SearchPropertyKind.options)
+    expect(searchPropertyState.enumValues).toEqual(SearchPropertyState.options)
+    expect(searchVerifyMethod.enumValues).toEqual(SearchVerifyMethod.options)
   })
 })
 

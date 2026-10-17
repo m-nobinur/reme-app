@@ -1885,3 +1885,158 @@ describe("domains hold their shape", () => {
     }
   })
 })
+
+describe("Search Console tables hold their shape", () => {
+  const PROPERTY_A = "00000000-0000-4000-a000-000000000019"
+  const PROPERTY_B = "00000000-0000-4000-b000-000000000019"
+  const SEALED = "v1.iv.ct"
+  const TABLES = [
+    "search_connections",
+    "search_properties",
+    "search_daily",
+    "search_snapshot",
+    "search_url_status",
+  ]
+
+  const property = (
+    tx: TransactionSql,
+    o: { org?: string; url?: string; kind?: string; method?: string }
+  ) => tx`
+    insert into search_properties (org_id, host, site_url, kind, method)
+    values (${o.org ?? ORG_A}, 'newco.example.com', ${o.url ?? "https://newco.example.com/"},
+      ${o.kind ?? "url_prefix"}, ${o.method ?? "file"})`
+
+  const connection = (
+    tx: TransactionSql,
+    state: string,
+    token: string | null
+  ) => tx`
+    update search_connections set state = ${state}, refresh_token = ${token}
+    where org_id = ${ORG_A}`
+
+  it("lets an org read and change only its own rows in all five", async () => {
+    for (const table of TABLES) {
+      const seen = await withOrg({ orgId: ORG_B }, (db) =>
+        db.execute<{ org_id: string }>(
+          sql`select org_id from ${sql.identifier(table)}`
+        )
+      )
+      expect(
+        seen.map((r) => r.org_id),
+        table
+      ).toEqual([ORG_B])
+      const touched = await withOrg({ orgId: ORG_B }, (db) =>
+        db.execute(
+          sql`delete from ${sql.identifier(table)} where org_id = ${ORG_A}`
+        )
+      )
+      expect(touched.count, table).toBe(0)
+    }
+  })
+
+  it("refuses a row written for another org, and a report on another org's property", async () => {
+    expect(
+      await denied(() =>
+        withOrg({ orgId: ORG_B }, (db) =>
+          db.execute(sql`
+            insert into search_daily (org_id, property_id, date, clicks, impressions, ctr, position)
+            values (${ORG_A}, ${PROPERTY_A}, '2026-10-14', 1, 1, 1, 1)`)
+        )
+      )
+    ).toBe(DENIED)
+    // Org B's own id with org A's property: the composite key refuses it.
+    expect(
+      await inTransaction(
+        (tx) => tx`
+          insert into search_daily (org_id, property_id, date, clicks, impressions, ctr, position)
+          values (${ORG_B}, ${PROPERTY_A}, '2026-10-14', 1, 1, 1, 1)`
+      )
+    ).toBe(FOREIGN_KEY)
+  })
+
+  it("takes a sealed token only, and holds one exactly when the connection is live", async () => {
+    for (const [why, token] of [
+      ["a plaintext token", "1//0gExampleRefreshToken"],
+      ["a missing ciphertext", "v1.iv"],
+      ["a v2 seal", "v2.iv.ct"],
+    ] as const) {
+      expect(
+        await inTransaction((tx) => connection(tx, "active", token)),
+        why
+      ).toBe(CHECK)
+    }
+    expect(await inTransaction((tx) => connection(tx, "active", null))).toBe(
+      CHECK
+    )
+    expect(await inTransaction((tx) => connection(tx, "revoked", SEALED))).toBe(
+      CHECK
+    )
+    expect(
+      await inTransaction((tx) => connection(tx, "needs_reauth", SEALED))
+    ).toBeUndefined()
+    expect(
+      await inTransaction((tx) => connection(tx, "revoked", null))
+    ).toBeUndefined()
+  })
+
+  it("names a property the way Google does, and proves a domain by TXT only", async () => {
+    for (const [why, options] of [
+      ["an http prefix", { url: "http://newco.example.com/" }],
+      ["a prefix with no trailing slash", { url: "https://newco.example.com" }],
+      ["a prefix with a path", { url: "https://newco.example.com/a/" }],
+      [
+        "an upper-case domain",
+        { url: "sc-domain:Newco.com", kind: "domain", method: "dns_txt" },
+      ],
+      [
+        "a domain proved by file",
+        { url: "sc-domain:newco.com", kind: "domain" },
+      ],
+      ["a prefix proved by TXT", { method: "dns_txt" }],
+    ] as const) {
+      expect(await inTransaction((tx) => property(tx, options)), why).toBe(
+        CHECK
+      )
+    }
+    expect(
+      await inTransaction((tx) =>
+        property(tx, {
+          url: "sc-domain:newco.com",
+          kind: "domain",
+          method: "dns_txt",
+        })
+      )
+    ).toBeUndefined()
+  })
+
+  it("holds a site_url once per org, and lets two orgs hold the same one", async () => {
+    expect(
+      await inTransaction((tx) =>
+        property(tx, { url: "https://tenancy-probe-a.example.com/" })
+      )
+    ).toBe(UNIQUE)
+    expect(
+      await inTransaction((tx) =>
+        property(tx, {
+          org: ORG_B,
+          url: "https://tenancy-probe-a.example.com/",
+        })
+      )
+    ).toBeUndefined()
+  })
+
+  it("takes a property's reports with it", async () => {
+    let left = -1
+    await inTransaction(async (tx) => {
+      await tx`delete from search_properties where id = ${PROPERTY_B}`
+      const [row] = await tx<{ n: number }[]>`
+        select (
+          (select count(*) from search_daily where property_id = ${PROPERTY_B}) +
+          (select count(*) from search_snapshot where property_id = ${PROPERTY_B}) +
+          (select count(*) from search_url_status where property_id = ${PROPERTY_B})
+        )::int as n`
+      left = row?.n ?? -1
+    })
+    expect(left).toBe(0)
+  })
+})

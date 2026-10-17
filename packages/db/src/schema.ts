@@ -1,10 +1,12 @@
 import { sql } from "drizzle-orm"
 import {
+  type AnyPgColumn,
   bigint,
   boolean,
   char,
   check,
   customType,
+  date,
   doublePrecision,
   foreignKey,
   index,
@@ -1230,5 +1232,197 @@ export const domains = pgTable(
     uniqueIndex("domains_live_name").on(t.name).where(sql`state < 'failed'`),
     index("domains_org_state_idx").on(t.orgId, t.state),
     orgIsolation("domains"),
+  ]
+)
+
+/** `SearchConnectionState`. `revoked` is a connection the owner ended or declined: no token is held. */
+export const searchConnectionState = pgEnum("search_connection_state", [
+  "active",
+  "needs_reauth",
+  "revoked",
+])
+
+/** `SearchPropertyKind`: the free subdomain, a connected domain's address, or a whole purchased domain. */
+export const searchPropertyKind = pgEnum("search_property_kind", [
+  "subdomain",
+  "domain",
+  "url_prefix",
+])
+
+/** `SearchVerifyMethod`: a file the router serves, or a TXT record. */
+export const searchVerifyMethod = pgEnum("search_verify_method", [
+  "file",
+  "dns_txt",
+])
+
+/** `SearchPropertyState`. */
+export const searchPropertyState = pgEnum("search_property_state", [
+  "pending",
+  "verified",
+  "failed",
+  "stale",
+])
+
+/**
+ * The org's Google connection for Search Console, one row per org. The
+ * refresh token is sealed by `apps/orchestrator` (AES-256-GCM, the org id as
+ * AAD) and stored as `v1.<iv>.<ct>`: this table never holds a plaintext one,
+ * and nothing outside the orchestrator can open it. A declined or ended
+ * connection keeps its row with no token, so the CoS does not ask again.
+ */
+export const searchConnections = pgTable(
+  "search_connections",
+  {
+    orgId: uuid("org_id")
+      .primaryKey()
+      .references(() => orgs.id),
+    connectedByUserId: uuid("connected_by_user_id").references(() => users.id),
+    googleEmail: text("google_email"),
+    /** `v1.<iv>.<ct>`. Never logged, never returned by an API. */
+    refreshToken: text("refresh_token"),
+    scopes: text("scopes").array().notNull().default(sql`'{}'::text[]`),
+    state: searchConnectionState("state").notNull(),
+    connectedAt: timestamp("connected_at", { withTimezone: true }),
+    lastRefreshAt: timestamp("last_refresh_at", { withTimezone: true }),
+    askedAt: timestamp("asked_at", { withTimezone: true }),
+    declined: boolean("declined").notNull().default(false),
+  },
+  () => [
+    check(
+      "search_connections_token_sealed",
+      sql`refresh_token is null or refresh_token ~ '^v1\\.[A-Za-z0-9+/_=-]+\\.[A-Za-z0-9+/_=-]+$'`
+    ),
+    // A live connection holds a token; a revoked one holds none.
+    check(
+      "search_connections_token_by_state",
+      sql`(state::text = 'revoked') = (refresh_token is null)`
+    ),
+    orgIsolation("search_connections"),
+  ]
+)
+
+/**
+ * A site Google reads for the org. `site_url` is the property as Google names
+ * it: `sc-domain:example.co.uk` for a whole domain (DNS TXT), otherwise an
+ * `https://host/` prefix (file). Every Google call is checked against this
+ * table, so a row here is the only way a `site_url` is ever used.
+ */
+export const searchProperties = pgTable(
+  "search_properties",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    host: text("host").notNull(),
+    siteUrl: text("site_url").notNull(),
+    kind: searchPropertyKind("kind").notNull(),
+    method: searchVerifyMethod("method").notNull(),
+    /** Google's verification token: the file name or the TXT value. Public once placed, never shown to the model. */
+    token: text("token"),
+    state: searchPropertyState("state").notNull().default("pending"),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+    /** `SearchSitemap`. */
+    sitemap: jsonb("sitemap"),
+    createdAt,
+  },
+  (t) => [
+    unique("search_properties_org_site_url").on(t.orgId, t.siteUrl),
+    // The target of the child tables' composite keys.
+    unique("search_properties_id_org").on(t.id, t.orgId),
+    check(
+      "search_properties_site_url_shape",
+      sql`site_url ~ '^(sc-domain:[a-z0-9.-]+|https://[^[:space:]/]+/)$' and char_length(site_url) <= 300`
+    ),
+    // A whole domain is proved with a TXT record and nothing else is.
+    check(
+      "search_properties_method_of_kind",
+      sql`(kind::text = 'domain') = (method::text = 'dns_txt')`
+    ),
+    orgIsolation("search_properties"),
+  ]
+)
+
+/** The columns every per-property table shares: the org and the property. */
+const ofProperty = {
+  orgId: uuid("org_id")
+    .notNull()
+    .references(() => orgs.id),
+  propertyId: uuid("property_id").notNull(),
+}
+
+/** A child row goes with its property, and its `org_id` must be the property's. */
+const propertyFk = (
+  table: string,
+  t: { propertyId: AnyPgColumn; orgId: AnyPgColumn }
+) =>
+  foreignKey({
+    name: `${table}_property_fk`,
+    columns: [t.propertyId, t.orgId],
+    foreignColumns: [searchProperties.id, searchProperties.orgId],
+  }).onDelete("cascade")
+
+/** One day of a property's totals, as Search Console reports them. */
+export const searchDaily = pgTable(
+  "search_daily",
+  {
+    ...ofProperty,
+    date: date("date", { mode: "string" }).notNull(),
+    clicks: integer("clicks").notNull(),
+    impressions: integer("impressions").notNull(),
+    ctr: doublePrecision("ctr").notNull(),
+    position: doublePrecision("position").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.orgId, t.propertyId, t.date] }),
+    propertyFk("search_daily", t),
+    check("search_daily_counts", sql`clicks >= 0 and impressions >= 0`),
+    orgIsolation("search_daily"),
+  ]
+)
+
+/**
+ * The last 28 days by query and page, replaced each day, the top 1,000 rows by
+ * impressions. `query` and `page` are text strangers typed or published.
+ */
+export const searchSnapshot = pgTable(
+  "search_snapshot",
+  {
+    ...ofProperty,
+    query: text("query").notNull(),
+    page: text("page").notNull(),
+    clicks: integer("clicks").notNull(),
+    impressions: integer("impressions").notNull(),
+    ctr: doublePrecision("ctr").notNull(),
+    position: doublePrecision("position").notNull(),
+    windowEnd: date("window_end", { mode: "string" }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.orgId, t.propertyId, t.query, t.page] }),
+    propertyFk("search_snapshot", t),
+    check("search_snapshot_counts", sql`clicks >= 0 and impressions >= 0`),
+    orgIsolation("search_snapshot"),
+  ]
+)
+
+/** Google's last verdict on one page of a property. */
+export const searchUrlStatus = pgTable(
+  "search_url_status",
+  {
+    ...ofProperty,
+    url: text("url").notNull(),
+    verdict: text("verdict").notNull(),
+    coverageState: text("coverage_state"),
+    indexingState: text("indexing_state"),
+    robotsState: text("robots_state"),
+    googleCanonical: text("google_canonical"),
+    lastCrawlTime: timestamp("last_crawl_time", { withTimezone: true }),
+    inspectedAt: timestamp("inspected_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.orgId, t.propertyId, t.url] }),
+    propertyFk("search_url_status", t),
+    orgIsolation("search_url_status"),
   ]
 )
