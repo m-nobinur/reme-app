@@ -565,6 +565,24 @@ async function domainCheckout(
   throw new Error(`apps/api answered ${response.status} for ${path}`)
 }
 
+async function googleConnect(
+  input: Parameters<OwnerDataSource["googleConnect"]>[0]
+): ReturnType<OwnerDataSource["googleConnect"]> {
+  const response = await call("/google/connect", {
+    method: "POST",
+    body: input,
+  }).catch(() => null)
+  if (response?.ok) return "connected"
+  const refusal = ErrorEnvelope.safeParse(
+    await response?.json().catch(() => null)
+  )
+  return response?.status === 422 &&
+    refusal.success &&
+    refusal.data.code.includes("scopes_missing")
+    ? "scopes_missing"
+    : "failed"
+}
+
 /** The newest purchase of a domain in the owner's business, or null when there is none. */
 async function domainStatus(
   name: string
@@ -706,6 +724,7 @@ export const apiSource: OwnerDataSource = {
   completeReminder,
   domainCheckout,
   domainStatus,
+  googleConnect,
   conversations,
   conversation,
   createConversation,
