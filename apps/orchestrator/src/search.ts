@@ -150,7 +150,7 @@ export async function accessToken(
  * published, and its live custom domain. Only these are ever verified: the
  * router serves a file on any host, and a property row can outlive the host
  * (a domain that expired, moved or was taken down), which may since be
- * another org's.
+ * another org's. With a domain live the slug host redirects to it.
  */
 async function heldHosts(env: Env, kit: Tenancy, orgId: string) {
   return kit.withOrg({ orgId }, async (db) => {
@@ -158,13 +158,11 @@ async function heldHosts(env: Env, kit: Tenancy, orgId: string) {
       .select({ slug: orgs.slug })
       .from(orgs)
       .where(eq(orgs.id, orgId))
-    const hosts: string[] = []
-    if (org && (await activeDeployment(db, orgId))) {
-      hosts.push(siteHost(org.slug, env.SITE_HOST_SUFFIX))
+    const live = org && (await activeDeployment(db, orgId))
+    return {
+      slug: live ? siteHost(org.slug, env.SITE_HOST_SUFFIX) : null,
+      domain: await activeDomainHost(db),
     }
-    const domain = await activeDomainHost(db)
-    if (domain) hosts.push(domain)
-    return hosts
   })
 }
 
@@ -238,8 +236,9 @@ export async function forgetHost(
  * saves nothing. A connection to another Google account replaces the old
  * one, whose grant is revoked first; the same account's old token is not,
  * since Google revokes the whole grant and that would take the new token
- * with it. Then the `SearchWorkflow` of every host the org holds, from the
- * start.
+ * with it. Then the `SearchWorkflow` of the host the site is served on, from
+ * the start. A slug host's property from before a domain went live stays as
+ * it is, and Google keeps re-checking its file.
  */
 export async function connectGoogle(
   env: Env,
@@ -352,9 +351,10 @@ export async function connectGoogle(
       payload: { google_email: exchanged.email },
     })
   })
-  for (const host of await heldHosts(env, kit, orgId)) {
-    await startSearch(env, orgId, host, true)
-  }
+  // The host the site answers on; a redirecting slug host is one Google cannot fetch.
+  const { slug, domain } = await heldHosts(env, kit, orgId)
+  const canonical = domain ?? slug
+  if (canonical) await startSearch(env, orgId, canonical, true)
   return { email: exchanged.email }
 }
 
@@ -392,7 +392,8 @@ export async function placeToken(
   { org_id: orgId, host }: SearchParams,
   file: string
 ): Promise<void> {
-  if (!(await heldHosts(env, kit, orgId)).includes(host)) {
+  const held = await heldHosts(env, kit, orgId)
+  if (host !== held.slug && host !== held.domain) {
     throw new GoogleError("search.host_not_held")
   }
   const [old] = await kit.withOrg({ orgId }, (db) =>

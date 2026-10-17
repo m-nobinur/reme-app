@@ -200,12 +200,21 @@ describe.skipIf(!url)("connecting Google", () => {
     expect(searchInstanceId(orgId, host)).toMatch(/^[A-Za-z0-9_-]{1,100}$/)
   })
 
-  it("starts every held host's verification over on a reconnect, ending a waiting one", async () => {
+  it("verifies only the host the site is served on, and starts it over on a reconnect", async () => {
     const { orgId, slug } = await published()
     const custom = `www.c-${orgId.slice(0, 8)}.example.test`
     // A host whose domain has gone, which may be another org's by now.
     const gone = `www.g-${orgId.slice(0, 8)}.example.test`
     const file = "google1a.html"
+    const property = (host: string) => ({
+      orgId,
+      host,
+      siteUrl: `https://${host}/`,
+      kind: "url_prefix" as const,
+      method: "file" as const,
+      token: file,
+      state: "verified" as const,
+    })
     await kit.withOrg({ orgId }, async (db) => {
       await db.insert(domains).values({
         orgId,
@@ -216,18 +225,11 @@ describe.skipIf(!url)("connecting Google", () => {
         method: "records",
         state: "active",
       })
-      await db.insert(searchProperties).values({
-        orgId,
-        host: gone,
-        siteUrl: `https://${gone}/`,
-        kind: "url_prefix",
-        method: "file",
-        token: file,
-        state: "verified",
-      })
+      // The slug host verified before the domain went live, and since redirecting.
+      await db.insert(searchProperties).values([property(slug), property(gone)])
     })
     // Instances by id, with their status; a second create of one throws.
-    const status = new Map<string, string>()
+    const status = new Map([[searchInstanceId(orgId, slug), "complete"]])
     const log: string[] = []
     const { env } = searchEnv()
     Object.assign(env, {
@@ -250,28 +252,30 @@ describe.skipIf(!url)("connecting Google", () => {
         }),
       },
     })
+    const domainRun = searchInstanceId(orgId, custom)
     stubGoogle("1//first", "a@example.test")
     await connectGoogle(env, kit, orgId, "nobody", BODY)
-    const ids = [searchInstanceId(orgId, custom), searchInstanceId(orgId, slug)]
-    expect(new Set(log)).toEqual(new Set(ids.map((id) => `create ${id}`)))
+    expect(log).toEqual([`create ${domainRun}`])
 
-    // One waits out a verify backoff, the other finished under the old account.
-    status.set(searchInstanceId(orgId, slug), "waiting")
-    status.set(searchInstanceId(orgId, custom), "complete")
+    // Waiting out a verify backoff under the old account: ended, then run again.
+    status.set(domainRun, "waiting")
     log.length = 0
     stubGoogle("1//second", "b@example.test")
     await connectGoogle(env, kit, orgId, "nobody", BODY)
-    expect(log).toEqual(
-      expect.arrayContaining([
-        `terminate ${searchInstanceId(orgId, slug)}`,
-        `restart ${searchInstanceId(orgId, slug)}`,
-        `restart ${searchInstanceId(orgId, custom)}`,
-      ])
-    )
-    expect(log).toHaveLength(3)
-    expect(
-      log.indexOf(`terminate ${searchInstanceId(orgId, slug)}`)
-    ).toBeLessThan(log.indexOf(`restart ${searchInstanceId(orgId, slug)}`))
+    expect(log).toEqual([`terminate ${domainRun}`, `restart ${domainRun}`])
+
+    // Finished under the old account: run again.
+    status.set(domainRun, "complete")
+    log.length = 0
+    stubGoogle("1//third", "c@example.test")
+    await connectGoogle(env, kit, orgId, "nobody", BODY)
+    expect(log).toEqual([`restart ${domainRun}`])
+
+    // The slug host's property stays for Google's re-checks.
+    expect(await ownProperty(kit, orgId, `https://${slug}/`)).toMatchObject({
+      state: "verified",
+      token: file,
+    })
   })
 
   it("revokes the old grant when another Google account replaces it, and not for the same account", async () => {
