@@ -22,6 +22,7 @@ vi.mock("cloudflare:workflows", () => ({
 const script = vi.hoisted(() => ({
   calls: [] as string[],
   pullError: null as Error | null,
+  stale: null as string | null,
 }))
 vi.mock("../src/domain-flow.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/domain-flow.ts")>()),
@@ -35,7 +36,9 @@ vi.mock("../src/search-sync.ts", () => ({
   pullProperty: async (...args: unknown[]) => {
     if (script.pullError) throw script.pullError
     script.calls.push(`pull ${String(args[3])}`)
-    return { days: 30, pairs: 4 }
+    return args[3] === script.stale
+      ? { days: 0, pairs: 0, stale: true }
+      : { days: 30, pairs: 4 }
   },
   inspectPages: async (...args: unknown[]) => {
     script.calls.push(`inspect ${String(args[3])}`)
@@ -69,6 +72,7 @@ async function drive() {
 beforeEach(() => {
   script.calls.length = 0
   script.pullError = null
+  script.stale = null
 })
 
 describe("the daily search sync", () => {
@@ -83,6 +87,18 @@ describe("the daily search sync", () => {
       "inspect https://b.example.test/",
     ])
     expect(configs["pull 1"]).toBe(SYNC_RETRIES)
+  })
+
+  it("skips a property Google refused and pulls the next", async () => {
+    script.stale = "https://a.example.test/"
+    const { names, result } = await drive()
+    expect(names).toEqual(steps.SearchSyncWorkflow.stale)
+    expect(result).toEqual({ outcome: "synced", properties: 2 })
+    expect(script.calls).toEqual([
+      "pull https://a.example.test/",
+      "pull https://b.example.test/",
+      "inspect https://b.example.test/",
+    ])
   })
 
   it("stops at a revoked token without failing", async () => {

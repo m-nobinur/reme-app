@@ -147,7 +147,8 @@ export const SYNC_RETRIES: WorkflowStepConfig = {
 /**
  * One instance per org a day, `syncInstanceId`, started by the hourly sweep
  * (search-sync.ts). Per verified property: the numbers, then the day's page
- * inspections. A token Google refused ends it, with the connection already
+ * inspections; a property Google refuses is left `stale` and skipped. A
+ * token Google refused ends it, with the connection already
  * `needs_reauth` and audited; tomorrow's instance finds no live connection.
  */
 export class SearchSyncWorkflow extends WorkflowEntrypoint<Env, SyncParams> {
@@ -179,6 +180,8 @@ export class SearchSyncWorkflow extends WorkflowEntrypoint<Env, SyncParams> {
         google((kit) => pullProperty(env, kit, orgId, siteUrl))
       )
       if (!pulled) return { outcome: "needs_reauth" }
+      // Google refused this property; the org's others still pull.
+      if (pulled.stale) continue
       const inspected = await step.do(
         `inspect ${i + 1}`,
         SYNC_RETRIES,

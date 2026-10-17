@@ -1,6 +1,7 @@
 import { siteHost } from "@workspace/contracts"
 import {
   deployments,
+  domains,
   eq,
   events,
   orgs,
@@ -108,6 +109,25 @@ const typesOf = async (orgId: string) =>
 
 afterEach(() => vi.unstubAllGlobals())
 
+/** An org with a live site, and the free subdomain it holds. */
+async function published() {
+  const site = await previewed()
+  const orgId = site.orgId
+  await kit.withOrg({ orgId }, (db) =>
+    db.insert(deployments).values({
+      orgId,
+      siteId: orgId,
+      revisionId: site.revisionId,
+      configVersion: 1,
+      kind: "rollback",
+    })
+  )
+  const [org] = await kit.withOrg({ orgId }, (db) =>
+    db.select({ slug: orgs.slug }).from(orgs).where(eq(orgs.id, orgId))
+  )
+  return { orgId, slug: siteHost(org?.slug ?? "", SUFFIX) }
+}
+
 describe.skipIf(!url)("connecting Google", () => {
   it("saves nothing when a scope was unticked", async () => {
     const orgId = await freshOrg(kit)
@@ -180,6 +200,84 @@ describe.skipIf(!url)("connecting Google", () => {
     expect(searchInstanceId(orgId, host)).toMatch(/^[A-Za-z0-9_-]{1,100}$/)
   })
 
+  it("verifies only the host the site is served on, and starts it over on a reconnect", async () => {
+    const { orgId, slug } = await published()
+    const custom = `www.c-${orgId.slice(0, 8)}.example.test`
+    // A host whose domain has gone, which may be another org's by now.
+    const gone = `www.g-${orgId.slice(0, 8)}.example.test`
+    const file = "google1a.html"
+    const property = (host: string) => ({
+      orgId,
+      host,
+      siteUrl: `https://${host}/`,
+      kind: "url_prefix" as const,
+      method: "file" as const,
+      token: file,
+      state: "verified" as const,
+    })
+    await kit.withOrg({ orgId }, async (db) => {
+      await db.insert(domains).values({
+        orgId,
+        siteId: orgId,
+        name: custom.slice(4),
+        primaryHost: custom,
+        origin: "connected",
+        method: "records",
+        state: "active",
+      })
+      // The slug host verified before the domain went live, and since redirecting.
+      await db.insert(searchProperties).values([property(slug), property(gone)])
+    })
+    // Instances by id, with their status; a second create of one throws.
+    const status = new Map([[searchInstanceId(orgId, slug), "complete"]])
+    const log: string[] = []
+    const { env } = searchEnv()
+    Object.assign(env, {
+      SEARCHES: {
+        create: async ({ id }: { id: string }) => {
+          if (status.has(id)) throw new Error("instance exists")
+          status.set(id, "running")
+          log.push(`create ${id}`)
+        },
+        get: async (id: string) => ({
+          status: async () => ({ status: status.get(id) }),
+          terminate: async () => {
+            status.set(id, "terminated")
+            log.push(`terminate ${id}`)
+          },
+          restart: async () => {
+            status.set(id, "running")
+            log.push(`restart ${id}`)
+          },
+        }),
+      },
+    })
+    const domainRun = searchInstanceId(orgId, custom)
+    stubGoogle("1//first", "a@example.test")
+    await connectGoogle(env, kit, orgId, "nobody", BODY)
+    expect(log).toEqual([`create ${domainRun}`])
+
+    // Waiting out a verify backoff under the old account: ended, then run again.
+    status.set(domainRun, "waiting")
+    log.length = 0
+    stubGoogle("1//second", "b@example.test")
+    await connectGoogle(env, kit, orgId, "nobody", BODY)
+    expect(log).toEqual([`terminate ${domainRun}`, `restart ${domainRun}`])
+
+    // Finished under the old account: run again.
+    status.set(domainRun, "complete")
+    log.length = 0
+    stubGoogle("1//third", "c@example.test")
+    await connectGoogle(env, kit, orgId, "nobody", BODY)
+    expect(log).toEqual([`restart ${domainRun}`])
+
+    // The slug host's property stays for Google's re-checks.
+    expect(await ownProperty(kit, orgId, `https://${slug}/`)).toMatchObject({
+      state: "verified",
+      token: file,
+    })
+  })
+
   it("revokes the old grant when another Google account replaces it, and not for the same account", async () => {
     const orgId = await freshOrg(kit)
     const { env, created } = searchEnv()
@@ -224,10 +322,23 @@ describe.skipIf(!url)("connecting Google", () => {
 
 describe.skipIf(!url)("the org's own properties", () => {
   it("serves the new file and stops serving one another account was given", async () => {
-    const orgId = await freshOrg(kit)
+    const { orgId, slug } = await published()
     const store = storage()
-    const env = { ROUTES: store.ROUTES } as unknown as Env
-    const params = { org_id: orgId, host: `p-${orgId}.example.test` }
+    const env = {
+      ROUTES: store.ROUTES,
+      SITE_HOST_SUFFIX: SUFFIX,
+    } as unknown as Env
+    // A host the org does not hold gets no file and no row.
+    await expect(
+      placeToken(
+        env,
+        kit,
+        { org_id: orgId, host: `p-${orgId}.example.test` },
+        "google1a.html"
+      )
+    ).rejects.toThrow("search.host_not_held")
+    expect([...store.pointers.keys()]).toEqual([])
+    const params = { org_id: orgId, host: slug }
     await placeToken(env, kit, params, "google1a.html")
     await placeToken(env, kit, params, "google1a.html")
     await placeToken(env, kit, params, "google2b.html")

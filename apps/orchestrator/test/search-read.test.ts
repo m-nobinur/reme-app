@@ -12,7 +12,7 @@ vi.mock("../src/google.ts", async (importOriginal) => ({
   ...google,
 }))
 
-const { NeedsReauth } = await import("../src/google.ts")
+const { GoogleError, NeedsReauth } = await import("../src/google.ts")
 const { liveInspect, livePerformance } = await import("../src/search-read.ts")
 
 /**
@@ -217,6 +217,36 @@ describe.skipIf(!url)("live Search Console reads", () => {
       "https://sparkle.example/",
       "https://sparkle.example/areas"
     )
+  })
+
+  it("leaves out a property Google refuses, and is transient only when all are", async () => {
+    const orgId = await connected("sparkle.example")
+    await kit.withOrg({ orgId }, (db) =>
+      db.insert(searchProperties).values({
+        orgId,
+        host: "lost.example",
+        siteUrl: "https://lost.example/",
+        kind: "url_prefix",
+        method: "file",
+        state: "verified",
+      })
+    )
+    google.searchAnalytics.mockImplementation(
+      async (_t: string, site: string) => {
+        if (site === "https://lost.example/") {
+          throw new GoogleError("google.403", 403)
+        }
+        return { rows: [{ clicks: 2, impressions: 20, ctr: 0.1, position: 4 }] }
+      }
+    )
+    expect(
+      await livePerformance(env, kit, orgId, { days: 7, by: "none" })
+    ).toMatchObject({ totals: { clicks: 2, impressions: 20 } })
+
+    google.searchAnalytics.mockRejectedValue(new GoogleError("google.403", 403))
+    expect(
+      await livePerformance(env, kit, orgId, { days: 7, by: "none" })
+    ).toMatchObject({ refused: true, status: 503, code: "google.403" })
   })
 
   it("reads a Google outage as transient, without what Google said", async () => {

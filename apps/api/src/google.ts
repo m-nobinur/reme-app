@@ -13,6 +13,13 @@ import { failure, invalid, readBody } from "./http.ts"
  * `connect_google` tool. The org is the session's; the owner only.
  */
 
+/**
+ * The connect's own bridge timeout: the orchestrator makes up to two Google
+ * calls of 15 s each (the exchange, a revoke), so the default 10 s would
+ * answer a timeout for a connect that went on to succeed.
+ */
+export const CONNECT_TIMEOUT_MS = 30_000
+
 const notOwner = () =>
   failure(403, {
     class: "permission",
@@ -37,6 +44,7 @@ export async function googleConnect(
   if (!parsed.success) return invalid(parsed.error.issues)
   const result = await bridge(env, owner, "/search/connect", {
     body: parsed.data,
+    signal: AbortSignal.timeout(CONNECT_TIMEOUT_MS),
   })
   if (result.status === 204) return new Response(null, { status: 204 })
   return relay(result, () => {

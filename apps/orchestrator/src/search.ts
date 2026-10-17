@@ -1,5 +1,6 @@
 import { GoogleConnectRequest, siteHost } from "@workspace/contracts"
 import {
+  activeDomainHost,
   appendEvent,
   eq,
   orgs,
@@ -144,34 +145,89 @@ export async function accessToken(
   }
 }
 
-/** The org's live hosts: the free subdomain once the site is published. */
-async function liveHosts(env: Env, kit: Tenancy, orgId: string) {
+/**
+ * The hosts the org holds now: the free subdomain once the site is
+ * published, and its live custom domain. Only these are ever verified: the
+ * router serves a file on any host, and a property row can outlive the host
+ * (a domain that expired, moved or was taken down), which may since be
+ * another org's. With a domain live the slug host redirects to it.
+ */
+async function heldHosts(env: Env, kit: Tenancy, orgId: string) {
   return kit.withOrg({ orgId }, async (db) => {
     const [org] = await db
       .select({ slug: orgs.slug })
       .from(orgs)
       .where(eq(orgs.id, orgId))
-    if (!org || !(await activeDeployment(db, orgId))) return []
-    return [siteHost(org.slug, env.SITE_HOST_SUFFIX)]
+    const live = org && (await activeDeployment(db, orgId))
+    return {
+      slug: live ? siteHost(org.slug, env.SITE_HOST_SUFFIX) : null,
+      domain: await activeDomainHost(db),
+    }
   })
 }
 
 /**
  * One `SearchWorkflow` per host. One already there is left running; a
- * finished one runs again, since a reconnect may be another Google account
- * that has to verify the host for itself.
+ * finished one runs again. `fresh` (a reconnect) ends a live one and starts
+ * it over, since its cached token step belongs to the old Google account.
  */
-export async function startSearch(env: Env, orgId: string, host: string) {
+export async function startSearch(
+  env: Env,
+  orgId: string,
+  host: string,
+  fresh = false
+) {
   const id = searchInstanceId(orgId, host)
   try {
     await env.SEARCHES.create({ id, params: { org_id: orgId, host } })
   } catch {
     const instance = await env.SEARCHES.get(id)
     const { status } = await instance.status()
-    if (["complete", "errored", "terminated"].includes(status)) {
-      await instance.restart()
+    const settled = ["complete", "errored", "terminated"].includes(status)
+    if (fresh && !settled) {
+      await instance.terminate().catch(() => {
+        // It settled after the status was read; the restart still runs.
+      })
+    }
+    if (fresh || settled) await instance.restart()
+  }
+}
+
+/**
+ * Everything Search Console holds for one host of the org: its verification
+ * stopped, its files no longer served, its property row gone (the child
+ * rows cascade). For a host the org lets go of, so a file of this org's never
+ * proves the host for whoever holds it next. The files go before the row,
+ * which is how a repeat finds them. Safe to repeat.
+ */
+export async function forgetHost(
+  env: Env,
+  kit: Tenancy,
+  orgId: string,
+  host: string
+): Promise<void> {
+  try {
+    const running = await env.SEARCHES.get(searchInstanceId(orgId, host))
+    await running.terminate()
+  } catch {
+    // None, or one already settled.
+  }
+  const where = eq(searchProperties.host, host)
+  const rows = await kit.withOrg({ orgId }, (db) =>
+    db
+      .select({
+        token: searchProperties.token,
+        method: searchProperties.method,
+      })
+      .from(searchProperties)
+      .where(where)
+  )
+  for (const row of rows) {
+    if (row.token && row.method === "file") {
+      await dropVerification(env, host, row.token)
     }
   }
+  await kit.withOrg({ orgId }, (db) => db.delete(searchProperties).where(where))
 }
 
 /**
@@ -180,7 +236,9 @@ export async function startSearch(env: Env, orgId: string, host: string) {
  * saves nothing. A connection to another Google account replaces the old
  * one, whose grant is revoked first; the same account's old token is not,
  * since Google revokes the whole grant and that would take the new token
- * with it. Then one `SearchWorkflow` per live host.
+ * with it. Then the `SearchWorkflow` of the host the site is served on, from
+ * the start. A slug host's property from before a domain went live stays as
+ * it is, and Google keeps re-checking its file.
  */
 export async function connectGoogle(
   env: Env,
@@ -293,9 +351,10 @@ export async function connectGoogle(
       payload: { google_email: exchanged.email },
     })
   })
-  for (const host of await liveHosts(env, kit, orgId)) {
-    await startSearch(env, orgId, host)
-  }
+  // The host the site answers on; a redirecting slug host is one Google cannot fetch.
+  const { slug, domain } = await heldHosts(env, kit, orgId)
+  const canonical = domain ?? slug
+  if (canonical) await startSearch(env, orgId, canonical, true)
   return { email: exchanged.email }
 }
 
@@ -324,7 +383,8 @@ export async function fileToken(
 /**
  * `place`: the file where the router serves it, and the property row that is
  * its truth. A file another Google account was given before is no longer
- * served, so that account loses the host at Google's next check.
+ * served, so that account loses the host at Google's next check. A host
+ * the org no longer holds gets no file, whatever started the instance.
  */
 export async function placeToken(
   env: Env,
@@ -332,6 +392,10 @@ export async function placeToken(
   { org_id: orgId, host }: SearchParams,
   file: string
 ): Promise<void> {
+  const held = await heldHosts(env, kit, orgId)
+  if (host !== held.slug && host !== held.domain) {
+    throw new GoogleError("search.host_not_held")
+  }
   const [old] = await kit.withOrg({ orgId }, (db) =>
     db
       .select({ token: searchProperties.token })
