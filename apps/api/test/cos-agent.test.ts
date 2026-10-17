@@ -961,6 +961,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     )
     expect(names.sort()).toEqual([
       "check_domain",
+      "connect_google",
       "find_domain",
       "get_facts",
       "get_preview",

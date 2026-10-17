@@ -98,6 +98,7 @@ import { assignmentFacts, checkA11y, validateRevision } from "./validate.ts"
 // needs it exported from the Worker for its own internal hosts.
 export { ContainerProxy } from "@cloudflare/sandbox"
 export { DomainWorkflow } from "./domain-workflow.ts"
+export { SearchWorkflow } from "./search-workflow.ts"
 
 /**
  * The container behind every site (ADR-031): egress denied by default

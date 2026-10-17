@@ -28,6 +28,7 @@ import { chat } from "./chat.ts"
 import { conversationRoute } from "./conversations.ts"
 import { removal } from "./cos/tools.ts"
 import { checkout, purchaseStatus } from "./domain-buy.ts"
+import { googleConnect } from "./google.ts"
 import { failure, invalid, keyMissing, readBody } from "./http.ts"
 import { reminderRoute } from "./reminders.ts"
 import { readActivity, readFacts, unchanged } from "./workspace.ts"
@@ -43,7 +44,7 @@ import { readTaggedWorkspace } from "./workspace-tag.ts"
 
 /** The routes `ownerRoute` answers, for `index.ts` to resolve an org before. */
 export const OWNER_PATH =
-  /^\/(workspace|facts|assets|photos\/[^/]+|changes|activity|builds\/[^/]+\/(answer|blueprint|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback))?)?|reminders(\/[^/]+)?|domains\/[^/]+(\/checkout)?|chat)$/
+  /^\/(workspace|facts|assets|photos\/[^/]+|changes|activity|builds\/[^/]+\/(answer|blueprint|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback))?)?|reminders(\/[^/]+)?|domains\/[^/]+(\/checkout)?|google\/connect|chat)$/
 
 async function setFacts(request: Request, kit: Tenancy, owner: Owner) {
   if (!idempotencyKey(request)) return keyMissing()
@@ -201,6 +202,9 @@ export async function ownerRoute(
   }
   if (pathname === "/chat" && method === "POST") {
     return chat(request, env, kit, owner, { waitUntil })
+  }
+  if (pathname === "/google/connect" && method === "POST") {
+    return googleConnect(request, env, kit, owner)
   }
   if (pathname === "/activity" && method === "GET") {
     return Response.json(await readActivity(kit, owner.orgId))
