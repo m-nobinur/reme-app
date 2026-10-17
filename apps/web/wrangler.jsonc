@@ -49,10 +49,6 @@
     // public hostname at all, which is a design question this does not settle.
     // The local value goes in apps/web/.dev.vars, which `pnpm bootstrap` writes.
     "REME_API_URL": "https://staging-api.remeai.co.uk",
-    // The public client id of the Google OAuth client that connects Search
-    // Console. Empty turns the feature off: /api/google/start then answers
-    // /app?google=unavailable. The secret is on the orchestrator, never here.
-    "GOOGLE_CLIENT_ID": "",
     // Stripe's public key for the domain purchase's embedded Checkout: public
     // by design, it only mounts a Checkout the api already created. Test mode,
     // so local and staging pay with test cards. Production leaves it unset,
@@ -108,8 +104,7 @@
       ],
       "vars": {
         "WORKOS_REDIRECT_URI": "https://preview.remeai.co.uk/api/auth/callback",
-        "REME_API_URL": "https://api.remeai.co.uk",
-        "GOOGLE_CLIENT_ID": ""
+        "REME_API_URL": "https://api.remeai.co.uk"
       },
       "kv_namespaces": [
         { "binding": "CACHE", "id": "8e089aa00e324970a824ca2768201502" }
