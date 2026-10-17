@@ -760,7 +760,7 @@ it("a finished design tray sends its answers, and reads back as the owner's word
     parts: [
       {
         type: "text",
-        text: "Which colour palette feels right for your business?: Navy and gold\nWhich pages should the site have?: Everything",
+        text: "Which colour palette feels right for your business: Navy and gold\nWhich pages should the site have: Everything",
       },
     ],
     metadata: { reply: true },
@@ -794,7 +794,7 @@ it("a finished design tray sends its answers, and reads back as the owner's word
         },
       })
     )
-  ).toBe("Which pages should the site have?: The essentials")
+  ).toBe("Which pages should the site have: The essentials")
   // Several ticked read as their labels, in the order given.
   expect(
     replyText(
@@ -805,7 +805,7 @@ it("a finished design tray sends its answers, and reads back as the owner's word
         },
       })
     )
-  ).toBe("Which pages should the site have?: Everything, The essentials")
+  ).toBe("Which pages should the site have: Everything, The essentials")
   expect(replyText(tray("input-available"))).toBeNull()
 })
 
