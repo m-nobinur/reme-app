@@ -26,6 +26,14 @@ import {
   WorkspaceStatus,
 } from "./owner.ts"
 import { Refused } from "./refused.ts"
+import {
+  ConnectGoogleInput,
+  ConnectGoogleOutput,
+  GetIndexingInput,
+  GetIndexingOutput,
+  GetSearchPerformanceInput,
+  GetSearchPerformanceOutput,
+} from "./search.ts"
 import { Text } from "./text.ts"
 
 // The Chief of Staff's tools and its event log (ADR-034). A tool's output is
@@ -314,6 +322,12 @@ export const COS_TOOLS = {
   remove_domain: { input: RemoveDomainInput, output: RemoveDomainOutput },
   find_domain: { input: FindDomainInput, output: FindDomainOutput },
   buy_domain: { input: BuyDomainInput, output: BuyDomainOutput },
+  connect_google: { input: ConnectGoogleInput, output: ConnectGoogleOutput },
+  get_search_performance: {
+    input: GetSearchPerformanceInput,
+    output: GetSearchPerformanceOutput,
+  },
+  get_indexing: { input: GetIndexingInput, output: GetIndexingOutput },
 } as const
 
 export type CosToolName = keyof typeof COS_TOOLS
@@ -469,6 +483,21 @@ export const CosToolResult = z.discriminatedUnion("tool", [
     ...Called,
     tool: z.literal("buy_domain"),
     output: COS_TOOLS.buy_domain.output,
+  }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("connect_google"),
+    output: COS_TOOLS.connect_google.output,
+  }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("get_search_performance"),
+    output: COS_TOOLS.get_search_performance.output,
+  }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("get_indexing"),
+    output: COS_TOOLS.get_indexing.output,
   }),
 ])
 
