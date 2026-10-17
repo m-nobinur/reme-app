@@ -864,6 +864,26 @@ export async function dropVerification(
   await env.ROUTES.delete(`gsv:${host}:${file}`)
 }
 
+/** A verification file KV lost, put back from its property row (search-sync.ts). */
+export async function restoreVerification(
+  env: Pick<Env, "ROUTES">,
+  host: string,
+  file: string
+): Promise<void> {
+  if ((await env.ROUTES.get(`gsv:${host}:${file}`)) === null) {
+    await writeVerification(env, host, file)
+  }
+}
+
+/** One verification file the router serves, as its address, for the uptime check; or null. */
+export async function servedVerification(
+  env: Pick<Env, "ROUTES">
+): Promise<string | null> {
+  const { keys } = await env.ROUTES.list({ prefix: "gsv:", limit: 1 })
+  const [, host, file] = keys[0]?.name.split(":") ?? []
+  return host && file ? `https://${host}/${file}` : null
+}
+
 /** The other half of a custom domain: `www.x` for `x`, and `x` for `www.x`. */
 export const otherHost = (primary: string) =>
   primary.startsWith("www.") ? primary.slice(4) : `www.${primary}`

@@ -54,6 +54,7 @@ import {
   readTarget,
   redriveQueued,
   requestReview,
+  servedVerification,
   stillLive,
   verifyArtifact,
   writePointer,
@@ -83,6 +84,15 @@ import {
   whileHeld,
 } from "./sandbox.ts"
 import {
+  afterPublish,
+  hourAt,
+  isWeeklyHour,
+  postWeekly,
+  startDueSyncs,
+  type Weekly,
+  weeklyFor,
+} from "./search-sync.ts"
+import {
   advance,
   claim,
   lastEventAt,
@@ -98,7 +108,7 @@ import { assignmentFacts, checkA11y, validateRevision } from "./validate.ts"
 // needs it exported from the Worker for its own internal hosts.
 export { ContainerProxy } from "@cloudflare/sandbox"
 export { DomainWorkflow } from "./domain-workflow.ts"
-export { SearchWorkflow } from "./search-workflow.ts"
+export { SearchSyncWorkflow, SearchWorkflow } from "./search-workflow.ts"
 
 /**
  * The container behind every site (ADR-031): egress denied by default
@@ -1301,6 +1311,26 @@ export class PublishWorkflow extends WorkflowEntrypoint<Env, PublishParams> {
       }
     }
 
+    // Search engines hear about a version that stayed live (search-sync.ts).
+    // The body never throws; a step that still fails leaves the publish as is.
+    if (deployment && !failed && !superseded) {
+      try {
+        await step.do("search", () =>
+          run((kit) =>
+            afterPublish(this.env, kit, {
+              orgId,
+              host: served,
+              siteId: target.site_id,
+              revisionId: target.revision_id,
+              previousRevisionId: deployment.previous_revision_id,
+            })
+          )
+        )
+      } catch {
+        // Logged in the body; the next publish and the daily sync catch up.
+      }
+    }
+
     // A rollback restores what this instance's own row replaced, only while
     // that row is still live.
     // A version the router never served is not known to be broken: an
@@ -1548,6 +1578,53 @@ export class SweepWorkflow extends WorkflowEntrypoint<Env, { hour: string }> {
         }
       }
     }
+    // Search Console (search-sync.ts): each org due a pull gets its own
+    // instance, since a sweep calling Google for every org would pass the
+    // subrequest limit; and on Monday at 07 UTC the weekly message, each
+    // posted in a step of its own like the domain messages.
+    const { hour } = event.payload
+    const day = `${hour.slice(0, 4)}-${hour.slice(4, 6)}-${hour.slice(6, 8)}`
+    for (let i = 0; i < orgIds.length; i += SWEEP_CHUNK) {
+      const chunk = orgIds.slice(i, i + SWEEP_CHUNK)
+      await step.do(`search ${i / SWEEP_CHUNK + 1}`, () =>
+        withKit(this.env, (kit) => startDueSyncs(this.env, kit, chunk, day))
+      )
+    }
+    if (isWeeklyHour(hour)) {
+      const now = hourAt(hour)
+      for (let i = 0; i < orgIds.length; i += SWEEP_CHUNK) {
+        const chunk = orgIds.slice(i, i + SWEEP_CHUNK)
+        const weeklies = await step.do(`weekly ${i / SWEEP_CHUNK + 1}`, () =>
+          withKit(this.env, async (kit) => {
+            const found: { orgId: string; weekly: Weekly }[] = []
+            for (const orgId of chunk) {
+              try {
+                const weekly = await weeklyFor(kit, orgId, now)
+                if (weekly) found.push({ orgId, weekly })
+              } catch (error) {
+                console.error(
+                  JSON.stringify({
+                    sweep: hour,
+                    org_id: orgId,
+                    code: failureCode(error),
+                  })
+                )
+              }
+            }
+            return found
+          })
+        )
+        for (const { orgId, weekly } of weeklies) {
+          try {
+            await step.do(`say ${weekly.key}`, SAY_RETRIES, () =>
+              withKit(this.env, (kit) => postWeekly(kit, orgId, weekly))
+            )
+          } catch {
+            // The chat stayed busy past every retry; next Monday says it again.
+          }
+        }
+      }
+    }
     // The run's one line, for the alert on a sweep that deletes nothing for a week.
     console.log(JSON.stringify({ sweep: event.payload.hour, ...totals }))
     return totals
@@ -1563,7 +1640,9 @@ export class SweepWorkflow extends WorkflowEntrypoint<Env, { hour: string }> {
 export default {
   async scheduled(controller: ScheduledController, env: Env) {
     if (controller.cron === UPTIME_CRON) {
-      await checkUptime(env)
+      // A router that stops serving verification files alerts before Google drops a property.
+      const file = await servedVerification(env).catch(() => null)
+      await checkUptime(env, file ? [file] : [])
       return
     }
     const hour = sweepHour(controller.scheduledTime)

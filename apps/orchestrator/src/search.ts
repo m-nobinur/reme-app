@@ -304,7 +304,7 @@ export async function connectGoogle(
 // ---------------------------------------------------------------------------
 
 /** Google's FILE token is the file name the router serves, and nothing else. */
-const FILE = /^google[0-9a-f]{1,64}\.html$/
+export const FILE = /^google[0-9a-f]{1,64}\.html$/
 
 /** `token`: the verification file name, under the owner's account. */
 export async function fileToken(

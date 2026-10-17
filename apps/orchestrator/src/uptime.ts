@@ -59,9 +59,14 @@ async function probe(url: string): Promise<Check> {
   }
 }
 
-export async function checkUptime(env: UptimeEnv): Promise<Check[]> {
+/** `extra` joins `HEALTH_URLS`: the cron adds one Google verification file the router serves. */
+export async function checkUptime(
+  env: UptimeEnv,
+  extra: string[] = []
+): Promise<Check[]> {
   const urls = env.HEALTH_URLS?.split(/[\s,]+/).filter(Boolean) ?? []
   if (urls.length === 0) return []
+  urls.push(...extra)
   const checks = await Promise.all(urls.map(probe))
   const failed = checks.filter((c) => !c.ok)
   console.log(

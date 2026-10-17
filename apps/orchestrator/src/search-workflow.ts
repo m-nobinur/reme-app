@@ -9,7 +9,7 @@ import { NonRetryableError } from "cloudflare:workflows"
 import type { Tenancy } from "@workspace/db"
 import { withKit } from "./domain-flow.ts"
 import { SAY_RETRIES } from "./domain-workflow.ts"
-import { GoogleError } from "./google.ts"
+import { GoogleError, NeedsReauth } from "./google.ts"
 import {
   addProperty,
   announce,
@@ -20,6 +20,12 @@ import {
   type SearchParams,
   verifyOnce,
 } from "./search.ts"
+import {
+  inspectPages,
+  pullProperty,
+  type SyncParams,
+  syncTargets,
+} from "./search-sync.ts"
 
 /** Google's outage or quota, and our own database, retry; any other Google answer is final. */
 export const GOOGLE_RETRIES: WorkflowStepConfig = {
@@ -129,5 +135,57 @@ export class SearchWorkflow extends WorkflowEntrypoint<Env, SearchParams> {
       // The chat stayed busy past every retry; the audit rows keep it.
     }
     return { outcome: "verified" }
+  }
+}
+
+/** A pull is three Google calls and the writes; a round of inspections is up to 20 calls. */
+export const SYNC_RETRIES: WorkflowStepConfig = {
+  ...GOOGLE_RETRIES,
+  timeout: "5 minutes",
+}
+
+/**
+ * One instance per org a day, `syncInstanceId`, started by the hourly sweep
+ * (search-sync.ts). Per verified property: the numbers, then the day's page
+ * inspections. A token Google refused ends it, with the connection already
+ * `needs_reauth` and audited; tomorrow's instance finds no live connection.
+ */
+export class SearchSyncWorkflow extends WorkflowEntrypoint<Env, SyncParams> {
+  async run(event: WorkflowEvent<SyncParams>, step: WorkflowStep) {
+    const orgId = event.payload.org_id
+    const env = this.env
+    // A revoked token is an answer, not a failure: null, and the instance stops.
+    const google =
+      <T>(body: (kit: Tenancy) => Promise<T>) =>
+      () =>
+        final(
+          withKit(env, (kit) =>
+            body(kit).catch((error) => {
+              if (error instanceof NeedsReauth) return null
+              throw error
+            })
+          )
+        )
+
+    const sites = await step.do(
+      "properties",
+      GOOGLE_RETRIES,
+      google((kit) => syncTargets(env, kit, orgId))
+    )
+    for (const [i, siteUrl] of (sites ?? []).entries()) {
+      const pulled = await step.do(
+        `pull ${i + 1}`,
+        SYNC_RETRIES,
+        google((kit) => pullProperty(env, kit, orgId, siteUrl))
+      )
+      if (!pulled) return { outcome: "needs_reauth" }
+      const inspected = await step.do(
+        `inspect ${i + 1}`,
+        SYNC_RETRIES,
+        google((kit) => inspectPages(env, kit, orgId, siteUrl))
+      )
+      if (inspected === null) return { outcome: "needs_reauth" }
+    }
+    return { outcome: "synced", properties: sites?.length ?? 0 }
   }
 }

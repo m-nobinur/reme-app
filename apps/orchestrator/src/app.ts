@@ -84,6 +84,7 @@ import { publishedSource } from "./revise.ts"
 import { endSandbox, endSite, probe } from "./sandbox.ts"
 import { connectGoogle } from "./search.ts"
 import { liveInspect, livePerformance } from "./search-read.ts"
+import { disconnectSearch } from "./search-sync.ts"
 import { assignmentCost, cancel, lockRow, TransitionError } from "./state.ts"
 
 /**
@@ -787,6 +788,7 @@ ownerOnly.post("/site/takedown", async (c) => {
   await endSite(c.env, orgId)
   await clearPointers(c.env, c.get("kit"), orgId)
   await revokeDomains(c.env, c.get("kit"), orgId)
+  await disconnectSearch(c.env, c.get("kit"), orgId, true)
   return c.body(null, 204)
 })
 
@@ -835,6 +837,12 @@ ownerOnly.post("/search/connect", async (c) => {
       detail: {},
     })
   }
+  return c.body(null, 204)
+})
+
+/** The owner ending the Google connection (search-sync.ts). Safe to repeat. */
+ownerOnly.post("/search/disconnect", async (c) => {
+  await disconnectSearch(c.env, c.get("kit"), c.get("orgId"))
   return c.body(null, 204)
 })
 
