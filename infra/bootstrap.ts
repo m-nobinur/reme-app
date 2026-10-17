@@ -37,7 +37,7 @@ function stop(message: string, ...fixes: string[]): never {
  */
 const environments = {
   staging: {
-    neonProject: "sparkling-wildflower-04343187",
+    neonProject: "silent-sun-14056263",
     neonBranch: "main",
     // Named because neonctl refuses to guess once a branch has more than one
     // role, and migration 0001 makes that true by creating `reme_app`.
@@ -108,7 +108,7 @@ const environments = {
    * only fills a missing secret, so it never puts staging's back.
    */
   prod: {
-    neonProject: "super-brook-02913792",
+    neonProject: "weathered-rice-57505553",
     neonBranch: "main",
     neonOwner: "neondb_owner",
     hyperdrive: "reme-prod-postgres",

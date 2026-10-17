@@ -36,7 +36,7 @@ env:
   # The production Neon project, not a branch of the staging one. A branch
   # inherits its parent's rows, and the first attempt at this arrived holding
   # the golden fixture orgs.
-  NEON_PROJECT_ID: super-brook-02913792
+  NEON_PROJECT_ID: weathered-rice-57505553
   WEB: https://preview.remeai.co.uk
   API: https://api.remeai.co.uk
   ORCHESTRATOR: https://orchestrator.remeai.co.uk

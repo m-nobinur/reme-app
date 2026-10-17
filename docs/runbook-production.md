@@ -3,7 +3,7 @@
 Written 2026-08-30 from the drill, not before it. Every number here was measured on
 `reme-api-production`.
 
-Production is four Workers on the `reme-prod` Neon project (`super-brook-02913792`):
+Production is four Workers on the `reme-prod` Neon project (`weathered-rice-57505553`):
 
 - `reme-web-production` on `preview.remeai.co.uk`
 - `reme-api-production` on `api.remeai.co.uk`

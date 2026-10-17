@@ -46,7 +46,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  NEON_PROJECT_ID: sparkling-wildflower-04343187
+  NEON_PROJECT_ID: silent-sun-14056263
   # `pr-<number>` satisfies the alias rules on its own and will keep doing so: it
   # begins with a lowercase letter, holds only lowercase letters, digits and
   # dashes, and `pr-` plus a seven-digit number plus `-reme-web` is 19 characters
