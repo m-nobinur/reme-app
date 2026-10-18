@@ -18,12 +18,16 @@ import { cspMiddleware } from "@/lib/csp"
  * TanStack Start ships the check but does not register it, and warns at dev time
  * that it is missing — which is how this got here.
  *
- * Scoped to server functions. Route handlers under /api/auth are reached by a
- * top-level GET navigation from a provider, which no CSRF token survives; those
- * carry their own `state` cookie check instead.
+ * Server functions, and any route handler a request would change state
+ * through, such as the chat and upload POSTs under /api. A GET or HEAD to a
+ * route skips it: the OAuth callbacks are reached by a top-level GET
+ * navigation from a provider, which no CSRF token survives, and carry their
+ * own `state` cookie check instead.
  */
-const csrfMiddleware = createCsrfMiddleware({
-  filter: (context) => context.handlerType === "serverFn",
+export const csrfMiddleware = createCsrfMiddleware({
+  filter: (context) =>
+    context.handlerType === "serverFn" ||
+    !["GET", "HEAD"].includes(context.request.method),
 })
 
 /**
