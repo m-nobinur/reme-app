@@ -619,3 +619,57 @@ describe.skipIf(!url)("the org writer, on a live connection", () => {
     })
   })
 })
+
+describe.skipIf(!url)("two signups by one person at once", () => {
+  // A kit each, as two requests each get their own.
+  const kits = [tenancy(url as string), tenancy(url as string)] as const
+  const admin = postgres(url as string, { max: 1 })
+  const WORKOS_ORG = "org_probe_api_race"
+
+  afterAll(async () => {
+    const rows = await admin<{ id: string }[]>`
+      select id from orgs where workos_organization_id like ${`${WORKOS_ORG}_%`}`
+    const dropped = rows.map((r) => r.id)
+    if (dropped.length > 0) {
+      await kits[0].withOrg({ orgId: dropped[0] as string }, async (db) => {
+        await db.execute(sql`reset role`)
+        await clearOrgs(db as unknown as Tx, dropped, [])
+      })
+    }
+    await admin.end()
+    await Promise.all(kits.map((k) => k.close()))
+  }, 60_000)
+
+  it("makes one org, and the second replays it", async () => {
+    let calls = 0
+    const created: { id: string; organizationId: string }[] = []
+    const directory: Directory = {
+      createOrganization: async () => {
+        calls += 1
+        const id = `${WORKOS_ORG}_${crypto.randomUUID()}`
+        // Long enough for the other signup to list memberships meanwhile.
+        await new Promise((resolve) => setTimeout(resolve, 200))
+        return { id }
+      },
+      listOrganizationMemberships: async () => ({ data: created.slice(0, 1) }),
+      createOrganizationMembership: async ({ organizationId }) => {
+        const membership = { id: `om_probe_api_race_${calls}`, organizationId }
+        created.push(membership)
+        return membership
+      },
+    }
+    const input = {
+      name: "Race Cleaning Co. (fixture)",
+      idempotencyKey: "race-key",
+      workosUserId: "user_probe_api_race",
+      email: "probe@api-race.invalid",
+      displayName: "Race Owner",
+    }
+    const [a, b] = await Promise.all([
+      createOrg(kits[0], directory, input),
+      createOrg(kits[1], directory, input),
+    ])
+    expect(calls).toBe(1)
+    expect(b.org_id).toBe(a.org_id)
+  }, 30_000)
+})
