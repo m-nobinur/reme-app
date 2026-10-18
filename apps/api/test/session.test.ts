@@ -101,6 +101,15 @@ describe("what a session carries besides the person", () => {
   })
 })
 
+describe("a malformed cookie", () => {
+  it("is no session, not a server fault", async () => {
+    const response = await call("/org", {
+      headers: { cookie: "wos-session=%E0%A4%A" },
+    })
+    expect(response.status).toBe(401)
+  })
+})
+
 describe("an expired session", () => {
   it("is refused, and refused for having expired", async () => {
     const client = new WorkOS("unused", { clientId: CLIENT_ID })
