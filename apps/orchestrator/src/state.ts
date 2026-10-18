@@ -337,7 +337,9 @@ export async function transition(
  * Move to `to` from whatever the row is at now. For the Workflow, which is
  * the row's single writer between claim and settlement: the version it reads
  * under the lock is the version it expects. `apply` runs in the same
- * transaction, for a step that writes more than the transition.
+ * transaction, for a step that writes more than the transition. A row already
+ * at `to` is a step retried after its commit, so it returns that transition
+ * rather than refusing the edge and jamming the site lock.
  */
 export function advance(
   kit: Tenancy,
@@ -351,6 +353,22 @@ export function advance(
 ): Promise<Transition> {
   return kit.withOrg({ orgId: ids.orgId }, async (db) => {
     const row = await lockRow(db, ids.assignmentId)
+    if (row.state === to) {
+      const [last] = await db
+        .select()
+        .from(assignmentTransitions)
+        .where(
+          sql`${assignmentTransitions.assignmentId} = ${row.id} and ${assignmentTransitions.version} = ${row.version}`
+        )
+      if (last) {
+        return {
+          from: last.fromState,
+          to,
+          version: row.version,
+          eventId: last.eventId,
+        }
+      }
+    }
     const extra = options.apply ? await options.apply(db, row) : {}
     return transition(db, {
       ...ids,

@@ -395,7 +395,8 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
       readyAt = got.at
       if (!ready) await step.sleep(`pool full ${attempt}`, "30 seconds")
     }
-    if (!ready) return { outcome: "pool_exhausted" }
+    // Failing releases the site lock; returning here would hold it for good.
+    if (!ready) return fail("pool", "pool.exhausted")
 
     await step.do("implementing", () =>
       run((kit) => advance(kit, ids, "implementing"))
