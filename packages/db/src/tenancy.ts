@@ -14,8 +14,8 @@ import * as schema from "./schema.ts"
  * is the kit over a pool the caller owns and closes, which is what a Worker
  * needs: Hyperdrive hands its connection string to the request rather than to
  * the environment. `withOrg` is the same thing over `DATABASE_URL`, shared and
- * opened on first use, for migrations, seeds and the suites; `closeTenancy`
- * shuts it, and a Node process that does not call it will not exit.
+ * opened on first use, for the suites, which tear their workers down; nothing
+ * can shut it, so a Node script uses `tenancy(url)` and closes that.
  *
  * That covers reaching a handle. It does not cover keeping one, which is the
  * other half: `withOrg` returns whatever the callback returns, so
@@ -432,11 +432,11 @@ export function tenancy(
 let shared: Tenancy | undefined
 
 /**
- * The same thing over `DATABASE_URL`, for migrations, seeds and the suites.
- * Opened on first use and shared, because those callers all want one pool.
+ * The same thing over `DATABASE_URL`, for the suites. Opened on first use and
+ * shared, because they all want one pool.
  *
- * A Node entry point that uses this has to call `closeTenancy` before it can
- * exit. Vitest does not, because it tears its workers down.
+ * Nothing closes it, so a Node entry point that uses this does not exit.
+ * Vitest does, because it tears its workers down.
  */
 export async function withOrg<T>(
   ctx: TenantContext,
@@ -444,11 +444,4 @@ export async function withOrg<T>(
 ): Promise<T> {
   shared ??= tenancy(connectionString(), { max: 10 })
   return shared.withOrg(ctx, fn)
-}
-
-/** Closes the shared pool. Safe to call twice, and safe never to have opened. */
-export async function closeTenancy(): Promise<void> {
-  const open = shared
-  shared = undefined
-  await open?.close()
 }
