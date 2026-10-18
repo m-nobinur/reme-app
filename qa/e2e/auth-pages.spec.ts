@@ -18,7 +18,12 @@ import { AXE_TAGS } from "./axe"
  * property. A single-theme scan checks half of the colour decisions.
  */
 
-test.use({ storageState: { cookies: [], origins: [] } })
+// Reduced motion, so axe measures settled colours: the front page and the
+// sign-in panel fade and pop in, and mid-fade text reads as low contrast.
+test.use({
+  storageState: { cookies: [], origins: [] },
+  contextOptions: { reducedMotion: "reduce" },
+})
 
 const PAGES = [
   ["the landing page", "/"],
