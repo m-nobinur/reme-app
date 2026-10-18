@@ -822,6 +822,12 @@ export async function startRegistration(
 ): Promise<Registering> {
   const row = await readPurchase(kit, orgId, domainId)
   if (row?.state !== "verifying") return { gone: true }
+  // A retry after the registration landed: the name is ours now, and the
+  // price check would call it taken and refund a domain we bought.
+  if (await getRegistration(env, row.name)) {
+    const status = await registrationStatus(env, row.name)
+    return { gone: false, say: null, status }
+  }
   const priced = await priceNow(env, row.name)
   if ("refused" in priced) {
     if (priced.status === 503) throw new DomainError("registrar.unavailable")
