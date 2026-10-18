@@ -484,6 +484,11 @@ export const facts = pgTable(
     uniqueIndex("facts_one_current_per_key")
       .on(t.orgId, t.key)
       .where(sql`valid_to is null`),
+    // `recent_designs` finds an industry's orgs here rather than by
+    // scanning every tenant's revisions.
+    index("facts_current_industry_idx")
+      .on(sql`(${t.value}->>'category')`, t.orgId)
+      .where(sql`key = 'business.industry' and valid_to is null`),
     check("facts_version_positive", sql`version > 0`),
     check(
       "facts_confidence_range",
@@ -829,6 +834,10 @@ export const siteRevisions = pgTable(
   (t) => [
     unique("site_revisions_id_org_key").on(t.id, t.orgId),
     unique("site_revisions_site_version_key").on(t.siteId, t.version),
+    // Each org's newest numbered revision, for `recent_designs`.
+    index("site_revisions_org_numbered_idx")
+      .on(t.orgId, t.createdAt)
+      .where(sql`version is not null`),
     foreignKey({
       name: "site_revisions_assignment_fk",
       columns: [t.assignmentId, t.orgId],
