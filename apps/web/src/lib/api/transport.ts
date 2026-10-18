@@ -6,13 +6,17 @@ import {
   getAuthkit,
 } from "@workos/authkit-tanstack-react-start"
 import type { ErrorEnvelope } from "@workspace/contracts"
+import { sessionCookie } from "@/lib/auth/workos"
 
 /**
  * How a request from `apps/web` reaches `apps/api`: with the session AuthKit
  * resolved, and with a bound on how long the api has to start answering.
  */
 
-/** The cookie AuthKit writes and `apps/api` reads (ADR-024, ADR-026). */
+/**
+ * The cookie `apps/api` reads the forwarded session from (ADR-024, ADR-026).
+ * The browser's own cookie is `sessionCookie()`, which only this Worker sees.
+ */
 export const COOKIE = "wos-session"
 
 /**
@@ -35,7 +39,7 @@ const TOKEN_LEFT_S = 10
 
 export async function forwardedSession(): Promise<string | undefined> {
   const context = getAuthKitContextOrNull()
-  if (!context) return getCookie(COOKIE)
+  if (!context) return getCookie(sessionCookie())
   const auth = context.auth()
   if (!auth.user) return undefined
   let seal = sealed.get(context.request)

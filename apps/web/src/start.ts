@@ -3,12 +3,14 @@ import {
   createMiddleware,
   createStart,
 } from "@tanstack/react-start"
+import { configure } from "@workos/authkit-session"
 import {
   type AuthKitContext,
   authkitMiddleware,
   getAuthkit,
 } from "@workos/authkit-tanstack-react-start"
 import { whyNoUser } from "@/lib/auth/diagnose"
+import { sessionCookie } from "@/lib/auth/workos"
 import { cspMiddleware } from "@/lib/csp"
 
 /**
@@ -31,6 +33,17 @@ export const csrfMiddleware = createCsrfMiddleware({
 })
 
 /**
+ * Names AuthKit's session cookie (`sessionCookie`). The kit reads the name
+ * once, on its first use in `authkitMiddleware`, so this runs before it; in a
+ * middleware body rather than at the top of this file, which the client
+ * bundle also loads.
+ */
+const cookieName = createMiddleware().server(({ next }) => {
+  configure({ cookieName: sessionCookie() })
+  return next()
+})
+
+/**
  * One log line when a request brought a session cookie and AuthKit still
  * found no user, saying why (`lib/auth/diagnose.ts`). Runs after AuthKit's
  * middleware and only on that path, so a signed-in request pays nothing.
@@ -48,7 +61,9 @@ export const noUserLog = createMiddleware().server(
     if (
       !auth ||
       auth.user ||
-      !/(?:^|;\s*)wos-session=/.test(request.headers.get("cookie") ?? "")
+      !(request.headers.get("cookie") ?? "")
+        .split(/;\s*/)
+        .some((pair) => pair.startsWith(`${sessionCookie()}=`))
     ) {
       return next()
     }
@@ -95,6 +110,7 @@ export const startInstance = createStart(() => ({
   requestMiddleware: [
     cspMiddleware,
     csrfMiddleware,
+    cookieName,
     authkitMiddleware(),
     noUserLog,
   ],

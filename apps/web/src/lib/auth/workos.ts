@@ -65,6 +65,18 @@ export function redirectUri(): string {
 }
 
 /**
+ * The browser's session cookie. `__Host-` forbids a `Domain`, so an owner's
+ * site on a sibling `remeai.co.uk` host cannot plant one for this host. A
+ * browser drops a `__Host-` cookie without `Secure`, and the kit sets
+ * `Secure` from the redirect URI's scheme, so local http keeps the plain name.
+ */
+export function sessionCookie(): string {
+  return process.env.WORKOS_REDIRECT_URI?.startsWith("https:")
+    ? "__Host-wos-session"
+    : "wos-session"
+}
+
+/**
  * Passed to every `authenticateWith*` call. The backend SDK seals the session
  * itself and hands back `sealedSession`, which is the whole of ADR-024: we
  * reproduce no cookie format and own no cryptography.
