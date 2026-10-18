@@ -10,6 +10,7 @@ import type { AttentionItem } from "@/lib/api/types"
 import { markSeen, notificationsOf, unreadCount } from "@/lib/notifications"
 import { anchorOf } from "@/lib/reminders"
 import { useLiveWorkspace } from "@/lib/workspace"
+import { useBrowserZone } from "@/panel/workspace-panel"
 
 /**
  * Everything the team has raised with the owner: what waits on them now,
@@ -62,6 +63,7 @@ const toRow = (item: AttentionItem): NotificationItem => ({
 function Notifications() {
   const { activity, seenAt, active } = frame.useLoaderData()
   const { workspace } = useLiveWorkspace()
+  const zone = useBrowserZone()
   const items = notificationsOf(workspace?.attention ?? [], activity ?? [])
   const newest = items[0]?.raisedAt
   const unread = unreadCount(items, seenAt)
@@ -90,7 +92,7 @@ function Notifications() {
         description="Questions and approvals waiting on you, and what happened to your site in the last 30 days."
         title="Notifications"
       />
-      <NotificationList error={error} items={items.map(toRow)} />
+      <NotificationList error={error} items={items.map(toRow)} zone={zone} />
     </>
   )
 }

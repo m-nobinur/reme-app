@@ -42,10 +42,13 @@ type NotificationItem = {
 function NotificationList({
   items,
   error = null,
+  zone,
 }: {
   items: NotificationItem[]
   /** Part of the list could not be read; shown above what was. */
   error?: string | null
+  /** The reader's time zone once it is known, UTC before, as the panel does. */
+  zone?: string | null
 }) {
   if (items.length === 0) {
     return error ? (
@@ -73,7 +76,7 @@ function NotificationList({
       <ul className="flex flex-col divide-y divide-border">
         {items.map((item) => {
           const kind = attentionKind[item.kind]
-          const expires = formatDateTime(item.expiresAt)
+          const expires = formatDateTime(item.expiresAt, zone ?? undefined)
           return (
             <li
               className="flex flex-col gap-1.5 py-4"
@@ -86,7 +89,7 @@ function NotificationList({
                   {kind.label}
                 </Badge>
                 <time className={`${META} tabular-nums`} dateTime={item.at}>
-                  {formatDateTime(item.at)}
+                  {formatDateTime(item.at, zone ?? undefined)}
                 </time>
               </div>
               <h2 className="font-medium text-base">{item.title}</h2>
@@ -135,12 +138,15 @@ function NotificationMenu({
   unread,
   viewAll,
   onOpenChange,
+  zone,
 }: {
   items: NotificationEntry[]
   unread: number
   /** The link element "View all notifications" renders as. */
   viewAll: ReactElement<ComponentProps<"a">>
   onOpenChange?: (open: boolean) => void
+  /** The reader's time zone once it is known, UTC before. */
+  zone?: string | null
 }) {
   return (
     <DropdownMenu onOpenChange={onOpenChange}>
@@ -195,7 +201,7 @@ function NotificationMenu({
                       {item.title}
                     </span>
                     <time className={`${META} tabular-nums`} dateTime={item.at}>
-                      {formatDateTime(item.at)}
+                      {formatDateTime(item.at, zone ?? undefined)}
                     </time>
                   </span>
                   {item.unread ? (
