@@ -194,6 +194,10 @@ export const verifyEmail = createServerFn({ method: "POST" })
     if (!pending) {
       return { status: "failed", failure: NO_PENDING }
     }
+    const limited = await throttle(env.SIGN_IN_LIMIT, "verify", pending.userId)
+    if (limited) {
+      return { status: "failed", failure: limited }
+    }
     return authenticate(
       () =>
         workos().userManagement.authenticateWithEmailVerification({
@@ -210,6 +214,14 @@ export const resendVerification = createServerFn({ method: "POST" }).handler(
     const pending = await readPending()
     if (!pending) {
       return { sent: false, failure: NO_PENDING }
+    }
+    const limited = await throttle(
+      env.SIGN_IN_LIMIT,
+      "verify-resend",
+      pending.email
+    )
+    if (limited) {
+      return { sent: false, failure: limited }
     }
     try {
       await workos().userManagement.sendVerificationEmail({

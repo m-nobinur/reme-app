@@ -35,7 +35,7 @@ export type Limiter = {
  * The forms that are counted, each in its own buckets on the one binding, so a
  * person who asked for three reset emails still has five sign-ins left. What
  * each is keyed on: the address, except `reset`, which has none and is keyed
- * on its link's token.
+ * on its link's token, and `verify`, which is keyed on the pending user.
  */
 type Throttled =
   | "sign-in"
@@ -43,6 +43,8 @@ type Throttled =
   | "sign-up"
   | "reset-request"
   | "reset"
+  | "verify-resend"
+  | "verify"
 
 const REFUSED: Record<Throttled, string> = {
   "sign-in": "Too many sign-in attempts for that email.",
@@ -50,6 +52,8 @@ const REFUSED: Record<Throttled, string> = {
   "sign-up": "Too many sign-up attempts for that email.",
   "reset-request": "Too many reset emails asked for that address.",
   reset: "Too many attempts with this reset link.",
+  "verify-resend": "Too many verification emails asked for that address.",
+  verify: "Too many verification codes tried.",
 }
 
 /**

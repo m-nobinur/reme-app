@@ -17,8 +17,20 @@ const resetPassword = vi.fn()
 const createMagicAuth = vi.fn()
 const authenticateWithMagicAuth = vi.fn()
 const authenticate = vi.fn()
+const sendVerificationEmail = vi.fn()
+const authenticateWithEmailVerification = vi.fn()
 
 vi.mock("cloudflare:workers", () => ({ env: { SIGN_IN_LIMIT: { limit } } }))
+
+vi.mock("./pending", () => ({
+  readPending: async () => ({
+    token: "pending",
+    userId: "user_probe",
+    email: "Dana@Brightclean.invalid",
+  }),
+  updatePending: vi.fn(),
+  clearPending: vi.fn(),
+}))
 
 vi.mock("@tanstack/react-start", () => {
   const builder = {
@@ -36,6 +48,8 @@ vi.mock("./workos", () => ({
       resetPassword,
       createMagicAuth,
       authenticateWithMagicAuth,
+      sendVerificationEmail,
+      authenticateWithEmailVerification,
     },
   }),
   sessionOptions: () => ({}),
@@ -112,6 +126,22 @@ describe("a limited form does not reach WorkOS", () => {
     expect(outcome).toEqual({ failure: refused })
     expect(limit).toHaveBeenCalledWith({ key: "reset:rt_probe" })
     expect(resetPassword).not.toHaveBeenCalled()
+  })
+
+  it("resending the verification email, counted on the address", async () => {
+    const outcome = await actions.resendVerification({ data: {} })
+    expect(outcome).toEqual({ sent: false, failure: refused })
+    expect(limit).toHaveBeenCalledWith({
+      key: "verify-resend:dana@brightclean.invalid",
+    })
+    expect(sendVerificationEmail).not.toHaveBeenCalled()
+  })
+
+  it("entering the verification code, counted on the user", async () => {
+    const outcome = await actions.verifyEmail({ data: { code: "123456" } })
+    expect(outcome).toEqual({ status: "failed", failure: refused })
+    expect(limit).toHaveBeenCalledWith({ key: "verify:user_probe" })
+    expect(authenticate).not.toHaveBeenCalled()
   })
 })
 
