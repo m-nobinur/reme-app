@@ -1,17 +1,37 @@
 import { AuthAside } from "@workspace/ui/components/auth-aside"
 import { Button } from "@workspace/ui/components/button"
 import {
+  Assistant,
   ClosingCta,
   Control,
+  Enquiries,
   Faq,
-  Features,
   Hero,
+  Pipeline,
+  Setup,
   SiteFooter,
   SiteHeader,
-  Steps,
+  Website,
+  Workforce,
 } from "@workspace/ui/components/landing"
+import {
+  ChatWidget,
+  FlowDiagram,
+  Frame,
+  HeroStage,
+  LeadHistory,
+  OnboardingChat,
+  ProductWindow,
+  QuoteRequest,
+  WebsitePreview,
+} from "@workspace/ui/components/landing-visuals"
 import { Logo } from "@workspace/ui/components/logo"
-import { MorningSummary } from "@workspace/ui/components/morning-summary"
+import {
+  Persona,
+  PersonaAvatar,
+  PersonaStage,
+  SpeechBubble,
+} from "@workspace/ui/components/persona"
 import type { CatalogEntry } from "./entries"
 
 const cta = <Button size="lg">Create your account</Button>
@@ -20,11 +40,24 @@ const cta = <Button size="lg">Create your account</Button>
 const landingCatalog: CatalogEntry[] = [
   {
     name: "AuthAside",
-    render: () => <AuthAside className="min-h-[32rem]" />,
+    render: () => <AuthAside className="min-h-[40rem]" />,
+  },
+  { name: "Persona", render: () => <Persona className="size-48" /> },
+  { name: "PersonaAvatar", render: () => <PersonaAvatar /> },
+  {
+    name: "SpeechBubble",
+    render: () => (
+      <SpeechBubble
+        arrival="enter"
+        className="mt-8 max-w-sm"
+        text="I'll look after your enquiries so you can get on with the work."
+        title="Hi, I'm Reme."
+      />
+    ),
   },
   {
-    name: "MorningSummary",
-    render: () => <MorningSummary className="max-w-md" />,
+    name: "PersonaStage",
+    render: () => <PersonaStage className="w-72" />,
   },
   {
     name: "SiteHeader",
@@ -33,15 +66,35 @@ const landingCatalog: CatalogEntry[] = [
         actions={<Button variant="ghost">Sign in</Button>}
         brand={<Logo />}
         nav={[
-          { href: "#features", label: "Features" },
+          { href: "#assistant", label: "The assistant" },
           { href: "#how", label: "How it works" },
         ]}
       />
     ),
   },
   { name: "Hero", render: () => <Hero actions={cta} /> },
-  { name: "Features", render: () => <Features /> },
-  { name: "Steps", render: () => <Steps /> },
+  { name: "HeroStage", render: () => <HeroStage /> },
+  { name: "Assistant", render: () => <Assistant /> },
+  { name: "ProductWindow", render: () => <ProductWindow /> },
+  { name: "Workforce", render: () => <Workforce /> },
+  { name: "FlowDiagram", render: () => <FlowDiagram /> },
+  { name: "Enquiries", render: () => <Enquiries /> },
+  { name: "ChatWidget", render: () => <ChatWidget /> },
+  { name: "Setup", render: () => <Setup /> },
+  { name: "OnboardingChat", render: () => <OnboardingChat /> },
+  { name: "Pipeline", render: () => <Pipeline /> },
+  { name: "QuoteRequest", render: () => <QuoteRequest /> },
+  { name: "LeadHistory", render: () => <LeadHistory /> },
+  { name: "Website", render: () => <Website /> },
+  { name: "WebsitePreview", render: () => <WebsitePreview /> },
+  {
+    name: "Frame",
+    render: () => (
+      <Frame caption="An empty frame" className="h-40 max-w-sm">
+        <div className="h-full rounded-[1.25rem] bg-background" />
+      </Frame>
+    ),
+  },
   { name: "Control", render: () => <Control /> },
   { name: "Faq", render: () => <Faq /> },
   { name: "ClosingCta", render: () => <ClosingCta actions={cta} /> },
@@ -50,12 +103,10 @@ const landingCatalog: CatalogEntry[] = [
     render: () => (
       <SiteFooter
         brand={<Logo />}
-        links={
-          <>
-            <span>Privacy</span>
-            <span>Terms</span>
-          </>
-        }
+        columns={[
+          { title: "Product", links: <span>How it works</span> },
+          { title: "Legal", links: <span>Privacy</span> },
+        ]}
       />
     ),
   },
