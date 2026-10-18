@@ -380,6 +380,10 @@ export const confirmMfa = createServerFn({ method: "POST" })
     if (!pending?.challengeId) {
       return { status: "failed", failure: NO_PENDING }
     }
+    const limited = await throttle(env.SIGN_IN_LIMIT, "mfa", pending.userId)
+    if (limited) {
+      return { status: "failed", failure: limited }
+    }
     return authenticate(
       () =>
         workos().userManagement.authenticateWithTotp({

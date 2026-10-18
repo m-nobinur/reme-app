@@ -27,6 +27,7 @@ vi.mock("./pending", () => ({
     token: "pending",
     userId: "user_probe",
     email: "Dana@Brightclean.invalid",
+    challengeId: "auth_challenge_probe",
   }),
   updatePending: vi.fn(),
   clearPending: vi.fn(),
@@ -141,6 +142,13 @@ describe("a limited form does not reach WorkOS", () => {
     const outcome = await actions.verifyEmail({ data: { code: "123456" } })
     expect(outcome).toEqual({ status: "failed", failure: refused })
     expect(limit).toHaveBeenCalledWith({ key: "verify:user_probe" })
+    expect(authenticate).not.toHaveBeenCalled()
+  })
+
+  it("entering the authenticator code, counted on the user", async () => {
+    const outcome = await actions.confirmMfa({ data: { code: "123456" } })
+    expect(outcome).toEqual({ status: "failed", failure: refused })
+    expect(limit).toHaveBeenCalledWith({ key: "mfa:user_probe" })
     expect(authenticate).not.toHaveBeenCalled()
   })
 })
