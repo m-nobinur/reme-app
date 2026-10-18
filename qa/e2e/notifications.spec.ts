@@ -17,6 +17,10 @@ import { visit } from "./visit"
  * an organisation, "Try again" whenever its run reaches it.
  */
 
+// Reduced motion, so axe measures settled colours: the name-your-business page
+// carries the sign-in panel, whose greeting pops in.
+test.use({ contextOptions: { reducedMotion: "reduce" } })
+
 const panel = (page: Page) => page.getByRole("complementary", { name: "Panel" })
 
 test("the notifications page says what will land there", async ({ page }) => {
