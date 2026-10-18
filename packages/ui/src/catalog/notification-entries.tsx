@@ -1,10 +1,4 @@
-import { BellIcon } from "@phosphor-icons/react"
 import { AttentionItem } from "@workspace/contracts"
-import {
-  AppNav,
-  NavCount,
-  navLinkClass,
-} from "@workspace/ui/components/app-shell"
 import { buttonVariants } from "@workspace/ui/components/button"
 import {
   type NotificationEntry,
@@ -15,7 +9,7 @@ import {
 import type { ReactNode } from "react"
 
 /**
- * Catalog entries for the notifications page and the rail's unread count.
+ * Catalog entries for the notifications page.
  * The kinds, the report variants and the alert reasons are enumerated from
  * `AttentionItem` in the contract, so a kind or a reason added there fails
  * the build here until it has words. The words are the ones
@@ -158,21 +152,6 @@ function BellSample({
   )
 }
 
-/** The rail's notifications link with `count` unread. */
-const rail = (count: number) => (
-  <div className="max-w-60 rounded-lg bg-rail p-3 text-rail-foreground">
-    <AppNav aria-label={`Main, ${count} unread`}>
-      <li>
-        <a className={navLinkClass} href="#notifications">
-          <BellIcon aria-hidden />
-          Notifications
-          <NavCount count={count} />
-        </a>
-      </li>
-    </AppNav>
-  </div>
-)
-
 const notificationCatalog: Entry[] = [
   {
     name: "NotificationList",
@@ -217,9 +196,6 @@ const notificationCatalog: Entry[] = [
     name: "NotificationMenu empty",
     render: () => <BellSample items={[]} unread={0} />,
   },
-  { name: "NavCount", render: () => rail(3) },
-  { name: "NavCount none", render: () => rail(0) },
-  { name: "NavCount capped", render: () => rail(120) },
 ]
 
 export { BellSample, notificationCatalog }

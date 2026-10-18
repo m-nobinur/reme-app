@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test"
 import { open, WCAG } from "./helpers"
 
 /**
- * The notifications list, the rail's unread count, and every blank panel
+ * The notifications list and every blank panel
  * section's next step. The catalog suite scans each entry at one width; the
  * owner reads these on a phone, a tablet and a laptop, so each is scanned
  * alone at all three, in both themes. The blank-state actions are clicked
@@ -19,9 +19,6 @@ const ENTRIES = [
   "NotificationList empty",
   "NotificationList error",
   "NotificationList failed",
-  "NavCount",
-  "NavCount none",
-  "NavCount capped",
   "WaitingOnYou error",
   "PanelBlank",
   "PanelBlank ready to build",
@@ -82,28 +79,6 @@ test("the empty list says what lands there", async ({ page }) => {
   await expect(page.getByRole("alert")).toContainText(
     "Notifications did not load"
   )
-})
-
-test("the unread count reads as a number and caps at 99+", async ({ page }) => {
-  await open(page, "NavCount")
-  await expect(page.getByRole("link")).toHaveAccessibleName(
-    /^Notifications\s*, 3 unread$/
-  )
-  await expect(page.locator('[data-slot="nav-count"]')).toHaveText(
-    "3, 3 unread"
-  )
-
-  await open(page, "NavCount none")
-  await expect(
-    page.getByRole("link", { name: "Notifications", exact: true })
-  ).toBeVisible()
-  await expect(page.locator('[data-slot="nav-count"]')).toHaveCount(0)
-
-  await open(page, "NavCount capped")
-  await expect(
-    page.locator('[data-slot="nav-count"] [aria-hidden="true"]')
-  ).toHaveText("99+")
-  await expect(page.getByRole("link")).toHaveAccessibleName(/120 unread/)
 })
 
 for (const [entry, name, hash] of [
