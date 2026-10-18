@@ -727,7 +727,8 @@ function SiteFooter({
           ))}
         </div>
         <div className="mt-14 flex flex-col items-start gap-4 border-border border-t pt-8 text-muted-foreground text-xs sm:flex-row sm:items-center sm:gap-6">
-          <p className="sm:mr-auto">
+          {/* Server and browser can straddle New Year; the browser's year wins. */}
+          <p className="sm:mr-auto" suppressHydrationWarning>
             © {new Date().getFullYear()} Jade &amp; Sterling Ltd. All rights
             reserved.
           </p>
