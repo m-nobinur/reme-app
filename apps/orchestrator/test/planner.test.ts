@@ -676,6 +676,25 @@ describe("pages the starter has no file for", () => {
     expect(made.features.length).toBeLessThanOrEqual(10)
   })
 
+  it("drops the model's own line about a picked section, which the note covers", () => {
+    const facts = picking(["home", "testimonials"])
+    const made = fallback(facts)
+    const said = withOwnerChoices(
+      {
+        ...made,
+        features: [
+          "A customer review spot on the home page, filled only with reviews you give us.",
+          "A quote form with your own questions.",
+          ...made.features,
+        ],
+      },
+      facts
+    ).features
+    expect(said.join("\n")).not.toMatch(/review spot/)
+    expect(said).toContain("Your reviews are a section on the home page.")
+    expect(said).toContain("A quote form with your own questions.")
+  })
+
   it("keeps the lines once on a re-plan and asks the model for the sections", () => {
     const facts = picking(["home", "gallery", "faq"], UPLOADS)
     const made = fallback(facts)
