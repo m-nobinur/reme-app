@@ -8,7 +8,12 @@ import { createOrgForSession } from "./org"
 import { clearOrgIntent, readOrgIntent } from "./org-intent"
 import { clearPending, readPending, updatePending } from "./pending"
 import { safeReturnTo } from "./redirect-target"
-import { type AuthOutcome, authenticate, writeSession } from "./session"
+import {
+  type AuthOutcome,
+  authenticate,
+  type StepCode,
+  writeSession,
+} from "./session"
 import { throttle } from "./throttle"
 import { sessionOptions, workos } from "./workos"
 
@@ -289,6 +294,9 @@ export const resetPassword = createServerFn({ method: "POST" })
 
 // --- multi-factor -----------------------------------------------------------
 
+/** The step codes `/mfa` serves, as `STEP_PATH` in `session.ts` maps them. */
+const MFA_CHALLENGE: StepCode[] = ["mfa_challenge", "mfa_verification"]
+
 type MfaEnrolment = {
   /** A `data:image/png;base64,…` QR code, rendered as an image. */
   qrCode: string
@@ -299,7 +307,7 @@ type MfaEnrolment = {
 export const startMfaEnrolment = createServerFn({ method: "POST" }).handler(
   async (): Promise<MfaEnrolment | { failure: AuthFailure }> => {
     const pending = await readPending()
-    if (!pending) {
+    if (pending?.step !== "mfa_enrollment") {
       return { failure: NO_PENDING }
     }
     try {
@@ -323,7 +331,7 @@ export const startMfaEnrolment = createServerFn({ method: "POST" }).handler(
 export const startMfaChallenge = createServerFn({ method: "POST" }).handler(
   async (): Promise<{ challenged: true } | { failure: AuthFailure }> => {
     const pending = await readPending()
-    if (!pending) {
+    if (!(pending && MFA_CHALLENGE.includes(pending.step))) {
       return { failure: NO_PENDING }
     }
     try {
@@ -355,6 +363,8 @@ export const confirmMfa = createServerFn({ method: "POST" })
   .validator((input: unknown) => ({ code: digits(record(input).code) }))
   .handler(async ({ data }): Promise<AuthOutcome> => {
     const pending = await readPending()
+    // Only the two calls above set a challenge, each on its own step, and a
+    // new step clears the cookie, so a challenge here is already on its step.
     if (!pending?.challengeId) {
       return { status: "failed", failure: NO_PENDING }
     }

@@ -36,7 +36,7 @@ export async function writeSession(sealedSession: string): Promise<void> {
 }
 
 /** The `code` values WorkOS answers an incomplete authentication with. */
-type StepCode =
+export type StepCode =
   | "email_verification_required"
   | "mfa_enrollment"
   | "mfa_challenge"
@@ -178,6 +178,7 @@ export async function authenticate(
           ? (rawData.organizations as Array<{ id: string; name: string }>)
           : undefined
         await setPending({
+          step: code,
           token,
           userId,
           email,
