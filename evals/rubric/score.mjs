@@ -19,7 +19,7 @@ export const MODEL = "anthropic/claude-sonnet-5.5"
 
 /** Characters of HTML and of CSS a build is shown: enough for a home page, bounded for the bill. */
 export const HTML_MAX = 60_000
-export const CSS_MAX = 30_000
+const CSS_MAX = 30_000
 
 /** The page without what a judge cannot read: scripts, drawn paths, inlined binaries. */
 export function slim(html) {

@@ -35,7 +35,7 @@ const FORBIDDEN =
   /\buser_|\borg_|\.workers\.dev|\bstaging[\w-]*\.[a-z0-9-]+\.|remeai|wos-session|\bBearer\s+[A-Za-z0-9._~+/=-]{16,}|sk-or-|qa-e2e|QA probe/i
 
 /** The chunk types a recorded turn may hold: what the api streams to the owner. */
-export const CHUNK_TYPES = new Set([
+const CHUNK_TYPES = new Set([
   "finish",
   "finish-step",
   "start",

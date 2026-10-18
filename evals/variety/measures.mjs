@@ -12,7 +12,7 @@ import { inflateSync } from "node:zlib"
  * owner named a colour instead. `template` is the starter before VS6, so a
  * baseline build from `main` still reads.
  */
-export const TUPLE_KEYS = {
+const TUPLE_KEYS = {
   direction: ["direction", "template"],
   pair: ["font"],
   palette: ["palette", "brandColor"],
