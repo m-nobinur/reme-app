@@ -50,6 +50,7 @@ import {
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu"
 import { LogoMark } from "@workspace/ui/components/logo"
+import { PersonaAvatar } from "@workspace/ui/components/persona"
 import { ComposerInputContext } from "@workspace/ui/hooks/use-composer-input"
 import {
   PLAN_CHANGES_PLACEHOLDER,
@@ -933,77 +934,82 @@ const AssistantMessage: FC = () => {
     <MessagePrimitive.Root
       data-slot="aui_assistant-message-root"
       data-role="assistant"
-      className="group/message relative -mb-7.5 pb-7.5 [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
+      className="group/message relative -mb-7.5 flex items-start gap-2.5 ps-2 pb-7.5 [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
     >
-      <div
-        data-slot="aui_assistant-message-content"
-        className="wrap-break-word px-2 text-chat text-foreground"
-        // A played-in message is read out once, whole, when it is done.
-        aria-live={reveal.phase === "still" ? undefined : "polite"}
-      >
-        {reveal.phase === "typing" ? (
-          <TypingIndicator />
-        ) : reveal.phase === "writing" ? (
-          <div aria-hidden>
-            <TextMessagePartProvider isRunning text={reveal.text}>
-              <MarkdownText />
-            </TextMessagePartProvider>
-          </div>
-        ) : (
-          <MessagePrimitive.GroupedParts groupBy={groupThreadParts}>
-            {({ part, children }) => {
-              switch (part.type) {
-                case "group-chainOfThought":
-                  return <div data-slot="aui_chain-of-thought">{children}</div>
-                case "group-tool":
-                  return <ToolGroup group={part}>{children}</ToolGroup>
-                case "group-reasoning":
-                  return (
-                    <ReasoningGroup group={part}>{children}</ReasoningGroup>
-                  )
-                case "text":
-                  return <MarkdownText />
-                case "reasoning":
-                  return <Reasoning {...part} />
-                case "tool-call": {
-                  const card = part.toolUI ?? (
-                    <ToolFallbackComponent {...part} />
-                  )
-                  // Played in: the cards follow the words.
-                  return reveal.phase === "played" ? (
-                    <div className="fade-in animate-in duration-200 motion-reduce:animate-none">
-                      {card}
-                    </div>
-                  ) : (
-                    card
-                  )
-                }
-                case "data":
-                  return part.dataRendererUI
-                case "indicator":
-                  return <TypingIndicator />
-                default:
-                  return null
-              }
-            }}
-          </MessagePrimitive.GroupedParts>
-        )}
-        <MessageError />
-      </div>
-
-      <div
-        data-slot="aui_assistant-message-footer"
-        className={cn("ms-2 flex items-center gap-2", ACTION_BAR_HEIGHT)}
-      >
-        <MessageTime held={writing} />
-        {/* A message of cards alone has no words to rate. */}
-        <AuiIf
-          condition={(s) =>
-            s.message.parts.some((part) => part.type === "text")
-          }
+      <PersonaAvatar className="mt-0.5 size-7" />
+      <div className="min-w-0 flex-1">
+        <div
+          data-slot="aui_assistant-message-content"
+          className="wrap-break-word pe-2 text-chat text-foreground"
+          // A played-in message is read out once, whole, when it is done.
+          aria-live={reveal.phase === "still" ? undefined : "polite"}
         >
-          <AssistantActionBar />
-        </AuiIf>
+          {reveal.phase === "typing" ? (
+            <TypingIndicator />
+          ) : reveal.phase === "writing" ? (
+            <div aria-hidden>
+              <TextMessagePartProvider isRunning text={reveal.text}>
+                <MarkdownText />
+              </TextMessagePartProvider>
+            </div>
+          ) : (
+            <MessagePrimitive.GroupedParts groupBy={groupThreadParts}>
+              {({ part, children }) => {
+                switch (part.type) {
+                  case "group-chainOfThought":
+                    return (
+                      <div data-slot="aui_chain-of-thought">{children}</div>
+                    )
+                  case "group-tool":
+                    return <ToolGroup group={part}>{children}</ToolGroup>
+                  case "group-reasoning":
+                    return (
+                      <ReasoningGroup group={part}>{children}</ReasoningGroup>
+                    )
+                  case "text":
+                    return <MarkdownText />
+                  case "reasoning":
+                    return <Reasoning {...part} />
+                  case "tool-call": {
+                    const card = part.toolUI ?? (
+                      <ToolFallbackComponent {...part} />
+                    )
+                    // Played in: the cards follow the words.
+                    return reveal.phase === "played" ? (
+                      <div className="fade-in animate-in duration-200 motion-reduce:animate-none">
+                        {card}
+                      </div>
+                    ) : (
+                      card
+                    )
+                  }
+                  case "data":
+                    return part.dataRendererUI
+                  case "indicator":
+                    return <TypingIndicator />
+                  default:
+                    return null
+                }
+              }}
+            </MessagePrimitive.GroupedParts>
+          )}
+          <MessageError />
+        </div>
+
+        <div
+          data-slot="aui_assistant-message-footer"
+          className={cn("flex items-center gap-2", ACTION_BAR_HEIGHT)}
+        >
+          <MessageTime held={writing} />
+          {/* A message of cards alone has no words to rate. */}
+          <AuiIf
+            condition={(s) =>
+              s.message.parts.some((part) => part.type === "text")
+            }
+          >
+            <AssistantActionBar />
+          </AuiIf>
+        </div>
       </div>
     </MessagePrimitive.Root>
   )
