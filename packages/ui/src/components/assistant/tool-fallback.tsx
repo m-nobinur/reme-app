@@ -229,7 +229,11 @@ function ToolFallbackArgs({
       className={cn("aui-tool-fallback-args", className)}
       {...props}
     >
-      <pre className="aui-tool-fallback-args-value wrap-anywhere max-h-64 overflow-auto whitespace-pre-wrap rounded-2xl bg-muted/50 p-2.5 text-foreground/90 text-xs">
+      <pre
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: a scroll region has to take focus to be scrolled from the keyboard.
+        tabIndex={0}
+        className="aui-tool-fallback-args-value wrap-anywhere max-h-64 overflow-auto whitespace-pre-wrap rounded-2xl bg-muted/50 p-2.5 text-foreground/90 text-xs outline-none focus-visible:ring-3 focus-visible:ring-ring"
+      >
         {argsText}
       </pre>
     </div>
@@ -254,7 +258,11 @@ function ToolFallbackResult({
       <p className="aui-tool-fallback-result-header font-medium text-muted-foreground text-xs">
         Result:
       </p>
-      <pre className="aui-tool-fallback-result-content wrap-anywhere mt-1 max-h-64 overflow-auto whitespace-pre-wrap rounded-2xl bg-muted/50 p-2.5 text-foreground/90 text-xs">
+      <pre
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: a scroll region has to take focus to be scrolled from the keyboard.
+        tabIndex={0}
+        className="aui-tool-fallback-result-content wrap-anywhere mt-1 max-h-64 overflow-auto whitespace-pre-wrap rounded-2xl bg-muted/50 p-2.5 text-foreground/90 text-xs outline-none focus-visible:ring-3 focus-visible:ring-ring"
+      >
         {typeof result === "string" ? result : JSON.stringify(result, null, 2)}
       </pre>
     </div>
