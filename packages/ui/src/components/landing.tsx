@@ -1,15 +1,27 @@
 import {
-  ArrowsClockwiseIcon,
   CaretDownIcon,
-  CheckIcon,
-  GlobeIcon,
-  HandTapIcon,
+  ChatCircleIcon,
+  CheckCircleIcon,
+  ClipboardTextIcon,
+  ClockIcon,
+  FileTextIcon,
+  HandIcon,
   type Icon,
-  LightningIcon,
-  ReceiptIcon,
+  MagnifyingGlassIcon,
+  ShieldCheckIcon,
+  SlidersHorizontalIcon,
 } from "@phosphor-icons/react"
-import { DEEP_SURFACE } from "@workspace/ui/components/auth-aside"
-import { MorningSummary } from "@workspace/ui/components/morning-summary"
+import {
+  ChatWidget,
+  FlowDiagram,
+  HeroStage,
+  LeadHistory,
+  OnboardingChat,
+  ProductWindow,
+  QuoteRequest,
+  WebsitePreview,
+} from "@workspace/ui/components/landing-visuals"
+import { Persona } from "@workspace/ui/components/persona"
 import { ThemeToggle } from "@workspace/ui/components/theme-toggle"
 import { cn } from "@workspace/ui/lib/utils"
 import type { ReactNode } from "react"
@@ -20,12 +32,20 @@ import type { ReactNode } from "react"
  * Presentational only, and links come in as slots so this package imports no
  * router. Every claim on the page is one the product plan makes for the first
  * release: nothing here promises payments, SMS, WhatsApp or calendar sync,
- * which are later. There is no testimonial, customer count or price, because
- * none of them exists yet and an invented one would read as real.
+ * which are later, and roles not yet built are labelled as coming. There is no
+ * testimonial, customer count or price, because none of them exists yet and an
+ * invented one would read as real.
  */
 
 const CONTAINER = "mx-auto w-full max-w-6xl px-6"
 const SECTION = "scroll-mt-16 border-border border-t py-24 sm:py-32"
+const H2 =
+  "text-balance font-medium text-[2.125rem] leading-[1.12] tracking-[-0.025em] sm:text-[2.75rem]"
+const LEAD = "text-lg text-muted-foreground leading-relaxed"
+
+/** A rise into place on first paint; pair with a `delay-*` to stagger. */
+const RISE =
+  "fill-mode-both duration-700 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-3"
 
 type NavLink = { href: string; label: string }
 
@@ -41,10 +61,10 @@ function SiteHeader({
 }) {
   return (
     <header className="sticky top-0 z-40 border-border border-b bg-background/85 backdrop-blur">
-      <div className={cn(CONTAINER, "flex h-16 items-center gap-10")}>
+      <div className={cn(CONTAINER, "flex h-16 items-center gap-6")}>
         {brand}
-        <nav aria-label="On this page" className="hidden md:block">
-          <ul className="flex gap-8 text-muted-foreground text-sm">
+        <nav aria-label="On this page" className="mx-auto hidden md:block">
+          <ul className="flex gap-7 text-muted-foreground text-sm">
             {nav.map((link) => (
               <li key={link.href}>
                 <a
@@ -57,116 +77,316 @@ function SiteHeader({
             ))}
           </ul>
         </nav>
-        <div className="ml-auto flex items-center gap-2">
-          {actions}
-          <ThemeToggle />
-        </div>
+        <div className="ml-auto flex items-center gap-2 md:ml-0">{actions}</div>
       </div>
     </header>
   )
 }
 
-/** The heading every section after the hero opens with, so they all start the same way. */
-function SectionHeading({
-  title,
-  children,
+/** Two lines, the second quieter: the statement, then what it means. */
+function Heading({
+  kicker,
+  first,
+  second,
   className,
+  children,
 }: {
-  title: string
-  children?: ReactNode
+  kicker: string
+  first: string
+  second?: string
   className?: string
+  children?: ReactNode
 }) {
   return (
-    <div className={cn("max-w-2xl", className)}>
-      <h2 className="text-balance font-semibold text-3xl tracking-tight sm:text-4xl">
-        {title}
+    <div className={cn("reveal max-w-2xl", className)}>
+      <p className="font-medium text-primary text-sm">{kicker}</p>
+      <h2 className={cn(H2, "mt-4")}>
+        {first}
+        {second ? (
+          <>
+            <br />
+            <span className="text-muted-foreground">{second}</span>
+          </>
+        ) : null}
       </h2>
-      {children ? (
-        <p className="mt-4 text-lg text-muted-foreground leading-relaxed">
-          {children}
-        </p>
-      ) : null}
+      {children ? <p className={cn(LEAD, "mt-5")}>{children}</p> : null}
     </div>
   )
 }
 
+/** A heading beside its picture, the picture first on wide screens if flipped. */
+function Split({
+  heading,
+  visual,
+  flip = false,
+}: {
+  heading: ReactNode
+  visual: ReactNode
+  flip?: boolean
+}) {
+  return (
+    <div className="grid items-center gap-14 lg:grid-cols-2 lg:gap-20">
+      {heading}
+      <div className={cn("reveal", flip && "lg:order-first")}>{visual}</div>
+    </div>
+  )
+}
+
+/**
+ * The first screen: it fills the window under the header, so the strip of what
+ * Reme does sits on the bottom edge of the view rather than halfway down it.
+ */
 function Hero({ actions }: { actions: ReactNode }) {
   return (
-    <section className="relative overflow-hidden">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{
-          backgroundImage:
-            "radial-gradient(50% 60% at 85% 0%, color-mix(in oklch, var(--primary) 14%, transparent), transparent 70%)",
-        }}
-      />
+    <section className="flex min-h-[calc(100svh-4rem)] flex-col overflow-hidden">
       <div
         className={cn(
           CONTAINER,
-          "relative grid items-center gap-16 py-20 sm:py-28 lg:grid-cols-[1.1fr_0.9fr]"
+          "grid flex-1 items-center gap-10 py-12 sm:py-16 lg:grid-cols-[1.05fr_0.95fr] lg:gap-6 [@media(max-height:820px)]:lg:py-8"
         )}
       >
-        <div>
-          <h1 className="text-balance font-semibold text-5xl leading-[1.05] tracking-tight sm:text-6xl">
-            Never lose a job to a slow reply.
-          </h1>
-          <p className="mt-6 max-w-xl text-lg text-muted-foreground leading-relaxed">
-            Reme is the AI assistant for cleaning businesses. It answers every
-            enquiry in your voice, gathers what each quote request needs and
-            follows up until the customer decides. You stay in charge of
-            everything that matters.
+        <div className="text-center lg:text-left">
+          <p
+            className={cn(
+              RISE,
+              "inline-flex items-center gap-2 rounded-full px-3 py-1 text-muted-foreground text-xs ring-1 ring-border"
+            )}
+          >
+            <span className="size-1.5 rounded-full bg-primary" />
+            Made for cleaning businesses
           </p>
-          <div className="mt-10 flex flex-wrap gap-3">{actions}</div>
+          <h1
+            className={cn(
+              RISE,
+              "mt-6 text-balance font-medium text-5xl leading-[1.06] tracking-[-0.03em] delay-100 sm:text-6xl lg:text-[4.25rem]"
+            )}
+          >
+            Meet Reme,
+            <br />
+            <span className="text-muted-foreground">
+              your business assistant.
+            </span>
+          </h1>
+          <p
+            className={cn(
+              RISE,
+              LEAD,
+              "mx-auto mt-6 max-w-xl delay-200 lg:mx-0"
+            )}
+          >
+            Reme answers every enquiry in your voice, gathers what each quote
+            needs and follows up until the customer decides. Routine work runs
+            itself. The decisions stay yours.
+          </p>
+          <div
+            className={cn(
+              RISE,
+              "mt-9 flex flex-wrap justify-center gap-3 delay-300 lg:justify-start"
+            )}
+          >
+            {actions}
+          </div>
+          <p
+            className={cn(RISE, "mt-5 text-muted-foreground text-xs delay-500")}
+          >
+            Set up in one conversation. Nothing goes live until you approve it.
+          </p>
         </div>
-        <MorningSummary className="mx-auto max-w-md lg:mr-0" />
+        <HeroStage className="[@media(max-height:820px)]:lg:max-w-md" />
+      </div>
+      <Abilities />
+    </section>
+  )
+}
+
+const ABILITIES: { icon: Icon; label: string }[] = [
+  { icon: ChatCircleIcon, label: "Responds to enquiries" },
+  { icon: FileTextIcon, label: "Prepares quotes" },
+  { icon: ClockIcon, label: "Follows through" },
+  { icon: ShieldCheckIcon, label: "Keeps you in control" },
+]
+
+/** What Reme does, in a few words each, along the hero's bottom edge. */
+function Abilities() {
+  return (
+    <div className="border-border border-t">
+      <ul
+        aria-label="What Reme does"
+        className={cn(
+          CONTAINER,
+          "grid grid-cols-2 gap-x-6 gap-y-4 py-5 text-muted-foreground text-sm sm:flex sm:justify-center sm:gap-10"
+        )}
+      >
+        {ABILITIES.map((item) => (
+          <li className="flex items-center gap-2" key={item.label}>
+            <item.icon aria-hidden className="size-4" />
+            {item.label}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+const POINTS: { icon: Icon; title: string; text: string }[] = [
+  {
+    icon: ChatCircleIcon,
+    title: "An assistant, not another inbox.",
+    text: "Talk to Reme in plain language. It knows the business, hands work to the right place and brings the outcome back to you.",
+  },
+  {
+    icon: ClipboardTextIcon,
+    title: "The next step is part of the job.",
+    text: "Every lead has a stage and a follow-up date. Quotes and bookings stay connected instead of scattered across threads.",
+  },
+  {
+    icon: ShieldCheckIcon,
+    title: "Only the decisions that need you.",
+    text: "Routine work moves within your rules. Discounts, exceptions and anything unusual come to you with the context to decide.",
+  },
+]
+
+/** The promise in one section: what Reme takes off the owner's plate. */
+function Assistant() {
+  return (
+    <section className={SECTION} id="assistant">
+      <div className={CONTAINER}>
+        <Heading
+          first="You run the business."
+          kicker="Less chasing. More doing."
+          second="Reme carries the work forward."
+        >
+          An enquiry shouldn't become another thing to remember. Reme answers,
+          gathers the right details, prepares the quote and follows up, so
+          opportunities don't disappear between conversations.
+        </Heading>
+        <div className="mt-16 grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
+          <ul className="reveal flex flex-col gap-9">
+            {POINTS.map((point) => (
+              <li className="flex gap-4" key={point.title}>
+                <point.icon
+                  aria-hidden
+                  className="mt-0.5 size-5 shrink-0 text-primary"
+                />
+                <div>
+                  <h3 className="font-medium">{point.title}</h3>
+                  <p className="mt-1.5 text-muted-foreground leading-relaxed">
+                    {point.text}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <ProductWindow className="reveal" />
+        </div>
       </div>
     </section>
   )
 }
 
-const FEATURES: { icon: Icon; title: string; text: string }[] = [
+const ROLES: {
+  icon: Icon
+  title: string
+  text: string
+  status: "now" | "next" | "planned"
+}[] = [
   {
-    icon: LightningIcon,
-    title: "Replies in minutes, day or night",
-    text: "Enquiries from your website, quote forms and email land in one place. Reme answers each one in your voice, from the services, hours and policies you have confirmed.",
+    icon: ChatCircleIcon,
+    title: "Client Services",
+    text: "First replies, qualification, quotes, follow-ups and booking conversations across your customer channels.",
+    status: "now",
   },
   {
-    icon: ReceiptIcon,
-    title: "Quote requests, ready to answer",
-    text: "Reme asks each customer what the job involves, then brings you the request with everything you need to quote. The quote is yours to set.",
+    icon: FileTextIcon,
+    title: "Developer",
+    text: "Builds and maintains your website from your confirmed details. You review it before it publishes.",
+    status: "now",
   },
   {
-    icon: ArrowsClockwiseIcon,
-    title: "Follow-ups that never slip",
-    text: "Quiet leads and unanswered quotes get a timely nudge on the schedule you set, so no job is lost to silence.",
+    icon: ClockIcon,
+    title: "Booking Coordinator",
+    text: "Calendar and crew coordination, reminders and service-day messages.",
+    status: "next",
   },
   {
-    icon: GlobeIcon,
-    title: "A website that brings in work",
-    text: "Reme builds and keeps up a professional site from your business details, on a remeai.co.uk address or your own domain.",
+    icon: MagnifyingGlassIcon,
+    title: "Growth",
+    text: "Listings, search content, lead research and outreach you approve.",
+    status: "next",
+  },
+  {
+    icon: SlidersHorizontalIcon,
+    title: "Ops Manager",
+    text: "Internal tasks and the day-to-day follow-through behind each job.",
+    status: "planned",
+  },
+  {
+    icon: ClipboardTextIcon,
+    title: "QA Coordinator",
+    text: "Quality checks, post-service follow-up and review requests.",
+    status: "planned",
   },
 ]
 
-function Features() {
+const STATUS = {
+  now: "Available now",
+  next: "Coming next",
+  planned: "Planned",
+} as const
+
+/** One contact, a team behind it, and the roadmap shown as the org chart. */
+function Workforce() {
   return (
-    <section className={SECTION} id="features">
+    <section className={SECTION} id="workforce">
       <div className={CONTAINER}>
-        <SectionHeading title="Everything between the enquiry and the booked job">
-          Most jobs are lost to attention, not price. Reme does the work that
-          slips when you are busy with the work itself.
-        </SectionHeading>
-        {/* One frame split into cells, not four floating cards: the hairlines
-            are the grid's own gap showing the border colour through. */}
-        <ul className="mt-14 grid gap-px overflow-hidden rounded-3xl bg-border ring-1 ring-border sm:grid-cols-2">
-          {FEATURES.map((item) => (
-            <li className="bg-background p-8 sm:p-10" key={item.title}>
-              <span className="grid size-11 place-items-center rounded-xl bg-primary/10 text-primary">
-                <item.icon aria-hidden className="size-5.5" />
-              </span>
-              <h3 className="mt-6 font-semibold text-lg">{item.title}</h3>
-              <p className="mt-2 text-muted-foreground leading-relaxed">
-                {item.text}
+        <Heading
+          first="One point of contact."
+          kicker="A team, not a collection of tools"
+          second="The right specialist for the job."
+        >
+          You talk to Reme. Reme hands each piece of work to the specialist
+          built for it, checks the result and reports back. Rename a role, pause
+          it, or add another as you grow.
+        </Heading>
+        <div className="reveal mt-16 rounded-2xl bg-rail p-6 ring-1 ring-border sm:p-10">
+          <FlowDiagram />
+        </div>
+        <ul className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {ROLES.map((role) => (
+            <li
+              className={cn(
+                "reveal rounded-xl p-6",
+                role.status === "now"
+                  ? "bg-card ring-1 ring-border"
+                  : "border border-border border-dashed"
+              )}
+              key={role.title}
+            >
+              <div className="flex items-center justify-between">
+                <span
+                  className={cn(
+                    "grid size-9 place-items-center rounded-md",
+                    role.status === "now"
+                      ? "bg-primary/12 text-primary"
+                      : "text-muted-foreground"
+                  )}
+                >
+                  <role.icon aria-hidden className="size-4.5" />
+                </span>
+                <span
+                  className={cn(
+                    "text-xs",
+                    role.status === "now"
+                      ? "text-primary"
+                      : "text-muted-foreground"
+                  )}
+                >
+                  {STATUS[role.status]}
+                </span>
+              </div>
+              <h3 className="mt-5 font-medium text-lg">{role.title}</h3>
+              <p className="mt-2 text-muted-foreground text-sm leading-relaxed">
+                {role.text}
               </p>
             </li>
           ))}
@@ -176,43 +396,130 @@ function Features() {
   )
 }
 
-const STEPS = [
+/** Late-night enquiries, the moment most jobs are won or lost. */
+function Enquiries() {
+  return (
+    <section className={SECTION} id="enquiries">
+      <div className={CONTAINER}>
+        <Split
+          heading={
+            <Heading
+              first="Answers like you would,"
+              kicker="Day and night"
+              second="even at 11 pm."
+            >
+              Enquiries from your website chat, quote form and email land in one
+              place. Reme replies from the services, prices and hours you've
+              confirmed, and asks the questions you'd ask.
+            </Heading>
+          }
+          visual={<ChatWidget />}
+        />
+      </div>
+    </section>
+  )
+}
+
+const PILLARS = [
   {
-    title: "Tell Reme about your business",
-    text: "Answer a few questions in plain conversation. Your services, hours and service area are saved as details you can review at any time.",
+    title: "Facts, not guesswork.",
+    text: "What you tell Reme becomes a business profile you can review and edit at any time.",
   },
   {
-    title: "Go live",
-    text: "Reme builds your website and starts answering enquiries once you have approved what it will say.",
+    title: "One connected pipeline.",
+    text: "Website chat, forms and email all feed the same customer journey.",
   },
   {
-    title: "Approve what matters",
-    text: "Routine work runs on its own. Quotes outside your rules and changes to your website wait for one tap from you.",
+    title: "Better with your guidance.",
+    text: "Corrections shape the next reply. Your rules change only with your approval.",
   },
 ] as const
 
-/** A real sequence, so the numbers are information and not decoration. */
-function Steps() {
+/** Setup as a conversation, and what it leaves behind. */
+function Setup() {
   return (
     <section className={SECTION} id="how">
       <div className={CONTAINER}>
-        <SectionHeading title="Up and running in an afternoon">
-          No setup forms and no training. You talk, Reme learns how your
-          business works.
-        </SectionHeading>
-        <ol className="mt-14 grid gap-10 md:grid-cols-3 md:gap-8">
-          {STEPS.map((step, index) => (
-            <li key={step.title}>
-              <span className="grid size-10 place-items-center rounded-full bg-primary font-semibold text-primary-foreground text-sm tabular-nums">
-                {index + 1}
+        <Split
+          heading={
+            <Heading
+              first="It starts with"
+              kicker="Built around your business"
+              second="a conversation."
+            >
+              No blank settings screen. Reme gets to know your services, prices,
+              service area and policies, asking for what's missing one question
+              at a time.
+            </Heading>
+          }
+          visual={<OnboardingChat />}
+        />
+        <ol className="mt-20 grid gap-10 border-border border-t pt-12 md:grid-cols-3">
+          {PILLARS.map((pillar, index) => (
+            <li className="reveal" key={pillar.title}>
+              <span className="font-medium text-primary text-sm tabular-nums">
+                0{index + 1}
               </span>
-              <h3 className="mt-6 font-semibold text-lg">{step.title}</h3>
-              <p className="mt-2 text-muted-foreground leading-relaxed">
-                {step.text}
+              <h3 className="mt-3 font-medium">{pillar.title}</h3>
+              <p className="mt-1.5 text-muted-foreground leading-relaxed">
+                {pillar.text}
               </p>
             </li>
           ))}
         </ol>
+      </div>
+    </section>
+  )
+}
+
+/** Quotes and follow-ups side by side: the two places money leaks. */
+function Pipeline() {
+  return (
+    <section className={SECTION} id="quotes">
+      <div className={CONTAINER}>
+        <Heading
+          className="mx-auto text-center"
+          first="Quotes that arrive ready."
+          kicker="From enquiry to booked"
+          second="Follow-ups that never slip."
+        >
+          Every request reaches you with the job details gathered and a price
+          from your own list. Then Reme keeps the lead moving until it books.
+        </Heading>
+        <div className="mt-16 grid gap-6 lg:grid-cols-2">
+          <div className="reveal">
+            <QuoteRequest />
+          </div>
+          <div className="reveal">
+            <LeadHistory />
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/** The website, built and kept up from the same facts Reme answers from. */
+function Website() {
+  return (
+    <section className={SECTION} id="website">
+      <div className={CONTAINER}>
+        <Split
+          flip
+          heading={
+            <Heading
+              first="A website that doesn't"
+              kicker="Your front door, taken care of"
+              second="stop at looking good."
+            >
+              Reme builds your site from the details you've confirmed and puts
+              it on Google Search Console. Its chat and quote form lead straight
+              back to Reme, so a first visit becomes a conversation. Start on a
+              remeai.co.uk address or bring your own domain.
+            </Heading>
+          }
+          visual={<WebsitePreview />}
+        />
       </div>
     </section>
   )
@@ -242,12 +549,15 @@ function ControlList({
   icon: Icon
 }) {
   return (
-    <div className="rounded-3xl bg-(--on)/8 p-8 ring-(--on)/15 ring-1">
-      <h3 className="font-semibold text-lg">{title}</h3>
-      <ul className="mt-6 flex flex-col gap-4">
+    <div className="reveal rounded-xl bg-background/50 p-7 ring-1 ring-border">
+      <h3 className="font-medium">{title}</h3>
+      <ul className="mt-5 flex flex-col gap-3.5 text-sm">
         {items.map((item) => (
           <li className="flex gap-3 leading-relaxed" key={item}>
-            <ItemIcon aria-hidden className="mt-1 size-4.5 shrink-0" />
+            <ItemIcon
+              aria-hidden
+              className="mt-0.5 size-4 shrink-0 text-primary"
+            />
             {item}
           </li>
         ))}
@@ -256,30 +566,34 @@ function ControlList({
   )
 }
 
+/**
+ * The one dark band on the page. It takes the dark theme's tokens whatever the
+ * page is in, so it stays dark in light mode and lifts to the card colour in
+ * dark mode.
+ */
 function Control() {
   return (
     <section
-      className={cn(DEEP_SURFACE, "scroll-mt-16 py-24 sm:py-32")}
+      className="dark scroll-mt-16 bg-card py-24 text-card-foreground sm:py-32"
       id="control"
     >
-      <div className={cn(CONTAINER, "grid gap-14 lg:grid-cols-[0.8fr_1.2fr]")}>
-        <div>
-          <h2 className="text-balance font-semibold text-3xl tracking-tight sm:text-4xl">
-            Routine work runs itself. Big decisions stay yours.
-          </h2>
-          <p className="mt-4 text-(--on)/80 text-lg leading-relaxed">
-            You decide where the line sits, and Reme holds it. No customer,
-            email or web page can talk it past your rules.
-          </p>
-        </div>
+      <div className={cn(CONTAINER, "grid gap-14 lg:grid-cols-[0.9fr_1.1fr]")}>
+        <Heading
+          first="Capable by default."
+          kicker="Designed to earn your trust"
+          second="Accountable to you."
+        >
+          You decide where the line sits, and Reme holds it. Customers, emails
+          and web pages can give it information, never instructions.
+        </Heading>
         <div className="grid gap-4 sm:grid-cols-2">
           <ControlList
-            icon={CheckIcon}
+            icon={CheckCircleIcon}
             items={ON_ITS_OWN}
             title="Handled for you"
           />
           <ControlList
-            icon={HandTapIcon}
+            icon={HandIcon}
             items={WAITS_FOR_YOU}
             title="Waits for your approval"
           />
@@ -296,7 +610,7 @@ const QUESTIONS = [
   },
   {
     q: "Do I need a website already?",
-    a: "No. Reme builds one for you on a remeai.co.uk address, and moves it to your own domain when you are ready.",
+    a: "No. Reme builds one for you on a remeai.co.uk address, and moves it to your own domain when you're ready.",
   },
   {
     q: "Will it message my customers without asking me?",
@@ -304,15 +618,15 @@ const QUESTIONS = [
   },
   {
     q: "Does it pretend to be a person?",
-    a: "No. It says it is your business's AI assistant, says when it does not know something, and never claims an action worked before it has.",
+    a: "No. Reme never claims to be human, says when it doesn't know something, and never says an action worked before it has.",
   },
   {
     q: "How long does setup take?",
-    a: "Most owners are done in one sitting. Reme asks only what it cannot work out itself, and everything you tell it can be reviewed and edited later.",
+    a: "Most owners finish in one sitting. Reme asks only what it can't work out itself, and everything you tell it can be reviewed and edited later.",
   },
   {
     q: "What if a customer tries to talk it round?",
-    a: "Customers, emails and web pages can give Reme information, never instructions. Your rules are enforced by the system, so asking twice does not change the answer.",
+    a: "Your rules are enforced by the system, not by persuasion, so asking twice doesn't change the answer.",
   },
 ] as const
 
@@ -321,18 +635,20 @@ function Faq() {
   return (
     <section className={SECTION} id="questions">
       <div className={cn(CONTAINER, "grid gap-14 lg:grid-cols-[0.8fr_1.2fr]")}>
-        <SectionHeading
+        <Heading
           className="lg:sticky lg:top-28 lg:self-start"
-          title="Questions, answered"
+          first="Questions,"
+          kicker="Good to know"
+          second="answered."
         />
-        <div className="divide-y divide-border border-border border-y">
+        <div className="reveal divide-y divide-border border-border border-y">
           {QUESTIONS.map((item) => (
-            <details className="group py-6" key={item.q}>
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 rounded-sm font-medium text-lg outline-none focus-visible:ring-3 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+            <details className="group py-5" key={item.q}>
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 rounded-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
                 {item.q}
                 <CaretDownIcon
                   aria-hidden
-                  className="size-5 shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
+                  className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-open:rotate-180"
                 />
               </summary>
               <p className="mt-3 max-w-prose text-muted-foreground leading-relaxed">
@@ -349,14 +665,27 @@ function Faq() {
 function ClosingCta({ actions }: { actions: ReactNode }) {
   return (
     <section className={SECTION}>
-      <div className={cn(CONTAINER, "flex flex-col items-center text-center")}>
-        <h2 className="max-w-2xl text-balance font-semibold text-4xl tracking-tight sm:text-5xl">
-          Give every enquiry the answer it deserves.
-        </h2>
-        <p className="mt-4 max-w-xl text-lg text-muted-foreground leading-relaxed">
-          Set up in minutes. Nothing goes live until you approve it.
+      <div
+        className={cn(
+          CONTAINER,
+          "reveal flex flex-col items-center text-center"
+        )}
+      >
+        <Persona className="size-36" delay={1} framing="full" />
+        <p className="mt-6 font-medium text-primary text-sm">
+          Meet your new assistant
         </p>
-        <div className="mt-10 flex flex-wrap justify-center gap-3">
+        <h2 className={cn(H2, "mt-4 max-w-2xl sm:text-5xl")}>
+          A little less on your plate.
+          <br />
+          <span className="text-muted-foreground">
+            A lot more moving forward.
+          </span>
+        </h2>
+        <p className={cn(LEAD, "mt-5 max-w-xl")}>
+          Set up in one conversation. Nothing goes live until you approve it.
+        </p>
+        <div className="mt-9 flex flex-wrap justify-center gap-3">
           {actions}
         </div>
       </div>
@@ -364,34 +693,73 @@ function ClosingCta({ actions }: { actions: ReactNode }) {
   )
 }
 
-function SiteFooter({ brand, links }: { brand: ReactNode; links: ReactNode }) {
+type FooterColumn = { title: string; links: ReactNode }
+
+/**
+ * The page's foot: what Reme is, the ways around, and who makes it. Links come
+ * in as slots per column, like the header, so this package imports no router.
+ */
+function SiteFooter({
+  brand,
+  columns,
+}: {
+  brand: ReactNode
+  columns: FooterColumn[]
+}) {
   return (
     <footer className="border-border border-t">
-      <div
-        className={cn(
-          CONTAINER,
-          "flex flex-col gap-6 py-10 text-muted-foreground text-sm sm:flex-row sm:items-center sm:justify-between"
-        )}
-      >
-        <div className="flex flex-col gap-2">
-          <span className="text-foreground">{brand}</span>
-          <p>Operated from the United Kingdom.</p>
+      <div className={cn(CONTAINER, "py-16")}>
+        <div className="grid gap-12 md:grid-cols-[1.6fr_repeat(3,1fr)]">
+          <div className="max-w-xs">
+            {brand}
+            <p className="mt-4 text-muted-foreground text-sm leading-relaxed">
+              The business assistant for cleaning businesses. Answers enquiries,
+              prepares quotes and follows up, with you in charge.
+            </p>
+          </div>
+          {columns.map((column) => (
+            <nav aria-label={column.title} key={column.title}>
+              <h2 className="font-medium text-sm">{column.title}</h2>
+              <div className="mt-4 flex flex-col items-start gap-3 text-muted-foreground text-sm [&_a:hover]:text-foreground [&_a]:transition-colors">
+                {column.links}
+              </div>
+            </nav>
+          ))}
         </div>
-        <nav aria-label="Legal and account" className="flex gap-6">
-          {links}
-        </nav>
+        <div className="mt-14 flex flex-col items-start gap-4 border-border border-t pt-8 text-muted-foreground text-xs sm:flex-row sm:items-center sm:gap-6">
+          <p className="sm:mr-auto">
+            © {new Date().getFullYear()} Jade &amp; Sterling Ltd. All rights
+            reserved.
+          </p>
+          <p>
+            Reme is made by{" "}
+            <a
+              className="text-foreground underline decoration-foreground/30 underline-offset-4 hover:decoration-foreground"
+              href="https://jadeandsterling.com/"
+              rel="noopener"
+            >
+              Jade &amp; Sterling
+            </a>
+            . Operated from the United Kingdom.
+          </p>
+          <ThemeToggle />
+        </div>
       </div>
     </footer>
   )
 }
 
 export {
+  Assistant,
   ClosingCta,
   Control,
+  Enquiries,
   Faq,
-  Features,
   Hero,
+  Pipeline,
+  Setup,
   SiteFooter,
   SiteHeader,
-  Steps,
+  Website,
+  Workforce,
 }

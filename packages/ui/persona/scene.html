@@ -1,0 +1,130 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<style>html,body{margin:0;background:transparent}</style>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"}}</script>
+</head><body>
+<script type="module">
+import * as THREE from "three"
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js"
+import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js"
+
+const SIZE = 1024
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true })
+renderer.setPixelRatio(1)
+renderer.setSize(SIZE, SIZE)
+renderer.setClearColor(0x000000, 0)
+renderer.toneMapping = THREE.ACESFilmicToneMapping
+renderer.toneMappingExposure = 0.98
+renderer.outputColorSpace = THREE.SRGBColorSpace
+document.body.appendChild(renderer.domElement)
+
+const scene = new THREE.Scene()
+const pmrem = new THREE.PMREMGenerator(renderer)
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture
+
+const camera = new THREE.PerspectiveCamera(26, 1, 0.1, 100)
+camera.position.set(1.1, 0.75, 8.1)
+camera.lookAt(0, -0.05, 0)
+
+const key = new THREE.DirectionalLight(0xfff4e8, 2.2); key.position.set(3, 5, 5); scene.add(key)
+const fill = new THREE.DirectionalLight(0xe8f6ff, 0.7); fill.position.set(-5, 1, 3); scene.add(fill)
+const rim = new THREE.DirectionalLight(0xffffff, 1.6); rim.position.set(-1, 3, -5); scene.add(rim)
+scene.add(new THREE.AmbientLight(0xffffff, 0.25))
+
+// Materials
+const shell = new THREE.MeshPhysicalMaterial({ color: 0xefe9e0, roughness: 0.48, clearcoat: 0.35, clearcoatRoughness: 0.35, sheen: 0.5, sheenColor: new THREE.Color(0xffffff), sheenRoughness: 0.6 })
+const visorMat = new THREE.MeshPhysicalMaterial({ color: 0x0c1714, roughness: 0.12, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.05 })
+const mint = new THREE.MeshPhysicalMaterial({ color: 0x3fb894, roughness: 0.34, clearcoat: 0.5, clearcoatRoughness: 0.2 })
+const glow = new THREE.MeshBasicMaterial({ color: 0x9df2d4, toneMapped: false })
+const blush = new THREE.MeshBasicMaterial({ color: 0xff8a7a, transparent: true, opacity: 0.8, toneMapped: false })
+const dark = new THREE.MeshPhysicalMaterial({ color: 0x1c2a26, roughness: 0.3, clearcoat: 0.6 })
+
+const avatar = new THREE.Group(); scene.add(avatar)
+
+// Head
+const head = new THREE.Mesh(new THREE.SphereGeometry(1, 128, 96), shell)
+head.scale.set(1.12, 0.98, 1.0); head.position.y = 0.35; avatar.add(head)
+
+// Face visor
+const VZ = 0.42, VY = 0.3, VS = [0.86, 0.62, 0.62]
+const visor = new THREE.Mesh(new THREE.SphereGeometry(1, 128, 96), visorMat)
+visor.scale.set(...VS); visor.position.set(0, VY, VZ); avatar.add(visor)
+const onVisor = (x, y, lift = 0) => VZ + VS[2] * Math.sqrt(Math.max(0, 1 - (x / VS[0]) ** 2 - ((y - VY) / VS[1]) ** 2)) + lift
+
+// Eyes (state set by window.pose): round, with a catch-light each.
+const eyes = []
+const spark = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false })
+for (const x of [-0.27, 0.27]) {
+  const eye = new THREE.Group()
+  const iris = new THREE.Mesh(new THREE.CapsuleGeometry(0.088, 0.07, 12, 24), glow)
+  eye.add(iris)
+  const hi = new THREE.Mesh(new THREE.SphereGeometry(0.026, 16, 12), spark)
+  hi.position.set(-0.03, 0.06, 0.07); eye.add(hi)
+  const hi2 = new THREE.Mesh(new THREE.SphereGeometry(0.012, 12, 8), spark)
+  hi2.position.set(0.035, -0.035, 0.075); eye.add(hi2)
+  eye.position.set(x, 0.38, onVisor(x, 0.38, -0.04))
+  eye.rotation.y = x * 0.55
+  avatar.add(eye); eyes.push(eye)
+}
+// Smile
+const smile = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.024, 16, 48, Math.PI), glow)
+smile.rotation.z = Math.PI; smile.position.set(0, 0.2, onVisor(0, 0.2, -0.01)); avatar.add(smile)
+// Cheeks
+for (const x of [-0.5, 0.5]) {
+  const c = new THREE.Mesh(new THREE.CircleGeometry(0.075, 32), blush)
+  c.position.set(x, 0.2, onVisor(x, 0.2, 0.004)); c.rotation.y = x * 1.15; avatar.add(c)
+}
+
+// Headset: ear cups, band, mic
+for (const s of [-1, 1]) {
+  const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.18, 48), mint)
+  cup.rotation.z = Math.PI / 2; cup.position.set(s * 1.1, 0.32, 0); avatar.add(cup)
+  const pad = new THREE.Mesh(new THREE.SphereGeometry(0.17, 32, 24), shell)
+  pad.scale.set(0.45, 1, 1); pad.position.set(s * 1.2, 0.32, 0); avatar.add(pad)
+}
+const band = new THREE.Mesh(new THREE.TorusGeometry(1.14, 0.05, 20, 96, Math.PI), mint)
+band.position.y = 0.32; band.rotation.y = -0.12; avatar.add(band)
+const boom = new THREE.CatmullRomCurve3([
+  new THREE.Vector3(1.12, 0.22, 0.12), new THREE.Vector3(1.0, 0.0, 0.62),
+  new THREE.Vector3(0.68, -0.12, 0.92), new THREE.Vector3(0.42, -0.12, 1.02),
+])
+avatar.add(new THREE.Mesh(new THREE.TubeGeometry(boom, 64, 0.032, 16, false), mint))
+const mic = new THREE.Mesh(new THREE.CapsuleGeometry(0.06, 0.08, 8, 16), dark)
+mic.rotation.z = Math.PI / 2; mic.position.set(0.38, -0.12, 1.03); avatar.add(mic)
+
+// Body, arms, badge
+const body = new THREE.Mesh(new THREE.SphereGeometry(1, 96, 64), shell)
+body.scale.set(0.8, 0.66, 0.72); body.position.y = -0.98; avatar.add(body)
+for (const s of [-1, 1]) {
+  const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.15, 0.26, 12, 24), shell)
+  arm.position.set(s * 0.74, -1.0, 0.08); arm.rotation.z = s * 0.42; avatar.add(arm)
+}
+const badge = new THREE.Mesh(new RoundedBoxGeometry(0.26, 0.26, 0.06, 4, 0.07), mint)
+badge.position.set(0, -0.76, 0.68); badge.rotation.x = -0.25; avatar.add(badge)
+// The Reme mark: the r's arm as a tube and the stop as a bead, from logo.tsx's 24-unit drawing.
+const F = 0.0085, toV = (x, y) => new THREE.Vector3((x - 12) * F, -0.76 - (y - 12) * F, 0.715 + (y - 12) * F * 0.25)
+const path = new THREE.CurvePath()
+path.add(new THREE.LineCurve3(toV(7.5, 18.5), toV(7.5, 11)))
+path.add(new THREE.QuadraticBezierCurve3(toV(7.5, 11), toV(7.5, 6.5), toV(12, 6.5)))
+path.add(new THREE.LineCurve3(toV(12, 6.5), toV(14.5, 6.5)))
+avatar.add(new THREE.Mesh(new THREE.TubeGeometry(path, 48, 1.7 * F, 12, false), dark))
+for (const end of [toV(7.5, 18.5), toV(14.5, 6.5)]) { const cap = new THREE.Mesh(new THREE.SphereGeometry(1.7 * F, 12, 8), dark); cap.position.copy(end); avatar.add(cap) }
+const stop = new THREE.Mesh(new THREE.SphereGeometry(2.3 * F, 16, 12), dark); stop.position.copy(toV(16.4, 16.6)); avatar.add(stop)
+
+avatar.rotation.y = -0.08
+
+window.pose = (name, framing, size) => {
+  for (const eye of eyes) eye.scale.set(1, name === "blink" ? 0.12 : 1, 1)
+  if (framing === "face") { camera.fov = 22; camera.position.set(0.45, 0.5, 7.6); camera.lookAt(0, 0.36, 0) }
+  else { camera.fov = 26; camera.position.set(1.1, 0.75, 8.1); camera.lookAt(0, -0.05, 0) }
+  camera.updateProjectionMatrix()
+  renderer.render(scene, camera)
+  // Downscale on a 2D canvas and encode there, so the script writes final files.
+  const out = document.createElement("canvas")
+  out.width = out.height = size
+  const ctx = out.getContext("2d")
+  ctx.imageSmoothingQuality = "high"
+  ctx.drawImage(renderer.domElement, 0, 0, size, size)
+  return out.toDataURL("image/webp", 0.88)
+}
+window.ready = true
+</script></body></html>

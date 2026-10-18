@@ -4,12 +4,47 @@
    is still running. */
 @import "tw-shimmer";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/dm-sans";
+/* The optical-size cut, so display sizes draw like Inter Display without a
+   second family. Only downloaded where the system face below is missing. */
+@import "@fontsource-variable/inter/opsz.css";
+/* The brand face, for the front page and the sign-in flow. */
+@import "@fontsource-variable/geist/wght.css";
 /* The raw values both design systems share. Everything else in this file is
    the app's Tailwind wiring and stays here. */
 @import "./tokens.css";
 
 @custom-variant dark (&:is(.dark *));
+
+/* The app's accent: the brand mint, on dark text where it fills. Set here and
+   not in tokens.css, so tenant sites keep the default theme they were built
+   on. Light mode takes the same hue deeper, because 58 places use the primary
+   as text and the bright mint measures about 2:1 on white. */
+:root {
+  --primary: oklch(0.5 0.085 172);
+  --primary-foreground: oklch(0.985 0.01 172);
+}
+.dark {
+  --primary: oklch(0.76 0.105 172);
+  --primary-foreground: oklch(0.17 0.02 172);
+}
+
+/* Sections rise into place as they scroll in. Pure CSS, so it costs no script
+   and does nothing where scroll timelines are unsupported or motion is off. */
+@utility reveal {
+  @media (prefers-reduced-motion: no-preference) {
+    @supports (animation-timeline: view()) {
+      animation: reveal linear both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 22%;
+    }
+  }
+}
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(1.5rem);
+  }
+}
 /* Base UI marks an open panel with `data-open`; these are what the collapsible
    in the chat surface animates on. */
 @custom-variant data-open (
@@ -56,7 +91,79 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
-  --font-sans: "DM Sans Variable", sans-serif;
+  /* The platform's own UI face first: SF Pro on Apple devices, with no font
+     download. Inter stands in elsewhere because it is drawn to the same
+     proportions, so Windows and Android get the same page. */
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Inter Variable", "Segoe UI", Roboto,
+    sans-serif;
+  /* Marketing and sign-in only. The app itself stays on the system face. */
+  --font-brand: "Geist Variable", var(--font-sans);
+  /* The persona's idle motion: a slow float and an occasional blink. */
+  --animate-persona-float: persona-float 5s ease-in-out infinite;
+  --animate-persona-blink: persona-blink 6.5s linear infinite;
+  --animate-persona-blink-once: persona-blink-once 0.28s ease-in-out;
+  --animate-flow: flow 1.4s linear infinite;
+  --animate-note-cycle: note-cycle 9s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  /* The conversation's body size: 15px on a 24px line, what native chat apps
+     set message text at. */
+  --text-chat: 0.9375rem;
+  --text-chat--line-height: 1.5rem;
+  @keyframes persona-float {
+    0%,
+    100% {
+      transform: translateY(0) rotate(0deg);
+    }
+    50% {
+      transform: translateY(-3%) rotate(-1.2deg);
+    }
+  }
+  @keyframes persona-blink {
+    0%,
+    95%,
+    100% {
+      opacity: 0;
+    }
+    96%,
+    98% {
+      opacity: 1;
+    }
+  }
+  /* A natural blink: shut quickly, open a little slower. */
+  @keyframes persona-blink-once {
+    0%,
+    100% {
+      opacity: 0;
+    }
+    30%,
+    55% {
+      opacity: 1;
+    }
+  }
+  /* One note's turn when three share a spot: a third of the loop, fading in
+     as the previous note fades out so the spot is never empty. */
+  @keyframes note-cycle {
+    0% {
+      opacity: 0;
+      transform: translateY(0.375rem) scale(0.98);
+    }
+    4%,
+    31% {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+    36%,
+    100% {
+      opacity: 0;
+      transform: translateY(-0.375rem) scale(0.98);
+    }
+  }
+  /* Dashes travelling along a connector, one dash length per loop. */
+  @keyframes flow {
+    to {
+      stroke-dashoffset: -10;
+    }
+  }
   /* Base UI measures the panel and publishes the height; the Radix variable the
      registry ships alongside it is dropped, because Radix is not in this tree. */
   @keyframes collapsible-down {
@@ -82,7 +189,7 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
   }
   button:not(:disabled),
   [role="button"]:not(:disabled) {
