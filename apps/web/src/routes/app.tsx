@@ -32,6 +32,7 @@ import {
 } from "@tanstack/react-router"
 import type { Conversation } from "@workspace/contracts"
 import { railItemClass } from "@workspace/ui/components/app-shell"
+import { SiteNameProvider } from "@workspace/ui/components/assistant/blueprint-card"
 import { buttonVariants } from "@workspace/ui/components/button"
 import {
   DropdownMenu,
@@ -337,286 +338,304 @@ function AppLayout() {
 
   return (
     <LiveWorkspaceProvider value={live}>
-      <WorkspaceShell
-        defaultPanelOpen={panelOpen}
-        defaultRailOpen={railOpen}
-        openPanel={press}
-        menu={
-          conversation ? (
-            <ConversationMenu
-              newChat={
-                <Link state={() => ({ chat: crypto.randomUUID() })} to="/app" />
-              }
-              onArchive={stored ? () => archive(stored) : undefined}
-              onRename={
-                stored
-                  ? () => {
-                      setFailed(null)
-                      setRenaming(stored.id)
-                    }
-                  : undefined
-              }
-            />
-          ) : undefined
-        }
-        actions={
-          <>
-            <Hint label="New chat">
-              <Link
-                aria-label="New chat"
-                className={buttonVariants({ variant: "ghost", size: "icon" })}
-                // A fresh state on every click: on /app already, the address
-                // does not change, and the state is what says "start again".
-                state={() => ({ chat: crypto.randomUUID() })}
-                to="/app"
-              >
-                <NotePencilIcon aria-hidden />
-              </Link>
-            </Hint>
-            <HistoryMenu current={id} items={history} />
-          </>
-        }
-        notifications={
-          <NotificationMenu
-            items={entries}
-            onOpenChange={markMenuSeen}
-            unread={unread}
-            viewAll={<Link to="/app/notifications" />}
-            zone={zone}
-          />
-        }
-        panel={hasPanel ? <WorkspacePanel panel={panel} /> : null}
-        panelLine={hasPanel ? <WorkspacePanelLine panel={panel} /> : null}
-        title={stored ? conversationTitle(stored) : conversation}
-        titleError={
-          stored && failed === stored.id
-            ? "That did not archive. Try again."
-            : undefined
-        }
-        renaming={
-          stored && renaming === stored.id
-            ? {
-                value: titleToEdit(stored),
-                onSave: async (title) => {
-                  await saveTitle(stored, title, (each, next) =>
-                    updateConversation({
-                      data: { id: each, title: next, key: crypto.randomUUID() },
-                    })
-                  )
-                  await router.invalidate()
-                  setRenaming(null)
-                },
-                onCancel: () => setRenaming(null),
-              }
-            : undefined
-        }
-        rail={
-          <>
-            <Hint label={orgName} side="right">
-              <Link className={railItemClass} to="/app/profile">
-                <OrgMark name={orgName} />
-                <span className="truncate font-medium" data-slot="rail-label">
-                  {orgName}
-                </span>
-              </Link>
-            </Hint>
-            <nav aria-label="Main" className="flex flex-col gap-1">
-              <Hint label="Home" side="right">
-                {/* Home is the new-chat screen, so it starts one as "New
-                    chat" does, and is current only on the bare address. */}
+      {/* The plan card names the business wherever it shows: chat, panel, approvals. */}
+      <SiteNameProvider value={active?.name ?? null}>
+        <WorkspaceShell
+          defaultPanelOpen={panelOpen}
+          defaultRailOpen={railOpen}
+          openPanel={press}
+          menu={
+            conversation ? (
+              <ConversationMenu
+                newChat={
+                  <Link
+                    state={() => ({ chat: crypto.randomUUID() })}
+                    to="/app"
+                  />
+                }
+                onArchive={stored ? () => archive(stored) : undefined}
+                onRename={
+                  stored
+                    ? () => {
+                        setFailed(null)
+                        setRenaming(stored.id)
+                      }
+                    : undefined
+                }
+              />
+            ) : undefined
+          }
+          actions={
+            <>
+              <Hint label="New chat">
                 <Link
-                  activeOptions={{ exact: true }}
-                  className={railItemClass}
+                  aria-label="New chat"
+                  className={buttonVariants({ variant: "ghost", size: "icon" })}
+                  // A fresh state on every click: on /app already, the address
+                  // does not change, and the state is what says "start again".
                   state={() => ({ chat: crypto.randomUUID() })}
                   to="/app"
                 >
-                  <HouseIcon aria-hidden />
-                  <span data-slot="rail-label">Home</span>
+                  <NotePencilIcon aria-hidden />
                 </Link>
               </Hint>
-              {last ? (
-                <Hint label="Chat" side="right">
+              <HistoryMenu current={id} items={history} />
+            </>
+          }
+          notifications={
+            <NotificationMenu
+              items={entries}
+              onOpenChange={markMenuSeen}
+              unread={unread}
+              viewAll={<Link to="/app/notifications" />}
+              zone={zone}
+            />
+          }
+          panel={hasPanel ? <WorkspacePanel panel={panel} /> : null}
+          panelLine={hasPanel ? <WorkspacePanelLine panel={panel} /> : null}
+          title={stored ? conversationTitle(stored) : conversation}
+          titleError={
+            stored && failed === stored.id
+              ? "That did not archive. Try again."
+              : undefined
+          }
+          renaming={
+            stored && renaming === stored.id
+              ? {
+                  value: titleToEdit(stored),
+                  onSave: async (title) => {
+                    await saveTitle(stored, title, (each, next) =>
+                      updateConversation({
+                        data: {
+                          id: each,
+                          title: next,
+                          key: crypto.randomUUID(),
+                        },
+                      })
+                    )
+                    await router.invalidate()
+                    setRenaming(null)
+                  },
+                  onCancel: () => setRenaming(null),
+                }
+              : undefined
+          }
+          rail={
+            <>
+              <Hint label={orgName} side="right">
+                <Link className={railItemClass} to="/app/profile">
+                  <OrgMark name={orgName} />
+                  <span className="truncate font-medium" data-slot="rail-label">
+                    {orgName}
+                  </span>
+                </Link>
+              </Hint>
+              <nav aria-label="Main" className="flex flex-col gap-1">
+                <Hint label="Home" side="right">
+                  {/* Home is the new-chat screen, so it starts one as "New
+                    chat" does, and is current only on the bare address. */}
                   <Link
+                    activeOptions={{ exact: true }}
                     className={railItemClass}
-                    params={{ id: last.id }}
-                    to="/app/c/$id"
+                    state={() => ({ chat: crypto.randomUUID() })}
+                    to="/app"
                   >
-                    <ChatCircleTextIcon aria-hidden />
-                    <span data-slot="rail-label">Chat</span>
+                    <HouseIcon aria-hidden />
+                    <span data-slot="rail-label">Home</span>
                   </Link>
                 </Hint>
-              ) : (
-                <Hint label="No chats yet" side="right">
-                  {/* Nowhere to go yet, so no link: a button that does
+                {last ? (
+                  <Hint label="Chat" side="right">
+                    <Link
+                      className={railItemClass}
+                      params={{ id: last.id }}
+                      to="/app/c/$id"
+                    >
+                      <ChatCircleTextIcon aria-hidden />
+                      <span data-slot="rail-label">Chat</span>
+                    </Link>
+                  </Hint>
+                ) : (
+                  <Hint label="No chats yet" side="right">
+                    {/* Nowhere to go yet, so no link: a button that does
                       nothing, still reachable, so a keyboard hears why. */}
-                  <button
-                    aria-disabled="true"
-                    className={`${railItemClass} cursor-default opacity-50`}
-                    type="button"
-                  >
-                    <ChatCircleTextIcon aria-hidden />
-                    <span data-slot="rail-label">Chat</span>
-                  </button>
+                    <button
+                      aria-disabled="true"
+                      className={`${railItemClass} cursor-default opacity-50`}
+                      type="button"
+                    >
+                      <ChatCircleTextIcon aria-hidden />
+                      <span data-slot="rail-label">Chat</span>
+                    </button>
+                  </Hint>
+                )}
+                <Hint label="Website" side="right">
+                  <Link className={railItemClass} to="/app/website">
+                    <GlobeIcon aria-hidden />
+                    <span data-slot="rail-label">Website</span>
+                  </Link>
                 </Hint>
-              )}
-              <Hint label="Website" side="right">
-                <Link className={railItemClass} to="/app/website">
-                  <GlobeIcon aria-hidden />
-                  <span data-slot="rail-label">Website</span>
-                </Link>
-              </Hint>
-              <Hint label="Reminders" side="right">
-                <Link className={railItemClass} to="/app/reminders">
-                  <AlarmIcon aria-hidden />
-                  <span data-slot="rail-label">Reminders</span>
-                </Link>
-              </Hint>
-            </nav>
-            <div className="mt-auto flex flex-col gap-1">
-              <DropdownMenu>
-                <Hint label="Help" side="right">
-                  <DropdownMenuTrigger
-                    render={
-                      <button
-                        aria-label="Help"
-                        className={railItemClass}
-                        type="button"
-                      />
-                    }
-                  >
-                    <QuestionIcon aria-hidden />
-                    <span data-slot="rail-label">Help</span>
-                  </DropdownMenuTrigger>
+                <Hint label="Reminders" side="right">
+                  <Link className={railItemClass} to="/app/reminders">
+                    <AlarmIcon aria-hidden />
+                    <span data-slot="rail-label">Reminders</span>
+                  </Link>
                 </Hint>
-                <DropdownMenuContent align="end" className="w-56" side="right">
-                  {onboarding ? (
-                    <DropdownMenuLinkItem
+              </nav>
+              <div className="mt-auto flex flex-col gap-1">
+                <DropdownMenu>
+                  <Hint label="Help" side="right">
+                    <DropdownMenuTrigger
                       render={
-                        <Link params={{ id: onboarding }} to="/app/c/$id" />
+                        <button
+                          aria-label="Help"
+                          className={railItemClass}
+                          type="button"
+                        />
                       }
                     >
-                      <SparkleIcon aria-hidden />
-                      Getting started
-                    </DropdownMenuLinkItem>
-                  ) : null}
-                  <DropdownMenuLinkItem
-                    render={
-                      <Link
-                        state={() => ({
-                          chat: crypto.randomUUID(),
-                          ask: HELP_PROMPT,
-                        })}
-                        to="/app"
-                      />
-                    }
+                      <QuestionIcon aria-hidden />
+                      <span data-slot="rail-label">Help</span>
+                    </DropdownMenuTrigger>
+                  </Hint>
+                  <DropdownMenuContent
+                    align="end"
+                    className="w-56"
+                    side="right"
                   >
-                    <ChatCircleDotsIcon aria-hidden />
-                    Ask Reme for help
-                  </DropdownMenuLinkItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuLinkItem
-                    href="/privacy"
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    <ShieldCheckIcon aria-hidden />
-                    Privacy
-                    <ArrowUpRightIcon
-                      aria-hidden
-                      className="ms-auto text-muted-foreground"
-                    />
-                  </DropdownMenuLinkItem>
-                  <DropdownMenuLinkItem
-                    href="/terms"
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    <FileTextIcon aria-hidden />
-                    Terms
-                    <ArrowUpRightIcon
-                      aria-hidden
-                      className="ms-auto text-muted-foreground"
-                    />
-                  </DropdownMenuLinkItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <DropdownMenu>
-                <Hint label={ownerName} side="right">
-                  <DropdownMenuTrigger
-                    render={
-                      <button
-                        aria-label={`Profile, ${ownerName}`}
-                        className={railItemClass}
-                        data-slot="profile-menu"
-                        type="button"
-                      />
-                    }
-                  >
-                    <span
-                      aria-hidden
-                      className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary font-semibold text-[0.6875rem] text-primary-foreground"
-                      data-slot="mark"
-                    >
-                      {initialsOf(ownerName)}
-                    </span>
-                    <span className="truncate" data-slot="rail-label">
-                      {ownerName}
-                    </span>
-                  </DropdownMenuTrigger>
-                </Hint>
-                <DropdownMenuContent align="end" className="w-60" side="right">
-                  <div className="flex flex-col px-2.5 py-1.5">
-                    <span className="truncate font-medium text-sm">
-                      {ownerName}
-                    </span>
-                    {owner.name ? (
-                      <span className="truncate text-muted-foreground text-xs">
-                        {owner.email}
-                      </span>
+                    {onboarding ? (
+                      <DropdownMenuLinkItem
+                        render={
+                          <Link params={{ id: onboarding }} to="/app/c/$id" />
+                        }
+                      >
+                        <SparkleIcon aria-hidden />
+                        Getting started
+                      </DropdownMenuLinkItem>
                     ) : null}
-                  </div>
-                  <div className="flex items-center gap-2 px-2.5 py-1.5 text-sm">
-                    <OrgMark name={orgName} />
-                    <span className="truncate">{orgName}</span>
-                  </div>
-                  <DropdownMenuSeparator />
-                  {PROFILE_NAV.map((item) => (
                     <DropdownMenuLinkItem
-                      key={item.to}
-                      render={<Link to={item.to} />}
+                      render={
+                        <Link
+                          state={() => ({
+                            chat: crypto.randomUUID(),
+                            ask: HELP_PROMPT,
+                          })}
+                          to="/app"
+                        />
+                      }
                     >
-                      <item.icon aria-hidden />
-                      {item.label}
+                      <ChatCircleDotsIcon aria-hidden />
+                      Ask Reme for help
                     </DropdownMenuLinkItem>
-                  ))}
-                  <DropdownMenuLinkItem render={<Link to="/app/account" />}>
-                    <GearSixIcon aria-hidden />
-                    Account
-                  </DropdownMenuLinkItem>
-                  <ThemeItem />
-                  <DropdownMenuSeparator />
-                  {/* A plain link, not a router one: the router preloads a
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLinkItem
+                      href="/privacy"
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      <ShieldCheckIcon aria-hidden />
+                      Privacy
+                      <ArrowUpRightIcon
+                        aria-hidden
+                        className="ms-auto text-muted-foreground"
+                      />
+                    </DropdownMenuLinkItem>
+                    <DropdownMenuLinkItem
+                      href="/terms"
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      <FileTextIcon aria-hidden />
+                      Terms
+                      <ArrowUpRightIcon
+                        aria-hidden
+                        className="ms-auto text-muted-foreground"
+                      />
+                    </DropdownMenuLinkItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <DropdownMenu>
+                  <Hint label={ownerName} side="right">
+                    <DropdownMenuTrigger
+                      render={
+                        <button
+                          aria-label={`Profile, ${ownerName}`}
+                          className={railItemClass}
+                          data-slot="profile-menu"
+                          type="button"
+                        />
+                      }
+                    >
+                      <span
+                        aria-hidden
+                        className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary font-semibold text-[0.6875rem] text-primary-foreground"
+                        data-slot="mark"
+                      >
+                        {initialsOf(ownerName)}
+                      </span>
+                      <span className="truncate" data-slot="rail-label">
+                        {ownerName}
+                      </span>
+                    </DropdownMenuTrigger>
+                  </Hint>
+                  <DropdownMenuContent
+                    align="end"
+                    className="w-60"
+                    side="right"
+                  >
+                    <div className="flex flex-col px-2.5 py-1.5">
+                      <span className="truncate font-medium text-sm">
+                        {ownerName}
+                      </span>
+                      {owner.name ? (
+                        <span className="truncate text-muted-foreground text-xs">
+                          {owner.email}
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="flex items-center gap-2 px-2.5 py-1.5 text-sm">
+                      <OrgMark name={orgName} />
+                      <span className="truncate">{orgName}</span>
+                    </div>
+                    <DropdownMenuSeparator />
+                    {PROFILE_NAV.map((item) => (
+                      <DropdownMenuLinkItem
+                        key={item.to}
+                        render={<Link to={item.to} />}
+                      >
+                        <item.icon aria-hidden />
+                        {item.label}
+                      </DropdownMenuLinkItem>
+                    ))}
+                    <DropdownMenuLinkItem render={<Link to="/app/account" />}>
+                      <GearSixIcon aria-hidden />
+                      Account
+                    </DropdownMenuLinkItem>
+                    <ThemeItem />
+                    <DropdownMenuSeparator />
+                    {/* A plain link, not a router one: the router preloads a
                     route on hover and focus, and /sign-out signs out in its
                     loader. */}
-                  <DropdownMenuLinkItem href="/sign-out">
-                    <SignOutIcon aria-hidden />
-                    Sign out
-                  </DropdownMenuLinkItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </>
-        }
-      >
-        <GoogleNotice onDismiss={dismissGoogle} result={google} />
-        {conversation ? (
-          <Outlet />
-        ) : (
-          <WorkspacePage>
+                    <DropdownMenuLinkItem href="/sign-out">
+                      <SignOutIcon aria-hidden />
+                      Sign out
+                    </DropdownMenuLinkItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </>
+          }
+        >
+          <GoogleNotice onDismiss={dismissGoogle} result={google} />
+          {conversation ? (
             <Outlet />
-          </WorkspacePage>
-        )}
-      </WorkspaceShell>
+          ) : (
+            <WorkspacePage>
+              <Outlet />
+            </WorkspacePage>
+          )}
+        </WorkspaceShell>
+      </SiteNameProvider>
       <PanelAnnouncer panel={panel} />
     </LiveWorkspaceProvider>
   )
