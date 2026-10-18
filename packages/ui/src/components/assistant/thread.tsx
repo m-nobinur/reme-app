@@ -646,7 +646,7 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
                   ? questionPlaceholder
                   : placeholder)
           }
-          className="aui-composer-input max-h-48 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base leading-6 caret-primary outline-none placeholder:text-muted-foreground/60"
+          className="aui-composer-input max-h-48 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base leading-6 caret-primary outline-none placeholder:text-muted-foreground/60 sm:text-chat"
           rows={1}
           autoFocus={autoFocus}
           disabled={!sendable}
@@ -937,7 +937,7 @@ const AssistantMessage: FC = () => {
     >
       <div
         data-slot="aui_assistant-message-content"
-        className="wrap-break-word px-2 text-foreground leading-relaxed"
+        className="wrap-break-word px-2 text-chat text-foreground"
         // A played-in message is read out once, whole, when it is done.
         aria-live={reveal.phase === "still" ? undefined : "polite"}
       >
@@ -1142,7 +1142,7 @@ const UserMessage: FC = () => {
       data-role="user"
     >
       <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0">
-        <div className="aui-user-message-content wrap-break-word relative rounded-3xl bg-muted px-4 py-2 text-foreground empty:hidden">
+        <div className="aui-user-message-content wrap-break-word relative rounded-3xl bg-muted px-4 py-2 text-chat text-foreground empty:hidden">
           <MessagePrimitive.Parts components={USER_PARTS} />
         </div>
         <span
