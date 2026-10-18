@@ -31,7 +31,7 @@ export function form(value: unknown, prefix = ""): string[] {
 
 async function stripe<T>(
   env: StripeEnv,
-  method: "GET" | "POST",
+  method: "GET" | "POST" | "DELETE",
   path: string,
   body?: Record<string, unknown>,
   idempotencyKey?: string
@@ -210,6 +210,13 @@ export async function createRenewal(
     `domain-renewal-${input.domainId}`
   )
 }
+
+/**
+ * Ends a renewal now, so a domain we no longer serve is never billed again.
+ * Stripe takes no idempotency key on a DELETE; it is idempotent already.
+ */
+export const cancelRenewal = (env: StripeEnv, id: string) =>
+  stripe(env, "DELETE", `/subscriptions/${encodeURIComponent(id)}`)
 
 export type Invoice = {
   id: string

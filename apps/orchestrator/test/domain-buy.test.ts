@@ -117,6 +117,10 @@ function stubNet(live: boolean, checks: Record<string, unknown> = {}): Net {
           ? json(REGISTRATION(reg[1]))
           : json(NOT_FOUND, 404)
       if (reg?.[1] && method === "PATCH") return json(REG_PENDING(reg[1]))
+      const progress = href.match(
+        new RegExp(`^${base}/registrations/([^/]+)/registration-status$`)
+      )
+      if (progress?.[1]) return json(REG_PENDING(progress[1]))
       if (href === `${base}/registrations` && method === "POST") {
         const { domain_name } = JSON.parse(body) as { domain_name: string }
         net.registered.add(domain_name)
@@ -149,6 +153,8 @@ function stubNet(live: boolean, checks: Record<string, unknown> = {}): Net {
         return json(STRIPE_MISSING, 404)
       if (href === `${STRIPE}/products`) return json({ id: "reme_domain_com" })
       if (href === `${STRIPE}/subscriptions`) return json(SUBSCRIPTION)
+      if (href === `${STRIPE}/subscriptions/sub_123` && method === "DELETE")
+        return json({ ...SUBSCRIPTION, status: "canceled" })
       if (href === `${STRIPE}/invoices/in_123`) return json(INVOICE)
       // The edge probe: the bought domain answers.
       if (href.startsWith("https://") && method === "GET")
@@ -606,6 +612,17 @@ describe.skipIf(!url)("buying a domain against a database", () => {
     expect(p.net.registered.size).toBe(0)
   })
 
+  it("takes a retried start after the registration landed as started, keeping the hold", async () => {
+    const p = await paid()
+    await startRegistration(p.env, kit, p.orgId, p.row.id)
+    // The step threw after Cloudflare took it; the name now checks as taken.
+    p.net.checks[p.name] = taken(p.name)
+    const again = await startRegistration(p.env, kit, p.orgId, p.row.id)
+    expect(again).toMatchObject({ gone: false, say: null })
+    expect(p.net.pi).toMatchObject({ status: "requires_capture" })
+    expect((await rowOf(p.orgId, p.name)).state).toBe("verifying")
+  })
+
   it("releases the hold when the cost rose over the cap", async () => {
     const p = await paid()
     p.net.checks[p.name] = priced(p.name, "12.51")
@@ -625,10 +642,11 @@ describe.skipIf(!url)("buying a domain against a database", () => {
     expect(await typesOf(p.orgId, "alert.raised")).toEqual(["alert.raised"])
   })
 
-  it("live: serves a bought domain through Workers Custom Domains, goes live, and a removal detaches them", async () => {
+  it("live: serves a bought domain through Workers Custom Domains, goes live, and a removal cancels its renewal and detaches them", async () => {
     const p = await paid(true)
     await startRegistration(p.env, kit, p.orgId, p.row.id)
     const said = await captureRegistered(p.env, kit, p.orgId, p.row.id)
+    await subscribeRenewal(p.env, kit, p.orgId, p.row.id)
     expect(said?.text).toMatch(/registered.*jane@example\.com.*15 days/)
     expect((await rowOf(p.orgId, p.name)).registration).toMatchObject({
       sandbox: false,
@@ -664,6 +682,7 @@ describe.skipIf(!url)("buying a domain against a database", () => {
       .filter((c) => c.method === "DELETE")
       .map((c) => c.url.split("/").at(-1))
     expect(detached).toEqual([
+      "sub_123",
       encodeURIComponent(`wd-${p.name}`),
       encodeURIComponent(`wd-www.${p.name}`),
     ])

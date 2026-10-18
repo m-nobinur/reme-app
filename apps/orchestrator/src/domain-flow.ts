@@ -51,6 +51,7 @@ import {
 } from "./publish.ts"
 import { detachHostname, type RegistrarEnv } from "./registrar.ts"
 import { forgetHost } from "./search.ts"
+import { cancelRenewal } from "./stripe.ts"
 
 /**
  * Connecting an owner's existing domain (records path): the step bodies of
@@ -1016,8 +1017,16 @@ export async function remove(
   return null
 }
 
-/** A claim's custom hostnames deleted and its Workflow ended; both idempotent. */
-async function revoke(env: Env, row: Pick<DomainRow, "id" | "cfIds">) {
+/**
+ * A claim's renewal cancelled, its custom hostnames deleted and its Workflow
+ * ended; all three idempotent.
+ */
+async function revoke(
+  env: Env,
+  row: Pick<DomainRow, "id" | "cfIds" | "stripe">
+) {
+  const sub = (row.stripe as { subscription?: string } | null)?.subscription
+  if (sub) await cancelRenewal(env, sub)
   await dropHostnames(env, row.cfIds)
   try {
     const instance = await env.DOMAINS.get(domainInstanceId(row.id))
@@ -1165,7 +1174,7 @@ export async function revokeDomains(
   const kept = sql`${domains.state} <> 'removed' and not (${domains.origin} = 'purchased' and ${domains.state} = 'verifying')`
   const held = await kit.withOrg({ orgId }, (db) =>
     db
-      .select({ id: domains.id, cfIds: domains.cfIds })
+      .select({ id: domains.id, cfIds: domains.cfIds, stripe: domains.stripe })
       .from(domains)
       .where(kept)
   )
