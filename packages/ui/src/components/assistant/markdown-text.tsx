@@ -309,7 +309,11 @@ const defaultComponents = memoizeMarkdownComponents({
     />
   ),
   table: ({ className, ...props }) => (
-    <div className="aui-md-table-scroll my-3 overflow-x-auto">
+    <div
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: a scroll region has to take focus to be scrolled from the keyboard.
+      tabIndex={0}
+      className="aui-md-table-scroll my-3 overflow-x-auto rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring"
+    >
       <table
         className={cn(
           "aui-md-table w-full border-separate border-spacing-0",
