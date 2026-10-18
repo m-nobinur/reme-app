@@ -1,3 +1,4 @@
+import type { WorkflowStepConfig } from "cloudflare:workers"
 import {
   ApprovalDecision,
   ApprovalRequest,
@@ -22,6 +23,7 @@ import {
   type OrgScopedDb,
   orgOpen,
   orgs,
+  postAssistantMessage,
   siteRevisions,
   sql,
   type Tenancy,
@@ -636,6 +638,40 @@ export async function probeHost(
 
 /** Minutes after activation at which the live host is probed (ADR-032). */
 export const PROBE_MINUTES = [0, 2, 5, 10] as const
+
+/** A busy chat is retried briefly: the probes wait on this step. */
+export const LIVE_SAY: WorkflowStepConfig = {
+  retries: { limit: 3, delay: "10 seconds", backoff: "exponential" },
+  timeout: "30 seconds",
+}
+
+/**
+ * The owner's first version is live: said once in their chat, keyed by the
+ * site, with what Ava can do next and the site to open.
+ */
+export async function sayLive(
+  kit: Tenancy,
+  orgId: string,
+  siteId: string,
+  url: string
+): Promise<void> {
+  const host = url.replace(/^https?:\/\//, "").replace(/\/$/, "")
+  const posted = await postAssistantMessage(kit, {
+    orgId,
+    key: `site.live:${siteId}`,
+    message: {
+      text: [
+        `Your website is live at ${host}. Next I can put it on Google so people find it, or on a domain of your own. Just say which.`,
+      ],
+      ...(url.startsWith("https://") && {
+        button: { label: "Visit your website", action: { kind: "open", url } },
+      }),
+    },
+  })
+  if (posted === "busy" || posted === "waiting") {
+    throw new Error(`site.live_${posted}`)
+  }
+}
 
 /**
  * A queued site assignment whose instance has ended without the site lock
