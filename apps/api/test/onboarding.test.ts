@@ -1430,7 +1430,13 @@ describe("the design tray", () => {
       "service_area",
       "contact",
     ])
-    expect(pages?.preselected).toEqual(["services", "about", "contact"])
+    // Every owner gave their area by now, so its page is ticked too.
+    expect(pages?.preselected).toEqual([
+      "services",
+      "about",
+      "service_area",
+      "contact",
+    ])
     const held = tray({
       facts: [
         ...heldBefore(),
@@ -1438,6 +1444,26 @@ describe("the design tray", () => {
       ],
     }).questions.find((q) => q.id === "pages")?.card
     expect(held?.preselected).toEqual(["gallery"])
+  })
+
+  it("ticks the areas and reviews pages when the owner already gave them", () => {
+    const pages = tray({
+      facts: [
+        ...heldBefore().filter((f) => f.key !== "business.proof"),
+        { key: "service_area.text", value: { text: "Reading and 15 miles" } },
+        {
+          key: "business.proof",
+          value: { text: "4.9 on Google from 120 reviews." },
+        },
+      ],
+    }).questions.find((q) => q.id === "pages")?.card
+    expect(pages?.preselected).toEqual([
+      "services",
+      "about",
+      "testimonials",
+      "service_area",
+      "contact",
+    ])
   })
 
   it("reads the pages an owner names in their own words as ticked", () => {

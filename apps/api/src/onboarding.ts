@@ -264,6 +264,17 @@ export const DEFAULT_QUOTE_FIELDS = [
 /** The pages ticked when the card opens. */
 const DEFAULT_PAGES = ["home", "services", "about", "contact", "quote"]
 
+/** The usual pages, plus areas and reviews when the owner's answers hold them. */
+const suggestedPages = (facts: Parameters<typeof factValue>[0]) => [
+  ...DEFAULT_PAGES,
+  ...(factValue(facts, "service_area.text") ? ["service_area"] : []),
+  ...(/\breviews?\b|\brating\b|\btestimonials?\b/i.test(
+    JSON.stringify(factValue(facts, "business.proof") ?? "")
+  )
+    ? ["testimonials"]
+    : []),
+]
+
 /** Each card's options, from the contracts' lists, so an answer is checked against the same ids. */
 const CHOICES: Record<
   ChoiceStep,
@@ -705,14 +716,15 @@ export function designCard(o: Onboarding, newId: () => string): ToolPart {
               "Name the pages you want and what goes on them",
               pagesHeld?.custom
             ),
-            // Any number of pages: the held pick, else the usual ones, ticked.
+            // Any number of pages: the held pick, else the usual ones ticked,
+            // with the areas and reviews pages when the owner already gave them.
             multiple: true,
             preselected: pageOptions
               .map((each) => each.id)
               .filter((page) =>
                 (pagesHeld && !pagesHeld.custom
                   ? (pagesHeld.ids as readonly string[])
-                  : DEFAULT_PAGES
+                  : suggestedPages(o.facts)
                 ).includes(page)
               ),
           },
