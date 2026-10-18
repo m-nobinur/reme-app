@@ -1,3 +1,4 @@
+import type { UploadedAssets } from "@workspace/contracts"
 import type { PhotoActions } from "@workspace/ui/components/generated-photos"
 import { askForChanges } from "@/lib/api/server"
 import type { WriteOutcome } from "@/lib/api/types"
@@ -34,14 +35,19 @@ export function photoActions(
           method: "POST",
           body: form,
         })
-        if (!response.ok) {
+        // The id names this upload among every photo the owner has given.
+        const uploaded = response.ok
+          ? ((await response.json().catch(() => null)) as UploadedAssets | null)
+          : null
+        const id = uploaded?.assets[0]?.id
+        if (!id) {
           return {
             done: false,
             reason: "That photo did not upload. Try another file.",
           }
         }
         return await ask(
-          `Use the photo I just uploaded for "${p.alt}" (${p.slot_id}) instead of the generated one, in the ${p.section.replaceAll("_", " ")} section.`,
+          `Use the photo I just uploaded (asset ${id}) for "${p.alt}" (${p.slot_id}) instead of the generated one, in the ${p.section.replaceAll("_", " ")} section.`,
           "section"
         )()
       }),
