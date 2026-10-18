@@ -599,6 +599,13 @@ const paths: [string, Wake[], Setup, { outcome: string }][] = [
     { provisions: [false] },
     { outcome: "preview_ready" },
   ],
+  // Failing is what releases the site lock to the next build.
+  [
+    "pool never frees",
+    [],
+    { provisions: Array(20).fill(false) },
+    { outcome: "failed" },
+  ],
   // The container slept before the block reached the checkpoint, so the site
   // is gone and no answer can bring it back. Failing here is what releases
   // the site lock; before this path existed the instance errored holding it.
@@ -923,6 +930,7 @@ describe("the assignment Workflow's step names", () => {
         "superseded a preview",
         "site busy then claimed",
         "pool full then provisioned",
+        "pool never frees",
         "checkpoint found the site gone",
         "nobody answered",
         "a stale nudge, then the answer",

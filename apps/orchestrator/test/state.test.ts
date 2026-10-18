@@ -354,6 +354,19 @@ live("the optimistic lock", () => {
     })
   })
 
+  it("takes a step retried after its commit as already done", async () => {
+    const ids = await newAssignment(sharedOrg, "probe.lock")
+    await walk(ids, ["briefing", "planning", "implementing"])
+    const first = await advance(kit, ids, "failed", {
+      reason: "pool.exhausted",
+    })
+    const again = await advance(kit, ids, "failed", {
+      reason: "pool.exhausted",
+    })
+    expect(again).toEqual(first)
+    expect((await current(ids)).version).toBe(first.version)
+  })
+
   it("resumes a pause to the state it left, and nowhere else", async () => {
     const ids = await newAssignment(sharedOrg, "probe.lock")
     await walk(ids, [
