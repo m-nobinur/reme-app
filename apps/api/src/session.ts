@@ -92,7 +92,12 @@ function sealed(request: Request): string | null {
     const at = pair.indexOf("=")
     if (at === -1) continue
     if (pair.slice(0, at).trim() === COOKIE) {
-      return decodeURIComponent(pair.slice(at + 1).trim()) || null
+      // A broken escape is no session (401), not a server fault (503).
+      try {
+        return decodeURIComponent(pair.slice(at + 1).trim()) || null
+      } catch {
+        return null
+      }
     }
   }
   return null
