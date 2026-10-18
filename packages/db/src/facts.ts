@@ -28,6 +28,12 @@ export async function supersedeFact(
   version: number
   supersededFactId: string | null
 }> {
+  // The row lock below cannot serialise two writers when there is no current
+  // row yet, or when the one they both waited on has just closed: each then
+  // opens the same version. Key 5: 2 to 4 are the conversation, org and domain locks.
+  await db.execute(
+    sql`select pg_advisory_xact_lock(5, hashtext(${`${input.orgId}:${input.key}`}::text))`
+  )
   const now = new Date()
   const [current] = await db
     .select({ id: facts.id, version: facts.version })
