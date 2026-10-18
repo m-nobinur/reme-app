@@ -258,13 +258,13 @@ holds BYPASSRLS. Closing it needs a login role that lacks BYPASSRLS, and `reme_a
 `NOLOGIN` with no password. Provisioning that credential belongs with the per-environment
 Hyperdrive configuration.
 
-**A script that uses `withOrg` has to close the pool.** `withOrg` opens one lazily and shares
-it, so a Node process that never calls `closeTenancy` does not exit. Measured 2026-08-28
-against the local container: a script whose only statement was `select 1` returned from the
-callback in 34 ms, was killed by a 25 s timeout at exit 124, and its `process.on("exit")`
-handler never fired; with `closeTenancy` the same script exits in 0.29 s at code 0 and the
-handler fires. Vitest never sees it, because it tears its workers down, which is why the
-tenancy suite never caught it.
+**A script that uses `withOrg` does not exit.** `withOrg` opens one pool lazily, shares it and
+exports no way to close it, so a Node process that reads through it never exits. Measured
+2026-08-28 against the local container: a script whose only statement was `select 1` returned
+from the callback in 34 ms and was killed by a 25 s timeout at exit 124, and its
+`process.on("exit")` handler never fired. Vitest never sees it, because it tears its workers
+down, which is why the tenancy suite never caught it. A script builds `tenancy(url)` and
+closes it.
 
 That is one of the two shapes the kit has. The other is `tenancy(url)`, a kit over a pool the
 caller owns, which is what a Worker uses: Hyperdrive hands its connection string to the request
