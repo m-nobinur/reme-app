@@ -20,6 +20,12 @@ import { saveDesignAnswer } from "./design"
 import { useConversationRuntime } from "./runtime"
 import { sendsOn } from "./turn"
 
+/** Images in the thread other than Reme's avatar, which is meant to be there. */
+const contentImages = (root: Element) =>
+  [...root.querySelectorAll("img")].filter(
+    (img) => !img.closest("[data-slot='persona']")
+  )
+
 /**
  * The chat as the owner's browser runs it: the AI SDK chat, assistant-ui's
  * runtime and converter, the thread, and the owner's cards, fed the history
@@ -1366,7 +1372,7 @@ it("renders every piece of model or owner text on a card as text, never as marku
   // Five places the text lands: the build goal, the fact, the change, the
   // answer and the reminder, each as the characters it is.
   expect(chat.textContent?.split(INJECTED)).toHaveLength(6)
-  expect(chat.querySelector("img")).toBeNull()
+  expect(contentImages(chat)).toHaveLength(0)
   expect(chat.querySelector('a[href*="evil.example"]')).toBeNull()
 })
 
