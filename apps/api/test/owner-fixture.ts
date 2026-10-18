@@ -3,6 +3,7 @@ import {
   approvals,
   assignments,
   assignmentTransitions,
+  conversationMessages,
   deployments,
   eq,
   events,
@@ -10,6 +11,7 @@ import {
   staff,
   type Tenancy,
 } from "@workspace/db"
+import type { StoredMessage } from "../src/conversations.ts"
 import worker from "../src/index.ts"
 import { createOrg } from "../src/org.ts"
 import { type CookieOptions, cookieHeader, env } from "./sealed-session.ts"
@@ -302,6 +304,20 @@ export function seed(kit: Tenancy, who: Owner) {
           .where(eq(assignments.id, assignmentId))
       })
     },
+    /** Messages stored in the order given, so `seq` follows it. */
+    messages: (conversationId: string, list: StoredMessage[]) =>
+      kit.withOrg({ orgId }, async (db) => {
+        for (const message of list) {
+          await db.insert(conversationMessages).values({
+            conversationId,
+            id: message.id,
+            orgId,
+            parentId: message.parent_id,
+            format: message.format,
+            content: message.content,
+          })
+        }
+      }),
     /** A block on the question `requestId`, as the Workflow's ask step logs it. */
     blocked(assignmentId: string, requestId: string, version: number) {
       return this.transition(

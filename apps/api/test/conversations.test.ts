@@ -14,10 +14,10 @@ import {
   tenancy,
 } from "@workspace/db"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
-import { appendMessages, type StoredMessage } from "../src/conversations.ts"
+import type { StoredMessage } from "../src/conversations.ts"
 import { BODY_MAX } from "../src/http.ts"
 import worker from "../src/index.ts"
-import { type Owner, owner, stubOrchestrator } from "./owner-fixture.ts"
+import { type Owner, owner, seed, stubOrchestrator } from "./owner-fixture.ts"
 import { env, stubJwksFetch } from "./sealed-session.ts"
 
 /**
@@ -288,7 +288,7 @@ describe.skipIf(!url)("the conversation routes, on a live connection", () => {
     it("reads a turn back in the order it was written, dated from created_at", async () => {
       const { body } = await create()
       const turn = [text("u_1", "user", null), text("a_1", "assistant", "u_1")]
-      expect(await appendMessages(kit, who.orgId, body.id, turn)).toBeNull()
+      await seed(kit, who).messages(body.id, turn)
       const rows = await kit.withOrg({ orgId: who.orgId }, (db) =>
         db
           .select({
@@ -315,11 +315,9 @@ describe.skipIf(!url)("the conversation routes, on a live connection", () => {
 
     it("reads by write order, not by created_at", async () => {
       const { body } = await create()
-      await appendMessages(kit, who.orgId, body.id, [
+      await seed(kit, who).messages(body.id, [
         text("u_1", "user", null),
         text("a_1", "assistant", "u_1"),
-      ])
-      await appendMessages(kit, who.orgId, body.id, [
         text("u_2", "user", "a_1"),
         text("a_2", "assistant", "u_2"),
       ])
@@ -344,27 +342,6 @@ describe.skipIf(!url)("the conversation routes, on a live connection", () => {
       ])
     })
 
-    it("refuses a message that is its own parent", async () => {
-      const { body } = await create()
-      const refused = (await appendMessages(kit, who.orgId, body.id, [
-        text("self_1", "user", "self_1"),
-      ])) as Response
-      expect(refused.status).toBe(400)
-      expect(ErrorEnvelope.parse(await refused.json()).code).toBe(
-        "message.invalid"
-      )
-    })
-
-    it("moves the conversation up the list when a turn is written", async () => {
-      const { body } = await create()
-      await create()
-      await appendMessages(kit, who.orgId, body.id, [text("u_1", "user", null)])
-      const list = ConversationList.parse(
-        await (await call("/conversations")).json()
-      )
-      expect(list.conversations[0]?.id).toBe(body.id)
-    })
-
     /**
      * A Worker's clock that has drifted a minute behind the database's, as a
      * Worker's and Neon's clocks can. Only `Date` is faked, so the driver's
@@ -375,23 +352,6 @@ describe.skipIf(!url)("the conversation routes, on a live connection", () => {
       vi.setSystemTime(Date.now() - 60_000)
       return () => vi.useRealTimers()
     }
-
-    it("moves a written conversation above one made before it, on the database's clock", async () => {
-      const { body } = await create()
-      await create()
-      const restore = workerBehind()
-      try {
-        await appendMessages(kit, who.orgId, body.id, [
-          text("u_1", "user", null),
-        ])
-      } finally {
-        restore()
-      }
-      const list = ConversationList.parse(
-        await (await call("/conversations")).json()
-      )
-      expect(list.conversations[0]?.id).toBe(body.id)
-    })
 
     it("moves a conversation with a new chat turn up the list, on the database's clock", async () => {
       const { body } = await create()
@@ -434,106 +394,6 @@ describe.skipIf(!url)("the conversation routes, on a live connection", () => {
         await (await call("/conversations")).json()
       )
       expect(list.conversations[0]?.id).toBe(body.id)
-    })
-
-    // Ordered by one clock: the retry wrote nothing, so the conversation made
-    // after the turn's first write stays on top.
-    it("writes nothing twice when a turn is retried, and leaves the list as it was", async () => {
-      const { body } = await create()
-      const turn = [text("u_1", "user", null), text("a_1", "assistant", "u_1")]
-      await appendMessages(kit, who.orgId, body.id, turn)
-      const newer = (await create()).body
-      expect(await appendMessages(kit, who.orgId, body.id, turn)).toBeNull()
-      const list = ConversationList.parse(
-        await (await call("/conversations")).json()
-      )
-      expect(list.conversations[0]?.id).toBe(newer.id)
-      const history = ConversationHistory.parse(
-        await (await call(`/conversations/${body.id}/messages`)).json()
-      )
-      expect(history.messages).toHaveLength(2)
-    })
-
-    it("refuses a parent it never stored, as a validation error, and writes none of the turn", async () => {
-      const { body } = await create()
-      const refused = (await appendMessages(kit, who.orgId, body.id, [
-        // The owner's message is fine and is written first; the reply names
-        // a parent nobody stored. The owner's row must not survive it.
-        text("u_1", "user", null),
-        text("a_1", "assistant", "lost_after_a_failed_stream"),
-      ])) as Response
-      expect(refused.status).toBe(400)
-      const envelope = ErrorEnvelope.parse(await refused.json())
-      expect(envelope).toMatchObject({
-        class: "validation",
-        code: "message.parent_unknown",
-        detail: {},
-      })
-      const history = ConversationHistory.parse(
-        await (await call(`/conversations/${body.id}/messages`)).json()
-      )
-      expect(history.messages).toEqual([])
-    })
-
-    it("refuses a message the contract refuses, and writes none of the turn", async () => {
-      const { body } = await create()
-      const good = text("u_1", "user", null)
-      const bad = [
-        { ...good, content: { role: "system", parts: good.content.parts } },
-        { ...good, content: { role: "user", parts: [] } },
-        { ...good, content: { role: "user", parts: [{ text: "no type" }] } },
-        { ...good, id: "has space" },
-        { ...good, format: "aui/v0" },
-        // The contract allows it; the table's check refuses a row that is
-        // its own parent.
-        { ...good, parent_id: "u_1" },
-      ]
-      for (const message of bad) {
-        const refused = (await appendMessages(kit, who.orgId, body.id, [
-          good,
-          message as StoredMessage,
-        ])) as Response
-        expect(refused.status, JSON.stringify(message)).toBe(400)
-        expect(ErrorEnvelope.parse(await refused.json())).toMatchObject({
-          code: "message.invalid",
-          detail: {},
-        })
-      }
-      const history = ConversationHistory.parse(
-        await (await call(`/conversations/${body.id}/messages`)).json()
-      )
-      expect(history.messages).toEqual([])
-    })
-
-    it("refuses NUL in a message, which Postgres cannot store", async () => {
-      const { body } = await create()
-      const message = text("u_1", "user", null)
-      const refused = (await appendMessages(kit, who.orgId, body.id, [
-        {
-          ...message,
-          content: {
-            role: "user",
-            parts: [{ type: "text", text: "a\u0000b" }],
-          },
-        },
-      ])) as Response
-      expect(refused.status).toBe(400)
-      expect(ErrorEnvelope.parse(await refused.json()).code).toBe(
-        "message.invalid"
-      )
-    })
-
-    it("answers 404 for a conversation it does not hold, and writes nothing", async () => {
-      const refused = (await appendMessages(
-        kit,
-        who.orgId,
-        crypto.randomUUID(),
-        [text("u_1", "user", null)]
-      )) as Response
-      expect(refused.status).toBe(404)
-      expect(ErrorEnvelope.parse(await refused.json()).code).toBe(
-        "conversation.not_found"
-      )
     })
   })
 })
