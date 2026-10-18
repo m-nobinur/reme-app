@@ -163,7 +163,7 @@ function Greeting() {
   useEffect(() => setGreeting(greetingFor(new Date().getHours())), [])
   return (
     <SpeechBubble
-      className="absolute top-[4%] left-[88%] w-max lg:max-[1399px]:left-[75%]"
+      className="absolute top-[4%] left-[88%] w-max lg:max-[1399px]:left-[56%] xl:max-[1399px]:left-[75%]"
       text="I'm Reme. Nice to meet you."
       title={greeting}
     />
