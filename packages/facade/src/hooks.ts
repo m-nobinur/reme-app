@@ -111,7 +111,14 @@ export function bashRefusal(
   const roots = [policy.siteRoot, ...(policy.readOnlyRoots ?? [])]
   // Split on shell punctuation too: `cat</etc/passwd` and `--out=/etc/x`
   // name a path with no space before it.
+  // shortcut: a string check, not a shell parser, so a path spelled without
+  // a slash (printf escapes) still passes; the org's own container is the
+  // tenant boundary. Parse the command if this ever guards more than that.
   for (const token of command.split(/[\s;&|<>()`='"]+/)) {
+    // `$HOME/x`, `~/x`, `\/etc`, `{/etc/passwd,}`: the shell makes the path.
+    if (/^[^/]*[$~\\{][^/]*\//.test(token)) {
+      return `${token} builds a path the check cannot read`
+    }
     if (!token.startsWith("/")) continue
     if (token === "/dev/null" || under(token, "/tmp")) continue
     if (!roots.some((root) => under(token, root))) {
