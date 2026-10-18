@@ -84,7 +84,7 @@
   ],
   // The hourly retention sweep (ADR-032), created by the `scheduled` handler
   // in src/cloudflare.ts; on Mondays at 07 UTC it also sends the weekly
-  // search message. Production restates it beside the uptime check.
+  // search message. Production restates it; its uptime check shares the firing.
   "triggers": { "crons": ["0 * * * *"] },
   // The routing cache the router reads (§11.1.3), written by publish.ts and
   // by nothing else in this Worker; a test holds that.
@@ -145,15 +145,15 @@
         "REGISTRAR_API": "registrar",
         "ROUTER_SERVICE": "reme-router-production",
         "INDEXNOW_KEY": "50d33f2d3b42e6d093cb945653fea6ca",
-        // What the five-minute uptime check fetches (src/uptime.ts). Not the
+        // What the hourly uptime check fetches (src/uptime.ts). Not the
         // orchestrator's own hostname: a Worker fetching itself through its
         // custom domain gets 522 (measured 2026-09-29), and the check running
         // at all is the orchestrator's proof of life.
         "HEALTH_URLS": "https://api.remeai.co.uk/health https://preview.remeai.co.uk/"
       },
-      // The sweep, and the uptime check every five minutes. Staging keeps
-      // the sweep only.
-      "triggers": { "crons": ["0 * * * *", "*/5 * * * *"] },
+      // The sweep and the uptime check, one firing an hour so the database
+      // wakes once (UPTIME_CRON). Staging has no HEALTH_URLS, so it sweeps only.
+      "triggers": { "crons": ["0 * * * *"] },
       // The uptime check's alert email (src/uptime.ts). No destination
       // restriction: `ALERT_TO`, a secret, picks a verified address.
       "send_email": [{ "name": "ALERTS" }],

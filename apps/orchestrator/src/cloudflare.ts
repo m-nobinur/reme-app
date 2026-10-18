@@ -1483,6 +1483,9 @@ const SWEEP_CHUNK = 50
 /** The UTC hour whose sweep also looks at every live custom domain, once a day. */
 export const DOMAIN_SWEEP_HOUR = "06"
 
+/** Matched character for character against the wrangler config. */
+export const SWEEP_CRON = "0 * * * *"
+
 /** The hour the sweep runs for, `YYYYMMDDHH`, which is also its instance id's suffix. */
 export const sweepHour = (at: number) =>
   new Date(at).toISOString().slice(0, 13).replace(/[-T]/g, "")
@@ -1659,23 +1662,26 @@ export class SweepWorkflow extends WorkflowEntrypoint<Env, { hour: string }> {
 
 /**
  * flue forwards every non-HTTP handler exported here into the Worker's
- * default export. The five-minute cron is the uptime check, which only
- * production schedules. The hourly cron creates the hour's sweep; a second
- * firing for the same hour is refused by the instance id and swallowed.
+ * default export. Each job runs on the cron that matches its constant, so two
+ * jobs on the same schedule share one firing. The hourly cron creates the
+ * hour's sweep; a second firing for the same hour is refused by the instance
+ * id and swallowed. The uptime check does nothing without `HEALTH_URLS`, which
+ * only production sets.
  */
 export default {
   async scheduled(controller: ScheduledController, env: Env) {
+    if (controller.cron === SWEEP_CRON) {
+      const hour = sweepHour(controller.scheduledTime)
+      try {
+        await env.SWEEPS.create({ id: `sweep-${hour}`, params: { hour } })
+      } catch {
+        // Already created for this hour.
+      }
+    }
     if (controller.cron === UPTIME_CRON) {
       // A router that stops serving verification files alerts before Google drops a property.
       const file = await servedVerification(env).catch(() => null)
       await checkUptime(env, file ? [file] : [])
-      return
-    }
-    const hour = sweepHour(controller.scheduledTime)
-    try {
-      await env.SWEEPS.create({ id: `sweep-${hour}`, params: { hour } })
-    } catch {
-      // Already created for this hour.
     }
   },
 }

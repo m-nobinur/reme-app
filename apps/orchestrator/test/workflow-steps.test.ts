@@ -375,6 +375,7 @@ vi.mock("../src/validate.ts", () => ({
 const {
   AssignmentWorkflow,
   SweepWorkflow,
+  SWEEP_CRON,
   sweepHour,
   default: worker,
 } = await import("../src/cloudflare.ts")
@@ -1101,7 +1102,7 @@ describe("the scheduled handler", () => {
     new URL("../wrangler.jsonc", import.meta.url),
     "utf8"
   )
-  async function fire(cron: string) {
+  async function fire(cron: string, healthUrls?: string) {
     const created = vi.fn(async () => ({}))
     const fetched = vi.fn(async () => new Response("{}"))
     vi.stubGlobal("fetch", fetched)
@@ -1114,41 +1115,58 @@ describe("the scheduled handler", () => {
         } as ScheduledController,
         {
           SWEEPS: { create: created },
-          HEALTH_URLS: "https://api.example.invalid/health",
+          HEALTH_URLS: healthUrls,
         } as unknown as Env
       )
     } finally {
       vi.unstubAllGlobals()
       log.mockRestore()
     }
-    return { created, fetched }
+    return {
+      created,
+      fetched,
+      urls: fetched.mock.calls.map((c) => String((c as unknown[])[0])),
+    }
   }
 
-  it("creates the hour's sweep on the hourly cron and checks nothing", async () => {
-    const { created, fetched } = await fire("0 * * * *")
+  it("sweeps and checks uptime on one hourly firing", async () => {
+    const { created, urls } = await fire(
+      "0 * * * *",
+      "https://api.example.invalid/health"
+    )
     expect(created).toHaveBeenCalledWith({
       id: "sweep-2026091612",
       params: { hour: "2026091612" },
     })
-    expect(fetched).not.toHaveBeenCalled()
-  })
-
-  it("runs the uptime check on the five-minute cron and sweeps nothing", async () => {
-    const { created, fetched } = await fire("*/5 * * * *")
     // The health URL and one verification file the router serves.
-    expect(fetched.mock.calls.map((c) => String((c as unknown[])[0]))).toEqual([
+    expect(urls).toEqual([
       "https://api.example.invalid/health",
       "https://a-stg.remeai.co.uk/google1a.html",
     ])
-    expect(created).not.toHaveBeenCalled()
   })
 
-  it("schedules the uptime check in production only", () => {
+  it("only sweeps where no health URLs are set, as on staging", async () => {
+    const { created, urls } = await fire("0 * * * *")
+    expect(created).toHaveBeenCalledOnce()
+    expect(urls).toEqual([])
+  })
+
+  it("runs nothing on a cron no job claims", async () => {
+    const { created, fetched } = await fire(
+      "*/5 * * * *",
+      "https://api.example.invalid/health"
+    )
+    expect(created).not.toHaveBeenCalled()
+    expect(fetched).not.toHaveBeenCalled()
+  })
+
+  it("schedules exactly the crons the handler matches", () => {
     // The handler matches the string exactly, so the config must spell it the same.
     const crons = [...config.matchAll(/"crons": (\[[^\]]*\])/g)].map(
       (m) => JSON.parse(m[1] ?? "[]") as string[]
     )
-    expect(crons).toEqual([["0 * * * *"], ["0 * * * *", UPTIME_CRON]])
+    const jobs = [...new Set([SWEEP_CRON, UPTIME_CRON])]
+    expect(crons).toEqual([[SWEEP_CRON], jobs])
   })
 })
 
