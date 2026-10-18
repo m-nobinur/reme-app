@@ -788,6 +788,33 @@ live("an owner deciding a review", () => {
     expect(refused.status).toBe(403)
   })
 
+  it("answers a failure, not a 202, when the publish cannot start", async () => {
+    const built = await previewed()
+    await requestReview(kit, built.ids)
+    const held = env.PUBLISHES
+    const swap = env as unknown as { PUBLISHES: unknown }
+    swap.PUBLISHES = {
+      create: async () => {
+        throw new Error("Workflows is down")
+      },
+      get: async () => {
+        throw new Error("no such instance")
+      },
+    }
+    try {
+      const res = await owner(
+        built.orgId,
+        `/${built.ids.assignmentId}/approve`,
+        {
+          revision_id: built.revisionId,
+        }
+      )
+      expect(res.status).toBe(503)
+    } finally {
+      swap.PUBLISHES = held
+    }
+  })
+
   it("records a rejection as the owner's session", async () => {
     const built = await previewed()
     await requestReview(kit, built.ids)

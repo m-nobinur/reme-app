@@ -687,6 +687,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         await step.sleep(`resume wait ${round}`, "30 seconds")
         await step.do(`resume run ${round}`, async () => {
           await init(Developer, { id: ids.assignmentId }).dispatch({
+            idempotencyKey: `${ids.assignmentId}:resume-run-${round}`,
             message: {
               kind: "signal",
               type: "run.interrupted",
@@ -779,6 +780,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             asked = seen.fixes
             await step.do(`design repair ${round}`, async () => {
               await init(Developer, { id: ids.assignmentId }).dispatch({
+                idempotencyKey: `${ids.assignmentId}:design-repair-${round}`,
                 message: {
                   kind: "signal",
                   type: "design.critique",
@@ -886,6 +888,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           if (a11y?.outcome === "repairing") {
             await step.do(`a11y handoff ${round}`, async () => {
               await init(Developer, { id: ids.assignmentId }).dispatch({
+                idempotencyKey: `${ids.assignmentId}:a11y-handoff-${round}`,
                 message: {
                   kind: "signal",
                   type: "validation.failed",
@@ -907,6 +910,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           const lift = escalate()
           await step.do(`repair ${round}`, async () => {
             await init(Developer, { id: ids.assignmentId }).dispatch({
+              idempotencyKey: `${ids.assignmentId}:repair-${round}`,
               message: {
                 kind: "signal",
                 type: "validation.failed",
@@ -1114,6 +1118,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         )
         // The Developer never sees "the owner said"; it sees a fact record.
         await init(Developer, { id: ids.assignmentId }).dispatch({
+          idempotencyKey: `${ids.assignmentId}:resume-${round}`,
           message: {
             kind: "signal",
             type: "information.answered",
