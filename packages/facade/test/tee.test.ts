@@ -150,6 +150,71 @@ describe("the observe tee", () => {
     ])
   })
 
+  it("strips NUL from a tool result, which Postgres refuses in jsonb", async () => {
+    const { sink, rows } = memorySink()
+    const refusing: EventSink = {
+      lastSeq: sink.lastSeq,
+      append: async (batch) => {
+        if (JSON.stringify(batch).includes("\\u0000")) {
+          throw new Error("unsupported Unicode escape sequence")
+        }
+        return sink.append(batch)
+      },
+    }
+    const tee = createTee({ sink: refusing, ids, waitUntil: () => undefined })
+    tee.subscriber(
+      observation("tool_end", { toolCallId: "c1", result: "bin\u0000ary" })
+    )
+    tee.subscriber(observation("agent_end"))
+    await tee.flush()
+    expect(rows.map((r) => r.type)).toEqual([
+      "runtime.tool_end",
+      "runtime.agent_end",
+    ])
+    expect(rows[0]?.payload.result).toBe("binary")
+  })
+
+  it("drops a batch that landed but reported failure instead of writing it twice", async () => {
+    let lose = true
+    const { sink, rows } = memorySink(0)
+    const lossy: EventSink = {
+      lastSeq: sink.lastSeq,
+      append: async (batch) => {
+        await sink.append(batch)
+        if (lose) {
+          lose = false
+          throw new Error("connection reset after commit")
+        }
+      },
+    }
+    const tee = createTee({ sink: lossy, ids, waitUntil: () => undefined })
+    tee.subscriber(observation("agent_start"))
+    await tee.flush()
+    tee.subscriber(observation("agent_end"))
+    await tee.flush()
+    expect(rows.map((r) => [r.type, r.seq])).toEqual([
+      ["runtime.agent_start", 1],
+      ["runtime.agent_end", 2],
+    ])
+  })
+
+  it("stores no streamed deltas, only what they complete into", async () => {
+    const { sink, rows } = memorySink()
+    const tee = createTee({ sink, ids, waitUntil: () => undefined })
+    tee.subscriber(observation("text_delta", { text: "Hel" }))
+    tee.subscriber(observation("thinking_delta", { delta: "hm" }))
+    tee.subscriber(
+      observation("toolcall_delta", {
+        toolCallId: "c1",
+        toolName: "bash",
+        argumentTextDelta: "{",
+      })
+    )
+    tee.subscriber(observation("message_end", { turnId: "t1", message: {} }))
+    await tee.flush()
+    expect(rows.map((r) => r.type)).toEqual(["runtime.message_end"])
+  })
+
   it("mints event ids that sort in write order within one millisecond", async () => {
     // A Worker's clock stands still within a request; this one does too.
     vi.useFakeTimers({ toFake: ["Date"], now: Date.now() })

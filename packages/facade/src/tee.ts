@@ -80,7 +80,8 @@ export function redact(observation: FlueObservation): Record<string, unknown> {
 }
 
 function scrub(text: string): string {
-  let out = text
+  // Postgres refuses \u0000 in jsonb, and one refused batch blocks every later one.
+  let out = text.replaceAll("\u0000", "")
   for (const shape of SECRET_SHAPES) out = out.replace(shape, "[redacted]")
   return out
 }
@@ -104,6 +105,8 @@ export function createTee(options: {
   let pending: Pending[] = []
   let last: number | null = null
   let chain: Promise<void> = Promise.resolve()
+  // The front of `pending` after an append that threw, which may still have committed.
+  let unsure: { rows: number; seq: number } | null = null
 
   const row = (
     type: string,
@@ -132,10 +135,20 @@ export function createTee(options: {
         const batch = pending
         pending = []
         try {
-          if (last === null) last = (await sink.lastSeq(ids.session_id)) ?? -1
+          if (last === null) {
+            last = (await sink.lastSeq(ids.session_id)) ?? -1
+            // It did commit: numbering it again would collide on every retry.
+            if (unsure && last >= unsure.seq) batch.splice(0, unsure.rows)
+            unsure = null
+          }
           let seq = last
           const rows = batch.map((r) => ({ ...r, seq: ++seq }))
-          await sink.append(rows)
+          try {
+            await sink.append(rows)
+          } catch (error) {
+            unsure = { rows: rows.length, seq }
+            throw error
+          }
           last = seq
         } catch (error) {
           // Back to the front, unnumbered: the next flush re-reads the last
@@ -160,6 +173,8 @@ export function createTee(options: {
 
   return {
     subscriber(observation) {
+      // Streamed fragments: the completed message that follows holds the same text.
+      if (observation.type.endsWith("_delta")) return
       pending.push(
         row(
           `runtime.${observation.type}`,
