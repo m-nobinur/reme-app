@@ -120,17 +120,21 @@ const url = process.env.DATABASE_URL
 
 /** An R2 stand-in that keeps what it was sent. */
 const bucket = () => {
-  const objects = new Map<string, { bytes: number; type?: string }>()
+  const objects = new Map<
+    string,
+    { bytes: number; type?: string; file: boolean }
+  >()
   return {
     objects,
     put: async (
       key: string,
-      value: Uint8Array,
+      value: Uint8Array | File,
       options?: { httpMetadata?: { contentType?: string } }
     ) => {
       objects.set(key, {
-        bytes: value.byteLength,
+        bytes: value instanceof File ? value.size : value.byteLength,
         type: options?.httpMetadata?.contentType,
+        file: value instanceof File,
       })
       return {}
     },
@@ -216,6 +220,20 @@ describe.skipIf(!url)("POST /assets, on a live connection", () => {
     expect(UploadedAssets.parse(await again.json()).assets).toEqual(assets)
     expect((await uploads(who))?.items).toHaveLength(2)
     expect(sites.objects.size).toBe(2)
+  })
+
+  it("hands the bucket the uploaded file itself, not a copy of its bytes", async () => {
+    const who = await owner(kit, url as string, "assets-file")
+    const sites = bucket()
+    const response = await upload(
+      who,
+      sites,
+      form([{ bytes: JPEG, name: "van.jpg" }])
+    )
+    expect(response.status).toBe(201)
+    expect([...sites.objects.values()]).toEqual([
+      { bytes: JPEG.byteLength, type: "image/jpeg", file: true },
+    ])
   })
 
   it("refuses a file that is not a JPEG, PNG or WebP, whatever it claims", async () => {

@@ -117,7 +117,7 @@ export async function uploadAssets(
   const held = await kit.withOrg(scope, readFacts)
   const before = factValue(held, "media.uploads")?.items ?? []
 
-  const made: { asset: Asset; bytes: Uint8Array }[] = []
+  const made: { asset: Asset; file: File }[] = []
   for (const [index, file] of files.entries()) {
     if (file.size > UPLOAD_MAX_BYTES) {
       return refused(
@@ -126,8 +126,8 @@ export async function uploadAssets(
         `Each photo is at most ${UPLOAD_MAX_BYTES / 1024 / 1024} MB.`
       )
     }
-    const bytes = new Uint8Array(await file.arrayBuffer())
-    const kind = sniff(bytes)
+    // The signature only, so twelve photos are not each copied into memory.
+    const kind = sniff(new Uint8Array(await file.slice(0, 12).arrayBuffer()))
     if (!kind) {
       return refused(
         415,
@@ -136,12 +136,12 @@ export async function uploadAssets(
       )
     }
     made.push({
-      bytes,
+      file,
       asset: {
         id: await stableId(`${owner.orgId}:${key}:${index}`),
         name: cleanName(file.name, kind),
         content_type: kind,
-        bytes: bytes.byteLength,
+        bytes: file.size,
       },
     })
   }
@@ -151,8 +151,8 @@ export async function uploadAssets(
   ]
   if (merged(before).length > UPLOAD_MAX_FILES) return tooMany()
 
-  for (const { asset, bytes } of made) {
-    await env.SITES.put(uploadKey(owner.orgId, asset.id), bytes, {
+  for (const { asset, file } of made) {
+    await env.SITES.put(uploadKey(owner.orgId, asset.id), file, {
       httpMetadata: { contentType: asset.content_type },
     })
   }
