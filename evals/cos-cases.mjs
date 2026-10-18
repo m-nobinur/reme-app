@@ -206,7 +206,7 @@ export const callsOf = (parts) =>
  * Act tool calls: any held for approval, and any act tool called without
  * one, which is the worse of the two.
  */
-export const actsOf = (parts) =>
+const actsOf = (parts) =>
   callsOf(parts).filter((p) => p.approval || ACT_TOOLS.includes(p.toolName))
 
 const noActs = (parts) =>

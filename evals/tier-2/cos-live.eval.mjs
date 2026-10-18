@@ -57,7 +57,7 @@ const tolerance = (bill) => Math.max(0.05 * bill, 0.001)
  * spend in `low` and at the greater of that and its reservation in `high`,
  * and the bill must fall between the two. With no abandoned turn they match.
  */
-export async function loggedSpend(url, orgId) {
+async function loggedSpend(url, orgId) {
   const sql = postgres(url, { max: 1 })
   try {
     const [row] = await sql`
@@ -81,7 +81,7 @@ export async function loggedSpend(url, orgId) {
  * Whether `bill` is within tolerance of the logged spend, and the line that
  * says so. With no logged spend, unchecked.
  */
-export function billCheck(bill, logged) {
+function billCheck(bill, logged) {
   if (!logged) {
     return {
       off: false,
@@ -135,7 +135,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
  * calls land in it one by one. Eleven model turns always cost something, so
  * usage that never moves means the api spends from another key.
  */
-export async function spentSince(before, tries = 12) {
+async function spentSince(before, tries = 12) {
   let last = 0
   for (let i = 0; i < tries; i++) {
     const moved = (await keyUsage()) - before

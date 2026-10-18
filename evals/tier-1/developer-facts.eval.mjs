@@ -18,7 +18,7 @@ import { loadSession } from "../replay.mjs"
 const fixtures = fileURLToPath(new URL("../fixtures/", import.meta.url))
 
 /** The facts the model was shown, parsed from the stable segment it was logged with. */
-export function briefedFacts(session) {
+function briefedFacts(session) {
   const segment = session.events.find(
     (e) => e.type === "runtime.context_segment"
   )
@@ -42,7 +42,7 @@ export function briefedFacts(session) {
 }
 
 /** Every piece of text an `edit` or `write` put into a file, with where. */
-export function writtenText(session) {
+function writtenText(session) {
   const out = []
   for (const turn of session.events.filter(
     (e) => e.type === "runtime.turn_messages"

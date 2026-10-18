@@ -21,7 +21,7 @@ const KEY_SHAPES = [
 ]
 
 /** What in one recorded session's requests or events looks like a credential. */
-export function credentialFindings(session) {
+function credentialFindings(session) {
   const found = []
   const requests = session.events.filter(
     (e) => e.type === "runtime.turn_request"
