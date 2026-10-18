@@ -3,6 +3,7 @@ import {
   AskDesignInput,
   AskDetailsInput,
   type FactValue,
+  FONT_PAIRS,
   INDUSTRIES,
   PALETTES,
   PaletteId,
@@ -1416,6 +1417,20 @@ describe("the design tray", () => {
     expect((all as { facts: FactValue[] }).facts.at(-1)?.value).toEqual({
       ids: ["home", "services", "gallery", "faq", "quote"],
     })
+  })
+
+  it("never offers two letterings with the same title font", () => {
+    for (let n = 0; n < 20; n++) {
+      const orgId = `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`
+      const offered = tray({ orgId })
+        .questions.find((q) => q.id === "lettering")
+        ?.card.options.map((o) => o.id)
+        .filter((id) => id !== "custom")
+      const families = offered?.map(
+        (id) => FONT_PAIRS.find((pair) => pair.id === id)?.display.family
+      )
+      expect(new Set(families).size).toBe(families?.length)
+    }
   })
 
   it("asks for pages one tick each, the usual ones or the held ones ticked", () => {

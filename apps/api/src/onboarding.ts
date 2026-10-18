@@ -591,7 +591,8 @@ export function designCard(o: Onboarding, newId: () => string): ToolPart {
     "lettering",
     FONT_PAIRS.filter((pair) => directions.some((d) => d.fonts === pair.id)),
     (pair) => pair.id,
-    (pair) => pair.id
+    // Two pairs with the same title font read as one choice offered twice.
+    (pair) => pair.display.family
   )
   const layouts = firstOf(
     o,
