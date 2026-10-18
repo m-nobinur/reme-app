@@ -16,4 +16,8 @@ export default defineConfig({
     },
   },
   server: { port: 4321 },
+  // The catalog only. persona/scene.html takes three.js from a CDN import map,
+  // which the scan cannot resolve; a failed scan skips pre-bundling, and the
+  // first page load then reloads mid-test while Vite finds the dependencies.
+  optimizeDeps: { entries: ["index.html"] },
 })
