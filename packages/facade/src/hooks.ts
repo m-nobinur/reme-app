@@ -109,9 +109,9 @@ export function bashRefusal(
   if (touchesAgents(command)) return "the command names .agents/"
   if (hasParentSegment(command)) return "the command contains a .. segment"
   const roots = [policy.siteRoot, ...(policy.readOnlyRoots ?? [])]
-  const tokens = command.split(/\s+/)
-  for (const raw of tokens) {
-    const token = raw.replace(/^['"]|['"]$/g, "")
+  // Split on shell punctuation too: `cat</etc/passwd` and `--out=/etc/x`
+  // name a path with no space before it.
+  for (const token of command.split(/[\s;&|<>()`='"]+/)) {
     if (!token.startsWith("/")) continue
     if (token === "/dev/null" || under(token, "/tmp")) continue
     if (!roots.some((root) => under(token, root))) {

@@ -64,6 +64,15 @@ describe("the pre_tool_call policy", () => {
     expect(bashRefusal("cd src; cd /workspace/other", policy)).toMatch(
       /outside the site/
     )
+    for (const command of [
+      "cat</etc/passwd",
+      "echo x>/etc/hosts",
+      "true;cat /etc/passwd",
+      "npm pack --pack-destination=/workspace/other",
+      'cp a "$(echo /etc/passwd)"',
+    ]) {
+      expect(bashRefusal(command, policy)).toMatch(/outside the site/)
+    }
   })
 
   it("allows bash inside the site, the toolchain and the scratch dir", () => {
