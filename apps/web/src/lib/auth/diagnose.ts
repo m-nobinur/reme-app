@@ -52,11 +52,16 @@ const cookieLength = (request: Request, name: string) =>
     .find((pair) => pair.startsWith(`${name}=`))
     ?.slice(name.length + 1).length ?? 0
 
+/**
+ * The reason, and the sealed session when the diagnostic refresh worked. That
+ * refresh spent the cookie's refresh token, so the caller has to save it; it
+ * sits beside the reason so the logged line can never carry it.
+ */
 export async function whyNoUser(
   request: Request,
   kit: Kit,
   now = Date.now()
-): Promise<NoUserReason> {
+): Promise<{ reason: NoUserReason; sealed?: string }> {
   const path = new URL(request.url).pathname
   const base = { event: "auth.no_user" as const, path }
   const cookie_length = cookieLength(request, "wos-session")
@@ -64,23 +69,30 @@ export async function whyNoUser(
   try {
     session = await kit.getSession(request)
   } catch {
-    return { ...base, class: "unseal_failed", cookie_length }
+    return { reason: { ...base, class: "unseal_failed", cookie_length } }
   }
-  if (!session) return { ...base, class: "cookie_absent", cookie_length }
+  if (!session) {
+    return { reason: { ...base, class: "cookie_absent", cookie_length } }
+  }
   const expiry = expiresAt(session.accessToken)
   if (expiry === null || expiry > now) {
-    return { ...base, class: "unknown", cookie_length }
+    return { reason: { ...base, class: "unknown", cookie_length } }
   }
   try {
-    await kit.refreshSession(session)
+    const { encryptedSession } = await kit.refreshSession(session)
     // It refreshes now: the failure was passing, and what it was is gone.
-    return { ...base, class: "unknown", cookie_length }
+    return {
+      reason: { ...base, class: "unknown", cookie_length },
+      sealed: encryptedSession,
+    }
   } catch (error) {
     return {
-      ...base,
-      class: "refresh_failed",
-      code: codeOf(error),
-      cookie_length,
+      reason: {
+        ...base,
+        class: "refresh_failed",
+        code: codeOf(error),
+        cookie_length,
+      },
     }
   }
 }

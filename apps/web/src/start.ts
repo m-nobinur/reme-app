@@ -34,21 +34,50 @@ export const csrfMiddleware = createCsrfMiddleware({
  * One log line when a request brought a session cookie and AuthKit still
  * found no user, saying why (`lib/auth/diagnose.ts`). Runs after AuthKit's
  * middleware and only on that path, so a signed-in request pays nothing.
+ *
+ * It also settles the cookie, or every later request pays AuthKit's refresh
+ * and this one again: a refresh token WorkOS refused for good is cleared, and
+ * a refresh that worked here is saved, since it spent the old token.
  */
-const noUserLog = createMiddleware().server(
+export const noUserLog = createMiddleware().server(
   async ({ request, next, context }) => {
     // What `authkitMiddleware` put in the context for the requests after it.
     const auth = (
       context as unknown as Partial<AuthKitContext> | undefined
     )?.auth?.()
     if (
-      auth &&
-      !auth.user &&
-      /(?:^|;\s*)wos-session=/.test(request.headers.get("cookie") ?? "")
+      !auth ||
+      auth.user ||
+      !/(?:^|;\s*)wos-session=/.test(request.headers.get("cookie") ?? "")
     ) {
-      console.warn(JSON.stringify(await whyNoUser(request, await getAuthkit())))
+      return next()
     }
-    return next()
+    const authkit = await getAuthkit()
+    const { reason, sealed } = await whyNoUser(request, authkit)
+    console.warn(JSON.stringify(reason))
+    const result = await next()
+    const dead =
+      reason.class === "refresh_failed" && reason.code === "invalid_grant"
+    if (!(sealed || dead)) {
+      return result
+    }
+    // Past `next()` the kit's pending-header channel is closed, so it hands
+    // the cookie back on a response, as AuthKit's own middleware reads it.
+    const { response: cookie } = sealed
+      ? await authkit.saveSession(undefined, sealed)
+      : await authkit.clearSession(new Response())
+    const headers = new Headers(result.response.headers)
+    for (const value of cookie?.headers.getSetCookie() ?? []) {
+      headers.append("set-cookie", value)
+    }
+    return {
+      ...result,
+      response: new Response(result.response.body, {
+        status: result.response.status,
+        statusText: result.response.statusText,
+        headers,
+      }),
+    }
   }
 )
 

@@ -29,7 +29,7 @@ it("names a failed unseal, with the path and the cookie's length and nothing sec
   const cookie = await sessionEncryption.sealData(session, {
     password: secret(),
   })
-  const reason = await whyNoUser(request(cookie), {
+  const { reason } = await whyNoUser(request(cookie), {
     getSession: async () =>
       await sessionEncryption.unsealData(cookie, { password: secret() }),
     refreshSession: async () => {
@@ -70,18 +70,20 @@ it("names a refused refresh with WorkOS's code, and a missing cookie", async () 
         throw refused
       },
     } as never)
-  ).toMatchObject({ class: "refresh_failed", code: "invalid_grant" })
+  ).toMatchObject({
+    reason: { class: "refresh_failed", code: "invalid_grant" },
+  })
   expect(
     await whyNoUser(request("sealed"), {
       getSession: async () => null,
       refreshSession: async () => undefined,
     } as never)
-  ).toMatchObject({ class: "cookie_absent", cookie_length: 6 })
+  ).toMatchObject({ reason: { class: "cookie_absent", cookie_length: 6 } })
   // A live token that still found no user is not a refresh problem.
   expect(
     await whyNoUser(request("sealed"), {
       getSession: async () => ({ ...expired, accessToken: token(300) }),
       refreshSession: async () => undefined,
     } as never)
-  ).toMatchObject({ class: "unknown" })
+  ).toMatchObject({ reason: { class: "unknown" } })
 })
