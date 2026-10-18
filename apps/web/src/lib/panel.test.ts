@@ -235,9 +235,13 @@ describe("in a chat", () => {
       lead: "Building version 4,",
       detail: "checking the site",
     })
-    expect(chat({ builds: [build("release_candidate", 4)] })?.headline).toEqual(
-      ["Reme is publishing version 4 now."]
-    )
+    const publishing = chat({ builds: [build("release_candidate", 4)] })
+    expect(publishing?.headline).toEqual(["Reme is publishing version 4 now."])
+    expect(publishing?.line).toEqual({
+      tone: "working",
+      lead: "Version 4,",
+      detail: "publishing",
+    })
   })
 
   it("calls the assistant by the name the owner gave it", () => {

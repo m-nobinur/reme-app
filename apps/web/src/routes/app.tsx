@@ -93,6 +93,7 @@ import { requireOwner } from "@/lib/tenant"
 import { LiveWorkspaceProvider, useLiveWorkspaceState } from "@/lib/workspace"
 import {
   PanelAnnouncer,
+  useBrowserZone,
   usePanel,
   WorkspacePanel,
   WorkspacePanelLine,
@@ -234,6 +235,7 @@ function AppLayout() {
   // Closing the menu marks what it showed as seen. Not while a read failed:
   // an item it would have shown would be marked read unseen.
   const newest = notifications[0]?.raisedAt
+  const zone = useBrowserZone()
   const markMenuSeen = (open: boolean) => {
     if (open || !active || !newest || !live.workspace || activity === null)
       return
@@ -380,6 +382,7 @@ function AppLayout() {
             onOpenChange={markMenuSeen}
             unread={unread}
             viewAll={<Link to="/app/notifications" />}
+            zone={zone}
           />
         }
         panel={hasPanel ? <WorkspacePanel panel={panel} /> : null}

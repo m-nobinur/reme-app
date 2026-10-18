@@ -3,6 +3,7 @@ import {
   AskDesignInput,
   AskDetailsInput,
   type FactValue,
+  FONT_PAIRS,
   INDUSTRIES,
   PALETTES,
   PaletteId,
@@ -1418,6 +1419,20 @@ describe("the design tray", () => {
     })
   })
 
+  it("never offers two letterings with the same title font", () => {
+    for (let n = 0; n < 20; n++) {
+      const orgId = `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`
+      const offered = tray({ orgId })
+        .questions.find((q) => q.id === "lettering")
+        ?.card.options.map((o) => o.id)
+        .filter((id) => id !== "custom")
+      const families = offered?.map(
+        (id) => FONT_PAIRS.find((pair) => pair.id === id)?.display.family
+      )
+      expect(new Set(families).size).toBe(families?.length)
+    }
+  })
+
   it("asks for pages one tick each, the usual ones or the held ones ticked", () => {
     const pages = input().questions.find((q) => q.id === "pages")?.card
     expect(pages?.multiple).toBe(true)
@@ -1430,7 +1445,13 @@ describe("the design tray", () => {
       "service_area",
       "contact",
     ])
-    expect(pages?.preselected).toEqual(["services", "about", "contact"])
+    // Every owner gave their area by now, so its page is ticked too.
+    expect(pages?.preselected).toEqual([
+      "services",
+      "about",
+      "service_area",
+      "contact",
+    ])
     const held = tray({
       facts: [
         ...heldBefore(),
@@ -1438,6 +1459,26 @@ describe("the design tray", () => {
       ],
     }).questions.find((q) => q.id === "pages")?.card
     expect(held?.preselected).toEqual(["gallery"])
+  })
+
+  it("ticks the areas and reviews pages when the owner already gave them", () => {
+    const pages = tray({
+      facts: [
+        ...heldBefore().filter((f) => f.key !== "business.proof"),
+        { key: "service_area.text", value: { text: "Reading and 15 miles" } },
+        {
+          key: "business.proof",
+          value: { text: "4.9 on Google from 120 reviews." },
+        },
+      ],
+    }).questions.find((q) => q.id === "pages")?.card
+    expect(pages?.preselected).toEqual([
+      "services",
+      "about",
+      "testimonials",
+      "service_area",
+      "contact",
+    ])
   })
 
   it("reads the pages an owner names in their own words as ticked", () => {

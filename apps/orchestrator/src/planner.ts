@@ -177,6 +177,13 @@ function pickedSections(facts: readonly FactRecord[]): {
     }))
 }
 
+/** What a feature line about each picked section says, which its note replaces. */
+const ABOUT_SECTION = {
+  testimonials: /\breviews? (spot|section)\b|\btestimonials?\b/i,
+  gallery: /\bgallery\b/i,
+  faq: /\bFAQs?\b|frequently asked/i,
+} as const satisfies Partial<Record<SectionKind, RegExp>>
+
 /** The card lines that say what became of each picked page that is not a page. */
 const pickNotes = (facts: readonly FactRecord[]): string[] =>
   pickedSections(facts).map(({ kind, planned }) =>
@@ -203,9 +210,16 @@ export function withOwnerChoices(
   const notes = pickNotes(facts)
   const budgeted = withinBudget(blueprint)
   const pages = withContentBlocks(splitHeaders(budgeted))
-  const features = [
-    ...blueprint.features.filter((line) => !notes.includes(line)),
-  ]
+  // A model line about a picked section said it twice beside its note.
+  const covered = pickedSections(facts).flatMap(({ kind }) =>
+    kind in ABOUT_SECTION
+      ? [ABOUT_SECTION[kind as keyof typeof ABOUT_SECTION]]
+      : []
+  )
+  const features = blueprint.features.filter(
+    (line) =>
+      !notes.includes(line) && !covered.some((about) => about.test(line))
+  )
   return {
     ...blueprint,
     ...(owner.direction ? { direction: owner.direction } : {}),

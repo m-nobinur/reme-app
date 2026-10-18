@@ -364,6 +364,14 @@ export function panelFor(input: PanelInput): Panel | null {
 
   const line = ((): Line => {
     const tone = live ? "live" : "idle"
+    // An approved version is no longer being built: "Version 1, publishing".
+    if (working?.state === "release_candidate" && working.revision?.version) {
+      return {
+        tone: "working",
+        lead: `Version ${working.revision.version},`,
+        detail: "publishing",
+      }
+    }
     if (working) {
       // A full build names the step it is on and how far through them it is,
       // which the minimised pill keeps in view.

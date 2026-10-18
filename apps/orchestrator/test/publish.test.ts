@@ -1267,7 +1267,9 @@ live("the publish workflow", () => {
       revision_id: second.revisionId,
     })
     expect(names).toEqual(steps.PublishWorkflow.superseded)
-    expect(thirdNames).toEqual(steps.PublishWorkflow.publish)
+    expect(thirdNames).toEqual(
+      steps.PublishWorkflow["publish over a live version"]
+    )
     expect(await eventsOf(thirdIds, "publish.probed")).toHaveLength(4)
     expect(await liveNow(orgId)).toMatchObject({
       kind: "publish",

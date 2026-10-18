@@ -10,6 +10,7 @@ import {
   Blueprint,
   type BuildLane,
   type ChangeKind,
+  siteUrl,
 } from "@workspace/contracts"
 import {
   appendEvent,
@@ -47,6 +48,7 @@ import { PLAN_ROUNDS, planRound, readDecision } from "./planner.ts"
 import {
   accessible,
   activate,
+  LIVE_SAY,
   latestRevision,
   PROBE_MINUTES,
   type PublishParams,
@@ -54,6 +56,7 @@ import {
   readTarget,
   redriveQueued,
   requestReview,
+  sayLive,
   servedVerification,
   stillLive,
   verifyArtifact,
@@ -1308,6 +1311,23 @@ export class PublishWorkflow extends WorkflowEntrypoint<Env, PublishParams> {
       if (!result.ok) {
         failed = { minute, ...result }
         break
+      }
+      // A first version going live is news the owner hears in the chat.
+      if (i === 0 && !rollback && !deployment.previous_revision_id) {
+        try {
+          await step.do("say live", LIVE_SAY, () =>
+            run((kit) =>
+              sayLive(
+                kit,
+                orgId,
+                target.site_id,
+                siteUrl(served, this.env.SITE_PORT)
+              )
+            )
+          )
+        } catch {
+          // The panel says the site is live as well; the chat misses one line.
+        }
       }
     }
 
