@@ -10,13 +10,18 @@ import { failureCode } from "@workspace/db"
  * Logs whether or not email is set up. A failing run emails through `ALERTS`
  * when the binding and `ALERT_TO` are both present.
  *
- * ponytail: one email per failing run, so an outage sends one every five
- * minutes. Email on state change needs somewhere to keep the last state,
- * which this Worker has nowhere to put yet.
+ * ponytail: one email per failing run, so an outage sends one an hour. Email
+ * on state change needs somewhere to keep the last state, which this Worker
+ * has nowhere to put yet.
  */
 
-/** Matched character for character against the wrangler config. */
-export const UPTIME_CRON = "*/5 * * * *"
+/**
+ * Matched character for character against the wrangler config. Hourly, on
+ * the sweep's own firing: `/health` runs a query, and Neon suspends a compute
+ * only after 5 idle minutes, so a five-minute check kept production's
+ * database awake all month (2026-10-18). Shorter means more compute hours.
+ */
+export const UPTIME_CRON = "0 * * * *"
 export const UPTIME_TIMEOUT_MS = 10_000
 /** A sender on the zone; Email Routing only asks that the domain be ours. */
 export const ALERT_FROM = "alerts@remeai.co.uk"

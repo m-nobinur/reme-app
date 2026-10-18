@@ -198,9 +198,12 @@ Open item 13 lists what that defers.
 
 The zone is on the Free plan, so Cloudflare Health Checks are not available, and Cloudflare
 Notifications has no alert on a Worker's error rate. The production orchestrator runs its own
-check instead: a cron every five minutes fetches each URL in its `HEALTH_URLS` var, which is
+check instead: the hourly cron, the same firing as the sweep, fetches each URL in its `HEALTH_URLS` var, which is
 `api.remeai.co.uk/health` and `preview.remeai.co.uk/`. A URL
 fails on anything but a 2xx, or on no answer within 10 s. Staging does not run the check.
+`/health` runs a query, so each check wakes the database. Hourly lets Neon suspend between
+runs; to check more often, change `UPTIME_CRON` in `src/uptime.ts` and add the same string to
+production's crons, and the compute bill grows with it.
 
 Every run writes one line to Workers Logs for `reme-orchestrator-production`:
 
@@ -209,7 +212,7 @@ Every run writes one line to Workers Logs for `reme-orchestrator-production`:
 ```
 
 Query `type = uptime.checked` there for the history. A run with a failure also sends one email,
-so an outage sends one every five minutes until it ends. A failed send logs
+so an outage sends one an hour until it ends. A failed send logs
 `uptime.alert_failed` with its code.
 
 The check fetches the public hostnames, so it tests the same path a visitor takes. Measured on
