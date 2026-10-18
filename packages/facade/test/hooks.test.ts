@@ -81,6 +81,19 @@ describe("the pre_tool_call policy", () => {
     ]) {
       expect(bashRefusal(command, policy)).toMatch(/builds a path/)
     }
+    for (const command of [
+      "cd ~ && cat .npmrc",
+      "cd $HOME; ls",
+      "cd && ls",
+      "cd - && ls",
+      "pushd /etc",
+      "ls && cd /workspace/other",
+    ]) {
+      expect(bashRefusal(command, policy)).toMatch(
+        /leaves the site|outside the site/
+      )
+    }
+    expect(bashRefusal("cd src && cd components && ls", policy)).toBeNull()
   })
 
   it("allows bash inside the site, the toolchain and the scratch dir", () => {

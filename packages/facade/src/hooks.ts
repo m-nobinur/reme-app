@@ -125,9 +125,17 @@ export function bashRefusal(
       return `${token} is outside the site`
     }
   }
-  const cd = command.match(/(?:^|[;&|]\s*)cd\s+(\S+)/)
-  if (cd?.[1]?.startsWith("/") && !under(cd[1], policy.siteRoot)) {
-    return `cd ${cd[1]} leaves the site`
+  // Every `cd` and `pushd`: a bare one, `-`, `~` or `$HOME` leaves with no
+  // slash for the loop above to see.
+  for (const [, verb, to] of command.matchAll(
+    /(?:^|[;&|(]\s*)(cd|pushd)(?:\s+([^\s;&|)]+))?/g
+  )) {
+    const leaves =
+      !to ||
+      to === "-" ||
+      /[$~\\{`]/.test(to) ||
+      (to.startsWith("/") && !under(to, policy.siteRoot))
+    if (leaves) return `${verb} ${to ?? ""} leaves the site`.trim()
   }
   return null
 }
