@@ -1525,8 +1525,10 @@ bridge.post("/:id/approve", async (c) => {
       id: approvalId,
       params: { org_id: orgId, approval_id: approvalId },
     })
-  } catch {
-    // Already created: the approval id is the instance id (ADR-032).
+  } catch (error) {
+    // Already created: the approval id is the instance id (ADR-032). Any
+    // other failure must reach the owner, not a 202 for a publish never started.
+    if (!(await instanceExists(c.env.PUBLISHES, approvalId))) throw error
   }
   return c.json(
     { ...decision.decision, workflow_instance_id: approvalId },
@@ -1584,14 +1586,16 @@ consoleOnly.post("/rollback", async (c) => {
       detail: {},
     })
   }
-  const id = `rollback-${key.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 80)}`
+  // The org in the id, so two orgs' keys never meet; 100 characters at most.
+  const id = `rollback-${orgId}-${key.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 54)}`
   let created = true
   try {
     await c.env.PUBLISHES.create({
       id,
       params: { org_id: orgId, site_id: orgId, rollback: { key, reason } },
     })
-  } catch {
+  } catch (error) {
+    if (!(await instanceExists(c.env.PUBLISHES, id))) throw error
     created = false
   }
   return c.json(
@@ -1603,6 +1607,13 @@ consoleOnly.post("/rollback", async (c) => {
     created ? 202 : 200
   )
 })
+
+/** Whether a Workflow instance exists; `get` throws for one that does not. */
+const instanceExists = (workflow: Workflow, id: string) =>
+  workflow.get(id).then(
+    () => true,
+    () => false
+  )
 
 function notFound(c: Context, id: string) {
   return failure(c, 404, {
