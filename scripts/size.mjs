@@ -1,5 +1,5 @@
 /**
- * The Worker size gate for `apps/<app>`, the same gate `apps/web` runs.
+ * The Worker size gate for `apps/<app>`.
  *
  *   node ../../scripts/size.mjs <app> [--config <path>] [--forbid <marker>]
  *
@@ -16,13 +16,10 @@
  * gate exists to catch.
  *
  * `--config` names a built config to bundle from, for a Worker that Vite builds
- * first (the orchestrator); without it wrangler bundles `src/` from the app's
+ * first (the orchestrator, web); without it wrangler bundles `src/` from the app's
  * `wrangler.jsonc`. `--forbid` fails the gate when the bundle holds a string:
  * one of parse5's error codes, for a Worker that must not carry the content
  * gate the `@workspace/gates` root pulls in.
- *
- * `apps/web` keeps its own copy in `apps/web/scripts/size-check.mjs`, which the
- * frontend owns.
  */
 import { execFileSync } from "node:child_process"
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs"
