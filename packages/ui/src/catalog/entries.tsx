@@ -1,14 +1,6 @@
-import {
-  CheckCircleIcon,
-  HouseIcon,
-  UsersThreeIcon,
-} from "@phosphor-icons/react"
+import { CheckCircleIcon, HouseIcon } from "@phosphor-icons/react"
 import { Alert } from "@workspace/ui/components/alert"
-import {
-  AppNav,
-  navLinkClass,
-  PageHeader,
-} from "@workspace/ui/components/app-shell"
+import { PageHeader } from "@workspace/ui/components/app-shell"
 import { AuthCard, AuthForm } from "@workspace/ui/components/auth-card"
 import { Button } from "@workspace/ui/components/button"
 import { CodeInput } from "@workspace/ui/components/code-input"
@@ -62,12 +54,6 @@ const FIXTURE_VERDICTS: Record<"weak" | "strong", PasswordVerdict> = {
     scored: true,
   },
 }
-
-const NAV = [
-  { href: "/app", label: "Dashboard", icon: HouseIcon },
-  { href: "/app/approvals", label: "Approvals", icon: CheckCircleIcon },
-  { href: "/app/staff", label: "Staff", icon: UsersThreeIcon },
-]
 
 /**
  * Every primitive in the package, rendered once. The a11y scan and the visual
@@ -318,27 +304,6 @@ const catalog: CatalogEntry[] = [
         description="The people and the AI roles that make up your organisation."
         title="Staff"
       />
-    ),
-  },
-  {
-    name: "AppNav",
-    render: () => (
-      <div className="max-w-60 rounded-lg bg-rail p-3 text-rail-foreground">
-        <AppNav aria-label="Catalog">
-          {NAV.map((item) => (
-            <li key={item.href}>
-              <a
-                aria-current={item.href === "/app" ? "page" : undefined}
-                className={navLinkClass}
-                href={item.href}
-              >
-                <item.icon aria-hidden />
-                {item.label}
-              </a>
-            </li>
-          ))}
-        </AppNav>
-      </div>
     ),
   },
   ...workspaceCatalog,

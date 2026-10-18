@@ -1,5 +1,4 @@
 import { ApprovalTargetSummary } from "@workspace/ui/components/approval-target"
-import { AttentionCard } from "@workspace/ui/components/attention-card"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -181,62 +180,6 @@ const TREE = [
   },
 ]
 
-/** One card per §7.3 type, so all four are scanned and snapshotted. */
-function AttentionSample() {
-  return (
-    <div className="flex max-w-2xl flex-col gap-3">
-      <AttentionCard
-        actions={
-          <>
-            <Button>Approve</Button>
-            <Button variant="outline">Decline</Button>
-          </>
-        }
-        detail="The homepage draft is built from the current facts and passed the content gate. Nothing publishes until you say so."
-        expiresAt="2026-08-31T09:12:00.000Z"
-        kind="approval"
-        onExpiry="The revision stays unpublished and Alex raises it again with the next build."
-        raisedAt="2026-08-24T09:12:00.000Z"
-        raisedBy="Alex"
-        target={
-          <ApprovalTargetSummary
-            target={{ kind: "revision", revision_id: "rev_2f41c9" }}
-            version={4}
-          />
-        }
-        title="Publish the new homepage"
-      />
-      <AttentionCard
-        detail="Two enquiries this week asked. Your hours fact covers weekdays only, so I have not answered either way."
-        expiresAt="2026-08-30T07:30:00.000Z"
-        kind="question"
-        onExpiry="I tell both customers weekday hours only and leave the fact unchanged."
-        raisedAt="2026-08-26T07:30:00.000Z"
-        raisedBy="Maya"
-        title="Do you cover Saturday mornings?"
-      />
-      <AttentionCard
-        detail="Every enquiry got a first reply inside four minutes. Two are waiting on a quote from you."
-        expiresAt={null}
-        kind="report"
-        onExpiry="Nothing. A report is there to read, not to answer."
-        raisedAt="2026-08-25T17:00:00.000Z"
-        raisedBy="Maya"
-        title="Six enquiries answered this week"
-      />
-      <AttentionCard
-        detail="I have chased twice. A third chase reads as pressure, so this is with you."
-        expiresAt="2026-09-01T06:00:00.000Z"
-        kind="alert"
-        onExpiry="I close the quote as lapsed and stop chasing."
-        raisedAt="2026-08-26T06:00:00.000Z"
-        raisedBy="Jamie"
-        title="A quote has been unanswered for nine days"
-      />
-    </div>
-  )
-}
-
 /** All four target kinds, because a union that renders three is a bug. */
 function TargetSample() {
   return (
@@ -297,7 +240,6 @@ const productCatalog: Entry[] = [
       <OrgTree aria-label="Reporting lines" className="max-w-xl" nodes={TREE} />
     ),
   },
-  { name: "AttentionCard", render: () => <AttentionSample /> },
   { name: "ApprovalTargetSummary", render: () => <TargetSample /> },
   {
     name: "DefinitionList",
