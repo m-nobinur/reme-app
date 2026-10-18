@@ -56,13 +56,11 @@ function Preview({ fields }: { fields: QuoteField[] }) {
         <p className="text-muted-foreground">Name, email and phone, then:</p>
         {fields.map((field) => (
           <div className="flex flex-col gap-1" key={field.key}>
-            <span className="truncate font-medium">
-              {field.label || " "}
+            {/* "optional" sits outside the truncated label, or a long label cut it off. */}
+            <span className="flex min-w-0 items-baseline gap-1">
+              <span className="truncate font-medium">{field.label || " "}</span>
               {field.required ? null : (
-                <span className="font-normal text-muted-foreground">
-                  {" "}
-                  optional
-                </span>
+                <span className="shrink-0 text-muted-foreground">optional</span>
               )}
             </span>
             <span
