@@ -49,7 +49,7 @@ import {
   otherHost,
   writePointer,
 } from "./publish.ts"
-import { detachHostname, type RegistrarEnv } from "./registrar.ts"
+import { detachHostname, type RegistrarEnv, setAutoRenew } from "./registrar.ts"
 import { forgetHost } from "./search.ts"
 import { cancelRenewal } from "./stripe.ts"
 
@@ -1018,21 +1018,27 @@ export async function remove(
 }
 
 /**
- * A claim's renewal cancelled, its custom hostnames deleted and its Workflow
- * ended; all three idempotent.
+ * A claim's custom hostnames deleted, its Workflow ended and, for a bought
+ * domain, its renewal stopped on both sides: Stripe bills the owner nothing
+ * more and Cloudflare bills us nothing more. All idempotent. Billing goes
+ * last, so a Stripe failure never leaves a hostname serving.
  */
 async function revoke(
   env: Env,
-  row: Pick<DomainRow, "id" | "cfIds" | "stripe">
+  row: Pick<DomainRow, "id" | "name" | "cfIds" | "stripe">
 ) {
-  const sub = (row.stripe as { subscription?: string } | null)?.subscription
-  if (sub) await cancelRenewal(env, sub)
   await dropHostnames(env, row.cfIds)
   try {
     const instance = await env.DOMAINS.get(domainInstanceId(row.id))
     await instance.terminate()
   } catch {
     // Already ended, or never started.
+  }
+  // A subscription exists only once the domain was registered and paid for.
+  const sub = (row.stripe as { subscription?: string } | null)?.subscription
+  if (sub) {
+    await cancelRenewal(env, sub)
+    await setAutoRenew(env, row.name, false)
   }
 }
 
@@ -1174,7 +1180,12 @@ export async function revokeDomains(
   const kept = sql`${domains.state} <> 'removed' and not (${domains.origin} = 'purchased' and ${domains.state} = 'verifying')`
   const held = await kit.withOrg({ orgId }, (db) =>
     db
-      .select({ id: domains.id, cfIds: domains.cfIds, stripe: domains.stripe })
+      .select({
+        id: domains.id,
+        name: domains.name,
+        cfIds: domains.cfIds,
+        stripe: domains.stripe,
+      })
       .from(domains)
       .where(kept)
   )

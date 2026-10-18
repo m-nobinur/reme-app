@@ -213,10 +213,13 @@ export async function createRenewal(
 
 /**
  * Ends a renewal now, so a domain we no longer serve is never billed again.
- * Stripe takes no idempotency key on a DELETE; it is idempotent already.
+ * Read first, so a repeat finds it cancelled and asks nothing more of Stripe.
  */
-export const cancelRenewal = (env: StripeEnv, id: string) =>
-  stripe(env, "DELETE", `/subscriptions/${encodeURIComponent(id)}`)
+export async function cancelRenewal(env: StripeEnv, id: string) {
+  const path = `/subscriptions/${encodeURIComponent(id)}`
+  const sub = await stripe<{ status: string }>(env, "GET", path)
+  if (sub.status !== "canceled") await stripe(env, "DELETE", path)
+}
 
 export type Invoice = {
   id: string

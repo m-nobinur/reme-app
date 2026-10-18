@@ -90,6 +90,7 @@ function stubNet(live: boolean, checks: Record<string, unknown> = {}): Net {
     calls: [],
   }
   const base = live ? LIVE : SANDBOX
+  let sub = SUBSCRIPTION
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: string | URL, init?: RequestInit) => {
@@ -153,8 +154,10 @@ function stubNet(live: boolean, checks: Record<string, unknown> = {}): Net {
         return json(STRIPE_MISSING, 404)
       if (href === `${STRIPE}/products`) return json({ id: "reme_domain_com" })
       if (href === `${STRIPE}/subscriptions`) return json(SUBSCRIPTION)
-      if (href === `${STRIPE}/subscriptions/sub_123` && method === "DELETE")
-        return json({ ...SUBSCRIPTION, status: "canceled" })
+      if (href === `${STRIPE}/subscriptions/sub_123`) {
+        if (method === "DELETE") sub = { ...sub, status: "canceled" }
+        return json(sub)
+      }
       if (href === `${STRIPE}/invoices/in_123`) return json(INVOICE)
       // The edge probe: the bought domain answers.
       if (href.startsWith("https://") && method === "GET")
@@ -678,14 +681,25 @@ describe.skipIf(!url)("buying a domain against a database", () => {
     ).toEqual({ redirect_to: p.name })
 
     expect(await remove(p.env, kit, p.orgId, p.name)).toBeNull()
-    const detached = p.net.calls
+    // A repeat finds the renewal cancelled and cancels nothing again.
+    expect(await remove(p.env, kit, p.orgId, p.name)).toBeNull()
+    const deleted = p.net.calls
       .filter((c) => c.method === "DELETE")
       .map((c) => c.url.split("/").at(-1))
-    expect(detached).toEqual([
-      "sub_123",
-      encodeURIComponent(`wd-${p.name}`),
-      encodeURIComponent(`wd-www.${p.name}`),
-    ])
+    expect(deleted.filter((d) => d === "sub_123")).toHaveLength(1)
+    expect(new Set(deleted)).toEqual(
+      new Set([
+        "sub_123",
+        encodeURIComponent(`wd-${p.name}`),
+        encodeURIComponent(`wd-www.${p.name}`),
+      ])
+    )
+    const renewal = p.net.calls.filter(
+      (c) => c.method === "PATCH" && c.url.endsWith(`/registrations/${p.name}`)
+    )
+    expect(renewal.map((c) => JSON.parse(c.body))).toContainEqual({
+      auto_renew: false,
+    })
   })
 
   it("renewals: keeps auto-renew on a paid invoice, says how to pay a failed one, turns it off when the subscription ends", async () => {
