@@ -102,8 +102,15 @@ export function generatedLine(b: Blueprint): string {
       ? "Every photo is one of yours."
       : "This plan has no photos."
   }
-  const shown = generated.slice(0, 3).join(", ")
-  const more = generated.length > 3 ? ` and ${generated.length - 3} more` : ""
+  // Several photos in one place are named once: "Home services (2)", not twice.
+  const places = new Map<string, number>()
+  for (const place of generated) places.set(place, (places.get(place) ?? 0) + 1)
+  const named = [...places].slice(0, 3)
+  const shown = named
+    .map(([place, n]) => (n > 1 ? `${place} (${n})` : place))
+    .join(", ")
+  const left = generated.length - named.reduce((sum, [, n]) => sum + n, 0)
+  const more = left > 0 ? ` and ${left} more` : ""
   const own =
     uploaded > 0 ? ` ${uploaded} ${uploaded === 1 ? "is" : "are"} yours.` : ""
   return `${generated.length} photo${generated.length === 1 ? "" : "s"} will be made for you: ${shown}${more}.${own}`

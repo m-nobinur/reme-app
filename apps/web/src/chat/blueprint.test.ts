@@ -195,7 +195,7 @@ describe("what the card says of a plan", () => {
 
   it("says which photos are made and how many are the owner's", () => {
     expect(generatedLine(BLUEPRINT)).toBe(
-      "2 photos will be made for you: Home hero, Home hero. 1 is yours."
+      "2 photos will be made for you: Home hero (2). 1 is yours."
     )
     const two = {
       ...BLUEPRINT,
