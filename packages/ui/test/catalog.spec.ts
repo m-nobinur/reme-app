@@ -119,6 +119,10 @@ for (const theme of ["light", "dark"] as const) {
     // 25 to 30 s on a loaded machine, against the 30 s default, and with the
     // onboarding cards and thread fixtures it passed 90 s under a full suite.
     test.setTimeout(180_000)
+    // Entries fade in, and a scan mid-fade reads text at a fraction of its
+    // colour; every entrance is `motion-safe:`, so reduced motion shows it
+    // settled.
+    await page.emulateMedia({ reducedMotion: "reduce" })
     await page.goto(`/?theme=${theme}`)
 
     for (const name of await entryNames(page)) {
