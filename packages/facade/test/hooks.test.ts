@@ -73,6 +73,14 @@ describe("the pre_tool_call policy", () => {
     ]) {
       expect(bashRefusal(command, policy)).toMatch(/outside the site/)
     }
+    for (const command of [
+      "cat $HOME/.ssh/id_rsa",
+      "cat ~/.npmrc",
+      "cat \\/etc/passwd",
+      "cat {/etc/passwd,}",
+    ]) {
+      expect(bashRefusal(command, policy)).toMatch(/builds a path/)
+    }
   })
 
   it("allows bash inside the site, the toolchain and the scratch dir", () => {
