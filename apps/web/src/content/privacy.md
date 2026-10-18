@@ -112,7 +112,7 @@ We use only cookies needed to sign you in, keep you signed in and remember choic
 
 | Name | Purpose | How long |
 | --- | --- | --- |
-| wos-session | Keeps you signed in. Its contents are encrypted | Up to 400 days, or until you sign out |
+| __Host-wos-session | Keeps you signed in. Its contents are encrypted | Up to 400 days, or until you sign out |
 | reme-auth-flow | Carries a sign-in or sign-up through its steps. Encrypted | 10 minutes |
 | reme-oauth-state | Protects Sign in with Google against forged requests | 10 minutes |
 | reme-google-state | Holds the sign-in state while you connect Google, and protects it against forged requests | 10 minutes |

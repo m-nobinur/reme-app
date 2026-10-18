@@ -1,4 +1,5 @@
 import type { AuthService } from "@workos/authkit-tanstack-react-start"
+import { sessionCookie } from "./workos"
 
 /**
  * Why a request that carried a session cookie reached us with no user.
@@ -64,7 +65,7 @@ export async function whyNoUser(
 ): Promise<{ reason: NoUserReason; sealed?: string }> {
   const path = new URL(request.url).pathname
   const base = { event: "auth.no_user" as const, path }
-  const cookie_length = cookieLength(request, "wos-session")
+  const cookie_length = cookieLength(request, sessionCookie())
   let session: Awaited<ReturnType<Kit["getSession"]>>
   try {
     session = await kit.getSession(request)
