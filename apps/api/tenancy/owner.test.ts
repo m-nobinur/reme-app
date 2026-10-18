@@ -13,7 +13,6 @@ import { events, sql, staffEvents, tenancy } from "@workspace/db"
 import { MockLanguageModelV4 } from "ai/test"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { chat } from "../src/chat.ts"
-import { appendMessages } from "../src/conversations.ts"
 import {
   type Owner,
   owner,
@@ -286,28 +285,6 @@ describe("another org's conversation is 404 and never written to", () => {
     expect(mineConversation.id).not.toBe(theirConversation.id)
   })
 
-  it("writes no message into it, whatever the ids", async () => {
-    const theirConversation = await create(theirs)
-    const message = {
-      id: "u_1",
-      parent_id: null,
-      format: "ai-sdk/v6",
-      content: { role: "user", parts: [{ type: "text", text: "x" }] },
-    } as const
-    await appendMessages(kit, theirs.orgId, theirConversation.id, [message])
-    const refused = (await appendMessages(
-      kit,
-      mine.orgId,
-      theirConversation.id,
-      [{ ...message, id: "u_2", parent_id: "u_1" }, message]
-    )) as Response
-    expect(refused.status).toBe(404)
-    expect(ErrorEnvelope.parse(await refused.json()).detail).toEqual({})
-    expect(
-      (await history(theirs, theirConversation.id)).map((m) => m.id)
-    ).toEqual(["u_1"])
-  })
-
   it("reaches no model for a turn in it", async () => {
     const theirConversation = await create(theirs)
     const model = new MockLanguageModelV4({
@@ -353,7 +330,7 @@ describe("another org's conversation is 404 and never written to", () => {
 
   it("takes no rating in it, and records nothing", async () => {
     const theirConversation = await create(theirs)
-    await appendMessages(kit, theirs.orgId, theirConversation.id, [
+    await seed(kit, theirs).messages(theirConversation.id, [
       {
         id: "u_r",
         parent_id: null,

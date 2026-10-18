@@ -2,7 +2,7 @@ import {
   Conversation,
   ConversationHistory,
   ConversationList,
-  ConversationMessage,
+  type ConversationMessage,
   ConversationPatch,
   CosFeedback,
   idempotencyKey,
@@ -248,19 +248,6 @@ async function history(kit: Tenancy, owner: Owner, id: string) {
   )
 }
 
-/** A message as the writer takes it: the contract's, less the date and rating. */
-const Stored = ConversationMessage.omit({ feedback: true }).extend({
-  content: ConversationMessage.shape.content.omit({ metadata: true }),
-})
-
-const messageInvalid = () =>
-  failure(400, {
-    class: "validation",
-    code: "message.invalid",
-    message: "A message does not match the contract.",
-    detail: {},
-  })
-
 /** Whether a value holds NUL anywhere, keys included: Postgres refuses it. */
 export const holdsNul = (value: unknown) => {
   let nul = false
@@ -274,75 +261,6 @@ export const holdsNul = (value: unknown) => {
     return each
   })
   return nul
-}
-
-/**
- * Writes a turn's messages in the order given, the owner's before the reply,
- * each as its own statement so `seq` follows that order. Every message is
- * checked against the contract first, so a row a history read would refuse is
- * never stored. A message already stored is left as it is, and the
- * conversation moves to the top of the list only when a row was written, so a
- * retried turn changes nothing. All or nothing: a message naming a parent the
- * conversation never stored (after a failed stream, say) is a validation
- * error and none of the turn is kept. Null when written.
- */
-export async function appendMessages(
-  kit: Tenancy,
-  orgId: string,
-  conversationId: string,
-  messages: StoredMessage[]
-): Promise<Response | null> {
-  if (
-    messages.some((m) => !Stored.safeParse(m).success) ||
-    holdsNul(messages)
-  ) {
-    return messageInvalid()
-  }
-  try {
-    const held = await kit.withOrg({ orgId }, async (db) => {
-      const conversation = await find(db, conversationId)
-      if (!conversation) return false
-      let wrote = false
-      for (const message of messages) {
-        const written = await db
-          .insert(conversationMessages)
-          .values({
-            conversationId: conversation.id,
-            id: message.id,
-            orgId,
-            parentId: message.parent_id,
-            format: message.format,
-            content: message.content,
-          })
-          .onConflictDoNothing()
-          .returning({ id: conversationMessages.id })
-        wrote ||= written.length > 0
-      }
-      if (wrote) {
-        // The database's clock, never the Worker's: the list compares this
-        // with times the database set, and two clocks drift apart.
-        await db
-          .update(conversations)
-          .set({ updatedAt: sql`now()` })
-          .where(eq(conversations.id, conversation.id))
-      }
-      return true
-    })
-    return held ? null : notFound()
-  } catch (error) {
-    const { code, name } = constraint(error)
-    if (code === "23503" && name === "conversation_messages_parent_fk") {
-      return failure(400, {
-        class: "validation",
-        code: "message.parent_unknown",
-        message: "A message names a parent this conversation does not hold.",
-        detail: {},
-      })
-    }
-    // The table's own checks: a message that is its own parent.
-    if (code === "23514") return messageInvalid()
-    throw error
-  }
 }
 
 const messageNotFound = () =>

@@ -6,9 +6,9 @@ import {
 import { type Tenancy, tenancy } from "@workspace/db"
 import postgres from "postgres"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { appendMessages, type StoredMessage } from "../src/conversations.ts"
+import type { StoredMessage } from "../src/conversations.ts"
 import { eventKey, TITLE_MAX, titleFrom } from "../src/http.ts"
-import { type Owner, owner, stubOrchestrator } from "./owner-fixture.ts"
+import { type Owner, owner, seed, stubOrchestrator } from "./owner-fixture.ts"
 import { stubJwksFetch } from "./sealed-session.ts"
 
 /**
@@ -128,7 +128,7 @@ describe.skipIf(!url)(
     async function thread() {
       const made = await call("/conversations", keyed("POST"))
       const { id } = Conversation.parse(await made.json())
-      const refused = await appendMessages(kit, me.orgId, id, [
+      await seed(kit, me).messages(id, [
         message("u1", "user", null, [{ type: "text", text: "Hi" }]),
         message("a1", "assistant", "u1", [
           { type: "step-start" },
@@ -145,7 +145,6 @@ describe.skipIf(!url)(
           },
         ]),
       ])
-      expect(refused).toBeNull()
       return id
     }
 
@@ -241,14 +240,12 @@ describe.skipIf(!url)(
       const other = Conversation.parse(
         await (await call("/conversations", keyed("POST"))).json()
       ).id
-      expect(
-        await appendMessages(kit, me.orgId, other, [
-          message("ou", "user", null, [{ type: "text", text: "Hi" }]),
-          message("ob", "assistant", "ou", [
-            { type: "text", text: "Hello.", state: "done" },
-          ]),
-        ])
-      ).toBeNull()
+      await seed(kit, me).messages(other, [
+        message("ou", "user", null, [{ type: "text", text: "Hi" }]),
+        message("ob", "assistant", "ou", [
+          { type: "text", text: "Hello.", state: "done" },
+        ]),
+      ])
       const done = await rate(id, "ob", "up")
       expect(done.status).toBe(404)
       expect(ErrorEnvelope.parse(await done.json()).code).toBe(
@@ -369,7 +366,7 @@ describe.skipIf(!url)(
           [{ type: "text", text: `Message ${i}` }]
         )
       )
-      expect(await appendMessages(kit, me.orgId, id, earlier)).toBeNull()
+      await seed(kit, me).messages(id, earlier)
       expect((await sendTo(id, "ok thanks")).status).toBe(200)
       expect(await titleOf(id)).toBeNull()
     })
