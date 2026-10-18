@@ -16,11 +16,17 @@ const menu = (page: Page) => page.locator('[data-slot="dropdown-menu-content"]')
 async function openMenu(page: Page, name: RegExp | string) {
   await page.getByRole("button", { name }).click()
   await expect(menu(page)).toBeVisible()
-  // A transition cut short rejects `finished`; that is settled too.
+  // A transition cut short rejects `finished`; that is settled too. Reme's
+  // float and blink never end, so they are not waited on.
   await page.evaluate(() =>
     Promise.all(
       document
         .getAnimations()
+        .filter(
+          (animation) =>
+            animation.effect?.getTiming().iterations !==
+            Number.POSITIVE_INFINITY
+        )
         .map((animation) => animation.finished.catch(() => undefined))
     )
   )
@@ -38,7 +44,14 @@ test("the empty state loads without entrance motion", async ({ page }) => {
     .locator('[data-entry="ThreadEmpty"]')
     .evaluate((root) =>
       [root, ...root.querySelectorAll("*")]
-        .filter((node) => getComputedStyle(node).animationName !== "none")
+        .filter((node) => {
+          const style = getComputedStyle(node)
+          // Reme's float and blink loop for as long as the page is open.
+          return (
+            style.animationName !== "none" &&
+            style.animationIterationCount !== "infinite"
+          )
+        })
         .map((node) => node.className)
     )
   expect(moving).toEqual([])
@@ -49,6 +62,10 @@ const animationsIn = (page: Page, entry: string) =>
   page.locator(`[data-entry="${entry}"]`).evaluate((root) =>
     document
       .getAnimations()
+      .filter(
+        (animation) =>
+          animation.effect?.getTiming().iterations !== Number.POSITIVE_INFINITY
+      )
       .map((animation) => (animation.effect as KeyframeEffect | null)?.target)
       .filter((target) => target instanceof Element && root.contains(target))
       .map(

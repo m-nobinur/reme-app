@@ -16,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu"
 import { Input } from "@workspace/ui/components/input"
+import { PersonaAvatar } from "@workspace/ui/components/persona"
 import {
   Sheet,
   SheetContent,
@@ -293,7 +294,9 @@ function WorkspaceShell({
             <SidebarSimpleIcon aria-hidden />
           </Button>
 
-          <div className="flex min-w-0 flex-1 items-center gap-0.5 md:ps-1">
+          <PersonaAvatar className="ms-1 size-7" />
+
+          <div className="flex min-w-0 flex-1 items-center gap-0.5 ps-1">
             {renaming ? (
               <TitleEditor {...renaming} />
             ) : (
