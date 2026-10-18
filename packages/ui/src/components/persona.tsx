@@ -46,6 +46,7 @@ function Persona({
     <span
       aria-hidden
       className={cn("group/persona relative inline-block shrink-0", className)}
+      data-slot="persona"
       style={style}
     >
       <span className="absolute inset-0 [animation-delay:var(--persona-delay)] motion-safe:animate-persona-float">

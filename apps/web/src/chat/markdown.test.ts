@@ -17,6 +17,12 @@ import { createRoot } from "react-dom/client"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { contentSecurityPolicy } from "../lib/csp"
 
+/** Images in the thread other than Reme's avatar, which is meant to be there. */
+const contentImages = (root: Element) =>
+  [...root.querySelectorAll("img")].filter(
+    (img) => !img.closest("[data-slot='persona']")
+  )
+
 /**
  * Model text reaches the thread's markdown renderer, and a prompt injection
  * can make the model write an image whose URL carries workspace data. The
@@ -94,7 +100,7 @@ async function render(element: ReactElement = createElement(Chat)) {
 
 it("a reply renders no image, by any markdown syntax, and fetches nothing", async () => {
   const chat = await render()
-  expect(chat.querySelectorAll("img")).toHaveLength(0)
+  expect(contentImages(chat)).toHaveLength(0)
   // Raw HTML shows as the text it is, never as an element.
   expect(chat.textContent).toContain("<img")
 })
