@@ -2,6 +2,7 @@
 // React hook, and the name trips the rules-of-hooks lint in a module that has
 // no components in it at all.
 import { useSession as openSession } from "@tanstack/react-start/server"
+import type { StepCode } from "./session"
 import { cookiePassword } from "./workos"
 
 /**
@@ -25,6 +26,11 @@ import { cookiePassword } from "./workos"
  * factor on it, so integrity here is not decoration.
  */
 type PendingAuth = {
+  /**
+   * The step WorkOS asked for. Each follow-up call checks it, so a challenge
+   * step cannot be used to enrol a new factor.
+   */
+  step: StepCode
   token: string
   userId: string
   email: string

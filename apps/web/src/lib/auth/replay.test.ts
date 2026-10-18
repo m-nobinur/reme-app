@@ -110,6 +110,7 @@ describe("the pending token does not outlive the step it belongs to", () => {
     expect(outcome).toEqual({ status: "next", redirectTo: "/mfa" })
     expect(setPending).toHaveBeenCalledTimes(1)
     expect(setPending.mock.calls[0]?.[0]).toMatchObject({
+      step: "mfa_challenge",
       token: "pending",
       userId: "user_probe",
     })
