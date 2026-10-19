@@ -9,7 +9,7 @@ import {
   staff,
 } from "@workspace/db"
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest"
-import { type DeliveryMessage, deliveriesBatch } from "../src/deliveries.ts"
+import type { DeliveryMessage } from "../src/deliveries.ts"
 import { HANDLERS, runJob } from "../src/jobs.ts"
 import { reminderJob } from "../src/reminder-job.ts"
 import { freshOrg, kit } from "./fixture.ts"
@@ -138,8 +138,6 @@ describe.skipIf(!url)("firing a reminder", () => {
     expect((await rows()).map((row) => row.key).sort()).toEqual(
       [key, `${key}:email`].sort()
     )
-    // Held back a few seconds so the run's commit lands first.
-    expect(queue.send.mock.calls[0]?.[1]).toEqual({ delaySeconds: 5 })
   })
 
   it("posts to the newest conversation for the owner's own, and sends no email to one who typed since", async () => {
@@ -244,7 +242,7 @@ describe.skipIf(!url)("firing a reminder", () => {
     })
   })
 
-  it("leaves no delivery row when the run fails, and the consumer treats the queued message as nothing to do", async () => {
+  it("sends nothing when the run rolls back after the handler, and leaves no delivery row", async () => {
     const { jobId } = await reminder()
     const failing = {
       reminder: async (run: Parameters<typeof reminderJob>[0]) => {
@@ -255,37 +253,28 @@ describe.skipIf(!url)("firing a reminder", () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined)
     expect(await fire(jobId, DUE, failing)).toBe("failed")
     expect(await rows()).toEqual([])
-    // The Queue already has the in-app message; no row stands behind it.
-    const [orphan] = sent()
-    expect(orphan).toMatchObject({ channel: "in_app" })
-    const message = {
-      body: orphan as DeliveryMessage,
-      attempts: 1,
-      ack: vi.fn(),
-      retry: vi.fn(),
-    }
-    await deliveriesBatch(
-      { messages: [message] } as unknown as MessageBatch<DeliveryMessage>,
-      {
-        HYPERDRIVE: {} as Hyperdrive,
-        OWNER_MAIL: { send: vi.fn() } as unknown as SendEmail,
-        APP_ORIGIN: "https://app.example.invalid",
-      },
-      kit
-    )
-    expect(message.ack).toHaveBeenCalled()
-    expect(message.retry).not.toHaveBeenCalled()
-    const [post] = await kit.withOrg({ orgId }, (db) =>
-      db.select().from(conversationMessages)
-    )
-    expect(post).toBeUndefined()
+    expect(queue.send).not.toHaveBeenCalled()
   })
 
-  it("drops the row when the Queue refuses the send, so the retry delivers", async () => {
+  it("sends only after the commit: the rows are visible when the Queue is told", async () => {
     const { jobId } = await reminder()
-    queue.send.mockRejectedValueOnce(new Error("queue down"))
+    const seen: number[] = []
+    queue.send.mockImplementationOnce(async () => {
+      seen.push((await rows()).length)
+    })
+    await fire(jobId, DUE)
+    expect(seen).toEqual([2])
+  })
+
+  it("keeps the committed run and its pending rows when the Queue refuses the send", async () => {
+    const { jobId } = await reminder()
+    queue.send.mockRejectedValue(new Error("queue down"))
     vi.spyOn(console, "error").mockImplementation(() => undefined)
-    expect(await fire(jobId, DUE)).toBe("failed")
-    expect(await rows()).toEqual([])
+    expect(await fire(jobId, DUE)).toBe("ok")
+    expect((await rows()).map((row) => row.state)).toEqual([
+      "pending",
+      "pending",
+    ])
+    queue.send.mockReset()
   })
 })

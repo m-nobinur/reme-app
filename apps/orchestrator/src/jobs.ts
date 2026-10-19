@@ -33,10 +33,20 @@ export type JobRun = {
   now: Date
 }
 
-/** Nothing returned means `ok`. Throwing is a failure, with backoff. */
-export type Handler = (
-  run: JobRun
-) => Promise<{ outcome: "ok" | "skipped"; detail?: string } | undefined>
+/**
+ * Nothing returned means `ok`. Throwing is a failure, with backoff. `after`
+ * runs once the run's transaction has committed and never otherwise, for what
+ * must not happen ahead of the commit, such as a Queue send for a row the run
+ * wrote. If it throws the run still stands; the error is logged.
+ */
+export type Handler = (run: JobRun) => Promise<
+  | {
+      outcome: "ok" | "skipped"
+      detail?: string
+      after?: () => Promise<void>
+    }
+  | undefined
+>
 
 export type Handlers = Partial<Record<ScheduledJob["kind"], Handler>>
 
@@ -94,8 +104,10 @@ export async function runJob(
   now = new Date()
 ): Promise<Ran> {
   let next: Date | null = null
+  let after: (() => Promise<void>) | undefined
   try {
     const ran = await kit.withOrg({ orgId }, async (db): Promise<Ran> => {
+      after = undefined
       const job = await claimedJob(db, jobId, now)
       if (!job) return "stale"
       if (!(await orgOpen(db))) {
@@ -112,9 +124,10 @@ export async function runJob(
         .returning({ jobId: jobRuns.jobId })
       if (!run) return "stale"
       const handler = handlers[job.kind]
-      const result = handler
+      const result: Awaited<ReturnType<Handler>> = handler
         ? await handler({ db, env, job, now })
-        : { outcome: "skipped" as const, detail: "no handler" }
+        : { outcome: "skipped", detail: "no handler" }
+      after = result?.after
       if (result)
         await db
           .update(jobRuns)
@@ -138,6 +151,16 @@ export async function runJob(
       return result?.outcome ?? "ok"
     })
     if (next) await lowerNextDue(env.SCHEDULE, next)
+    // Committed. A failure here leaves the handler's delivery rows pending.
+    await after?.().catch((error: unknown) =>
+      console.error(
+        JSON.stringify({
+          code: "jobs.after_failed",
+          job_id: jobId,
+          error: failureCode(error),
+        })
+      )
+    )
     return ran
   } catch (error) {
     return failed(kit, env, { jobId, orgId }, error, now)

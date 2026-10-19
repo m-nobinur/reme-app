@@ -76,26 +76,23 @@ export async function deliver(
   return "queued"
 }
 
-/** How long a message waits in the Queue, for the transaction that wrote its row to commit. */
-const COMMIT_GRACE_SECONDS = 5
-
 /**
  * `deliver` for a caller already inside a transaction, such as a job
  * handler: the row is written with `db`, so it commits with the caller's
- * work or not at all. The message goes to the Queue now, a few seconds
- * delayed so the commit lands first. A rolled-back caller leaves a message
- * for a row that does not exist, which `attempt` treats as nothing to do.
- * If the send throws, so does this, and the caller's rollback drops the row.
+ * work or not at all. Returns the Queue send for the caller to run once that
+ * transaction has committed (a job handler's `after`), or null when the key
+ * already exists. Sent any earlier, the consumer could look for a row that
+ * is not visible yet and drop the message.
  */
 export async function deliverIn(
   db: OrgScopedDb,
   env: SendEnv,
   delivery: DeliveryMessage
-): Promise<"queued" | "exists"> {
+): Promise<(() => Promise<void>) | null> {
   const inserted = await insertRow(db, delivery)
-  if (inserted.length === 0) return "exists"
-  await env.DELIVERIES.send(delivery, { delaySeconds: COMMIT_GRACE_SECONDS })
-  return "queued"
+  return inserted.length === 0
+    ? null
+    : async () => void (await env.DELIVERIES.send(delivery))
 }
 
 type Outcome =

@@ -46,16 +46,18 @@ export const reminderJob: Handler = async ({ db, env, job, now }) => {
   // The occurrence is the key's tail: a reminder moved to a new time is a new
   // delivery, and a rerun of this one is not.
   const key = `reminder:${reminder.id}:${reminder.dueAt.toISOString()}`
-  await deliverIn(db, env, {
-    orgId: reminder.orgId,
-    key,
-    channel: "in_app",
-    message: { text: lines },
-    // Null for the owner's own, which goes to the newest conversation.
-    ...(reminder.conversationId && {
-      conversationId: reminder.conversationId,
+  const sends = [
+    await deliverIn(db, env, {
+      orgId: reminder.orgId,
+      key,
+      channel: "in_app",
+      message: { text: lines },
+      // Null for the owner's own, which goes to the newest conversation.
+      ...(reminder.conversationId && {
+        conversationId: reminder.conversationId,
+      }),
     }),
-  })
+  ]
 
   // shortcut: the owner's latest typed message stands for "in the app", since
   // nothing records a visit. Add a last-seen column if email should hold back
@@ -66,14 +68,23 @@ export const reminderJob: Handler = async ({ db, env, job, now }) => {
       where content->>'role' = 'user'
         and created_at >= ${reminder.createdAt.toISOString()}::timestamptz
     ) as active`)
-  if (active?.active) return { outcome: "ok", detail: "in_app" }
-  await deliverIn(db, env, {
-    orgId: reminder.orgId,
-    key: `${key}:email`,
-    channel: "email",
-    // One line: a title with a line break must not reach the header.
-    subject: `Reminder: ${reminder.title.replace(/\s+/g, " ")}`,
-    text: lines.join("\n\n"),
-  })
-  return { outcome: "ok", detail: "in_app,email" }
+  if (!active?.active)
+    sends.push(
+      await deliverIn(db, env, {
+        orgId: reminder.orgId,
+        key: `${key}:email`,
+        channel: "email",
+        // One line: a title with a line break must not reach the header.
+        subject: `Reminder: ${reminder.title.replace(/\s+/g, " ")}`,
+        text: lines.join("\n\n"),
+      })
+    )
+  return {
+    outcome: "ok",
+    detail: sends.length > 1 ? "in_app,email" : "in_app",
+    // The Queue hears of them only once the row is committed.
+    after: async () => {
+      await Promise.all(sends.map((send) => send?.()))
+    },
+  }
 }
