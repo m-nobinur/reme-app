@@ -5,9 +5,12 @@ import {
   AnswerQuestionInput,
   AnswerQuestionOutput,
   COS_TOOLS,
+  CosApproval,
+  CosCompaction,
   CosFeedback,
   CosToolName,
   CosToolResult,
+  CosToolUnknown,
   CosTurn,
   CosWorkspace,
   CreateReminderOutput,
@@ -415,5 +418,67 @@ describe("CosFeedback", () => {
     ["a note", { ...feedback, note: "Wrong hours" }],
   ])("refuses %s", (_name, value) => {
     expect(verdict("CosFeedback", CosFeedback, value)).toEqual(REFUSED)
+  })
+})
+
+describe("CosApproval", () => {
+  const approval = samples.CosApproval as Record<string, unknown>
+
+  it("accepts a card bound to an input hash and an expiry", () => {
+    expect(verdict("CosApproval", CosApproval, approval)).toEqual(ACCEPTED)
+  })
+
+  it.each([
+    ["no input hash", { ...approval, input_sha256: undefined }],
+    ["an input hash that is not sha-256", { ...approval, input_sha256: "abc" }],
+    ["no expiry", { ...approval, expires_at: undefined }],
+    ["an expiry with no offset", { ...approval, expires_at: "2026-08-27" }],
+    ["a tool call id with a space", { ...approval, tool_call_id: "a b" }],
+    // The hash binds the input; the input itself stays out of the event.
+    ["the input itself", { ...approval, input: { title: "x" } }],
+  ])("refuses %s", (_name, value) => {
+    expect(verdict("CosApproval", CosApproval, value)).toEqual(REFUSED)
+  })
+})
+
+describe("CosToolUnknown", () => {
+  const unknown = samples.CosToolUnknown as Record<string, unknown>
+
+  it("accepts a call and the approval it ran under", () => {
+    expect(verdict("CosToolUnknown", CosToolUnknown, unknown)).toEqual(ACCEPTED)
+  })
+
+  it.each([
+    ["no approval", { ...unknown, approval_id: undefined }],
+    ["an empty call id", { ...unknown, tool_call_id: "" }],
+    ["a reason", { ...unknown, reason: "timeout" }],
+  ])("refuses %s", (_name, value) => {
+    expect(verdict("CosToolUnknown", CosToolUnknown, value)).toEqual(REFUSED)
+  })
+})
+
+describe("CosCompaction", () => {
+  const compaction = samples.CosCompaction as Record<string, unknown>
+
+  it("accepts a summary, the range it replaces and the refs it drops", () => {
+    expect(verdict("CosCompaction", CosCompaction, compaction)).toEqual(
+      ACCEPTED
+    )
+  })
+
+  it.each([
+    ["a blank summary", { ...compaction, summary: " \n " }],
+    ["no range", { ...compaction, replaced_range: undefined }],
+    [
+      "a negative range start",
+      { ...compaction, replaced_range: { from_seq: -1, to_seq: 2 } },
+    ],
+    [
+      "a ref that is not an event id",
+      { ...compaction, dropped_refs: ["evt_1"] },
+    ],
+    ["no dropped refs", { ...compaction, dropped_refs: undefined }],
+  ])("refuses %s", (_name, value) => {
+    expect(verdict("CosCompaction", CosCompaction, value)).toEqual(REFUSED)
   })
 })

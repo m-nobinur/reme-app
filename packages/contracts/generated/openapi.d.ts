@@ -4397,10 +4397,26 @@ export interface components {
       | {
           archived: boolean
         }
+    CosApproval: {
+      turn_id: string
+      approval_id: string
+      tool_call_id: string
+      input_sha256: string
+      /** Format: date-time */
+      expires_at: string
+    }
     CosCall: {
       turn_id: string
       step: number
       sha256: string
+    }
+    CosCompaction: {
+      summary: string
+      replaced_range: {
+        from_seq: number
+        to_seq: number
+      }
+      dropped_refs: string[]
     }
     CosContext: {
       turn_id: string
@@ -6357,6 +6373,10 @@ export interface components {
                 }
               }
         }
+    CosToolUnknown: {
+      tool_call_id: string
+      approval_id: string
+    }
     CosTurn:
       | {
           /** @constant */
@@ -6694,6 +6714,18 @@ export interface components {
       decision: "approved" | "rejected"
       /** Format: uuid */
       revision_id: string
+    }
+    Delivery: {
+      /** Format: uuid */
+      org_id: string
+      key: string
+      /** @enum {string} */
+      channel: "in_app" | "email"
+      /** @enum {string} */
+      state: "pending" | "sent" | "failed" | "suppressed"
+      attempts: number
+      sent_at: string | null
+      error: string | null
     }
     DeploymentManifest: {
       /** Format: uuid */
@@ -7784,6 +7816,17 @@ export interface components {
       requested_at: string
       expires_at: string | null
     }
+    JobRun: {
+      /** Format: uuid */
+      job_id: string
+      /** Format: uuid */
+      org_id: string
+      /** Format: date-time */
+      run_at: string
+      /** @enum {string} */
+      outcome: "ok" | "skipped" | "failed"
+      detail: string | null
+    }
     MessageFeedback: {
       message_id: string
       /** @enum {string} */
@@ -7796,6 +7839,13 @@ export interface components {
       name: string
       /** Format: date-time */
       created_at: string
+    }
+    OrgSchedule: {
+      time_zone: string | null
+      quiet_start: string
+      quiet_end: string
+      /** @enum {string} */
+      proactivity: "off" | "low" | "default" | "high"
     }
     OwnerChangeRequest: {
       text: string
@@ -8699,6 +8749,23 @@ export interface components {
       /** Format: date-time */
       expires_at: string
       signature: string
+    }
+    ScheduledJob: {
+      /** Format: uuid */
+      id: string
+      /** Format: uuid */
+      org_id: string
+      /** @enum {string} */
+      kind: "reminder" | "heartbeat" | "weekly_report"
+      ref_id: string | null
+      rule: string | null
+      /** Format: date-time */
+      next_run_at: string
+      last_run_at: string | null
+      failures: number
+      paused_at: string | null
+      /** Format: date-time */
+      created_at: string
     }
     SearchConnection: {
       /** @enum {string} */
