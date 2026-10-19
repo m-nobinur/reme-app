@@ -1016,6 +1016,8 @@ export const samples: Record<ContractName, unknown> = {
     attempts: 1,
     sent_at: LATER,
     error: null,
+    lease_until: null,
+    created_at: LATER,
   },
   OrgSchedule: {
     time_zone: "Europe/London",

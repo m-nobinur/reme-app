@@ -6,10 +6,15 @@ import {
   orgs,
   reminders,
   scheduledJobs,
+  sql,
   staff,
 } from "@workspace/db"
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest"
-import type { DeliveryMessage } from "../src/deliveries.ts"
+import {
+  type DeliveryMessage,
+  deliveriesBatch,
+  redriveDeliveries,
+} from "../src/deliveries.ts"
 import { HANDLERS, runJob } from "../src/jobs.ts"
 import { reminderJob } from "../src/reminder-job.ts"
 import { freshOrg, kit } from "./fixture.ts"
@@ -32,6 +37,9 @@ describe.skipIf(!url)("firing a reminder", () => {
     send: vi.fn(
       async (_message: DeliveryMessage, _options?: unknown) => undefined
     ),
+    sendBatch: vi.fn(
+      async (_messages: { body: DeliveryMessage }[]) => undefined
+    ),
   }
   const env = {
     SCHEDULE: {
@@ -46,6 +54,7 @@ describe.skipIf(!url)("firing a reminder", () => {
 
   beforeEach(async () => {
     queue.send.mockClear()
+    queue.sendBatch.mockClear()
     orgId = await freshOrg(kit)
     await kit.withOrg({ orgId }, async (db) => {
       const [chief] = await db
@@ -276,5 +285,57 @@ describe.skipIf(!url)("firing a reminder", () => {
       "pending",
     ])
     queue.send.mockReset()
+  })
+
+  it("writes rows the outbox's consumer can claim and its sweep can queue again", async () => {
+    const { id, jobId } = await reminder()
+    await fire(jobId, DUE)
+    const stored = await rows()
+    expect(stored.map((row) => row.payload).sort()).toEqual(sent().sort())
+    // The Queue lost both messages: the rows sit unsettled for ten minutes.
+    await kit.withOrg({ orgId }, (db) =>
+      db
+        .update(deliveries)
+        .set({ createdAt: sql`now() - interval '11 minutes'` })
+    )
+    expect(
+      await redriveDeliveries(kit, { DELIVERIES: queue as never }, orgId)
+    ).toBe(2)
+    const queued = (queue.sendBatch.mock.calls[0]?.[0] ?? []).map((m) => m.body)
+    expect(queued.map((m) => m.key).sort()).toEqual(
+      [
+        `reminder:${id}:2026-10-20T08:00:00.000Z`,
+        `reminder:${id}:2026-10-20T08:00:00.000Z:email`,
+      ].sort()
+    )
+    // The consumer takes each one: the message lands and the email goes.
+    const mail = vi.fn(async () => ({ messageId: "m" }))
+    const batchEnv = {
+      HYPERDRIVE: {} as Hyperdrive,
+      OWNER_MAIL: { send: mail } as unknown as SendEmail,
+      APP_ORIGIN: "https://app.example.invalid",
+      REPLY_DOMAIN: "reply.example.invalid",
+    }
+    const messages = queued.map((body) => ({
+      body,
+      attempts: 1,
+      ack: vi.fn(),
+      retry: vi.fn(),
+    }))
+    await deliveriesBatch(
+      { messages } as unknown as MessageBatch<DeliveryMessage>,
+      batchEnv,
+      kit
+    )
+    expect(messages.every((m) => m.ack.mock.calls.length === 1)).toBe(true)
+    expect(mail).toHaveBeenCalledTimes(1)
+    const posted = await kit.withOrg({ orgId }, (db) =>
+      db
+        .select()
+        .from(conversationMessages)
+        .where(eq(conversationMessages.conversationId, conversationId))
+    )
+    expect(posted).toHaveLength(1)
+    expect((await rows()).map((row) => row.state)).toEqual(["sent", "sent"])
   })
 })

@@ -18,9 +18,12 @@ import {
  * The outbox (ADR-043). `deliver` writes the row and queues one message; the
  * batch handler below sends it. The key names the cause (`reminder:<id>`),
  * never the time sent, so a second `deliver` for the same cause is a no-op.
- * The Queue is at-least-once, so the consumer sends only a row still
- * `pending`; a crash between a send and its row update can repeat one email,
- * which the in-app path avoids by posting under a stable message id.
+ * The Queue is at-least-once, so the consumer first moves the row from
+ * `pending` to `sending` with a lease, and only the one that wins sends. A
+ * crash past the lease can repeat one email, which the in-app path avoids by
+ * posting under a stable message id. An email whose send fails with no
+ * provider code may have left, so it settles as `unknown` and is never
+ * sent again.
  */
 
 export const OWNER_FROM = { name: "Reme", email: "hello@remeai.co.uk" }
@@ -31,6 +34,12 @@ export const DELIVERIES_QUEUES = [
 ]
 /** Matched to `max_retries` in wrangler.jsonc: the last attempt settles the row as failed. */
 export const MAX_RETRIES = 5
+/** A send takes seconds; the lease only bounds how long a dead consumer holds a row. */
+const LEASE = "5 minutes"
+/** How long a row may sit unsettled before the hourly sweep queues it again. */
+const STUCK_AFTER = "10 minutes"
+/** Per org per sweep, so one backlog cannot swamp the batch. */
+const REDRIVE_LIMIT = 50
 
 export type DeliveryMessage = { orgId: string; key: string } & (
   | {
@@ -58,10 +67,16 @@ type BatchEnv = {
   REPLY_DOMAIN: string
 }
 
-const insertRow = (db: OrgScopedDb, { orgId, key, channel }: DeliveryMessage) =>
+/** The row for one delivery; `payload` is what the sweep queues again. */
+const insertRow = (db: OrgScopedDb, delivery: DeliveryMessage) =>
   db
     .insert(deliveries)
-    .values({ orgId, key, channel })
+    .values({
+      orgId: delivery.orgId,
+      key: delivery.key,
+      channel: delivery.channel,
+      payload: delivery,
+    })
     .onConflictDoNothing()
     .returning({ key: deliveries.key })
 
@@ -106,7 +121,7 @@ export async function deliverIn(
 
 type Outcome =
   | { state: "sent" | "suppressed" }
-  | { state: "failed"; error: string }
+  | { state: "failed" | "unknown"; error: string }
   | { state: "retry"; error: string }
 
 export async function deliveriesBatch(
@@ -130,18 +145,23 @@ export async function deliveriesBatch(
         })
         message.ack()
       } else {
+        await release(kit, message.body)
         message.retry({ delaySeconds })
       }
     } catch (error) {
-      // Left pending: the Queue redelivers, and after `max_retries` the
-      // dead-letter queue holds the message.
+      // The Queue redelivers, and after `max_retries` the dead-letter queue
+      // holds the message. In-app posts under a stable id, so its row is freed
+      // for the retry; an email stays claimed until the lease lapses, since
+      // the send may have left.
       logFailure({ where: "deliveries.batch" }, error)
+      if (message.body.channel === "in_app")
+        await release(kit, message.body).catch(() => undefined)
       message.retry({ delaySeconds })
     }
   }
 }
 
-/** Null when the row is not pending: already settled, or never kept. */
+/** Null when another consumer holds the row, or it is settled or never kept. */
 async function attempt(
   kit: Tenancy,
   env: BatchEnv,
@@ -151,9 +171,13 @@ async function attempt(
   const claimed = await kit.withOrg({ orgId }, (db) =>
     db
       .update(deliveries)
-      .set({ attempts: sql`${deliveries.attempts} + 1` })
+      .set({
+        state: "sending",
+        attempts: sql`${deliveries.attempts} + 1`,
+        leaseUntil: sql`now() + ${LEASE}::interval`,
+      })
       .where(
-        sql`${deliveries.key} = ${key} and ${deliveries.state} = 'pending'`
+        sql`${deliveries.key} = ${key} and (${deliveries.state} = 'pending' or (${deliveries.state} = 'sending' and ${deliveries.leaseUntil} < now()))`
       )
       .returning({ key: deliveries.key })
   )
@@ -183,9 +207,50 @@ async function settle(
         state: outcome.state,
         error,
         sentAt: outcome.state === "sent" ? sql`now()` : null,
+        leaseUntil: null,
+        payload: null,
       })
       .where(eq(deliveries.key, key))
   )
+}
+
+/** Hands a row back to `pending` so the retry can claim it. */
+async function release(kit: Tenancy, { orgId, key }: DeliveryMessage) {
+  await kit.withOrg({ orgId }, (db) =>
+    db
+      .update(deliveries)
+      .set({ state: "pending", leaseUntil: null })
+      .where(
+        sql`${deliveries.key} = ${key} and ${deliveries.state} = 'sending'`
+      )
+  )
+}
+
+/**
+ * The hourly sweep's part: queues again the rows the Queue lost, those still
+ * `pending` or `sending` past their lease after ten minutes. The claim step
+ * makes a message that was not lost harmless.
+ */
+export async function redriveDeliveries(
+  kit: Tenancy,
+  env: SendEnv,
+  orgId: string
+): Promise<number> {
+  const stuck = await kit.withOrg({ orgId }, (db) =>
+    db
+      .select({ payload: deliveries.payload })
+      .from(deliveries)
+      .where(
+        sql`${deliveries.payload} is not null and ${deliveries.createdAt} < now() - ${STUCK_AFTER}::interval and (${deliveries.state} = 'pending' or (${deliveries.state} = 'sending' and ${deliveries.leaseUntil} < now()))`
+      )
+      .orderBy(deliveries.createdAt)
+      .limit(REDRIVE_LIMIT)
+  )
+  if (stuck.length > 0)
+    await env.DELIVERIES.sendBatch(
+      stuck.map(({ payload }) => ({ body: payload as DeliveryMessage }))
+    )
+  return stuck.length
 }
 
 /**
@@ -281,8 +346,10 @@ async function sendEmail(
       )
       return { state: "suppressed" }
     }
-    // No code is a network or runtime error, which the next attempt may clear.
-    return TRANSIENT.has(code) || typeof raw !== "string"
+    // No code is a timeout or a dropped connection after the request may
+    // have left, so a resend could be a second email.
+    if (typeof raw !== "string") return { state: "unknown", error: code }
+    return TRANSIENT.has(code)
       ? { state: "retry", error: code }
       : { state: "failed", error: code }
   }

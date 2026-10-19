@@ -316,6 +316,11 @@ vi.mock("../src/critic.ts", () => ({
   }),
   repairMessage: (fixes: unknown[]) => JSON.stringify({ fixes }),
 }))
+// The outbox look is driven in deliveries.test.ts; here it is only a step.
+vi.mock("../src/deliveries.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/deliveries.ts")>()),
+  redriveDeliveries: async () => 0,
+}))
 const sweepFailures = new Set<string>()
 vi.mock("../src/retention.ts", () => ({
   retireOthers: async () => [],
