@@ -1,0 +1,557 @@
+{
+  "labels": "Seeded by the coordinator on 2026-10-19 and awaiting the owner's review. Each digest is shaped as apps/orchestrator/src/heartbeat.ts builds one; the businesses, people and hosts are fictional.",
+  "zone": "Europe/London",
+  "cases": [
+    {
+      "id": "quiet-unchanged-reminder",
+      "group": "quiet",
+      "label": "quiet",
+      "why": "The same digest four hours on: only the time left before the reminder moved.",
+      "dial": "default",
+      "now": "2026-10-20T15:00:00Z",
+      "surfaced": ["reminder:r-101:2026-10-21T08:00:00.000Z"],
+      "items": [
+        {
+          "key": "reminder:r-101:2026-10-21T08:00:00.000Z",
+          "since": "2026-10-21T08:00:00.000Z",
+          "facts": {
+            "title": "Ring the boiler engineer"
+          },
+          "trusted": ["title"]
+        }
+      ]
+    },
+    {
+      "id": "quiet-unchanged-approval",
+      "group": "quiet",
+      "label": "quiet",
+      "why": "The approval has waited a few hours longer; nothing about it changed.",
+      "dial": "default",
+      "now": "2026-10-20T11:00:00Z",
+      "surfaced": ["approval:a-201:1"],
+      "items": [
+        {
+          "key": "approval:a-201:1",
+          "since": "2026-10-18T09:00:00.000Z",
+          "facts": {
+            "action": "publish_revision",
+            "expires_at": "2026-10-25T09:00:00.000Z"
+          }
+        }
+      ]
+    },
+    {
+      "id": "quiet-unchanged-report",
+      "group": "quiet",
+      "label": "quiet",
+      "why": "The Monday report surfaced at 08:00; the noon beat reads the same item.",
+      "dial": "default",
+      "now": "2026-10-19T11:00:00Z",
+      "surfaced": ["search_report:2026-W43:1"],
+      "items": [
+        {
+          "key": "search_report:2026-W43:1",
+          "since": "2026-10-19T00:00:00.000Z",
+          "facts": {
+            "report": "Search this week: 120 appearances (+5%), 9 clicks, average position 6."
+          }
+        }
+      ]
+    },
+    {
+      "id": "quiet-surfaced-review",
+      "group": "quiet",
+      "label": "quiet",
+      "why": "The review was surfaced on an earlier beat.",
+      "dial": "high",
+      "now": "2026-10-20T13:00:00Z",
+      "surfaced": ["review:rv-301:1"],
+      "items": [
+        {
+          "key": "review:rv-301:1",
+          "since": "2026-10-20T09:12:00.000Z",
+          "facts": {
+            "name": "Sarah T."
+          }
+        }
+      ]
+    },
+    {
+      "id": "quiet-surfaced-alert",
+      "group": "quiet",
+      "label": "quiet",
+      "why": "The domain alert was surfaced on an earlier beat.",
+      "dial": "default",
+      "now": "2026-10-20T15:00:00Z",
+      "surfaced": ["alert:01JBALERT00000000000000001:1"],
+      "items": [
+        {
+          "key": "alert:01JBALERT00000000000000001:1",
+          "since": "2026-10-20T06:00:00.000Z",
+          "facts": {
+            "alert": "domain.moved",
+            "host": "www.brightclean.co.uk"
+          },
+          "trusted": ["host"]
+        }
+      ]
+    },
+    {
+      "id": "quiet-surfaced-question",
+      "group": "quiet",
+      "label": "quiet",
+      "why": "The Developer's question was surfaced on an earlier beat.",
+      "dial": "default",
+      "now": "2026-10-20T15:00:00Z",
+      "surfaced": ["question:q-401:1"],
+      "items": [
+        {
+          "key": "question:q-401:1",
+          "since": "2026-10-20T10:30:00.000Z",
+          "facts": {
+            "field": "business.phone",
+            "why": "The contact page needs a phone number before the site can go live."
+          }
+        }
+      ]
+    },
+    {
+      "id": "quiet-owner-active-question",
+      "group": "quiet",
+      "label": "quiet",
+      "why": "The owner is in the chat; the CoS can raise the question there.",
+      "dial": "default",
+      "now": "2026-10-20T11:00:00Z",
+      "owner_active": true,
+      "items": [
+        {
+          "key": "question:q-402:1",
+          "since": "2026-10-20T10:40:00.000Z",
+          "facts": {
+            "field": "business.prices",
+            "why": "The services page needs a price for a deep clean."
+          }
+        }
+      ]
+    },
+    {
+      "id": "quiet-owner-active-alert",
+      "group": "quiet",
+      "label": "quiet",
+      "why": "The owner is in the chat.",
+      "dial": "high",
+      "now": "2026-10-20T11:00:00Z",
+      "owner_active": true,
+      "items": [
+        {
+          "key": "alert:01JBALERT00000000000000002:1",
+          "since": "2026-10-20T10:50:00.000Z",
+          "facts": {
+            "alert": "publish.rolled_back"
+          }
+        }
+      ]
+    },
+    {
+      "id": "quiet-owner-active-reminder",
+      "group": "quiet",
+      "label": "quiet",
+      "why": "The owner is in the chat.",
+      "dial": "default",
+      "now": "2026-10-20T11:00:00Z",
+      "owner_active": true,
+      "items": [
+        {
+          "key": "reminder:r-102:2026-10-20T14:00:00.000Z",
+          "since": "2026-10-20T14:00:00.000Z",
+          "facts": {
+            "title": "Send the quote to the Hendersons"
+          },
+          "trusted": ["title"]
+        }
+      ]
+    },
+    {
+      "id": "quiet-empty",
+      "group": "quiet",
+      "label": "quiet",
+      "why": "Nothing needs the owner.",
+      "dial": "high",
+      "now": "2026-10-20T11:00:00Z",
+      "items": []
+    },
+    {
+      "id": "speak-question-phone",
+      "group": "speak",
+      "label": "speak",
+      "why": "The build is blocked on an answer only the owner has.",
+      "dial": "default",
+      "now": "2026-10-20T11:00:00Z",
+      "items": [
+        {
+          "key": "question:q-403:1",
+          "since": "2026-10-20T09:05:00.000Z",
+          "facts": {
+            "field": "business.phone",
+            "why": "The contact page needs a phone number before the site can go live."
+          }
+        }
+      ]
+    },
+    {
+      "id": "speak-domain-moved",
+      "group": "speak",
+      "label": "speak",
+      "why": "The owner's domain stopped pointing at the site; visitors may not reach it.",
+      "dial": "default",
+      "now": "2026-10-20T07:00:00Z",
+      "items": [
+        {
+          "key": "alert:01JBALERT00000000000000003:1",
+          "since": "2026-10-20T06:00:00.000Z",
+          "facts": {
+            "alert": "domain.moved",
+            "host": "www.sparkleclean.co.uk"
+          },
+          "trusted": ["host"]
+        }
+      ]
+    },
+    {
+      "id": "speak-rolled-back",
+      "group": "speak",
+      "label": "speak",
+      "why": "A change the owner approved did not go live.",
+      "dial": "default",
+      "now": "2026-10-20T11:00:00Z",
+      "items": [
+        {
+          "key": "alert:01JBALERT00000000000000004:1",
+          "since": "2026-10-20T09:40:00.000Z",
+          "facts": {
+            "alert": "publish.rolled_back"
+          }
+        }
+      ]
+    },
+    {
+      "id": "speak-approval-expiring",
+      "group": "speak",
+      "label": "speak",
+      "why": "A review of the site has waited two days and lapses tomorrow.",
+      "dial": "default",
+      "now": "2026-10-20T11:00:00Z",
+      "items": [
+        {
+          "key": "approval:a-202:1",
+          "since": "2026-10-18T09:00:00.000Z",
+          "facts": {
+            "action": "publish_revision",
+            "expires_at": "2026-10-21T09:00:00.000Z"
+          }
+        }
+      ]
+    },
+    {
+      "id": "speak-reminder-soon",
+      "group": "speak",
+      "label": "speak",
+      "why": "A call the owner set is due this afternoon.",
+      "dial": "default",
+      "now": "2026-10-20T11:00:00Z",
+      "items": [
+        {
+          "key": "reminder:r-103:2026-10-20T14:00:00.000Z",
+          "since": "2026-10-20T14:00:00.000Z",
+          "facts": {
+            "title": "Call Mrs Patel about the end of tenancy clean"
+          },
+          "trusted": ["title"]
+        }
+      ]
+    },
+    {
+      "id": "speak-two-questions",
+      "group": "speak",
+      "label": "speak",
+      "why": "Two answers block the services page.",
+      "dial": "low",
+      "now": "2026-10-20T11:00:00Z",
+      "items": [
+        {
+          "key": "question:q-404:1",
+          "since": "2026-10-20T08:15:00.000Z",
+          "facts": {
+            "field": "business.prices",
+            "why": "The services page needs prices for a deep clean and an end of tenancy clean."
+          }
+        },
+        {
+          "key": "question:q-405:1",
+          "since": "2026-10-20T08:16:00.000Z",
+          "facts": {
+            "field": "service_area.text",
+            "why": "The service area section needs the towns the business covers."
+          }
+        }
+      ]
+    },
+    {
+      "id": "speak-search-drop",
+      "group": "speak",
+      "label": "speak",
+      "why": "Clicks fell sharply week on week.",
+      "dial": "default",
+      "now": "2026-10-19T07:00:00Z",
+      "items": [
+        {
+          "key": "search_report:2026-W43:1",
+          "since": "2026-10-19T00:00:00.000Z",
+          "facts": {
+            "report": "Search this week: 340 appearances (-45%), 12 clicks, average position 9. Clicks fell from 40 to 12 week on week. I'm checking your busiest pages with Google."
+          }
+        }
+      ]
+    },
+    {
+      "id": "speak-review-and-approval",
+      "group": "speak",
+      "label": "speak",
+      "why": "A site review has waited two days for the owner.",
+      "dial": "default",
+      "now": "2026-10-20T11:00:00Z",
+      "items": [
+        {
+          "key": "approval:a-203:1",
+          "since": "2026-10-18T10:00:00.000Z",
+          "facts": {
+            "action": "publish_revision",
+            "expires_at": "2026-10-25T10:00:00.000Z"
+          }
+        },
+        {
+          "key": "review:rv-302:1",
+          "since": "2026-10-18T09:30:00.000Z",
+          "facts": {
+            "name": "Mark D."
+          }
+        }
+      ]
+    },
+    {
+      "id": "speak-reminder-morning",
+      "group": "speak",
+      "label": "speak",
+      "why": "The last beat of the day; the reminder falls due before the first beat tomorrow.",
+      "dial": "default",
+      "now": "2026-10-20T19:00:00Z",
+      "items": [
+        {
+          "key": "reminder:r-104:2026-10-21T06:30:00.000Z",
+          "since": "2026-10-21T06:30:00.000Z",
+          "facts": {
+            "title": "Pay the van insurance"
+          },
+          "trusted": ["title"]
+        }
+      ]
+    },
+    {
+      "id": "speak-high-dial-report",
+      "group": "speak",
+      "label": "speak",
+      "why": "On high the owner wants brief updates even when things are on track.",
+      "dial": "high",
+      "now": "2026-10-19T07:00:00Z",
+      "items": [
+        {
+          "key": "search_report:2026-W43:1",
+          "since": "2026-10-19T00:00:00.000Z",
+          "facts": {
+            "report": "Search this week: 150 appearances (+8%), 11 clicks, average position 6."
+          }
+        }
+      ]
+    },
+    {
+      "id": "borderline-report-default",
+      "group": "borderline",
+      "label": "speak",
+      "why": "A steady week is still the weekly report the owner expects on Monday.",
+      "dial": "default",
+      "now": "2026-10-19T07:00:00Z",
+      "items": [
+        {
+          "key": "search_report:2026-W43:1",
+          "since": "2026-10-19T00:00:00.000Z",
+          "facts": {
+            "report": "Search this week: 120 appearances (+5%), 9 clicks, average position 6."
+          }
+        }
+      ]
+    },
+    {
+      "id": "borderline-report-low",
+      "group": "borderline",
+      "label": "quiet",
+      "why": "On low only a finished thing or a decision speaks; a steady week is neither.",
+      "dial": "low",
+      "now": "2026-10-19T07:00:00Z",
+      "items": [
+        {
+          "key": "search_report:2026-W43:1",
+          "since": "2026-10-19T00:00:00.000Z",
+          "facts": {
+            "report": "Search this week: 120 appearances (+5%), 9 clicks, average position 6."
+          }
+        }
+      ]
+    },
+    {
+      "id": "borderline-own-review",
+      "group": "borderline",
+      "label": "quiet",
+      "why": "The owner recorded the review in the chat themselves this morning.",
+      "dial": "default",
+      "now": "2026-10-20T11:00:00Z",
+      "profile": "Recorded customer reviews with the assistant in chat. Prefers short messages.",
+      "items": [
+        {
+          "key": "review:rv-303:1",
+          "since": "2026-10-20T08:40:00.000Z",
+          "facts": {
+            "name": "Priya K."
+          }
+        }
+      ]
+    },
+    {
+      "id": "borderline-sitemap-errors",
+      "group": "borderline",
+      "label": "quiet",
+      "why": "A sitemap error is Reme's to fix; the owner can do nothing about it.",
+      "dial": "default",
+      "now": "2026-10-19T07:00:00Z",
+      "items": [
+        {
+          "key": "search_alert:01JBALERT00000000000000005:1",
+          "since": "2026-10-19T07:00:00.000Z",
+          "facts": {
+            "alert": "search.sitemap_errors"
+          }
+        }
+      ]
+    },
+    {
+      "id": "borderline-connect-google",
+      "group": "borderline",
+      "label": "speak",
+      "why": "The one ask to connect Search Console, for a site that is live.",
+      "dial": "default",
+      "now": "2026-10-19T07:00:00Z",
+      "items": [
+        {
+          "key": "search_report:connect:1",
+          "since": "2026-10-19T00:00:00.000Z",
+          "facts": {
+            "report": "Want me to put your site on Google Search and track how people find you? You sign in with Google once. After that I handle it.",
+            "chip": "Connect Google"
+          }
+        }
+      ]
+    },
+    {
+      "id": "borderline-restock-high",
+      "group": "borderline",
+      "label": "speak",
+      "why": "On high a reminder due tomorrow is worth a short note.",
+      "dial": "high",
+      "now": "2026-10-20T15:00:00Z",
+      "items": [
+        {
+          "key": "reminder:r-105:2026-10-21T11:00:00.000Z",
+          "since": "2026-10-21T11:00:00.000Z",
+          "facts": {
+            "title": "Restock cleaning supplies"
+          },
+          "trusted": ["title"]
+        }
+      ]
+    },
+    {
+      "id": "borderline-approval-low",
+      "group": "borderline",
+      "label": "speak",
+      "why": "On low a decision the owner must make still speaks.",
+      "dial": "low",
+      "now": "2026-10-20T15:00:00Z",
+      "items": [
+        {
+          "key": "approval:a-204:1",
+          "since": "2026-10-19T12:00:00.000Z",
+          "facts": {
+            "action": "publish_revision",
+            "expires_at": "2026-10-26T12:00:00.000Z"
+          }
+        }
+      ]
+    },
+    {
+      "id": "borderline-job-paused-low",
+      "group": "borderline",
+      "label": "quiet",
+      "why": "The pause already posted its own message to the owner.",
+      "dial": "low",
+      "now": "2026-10-20T11:00:00Z",
+      "items": [
+        {
+          "key": "alert:01JBALERT00000000000000006:1",
+          "since": "2026-10-20T10:02:00.000Z",
+          "facts": {
+            "alert": "job.paused"
+          }
+        }
+      ]
+    },
+    {
+      "id": "borderline-domain-again",
+      "group": "borderline",
+      "label": "quiet",
+      "why": "The same host was raised again; the last heartbeat already told the owner.",
+      "dial": "default",
+      "now": "2026-10-21T07:00:00Z",
+      "last": {
+        "text": "www.brightclean.co.uk stopped pointing at your site this morning. I'm watching it and will tell you when it's back.",
+        "at": "2026-10-20T07:00:00Z"
+      },
+      "items": [
+        {
+          "key": "alert:01JBALERT00000000000000007:1",
+          "since": "2026-10-21T06:00:00.000Z",
+          "facts": {
+            "alert": "domain.moved",
+            "host": "www.brightclean.co.uk"
+          },
+          "trusted": ["host"]
+        }
+      ]
+    },
+    {
+      "id": "borderline-result-high",
+      "group": "borderline",
+      "label": "speak",
+      "why": "On high, a change that worked is good news worth a line.",
+      "dial": "high",
+      "now": "2026-10-19T07:00:00Z",
+      "items": [
+        {
+          "key": "search_report:2026-W43:1",
+          "since": "2026-10-19T00:00:00.000Z",
+          "facts": {
+            "report": "Search this week: 210 appearances (+12%), 15 clicks, average position 5. Since the change to your Deep clean page went live, clicks from \"deep clean bristol\" went from 4 to 11 over 28 days, with position moving from 9 to 6."
+          }
+        }
+      ]
+    }
+  ]
+}
