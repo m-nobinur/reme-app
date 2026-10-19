@@ -37,10 +37,14 @@ export async function signIn(page: Page, user: ProbeUser, returnTo?: string) {
   await page.waitForURL(/\/app/)
 }
 
-/** The browser's session as a `cookie` header, read fresh each call. */
+/**
+ * The browser's session as the `cookie` header the api reads, fresh each call.
+ * The browser holds it as `__Host-wos-session` on https; the api's name is
+ * `wos-session` either way.
+ */
 export async function sessionCookie(page: Page): Promise<string> {
-  const session = (await page.context().cookies()).find(
-    (cookie) => cookie.name === "wos-session"
+  const session = (await page.context().cookies()).find((cookie) =>
+    ["__Host-wos-session", "wos-session"].includes(cookie.name)
   )
   expect(session, "the sign-in set no session cookie").toBeDefined()
   return `wos-session=${session?.value}`
