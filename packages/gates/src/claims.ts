@@ -341,6 +341,7 @@ function supportFrom(facts: readonly FactRecord[]): Support {
       (fact.value as { permission?: unknown } | null)?.permission !== true
     )
       continue
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: JSON.stringify returns undefined for an undefined value
     const text = JSON.stringify(fact.value) ?? ""
     for (const m of text.matchAll(/\d+(?:\.\d+)?/g))
       support.numbers.add(Number(m[0]))

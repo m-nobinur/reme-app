@@ -561,6 +561,8 @@
         "noUselessRegexBackrefs": "error",
         "noVar": "error",
         "noWith": "error",
+        // Our sorts of string arrays want code-unit order, which is the default.
+        "useArraySortCompare": "off",
         "useAwait": "off"
       }
     },

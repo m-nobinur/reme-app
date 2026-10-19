@@ -121,7 +121,8 @@ observe((observation, ctx) => {
   const found = sessions.get(ctx.id)
   if (!found) return
   found.tee.subscriber(observation)
-  found.budget.instrumentation.observe(observation, ctx)
+  // Typed void | Promise<void>, but the budget guard's observer is synchronous.
+  void found.budget.instrumentation.observe(observation, ctx)
   interrupted(found, observation)
 })
 
