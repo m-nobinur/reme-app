@@ -284,6 +284,7 @@ describe("a typed reply over an open card", () => {
     }
     for (const reply of [
       "no",
+      "Nope!",
       "No thanks.",
       "Don't",
       "don’t",

@@ -20,6 +20,8 @@ const { cards, replies } = JSON.parse(
 
 const wrong = []
 for (const { reply, card, kind, path } of replies) {
+  // The next `approval.jev` line (approves, declines, asks_change) is this reply's.
+  console.log(JSON.stringify({ reply, kind, want: path }))
   const gate = (text) => jevApproval(key, cards[card], text)
   const verdict = await readReply(reply, gate)
   const got = verdict ?? "normal"
