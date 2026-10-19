@@ -2,6 +2,7 @@ import {
   appendEvent,
   eq,
   memberships,
+  pushSubscriptions,
   resolveOrg,
   rootStaffId,
   scheduledJobs,
@@ -15,9 +16,9 @@ import type { Session } from "./session.ts"
 /**
  * Deleting an owner's account (ADR-035): the site goes offline, the email is
  * freed and the WorkOS identity removed, and the org's rows stay behind as an
- * org nobody can resolve until the §10.5 erasure job exists. The one row
- * deleted is each scheduled job, so nothing runs for the org again; the
- * org's R2 objects are deleted.
+ * org nobody can resolve until the §10.5 erasure job exists. The rows
+ * deleted are each scheduled job and push subscription, so nothing runs or
+ * reaches a browser for the org again; the org's R2 objects are deleted.
  */
 
 /** The three WorkOS calls deletion makes, as a parameter so tests stand in. */
@@ -127,6 +128,9 @@ export async function deleteAccount(
         })
         .where(eq(users.workosUserId, session.workosUserId))
       await db.delete(scheduledJobs).where(eq(scheduledJobs.orgId, orgId))
+      await db
+        .delete(pushSubscriptions)
+        .where(eq(pushSubscriptions.orgId, orgId))
       return own
     })
     if (typeof checked === "string") return checked
