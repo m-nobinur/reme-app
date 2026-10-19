@@ -86,12 +86,12 @@ function load(): Promise<Zxcvbn | null> {
     import("@zxcvbn-ts/language-en"),
   ])
     .then(([core, common, en]) => {
-      core.zxcvbnOptions.setOptions({
+      const factory = new core.ZxcvbnFactory({
         dictionary: { ...common.dictionary, ...en.dictionary },
         graphs: common.adjacencyGraphs,
         translations: en.translations,
       })
-      return core.zxcvbn as Zxcvbn
+      return (password: string) => factory.check(password)
     })
     .catch(() => {
       // A blocked or failed chunk must not take the form down with it. The
