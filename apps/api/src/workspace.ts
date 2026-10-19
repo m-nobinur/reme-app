@@ -772,6 +772,15 @@ export async function statusOf(
   config: SiteConfig,
   now: Date
 ): Promise<WorkspaceStatus> {
+  return (await statusWithFacts(db, config, now)).status
+}
+
+/** `statusOf` and the facts it was read from, for a caller that needs both. */
+export async function statusWithFacts(
+  db: OrgScopedDb,
+  config: SiteConfig,
+  now: Date
+): Promise<{ status: WorkspaceStatus; facts: FactRecord[] }> {
   // Issued together, so postgres.js pipelines them on the transaction's one
   // connection instead of paying a round trip each.
   const [builds, approvalItems, questions, feed, current, site, notes] =
@@ -785,7 +794,7 @@ export async function statusOf(
       readReminderNotes(db),
     ])
   const missing = missingFacts(current)
-  return WorkspaceStatus.parse({
+  const status = WorkspaceStatus.parse({
     site,
     builds,
     expected_seconds: EXPECTED_SECONDS,
@@ -800,6 +809,7 @@ export async function statusOf(
       ),
     },
   })
+  return { status, facts: current }
 }
 
 export async function readActivity(

@@ -116,15 +116,24 @@ const reads = vi.hoisted(() => ({
 
 vi.mock("../src/cos/history.ts", async (importOriginal) => {
   const real = await importOriginal<typeof import("../src/cos/history.ts")>()
+  const cut = () => {
+    reads.count += 1
+    if (reads.failAt > 0 && reads.count === reads.failAt) {
+      reads.failAt = 0
+      throw new Error("the read was cut off")
+    }
+  }
   return {
     ...real,
     readSession: async (...args: Parameters<typeof real.readSession>) => {
-      reads.count += 1
-      if (reads.failAt > 0 && reads.count === reads.failAt) {
-        reads.failAt = 0
-        throw new Error("the read was cut off")
-      }
+      cut()
       return real.readSession(...args)
+    },
+    readSessionSince: async (
+      ...args: Parameters<typeof real.readSessionSince>
+    ) => {
+      cut()
+      return real.readSessionSince(...args)
     },
   }
 })
@@ -2582,9 +2591,10 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
   it("ends a turn as an error, never frozen, when the log cannot be read to check a call", async () => {
     const id = await conversation(me)
     const { model, sent } = scripted(said("never sent"))
-    // The third read of the session is the first call's check.
+    // The turn reads its log whole once as it opens; the second read, the
+    // rows since, is the first call's check.
     reads.count = 0
-    reads.failAt = 3
+    reads.failAt = 2
     const done = await send(me, typed(id, "Hello", "ask"), { model })
     reads.failAt = 0
     expect(done.response.status).toBe(503)

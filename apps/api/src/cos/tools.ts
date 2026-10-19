@@ -66,7 +66,7 @@ import {
   ASSISTANT_KEY_PREFIX,
   createReminder as storeReminder,
 } from "../reminders.ts"
-import { readFacts, readWorkspace } from "../workspace.ts"
+import { readFacts, statusWithFacts } from "../workspace.ts"
 import { readSession } from "./history.ts"
 import { wallToUtc } from "./time.ts"
 import type { Turn } from "./turns.ts"
@@ -154,23 +154,38 @@ function optionsOf(requestId: string, options: string[] | null) {
 const live = sql`${domains.state} <> 'removed'`
 
 export async function getWorkspace(
-  { env, kit, owner }: ToolContext,
+  ctx: ToolContext,
   _input: Empty
 ): Promise<CosWorkspace> {
-  const status = await readWorkspace(kit, owner.orgId, env)
-  const rows = await kit.withOrg({ orgId: owner.orgId }, (db) =>
-    db
-      .select({
-        name: domains.name,
-        state: domains.state,
-        lastCheck: domains.lastCheck,
-      })
-      .from(domains)
-      .where(live)
-      .orderBy(sql`${domains.createdAt} desc`)
-      .limit(10)
+  return (await loadWorkspace(ctx)).workspace
+}
+
+/**
+ * The workspace the model reads and the facts it was read with, in one
+ * transaction: a turn's context needs both before its first token.
+ */
+export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
+  workspace: CosWorkspace
+  facts: FactRecord[]
+}> {
+  const [{ status, facts }, rows] = await kit.withOrg(
+    { orgId: owner.orgId },
+    (db) =>
+      Promise.all([
+        statusWithFacts(db, env, new Date()),
+        db
+          .select({
+            name: domains.name,
+            state: domains.state,
+            lastCheck: domains.lastCheck,
+          })
+          .from(domains)
+          .where(live)
+          .orderBy(sql`${domains.createdAt} desc`)
+          .limit(10),
+      ])
   )
-  return CosWorkspace.parse({
+  const workspace = CosWorkspace.parse({
     site: {
       host: status.site.host,
       live_version: status.site.live?.version ?? null,
@@ -209,6 +224,7 @@ export async function getWorkspace(
     })),
     expected_seconds: status.expected_seconds,
   })
+  return { workspace, facts }
 }
 
 /**

@@ -16,7 +16,7 @@ import {
   TOOL_UNKNOWN,
   type ToneId,
 } from "@workspace/contracts"
-import { failureCode, type Tenancy } from "@workspace/db"
+import { failureCode, type OrgScopedDb, type Tenancy } from "@workspace/db"
 import models from "@workspace/facade/models/openrouter.models.json" with {
   type: "json",
 }
@@ -37,7 +37,8 @@ import { connectGoogle } from "../google.ts"
 import {
   CONTEXT_POLICY,
   deriveCosMessages,
-  readSession,
+  type LoggedEvent,
+  readSessionSince,
   sha256,
 } from "./history.ts"
 import { getIndexing, getSearchPerformance } from "./search-tools.ts"
@@ -573,6 +574,25 @@ export type AgentTurn = {
   abort: AbortController
   /** The owner's zone from this turn's request, or null for none. */
   zone: string | null
+  /**
+   * The session's log as the turn last read it: read whole once when the
+   * turn opened, and caught up by `caughtUp` after that.
+   */
+  log: LoggedEvent[]
+}
+
+/**
+ * `run.log` with the rows written since its last seq appended, read in
+ * `db`. The turn is the session's only writer while it holds its token, so
+ * these rows and the ones it holds are the whole log (ADR-042).
+ */
+export async function caughtUp(
+  db: OrgScopedDb,
+  run: Pick<AgentTurn, "turn" | "log">
+): Promise<LoggedEvent[]> {
+  const after = run.log.at(-1)?.seq ?? -1
+  run.log.push(...(await readSessionSince(db, run.turn.sessionId, after)))
+  return run.log
 }
 
 /** Thrown in `prepareStep` when the messages are not the ones the log derives. */
@@ -787,13 +807,14 @@ function toolsFor(run: AgentTurn) {
  * turn has logged.
  */
 async function derivedCall(
-  run: Pick<AgentTurn, "kit" | "turn">,
+  db: OrgScopedDb,
+  run: Pick<AgentTurn, "turn" | "log">,
   tools: ToolSet
 ): Promise<ModelMessage[]> {
-  const rows = await run.kit.withOrg({ orgId: run.turn.orgId }, (db) =>
-    readSession(db, run.turn.sessionId)
+  const { messages, steps } = deriveCosMessages(
+    await caughtUp(db, run),
+    CONTEXT_POLICY
   )
-  const { messages, steps } = deriveCosMessages(rows, CONTEXT_POLICY)
   return [...(await convertToModelMessages(messages, { tools })), ...steps]
 }
 
@@ -858,49 +879,37 @@ export function cosAgent(
         },
       }
     },
+    // The check and the step's `cos.call` share one transaction.
     prepareStep: async ({ messages, stepNumber }) => {
-      // A failed read is not a mismatch: the turn ends as an error and the
-      // conversation stays open.
-      let expected: string
-      try {
-        expected = await sha256(await derivedCall(run, tools))
-      } catch (error) {
-        run.state.readFailed = true
-        console.error(
-          JSON.stringify({
-            code: "cos.derive_failed",
-            turn_id: run.turn.turnId,
-            error: failureCode(error),
-          })
-        )
-        throw error
-      }
       const sent = await sha256(messages)
-      if (expected !== sent) {
-        run.state.integrity = true
-        console.error(
-          JSON.stringify({
-            alert: "cos.integrity",
-            turn_id: run.turn.turnId,
-            step: stepNumber,
-          })
-        )
-        throw new IntegrityError()
-      }
       // The first call is checked here; later ones are stopped by `stopWhen`.
       const chars =
         JSON.stringify(messages).length +
         JSON.stringify(await cosPrefix()).length
-      if (
-        stepNumber === 0 &&
-        worstStep(run.price, tokensIn(chars)) > run.reserved
-      ) {
-        run.state.overBudget = true
-        throw new Error("cos.over_budget")
-      }
+      let checked = false
       try {
-        await run.kit.withOrg({ orgId: run.turn.orgId }, (db) =>
-          writeAsTurn(db, run.turn, [
+        await run.kit.withOrg({ orgId: run.turn.orgId }, async (db) => {
+          const expected = await sha256(await derivedCall(db, run, tools))
+          if (expected !== sent) {
+            run.state.integrity = true
+            console.error(
+              JSON.stringify({
+                alert: "cos.integrity",
+                turn_id: run.turn.turnId,
+                step: stepNumber,
+              })
+            )
+            throw new IntegrityError()
+          }
+          if (
+            stepNumber === 0 &&
+            worstStep(run.price, tokensIn(chars)) > run.reserved
+          ) {
+            run.state.overBudget = true
+            throw new Error("cos.over_budget")
+          }
+          checked = true
+          await writeAsTurn(db, run.turn, [
             {
               type: "cos.call",
               payload: {
@@ -910,8 +919,20 @@ export function cosAgent(
               },
             },
           ])
-        )
+        })
       } catch (error) {
+        // A failed read is not a mismatch: the turn ends as an error and
+        // the conversation stays open.
+        if (!(checked || run.state.integrity || run.state.overBudget)) {
+          run.state.readFailed = true
+          console.error(
+            JSON.stringify({
+              code: "cos.derive_failed",
+              turn_id: run.turn.turnId,
+              error: failureCode(error),
+            })
+          )
+        }
         closed(error)
         throw error
       }

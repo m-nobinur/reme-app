@@ -36,6 +36,7 @@ import { holdsNul, notFound } from "./conversations.ts"
 import {
   type AgentTurn,
   activeTools,
+  caughtUp,
   contextOf,
   cosPrefix,
   knownZone,
@@ -51,6 +52,7 @@ import {
 import {
   CONTEXT_POLICY,
   deriveCosMessages,
+  type LoggedEvent,
   readSession,
   sha256,
 } from "./cos/history.ts"
@@ -64,7 +66,11 @@ import {
   streamTurn,
   writtenAt,
 } from "./cos/run.ts"
-import { getWorkspace, startOwnerChange, type ToolFailed } from "./cos/tools.ts"
+import {
+  loadWorkspace,
+  startOwnerChange,
+  type ToolFailed,
+} from "./cos/tools.ts"
 import {
   beginTurn,
   closeLapsedTurn,
@@ -625,13 +631,15 @@ export async function chat(
   if (zone && !knownZone(zone)) return invalid([{ path: ["time_zone"] }])
   const scope = { orgId: owner.orgId, workosUserId: owner.session.workosUserId }
   const tools = { env, kit, owner }
-  const ahead = await kit.withOrg(scope, (db) => lookAhead(db, id))
-  // Read before the turn's lock is taken; the CoS's context is built from
-  // it. An onboarding turn never reads it.
-  const [workspace, prefix] = await Promise.all([
-    ahead.onboarding ? null : getWorkspace(tools, {}),
+  // Read before the turn's lock is taken, beside `lookAhead`; the CoS's
+  // context is built from it. An onboarding turn reads it and drops it.
+  const loading = loadWorkspace(tools)
+  loading.catch(() => undefined)
+  const [ahead, prefix] = await Promise.all([
+    kit.withOrg(scope, (db) => lookAhead(db, id)),
     cosPrefix(),
   ])
+  const loaded = ahead.onboarding ? null : await loading
   const gateOf =
     deps.jev !== undefined
       ? deps.jev
@@ -783,13 +791,14 @@ export async function chat(
       const opening = await openCos(db, held, id, parsed.data, log)
       if (opening instanceof Response) return opening
       const cosTurn: Turn = { ...session, turnId: newUlid() }
+      const { workspace, facts } = loaded ?? (await loadWorkspace(tools))
       const context = contextOf(
         mode,
-        workspace ?? (await getWorkspace(tools, {})),
+        workspace,
         zone ?? null,
         new Date(),
         turn.kind === "message" ? parsed.data.intent : undefined,
-        personaOf(await readFacts(db))
+        personaOf(facts)
       )
       await beginTurn(db, cosTurn, {
         prefix: log.prefixLogged ? null : prefix,
@@ -818,6 +827,8 @@ export async function chat(
         fallback,
         reserved: fallback ? 0 : reserve,
         tail: opening.tail,
+        // The turn's one whole read of its log (ADR-042), under its lock.
+        log: await readSession(db, id),
       }
     })
   } catch (error) {
@@ -856,6 +867,7 @@ export async function chat(
     state: newRunState(),
     abort: new AbortController(),
     zone: zone ?? null,
+    log: opened.log,
   }
   return answerCos(run, {
     env,
@@ -898,6 +910,7 @@ type Opened = {
   reserved: number
   /** For a results turn: the message its results resolved. */
   tail: { id: string } | null
+  log: LoggedEvent[]
 }
 
 /** A turn the script answers: everything before the CoS, unchanged. */
@@ -1238,17 +1251,14 @@ async function fellBack(
   return response
 }
 
-/** The model's run over the history the log derives now. */
+/** The model's run over the history the log derives now, which `settle` left caught up. */
 async function startModel(
   run: AgentTurn,
   a: Answering,
   model: LanguageModel,
   rows: Rows
 ): Promise<Response | FellBack> {
-  const history = await run.kit.withOrg({ orgId: run.turn.orgId }, (db) =>
-    readSession(db, run.turn.sessionId)
-  )
-  const { messages } = deriveCosMessages(history, CONTEXT_POLICY)
+  const { messages } = deriveCosMessages(run.log, CONTEXT_POLICY)
   const tail = a.opened.tail
   return streamTurn({
     run,
@@ -1310,7 +1320,7 @@ async function fallbackTurn(
     return stream(assistantId, step, [writtenAt()])
   }
   const history = await run.kit.withOrg({ orgId: run.turn.orgId }, (db) =>
-    readSession(db, run.turn.sessionId)
+    caughtUp(db, run)
   )
   const { messages } = deriveCosMessages(history, CONTEXT_POLICY)
   const tailId = a.opened.tail?.id as string

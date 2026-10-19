@@ -14,6 +14,7 @@ import {
 import { withoutProviderData } from "../http.ts"
 import {
   type AgentTurn,
+  caughtUp,
   cosAgent,
   LIMITS,
   messageTaint,
@@ -21,7 +22,11 @@ import {
   runTool,
   toolErrorText,
 } from "./agent.ts"
-import { CONTEXT_POLICY, deriveCosMessages, readSession } from "./history.ts"
+import {
+  CONTEXT_POLICY,
+  deriveCosMessages,
+  type SessionEvent,
+} from "./history.ts"
 import { ToolFailed } from "./tools.ts"
 import { abandonTurn, TurnClosed, writeAsTurn } from "./turns.ts"
 
@@ -286,25 +291,21 @@ type Call = {
   approvalId: string
 }
 
-/** The session's messages as the log holds them now, unpruned. */
-async function logged(run: AgentTurn): Promise<UIMessage[]> {
-  const rows = await run.kit.withOrg({ orgId: run.turn.orgId }, (db) =>
-    readSession(db, run.turn.sessionId)
-  )
-  return deriveCosMessages(rows, {
+/** The session's messages in `rows`, unpruned. */
+const logged = (rows: SessionEvent[]): UIMessage[] =>
+  deriveCosMessages(rows, {
     ...CONTEXT_POLICY,
     turns: Number.POSITIVE_INFINITY,
     toolTurns: Number.POSITIVE_INFINITY,
   }).messages
-}
 
 /**
  * Every call the owner approved that the log holds no result for, in log
  * order: the ones this turn's results just approved, and any a dead turn
  * approved and never finished.
  */
-async function unsettled(run: AgentTurn): Promise<Call[]> {
-  return (await logged(run)).flatMap((message) =>
+function unsettled(run: AgentTurn): Call[] {
+  return logged(run.log).flatMap((message) =>
     message.role !== "assistant"
       ? []
       : message.parts.flatMap((part) => {
@@ -343,13 +344,14 @@ async function unsettled(run: AgentTurn): Promise<Call[]> {
  * would fail the same way again, so the call is closed as `output-error`
  * with the text the model reads for it. Any other `ToolFailed` leaves the
  * outcome unknown: it is returned, with the call left open for a later turn
- * to run again.
+ * to run again. It reads the log only after it ran a call, and leaves
+ * `run.log` caught up.
  */
 export async function settle(
   run: AgentTurn,
   rows: Rows
 ): Promise<ToolFailed | null> {
-  for (const call of await unsettled(run)) {
+  for (const call of unsettled(run)) {
     let failed: ToolFailed | null = null
     try {
       await runTool(
@@ -364,12 +366,14 @@ export async function settle(
       if (error.error.class !== "integrity") return error
       failed = error
     }
-    // Read again: the result, or an earlier call's in the same message, is
-    // in the log by now.
-    const current = (await logged(run)).find((m) => m.id === call.messageId)
-    if (!current)
-      throw failed ?? new Error("cos.run: a settled call's message is gone")
     await run.kit.withOrg({ orgId: run.turn.orgId }, async (db) => {
+      // Caught up: the result, or an earlier call's in the same message, is
+      // in the log by now.
+      const current = logged(await caughtUp(db, run)).find(
+        (m) => m.id === call.messageId
+      )
+      if (!current)
+        throw failed ?? new Error("cos.run: a settled call's message is gone")
       if (!failed) {
         // The result is logged; the stored row shows it too.
         await rows(db, current)
@@ -395,6 +399,7 @@ export async function settle(
         },
       ])
       await rows(db, message)
+      await caughtUp(db, run)
     })
   }
   return null
