@@ -24,8 +24,8 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.62.2",
-    "@flue/runtime": "2.2.2",
-    "@flue/vite": "2.2.2",
+    "@flue/runtime": "2.3.0",
+    "@flue/vite": "2.3.0",
     "@types/node": "^22",
     "fast-check": "^4.10.2",
     "typescript": "^6",
