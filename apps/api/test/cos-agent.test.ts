@@ -1,4 +1,5 @@
 import {
+  APPROVAL_EXPIRED,
   ChangeKind,
   ChatRequest,
   COS_TOOLS,
@@ -50,7 +51,9 @@ import {
 import type { z } from "zod"
 import { type ChatDeps, chat, NO_ANSWER } from "../src/chat.ts"
 import {
+  APPROVAL_TTL_MS,
   activeTools,
+  binds,
   type CosAgent,
   contextOf,
   costOf,
@@ -60,6 +63,7 @@ import {
   knownZone,
   LIMITS,
   messageTaint,
+  NotRun,
   openrouterModel,
   personaOf,
   priceOf,
@@ -70,6 +74,7 @@ import {
   stepCost,
   toolErrorText,
 } from "../src/cos/agent.ts"
+import { sha256 } from "../src/cos/history.ts"
 import { retrying } from "../src/cos/retry.ts"
 import { ToolFailed } from "../src/cos/tools.ts"
 import { DAILY_CAP_USD as CAP, GRACE_MS, withinCap } from "../src/cos/turns.ts"
@@ -624,6 +629,43 @@ describe("the CoS's model and price", () => {
     expect(
       text.startsWith(kind === "failed" ? TOOL_FAILED : TOOL_UNKNOWN)
     ).toBe(true)
+  })
+
+  it("lets a yes run only the call its card showed, with the input it showed, before it expires", async () => {
+    const now = Date.parse("2026-10-19T12:00:00Z")
+    const input = { text: "Add a Saturday slot.", change_kind: "section" }
+    const card = {
+      turn_id: "01K6A00000000000000000TURN",
+      approval_id: "aitxt-approval",
+      tool_call_id: "call_rc",
+      input_sha256: await sha256(input),
+      expires_at: new Date(now + 1000).toISOString(),
+    }
+    expect(await binds(card, "call_rc", input, now)).toBe(true)
+    // Key order is not a change: the hash is over sorted keys.
+    expect(
+      await binds(
+        card,
+        "call_rc",
+        { change_kind: "section", text: "Add a Saturday slot." },
+        now
+      )
+    ).toBe(true)
+    expect(
+      await binds(card, "call_rc", { ...input, text: "Add Sunday." }, now)
+    ).toBe(false)
+    expect(await binds(card, "call_other", input, now)).toBe(false)
+    expect(await binds(card, "call_rc", input, now + 1000)).toBe(false)
+    expect(await binds(undefined, "call_rc", input, now)).toBe(false)
+  })
+
+  it("writes a refused yes so the web reads it as expired, never as a failure or unknown", () => {
+    const text = toolErrorText(new NotRun("expired"))
+    expect(text.startsWith(`${APPROVAL_EXPIRED}:`)).toBe(true)
+    expect(text.startsWith(TOOL_FAILED)).toBe(false)
+    expect(toolErrorText(new NotRun("unknown")).startsWith(TOOL_UNKNOWN)).toBe(
+      true
+    )
   })
 
   it("types each tool's input as COS_TOOLS says", () => {
@@ -1876,7 +1918,19 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     await s.state(build, "cancelled")
   })
 
-  it("answers 503 and keeps the call open when an approved change's outcome is unknown", async () => {
+  /** A results turn that says yes to `approvalId` on the message `messageId`. */
+  const yes = (id: string, messageId: string, approvalId: string) => ({
+    conversation_id: id,
+    mode: "act",
+    turn: {
+      kind: "results",
+      message_id: messageId,
+      results: [{ kind: "approval", approval_id: approvalId, approved: true }],
+    },
+  })
+
+  /** A conversation whose tail is a request_change card, and that card. */
+  const changeCard = async () => {
     const id = await conversation(me)
     await turn(me, typed(id, "Add a Saturday slot."), {
       model: scripted(
@@ -1889,7 +1943,12 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     })
     const tail = await tailOf(me, id)
     const [call] = waiting(tail)
-    const unknown = stubOrchestrator(() =>
+    if (!call) throw new Error("no card")
+    return { id, tail, call }
+  }
+
+  const unavailable = () =>
+    stubOrchestrator(() =>
       Response.json(
         {
           class: "transient",
@@ -1901,30 +1960,147 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
         { status: 503 }
       )
     )
+
+  it("logs an approved change whose outcome is unknown, closes it as unknown and lets the model tell the owner", async () => {
+    const { id, tail, call } = await changeCard()
+    const unknown = unavailable()
+    const { model, sent } = scripted(said("I could not confirm that."))
     const done = await turn(
       me,
-      {
-        conversation_id: id,
-        mode: "act",
-        turn: {
-          kind: "results",
-          message_id: tail.id,
-          results: [
-            {
-              kind: "approval",
-              approval_id: call?.approval.id,
-              approved: true,
-            },
-          ],
-        },
-      },
-      { model: scripted(said("unused")).model },
+      yes(id, tail.id, call.approval.id),
+      { model },
       unknown
     )
-    expect(done.response.status).toBe(503)
+    expect(done.response.status, done.text).toBe(200)
+    expect(unknown.calls).toHaveLength(1)
     const log = await logOf(id)
     expect(log.filter((e) => e.type === "cos.tool_result")).toHaveLength(0)
-    expect((await turnsOf(id)).at(-1)?.outcome).toBe("error")
+    expect(
+      log.filter((e) => e.type === "cos.tool_unknown").map((e) => e.payload)
+    ).toEqual([
+      { tool_call_id: call.toolCallId, approval_id: call.approval.id },
+    ])
+    expect(JSON.stringify(sent[0]?.prompt)).toContain(
+      `${TOOL_UNKNOWN} (orchestrator.unavailable)`
+    )
+    const part = (await tailOf(me, id)).parts.find(
+      (p) => "toolCallId" in p && p.toolCallId === call.toolCallId
+    ) as { state: string }
+    expect(part.state).toBe("output-error")
+    expect((await turnsOf(id)).at(-1)?.outcome).toBe("answered")
+  })
+
+  it("never runs a call again once its outcome is logged unknown, even when the turn that logged it died", async () => {
+    const { id, tail, call } = await changeCard()
+    // The turn dies after the tool was logged unknown and before the call
+    // was closed.
+    const unknown = unavailable()
+    const dying = send(
+      me,
+      yes(id, tail.id, call.approval.id),
+      { model: scripted(said("unused")).model },
+      stubOrchestrator(async (request) => {
+        faults.dead = true
+        return unknown.fetch(request)
+      })
+    )
+    await expect(dying).rejects.toBeInstanceOf(Died)
+    faults.dead = false
+    await admin`
+      insert into events (event_id, org_id, staff_id, session_id, seq, type, occurred_at, idempotency_key, payload, taint)
+      values (${ulid()}, ${me.orgId}, ${me.chiefId}, ${id},
+        (select max(seq) + 1 from events where session_id = ${id}),
+        'cos.tool_unknown', now(), ${ulid()},
+        ${admin.json({ tool_call_id: call.toolCallId, approval_id: call.approval.id })}, '{}')`
+    await admin`
+      update events set recorded_at = now() - make_interval(secs => ${(LIMITS.totalMs + GRACE_MS) / 1000 + 1})
+      where session_id = ${id} and type = 'cos.context'`
+    const stub = orchestrator()
+    const next = await turn(
+      me,
+      typed(id, "Did it start?", "ask"),
+      { model: scripted(said("I could not confirm it.")).model },
+      stub
+    )
+    expect(next.response.status, next.text).toBe(200)
+    expect(stub.calls).toHaveLength(0)
+    const rows = await rowsOf(me, id)
+    const card = rows
+      .flatMap((r) => (r.content as { parts: Record<string, unknown>[] }).parts)
+      .find((p) => p.toolCallId === call.toolCallId)
+    expect(card).toMatchObject({ state: "output-error" })
+    expect(String(card?.errorText)).toMatch(new RegExp(`^${TOOL_UNKNOWN}`))
+  })
+
+  it("logs each card as shown: its call, the hash of its input and a day to answer", async () => {
+    const { id, call } = await changeCard()
+    const [card] = (await logOf(id)).filter((e) => e.type === "cos.approval")
+    expect(card?.payload).toMatchObject({
+      approval_id: call.approval.id,
+      tool_call_id: call.toolCallId,
+      input_sha256: await sha256({ text: "Add a Saturday slot." }),
+    })
+    const left = Date.parse(card?.payload.expires_at) - Date.now()
+    expect(left).toBeGreaterThan(APPROVAL_TTL_MS - 60_000)
+    expect(left).toBeLessThanOrEqual(APPROVAL_TTL_MS)
+  })
+
+  it("refuses a yes on a card that expired: nothing runs, and the card and the model say it expired", async () => {
+    const { id, tail, call } = await changeCard()
+    await admin`
+      update events set payload = jsonb_set(payload, '{expires_at}', to_jsonb(${new Date(Date.now() - 1000).toISOString()}::text))
+      where session_id = ${id} and type = 'cos.approval'`
+    const stub = orchestrator()
+    const { model, sent } = scripted(said("That card expired."))
+    const done = await turn(
+      me,
+      yes(id, tail.id, call.approval.id),
+      { model },
+      stub
+    )
+    expect(done.response.status, done.text).toBe(200)
+    expect(stub.calls).toHaveLength(0)
+    expect(
+      (await logOf(id)).filter((e) => e.type === "cos.tool_result")
+    ).toHaveLength(0)
+    expect(JSON.stringify(sent[0]?.prompt)).toContain(APPROVAL_EXPIRED)
+    const part = (await tailOf(me, id)).parts.find(
+      (p) => "toolCallId" in p && p.toolCallId === call.toolCallId
+    ) as { state: string; errorText: string }
+    expect(part.state).toBe("output-error")
+    expect(part.errorText.startsWith(`${APPROVAL_EXPIRED}:`)).toBe(true)
+  })
+
+  it("refuses a yes when the call's input changed after its card was shown", async () => {
+    const { id, tail, call } = await changeCard()
+    // The logged card now holds another input than the one its record hashed.
+    const [logged] = await admin<{ event_id: string; payload: unknown }[]>`
+      select event_id, payload from events
+      where session_id = ${id} and type = 'cos.message'
+        and payload->'message'->>'id' = ${tail.id}
+      order by seq desc limit 1`
+    if (!logged) throw new Error("the card was not logged")
+    const changed = JSON.parse(
+      JSON.stringify(logged.payload).replace(
+        "Add a Saturday slot.",
+        "Delete the whole website."
+      )
+    )
+    await admin`update events set payload = ${admin.json(changed)} where event_id = ${logged.event_id}`
+    const stub = orchestrator()
+    const done = await turn(
+      me,
+      yes(id, tail.id, call.approval.id),
+      { model: scripted(said("That card no longer matches.")).model },
+      stub
+    )
+    expect(done.response.status, done.text).toBe(200)
+    expect(stub.calls).toHaveLength(0)
+    const part = (await tailOf(me, id)).parts.find(
+      (p) => "toolCallId" in p && p.toolCallId === call.toolCallId
+    ) as { state: string; errorText: string }
+    expect(part.state).toBe("output-error")
+    expect(part.errorText.startsWith(`${APPROVAL_EXPIRED}:`)).toBe(true)
   })
 
   it("closes an approved call whose answer was off the contract as failed, not refused, and goes on", async () => {

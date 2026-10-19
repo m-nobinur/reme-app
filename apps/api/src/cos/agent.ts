@@ -1,12 +1,15 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider"
 import {
+  APPROVAL_EXPIRED,
   BuyDomainAsk,
   type ChatRequest,
   COS_TOOLS,
+  type CosApproval,
   type CosPrefix,
   type CosStep,
   type CosToolName,
   type CosToolResult,
+  type CosToolUnknown,
   type CosWorkspace,
   FactValue,
   PRONOUNS,
@@ -39,6 +42,7 @@ import {
   deriveCosMessages,
   type LoggedEvent,
   readSessionSince,
+  type SessionEvent,
   sha256,
 } from "./history.ts"
 import { getIndexing, getSearchPerformance } from "./search-tools.ts"
@@ -629,12 +633,61 @@ const BODIES = {
   connect_google: connectGoogle,
 }
 
+/** How long a CoS card's yes stays good (ADR-042). Publish approvals keep their own 72 hours. */
+export const APPROVAL_TTL_MS = 24 * 3_600_000
+
+/**
+ * A call `runTool` refuses before it runs: its card's approval has expired
+ * or no longer matches the call, or its outcome is already unknown.
+ */
+export class NotRun extends Error {
+  constructor(readonly reason: "expired" | "unknown") {
+    super(`cos.not_run.${reason}`)
+  }
+}
+
+/** The `cos.approval` `rows` hold for `approvalId`. */
+const approvalIn = (rows: readonly SessionEvent[], approvalId: string) =>
+  rows.find(
+    (e) =>
+      e.type === "cos.approval" &&
+      (e.payload as CosApproval).approval_id === approvalId
+  )?.payload as CosApproval | undefined
+
+/** Whether `rows` hold a `cos.tool_unknown` for `toolCallId`. */
+const unknownIn = (rows: readonly SessionEvent[], toolCallId: string) =>
+  rows.some(
+    (e) =>
+      e.type === "cos.tool_unknown" &&
+      (e.payload as CosToolUnknown).tool_call_id === toolCallId
+  )
+
+/**
+ * Whether a yes on the card `approval` logged still runs this call at
+ * `now`: the same call, the same input the card showed, and not expired.
+ * A card with no record, shown before records were kept, binds nothing.
+ */
+export async function binds(
+  approval: CosApproval | undefined,
+  toolCallId: string,
+  input: unknown,
+  now: number
+): Promise<boolean> {
+  return (
+    approval !== undefined &&
+    approval.tool_call_id === toolCallId &&
+    Date.parse(approval.expires_at) > now &&
+    approval.input_sha256 === (await sha256(input))
+  )
+}
+
 /**
  * Runs one tool and logs its output under the turn's token. An act tool
  * takes its approval id as its key, so running it again replays the first
- * run. A `ToolFailed` goes up as it is and logs nothing: an unknown outcome
- * is never stored as an answer, so the call stays open for the next turn to
- * run again under the same key.
+ * run, and it runs only while its card's approval binds it. A `ToolFailed`
+ * goes up as it is and logs no result: an unknown outcome is never stored as
+ * an answer. For an act tool it logs `cos.tool_unknown` first, so the call
+ * never runs again and the owner is asked instead (ADR-042).
  */
 export async function runTool(
   run: AgentTurn,
@@ -654,7 +707,39 @@ export async function runTool(
   if (ACT_TOOLS.includes(name) && !key) {
     throw new Error(`cos.agent: ${name} ran without an approval`)
   }
-  const output = await body(run.tools, input, key ?? "", run.turn, run.zone)
+  if (key && unknownIn(run.log, toolCallId)) throw new NotRun("unknown")
+  if (
+    approvalId &&
+    !UNAPPROVED.includes(name) &&
+    !(await binds(
+      approvalIn(run.log, approvalId),
+      toolCallId,
+      input,
+      Date.now()
+    ))
+  ) {
+    throw new NotRun("expired")
+  }
+  let output: unknown
+  try {
+    output = await body(run.tools, input, key ?? "", run.turn, run.zone)
+  } catch (error) {
+    if (
+      key &&
+      error instanceof ToolFailed &&
+      error.error.class !== "integrity"
+    ) {
+      await run.kit.withOrg({ orgId: run.turn.orgId }, (db) =>
+        writeAsTurn(db, run.turn, [
+          {
+            type: "cos.tool_unknown",
+            payload: { tool_call_id: toolCallId, approval_id: key },
+          },
+        ])
+      )
+    }
+    throw error
+  }
   run.state.tools.push(name)
   await logResult(run, {
     turn_id: run.turn.turnId,
@@ -673,6 +758,9 @@ export async function runTool(
  * `TOOL_FAILED`: it did nothing. Anything else left the outcome unknown.
  */
 export function toolErrorText(error: unknown): string {
+  if (error instanceof NotRun && error.reason === "expired") {
+    return `${APPROVAL_EXPIRED}: the owner's yes on this card has expired or no longer matches what the card showed, so nothing was done. Tell the owner and offer to propose it again.`
+  }
   if (error instanceof ToolFailed && error.error.class === "integrity") {
     return `${TOOL_FAILED} (${error.error.code}): the builder answered in a shape we do not accept, so nothing was done. Tell the owner it did not go through.`
   }
@@ -949,6 +1037,27 @@ export function cosAgent(
           run.state.usage.cached_input_tokens + usage.cached_input_tokens,
         output_tokens: run.state.usage.output_tokens + usage.output_tokens,
       }
+      // Each card as it was shown, written with its step, so a step logged
+      // always has its cards' records.
+      const expiresAt = new Date(Date.now() + APPROVAL_TTL_MS).toISOString()
+      const approvals = await Promise.all(
+        step.content.flatMap((part) =>
+          part.type === "tool-approval-request"
+            ? [
+                (async () => ({
+                  type: "cos.approval" as const,
+                  payload: {
+                    turn_id: run.turn.turnId,
+                    approval_id: part.approvalId,
+                    tool_call_id: part.toolCall.toolCallId,
+                    input_sha256: await sha256(part.toolCall.input),
+                    expires_at: expiresAt,
+                  },
+                }))(),
+              ]
+            : []
+        )
+      )
       // The SDK swallows an error here, so a failed write shows up as a
       // mismatch at the next `prepareStep` rather than as a gap.
       try {
@@ -977,6 +1086,7 @@ export function cosAgent(
                   : []),
               ],
             },
+            ...approvals,
           ])
         )
       } catch (error) {

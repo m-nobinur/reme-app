@@ -1,10 +1,12 @@
 import {
+  CosApproval,
   CosCall,
   CosContext,
   CosMessage,
   CosPrefix,
   CosStep,
   CosToolResult,
+  CosToolUnknown,
   CosTurn,
   type TaintLabel,
 } from "@workspace/contracts"
@@ -77,7 +79,8 @@ export class NoSuchSession extends Error {
  * An event a turn writes after its first transaction. Taint is the
  * caller's to say from what the payload carries. A step is the model's
  * output, so it is always `inferred`, plus the labels of the tool outputs
- * it carries; `cos.call` and `cos.turn` carry no text and no label.
+ * it carries; `cos.call`, `cos.turn`, `cos.approval` and `cos.tool_unknown`
+ * carry no text and no label.
  */
 type TurnEvent =
   | { type: "cos.message"; payload: CosMessage; taint: TaintLabel[] }
@@ -85,6 +88,8 @@ type TurnEvent =
   | { type: "cos.step"; payload: CosStep; taint?: TaintLabel[] }
   | { type: "cos.call"; payload: CosCall }
   | { type: "cos.turn"; payload: CosTurn }
+  | { type: "cos.approval"; payload: CosApproval }
+  | { type: "cos.tool_unknown"; payload: CosToolUnknown }
 
 const SCHEMAS = {
   "cos.message": CosMessage,
@@ -92,24 +97,29 @@ const SCHEMAS = {
   "cos.step": CosStep,
   "cos.call": CosCall,
   "cos.turn": CosTurn,
+  "cos.approval": CosApproval,
+  "cos.tool_unknown": CosToolUnknown,
 } as const
 
 type Checked = {
   type: TurnEvent["type"]
-  payload: { turn_id: string } & Record<string, unknown>
+  payload: Record<string, unknown>
   taint: TaintLabel[]
 }
 
 /**
  * The whole batch checked before anything is written: each payload against
- * its contract and naming `turnId`, a step holding only the model's
- * messages, at most one result per call, and nothing after a `cos.turn`.
+ * its contract and naming `turnId` (a `cos.tool_unknown` names no turn), a
+ * step holding only the model's messages, at most one result per call, and
+ * nothing after a `cos.turn`.
  */
 function checked(turnId: string, writes: TurnEvent[]): Checked[] {
   const calls = new Set<string>()
   return writes.map((write, i) => {
-    const payload = SCHEMAS[write.type].parse(write.payload)
-    if (payload.turn_id !== turnId) {
+    const payload: Record<string, unknown> = SCHEMAS[write.type].parse(
+      write.payload
+    )
+    if (write.type !== "cos.tool_unknown" && payload.turn_id !== turnId) {
       throw new Error(`cos.turns: a ${write.type} for another turn`)
     }
     if (write.type === "cos.turn" && i < writes.length - 1) {
@@ -467,6 +477,20 @@ export async function beginTurn(
       throw new SessionBusy(turn.sessionId)
     }
   }
+}
+
+/** The `cos.approval` rows the session logged for `approvalIds`. */
+export async function loggedApprovals(
+  db: OrgScopedDb,
+  sessionId: string,
+  approvalIds: string[]
+): Promise<CosApproval[]> {
+  if (approvalIds.length === 0) return []
+  const rows = await db.execute<{ payload: unknown }>(sql`
+    select payload from ${events}
+    where session_id = ${sessionId} and type = 'cos.approval'
+      and payload->>'approval_id' in ${approvalIds}`)
+  return rows.map((row) => CosApproval.parse(row.payload))
 }
 
 /**

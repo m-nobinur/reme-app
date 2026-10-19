@@ -36,18 +36,21 @@ import { holdsNul, notFound } from "./conversations.ts"
 import {
   type AgentTurn,
   activeTools,
+  binds,
   caughtUp,
   contextOf,
   cosPrefix,
   knownZone,
   LIMITS,
   messageTaint,
+  NotRun,
   newRunState,
   openrouterModel,
   personaOf,
   priceOf,
   reservation,
   routeOf,
+  toolErrorText,
 } from "./cos/agent.ts"
 import {
   CONTEXT_POLICY,
@@ -66,14 +69,11 @@ import {
   streamTurn,
   writtenAt,
 } from "./cos/run.ts"
-import {
-  loadWorkspace,
-  startOwnerChange,
-  type ToolFailed,
-} from "./cos/tools.ts"
+import { loadWorkspace, startOwnerChange } from "./cos/tools.ts"
 import {
   beginTurn,
   closeLapsedTurn,
+  loggedApprovals,
   loggedMessage,
   NoSuchSession,
   type Opening,
@@ -971,6 +971,7 @@ type CosPart = {
   type: string
   toolCallId?: string
   state?: string
+  input?: unknown
   output?: unknown
   errorText?: string
   approval?: { id: string; approved?: boolean; reason?: string }
@@ -1100,9 +1101,36 @@ async function openCos(
   ) {
     return stale()
   }
+  // A yes counts only while the card's record binds its call (ADR-042);
+  // otherwise the call closes with the expired line and nothing runs.
+  const yeses = waiting.filter(
+    (p) => byApproval.get(p.approval?.id ?? "")?.approved
+  )
+  const cards = await loggedApprovals(
+    db,
+    id,
+    yeses.map((p) => p.approval?.id ?? "")
+  )
+  const now = Date.now()
+  const lapsed = new Set<string>()
+  for (const part of yeses) {
+    const approvalId = part.approval?.id ?? ""
+    const card = cards.find((c) => c.approval_id === approvalId)
+    if (!(await binds(card, part.toolCallId ?? "", part.input, now))) {
+      lapsed.add(approvalId)
+    }
+  }
   const applied = parts.map((part): CosPart => {
     const result = part.approval ? byApproval.get(part.approval.id) : undefined
     if (!result || !waiting.includes(part)) return part
+    if (lapsed.has(result.approval_id)) {
+      return {
+        ...part,
+        state: "output-error",
+        errorText: toolErrorText(new NotRun("expired")),
+        approval: { id: result.approval_id, approved: true },
+      }
+    }
     // A denial's reason is the owner's free text, so the model gets it
     // framed as the owner's no; it could otherwise open with words the
     // instructions give to a failure. The screen keeps the owner's words.
@@ -1203,20 +1231,15 @@ async function answerCos(run: AgentTurn, a: Answering): Promise<Response> {
   }
   // Anything that throws before a response exists closes the turn as an
   // error, so the next turn need not wait for it to lapse.
-  let failed: ToolFailed | null = null
   let streamed: Response | FellBack | null = null
   try {
-    failed = await settle(run, rows)
-    if (!failed && !a.opened.fallback && a.model) {
+    await settle(run, rows)
+    if (!a.opened.fallback && a.model) {
       streamed = await startModel(run, a, a.model, rows)
     }
   } catch (error) {
     await closeTurn(run, ended("error"), null, rows).catch(() => undefined)
     throw error
-  }
-  if (failed) {
-    await closeTurn(run, ended("error"), null, rows)
-    return failure(failed.status, { ...failed.error, detail: {} })
   }
   if (streamed instanceof Response) return streamed
   if (streamed && run.state.readFailed) {
