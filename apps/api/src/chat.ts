@@ -30,6 +30,7 @@ import {
   type UIMessage,
   type UIMessageChunk,
 } from "ai"
+import { enqueueAfterTurn } from "./after-turn.ts"
 import { type Owner, stateFacts } from "./changes.ts"
 import { holdsNul, notFound } from "./conversations.ts"
 import {
@@ -1215,14 +1216,26 @@ async function answerCos(run: AgentTurn, a: Answering): Promise<Response> {
     })
   }
   if (streamed && run.state.integrity) {
-    return fallbackTurn(run, a, rows, ended("integrity"))
+    return fellBack(run, a, rows, ended("integrity"))
   }
   const fallback = streamed
     ? run.state.overBudget
       ? "budgetary"
       : "provider"
     : a.opened.fallback
-  return fallbackTurn(run, a, rows, ended("fallback", fallback ?? "resource"))
+  return fellBack(run, a, rows, ended("fallback", fallback ?? "resource"))
+}
+
+/** A turn that ran no model closes inside `fallbackTurn`; queue it after. */
+async function fellBack(
+  run: AgentTurn,
+  a: Answering,
+  rows: Rows,
+  payload: CosTurn
+): Promise<Response> {
+  const response = await fallbackTurn(run, a, rows, payload)
+  a.waitUntil(enqueueAfterTurn(a.env, run.turn))
+  return response
 }
 
 /** The model's run over the history the log derives now. */
@@ -1246,7 +1259,9 @@ async function startModel(
     newMessageId: a.newId,
     lead: tail ? settledLead(messages, tail.id) : [],
     rows,
-    waitUntil: a.waitUntil,
+    // The stream's reader ends after `closeRun`, so the turn is closed here.
+    waitUntil: (reading) =>
+      a.waitUntil(reading.then(() => enqueueAfterTurn(a.env, run.turn))),
   })
 }
 

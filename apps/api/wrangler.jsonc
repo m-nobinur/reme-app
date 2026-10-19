@@ -109,6 +109,20 @@
       "simple": { "limit": 30, "period": 60 }
     }
   ],
+  // Closed turns, for the work that follows one (compaction, reflection). A
+  // message holds ids only, so a consumer never carries a conversation's text.
+  // The first attempt and three retries, then the dead-letter queue, where a
+  // poisoned job waits to be read instead of retrying forever.
+  "queues": {
+    "producers": [{ "binding": "AFTER_TURN", "queue": "reme-after-turn" }],
+    "consumers": [
+      {
+        "queue": "reme-after-turn",
+        "max_retries": 3,
+        "dead_letter_queue": "reme-after-turn-dlq"
+      }
+    ]
+  },
   // Production. Everything above is staging, which is what the default
   // environment has always been; naming that is a later cleanup.
   //
@@ -168,7 +182,19 @@
           "namespace_id": "1004",
           "simple": { "limit": 30, "period": 60 }
         }
-      ]
+      ],
+      "queues": {
+        "producers": [
+          { "binding": "AFTER_TURN", "queue": "reme-after-turn-production" }
+        ],
+        "consumers": [
+          {
+            "queue": "reme-after-turn-production",
+            "max_retries": 3,
+            "dead_letter_queue": "reme-after-turn-dlq-production"
+          }
+        ]
+      }
     }
   }
 }
