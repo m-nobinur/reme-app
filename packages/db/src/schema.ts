@@ -233,6 +233,12 @@ export const users = pgTable(
     workosUserId: text("workos_user_id").notNull(),
     email: text("email").notNull(),
     name: text("name"),
+    /**
+     * Set while one signup is creating this person's org, so a second one at
+     * the same moment waits for it instead of making a second org. Null when
+     * no signup is running (`apps/api/src/org.ts`).
+     */
+    signupClaimedAt: timestamp("signup_claimed_at", { withTimezone: true }),
     createdAt,
     updatedAt,
   },
