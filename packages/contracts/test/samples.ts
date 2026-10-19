@@ -1201,6 +1201,12 @@ export const samples: Record<ContractName, unknown> = {
         },
         version: 4,
       },
+      {
+        kind: "reminder",
+        reminder_id: "9c0d1e2f-3a4b-4c5d-8e6f-7a8b9c0d1e2f",
+        title: "Order more microfibre cloths",
+        due_at: NOW,
+      },
     ],
     missing_facts: ["business.email"],
     assistant_name: "Ava",

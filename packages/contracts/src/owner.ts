@@ -400,13 +400,18 @@ export const BuildStopCause = z.enum([
 const AlertItem = z.strictObject({
   kind: z.literal("alert"),
   ...Logged,
-  reason: z.enum(["build_failed", "budget_parked", "publish_rolled_back"]),
+  reason: z.enum([
+    "build_failed",
+    "budget_parked",
+    "publish_rolled_back",
+    "job_paused",
+  ]),
   /** Why a failed build stopped; absent on the other alerts. */
   cause: BuildStopCause.optional(),
 })
 
 /**
- * §7.3: exactly four kinds. The copy is the UI's; the wire carries facts
+ * §7.3: exactly five kinds. The copy is the UI's; the wire carries facts
  * about the item, so a question and an approval embed the request whole.
  */
 export const AttentionItem = z.discriminatedUnion("kind", [
@@ -432,6 +437,13 @@ export const AttentionItem = z.discriminatedUnion("kind", [
   }),
   ReportItem,
   AlertItem,
+  /** A reminder that came due and is not done. The title is the owner's text, shown as data. */
+  z.strictObject({
+    kind: z.literal("reminder"),
+    reminder_id: Uuid,
+    title: Text(200),
+    due_at: Timestamp,
+  }),
 ])
 
 /** `GET /activity`: reports and alerts from the last 30 days. */
