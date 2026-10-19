@@ -4,7 +4,7 @@
   "db-unit": 95,
   "db-tenancy": 120,
   "db-seed": 14,
-  "api-tenancy": 44,
+  "api-tenancy": 43,
   "api-unit": 350,
   "api-unit+db": 689,
   "orchestrator-unit": 515,
