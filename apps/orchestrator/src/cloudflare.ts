@@ -94,15 +94,7 @@ import {
   whileHeld,
 } from "./sandbox.ts"
 import { type JobMessage, SCHEDULE_CRON, scanDue } from "./schedule.ts"
-import {
-  afterPublish,
-  hourAt,
-  isWeeklyHour,
-  postWeekly,
-  startDueSyncs,
-  type Weekly,
-  weeklyFor,
-} from "./search-sync.ts"
+import { afterPublish, startDueSyncs } from "./search-sync.ts"
 import {
   advance,
   claim,
@@ -1617,8 +1609,7 @@ export class SweepWorkflow extends WorkflowEntrypoint<Env, { hour: string }> {
     }
     // Search Console (search-sync.ts): each org due a pull gets its own
     // instance, since a sweep calling Google for every org would pass the
-    // subrequest limit; and on Monday at 07 UTC the weekly message, each
-    // posted in a step of its own like the domain messages.
+    // subrequest limit. The Monday report is a heartbeat item (heartbeat.ts).
     const { hour } = event.payload
     const day = `${hour.slice(0, 4)}-${hour.slice(4, 6)}-${hour.slice(6, 8)}`
     for (let i = 0; i < orgIds.length; i += SWEEP_CHUNK) {
@@ -1626,41 +1617,6 @@ export class SweepWorkflow extends WorkflowEntrypoint<Env, { hour: string }> {
       await step.do(`search ${i / SWEEP_CHUNK + 1}`, () =>
         withKit(this.env, (kit) => startDueSyncs(this.env, kit, chunk, day))
       )
-    }
-    if (isWeeklyHour(hour)) {
-      const now = hourAt(hour)
-      for (let i = 0; i < orgIds.length; i += SWEEP_CHUNK) {
-        const chunk = orgIds.slice(i, i + SWEEP_CHUNK)
-        const weeklies = await step.do(`weekly ${i / SWEEP_CHUNK + 1}`, () =>
-          withKit(this.env, async (kit) => {
-            const found: { orgId: string; weekly: Weekly }[] = []
-            for (const orgId of chunk) {
-              try {
-                const weekly = await weeklyFor(kit, orgId, now)
-                if (weekly) found.push({ orgId, weekly })
-              } catch (error) {
-                console.error(
-                  JSON.stringify({
-                    sweep: hour,
-                    org_id: orgId,
-                    code: failureCode(error),
-                  })
-                )
-              }
-            }
-            return found
-          })
-        )
-        for (const { orgId, weekly } of weeklies) {
-          try {
-            await step.do(`say ${weekly.key}`, SAY_RETRIES, () =>
-              withKit(this.env, (kit) => postWeekly(kit, orgId, weekly))
-            )
-          } catch {
-            // The chat stayed busy past every retry; next Monday says it again.
-          }
-        }
-      }
     }
     // The outbox (deliveries.ts): rows the Queue lost are queued again.
     for (let i = 0; i < orgIds.length; i += SWEEP_CHUNK) {

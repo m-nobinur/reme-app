@@ -17,10 +17,9 @@ import {
   disconnectSearch,
   inspectPages,
   isoWeek,
-  isWeeklyHour,
   pullProperty,
   startDueSyncs,
-  weeklyFor,
+  weeklyItem,
 } from "../src/search-sync.ts"
 import { freshOrg } from "./fixture.ts"
 import { kit, storage } from "./site.ts"
@@ -33,7 +32,7 @@ vi.mock("../src/sandbox.ts", () => ({}))
 vi.mock("../src/agents/developer.ts", () => ({ Developer: {} }))
 
 /**
- * The publish step, the daily pull, the Monday message and the disconnect
+ * The publish step, the daily pull, the Monday report and the disconnect
  * against a real database, with Google, IndexNow and the live sitemap stood
  * in for. Skipped without DATABASE_URL, like the publish suite.
  */
@@ -519,41 +518,46 @@ describe.skipIf(!url)("after a publish", () => {
   })
 })
 
-describe.skipIf(!url)("the Monday message", () => {
+describe.skipIf(!url)("the Monday report", () => {
   it("reports the week for a connected org and asks a paused one to sign in", async () => {
     const { env } = searchEnv()
     const { orgId, siteUrl } = await connected(env)
     stubFetch()
     const now = new Date("2026-10-12T07:00:00Z")
+    const monday = new Date("2026-10-12T00:00:00Z")
     await pullProperty(env, kit, orgId, siteUrl, now)
-    const weekly = await weeklyFor(kit, orgId, now)
-    expect(weekly?.key).toBe(`search-weekly-${orgId}-2026-W42`)
-    expect(weekly?.message.text[0]).toBe(
-      "Search this week: 100 appearances, 8 clicks, average position 5."
+    const item = () => rows(orgId, (db) => weeklyItem(db, orgId, now, monday))
+    const weekly = await item()
+    expect(weekly).toMatchObject({
+      key: "search_report:2026-W42:1",
+      since: "2026-10-12T00:00:00.000Z",
+      facts: { chip: "Rewrite that page's title" },
+    })
+    expect(weekly?.facts.report).toMatch(
+      /^Search this week: 100 appearances, 8 clicks, average position 5\. /
     )
-    // The sitemap error is ours to fix: an alert, not the owner's message.
+    // The sitemap error is ours to fix: an alert, not the owner's message,
+    // raised once however many beats read the report that week.
+    await item()
     const alerts = await rows(orgId, (db) =>
       db
         .select({ payload: events.payload })
         .from(events)
         .where(eq(events.type, "alert.raised"))
     )
-    expect(alerts.map((a) => (a.payload as { kind: string }).kind)).toContain(
-      "search.sitemap_errors"
-    )
+    expect(
+      alerts.filter(
+        (a) => (a.payload as { kind: string }).kind === "search.sitemap_errors"
+      )
+    ).toHaveLength(1)
 
     await rows(orgId, (db) =>
       db.update(searchConnections).set({ state: "needs_reauth" })
     )
-    expect((await weeklyFor(kit, orgId, now))?.message).toMatchObject({
-      button: { label: "Connect Google" },
-    })
+    expect((await item())?.facts).toMatchObject({ chip: "Connect Google" })
   })
 
-  it("knows the hour and the week", () => {
-    expect(isWeeklyHour("2026101207")).toBe(true)
-    expect(isWeeklyHour("2026101208")).toBe(false)
-    expect(isWeeklyHour("2026101307")).toBe(false)
+  it("knows the week", () => {
     expect(isoWeek(new Date("2027-01-01T00:00:00Z"))).toBe("2026-W53")
     expect(isoWeek(new Date("2026-01-01T00:00:00Z"))).toBe("2026-W01")
   })

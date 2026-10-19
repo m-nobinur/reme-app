@@ -1,10 +1,126 @@
+import { createOpenRouter } from "@openrouter/ai-sdk-provider"
 import type { Proactivity } from "@workspace/contracts"
+import models from "@workspace/facade/models/openrouter.models.json" with {
+  type: "json",
+}
+import { generateText } from "ai"
 
 /**
- * What the heartbeat's writer is told, and what code checks in its reply.
- * The model may decline with `[quiet]` and a reason; anything else is the
- * message, and it must keep to the limits below or it is not sent.
+ * The heartbeat's two model calls and what code checks in their answers.
+ * Jev, a decision model, says whether the new items are worth interrupting
+ * the owner; then the writer drafts one message, or declines with `[quiet]`
+ * and a reason. A message must keep to the limits below or it is not sent.
  */
+
+/** What one call cost, for its `cos.background_step` row. */
+export type Spent = {
+  model: string
+  cost_usd: number
+  usage: { input_tokens: number; output_tokens: number }
+  ms: number
+}
+
+export const GATE = {
+  model: "typesafe/jev-1.13",
+  question: "Is any of this worth interrupting the owner for now?",
+  /** The bar each dial sets: the lower it is, the more gets through. */
+  threshold: { low: 0.95, default: 0.9, high: 0.8 },
+  timeoutMs: 5_000,
+  /** Per Mtok of input, for when OpenRouter reports no cost. */
+  inputPrice: 0.042,
+} as const
+
+export const WRITER = {
+  model: "openai/gpt-6.1-sol",
+  /** Reasoning counts here too; low effort stays well under it. */
+  maxOutputTokens: 2_000,
+  timeoutMs: 60_000,
+} as const
+
+const billed = (metadata: unknown): number | null => {
+  const cost = (
+    metadata as { openrouter?: { usage?: { cost?: unknown } } } | undefined
+  )?.openrouter?.usage?.cost
+  return typeof cost === "number" && Number.isFinite(cost) && cost >= 0
+    ? cost
+    : null
+}
+
+type GateState = Parameters<
+  ReturnType<
+    ReturnType<typeof createOpenRouter>["evaluationModel"]
+  >["doEvaluate"]
+>[0]["state"]
+
+/** Jev's probability that `state` is worth interrupting the owner for. */
+export async function askGate(
+  apiKey: string,
+  state: GateState
+): Promise<{ probability: number; spent: Spent }> {
+  const started = Date.now()
+  const result = await createOpenRouter({ apiKey })
+    .evaluationModel(GATE.model)
+    .doEvaluate({
+      state,
+      questions: { worth_it: { type: "boolean", instructions: GATE.question } },
+      abortSignal: AbortSignal.timeout(GATE.timeoutMs),
+    })
+  const answer = result.answers.worth_it
+  const input = result.usage?.inputTokens ?? 0
+  return {
+    probability: answer.type === "boolean" ? answer.probability : 0,
+    spent: {
+      model: GATE.model,
+      cost_usd:
+        billed(result.providerMetadata) ?? (input * GATE.inputPrice) / 1e6,
+      usage: {
+        input_tokens: input,
+        output_tokens: result.usage?.outputTokens ?? 0,
+      },
+      ms: Date.now() - started,
+    },
+  }
+}
+
+/**
+ * One reply from the writer model at low effort, with no tools, through the
+ * same OpenRouter routing the CoS uses: capped at the table's price and kept
+ * off the hosts it excludes. `data` goes in as the user turn, as JSON.
+ */
+export async function writeText(
+  apiKey: string,
+  system: string,
+  data: unknown
+): Promise<{ text: string; spent: Spent }> {
+  const entry = models.find((m) => m.id === WRITER.model)
+  const routing = entry?.compat.openRouterRouting
+  if (!entry || !routing) throw new Error("heartbeat.writer_unpriced")
+  const started = Date.now()
+  const result = await generateText({
+    model: createOpenRouter({ apiKey }).chat(WRITER.model, {
+      usage: { include: true },
+      reasoning: { effort: "low" },
+      provider: { ...routing },
+    }),
+    system,
+    prompt: JSON.stringify(data),
+    maxOutputTokens: WRITER.maxOutputTokens,
+    abortSignal: AbortSignal.timeout(WRITER.timeoutMs),
+  })
+  const input = result.usage.inputTokens ?? 0
+  const output = result.usage.outputTokens ?? 0
+  return {
+    text: result.text,
+    spent: {
+      model: WRITER.model,
+      cost_usd:
+        billed(result.providerMetadata) ??
+        (input * entry.cost.input + output * entry.cost.output) / 1e6,
+      usage: { input_tokens: input, output_tokens: output },
+      ms: Date.now() - started,
+    },
+  }
+}
 
 /** Hard limits on a heartbeat message, checked in code. */
 export const LIMITS = { sentences: 3, chars: 450, questions: 1 } as const

@@ -768,18 +768,6 @@
       "search 2",
       "deliveries 1",
       "deliveries 2"
-    ],
-    "weekly search": [
-      "list orgs",
-      "sweep 1",
-      "sweep 2",
-      "search 1",
-      "search 2",
-      "weekly 1",
-      "say search-weekly-org-1-2026-W39",
-      "weekly 2",
-      "deliveries 1",
-      "deliveries 2"
     ]
   },
   "DomainWorkflow": {
