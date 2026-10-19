@@ -85,9 +85,21 @@ call inside the lock: the summary is written first and only appended under it. A
 change-if is narrowed to: a model call runs inside the lock, the approval turn's p95 passes 5 s,
 or a Hyperdrive connection-count alarm fires.
 
-**Redaction before every model call.** §14.2 promised it and nothing did it. A text-level scrub
-from `packages/facade` runs over every message the CoS, compaction and reflection send to a model,
-with the same secret shapes the flue tee uses.
+**Redaction before every model call.** §14.2 promised it and nothing did it. The flue tee's
+`scrub` in `packages/facade` is exported, so there is one scrub and one list of secret shapes, and
+the api imports it from `@workspace/facade/tee`: the package root would pull the whole facade
+into the api Worker, about 755 KB minified against 230 bytes. The CoS runs it in `prepareStep`,
+which every model call passes through, over every string in the messages except provider data,
+and sends the model the redacted list. Both sides of the integrity check are hashed redacted:
+the SDK's messages and the messages derived from the log. Redacting inside `deriveCosMessages`
+instead was rejected: the SDK carries its own copy of each step's output into the next call, so
+the two sides would differ on any step that returned a secret-shaped string, and the derivation
+would stop being a plain function of the log. Scrub is idempotent, so a list the SDK carries over
+from a redacted step hashes the same again. The hash, and the `cos.call` that logs it, now prove
+the model saw the redaction of the derived log, which is what it was sent. Two lists that differ
+only inside a secret-shaped string hash alike; the model sees the same text either way. The log
+keeps the words as they were said and returned: redaction is at the model boundary, not before
+append. Compaction and reflection must call the same scrub when they send a transcript.
 
 ## What was rejected
 
