@@ -57,7 +57,7 @@ export const JobRun = z.strictObject({
 export const Delivery = z.strictObject({
   org_id: Uuid,
   key: z.string().min(1).max(200),
-  channel: z.enum(["in_app", "email"]),
+  channel: z.enum(["in_app", "email", "push"]),
   state: z.enum([
     "pending",
     "sending",
@@ -71,6 +71,32 @@ export const Delivery = z.strictObject({
   error: z.string().max(500).nullable(),
   lease_until: Timestamp.nullable(),
   created_at: Timestamp,
+})
+
+/**
+ * `POST /push/subscriptions`: what a browser's `PushSubscription.toJSON()`
+ * holds, less the expiry. A push service's endpoint is an https address.
+ */
+export const PushSubscribeRequest = z.strictObject({
+  endpoint: z
+    .string()
+    .max(2000)
+    .regex(/^https:\/\/[^\s]+$/),
+  keys: z.strictObject({
+    p256dh: z.string().min(1).max(200),
+    auth: z.string().min(1).max(200),
+  }),
+})
+
+/** The subscription's id, which `DELETE /push/subscriptions/{id}` takes. */
+export const PushSubscribed = z.strictObject({ id: Uuid })
+
+/**
+ * `GET /push/config`: the VAPID public key a browser subscribes with, or null
+ * where push is not set up and the settings page offers nothing.
+ */
+export const PushConfig = z.strictObject({
+  public_key: z.string().min(1).max(200).nullable(),
 })
 
 /** Wall-clock time of day in the org's zone, as `HH:MM`. */
@@ -99,5 +125,8 @@ export type JobKind = z.infer<typeof JobKind>
 export type ScheduledJob = z.infer<typeof ScheduledJob>
 export type JobRun = z.infer<typeof JobRun>
 export type Delivery = z.infer<typeof Delivery>
+export type PushSubscribeRequest = z.infer<typeof PushSubscribeRequest>
+export type PushSubscribed = z.infer<typeof PushSubscribed>
+export type PushConfig = z.infer<typeof PushConfig>
 export type Proactivity = z.infer<typeof Proactivity>
 export type OrgSchedule = z.infer<typeof OrgSchedule>

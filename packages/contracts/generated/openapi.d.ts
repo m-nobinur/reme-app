@@ -6724,7 +6724,7 @@ export interface components {
       org_id: string
       key: string
       /** @enum {string} */
-      channel: "in_app" | "email"
+      channel: "in_app" | "email" | "push"
       /** @enum {string} */
       state:
         | "pending"
@@ -7945,6 +7945,20 @@ export interface components {
       metrics: {
         [key: string]: number
       }
+    }
+    PushConfig: {
+      public_key: string | null
+    }
+    PushSubscribeRequest: {
+      endpoint: string
+      keys: {
+        p256dh: string
+        auth: string
+      }
+    }
+    PushSubscribed: {
+      /** Format: uuid */
+      id: string
     }
     QuoteField: {
       key: string

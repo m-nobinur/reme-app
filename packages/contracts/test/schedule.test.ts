@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest"
-import { Delivery, JobRun, OrgSchedule, ScheduledJob } from "../src/schedule.ts"
+import {
+  Delivery,
+  JobRun,
+  OrgSchedule,
+  PushConfig,
+  PushSubscribeRequest,
+  ScheduledJob,
+} from "../src/schedule.ts"
 import { ACCEPTED, REFUSED, verdict } from "./json-schema.ts"
 import { samples } from "./samples.ts"
 
@@ -59,7 +66,7 @@ describe("JobRun", () => {
 describe("Delivery", () => {
   const delivery = samples.Delivery as Record<string, unknown>
 
-  it.each(["in_app", "email"])("accepts the %s channel", (channel) => {
+  it.each(["in_app", "email", "push"])("accepts the %s channel", (channel) => {
     expect(verdict("Delivery", Delivery, { ...delivery, channel })).toEqual(
       ACCEPTED
     )
@@ -75,13 +82,47 @@ describe("Delivery", () => {
   )
 
   it.each([
-    ["a push channel, which comes later", { ...delivery, channel: "push" }],
+    ["a web channel", { ...delivery, channel: "web" }],
     ["an empty key", { ...delivery, key: "" }],
     ["another state", { ...delivery, state: "queued" }],
     ["no attempt count", { ...delivery, attempts: undefined }],
     ["a fractional attempt count", { ...delivery, attempts: 1.5 }],
   ])("refuses %s", (_name, value) => {
     expect(verdict("Delivery", Delivery, value)).toEqual(REFUSED)
+  })
+})
+
+describe("PushSubscribeRequest", () => {
+  const request = samples.PushSubscribeRequest as Record<string, unknown>
+
+  it("accepts a browser's subscription", () => {
+    expect(
+      verdict("PushSubscribeRequest", PushSubscribeRequest, request)
+    ).toEqual(ACCEPTED)
+  })
+
+  it.each([
+    [
+      "an http endpoint",
+      { ...request, endpoint: "http://push.example.test/a" },
+    ],
+    ["no endpoint", { ...request, endpoint: undefined }],
+    [
+      "an endpoint over 2000 characters",
+      { ...request, endpoint: `https://p.test/${"a".repeat(2000)}` },
+    ],
+    ["no auth secret", { ...request, keys: { p256dh: "k" } }],
+    ["a stray field", { ...request, expirationTime: null }],
+  ])("refuses %s", (_name, value) => {
+    expect(
+      verdict("PushSubscribeRequest", PushSubscribeRequest, value)
+    ).toEqual(REFUSED)
+  })
+
+  it("lets the config carry no key", () => {
+    expect(verdict("PushConfig", PushConfig, { public_key: null })).toEqual(
+      ACCEPTED
+    )
   })
 })
 

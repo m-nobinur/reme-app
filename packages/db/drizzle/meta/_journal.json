@@ -169,6 +169,13 @@
       "when": 1792403464553,
       "tag": "0023_delivery_claim",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1792403961803,
+      "tag": "0024_push_subscriptions",
+      "breakpoints": true
     }
   ]
 }
