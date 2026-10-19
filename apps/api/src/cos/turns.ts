@@ -6,6 +6,7 @@ import {
   CosPrefix,
   CosStep,
   CosToolResult,
+  CosToolStarted,
   CosToolUnknown,
   CosTurn,
   type TaintLabel,
@@ -79,8 +80,8 @@ export class NoSuchSession extends Error {
  * An event a turn writes after its first transaction. Taint is the
  * caller's to say from what the payload carries. A step is the model's
  * output, so it is always `inferred`, plus the labels of the tool outputs
- * it carries; `cos.call`, `cos.turn`, `cos.approval` and `cos.tool_unknown`
- * carry no text and no label.
+ * it carries; `cos.call`, `cos.turn`, `cos.approval` and a call's marks,
+ * `cos.tool_started` and `cos.tool_unknown`, carry no text and no label.
  */
 type TurnEvent =
   | { type: "cos.message"; payload: CosMessage; taint: TaintLabel[] }
@@ -89,6 +90,7 @@ type TurnEvent =
   | { type: "cos.call"; payload: CosCall }
   | { type: "cos.turn"; payload: CosTurn }
   | { type: "cos.approval"; payload: CosApproval }
+  | { type: "cos.tool_started"; payload: CosToolStarted }
   | { type: "cos.tool_unknown"; payload: CosToolUnknown }
 
 const SCHEMAS = {
@@ -98,8 +100,15 @@ const SCHEMAS = {
   "cos.call": CosCall,
   "cos.turn": CosTurn,
   "cos.approval": CosApproval,
+  "cos.tool_started": CosToolStarted,
   "cos.tool_unknown": CosToolUnknown,
 } as const
+
+/** The writes whose payload names a call and its approval, not a turn. */
+const CALL_MARKS: readonly TurnEvent["type"][] = [
+  "cos.tool_started",
+  "cos.tool_unknown",
+]
 
 type Checked = {
   type: TurnEvent["type"]
@@ -109,7 +118,7 @@ type Checked = {
 
 /**
  * The whole batch checked before anything is written: each payload against
- * its contract and naming `turnId` (a `cos.tool_unknown` names no turn), a
+ * its contract and naming `turnId` (a call's marks name no turn), a
  * step holding only the model's messages, at most one result per call, and
  * nothing after a `cos.turn`.
  */
@@ -119,7 +128,7 @@ function checked(turnId: string, writes: TurnEvent[]): Checked[] {
     const payload: Record<string, unknown> = SCHEMAS[write.type].parse(
       write.payload
     )
-    if (write.type !== "cos.tool_unknown" && payload.turn_id !== turnId) {
+    if (!CALL_MARKS.includes(write.type) && payload.turn_id !== turnId) {
       throw new Error(`cos.turns: a ${write.type} for another turn`)
     }
     if (write.type === "cos.turn" && i < writes.length - 1) {
@@ -477,6 +486,27 @@ export async function beginTurn(
       throw new SessionBusy(turn.sessionId)
     }
   }
+}
+
+/**
+ * Whether the session logged `call` as started at least `afterMs` ago, by
+ * the database's clock. `runTool` asks only for a call with no result.
+ */
+export async function startedBefore(
+  db: OrgScopedDb,
+  sessionId: string,
+  call: CosToolStarted,
+  afterMs: number
+): Promise<boolean> {
+  const [row] = await db.execute<{ stale: boolean }>(sql`
+    select exists (
+      select 1 from ${events}
+      where session_id = ${sessionId} and type = 'cos.tool_started'
+        and payload->>'tool_call_id' = ${call.tool_call_id}
+        and payload->>'approval_id' = ${call.approval_id}
+        and recorded_at + make_interval(secs => ${afterMs / 1000}) <= now()
+    ) as stale`)
+  return row?.stale === true
 }
 
 /** The `cos.approval` rows the session logged for `approvalIds`. */

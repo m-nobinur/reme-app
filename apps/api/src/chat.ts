@@ -3,6 +3,7 @@ import {
   ChatRequest,
   type ChatResult,
   CosChangeRequest,
+  type CosToolName,
   type CosTurn,
   ErrorEnvelope,
   type FactRecord,
@@ -37,6 +38,7 @@ import {
   type AgentTurn,
   activeTools,
   binds,
+  boundInput,
   caughtUp,
   contextOf,
   cosPrefix,
@@ -1116,7 +1118,12 @@ async function openCos(
   for (const part of yeses) {
     const approvalId = part.approval?.id ?? ""
     const card = cards.find((c) => c.approval_id === approvalId)
-    if (!(await binds(card, part.toolCallId ?? "", part.input, now))) {
+    const input = await boundInput(
+      db,
+      part.type.slice("tool-".length) as CosToolName,
+      part.input
+    )
+    if (!(await binds(card, part.toolCallId ?? "", input, now))) {
       lapsed.add(approvalId)
     }
   }

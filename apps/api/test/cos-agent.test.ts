@@ -1930,9 +1930,9 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
   })
 
   /** A conversation whose tail is a request_change card, and that card. */
-  const changeCard = async () => {
-    const id = await conversation(me)
-    await turn(me, typed(id, "Add a Saturday slot."), {
+  const changeCard = async (who: Owner = me) => {
+    const id = await conversation(who)
+    await turn(who, typed(id, "Add a Saturday slot."), {
       model: scripted(
         calls({
           id: "call_rc",
@@ -1941,7 +1941,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
         })
       ).model,
     })
-    const tail = await tailOf(me, id)
+    const tail = await tailOf(who, id)
     const [call] = waiting(tail)
     if (!call) throw new Error("no card")
     return { id, tail, call }
@@ -2032,17 +2032,107 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     expect(String(card?.errorText)).toMatch(new RegExp(`^${TOOL_UNKNOWN}`))
   })
 
-  it("logs each card as shown: its call, the hash of its input and a day to answer", async () => {
+  it("logs each card as shown: its call, the hash of its input and the live site version, and a day to answer", async () => {
     const { id, call } = await changeCard()
+    const [live] = await admin<{ version: number }[]>`
+      select r.version from deployments d join site_revisions r on r.id = d.revision_id
+      where d.org_id = ${me.orgId} order by d.config_version desc limit 1`
     const [card] = (await logOf(id)).filter((e) => e.type === "cos.approval")
     expect(card?.payload).toMatchObject({
       approval_id: call.approval.id,
       tool_call_id: call.toolCallId,
-      input_sha256: await sha256({ text: "Add a Saturday slot." }),
+      input_sha256: await sha256({
+        input: { text: "Add a Saturday slot." },
+        site_version: live?.version ?? null,
+      }),
     })
     const left = Date.parse(card?.payload.expires_at) - Date.now()
     expect(left).toBeGreaterThan(APPROVAL_TTL_MS - 60_000)
     expect(left).toBeLessThanOrEqual(APPROVAL_TTL_MS)
+  })
+
+  it("refuses a yes on a change card once the site was published again since it was shown", async () => {
+    const who = await owner(kit, url as string, "cos-version")
+    const { id, tail, call } = await changeCard(who)
+    const s = seed(kit, who)
+    const build = await s.assignment("published")
+    const revision = await s.revision(build, 2)
+    await s.deployment(revision, await s.approval(build, revision, 72, true))
+    const stub = orchestrator()
+    const done = await turn(
+      who,
+      yes(id, tail.id, call.approval.id),
+      { model: scripted(said("The site changed since.")).model },
+      stub
+    )
+    expect(done.response.status, done.text).toBe(200)
+    expect(stub.calls).toHaveLength(0)
+    const part = (await tailOf(who, id)).parts.find(
+      (p) => "toolCallId" in p && p.toolCallId === call.toolCallId
+    ) as { state: string; errorText: string }
+    expect(part.errorText.startsWith(`${APPROVAL_EXPIRED}:`)).toBe(true)
+  })
+
+  it("runs the tool once when the same card is approved twice at once", async () => {
+    const { id, tail, call } = await changeCard()
+    const stub = orchestrator()
+    const both = await Promise.all(
+      [1, 2].map(() =>
+        turn(
+          me,
+          yes(id, tail.id, call.approval.id),
+          { model: scripted(said("Started.")).model },
+          stub
+        )
+      )
+    )
+    expect(both.map((t) => t.response.status).sort()).toEqual([200, 409])
+    expect(stub.calls).toHaveLength(1)
+    expect(
+      (await logOf(id)).filter((e) => e.type === "cos.tool_result")
+    ).toHaveLength(1)
+  })
+
+  it("treats an approved call started five minutes ago with no result as unknown, never runs it, and the model asks", async () => {
+    const { id, tail, call } = await changeCard()
+    // The Worker dies inside the tool, after the start was logged.
+    const dying = send(
+      me,
+      yes(id, tail.id, call.approval.id),
+      { model: scripted(said("unused")).model },
+      stubOrchestrator(async () => {
+        faults.dead = true
+        throw new Died("killed mid-call")
+      })
+    )
+    await expect(dying).rejects.toBeInstanceOf(Died)
+    faults.dead = false
+    expect(
+      (await logOf(id)).filter((e) => e.type === "cos.tool_started")
+    ).toHaveLength(1)
+    await admin`
+      update events set recorded_at = now() - interval '6 minutes'
+      where session_id = ${id} and type = 'cos.tool_started'`
+    await admin`
+      update events set recorded_at = now() - make_interval(secs => ${(LIMITS.totalMs + GRACE_MS) / 1000 + 1})
+      where session_id = ${id} and type = 'cos.context'`
+    const stub = orchestrator()
+    const { model, sent } = scripted(said("I could not confirm it."))
+    const next = await turn(
+      me,
+      typed(id, "Did it start?", "ask"),
+      { model },
+      stub
+    )
+    expect(next.response.status, next.text).toBe(200)
+    expect(stub.calls).toHaveLength(0)
+    const log = await logOf(id)
+    expect(
+      log.filter((e) => e.type === "cos.tool_unknown").map((e) => e.payload)
+    ).toEqual([
+      { tool_call_id: call.toolCallId, approval_id: call.approval.id },
+    ])
+    expect(JSON.stringify(sent[0]?.prompt)).toContain(TOOL_UNKNOWN)
   })
 
   it("refuses a yes on a card that expired: nothing runs, and the card and the model say it expired", async () => {

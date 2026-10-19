@@ -19,7 +19,15 @@ import {
   TOOL_UNKNOWN,
   type ToneId,
 } from "@workspace/contracts"
-import { failureCode, type OrgScopedDb, type Tenancy } from "@workspace/db"
+import {
+  deployments,
+  eq,
+  failureCode,
+  type OrgScopedDb,
+  siteRevisions,
+  sql,
+  type Tenancy,
+} from "@workspace/db"
 import models from "@workspace/facade/models/openrouter.models.json" with {
   type: "json",
 }
@@ -63,7 +71,7 @@ import {
   type ToolContext,
   ToolFailed,
 } from "./tools.ts"
-import { type Turn, TurnClosed, writeAsTurn } from "./turns.ts"
+import { startedBefore, type Turn, TurnClosed, writeAsTurn } from "./turns.ts"
 
 /**
  * The Chief of Staff as an AI SDK `ToolLoopAgent` (ADR-034), built per turn
@@ -655,12 +663,36 @@ const approvalIn = (rows: readonly SessionEvent[], approvalId: string) =>
   )?.payload as CosApproval | undefined
 
 /** Whether `rows` hold a `cos.tool_unknown` for `toolCallId`. */
-const unknownIn = (rows: readonly SessionEvent[], toolCallId: string) =>
+const unknownIn = (rows: readonly SessionEvent[], call: CosToolUnknown) =>
   rows.some(
     (e) =>
       e.type === "cos.tool_unknown" &&
-      (e.payload as CosToolUnknown).tool_call_id === toolCallId
+      (e.payload as CosToolUnknown).tool_call_id === call.tool_call_id &&
+      (e.payload as CosToolUnknown).approval_id === call.approval_id
   )
+
+/** How long a started act call may go without a result before its outcome counts as unknown. */
+export const STARTED_MS = 5 * 60_000
+
+/**
+ * The input a card's hash covers. `request_change` acts on the live site,
+ * so its live version is bound too, and a yes given after a publish is
+ * refused. No other tool acts on a versioned target.
+ */
+export async function boundInput(
+  db: OrgScopedDb,
+  name: CosToolName,
+  input: unknown
+): Promise<unknown> {
+  if (name !== "request_change") return input
+  const [live] = await db
+    .select({ version: siteRevisions.version })
+    .from(deployments)
+    .innerJoin(siteRevisions, eq(siteRevisions.id, deployments.revisionId))
+    .orderBy(sql`${deployments.configVersion} desc`)
+    .limit(1)
+  return { input, site_version: live?.version ?? null }
+}
 
 /**
  * Whether a yes on the card `approval` logged still runs this call at
@@ -707,18 +739,39 @@ export async function runTool(
   if (ACT_TOOLS.includes(name) && !key) {
     throw new Error(`cos.agent: ${name} ran without an approval`)
   }
-  if (key && unknownIn(run.log, toolCallId)) throw new NotRun("unknown")
-  if (
-    approvalId &&
-    !UNAPPROVED.includes(name) &&
-    !(await binds(
-      approvalIn(run.log, approvalId),
-      toolCallId,
-      input,
-      Date.now()
-    ))
-  ) {
-    throw new NotRun("expired")
+  if (key) {
+    const verdict = await run.kit.withOrg(
+      { orgId: run.turn.orgId },
+      async (db) => {
+        const log = await caughtUp(db, run)
+        const call = { tool_call_id: toolCallId, approval_id: key }
+        if (unknownIn(log, call)) return "unknown" as const
+        // A start with no result this long ago is a Worker killed mid-call.
+        if (await startedBefore(db, run.turn.sessionId, call, STARTED_MS)) {
+          await writeAsTurn(db, run.turn, [
+            { type: "cos.tool_unknown", payload: call },
+          ])
+          return "unknown" as const
+        }
+        if (
+          approvalId &&
+          !UNAPPROVED.includes(name) &&
+          !(await binds(
+            approvalIn(log, approvalId),
+            toolCallId,
+            await boundInput(db, name, input),
+            Date.now()
+          ))
+        ) {
+          return "expired" as const
+        }
+        await writeAsTurn(db, run.turn, [
+          { type: "cos.tool_started", payload: call },
+        ])
+        return null
+      }
+    )
+    if (verdict) throw new NotRun(verdict)
   }
   let output: unknown
   try {
@@ -1040,28 +1093,35 @@ export function cosAgent(
       // Each card as it was shown, written with its step, so a step logged
       // always has its cards' records.
       const expiresAt = new Date(Date.now() + APPROVAL_TTL_MS).toISOString()
-      const approvals = await Promise.all(
-        step.content.flatMap((part) =>
-          part.type === "tool-approval-request"
-            ? [
-                (async () => ({
-                  type: "cos.approval" as const,
-                  payload: {
-                    turn_id: run.turn.turnId,
-                    approval_id: part.approvalId,
-                    tool_call_id: part.toolCall.toolCallId,
-                    input_sha256: await sha256(part.toolCall.input),
-                    expires_at: expiresAt,
-                  },
-                }))(),
-              ]
-            : []
+      const cards = (db: OrgScopedDb) =>
+        Promise.all(
+          step.content.flatMap((part) =>
+            part.type === "tool-approval-request"
+              ? [
+                  (async () => ({
+                    type: "cos.approval" as const,
+                    payload: {
+                      turn_id: run.turn.turnId,
+                      approval_id: part.approvalId,
+                      tool_call_id: part.toolCall.toolCallId,
+                      input_sha256: await sha256(
+                        await boundInput(
+                          db,
+                          part.toolCall.toolName as CosToolName,
+                          part.toolCall.input
+                        )
+                      ),
+                      expires_at: expiresAt,
+                    },
+                  }))(),
+                ]
+              : []
+          )
         )
-      )
       // The SDK swallows an error here, so a failed write shows up as a
       // mismatch at the next `prepareStep` rather than as a gap.
       try {
-        await run.kit.withOrg({ orgId: run.turn.orgId }, (db) =>
+        await run.kit.withOrg({ orgId: run.turn.orgId }, async (db) =>
           writeAsTurn(db, run.turn, [
             {
               type: "cos.step",
@@ -1086,7 +1146,7 @@ export function cosAgent(
                   : []),
               ],
             },
-            ...approvals,
+            ...(await cards(db)),
           ])
         )
       } catch (error) {
