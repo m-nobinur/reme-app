@@ -406,8 +406,30 @@ const AlertItem = z.strictObject({
 })
 
 /**
- * §7.3: exactly four kinds. The copy is the UI's; the wire carries facts
- * about the item, so a question and an approval embed the request whole.
+ * A reminder someone wrote down: the owner through `POST /reminders`, or the
+ * Chief of Staff through `create_reminder`. The route sets `source`, so it is
+ * never on a request. `conversation_id` is the conversation an assistant
+ * reminder came from, and null for the owner's own.
+ */
+export const Reminder = z.strictObject({
+  id: Uuid,
+  /**
+   * The owner's text, or the CoS's restatement of it. If it ever reaches a
+   * prompt, it goes in as quoted data, never as instructions.
+   */
+  title: Text(200),
+  due_at: Timestamp.nullable(),
+  done_at: Timestamp.nullable(),
+  source: z.enum(["owner", "assistant"]),
+  conversation_id: Uuid.nullable(),
+  created_at: Timestamp,
+  updated_at: Timestamp,
+})
+
+/**
+ * §7.3 names four kinds, and a reminder that came due is the fifth. The copy
+ * is the UI's; the wire carries facts about the item, so a question, an
+ * approval and a reminder embed the request or row whole.
  */
 export const AttentionItem = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("question"), request: InformationRequest }),
@@ -432,32 +454,12 @@ export const AttentionItem = z.discriminatedUnion("kind", [
   }),
   ReportItem,
   AlertItem,
+  z.strictObject({ kind: z.literal("reminder"), reminder: Reminder }),
 ])
 
 /** `GET /activity`: reports and alerts from the last 30 days. */
 export const ActivityFeed = z.strictObject({
   items: z.array(z.discriminatedUnion("kind", [ReportItem, AlertItem])).max(50),
-})
-
-/**
- * A reminder someone wrote down: the owner through `POST /reminders`, or the
- * Chief of Staff through `create_reminder`. The route sets `source`, so it is
- * never on a request. `conversation_id` is the conversation an assistant
- * reminder came from, and null for the owner's own.
- */
-export const Reminder = z.strictObject({
-  id: Uuid,
-  /**
-   * The owner's text, or the CoS's restatement of it. If it ever reaches a
-   * prompt, it goes in as quoted data, never as instructions.
-   */
-  title: Text(200),
-  due_at: Timestamp.nullable(),
-  done_at: Timestamp.nullable(),
-  source: z.enum(["owner", "assistant"]),
-  conversation_id: Uuid.nullable(),
-  created_at: Timestamp,
-  updated_at: Timestamp,
 })
 
 /**

@@ -412,7 +412,7 @@ const ChatResult = z.discriminatedUnion("kind", [
  * An IANA zone name as the browser's `Intl` reports it, such as
  * `Europe/London`. The shape only: the api refuses a name `Intl` rejects.
  */
-const TimeZone = z.string().regex(/^[A-Za-z][A-Za-z0-9_+/-]{0,63}$/)
+export const TimeZone = z.string().regex(/^[A-Za-z][A-Za-z0-9_+/-]{0,63}$/)
 
 /**
  * `POST /chat`: one turn of one conversation. The client sends only what
