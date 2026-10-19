@@ -31,6 +31,9 @@ import {
   type Directory,
   readOrg,
   readStaffDirectory,
+  SIGNUP_LEASE_S,
+  SIGNUP_WAIT_MS,
+  SignupBusy,
 } from "../src/org.ts"
 
 /**
@@ -618,4 +621,131 @@ describe.skipIf(!url)("the org writer, on a live connection", () => {
       events: 0,
     })
   })
+})
+
+describe.skipIf(!url)("one signup at a time, on a live connection", () => {
+  // Two connections, the pool the advisory lock drained (PR #296): a claim
+  // that held one across the WorkOS calls would starve the second signup.
+  const kit = tenancy(url as string, { max: 2 })
+  const admin = postgres(url as string, { max: 1 })
+  const written: string[] = []
+
+  // The probe people outlive a run (`users` has no delete policy), and so
+  // would a claim a killed run left on one.
+  beforeAll(async () => {
+    await admin`update users set signup_claimed_at = null
+      where workos_user_id like 'user_probe_api_claim_%'`
+  })
+
+  afterAll(async () => {
+    if (written.length > 0) {
+      await kit.withOrg({ orgId: written[0] as string }, async (db) => {
+        await db.execute(sql`reset role`)
+        await clearOrgs(db as unknown as Tx, written, [])
+      })
+    }
+    await admin.end()
+    await kit.close()
+  }, 60_000)
+
+  /**
+   * WorkOS as the writer case above has it, per person: a new organization
+   * on every create, and memberships listed from what was created. The
+   * create takes a moment, so a second signup arrives while the first is
+   * between reading no membership and making one.
+   */
+  const workosFor = (tag: string, failures = 0) => {
+    let calls = 0
+    const created: { id: string; organizationId: string }[] = []
+    const directory: Directory = {
+      createOrganization: async () => {
+        calls += 1
+        if (calls <= failures) throw new Error("WorkOS refused")
+        await new Promise((resolve) => setTimeout(resolve, 300))
+        return { id: `org_probe_claim_${tag}_${calls}` }
+      },
+      listOrganizationMemberships: async () => ({ data: created.slice(0, 1) }),
+      createOrganizationMembership: async ({ organizationId }) => {
+        const membership = {
+          id: `om_probe_claim_${tag}_${created.length + 1}`,
+          organizationId,
+        }
+        created.push(membership)
+        return membership
+      },
+    }
+    return { directory, calls: () => calls }
+  }
+
+  const signup = (tag: string) => ({
+    name: `Claim ${tag} Cleaning Co. (fixture)`,
+    idempotencyKey: `probe-claim-${tag}`,
+    workosUserId: `user_probe_api_claim_${tag}`,
+    email: `probe-${tag}@api-claim.invalid`,
+    displayName: "Probe Owner",
+  })
+
+  const claimOf = async (workosUserId: string) => {
+    const [row] = await admin<{ at: Date | null }[]>`
+      select signup_claimed_at as at from users
+      where workos_user_id = ${workosUserId}`
+    return row?.at ?? null
+  }
+
+  it("makes one org when the same person signs up twice at once", async () => {
+    const input = signup("race")
+    const { directory, calls } = workosFor("race")
+    const [first, second] = await Promise.all([
+      createOrg(kit, directory, input),
+      createOrg(kit, directory, input),
+    ])
+    written.push(first.org_id)
+    expect(second.org_id).toBe(first.org_id)
+    expect(calls()).toBe(1)
+    expect(await claimOf(input.workosUserId)).toBeNull()
+  }, 30_000)
+
+  it("lets a retry through after the first attempt failed", async () => {
+    const input = signup("retry")
+    const { directory, calls } = workosFor("retry", 1)
+    await expect(createOrg(kit, directory, input)).rejects.toThrow(
+      "WorkOS refused"
+    )
+    expect(await claimOf(input.workosUserId)).toBeNull()
+    const org = await createOrg(kit, directory, input)
+    written.push(org.org_id)
+    expect(calls()).toBe(2)
+  }, 30_000)
+
+  it("refuses as busy, within the wait, while a live claim is held", async () => {
+    const input = signup("busy")
+    const { directory, calls } = workosFor("busy")
+    written.push((await createOrg(kit, directory, input)).org_id)
+    // An attempt that claimed a moment ago and is still running.
+    await admin`update users set signup_claimed_at = now()
+      where workos_user_id = ${input.workosUserId}`
+    const started = Date.now()
+    await expect(createOrg(kit, directory, input)).rejects.toBeInstanceOf(
+      SignupBusy
+    )
+    const waited = Date.now() - started
+    expect(waited).toBeGreaterThanOrEqual(SIGNUP_WAIT_MS)
+    expect(waited).toBeLessThan(SIGNUP_WAIT_MS + 2_000)
+    // The running attempt's claim is left alone.
+    expect(await claimOf(input.workosUserId)).not.toBeNull()
+    expect(calls()).toBe(1)
+  }, 30_000)
+
+  it("takes over a claim older than the lease", async () => {
+    const input = signup("lapsed")
+    const { directory } = workosFor("lapsed")
+    const org = await createOrg(kit, directory, input)
+    written.push(org.org_id)
+    // An attempt that died holding the claim.
+    await admin`update users
+      set signup_claimed_at = now() - make_interval(secs => ${SIGNUP_LEASE_S + 1})
+      where workos_user_id = ${input.workosUserId}`
+    expect((await createOrg(kit, directory, input)).org_id).toBe(org.org_id)
+    expect(await claimOf(input.workosUserId)).toBeNull()
+  }, 30_000)
 })

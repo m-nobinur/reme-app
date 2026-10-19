@@ -1231,8 +1231,8 @@ describe("the queue handler", () => {
     const consumed = [
       ...config.matchAll(/\{\s*"queue": "([^"]+)",\s*"max_retries"/g),
     ].map((m) => m[1])
-    expect(consumed.toSorted()).toEqual(
-      [...JOBS_QUEUES, ...DELIVERIES_QUEUES].toSorted()
+    expect([...consumed].sort()).toEqual(
+      [...JOBS_QUEUES, ...DELIVERIES_QUEUES].sort()
     )
   })
 })

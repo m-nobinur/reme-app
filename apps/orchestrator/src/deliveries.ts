@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import type { ServerMessage } from "@workspace/contracts"
+import { replyToken, type ServerMessage } from "@workspace/contracts"
 import {
   deliveries,
   eq,
@@ -39,7 +39,13 @@ export type DeliveryMessage = { orgId: string; key: string } & (
       /** A reminder's own conversation; the org's newest when absent. */
       conversationId?: string
     }
-  | { channel: "email"; subject: string; text: string }
+  | {
+      channel: "email"
+      subject: string
+      text: string
+      /** The conversation a reply goes to; with none, the email takes no reply. */
+      conversationId?: string
+    }
 )
 
 type SendEnv = { DELIVERIES: Queue<DeliveryMessage> }
@@ -47,6 +53,9 @@ type BatchEnv = {
   HYPERDRIVE: Hyperdrive
   OWNER_MAIL: SendEmail
   APP_ORIGIN: string
+  /** Signs the Reply-To token; unset, an email goes without one. */
+  REPLY_TOKEN_KEY?: string
+  REPLY_DOMAIN: string
 }
 
 const insertRow = (db: OrgScopedDb, { orgId, key, channel }: DeliveryMessage) =>
@@ -203,7 +212,14 @@ const suppressionKey = (address: string) =>
 async function sendEmail(
   kit: Tenancy,
   env: BatchEnv,
-  { orgId, subject, text }: DeliveryMessage & { channel: "email" }
+  {
+    orgId,
+    subject,
+    text,
+    conversationId,
+  }: DeliveryMessage & {
+    channel: "email"
+  }
 ): Promise<Outcome> {
   const [owner] = await kit.withOrg({ orgId }, (db) =>
     db
@@ -229,10 +245,15 @@ async function sendEmail(
   )
   if (suppressed) return { state: "suppressed" }
   const link = `${env.APP_ORIGIN}/app`
+  const token =
+    conversationId && env.REPLY_TOKEN_KEY
+      ? await replyToken(env.REPLY_TOKEN_KEY, orgId, conversationId)
+      : null
   try {
     await env.OWNER_MAIL.send({
       from: OWNER_FROM,
       to,
+      ...(token && { replyTo: `reply+${token}@${env.REPLY_DOMAIN}` }),
       subject,
       text: `${text}\n\nOpen Reme: ${link}`,
       html: `${text

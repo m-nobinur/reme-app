@@ -3,6 +3,7 @@ import {
   ChatRequest,
   type ChatResult,
   CosChangeRequest,
+  type CosToolName,
   type CosTurn,
   ErrorEnvelope,
   type FactRecord,
@@ -38,21 +39,27 @@ import { holdsNul, notFound } from "./conversations.ts"
 import {
   type AgentTurn,
   activeTools,
+  binds,
+  boundInput,
+  caughtUp,
   contextOf,
   cosPrefix,
   knownZone,
   LIMITS,
   messageTaint,
+  NotRun,
   newRunState,
   openrouterModel,
   personaOf,
   priceOf,
   reservation,
   routeOf,
+  toolErrorText,
 } from "./cos/agent.ts"
 import {
   CONTEXT_POLICY,
   deriveCosMessages,
+  type LoggedEvent,
   readSession,
   sha256,
 } from "./cos/history.ts"
@@ -66,10 +73,11 @@ import {
   streamTurn,
   writtenAt,
 } from "./cos/run.ts"
-import { getWorkspace, startOwnerChange, type ToolFailed } from "./cos/tools.ts"
+import { loadWorkspace, startOwnerChange } from "./cos/tools.ts"
 import {
   beginTurn,
   closeLapsedTurn,
+  loggedApprovals,
   loggedMessage,
   NoSuchSession,
   type Opening,
@@ -644,24 +652,26 @@ export async function chat(
   if (browser && !knownZone(browser)) return invalid([{ path: ["time_zone"] }])
   const scope = { orgId: owner.orgId, workosUserId: owner.session.workosUserId }
   const tools = { env, kit, owner }
-  const [ahead, stored] = await kit.withOrg(
-    scope,
-    async (db) =>
-      [
-        await lookAhead(db, id),
-        await rememberZone(db, owner.orgId, browser),
-      ] as const
-  )
+  // Read before the turn's lock is taken, beside `lookAhead`; the CoS's
+  // context is built from it. An onboarding turn reads it and drops it.
+  const loading = loadWorkspace(tools)
+  loading.catch(() => undefined)
+  const [[ahead, stored], prefix] = await Promise.all([
+    kit.withOrg(
+      scope,
+      async (db) =>
+        [
+          await lookAhead(db, id),
+          await rememberZone(db, owner.orgId, browser),
+        ] as const
+    ),
+    cosPrefix(),
+  ])
   // The org's zone: the browser's, now stored, or the stored one when the
   // request carries none (ADR-034's change-if).
   const zone = stored.zone
   if (stored.next) await lowerNextDue(env.SCHEDULE, stored.next)
-  // Read before the turn's lock is taken; the CoS's context is built from
-  // it. An onboarding turn never reads it.
-  const [workspace, prefix] = await Promise.all([
-    ahead.onboarding ? null : getWorkspace(tools, {}),
-    cosPrefix(),
-  ])
+  const loaded = ahead.onboarding ? null : await loading
   const gateOf =
     deps.jev !== undefined
       ? deps.jev
@@ -813,13 +823,14 @@ export async function chat(
       const opening = await openCos(db, held, id, parsed.data, log)
       if (opening instanceof Response) return opening
       const cosTurn: Turn = { ...session, turnId: newUlid() }
+      const { workspace, facts } = loaded ?? (await loadWorkspace(tools))
       const context = contextOf(
         mode,
-        workspace ?? (await getWorkspace(tools, {})),
+        workspace,
         zone ?? null,
         new Date(),
         turn.kind === "message" ? parsed.data.intent : undefined,
-        personaOf(await readFacts(db))
+        personaOf(facts)
       )
       await beginTurn(db, cosTurn, {
         prefix: log.prefixLogged ? null : prefix,
@@ -848,6 +859,8 @@ export async function chat(
         fallback,
         reserved: fallback ? 0 : reserve,
         tail: opening.tail,
+        // The turn's one whole read of its log (ADR-042), under its lock.
+        log: await readSession(db, id),
       }
     })
   } catch (error) {
@@ -886,6 +899,7 @@ export async function chat(
     state: newRunState(),
     abort: new AbortController(),
     zone: zone ?? null,
+    log: opened.log,
   }
   return answerCos(run, {
     env,
@@ -928,6 +942,7 @@ type Opened = {
   reserved: number
   /** For a results turn: the message its results resolved. */
   tail: { id: string } | null
+  log: LoggedEvent[]
 }
 
 /** A turn the script answers: everything before the CoS, unchanged. */
@@ -988,6 +1003,7 @@ type CosPart = {
   type: string
   toolCallId?: string
   state?: string
+  input?: unknown
   output?: unknown
   errorText?: string
   approval?: { id: string; approved?: boolean; reason?: string }
@@ -1117,9 +1133,41 @@ async function openCos(
   ) {
     return stale()
   }
+  // A yes counts only while the card's record binds its call (ADR-042);
+  // otherwise the call closes with the expired line and nothing runs.
+  const yeses = waiting.filter(
+    (p) => byApproval.get(p.approval?.id ?? "")?.approved
+  )
+  const cards = await loggedApprovals(
+    db,
+    id,
+    yeses.map((p) => p.approval?.id ?? "")
+  )
+  const now = Date.now()
+  const lapsed = new Set<string>()
+  for (const part of yeses) {
+    const approvalId = part.approval?.id ?? ""
+    const card = cards.find((c) => c.approval_id === approvalId)
+    const input = await boundInput(
+      db,
+      part.type.slice("tool-".length) as CosToolName,
+      part.input
+    )
+    if (!(await binds(card, part.toolCallId ?? "", input, now))) {
+      lapsed.add(approvalId)
+    }
+  }
   const applied = parts.map((part): CosPart => {
     const result = part.approval ? byApproval.get(part.approval.id) : undefined
     if (!result || !waiting.includes(part)) return part
+    if (lapsed.has(result.approval_id)) {
+      return {
+        ...part,
+        state: "output-error",
+        errorText: toolErrorText(new NotRun("expired")),
+        approval: { id: result.approval_id, approved: true },
+      }
+    }
     // A denial's reason is the owner's free text, so the model gets it
     // framed as the owner's no; it could otherwise open with words the
     // instructions give to a failure. The screen keeps the owner's words.
@@ -1220,20 +1268,15 @@ async function answerCos(run: AgentTurn, a: Answering): Promise<Response> {
   }
   // Anything that throws before a response exists closes the turn as an
   // error, so the next turn need not wait for it to lapse.
-  let failed: ToolFailed | null = null
   let streamed: Response | FellBack | null = null
   try {
-    failed = await settle(run, rows)
-    if (!failed && !a.opened.fallback && a.model) {
+    await settle(run, rows)
+    if (!a.opened.fallback && a.model) {
       streamed = await startModel(run, a, a.model, rows)
     }
   } catch (error) {
     await closeTurn(run, ended("error"), null, rows).catch(() => undefined)
     throw error
-  }
-  if (failed) {
-    await closeTurn(run, ended("error"), null, rows)
-    return failure(failed.status, { ...failed.error, detail: {} })
   }
   if (streamed instanceof Response) return streamed
   if (streamed && run.state.readFailed) {
@@ -1268,17 +1311,14 @@ async function fellBack(
   return response
 }
 
-/** The model's run over the history the log derives now. */
+/** The model's run over the history the log derives now, which `settle` left caught up. */
 async function startModel(
   run: AgentTurn,
   a: Answering,
   model: LanguageModel,
   rows: Rows
 ): Promise<Response | FellBack> {
-  const history = await run.kit.withOrg({ orgId: run.turn.orgId }, (db) =>
-    readSession(db, run.turn.sessionId)
-  )
-  const { messages } = deriveCosMessages(history, CONTEXT_POLICY)
+  const { messages } = deriveCosMessages(run.log, CONTEXT_POLICY)
   const tail = a.opened.tail
   return streamTurn({
     run,
@@ -1340,7 +1380,7 @@ async function fallbackTurn(
     return stream(assistantId, step, [writtenAt()])
   }
   const history = await run.kit.withOrg({ orgId: run.turn.orgId }, (db) =>
-    readSession(db, run.turn.sessionId)
+    caughtUp(db, run)
   )
   const { messages } = deriveCosMessages(history, CONTEXT_POLICY)
   const tailId = a.opened.tail?.id as string
@@ -1354,24 +1394,31 @@ async function fallbackTurn(
 }
 
 /**
- * The messages the assistant posted on its own (`postAssistantMessage`,
- * ids `srv_…`) that the session's log does not hold yet, oldest first, cut
- * to their text. A typed turn logs them before the owner's message, so the
- * model's history, which reads the log alone, holds what it already told
- * the owner.
+ * The messages posted outside a turn that the session's log does not hold
+ * yet, oldest first, cut to their text: the assistant's own (`srv_…`,
+ * `postAssistantMessage`) and the owner's emailed replies (`eml_…`,
+ * `postOwnerEmail`). A typed turn logs them before the owner's message, so
+ * the model's history, which reads the log alone, holds what it already told
+ * the owner and what the owner answered by email.
  */
 async function unloggedPosts(db: OrgScopedDb, id: string) {
-  const rows = await db.execute<{ id: string; parts: Part[] }>(sql`
-    select m.id, m.content->'parts' as parts from ${conversationMessages} m
-    where m.conversation_id = ${id} and m.id like 'srv\_%'
-      and m.content->>'role' = 'assistant'
+  const rows = await db.execute<{
+    id: string
+    role: "assistant" | "user"
+    parts: Part[]
+  }>(sql`
+    select m.id, m.content->>'role' as role, m.content->'parts' as parts
+    from ${conversationMessages} m
+    where m.conversation_id = ${id} and (
+        (m.id like 'srv\_%' and m.content->>'role' = 'assistant')
+        or (m.id like 'eml\_%' and m.content->>'role' = 'user'))
       and not exists (select 1 from ${events} e
         where e.session_id = ${id} and e.type = 'cos.message'
           and e.payload->'message'->>'id' = m.id)
     order by m.seq`)
   return rows.map((row) => ({
     id: row.id,
-    role: "assistant" as const,
+    role: row.role,
     parts: row.parts.filter(
       (p) => p.type === "step-start" || p.type === "text"
     ),

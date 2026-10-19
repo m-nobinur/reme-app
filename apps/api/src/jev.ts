@@ -1,4 +1,5 @@
 import { AskChoiceInput } from "@workspace/contracts"
+import { scrub } from "@workspace/facade/tee"
 import type { ToolPart } from "./chat.ts"
 
 /**
@@ -207,7 +208,7 @@ export async function jev(
       body: JSON.stringify({
         model: JEV.model,
         // The owner's words are data to decide on, never instructions.
-        state: { assistant_asked: asked, owner_replied: reply },
+        state: { assistant_asked: scrub(asked), owner_replied: scrub(reply) },
         questions,
       }),
       signal: AbortSignal.timeout(JEV.timeoutMs),

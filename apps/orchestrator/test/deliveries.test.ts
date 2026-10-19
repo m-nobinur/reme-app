@@ -1,3 +1,4 @@
+import { readReplyToken } from "@workspace/contracts"
 import {
   conversationMessages,
   conversations,
@@ -34,6 +35,8 @@ function stubs() {
       DELIVERIES: queue as unknown as Queue<DeliveryMessage>,
       OWNER_MAIL: { send } as unknown as SendEmail,
       APP_ORIGIN: "https://app.example.invalid",
+      REPLY_TOKEN_KEY: "k".repeat(32),
+      REPLY_DOMAIN: "reply.example.invalid",
       HYPERDRIVE: {} as Hyperdrive,
     },
   }
@@ -121,6 +124,29 @@ describe.skipIf(!url)("the delivery outbox", () => {
     const again = await consume(env, body)
     expect(again.ack).toHaveBeenCalled()
     expect(send).toHaveBeenCalledTimes(1)
+  })
+
+  it("sets a Reply-To that names the conversation, and none when no conversation is named", async () => {
+    const orgId = await freshOrg(kit)
+    const { env, send } = stubs()
+    const conversationId = crypto.randomUUID()
+    for (const body of [
+      { ...mail(orgId, "reminder:t1"), conversationId },
+      mail(orgId, "reminder:t2"),
+    ]) {
+      await deliver(kit, env, body)
+      await consume(env, body)
+    }
+    const [withReply, without] = send.mock.calls.map((c) => c[0])
+    const to = withReply?.replyTo as string
+    expect(to).toMatch(/^reply\+[A-Za-z0-9_-]{56}@reply\.example\.invalid$/)
+    expect(
+      await readReplyToken(
+        "k".repeat(32),
+        to.slice("reply+".length, to.indexOf("@"))
+      )
+    ).toEqual({ orgId, conversationId })
+    expect(without).not.toHaveProperty("replyTo")
   })
 
   it("turns the email channel off when the address is suppressed", async () => {

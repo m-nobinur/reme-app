@@ -22,23 +22,49 @@ from the session's event log. Three things in it no longer fit.
 
 ## Decision
 
-**One log read per turn.** `startModel` reads the session once and passes the rows through
-`AgentTurn`. `prepareStep` reads only events after the last sequence it holds
-(`readSessionSince`) and appends them. The integrity check is unchanged in what it proves: the hash
-still covers the whole derived message list, and the call is refused on any mismatch. It holds
+**One log read per turn.** The turn's first transaction reads the session whole once, after its
+`cos.context` is written and under the same lock, and passes the rows through `AgentTurn`, so it
+costs no transaction of its own. `settle` and `startModel` work from those rows; `settle` reads
+again only after it ran a call, and leaves the rows caught up. `prepareStep` reads only events after
+the last sequence it holds (`readSessionSince`), appends them, checks the hash and writes the
+step's `cos.call`, all in one transaction. The integrity check is unchanged in what it proves: the
+hash still covers the whole derived message list, and the call is refused on any mismatch. It holds
 because the turn is the only writer to its session while it holds its token and the conversation
 lock, so the rows it holds plus the rows after its last sequence are the log. The workspace load
-starts beside `lookAhead`, the domains query folds into the status read, and the second fact read
-goes. This replaces ADR-034's "each model call costs one extra read of the session's events".
+(status, domains and facts in one transaction) starts beside `lookAhead`, and its facts give the
+persona, so the second fact read goes. An onboarding turn starts the load too and drops it, since
+`lookAhead` is what says which kind of turn it is. This replaces ADR-034's "each model call costs
+one extra read of the session's events".
 
 **Approvals are bound.** For each approval request `onStepEnd` appends
-`cos.approval {turn_id, approval_id, tool_call_id, input_sha256, expires_at}`. The answer is
-checked in `openCos` and again in `runTool` before execute: a different input hash or a passed
-expiry is refused with a fixed line, and the card shows "expired". CoS acts expire after 24 hours;
-publish approvals keep ADR-032's 72. A call whose outcome is unknown appends
-`cos.tool_unknown {tool_call_id, approval_id}`. Settle never runs it again; the owner is asked.
-Both events sit outside `deriveCosMessages`, which ignores types it does not know, so the model's
-view and the integrity hash do not change.
+`cos.approval {turn_id, approval_id, tool_call_id, input_sha256, expires_at}` in the same write as
+its `cos.step`, so a logged step always has its cards' records. The answer is checked in `openCos`
+and again in `runTool` before execute: another call id, a different input hash or a passed expiry
+is refused. The call closes as `output-error` with a line that starts `APPROVAL_EXPIRED` (from the
+contracts), the model reads it and tells the owner, and the card shows "expired" for every one of
+these reasons. A card with no record, shown before this change, is refused the same way. Expiry
+is written and checked on the Worker's clock: a day is long enough that seconds of skew do not
+matter. CoS acts expire after 24 hours; publish approvals keep ADR-032's 72. When an act tool
+throws a `ToolFailed` that is not an answer off the contract, its outcome is unknown: `runTool`
+appends `cos.tool_unknown {tool_call_id, approval_id}`, `settle` closes the call with the unknown
+line, and the turn goes on to the model, which asks the owner. This replaces ADR-034's 503 that
+left the call open to run again. Every act call is checked and marked in one transaction before
+it runs: the log is caught up, the approval checked, and `cos.tool_started {tool_call_id,
+approval_id}` appended. A start with no result five minutes later, by the database's clock, is a
+Worker killed mid-call: the next `runTool` appends `cos.tool_unknown` instead of running it. A
+start younger than that is run again under its key, which replays it, as ADR-034 had it. `runTool`
+refuses any call the log marks unknown, matched by call id and approval id together, since
+provider call ids repeat across turns. Other errors keep ADR-034's path: the turn ends as an error
+and the next turn replays the call under its approval key. A card answered twice runs its tool
+once: the second answer finds the conversation busy or the card already resolved.
+
+Only `request_change` acts on a versioned target, the live site, so its card's hash covers
+`{input, site_version}`, the version from the latest deployment when the card is shown and again
+when it is answered: a publish in between refuses the yes as expired. `answer_question`,
+`create_reminder`, `record_review`, `connect_domain` and `remove_domain` act on targets the input
+names in full, so their hash covers the input alone. Both events sit outside
+`deriveCosMessages`, which ignores types it does not know, so the model's view and the integrity
+hash do not change.
 
 **A typed yes over a card**, owner decision 2: allowed only for `create_reminder` and
 `request_change`, exact phrases first, then Jev's `noul` questions at the existing thresholds,
@@ -59,9 +85,25 @@ call inside the lock: the summary is written first and only appended under it. A
 change-if is narrowed to: a model call runs inside the lock, the approval turn's p95 passes 5 s,
 or a Hyperdrive connection-count alarm fires.
 
-**Redaction before every model call.** §14.2 promised it and nothing did it. A text-level scrub
-from `packages/facade` runs over every message the CoS, compaction and reflection send to a model,
-with the same secret shapes the flue tee uses.
+**Redaction before every model call.** §14.2 promised it and nothing did it. The flue tee's
+`scrub` in `packages/facade` is exported, so there is one scrub and one list of secret shapes, and
+the api imports it from `@workspace/facade/tee`: the package root would pull the whole facade
+into the api Worker, about 755 KB minified against 230 bytes. The CoS runs it in `prepareStep`,
+which every model call passes through, over every string in the messages except provider data,
+and sends the model the redacted list. Both sides of the integrity check are hashed redacted:
+the SDK's messages and the messages derived from the log. Redacting inside `deriveCosMessages`
+instead was rejected: the SDK carries its own copy of each step's output into the next call, so
+the two sides would differ on any step that returned a secret-shaped string, and the derivation
+would stop being a plain function of the log. Scrub is idempotent, so a list the SDK carries over
+from a redacted step hashes the same again. The hash, and the `cos.call` that logs it, now prove
+the model saw the redaction of the derived log, which is what it was sent. Two lists that differ
+only inside a secret-shaped string hash alike; the model sees the same text either way. The log
+keeps the words as they were said and returned: redaction is at the model boundary, not before
+append. That is the answer to §14.2's "before event append" half: the log is the system of
+record, and a replay must see what the owner and the tools said, so the scrub runs where text
+leaves for a provider instead. The other api model calls run the same scrub over what they send:
+Jev's question state, the onboarding planner's turn data and the background copy call's prompt.
+Compaction and reflection must call it too when they send a transcript.
 
 ## What was rejected
 
