@@ -96,7 +96,14 @@ import {
   titleFrom,
   withoutProviderData,
 } from "./http.ts"
-import { type JevDecision, jev, matched } from "./jev.ts"
+import {
+  type JevDecision,
+  jev,
+  jevApproval,
+  matched,
+  readReply,
+  type Verdict,
+} from "./jev.ts"
 import {
   type Answer,
   again,
@@ -546,6 +553,12 @@ export type ChatDeps = {
    * the planner's model at medium effort when the api holds a key.
    */
   prepare?: LanguageModel | null
+  /**
+   * The gate on a typed reply to one open reminder or change card that no
+   * exact phrase read: left out, Jev on OpenRouter when the api holds a
+   * key. Tests pass one.
+   */
+  approval?: ((card: string, reply: string) => Promise<Verdict | null>) | null
 }
 
 /** What a turn is, read before its lock: whether onboarding runs, and the card it waits on. */
@@ -554,16 +567,52 @@ type Ahead = {
   card: ToolPart | undefined
   /** The words of the step that holds the card: the question the owner is answering. */
   asked: string
+  /** The one reminder or change card a typed yes or no may answer; read for a typed message only. */
+  open?: CosPart
 }
 
-async function lookAhead(db: OrgScopedDb, id: string): Promise<Ahead> {
+/** The cards a typed yes or no may answer (ADR-042); every other card a typed message cancels. */
+const TYPED_CARDS: ReadonlySet<string> = new Set([
+  "tool-create_reminder",
+  "tool-request_change",
+])
+
+/**
+ * The tail's last step holds exactly one pending call, and it is a card a
+ * typed reply may answer. The tail is the message a click would answer, so
+ * an emailed reply, which is a later row, leaves a card out of reach.
+ */
+function typedCard(tail: Tail | null): CosPart | undefined {
+  if (tail?.content.role !== "assistant") return undefined
+  const parts = tail.content.parts as CosPart[]
+  const last = parts.slice(parts.map((p) => p.type).lastIndexOf("step-start"))
+  const [card, ...more] = last.filter(
+    (p) => p.type.startsWith("tool-") && pending(p as ToolPart)
+  )
+  return more.length === 0 &&
+    card?.state === "approval-requested" &&
+    card.approval &&
+    TYPED_CARDS.has(card.type)
+    ? card
+    : undefined
+}
+
+async function lookAhead(
+  db: OrgScopedDb,
+  id: string,
+  typing: boolean
+): Promise<Ahead> {
   const none = { onboarding: false, card: undefined, asked: "" }
   const [conversation] = await db
     .select({ kind: conversations.kind })
     .from(conversations)
     .where(eq(conversations.id, id))
-  if (conversation?.kind !== "onboarding") return none
-  if (scriptEnded(await readScript(db, id))) return none
+  if (
+    conversation?.kind !== "onboarding" ||
+    scriptEnded(await readScript(db, id))
+  ) {
+    return typing ? { ...none, open: typedCard(await readTail(db, id)) } : none
+  }
   const tail = await readTail(db, id)
   const parts = tail?.content.role === "assistant" ? tail.content.parts : []
   const last = parts.slice(parts.map((p) => p.type).lastIndexOf("step-start"))
@@ -661,7 +710,7 @@ export async function chat(
       scope,
       async (db) =>
         [
-          await lookAhead(db, id),
+          await lookAhead(db, id, turn.kind === "message"),
           await rememberZone(db, owner.orgId, browser),
         ] as const
     ),
@@ -679,6 +728,19 @@ export async function chat(
         ? (card: ToolPart, asked: string, reply: string) =>
             jev(env.OPENROUTER_API_KEY as string, card, asked, reply)
         : null
+  const approvalOf =
+    deps.approval !== undefined
+      ? deps.approval
+      : env.OPENROUTER_API_KEY
+        ? (card: string, reply: string) =>
+            jevApproval(env.OPENROUTER_API_KEY as string, card, reply)
+        : null
+  // A typed reply over one open reminder or change card: an exact phrase
+  // answers it, else Jev reads it, here outside the transaction.
+  const heard =
+    turn.kind === "message" && ahead.open
+      ? await typedVerdict(ahead.open, turn.text, approvalOf)
+      : null
   const modelId = env.COS_MODEL ?? routeOf("owner_turn").model
   const price = priceOf(modelId)
   const model =
@@ -820,7 +882,7 @@ export async function chat(
           : (await withinCap(db, owner.orgId, reserve))
             ? null
             : "budgetary"
-      const opening = await openCos(db, held, id, parsed.data, log)
+      const opening = await openCos(db, held, id, parsed.data, log, heard)
       if (opening instanceof Response) return opening
       const cosTurn: Turn = { ...session, turnId: newUlid() }
       const { workspace, facts } = loaded ?? (await loadWorkspace(tools))
@@ -859,6 +921,7 @@ export async function chat(
         fallback,
         reserved: fallback ? 0 : reserve,
         tail: opening.tail,
+        typed: opening.typed,
         // The turn's one whole read of its log (ADR-042), under its lock.
         log: await readSession(db, id),
       }
@@ -942,7 +1005,45 @@ type Opened = {
   reserved: number
   /** For a results turn: the message its results resolved. */
   tail: { id: string } | null
+  /** The typed yes or no this turn took as the card's answer, once the lock confirmed the card. */
+  typed: Typed | null
   log: LoggedEvent[]
+}
+
+/** A typed reply read as the answer to the open card `callId`, with the line that says so. */
+type Typed = { callId: string; approved: boolean; line: string }
+
+/** What the card proposes, in the words the owner and Jev read it in. */
+function proposed(card: CosPart): string {
+  const { text, title, due_at } = (card.input ?? {}) as Record<string, unknown>
+  const what =
+    card.type === "tool-request_change"
+      ? `a website change: ${text}`
+      : `a reminder: ${title}${due_at ? `, due ${due_at}` : ""}`
+  return what.slice(0, 200)
+}
+
+/**
+ * The card's answer in a typed reply: an exact phrase, else Jev when it is
+ * available, else none and the message takes the normal turn. An error from
+ * Jev reads as none.
+ */
+async function typedVerdict(
+  card: CosPart,
+  reply: string,
+  gate: ChatDeps["approval"]
+): Promise<Typed | null> {
+  const what = proposed(card)
+  const verdict = await readReply(reply, gate ? (r) => gate(what, r) : null)
+  if (!verdict) return null
+  return {
+    callId: card.toolCallId as string,
+    approved: verdict === "approve",
+    line:
+      verdict === "approve"
+        ? `Taken as a yes: ${what}.`
+        : `Taken as a no, so I left it: ${what}.`,
+  }
 }
 
 /** A turn the script answers: everything before the CoS, unchanged. */
@@ -1071,23 +1172,42 @@ function settledChunks(part: CosPart): UIMessageChunk[] {
  * CoS made it. A results turn must resolve exactly the pending calls of the
  * tail's last step, each once: an approval is `approval-responded` until
  * its tool runs, a denial is `output-denied`, and a reason is kept.
+ *
+ * A typed yes or no `heard` over the tail's one open card (ADR-042)
+ * resolves it by the results turn's own path, then logs the owner's words
+ * after it, so the card is never cancelled. A card that moved since the
+ * lookahead leaves the message to the cancelling path.
  */
 async function openCos(
   db: OrgScopedDb,
   held: Read,
   id: string,
   { turn }: ChatRequest,
-  log: SessionState
+  log: SessionState,
+  heard: Typed | null
 ): Promise<
   | {
       messages: Opening["messages"]
       tail: { id: string } | null
+      typed: Typed | null
     }
   | Response
 > {
   if (turn.kind === "message") {
     if (await messageTaken(db, id, turn.message_id)) return messageExists()
-    const cancelled = await cancelPending(db, id, held.tail)
+    const card = typedCard(held.tail)
+    const answered =
+      heard && held.tail && card?.toolCallId === heard.callId
+        ? await resolveApprovals(db, id, held.tail, [
+            {
+              kind: "approval",
+              approval_id: card.approval?.id ?? "",
+              approved: heard.approved,
+            },
+          ])
+        : null
+    if (answered instanceof Response) return answered
+    const cancelled = answered ? null : await cancelPending(db, id, held.tail)
     const user = {
       id: turn.message_id,
       role: "user" as const,
@@ -1099,18 +1219,38 @@ async function openCos(
         ? await loggedMessage(db, id, held.tail.id)
         : null
     const posts = await unloggedPosts(db, id)
-    const messages = logged
-      ? [...posts, { ...logged, parts: cancelParts(logged.parts) }, user]
-      : [...posts, user]
+    const messages = answered
+      ? [...posts, ...answered.messages.map((m) => m.message), user]
+      : logged
+        ? [...posts, { ...logged, parts: cancelParts(logged.parts) }, user]
+        : [...posts, user]
     return {
       messages: messages.map((m) => ({ message: m, taint: messageTaint(m) })),
       tail: null,
+      typed: answered ? heard : null,
     }
   }
   const { tail } = held
   if (tail?.id !== turn.message_id || tail.content.role !== "assistant") {
     return stale()
   }
+  const opened = await resolveApprovals(db, id, tail, turn.results)
+  return opened instanceof Response ? opened : { ...opened, typed: null }
+}
+
+/**
+ * Resolves the pending calls of the tail's last step with `results`, each
+ * once, and stores the tail as it now stands. The one path a click and a
+ * typed yes or no both take.
+ */
+async function resolveApprovals(
+  db: OrgScopedDb,
+  id: string,
+  tail: Tail,
+  results: ChatResult[]
+): Promise<
+  { messages: Opening["messages"]; tail: { id: string } | null } | Response
+> {
   // Resolved on the logged message, which keeps the reasoning the row leaves out.
   const logged = (await loggedMessage(db, id, tail.id)) ?? {
     id: tail.id,
@@ -1122,7 +1262,6 @@ async function openCos(
   const waiting = last.filter(
     (p) => p.type.startsWith("tool-") && p.state === "approval-requested"
   )
-  const results = turn.results
   const byApproval = new Map(
     results.flatMap((r) => (r.kind === "approval" ? [[r.approval_id, r]] : []))
   )
@@ -1360,8 +1499,9 @@ async function fallbackTurn(
   payload: CosTurn
 ): Promise<Response> {
   if (a.turn.kind === "message") {
-    const step: Part[] =
-      payload.outcome === "fallback" && payload.reason === "provider"
+    const step: Part[] = a.opened.typed
+      ? [{ type: "text", text: a.opened.typed.line, state: "done" }]
+      : payload.outcome === "fallback" && payload.reason === "provider"
         ? [{ type: "text", text: NO_ANSWER, state: "done" }]
         : nextStep({
             onboarding: null,

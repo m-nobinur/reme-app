@@ -3064,4 +3064,265 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     expect(await logOf(room)).toEqual([])
     expect(await rowsOf(who, room)).toEqual([])
   }, 15_000)
+
+  describe("a typed yes or no over an open card (ADR-042)", () => {
+    const tomorrow = () =>
+      new Date(Date.now() + 86_400_000).toISOString().slice(0, 10)
+
+    /** A conversation whose tail is a create_reminder card, and that card. */
+    const reminderCard = async (who: Owner = me) => {
+      const id = await conversation(who)
+      await turn(who, typed(id, "Remind me to call the supplier."), {
+        model: scripted(
+          calls({
+            id: "call_cr",
+            tool: "create_reminder",
+            input: {
+              title: "Call the supplier",
+              due_at: `${tomorrow()}T09:00:00Z`,
+            },
+          })
+        ).model,
+      })
+      const [call] = waiting(await tailOf(who, id))
+      if (!call) throw new Error("no card")
+      return { id, call }
+    }
+
+    const remindersOf = (id: string) =>
+      kit.withOrg({ orgId: me.orgId }, (db) =>
+        db.select().from(reminders).where(eq(reminders.conversationId, id))
+      )
+
+    const cardState = async (id: string, callId: string) =>
+      (await rowsOf(me, id))
+        .flatMap(
+          (r) =>
+            (r.content as { parts: { toolCallId?: string; state?: string }[] })
+              .parts
+        )
+        .find((p) => p.toolCallId === callId) as {
+        state: string
+        errorText?: string
+      }
+
+    it("takes an exact yes as the click does: the reminder is stored under the card's approval, the owner's words follow it, and Jev is never asked", async () => {
+      const { id, call } = await reminderCard()
+      const approval = vi.fn(async () => null)
+      const { model, sent } = scripted(said("Your reminder is set."))
+      const done = await turn(me, typed(id, "Yes, please!"), {
+        model,
+        approval,
+      })
+      expect(done.response.status, done.text).toBe(200)
+      expect(approval).not.toHaveBeenCalled()
+      expect(await remindersOf(id)).toMatchObject([
+        {
+          title: "Call the supplier",
+          idempotencyKey: `approval:${call.approval.id}`,
+        },
+      ])
+      expect((await cardState(id, call.toolCallId)).state).toBe(
+        "output-available"
+      )
+      // The card's message, then the owner's words, then the answer.
+      const rows = await rowsOf(me, id)
+      expect(rows.map((r) => (r.content as { role: string }).role)).toEqual([
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+      ])
+      expect(rows[2]?.content).toEqual({
+        role: "user",
+        parts: [{ type: "text", text: "Yes, please!" }],
+      })
+      expect(wire(sent)).toContain("created")
+      expect((await turnsOf(id)).at(-1)?.outcome).toBe("answered")
+    })
+
+    it("echoes the reading in one line when no model answers", async () => {
+      const { id, call } = await reminderCard()
+      const done = await turn(me, typed(id, "go ahead"), { model: null })
+      expect(done.response.status, done.text).toBe(200)
+      expect(await remindersOf(id)).toHaveLength(1)
+      const row = (await rowsOf(me, id)).at(-1)
+      expect(row?.content).toMatchObject({
+        parts: [
+          { type: "step-start" },
+          {
+            type: "text",
+            text: expect.stringMatching(/^Taken as a yes: a reminder: Call/),
+          },
+        ],
+      })
+      expect((await cardState(id, call.toolCallId)).state).toBe(
+        "output-available"
+      )
+    })
+
+    it("takes an exact no as a denial and stores nothing", async () => {
+      const { id, call } = await reminderCard()
+      const { model, sent } = scripted(said("Left it."))
+      await turn(me, typed(id, "No thanks"), { model, approval: null })
+      expect(await remindersOf(id)).toEqual([])
+      expect((await cardState(id, call.toolCallId)).state).toBe("output-denied")
+      expect(wire(sent)).toContain("The owner declined")
+    })
+
+    it("asks Jev about a reply that is not a phrase, and takes its yes or its no", async () => {
+      const yesCard = await reminderCard()
+      const approve = vi.fn(async () => "approve" as const)
+      await turn(me, typed(yesCard.id, "sure thing"), {
+        model: scripted(said("Set.")).model,
+        approval: approve,
+      })
+      expect(approve).toHaveBeenCalledWith(
+        expect.stringContaining("a reminder: Call the supplier"),
+        "sure thing"
+      )
+      expect(await remindersOf(yesCard.id)).toHaveLength(1)
+
+      const noCard = await reminderCard()
+      await turn(me, typed(noCard.id, "nope"), {
+        model: scripted(said("Left it.")).model,
+        approval: async () => "decline",
+      })
+      expect(await remindersOf(noCard.id)).toEqual([])
+      expect((await cardState(noCard.id, noCard.call.toolCallId)).state).toBe(
+        "output-denied"
+      )
+    })
+
+    it("never takes a yes with something after it: the card is cancelled and the message takes the normal turn", async () => {
+      const { id, call } = await reminderCard()
+      const approval = vi.fn(async () => null)
+      const { model, sent } = scripted(said("Five it is."))
+      const done = await turn(me, typed(id, "yes, but make it 5pm"), {
+        model,
+        approval,
+      })
+      expect(done.response.status, done.text).toBe(200)
+      expect(approval).toHaveBeenCalledTimes(1)
+      expect(await remindersOf(id)).toEqual([])
+      expect(await cardState(id, call.toolCallId)).toMatchObject({
+        state: "output-error",
+        errorText: expect.stringContaining("cancel"),
+      })
+      expect(wire(sent)).toContain("yes, but make it 5pm")
+    })
+
+    it("refuses a typed yes on an expired card as a click is refused", async () => {
+      const { id, call } = await reminderCard()
+      await admin`
+        update events set payload = jsonb_set(payload, '{expires_at}', to_jsonb(${new Date(Date.now() - 1000).toISOString()}::text))
+        where session_id = ${id} and type = 'cos.approval'`
+      const { model, sent } = scripted(said("That card expired."))
+      await turn(me, typed(id, "yes"), { model })
+      expect(await remindersOf(id)).toEqual([])
+      expect(wire(sent)).toContain(APPROVAL_EXPIRED)
+      const part = await cardState(id, call.toolCallId)
+      expect(part.state).toBe("output-error")
+      expect(part.errorText?.startsWith(`${APPROVAL_EXPIRED}:`)).toBe(true)
+    })
+
+    it("runs a site change on a typed yes through the same start a click makes", async () => {
+      const { id, call } = await changeCard()
+      const stub = orchestrator()
+      const done = await turn(
+        me,
+        typed(id, "do it"),
+        { model: scripted(said("Started.")).model },
+        stub
+      )
+      expect(done.response.status, done.text).toBe(200)
+      expect(stub.calls).toHaveLength(1)
+      expect(stub.calls[0]?.request.headers.get("idempotency-key")).toBe(
+        call.approval.id
+      )
+      expect((await cardState(id, call.toolCallId)).state).toBe(
+        "output-available"
+      )
+    })
+
+    it("leaves every other card to the cancelling rule", async () => {
+      const id = await conversation(me)
+      await turn(me, typed(id, "Put the site on sparkleclean.co.uk."), {
+        model: scripted(
+          calls({
+            id: "call_connect",
+            tool: "connect_domain",
+            input: { name: "sparkleclean.co.uk" },
+          })
+        ).model,
+      })
+      const approval = vi.fn(async () => "approve" as const)
+      const stub = orchestrator()
+      await turn(
+        me,
+        typed(id, "yes"),
+        { model: scripted(said("Which one?")).model, approval },
+        stub
+      )
+      expect(approval).not.toHaveBeenCalled()
+      expect(stub.calls).toHaveLength(0)
+      expect((await cardState(id, "call_connect")).state).toBe("output-error")
+    })
+
+    it("answers only when the tail holds exactly one open card", async () => {
+      const id = await conversation(me)
+      await turn(me, typed(id, "Two reminders."), {
+        model: scripted(
+          calls(
+            {
+              id: "call_a",
+              tool: "create_reminder",
+              input: { title: "A", due_at: `${tomorrow()}T09:00:00Z` },
+            },
+            {
+              id: "call_b",
+              tool: "create_reminder",
+              input: { title: "B", due_at: `${tomorrow()}T10:00:00Z` },
+            }
+          )
+        ).model,
+      })
+      await turn(me, typed(id, "yes"), {
+        model: scripted(said("Which one?")).model,
+      })
+      expect(await remindersOf(id)).toEqual([])
+    })
+
+    it("never lets an emailed yes answer a card: it waits while the card is open, and once posted it is not a card's tail", async () => {
+      const { id, call } = await reminderCard()
+      const before = (await rowsOf(me, id)).length
+      const mail = (key: string) =>
+        postOwnerEmail(kit, {
+          orgId: me.orgId,
+          conversationId: id,
+          key: `<${key}-${id}@mail.example.com>`,
+          text: "Yes",
+        })
+      expect(await mail("first")).toBe("waiting")
+      expect((await rowsOf(me, id)).length).toBe(before)
+      expect(await remindersOf(id)).toEqual([])
+      expect((await cardState(id, call.toolCallId)).state).toBe(
+        "approval-requested"
+      )
+      // Once the owner talks past the card, the email posts, and a typed yes
+      // after it has no card to answer.
+      await turn(me, typed(id, "Not now, thanks for asking"), {
+        model: scripted(said("Fine.")).model,
+        approval: async () => null,
+      })
+      expect(await mail("second")).toBe("posted")
+      const approval = vi.fn(async () => "approve" as const)
+      await turn(me, typed(id, "yes"), {
+        model: scripted(said("Yes to what?")).model,
+        approval,
+      })
+      expect(approval).not.toHaveBeenCalled()
+      expect(await remindersOf(id)).toEqual([])
+    })
+  })
 })
