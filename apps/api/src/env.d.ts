@@ -20,6 +20,11 @@ interface Env {
    * orchestrator, which signs. Unset, no reply is accepted.
    */
   REPLY_TOKEN_KEY: string
+  /**
+   * The VAPID public key a browser subscribes to push with (`GET /push/config`).
+   * The orchestrator holds the private half. Unset, push is not offered.
+   */
+  VAPID_PUBLIC_KEY?: string
   /** The Chief of Staff's key (ADR-034). Unset, every CoS turn takes the fallback. */
   OPENROUTER_API_KEY?: string
   /** The CoS's model id, when not `DEFAULT_MODEL`. It must be in the facade's price table. */

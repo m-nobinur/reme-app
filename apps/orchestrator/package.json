@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@cloudflare/sandbox": "0.12.10",
+    "@pushforge/builder": "2.0.5",
     "@workspace/contracts": "workspace:*",
     "@workspace/db": "workspace:*",
     "@workspace/facade": "workspace:*",

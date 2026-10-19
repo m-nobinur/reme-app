@@ -16,6 +16,7 @@ import {
   jobRuns,
   memberships,
   orgs,
+  pushSubscriptions,
   reminders,
   roles,
   scheduledJobs,
@@ -351,6 +352,13 @@ export async function seedTwoOrgs() {
       orgId: org,
       key: `tenancy_delivery_${tag}`,
       channel: "in_app",
+    })
+    await db.insert(pushSubscriptions).values({
+      orgId: org,
+      staffId: per(tag, 4),
+      endpoint: `https://push.example.test/tenancy-${tag}`,
+      p256dh: "tenancy-p256dh",
+      auth: "tenancy-auth",
     })
     // The org's connected domain: live, served on its apex (org A on `www.`).
     await db.insert(domains).values({

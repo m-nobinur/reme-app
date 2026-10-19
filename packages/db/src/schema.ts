@@ -1246,7 +1246,11 @@ export const jobRuns = pgTable(
 )
 
 /** `Delivery.channel`. */
-export const deliveryChannel = pgEnum("delivery_channel", ["in_app", "email"])
+export const deliveryChannel = pgEnum("delivery_channel", [
+  "in_app",
+  "email",
+  "push",
+])
 
 /** `Delivery.state`. */
 export const deliveryState = pgEnum("delivery_state", [
@@ -1293,6 +1297,46 @@ export const deliveries = pgTable(
     check("deliveries_attempts_count", sql`attempts >= 0`),
     check("deliveries_error_length", sql`char_length(error) <= 500`),
     orgIsolation("deliveries"),
+  ]
+)
+
+/**
+ * A browser the owner allowed to receive push (ADR-043). The endpoint is unique
+ * per org rather than alone, for the reason `deliveries.key` is: an insert in
+ * one org can neither collide with another's nor tell that it exists. A staff
+ * member keeps at most `PUSH_SUBSCRIPTION_CAP`; `addPushSubscription` drops
+ * the oldest.
+ */
+export const pushSubscriptions = pgTable(
+  "push_subscriptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    staffId: uuid("staff_id").notNull(),
+    endpoint: text("endpoint").notNull(),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    createdAt,
+  },
+  (t) => [
+    unique("push_subscriptions_org_endpoint_key").on(t.orgId, t.endpoint),
+    foreignKey({
+      name: "push_subscriptions_staff_fk",
+      columns: [t.staffId, t.orgId],
+      foreignColumns: [staff.id, staff.orgId],
+    }),
+    check(
+      "push_subscriptions_endpoint",
+      sql`endpoint ~ '^https://' and char_length(endpoint) <= 2000`
+    ),
+    check(
+      "push_subscriptions_keys_length",
+      sql`char_length(p256dh) <= 200 and char_length(auth) <= 200`
+    ),
+    index("push_subscriptions_staff_idx").on(t.orgId, t.staffId, t.createdAt),
+    orgIsolation("push_subscriptions"),
   ]
 )
 
