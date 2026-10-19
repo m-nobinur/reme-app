@@ -60,6 +60,10 @@ const ALERTS: Record<Alert["reason"], { title: string; detail: string }> = {
     detail:
       "The new version failed its checks once live, so your site went back to the one before.",
   },
+  job_paused: {
+    title: "A scheduled task was paused",
+    detail: "Something Reme does on a schedule kept failing, so it was paused.",
+  },
 }
 
 const reportRows = (): NotificationItem[] =>
@@ -115,6 +119,20 @@ const ONE_OF_EACH: Record<Kind, NotificationItem> = {
   },
   report: reportRows()[0] as NotificationItem,
   alert: alertRows()[0] as NotificationItem,
+  reminder: {
+    id: "reminder",
+    kind: "reminder",
+    title: "Ring the boiler engineer",
+    detail: "You asked to be reminded. Mark it done on the Reminders page.",
+    at: hoursBefore(3),
+    expiresAt: null,
+    onExpiry: "It stays here until you mark it done.",
+    action: (
+      <a className={ACTION} href="#reminders">
+        Open reminders
+      </a>
+    ),
+  },
 }
 
 /** The bell's menu rows: one of each kind, the newest two unread. */
