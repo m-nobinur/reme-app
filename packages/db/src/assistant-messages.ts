@@ -25,6 +25,9 @@ export const serverMessageId = (key: string) =>
  * message only, and while the onboarding script still runs there, because
  * the script reads that conversation's cards.
  *
+ * `conversationId` names the conversation instead (a reminder goes to the
+ * one it was set in), archived or not; one the org does not have is `none`.
+ *
  * Not written to the CoS session log here: `cos.message` belongs to a turn,
  * so apps/api/src/chat.ts logs this row on the owner's next typed turn.
  */
@@ -34,7 +37,13 @@ export async function postAssistantMessage(
     orgId,
     key,
     message,
-  }: { orgId: string; key: string; message: Omit<ServerMessage, "id"> }
+    conversationId,
+  }: {
+    orgId: string
+    key: string
+    message: Omit<ServerMessage, "id">
+    conversationId?: string
+  }
 ): Promise<Posted> {
   const { id, text, button } = ServerMessage.parse({
     ...message,
@@ -48,8 +57,10 @@ export async function postAssistantMessage(
     )
     if (posted) return "exists"
     const [target] = await db.execute<{ id: string; kind: string }>(
-      sql`select id, kind from ${conversations} where archived_at is null
-        order by updated_at desc limit 1`
+      conversationId
+        ? sql`select id, kind from ${conversations} where id = ${conversationId}`
+        : sql`select id, kind from ${conversations} where archived_at is null
+          order by updated_at desc limit 1`
     )
     if (!target) return "none"
     const [turn] = await db.execute<{ locked: boolean }>(
