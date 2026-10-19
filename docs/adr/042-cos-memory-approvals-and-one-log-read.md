@@ -153,6 +153,13 @@ Compaction and reflection must call it too when they send a transcript.
   how many and the new p95.
 - An old card cannot run against a changed site. An owner who waits a day re-asks.
 - The profile and compaction events become model-visible state that the eval set must cover.
+- Compaction has three known limits. `dropped_refs` is always empty: nothing tracks which events a
+  summary leaves out. Four characters a token undercounts Bengali by about half, so a Bengali
+  session compacts and caps later than the numbers say; the trigger moves to the last step's
+  `inputTokens` when the first such owner arrives. The cap is checked and the call's cost written
+  in separate transactions, so jobs running at the same time can each pass it by one summary call,
+  about $0.01 against $100 a day; a reservation row, as onboarding's copy call writes, closes it if
+  that ever matters.
 
 ## Change if
 
