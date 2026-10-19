@@ -72,6 +72,8 @@ const environments = {
         "GOOGLE_CLIENT_ID",
         // Verifies the reply token the orchestrator signs; the same value on both.
         "REPLY_TOKEN_KEY",
+        // The VAPID public key a browser subscribes to push with (optional).
+        "VAPID_PUBLIC_KEY",
       ],
       // The console bearer, the spec signing key and the model plane: this
       // Worker holds no session. The REME_MODEL_* values are configuration
@@ -94,6 +96,8 @@ const environments = {
         "GOOGLE_TOKEN_KEY",
         // Signs the Reply-To token on an owner email; the api verifies it.
         "REPLY_TOKEN_KEY",
+        // Signs web push; the pair of the api's VAPID_PUBLIC_KEY (optional).
+        "VAPID_PRIVATE_KEY",
       ],
       // Verifies the claims the orchestrator signs; the same value on both.
       "reme-router": ["PREVIEW_KEY"],
@@ -132,6 +136,7 @@ const environments = {
         "OPENROUTER_API_KEY",
         "GOOGLE_CLIENT_ID",
         "REPLY_TOKEN_KEY",
+        "VAPID_PUBLIC_KEY",
       ],
       "reme-orchestrator-production": [
         "ORCHESTRATOR_TOKEN",
@@ -149,6 +154,7 @@ const environments = {
         "GOOGLE_CLIENT_SECRET",
         "GOOGLE_TOKEN_KEY",
         "REPLY_TOKEN_KEY",
+        "VAPID_PRIVATE_KEY",
       ],
       "reme-router-production": ["PREVIEW_KEY"],
     },
@@ -437,7 +443,8 @@ const localEnv = readEnv(".env.local")
 /**
  * Staging connects through the unreviewed reme-dev Google project, so its
  * values in .env.local must never reach production: there the GOOGLE_* names
- * come from .env.production.local, and are skipped when it lacks them.
+ * come from .env.production.local, and are skipped when it lacks them. The
+ * VAPID_* pair follows the same rule, so production signs with its own keys.
  */
 const googleEnv = name === "prod" ? readEnv(".env.production.local") : localEnv
 
@@ -453,6 +460,9 @@ const OPTIONAL_SECRETS: ReadonlySet<string> = new Set([
   "GOOGLE_CLIENT_ID",
   "GOOGLE_CLIENT_SECRET",
   "GOOGLE_TOKEN_KEY",
+  // Push stays off until the owner makes the VAPID pair (.env.example).
+  "VAPID_PUBLIC_KEY",
+  "VAPID_PRIVATE_KEY",
 ])
 
 for (const [worker, secrets] of Object.entries(config.secrets)) {
@@ -478,9 +488,11 @@ for (const [worker, secrets] of Object.entries(config.secrets)) {
       ok(`${state("present")}${worker} ${secret}`)
       continue
     }
-    const value = (secret.startsWith("GOOGLE_") ? googleEnv : localEnv).get(
-      secret
-    )
+    const value = (
+      secret.startsWith("GOOGLE_") || secret.startsWith("VAPID_")
+        ? googleEnv
+        : localEnv
+    ).get(secret)
     if (!value && OPTIONAL_SECRETS.has(secret)) {
       note(`${state("skipped")}${worker} ${secret}, optional and empty`)
       continue
