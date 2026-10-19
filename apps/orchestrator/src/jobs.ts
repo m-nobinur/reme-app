@@ -26,9 +26,11 @@ type ScheduledJob = typeof scheduledJobs.$inferSelect
  * at all, so a crash mid-run leaves nothing and the job is retaken when its
  * claim lapses. Anything that leaves Postgres goes through the outbox, and
  * the transaction's 15-second idle limit bounds the work done inside it.
+ * `kit` is for `after`, which runs once that transaction is over.
  */
 export type JobRun = {
   db: OrgScopedDb
+  kit: Tenancy
   env: Env
   job: ScheduledJob
   now: Date
@@ -129,7 +131,7 @@ export async function runJob(
       if (!run) return "stale"
       const handler = handlers[job.kind]
       const result: Awaited<ReturnType<Handler>> = handler
-        ? await handler({ db, env, job, now })
+        ? await handler({ db, kit, env, job, now })
         : { outcome: "skipped", detail: "no handler" }
       after = result?.after
       if (result)

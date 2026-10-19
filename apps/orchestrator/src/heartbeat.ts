@@ -1,16 +1,37 @@
+import type { Proactivity } from "@workspace/contracts"
 import {
   approvals,
+  conversationMessages,
   deliveries,
+  eq,
   events,
   facts,
+  failureCode,
   inQuiet,
+  jobRuns,
+  newUlid,
   type OrgScopedDb,
   orgs,
   reminders,
+  serverMessageId,
   sql,
+  type Tenancy,
   waitedOn,
 } from "@workspace/db"
+import { scrub } from "@workspace/facade/tee"
+import { deliverIn } from "./deliveries.ts"
+import {
+  askGate,
+  GATE,
+  overLimit,
+  type Reply,
+  readReply,
+  type Spent,
+  writerPrompt,
+  writeText,
+} from "./heartbeat-write.ts"
 import type { Handler } from "./jobs.ts"
+import { weeklyItem } from "./search-sync.ts"
 
 /**
  * The `heartbeat` job (ADR-043): on the org's proactivity rule and never in
@@ -148,11 +169,25 @@ const alerts: Source = async (db, now) => {
   })
 }
 
+/**
+ * The weekly search report (search-sync.ts), on the org's own Monday. It
+ * reads before `alerts`, since reading it can raise a search alert.
+ */
+const searchReport: Source = async (db, now) => {
+  const [org] = await db.select({ id: orgs.id, zone: orgs.timeZone }).from(orgs)
+  if (!org) return []
+  const day = new Date(`${localDate(now, org.zone)}T00:00:00Z`)
+  if (day.getUTCDay() !== 1) return []
+  const item = await weeklyItem(db, org.id, now, day)
+  return item ? [item] : []
+}
+
 export const SOURCES: Source[] = [
   reviews,
   questions,
   approvalsWaiting,
   remindersDue,
+  searchReport,
   alerts,
 ]
 
@@ -228,23 +263,268 @@ async function ownerActive(db: OrgScopedDb, orgId: string, now: Date) {
   return row?.active === true
 }
 
+/** The owner profile fact's text, if the org has one. */
+async function ownerProfile(db: OrgScopedDb): Promise<string | null> {
+  const [row] = await db
+    .select({ value: facts.value })
+    .from(facts)
+    .where(sql`${facts.key} = 'owner.profile' and ${facts.validTo} is null`)
+  if (!row) return null
+  const value = row.value as { text?: unknown } | string
+  return typeof value === "string"
+    ? value
+    : typeof value.text === "string"
+      ? value.text
+      : JSON.stringify(value)
+}
+
+/** The last heartbeat the owner was shown, for the writer's continuity. */
+async function lastHeartbeat(
+  db: OrgScopedDb,
+  orgId: string
+): Promise<{ text: string; at: Date } | null> {
+  const [sent] = await db
+    .select({ key: deliveries.key, at: deliveries.sentAt })
+    .from(deliveries)
+    .where(
+      sql`starts_with(${deliveries.key}, ${`heartbeat:${orgId}:`}) and ${deliveries.channel} = 'in_app' and ${deliveries.state} = 'sent'`
+    )
+    .orderBy(sql`${deliveries.sentAt} desc`)
+    .limit(1)
+  if (!sent?.at) return null
+  const [message] = await db
+    .select({ content: conversationMessages.content })
+    .from(conversationMessages)
+    .where(eq(conversationMessages.id, serverMessageId(sent.key)))
+  const content = message?.content as
+    | { parts?: { type: string; text?: string }[] }
+    | undefined
+  const parts = content?.parts ?? []
+  const text = parts.flatMap((p) => (p.type === "text" ? [p.text] : []))
+  return text.length > 0 ? { text: text.join(" "), at: sent.at } : null
+}
+
+/** Whether the owner typed in any conversation at or after `since`. */
+async function typedSince(db: OrgScopedDb, since: Date) {
+  const [row] = await db.execute<{ typed: boolean }>(sql`
+    select exists (
+      select 1 from ${conversationMessages}
+      where content->>'role' = 'user'
+        and created_at >= ${since.toISOString()}::timestamptz
+    ) as typed`)
+  return row?.typed === true
+}
+
+/** `2026-10-19`, the date at `at` in `zone`. */
+const localDate = (at: Date, zone: string | null) =>
+  at.toLocaleDateString("en-CA", { timeZone: zone ?? "UTC" })
+
+/** "Monday, 19 October 2026 at 14:00", in `zone`. */
+const localTime = (at: Date, zone: string | null) =>
+  new Intl.DateTimeFormat("en-GB", {
+    timeZone: zone ?? "UTC",
+    dateStyle: "full",
+    timeStyle: "short",
+  }).format(at)
+
+const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/
+
+/**
+ * An item as the models read it: scrubbed of anything secret-shaped, and
+ * every time in the owner's zone, so a date the writer copies is one the
+ * owner reads. The key keeps only its kind.
+ */
+function forModel(item: DigestItem, zone: string | null) {
+  const values = Object.fromEntries(
+    Object.entries(item.facts).map(([k, v]) => [
+      k,
+      ISO.test(v) ? localTime(new Date(v), zone) : scrub(v),
+    ])
+  )
+  return {
+    kind: item.key.split(":")[0] ?? "",
+    since: localTime(new Date(item.since), zone),
+    ...values,
+  }
+}
+
+/** The two model calls, apart from the key, so a test can stand in for them. */
+export type Models = {
+  gate: (state: Parameters<typeof askGate>[1]) => ReturnType<typeof askGate>
+  write: (system: string, data: unknown) => ReturnType<typeof writeText>
+}
+
+const liveModels = (env: Env): Models => ({
+  gate: (state) => askGate(env.OPENROUTER_API_KEY, state),
+  write: (system, data) => writeText(env.OPENROUTER_API_KEY, system, data),
+})
+
+/** What the model step needs, read inside the run's transaction. */
+type Beat = {
+  orgId: string
+  jobId: string
+  /** The run's `run_at`: the `job_runs` row this beat updates, and its delivery's slot. */
+  slot: Date
+  level: Exclude<Proactivity, "off">
+  zone: string | null
+  now: Date
+  items: DigestItem[]
+  profile: string | null
+  last: { text: string; at: Date } | null
+  /** The owner typed since the last heartbeat, so the app is enough. */
+  typed: boolean
+}
+
+/**
+ * The model step, after the run has committed its ledger rows. Jev looks
+ * first and costs nothing to the day's cap; on a yes the beat takes the
+ * day's one unprompted message (`unprompted:<org>:<local date>`) before the
+ * writer runs, and gives it back when the writer stays quiet or fails, so a
+ * later beat that day can still speak. Every model call is logged as a
+ * `cos.background_step` so the CoS's daily cap counts it.
+ */
+async function speak(kit: Tenancy, env: Env, models: Models, beat: Beat) {
+  const { orgId, jobId, slot } = beat
+  const thisRun = sql`${jobRuns.jobId} = ${jobId} and ${jobRuns.runAt} = ${slot.toISOString()}::timestamptz`
+  const record = (outcome: "ok" | "skipped" | "failed", detail: string) =>
+    kit.withOrg({ orgId }, (db) =>
+      db
+        .update(jobRuns)
+        .set({ outcome, detail: detail.slice(0, 500) })
+        .where(thisRun)
+    )
+  const spend = (job: string, outcome: string, spent: Spent) =>
+    kit.withOrg({ orgId }, (db) =>
+      db.insert(events).values({
+        eventId: newUlid(),
+        orgId,
+        staffId: null,
+        assignmentId: null,
+        type: "cos.background_step",
+        occurredAt: new Date(),
+        idempotencyKey: newUlid(),
+        payload: { job, outcome, ...spent },
+      })
+    )
+
+  const items = beat.items.map((item) => forModel(item, beat.zone))
+  const profile = beat.profile ? scrub(beat.profile).slice(0, 1_500) : null
+  let gate: Awaited<ReturnType<Models["gate"]>>
+  try {
+    gate = await models.gate({
+      items,
+      ...(profile && { owner_profile: profile }),
+    })
+  } catch (error) {
+    return record("failed", `gate_error:${failureCode(error)}`)
+  }
+  const pass = gate.probability >= GATE.threshold[beat.level]
+  await spend("heartbeat_gate", pass ? "pass" : "stop", gate.spent)
+  if (!pass) return record("skipped", `gate:${gate.probability.toFixed(2)}`)
+
+  const cap = `unprompted:${orgId}:${localDate(beat.now, beat.zone)}`
+  const took = await kit.withOrg({ orgId }, (db) =>
+    db
+      .insert(deliveries)
+      .values({ orgId, key: cap, channel: "in_app", state: "sent" })
+      .onConflictDoNothing()
+      .returning({ key: deliveries.key })
+  )
+  if (took.length === 0) return record("skipped", "capped")
+
+  let reply: Reply
+  try {
+    const written = await models.write(writerPrompt(beat.level), {
+      now: localTime(beat.now, beat.zone),
+      ...(profile && { owner_profile: profile }),
+      ...(beat.last && {
+        last_message: {
+          text: scrub(beat.last.text),
+          sent: localTime(beat.last.at, beat.zone),
+        },
+      }),
+      items,
+    })
+    reply = readReply(written.text)
+    const over = reply.kind === "message" ? overLimit(reply.text) : null
+    if (over) reply = { kind: "error", detail: `over_limit:${over}` }
+    await spend("heartbeat_writer", reply.kind, written.spent)
+  } catch (error) {
+    reply = { kind: "error", detail: `writer_error:${failureCode(error)}` }
+  }
+  if (reply.kind !== "message") {
+    await kit.withOrg({ orgId }, (db) =>
+      db.delete(deliveries).where(eq(deliveries.key, cap))
+    )
+    return reply.kind === "quiet"
+      ? record("skipped", `quiet: ${reply.reason}`)
+      : record("failed", reply.detail)
+  }
+
+  const { text } = reply
+  const chip = beat.items.find((item) => item.facts.chip)?.facts.chip
+  const key = `heartbeat:${orgId}:${jobId}:${slot.toISOString()}`
+  const sends = await kit.withOrg({ orgId }, async (db) => {
+    const out = [
+      await deliverIn(db, env, {
+        orgId,
+        key,
+        channel: "in_app",
+        message: {
+          text: [text],
+          ...(chip && {
+            button: { label: chip, action: { kind: "ask", text: chip } },
+          }),
+        },
+      }),
+    ]
+    // At most one a day, since the cap above holds the day's one message.
+    if (!beat.typed)
+      out.push(
+        await deliverIn(db, env, {
+          orgId,
+          key: `${key}:email`,
+          channel: "email",
+          subject: "An update from Reme",
+          text,
+        })
+      )
+    await db
+      .update(jobRuns)
+      .set({
+        outcome: "ok",
+        detail: out.length > 1 ? "sent:in_app,email" : "sent:in_app",
+      })
+      .where(thisRun)
+    return out
+  })
+  await Promise.all(sends.map((send) => send?.()))
+}
+
 /**
  * The handler, over `sources`. Quiet hours are checked again here, since a
  * retry after a failure is timed by the backoff, not the rule. A digest that
  * throws rolls the run back, ledger included, and the run is recorded
- * failed: a source that could not be read is not a change.
+ * failed: a source that could not be read is not a change. The models run in
+ * `after`, once the ledger has committed; what they decide is written to the
+ * run's `job_runs` row then.
  */
-export function heartbeatWith(sources: Source[] = SOURCES): Handler {
-  return async ({ db, job, now }) => {
+export function heartbeatWith(
+  sources: Source[] = SOURCES,
+  models: (env: Env) => Models = liveModels
+): Handler {
+  return async ({ db, kit, env, job, now }) => {
     const [org] = await db
       .select({
+        proactivity: orgs.proactivity,
         timeZone: orgs.timeZone,
         quietStart: orgs.quietStart,
         quietEnd: orgs.quietEnd,
       })
       .from(orgs)
+    if (!org || org.proactivity === "off")
+      return { outcome: "skipped", detail: "off" }
     if (
-      org &&
       inQuiet(now, org.timeZone, { start: org.quietStart, end: org.quietEnd })
     )
       return { outcome: "skipped", detail: "quiet_hours" }
@@ -257,7 +537,26 @@ export function heartbeatWith(sources: Source[] = SOURCES): Handler {
     // Detection time is the state boundary: the keys are surfaced before any
     // model looks, so a model that fails does not raise them again.
     await surface(db, job.orgId, fresh, now)
-    return { outcome: "ok", detail: `new:${fresh.length}` }
+    const last = await lastHeartbeat(db, job.orgId)
+    const beat: Beat = {
+      orgId: job.orgId,
+      jobId: job.id,
+      slot: job.nextRunAt,
+      level: org.proactivity,
+      zone: org.timeZone,
+      now,
+      items: fresh,
+      profile: await ownerProfile(db),
+      last,
+      typed: await typedSince(db, last?.at ?? job.createdAt),
+    }
+    return {
+      outcome: "ok",
+      detail: `new:${fresh.length}`,
+      after: async () => {
+        await speak(kit, env, models(env), beat)
+      },
+    }
   }
 }
 

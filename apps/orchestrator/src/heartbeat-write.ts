@@ -65,10 +65,13 @@ export async function askGate(
       questions: { worth_it: { type: "boolean", instructions: GATE.question } },
       abortSignal: AbortSignal.timeout(GATE.timeoutMs),
     })
-  const answer = result.answers.worth_it
+  const answer = Object.entries(result.answers).find(
+    ([id]) => id === "worth_it"
+  )?.[1]
+  if (answer?.type !== "boolean") throw new Error("heartbeat.gate_unanswered")
   const input = result.usage?.inputTokens ?? 0
   return {
-    probability: answer.type === "boolean" ? answer.probability : 0,
+    probability: answer.probability,
     spent: {
       model: GATE.model,
       cost_usd:
