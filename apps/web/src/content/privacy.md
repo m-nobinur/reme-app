@@ -113,10 +113,10 @@ We use only cookies needed to sign you in, keep you signed in and remember choic
 | Name | Purpose | How long |
 | --- | --- | --- |
 | __Host-wos-session | Keeps you signed in. Its contents are encrypted | Up to 400 days, or until you sign out |
-| reme-auth-flow | Carries a sign-in or sign-up through its steps. Encrypted | 10 minutes |
+| __Host-reme-auth-flow | Carries a sign-in or sign-up through its steps. Encrypted | 10 minutes |
 | reme-oauth-state | Protects Sign in with Google against forged requests | 10 minutes |
 | reme-google-state | Holds the sign-in state while you connect Google, and protects it against forged requests | 10 minutes |
-| reme-org-intent | Remembers your business name if sign-up stopped before your workspace was created. Encrypted | 30 days |
+| __Host-reme-org-intent | Remembers your business name if sign-up stopped before your workspace was created. Encrypted | 30 days |
 | reme-notifications-seen-... | Remembers which notifications you have already seen | 1 year |
 | reme_preview | Opens a preview of an unpublished website version from a preview link | Up to 24 hours |
 
