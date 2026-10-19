@@ -32,7 +32,11 @@ export interface components {
             /** Format: date-time */
             at: string
             /** @enum {string} */
-            reason: "build_failed" | "budget_parked" | "publish_rolled_back"
+            reason:
+              | "build_failed"
+              | "budget_parked"
+              | "publish_rolled_back"
+              | "job_paused"
             /** @enum {string} */
             cause?:
               | "stalled"
@@ -2132,9 +2136,22 @@ export interface components {
           /** Format: date-time */
           at: string
           /** @enum {string} */
-          reason: "build_failed" | "budget_parked" | "publish_rolled_back"
+          reason:
+            | "build_failed"
+            | "budget_parked"
+            | "publish_rolled_back"
+            | "job_paused"
           /** @enum {string} */
           cause?: "stalled" | "unfinished" | "unanswered" | "service" | "other"
+        }
+      | {
+          /** @constant */
+          kind: "reminder"
+          /** Format: uuid */
+          reminder_id: string
+          title: string
+          /** Format: date-time */
+          due_at: string
         }
     Blueprint: {
       direction: string
@@ -6724,12 +6741,21 @@ export interface components {
       org_id: string
       key: string
       /** @enum {string} */
-      channel: "in_app" | "email"
+      channel: "in_app" | "email" | "push"
       /** @enum {string} */
-      state: "pending" | "sent" | "failed" | "suppressed"
+      state:
+        | "pending"
+        | "sending"
+        | "unknown"
+        | "sent"
+        | "failed"
+        | "suppressed"
       attempts: number
       sent_at: string | null
       error: string | null
+      lease_until: string | null
+      /** Format: date-time */
+      created_at: string
     }
     DeploymentManifest: {
       /** Format: uuid */
@@ -7936,6 +7962,20 @@ export interface components {
       metrics: {
         [key: string]: number
       }
+    }
+    PushConfig: {
+      public_key: string | null
+    }
+    PushSubscribeRequest: {
+      endpoint: string
+      keys: {
+        p256dh: string
+        auth: string
+      }
+    }
+    PushSubscribed: {
+      /** Format: uuid */
+      id: string
     }
     QuoteField: {
       key: string
@@ -10021,7 +10061,11 @@ export interface components {
             /** Format: date-time */
             at: string
             /** @enum {string} */
-            reason: "build_failed" | "budget_parked" | "publish_rolled_back"
+            reason:
+              | "build_failed"
+              | "budget_parked"
+              | "publish_rolled_back"
+              | "job_paused"
             /** @enum {string} */
             cause?:
               | "stalled"
@@ -10029,6 +10073,15 @@ export interface components {
               | "unanswered"
               | "service"
               | "other"
+          }
+        | {
+            /** @constant */
+            kind: "reminder"
+            /** Format: uuid */
+            reminder_id: string
+            title: string
+            /** Format: date-time */
+            due_at: string
           }
       )[]
       missing_facts: (

@@ -29,7 +29,8 @@ const ACTION = buttonVariants({ variant: "outline", size: "sm" })
 
 /**
  * Where an item is acted on: questions and approvals in the panel, which
- * opens on the item. Reports and alerts are there to read.
+ * opens on the item; a reminder on the reminders page. Reports and alerts
+ * are there to read.
  */
 function actionOf(item: AttentionItem) {
   if (item.kind === "approval" || item.kind === "question") {
@@ -43,6 +44,13 @@ function actionOf(item: AttentionItem) {
         {item.kind === "approval"
           ? `Review version ${item.version}`
           : "Answer in the panel"}
+      </Link>
+    )
+  }
+  if (item.kind === "reminder") {
+    return (
+      <Link className={ACTION} to="/app/reminders">
+        Open reminders
       </Link>
     )
   }

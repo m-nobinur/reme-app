@@ -14,6 +14,7 @@ import {
   orgs,
   resolveOrg,
   rootStaffId,
+  sql,
   staff,
   supersedeFact,
   type Tenancy,
@@ -91,6 +92,28 @@ export type Directory = {
 export class EmailTaken extends Error {}
 
 /**
+ * How long a signup's claim holds. Longer than a whole attempt can run (three
+ * WorkOS calls bounded at 3 s each, then the writes), so only the claim of an
+ * attempt that died is ever taken over.
+ */
+export const SIGNUP_LEASE_S = 30
+
+/**
+ * How long a second signup waits for the first. Under `apps/web`'s 10 s wait
+ * for an answer, so the refusal below reaches it rather than its own timeout.
+ */
+export const SIGNUP_WAIT_MS = 8_000
+
+const SIGNUP_POLL_MS = 500
+
+/**
+ * Another signup for this person is still running. Not caught in `index.ts`,
+ * so it answers 503 `request.failed`, which `apps/web` already treats as a
+ * write to retry.
+ */
+export class SignupBusy extends Error {}
+
+/**
  * Creates the org: the WorkOS organization first, then ours.
  *
  * "Transactionally with the WorkOS organization" is not achievable and ADR-029
@@ -113,6 +136,12 @@ export class EmailTaken extends Error {}
  * after it, and it needs no promise from the vendor. `resolveOrg` then finds
  * whatever we already wrote, and `orgs_workos_organization_key` refuses a
  * second row for one organization if two requests race.
+ *
+ * Two signups at once for one person both read no membership, so each would
+ * make an organization. The person's row carries a claim (`signupClaimedAt`):
+ * the first takes it, and the second waits until it can take it in turn and
+ * then adopts. No connection is held across the WorkOS calls; holding a lock
+ * open there drained a 2-connection pool before (PR #296).
  *
  * The consequence, and it is deliberate: this endpoint creates at most one
  * organisation per person. It is the signup writer, and a second business for
@@ -166,6 +195,76 @@ export async function createOrg(
   )
   if (!personId) throw new EmailTaken()
 
+  // One signup per person at a time. A second one waits, holding no
+  // connection, and once it holds the claim it adopts what the first made.
+  const deadline = Date.now() + SIGNUP_WAIT_MS
+  let claimed = await claimSignup(kit, input.workosUserId)
+  while (!claimed) {
+    if (Date.now() >= deadline) throw new SignupBusy()
+    await new Promise((resolve) => setTimeout(resolve, SIGNUP_POLL_MS))
+    claimed = await claimSignup(kit, input.workosUserId)
+  }
+  try {
+    return await writeOrg(kit, directory, input, personId, newId)
+  } finally {
+    // Cleared on failure too, so a retry goes straight in. A clear that fails
+    // leaves the claim to lapse after the lease.
+    await releaseSignup(kit, input.workosUserId, claimed).catch(() => undefined)
+  }
+}
+
+/** The person's own row, as `users_self_update` allows, under a fresh org id. */
+const asPerson = (workosUserId: string) => ({
+  orgId: crypto.randomUUID(),
+  workosUserId,
+})
+
+/**
+ * Takes the claim, or null when a live one is held. One statement, committed
+ * at once: a racing second update waits on the row lock, then reads the claim
+ * the first wrote and matches nothing. Milliseconds, so the release can match
+ * the stamp exactly as it comes back through a `Date`.
+ */
+async function claimSignup(
+  kit: Tenancy,
+  workosUserId: string
+): Promise<Date | null> {
+  return kit.withOrg(asPerson(workosUserId), async (db) => {
+    const [row] = await db
+      .update(users)
+      .set({ signupClaimedAt: sql`date_trunc('milliseconds', now())` })
+      .where(
+        sql`${users.workosUserId} = ${workosUserId} and (${users.signupClaimedAt} is null
+          or ${users.signupClaimedAt} < now() - make_interval(secs => ${SIGNUP_LEASE_S}))`
+      )
+      .returning({ at: users.signupClaimedAt })
+    return row?.at ?? null
+  })
+}
+
+/** Clears this attempt's claim, and not one a later attempt took over. */
+async function releaseSignup(
+  kit: Tenancy,
+  workosUserId: string,
+  at: Date
+): Promise<void> {
+  await kit.withOrg(asPerson(workosUserId), async (db) => {
+    await db.update(users).set({ signupClaimedAt: null }).where(
+      // As ISO text: a `Date` bound raw goes out in its local string form,
+      // which drops the milliseconds and never matches.
+      sql`${users.workosUserId} = ${workosUserId} and ${users.signupClaimedAt} = ${at.toISOString()}::timestamptz`
+    )
+  })
+}
+
+/** The org for a person who holds the signup claim: adopted or created. */
+async function writeOrg(
+  kit: Tenancy,
+  directory: Directory,
+  input: Parameters<typeof createOrg>[2],
+  personId: string,
+  newId: () => string
+): Promise<Org> {
   // The replay: everything after it either creates a vendor resource or
   // writes a row.
   const existing = await directory.listOrganizationMemberships({

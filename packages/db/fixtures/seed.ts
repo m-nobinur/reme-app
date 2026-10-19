@@ -15,6 +15,7 @@ import {
   jobRuns,
   memberships,
   orgs,
+  pushSubscriptions,
   reminders,
   roles,
   scheduledJobs,
@@ -131,6 +132,9 @@ export async function clearOrgs(
   await tx.delete(domains).where(inArray(domains.orgId, ids))
   // A run cites its job; a job points at a reminder, with no key to say so.
   await tx.delete(deliveries).where(inArray(deliveries.orgId, ids))
+  await tx
+    .delete(pushSubscriptions)
+    .where(inArray(pushSubscriptions.orgId, ids))
   await tx.delete(jobRuns).where(inArray(jobRuns.orgId, ids))
   await tx.delete(scheduledJobs).where(inArray(scheduledJobs.orgId, ids))
   // A reminder and a message cite their conversation, and a conversation its

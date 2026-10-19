@@ -18,6 +18,8 @@ import {
   events,
   facts,
   newUlid,
+  orgs,
+  scheduledJobs,
   sql,
   type Tenancy,
   tenancy,
@@ -1342,6 +1344,54 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         offered: false,
         builder: false,
       })
+    })
+
+    it("stores the browser's zone on a turn, and moves the org's recurring jobs only when it changes", async () => {
+      const fresh = await owner(kit, url as string, "chat-zone")
+      const talk = talker(fresh)
+      const id = await talk.onboarding()
+      const zoneOf = () =>
+        kit.withOrg({ orgId: fresh.orgId }, async (db) => ({
+          zone: (await db.select({ z: orgs.timeZone }).from(orgs))[0]?.z,
+          next: (
+            await db.select({ at: scheduledJobs.nextRunAt }).from(scheduledJobs)
+          )[0]?.at.toISOString(),
+        }))
+      await kit.withOrg({ orgId: fresh.orgId }, (db) =>
+        db.insert(scheduledJobs).values({
+          orgId: fresh.orgId,
+          kind: "heartbeat",
+          // Daily at 09:00 in the org's zone.
+          rule: "0 9 * * *",
+          nextRunAt: new Date(Date.now() + 30 * 86_400_000),
+        })
+      )
+      const turn = (n: number, time_zone?: string) =>
+        talk.send({
+          conversation_id: id,
+          mode: "act",
+          turn: {
+            kind: "message",
+            message_id: `u_zone_${n}`,
+            text: "Weddings",
+          },
+          ...(time_zone && { time_zone }),
+        })
+
+      expect((await turn(1, "Asia/Tokyo")).response.status).toBe(200)
+      const tokyo = await zoneOf()
+      expect(tokyo.zone).toBe("Asia/Tokyo")
+      // 09:00 in Tokyo is 00:00 UTC.
+      expect(tokyo.next).toMatch(/T00:00:00\.000Z$/)
+
+      // A turn with no zone keeps the stored one and moves nothing.
+      expect((await turn(2)).response.status).toBe(200)
+      expect(await zoneOf()).toEqual(tokyo)
+
+      expect((await turn(3, "America/New_York")).response.status).toBe(200)
+      const york = await zoneOf()
+      expect(york.zone).toBe("America/New_York")
+      expect(york.next).toMatch(/T1[34]:00:00\.000Z$/)
     })
 
     it("refuses what a client may not send, and an unknown conversation", async () => {

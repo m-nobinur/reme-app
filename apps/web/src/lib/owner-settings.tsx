@@ -25,6 +25,7 @@ import {
 } from "@workspace/ui/components/theme-toggle"
 import { Hint } from "@workspace/ui/components/tooltip"
 import type { ReactNode } from "react"
+import { PushControl } from "@/lib/push-control"
 import { useLiveWorkspace } from "@/lib/workspace"
 
 /**
@@ -170,6 +171,9 @@ export function OwnerSettings({
           <Link className={LINK} to="/app/notifications">
             See all notifications
           </Link>
+          <div className="mt-6">
+            <PushControl />
+          </div>
         </>
       ),
     },

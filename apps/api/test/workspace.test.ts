@@ -8,6 +8,7 @@ import {
   WorkspaceStatus,
 } from "@workspace/contracts"
 import {
+  appendEvent,
   approvals as approvalRows,
   assignments,
   conversationMessages,
@@ -15,6 +16,7 @@ import {
   domains,
   eq,
   postAssistantMessage,
+  reminders,
   serverMessageId,
   sql,
   staff,
@@ -306,7 +308,9 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
           ? item.request.approval_id
           : item.kind === "question"
             ? item.request.request_id
-            : item.event_id
+            : item.kind === "reminder"
+              ? item.reminder_id
+              : item.event_id
       )
     ).toEqual([
       busyIds.review,
@@ -846,7 +850,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     })
   })
 
-  it("reads the workspace in one transaction of eight statements", async () => {
+  it("reads the workspace in one transaction of ten statements", async () => {
     let transactions = 0
     let statements = 0
     const counted: Tenancy = {
@@ -867,8 +871,75 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     }
     await readWorkspace(counted, busy.orgId, { SITE_HOST_SUFFIX: SUFFIX })
     expect(transactions).toBe(1)
-    // The eighth reads the generated photos of the waiting approval.
-    expect(statements).toBe(8)
+    // The tenth reads the generated photos of the waiting approval; the
+    // reminders that came due and the paused jobs are one each.
+    expect(statements).toBe(10)
+  })
+
+  it("lists a reminder once it is due and until it is done, after the questions and before the alerts", async () => {
+    const who = await owner(kit, url as string, "due-reminders")
+    const d = seed(kit, who)
+    const build = await d.assignment("awaiting_review")
+    const approval = await d.approval(build, await d.revision(build, 1), 25)
+    const made = await kit.withOrg({ orgId: who.orgId }, async (db) => {
+      const row = (title: string, dueAt: Date | null, doneAt?: Date) => ({
+        orgId: who.orgId,
+        title,
+        dueAt,
+        doneAt: doneAt ?? null,
+        source: "owner" as const,
+        createdByStaffId: who.chiefId,
+      })
+      const rows = await db
+        .insert(reminders)
+        .values([
+          row("due earlier", new Date(Date.now() - 3 * 3_600_000)),
+          row("due later", new Date(Date.now() - 3_600_000)),
+          row("not yet", new Date(Date.now() + 3_600_000)),
+          row("done", new Date(Date.now() - 3_600_000), new Date()),
+          row("undated", null),
+        ])
+        .returning({ id: reminders.id, title: reminders.title })
+      return Object.fromEntries(rows.map((r) => [r.title, r.id]))
+    })
+    const body = WorkspaceStatus.parse(await (await workspace(who)).json())
+    expect(body.attention).toMatchObject([
+      { kind: "approval", request: { approval_id: approval } },
+      { kind: "reminder", reminder_id: made["due later"], title: "due later" },
+      {
+        kind: "reminder",
+        reminder_id: made["due earlier"],
+        title: "due earlier",
+      },
+    ])
+  })
+
+  it("lists a paused job as an alert in the activity feed and the panel, though it belongs to no build", async () => {
+    const who = await owner(kit, url as string, "paused-job")
+    const eventId = await kit.withOrg({ orgId: who.orgId }, (db) =>
+      appendEvent(db, {
+        orgId: who.orgId,
+        assignmentId: null,
+        staffId: null,
+        type: "alert.raised",
+        payload: { kind: "job.paused", job_id: crypto.randomUUID() },
+      })
+    )
+    const feed = ActivityFeed.parse(
+      await (await who.call(stubOrchestrator(), "/activity")).json()
+    )
+    expect(feed.items).toMatchObject([
+      {
+        kind: "alert",
+        event_id: eventId,
+        assignment_id: null,
+        reason: "job_paused",
+      },
+    ])
+    const panel = WorkspaceStatus.parse(await (await workspace(who)).json())
+    expect(panel.attention).toMatchObject([
+      { kind: "alert", event_id: eventId, reason: "job_paused" },
+    ])
   })
 
   it("lists 30 days of reports and alerts as activity, newest first", async () => {

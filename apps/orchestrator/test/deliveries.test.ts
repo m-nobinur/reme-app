@@ -12,6 +12,7 @@ import {
   deliver,
   deliveriesBatch,
   MAX_RETRIES,
+  redriveDeliveries,
 } from "../src/deliveries.ts"
 import { freshOrg, kit } from "./fixture.ts"
 
@@ -24,7 +25,10 @@ const url = process.env.DATABASE_URL
 const text = ["Your reminder is due."]
 
 function stubs() {
-  const queue = { send: vi.fn(async () => undefined) }
+  const queue = {
+    send: vi.fn(async () => undefined),
+    sendBatch: vi.fn(async (_batch: { body: DeliveryMessage }[]) => undefined),
+  }
   const send = vi.fn(async (_message: EmailMessageBuilder) => ({
     messageId: "m",
   }))
@@ -37,6 +41,7 @@ function stubs() {
       APP_ORIGIN: "https://app.example.invalid",
       REPLY_TOKEN_KEY: "k".repeat(32),
       REPLY_DOMAIN: "reply.example.invalid",
+      VAPID_SUBJECT: "mailto:ops@example.invalid",
       HYPERDRIVE: {} as Hyperdrive,
     },
   }
@@ -253,5 +258,111 @@ describe.skipIf(!url)("the delivery outbox", () => {
     expect(await countIn(ids.older)).toHaveLength(1)
     expect(await countIn(ids.newest)).toHaveLength(0)
     expect(await rowOf(orgId, "reminder:i1")).toMatchObject({ state: "sent" })
+  })
+
+  it("sends once when two consumers hold the same message", async () => {
+    const orgId = await freshOrg(kit)
+    const { env, send } = stubs()
+    send.mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      return { messageId: "m" }
+    })
+    const body = mail(orgId, "reminder:c1")
+    await deliver(kit, env, body)
+    const [a, b] = await Promise.all([consume(env, body), consume(env, body)])
+    expect(a.ack).toHaveBeenCalled()
+    expect(b.ack).toHaveBeenCalled()
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(await rowOf(orgId, "reminder:c1")).toMatchObject({
+      state: "sent",
+      attempts: 1,
+      leaseUntil: null,
+      payload: null,
+    })
+  })
+
+  it("takes a sending row back only once its lease has lapsed", async () => {
+    const orgId = await freshOrg(kit)
+    const { env, send } = stubs()
+    const body = mail(orgId, "reminder:l1")
+    await deliver(kit, env, body)
+    const lease = (interval: string) =>
+      kit.withOrg({ orgId }, (db) =>
+        db
+          .update(deliveries)
+          .set({
+            state: "sending",
+            leaseUntil: sql`now() + ${interval}::interval`,
+          })
+          .where(eq(deliveries.key, "reminder:l1"))
+      )
+    await lease("1 minute")
+    expect((await consume(env, body)).ack).toHaveBeenCalled()
+    expect(send).not.toHaveBeenCalled()
+    await lease("-1 minute")
+    await consume(env, body)
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(await rowOf(orgId, "reminder:l1")).toMatchObject({ state: "sent" })
+  })
+
+  it("settles an email that may have left as unknown and never resends it", async () => {
+    const orgId = await freshOrg(kit)
+    const { env, send } = stubs()
+    send.mockRejectedValue(new Error("connection reset"))
+    const body = mail(orgId, "reminder:u1")
+    await deliver(kit, env, body)
+    const first = await consume(env, body)
+    expect(first.ack).toHaveBeenCalled()
+    expect(first.retry).not.toHaveBeenCalled()
+    expect(await rowOf(orgId, "reminder:u1")).toMatchObject({
+      state: "unknown",
+      leaseUntil: null,
+    })
+    await consume(env, body)
+    expect(send).toHaveBeenCalledTimes(1)
+  })
+
+  it("queues again what has sat unsettled for ten minutes, and nothing else", async () => {
+    const orgId = await freshOrg(kit)
+    const { env, queue } = stubs()
+    const keys = {
+      old: "reminder:d1",
+      lapsed: "reminder:d2",
+      held: "reminder:d3",
+      fresh: "reminder:d4",
+      done: "reminder:d5",
+    }
+    for (const key of Object.values(keys))
+      await deliver(kit, env, mail(orgId, key))
+    const set = (
+      key: string,
+      state: "pending" | "sending" | "sent",
+      lease: string,
+      age: string
+    ) =>
+      kit.withOrg({ orgId }, (db) =>
+        db
+          .update(deliveries)
+          .set({
+            state,
+            leaseUntil: sql`now() + ${lease}::interval`,
+            createdAt: sql`now() - ${age}::interval`,
+          })
+          .where(eq(deliveries.key, key))
+      )
+    await set(keys.old, "pending", "0", "11 minutes")
+    await set(keys.lapsed, "sending", "-1 minute", "11 minutes")
+    await set(keys.held, "sending", "1 minute", "11 minutes")
+    await set(keys.fresh, "pending", "0", "1 minute")
+    await set(keys.done, "sent", "0", "11 minutes")
+    await kit.withOrg({ orgId }, (db) =>
+      db
+        .update(deliveries)
+        .set({ payload: null })
+        .where(eq(deliveries.key, keys.done))
+    )
+    expect(await redriveDeliveries(kit, env, orgId)).toBe(2)
+    const queued = queue.sendBatch.mock.calls[0]?.[0].map((m) => m.body.key)
+    expect(queued).toEqual([keys.old, keys.lapsed])
   })
 })

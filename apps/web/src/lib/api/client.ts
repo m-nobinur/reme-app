@@ -17,6 +17,9 @@ import {
   type MessageFeedback,
   Org,
   PreviewLink,
+  PushConfig,
+  PushSubscribed,
+  type PushSubscribeRequest,
   type RegistrantDetails,
   StaffDirectory,
   Uuid,
@@ -247,6 +250,12 @@ function logged(item: Logged): { title: string; detail: string } {
         detail:
           "The new version failed its checks once live, so your site went back to the one before.",
       }
+    case "job_paused":
+      return {
+        title: "A scheduled task was paused",
+        detail:
+          "Something Reme does on a schedule kept failing, so it was paused.",
+      }
   }
 }
 
@@ -343,6 +352,18 @@ function toAttention(
         onExpiry: item.request.blocking
           ? "The build waits on you until you answer."
           : "The build carries on without it.",
+      }
+    case "reminder":
+      return {
+        kind: "reminder",
+        id: item.reminder_id,
+        title: item.title,
+        detail: "You asked to be reminded. Mark it done on the Reminders page.",
+        raisedBy: SYSTEM,
+        raisedById: null,
+        raisedAt: item.due_at,
+        expiresAt: null,
+        onExpiry: "It stays here until you mark it done.",
       }
     default:
       return {
@@ -607,6 +628,32 @@ async function completeReminder(id: string): Promise<WriteOutcome> {
   )
 }
 
+async function pushKey(): Promise<string | null> {
+  const body = await get("/push/config")
+  return body === null ? null : PushConfig.parse(body).public_key
+}
+
+async function subscribePush(
+  input: PushSubscribeRequest,
+  key: string
+): Promise<string | null> {
+  const response = await post("/push/subscriptions", input, key)
+  if (response.ok) return PushSubscribed.parse(await response.json()).id
+  // A refusal (not the owner, an address that is no push service) is final.
+  if (response.status >= 400 && response.status < 500) return null
+  throw new Error(
+    `apps/api answered ${response.status} for /push/subscriptions`
+  )
+}
+
+async function unsubscribePush(id: string): Promise<WriteOutcome> {
+  const path = `/push/subscriptions/${segment(id)}`
+  return await outcome(
+    await post(path, undefined, `unsubscribe:${id}`, "DELETE"),
+    path
+  )
+}
+
 async function conversations(): Promise<Conversation[]> {
   const body = await get("/conversations")
   return body === null ? [] : ConversationList.parse(body).conversations
@@ -724,6 +771,9 @@ export const apiSource: OwnerDataSource = {
   requestChange,
   createReminder,
   completeReminder,
+  pushKey,
+  subscribePush,
+  unsubscribePush,
   domainCheckout,
   domainStatus,
   googleConnect,

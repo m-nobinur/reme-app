@@ -233,6 +233,12 @@ export const users = pgTable(
     workosUserId: text("workos_user_id").notNull(),
     email: text("email").notNull(),
     name: text("name"),
+    /**
+     * Set while one signup is creating this person's org, so a second one at
+     * the same moment waits for it instead of making a second org. Null when
+     * no signup is running (`apps/api/src/org.ts`).
+     */
+    signupClaimedAt: timestamp("signup_claimed_at", { withTimezone: true }),
     createdAt,
     updatedAt,
   },
@@ -1240,11 +1246,17 @@ export const jobRuns = pgTable(
 )
 
 /** `Delivery.channel`. */
-export const deliveryChannel = pgEnum("delivery_channel", ["in_app", "email"])
+export const deliveryChannel = pgEnum("delivery_channel", [
+  "in_app",
+  "email",
+  "push",
+])
 
 /** `Delivery.state`. */
 export const deliveryState = pgEnum("delivery_state", [
   "pending",
+  "sending",
+  "unknown",
   "sent",
   "failed",
   "suppressed",
@@ -1267,6 +1279,17 @@ export const deliveries = pgTable(
     attempts: integer("attempts").notNull().default(0),
     sentAt: timestamp("sent_at", { withTimezone: true }),
     error: text("error"),
+    /** The consumer's claim: another consumer may take a `sending` row once it lapses. */
+    leaseUntil: timestamp("lease_until", { withTimezone: true }),
+    /** Ages a row for the hourly sweep. */
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    /**
+     * The queued message while the row is outstanding, so the sweep can queue
+     * it again; null once settled.
+     */
+    payload: jsonb("payload").$type<Record<string, unknown>>(),
   },
   (t) => [
     primaryKey({ name: "deliveries_pkey", columns: [t.orgId, t.key] }),
@@ -1274,6 +1297,46 @@ export const deliveries = pgTable(
     check("deliveries_attempts_count", sql`attempts >= 0`),
     check("deliveries_error_length", sql`char_length(error) <= 500`),
     orgIsolation("deliveries"),
+  ]
+)
+
+/**
+ * A browser the owner allowed to receive push (ADR-043). The endpoint is unique
+ * per org rather than alone, for the reason `deliveries.key` is: an insert in
+ * one org can neither collide with another's nor tell that it exists. A staff
+ * member keeps at most `PUSH_SUBSCRIPTION_CAP`; `addPushSubscription` drops
+ * the oldest.
+ */
+export const pushSubscriptions = pgTable(
+  "push_subscriptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    staffId: uuid("staff_id").notNull(),
+    endpoint: text("endpoint").notNull(),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    createdAt,
+  },
+  (t) => [
+    unique("push_subscriptions_org_endpoint_key").on(t.orgId, t.endpoint),
+    foreignKey({
+      name: "push_subscriptions_staff_fk",
+      columns: [t.staffId, t.orgId],
+      foreignColumns: [staff.id, staff.orgId],
+    }),
+    check(
+      "push_subscriptions_endpoint",
+      sql`endpoint ~ '^https://' and char_length(endpoint) <= 2000`
+    ),
+    check(
+      "push_subscriptions_keys_length",
+      sql`char_length(p256dh) <= 200 and char_length(auth) <= 200`
+    ),
+    index("push_subscriptions_staff_idx").on(t.orgId, t.staffId, t.createdAt),
+    orgIsolation("push_subscriptions"),
   ]
 )
 

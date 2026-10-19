@@ -111,7 +111,15 @@ import {
 } from "./owner.ts"
 import { CompletionReport, ProgressEvent, ValidationReport } from "./report.ts"
 import { CapabilityCall, RuntimeSpec } from "./runtime.ts"
-import { Delivery, JobRun, OrgSchedule, ScheduledJob } from "./schedule.ts"
+import {
+  Delivery,
+  JobRun,
+  OrgSchedule,
+  PushConfig,
+  PushSubscribed,
+  PushSubscribeRequest,
+  ScheduledJob,
+} from "./schedule.ts"
 import {
   ConnectGoogleInput,
   ConnectGoogleOutput,
@@ -244,6 +252,9 @@ export const contracts = {
   PreviewClaim,
   PreviewLink,
   ProgressEvent,
+  PushConfig,
+  PushSubscribed,
+  PushSubscribeRequest,
   Reminder,
   ReminderPatch,
   QuoteField,

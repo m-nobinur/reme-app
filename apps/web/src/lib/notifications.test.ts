@@ -47,6 +47,16 @@ it("takes questions and approvals from /workspace and reports and alerts from /a
   ).toEqual(["q", "p", "r", "a"])
 })
 
+it("lists a due reminder among the rest by the time it fell due, and counts it unread after the seen time", () => {
+  const reminder = item("reminder", "boiler", "2026-10-01T10:00:00.000Z")
+  const listed = notificationsOf(
+    waitingOnOwner([item("question", "q", SEEN), reminder]),
+    [item("report", "r", "2026-10-01T06:00:00.000Z")]
+  )
+  expect(listed.map((each) => each.id)).toEqual(["boiler", "q", "r"])
+  expect(unreadCount(listed, SEEN)).toBe(1)
+})
+
 it("lists the newest first", () => {
   const listed = notificationsOf(
     [

@@ -6,20 +6,25 @@ import {
   failureCode,
   logFailure,
   memberships,
+  type OrgScopedDb,
   postAssistantMessage,
   sql,
   type Tenancy,
   tenancy,
   users,
 } from "@workspace/db"
+import { type PushDelivery, pushFor, sendPush } from "./push.ts"
 
 /**
  * The outbox (ADR-043). `deliver` writes the row and queues one message; the
  * batch handler below sends it. The key names the cause (`reminder:<id>`),
  * never the time sent, so a second `deliver` for the same cause is a no-op.
- * The Queue is at-least-once, so the consumer sends only a row still
- * `pending`; a crash between a send and its row update can repeat one email,
- * which the in-app path avoids by posting under a stable message id.
+ * The Queue is at-least-once, so the consumer first moves the row from
+ * `pending` to `sending` with a lease, and only the one that wins sends. A
+ * crash past the lease can repeat one email, which the in-app path avoids by
+ * posting under a stable message id. An email whose send fails with no
+ * provider code may have left, so it settles as `unknown` and is never
+ * sent again. A delivered in-app message also queues a push (push.ts).
  */
 
 export const OWNER_FROM = { name: "Reme", email: "hello@remeai.co.uk" }
@@ -30,6 +35,12 @@ export const DELIVERIES_QUEUES = [
 ]
 /** Matched to `max_retries` in wrangler.jsonc: the last attempt settles the row as failed. */
 export const MAX_RETRIES = 5
+/** A send takes seconds; the lease only bounds how long a dead consumer holds a row. */
+const LEASE = "5 minutes"
+/** How long a row may sit unsettled before the hourly sweep queues it again. */
+const STUCK_AFTER = "10 minutes"
+/** Per org per sweep, so one backlog cannot swamp the batch. */
+const REDRIVE_LIMIT = 50
 
 export type DeliveryMessage = { orgId: string; key: string } & (
   | {
@@ -45,11 +56,15 @@ export type DeliveryMessage = { orgId: string; key: string } & (
       /** The conversation a reply goes to; with none, the email takes no reply. */
       conversationId?: string
     }
+  | PushDelivery
 )
 
 type SendEnv = { DELIVERIES: Queue<DeliveryMessage> }
-type BatchEnv = {
+type BatchEnv = SendEnv & {
   HYPERDRIVE: Hyperdrive
+  /** Signs the push request; unset, a push fails as `push_unset`. */
+  VAPID_PRIVATE_KEY?: string
+  VAPID_SUBJECT: string
   OWNER_MAIL: SendEmail
   APP_ORIGIN: string
   /** Signs the Reply-To token; unset, an email goes without one. */
@@ -57,20 +72,34 @@ type BatchEnv = {
   REPLY_DOMAIN: string
 }
 
+/**
+ * Writes the outbox row, holding the message so the sweep can queue it again
+ * (it carries no address; the owner's is read at send time). False when the
+ * key already has a row. The caller queues the message after its commit.
+ */
+export async function insertDelivery(
+  db: OrgScopedDb,
+  delivery: DeliveryMessage
+): Promise<boolean> {
+  const { orgId, key, channel } = delivery
+  const inserted = await db
+    .insert(deliveries)
+    .values({ orgId, key, channel, payload: delivery })
+    .onConflictDoNothing()
+    .returning({ key: deliveries.key })
+  return inserted.length > 0
+}
+
 export async function deliver(
   kit: Tenancy,
   env: SendEnv,
   delivery: DeliveryMessage
 ): Promise<"queued" | "exists"> {
-  const { orgId, key, channel } = delivery
+  const { orgId, key } = delivery
   const inserted = await kit.withOrg({ orgId }, (db) =>
-    db
-      .insert(deliveries)
-      .values({ orgId, key, channel })
-      .onConflictDoNothing()
-      .returning({ key: deliveries.key })
+    insertDelivery(db, delivery)
   )
-  if (inserted.length === 0) return "exists"
+  if (!inserted) return "exists"
   try {
     await env.DELIVERIES.send(delivery)
   } catch (error) {
@@ -83,9 +112,27 @@ export async function deliver(
   return "queued"
 }
 
+/**
+ * `deliver` for a caller already inside a transaction, such as a job
+ * handler: the row is written with `db`, so it commits with the caller's
+ * work or not at all. Returns the Queue send for the caller to run once that
+ * transaction has committed (a job handler's `after`), or null when the key
+ * already exists. Sent any earlier, the consumer could look for a row that
+ * is not visible yet and drop the message.
+ */
+export async function deliverIn(
+  db: OrgScopedDb,
+  env: SendEnv,
+  delivery: DeliveryMessage
+): Promise<(() => Promise<void>) | null> {
+  return (await insertDelivery(db, delivery))
+    ? async () => void (await env.DELIVERIES.send(delivery))
+    : null
+}
+
 type Outcome =
   | { state: "sent" | "suppressed" }
-  | { state: "failed"; error: string }
+  | { state: "failed" | "unknown"; error: string }
   | { state: "retry"; error: string }
 
 export async function deliveriesBatch(
@@ -109,18 +156,23 @@ export async function deliveriesBatch(
         })
         message.ack()
       } else {
+        await release(kit, message.body)
         message.retry({ delaySeconds })
       }
     } catch (error) {
-      // Left pending: the Queue redelivers, and after `max_retries` the
-      // dead-letter queue holds the message.
+      // The Queue redelivers, and after `max_retries` the dead-letter queue
+      // holds the message. In-app posts under a stable id, so its row is freed
+      // for the retry; an email stays claimed until the lease lapses, since
+      // the send may have left.
       logFailure({ where: "deliveries.batch" }, error)
+      if (message.body.channel === "in_app")
+        await release(kit, message.body).catch(() => undefined)
       message.retry({ delaySeconds })
     }
   }
 }
 
-/** Null when the row is not pending: already settled, or never kept. */
+/** Null when another consumer holds the row, or it is settled or never kept. */
 async function attempt(
   kit: Tenancy,
   env: BatchEnv,
@@ -130,21 +182,33 @@ async function attempt(
   const claimed = await kit.withOrg({ orgId }, (db) =>
     db
       .update(deliveries)
-      .set({ attempts: sql`${deliveries.attempts} + 1` })
+      .set({
+        state: "sending",
+        attempts: sql`${deliveries.attempts} + 1`,
+        leaseUntil: sql`now() + ${LEASE}::interval`,
+      })
       .where(
-        sql`${deliveries.key} = ${key} and ${deliveries.state} = 'pending'`
+        sql`${deliveries.key} = ${key} and (${deliveries.state} = 'pending' or (${deliveries.state} = 'sending' and ${deliveries.leaseUntil} < now()))`
       )
       .returning({ key: deliveries.key })
   )
   if (claimed.length === 0) return null
   if (body.channel === "email") return sendEmail(kit, env, body)
+  if (body.channel === "push") return sendPush(kit, env, orgId, body)
   const posted = await postAssistantMessage(kit, {
     orgId,
     key,
     message: body.message,
     conversationId: body.conversationId,
   })
-  if (posted === "posted" || posted === "exists") return { state: "sent" }
+  if (posted === "posted" || posted === "exists") {
+    // Also on "exists": a crash after the post must not lose the push, and a
+    // key already queued makes this a no-op.
+    const push = await pushFor(kit, body)
+    if (push)
+      await deliver(kit, env, { orgId, key: push.key, ...push.delivery })
+    return { state: "sent" }
+  }
   if (posted === "none") return { state: "failed", error: "no_conversation" }
   return { state: "retry", error: posted }
 }
@@ -162,9 +226,50 @@ async function settle(
         state: outcome.state,
         error,
         sentAt: outcome.state === "sent" ? sql`now()` : null,
+        leaseUntil: null,
+        payload: null,
       })
       .where(eq(deliveries.key, key))
   )
+}
+
+/** Hands a row back to `pending` so the retry can claim it. */
+async function release(kit: Tenancy, { orgId, key }: DeliveryMessage) {
+  await kit.withOrg({ orgId }, (db) =>
+    db
+      .update(deliveries)
+      .set({ state: "pending", leaseUntil: null })
+      .where(
+        sql`${deliveries.key} = ${key} and ${deliveries.state} = 'sending'`
+      )
+  )
+}
+
+/**
+ * The hourly sweep's part: queues again the rows the Queue lost, those still
+ * `pending` or `sending` past their lease after ten minutes. The claim step
+ * makes a message that was not lost harmless.
+ */
+export async function redriveDeliveries(
+  kit: Tenancy,
+  env: SendEnv,
+  orgId: string
+): Promise<number> {
+  const stuck = await kit.withOrg({ orgId }, (db) =>
+    db
+      .select({ payload: deliveries.payload })
+      .from(deliveries)
+      .where(
+        sql`${deliveries.payload} is not null and ${deliveries.createdAt} < now() - ${STUCK_AFTER}::interval and (${deliveries.state} = 'pending' or (${deliveries.state} = 'sending' and ${deliveries.leaseUntil} < now()))`
+      )
+      .orderBy(deliveries.createdAt)
+      .limit(REDRIVE_LIMIT)
+  )
+  if (stuck.length > 0)
+    await env.DELIVERIES.sendBatch(
+      stuck.map(({ payload }) => ({ body: payload as DeliveryMessage }))
+    )
+  return stuck.length
 }
 
 /**
@@ -260,8 +365,10 @@ async function sendEmail(
       )
       return { state: "suppressed" }
     }
-    // No code is a network or runtime error, which the next attempt may clear.
-    return TRANSIENT.has(code) || typeof raw !== "string"
+    // No code is a timeout or a dropped connection after the request may
+    // have left, so a resend could be a second email.
+    if (typeof raw !== "string") return { state: "unknown", error: code }
+    return TRANSIENT.has(code)
       ? { state: "retry", error: code }
       : { state: "failed", error: code }
   }

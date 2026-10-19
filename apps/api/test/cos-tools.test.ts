@@ -12,6 +12,7 @@ import {
   eq,
   facts,
   memberships,
+  NEXT_DUE_KEY,
   reminders,
   sql,
   supersedeFact,
@@ -1125,6 +1126,28 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         conversationId: turn.sessionId,
         createdByStaffId: me.chiefId,
       })
+    })
+
+    it("lowers the scheduler's guard to the due time, so the reminder fires within the minute", async () => {
+      const map = new Map([
+        [NEXT_DUE_KEY, JSON.stringify({ next: Date.now() + 9e9, scanned: 0 })],
+      ])
+      const kv = {
+        get: async (key: string) => JSON.parse(map.get(key) ?? "null"),
+        put: async (key: string, value: string) => void map.set(key, value),
+      }
+      const base = context(me)
+      const input = { title: "Ring the plumber", due_at: DUE }
+      await createReminder(
+        { ...base, env: { ...base.env, SCHEDULE: kv } as unknown as Env },
+        input,
+        crypto.randomUUID(),
+        await turnOf(me),
+        null
+      )
+      expect(JSON.parse(map.get(NEXT_DUE_KEY) as string).next).toBe(
+        Date.parse(DUE)
+      )
     })
 
     it("never replays the owner's own reminder keyed by the bare approval id", async () => {

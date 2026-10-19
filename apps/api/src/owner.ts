@@ -30,6 +30,7 @@ import { removal } from "./cos/tools.ts"
 import { checkout, isOrgOwner, purchaseStatus } from "./domain-buy.ts"
 import { googleConnect } from "./google.ts"
 import { failure, invalid, keyMissing, readBody } from "./http.ts"
+import { pushRoute } from "./push.ts"
 import { reminderRoute } from "./reminders.ts"
 import { readActivity, readFacts, unchanged } from "./workspace.ts"
 import { readTaggedWorkspace } from "./workspace-tag.ts"
@@ -44,7 +45,7 @@ import { readTaggedWorkspace } from "./workspace-tag.ts"
 
 /** The routes `ownerRoute` answers, for `index.ts` to resolve an org before. */
 export const OWNER_PATH =
-  /^\/(workspace|facts|assets|photos\/[^/]+|changes|activity|builds\/[^/]+\/(answer|blueprint|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback))?)?|reminders(\/[^/]+)?|domains\/[^/]+(\/checkout)?|google\/(connect|disconnect)|chat)$/
+  /^\/(workspace|facts|assets|photos\/[^/]+|changes|activity|builds\/[^/]+\/(answer|blueprint|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback))?)?|reminders(\/[^/]+)?|push\/(config|subscriptions(\/[^/]+)?)|domains\/[^/]+(\/checkout)?|google\/(connect|disconnect)|chat)$/
 
 async function setFacts(request: Request, kit: Tenancy, owner: Owner) {
   if (!idempotencyKey(request)) return keyMissing()
@@ -245,7 +246,8 @@ export async function ownerRoute(
   if (noun === "conversations") {
     return conversationRoute(request, kit, owner, id, action)
   }
-  if (noun === "reminders") return reminderRoute(request, kit, owner, id)
+  if (noun === "reminders") return reminderRoute(request, env, kit, owner, id)
+  if (noun === "push") return pushRoute(request, env, kit, owner)
   if (noun === "domains" && method === "DELETE" && !action) {
     return removeDomain(request, env, kit, owner, id)
   }

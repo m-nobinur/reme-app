@@ -15,6 +15,7 @@ import type {
   FactRecord,
   FactValueKey,
   MessageFeedback,
+  PushSubscribeRequest,
   RegistrantDetails,
   Reminder,
   WorkspaceStatus,
@@ -84,6 +85,8 @@ type AttentionBase = {
 export type AttentionItem =
   // A failed build's alert carries why it stopped.
   | (AttentionBase & { kind: "report" | "alert"; stopped?: BuildStopCause })
+  // A reminder that came due and is not done; `id` is the reminder's.
+  | (AttentionBase & { kind: "reminder" })
   // A question carries what answering it needs: the build it blocks, and the
   // inputs, derived on the server so the raw `answer_schema` never travels.
   | (AttentionBase & {
@@ -283,6 +286,14 @@ export type OwnerDataSource = {
     input: CreateReminderRequest,
     key: string
   ) => Promise<WriteOutcome>
+  /** The VAPID public key a browser subscribes with, or null where push is off. */
+  pushKey: () => Promise<string | null>
+  /** Saves this browser for push. Its id, or null when the api refused it. */
+  subscribePush: (
+    input: PushSubscribeRequest,
+    key: string
+  ) => Promise<string | null>
+  unsubscribePush: (id: string) => Promise<WriteOutcome>
   /** A domain purchase's Checkout, or the api's refusal code. Keyed by `key`. */
   domainCheckout: (
     name: string,

@@ -14,6 +14,7 @@ import {
   type Tenancy,
 } from "@workspace/db"
 import { withKit } from "./domain-flow.ts"
+import { reminderJob } from "./reminder-job.ts"
 import type { JobMessage } from "./schedule.ts"
 
 type ScheduledJob = typeof scheduledJobs.$inferSelect
@@ -25,12 +26,27 @@ type ScheduledJob = typeof scheduledJobs.$inferSelect
  * claim lapses. Anything that leaves Postgres goes through the outbox, and
  * the transaction's 15-second idle limit bounds the work done inside it.
  */
-export type JobRun = { db: OrgScopedDb; env: Env; job: ScheduledJob }
+export type JobRun = {
+  db: OrgScopedDb
+  env: Env
+  job: ScheduledJob
+  now: Date
+}
 
-/** Nothing returned means `ok`. Throwing is a failure, with backoff. */
-export type Handler = (
-  run: JobRun
-) => Promise<{ outcome: "ok" | "skipped"; detail?: string } | undefined>
+/**
+ * Nothing returned means `ok`. Throwing is a failure, with backoff. `after`
+ * runs once the run's transaction has committed and never otherwise, for what
+ * must not happen ahead of the commit, such as a Queue send for a row the run
+ * wrote. If it throws the run still stands; the error is logged.
+ */
+export type Handler = (run: JobRun) => Promise<
+  | {
+      outcome: "ok" | "skipped"
+      detail?: string
+      after?: () => Promise<void>
+    }
+  | undefined
+>
 
 export type Handlers = Partial<Record<ScheduledJob["kind"], Handler>>
 
@@ -38,7 +54,7 @@ export type Handlers = Partial<Record<ScheduledJob["kind"], Handler>>
 export const JOBS_QUEUES = ["reme-jobs", "reme-jobs-production"]
 
 /** One handler per kind, added by the story that adds the kind. */
-export const HANDLERS: Handlers = {}
+export const HANDLERS: Handlers = { reminder: reminderJob }
 
 /** Failures in a row before a job pauses and the owner is told. */
 export const MAX_FAILURES = 5
@@ -88,8 +104,10 @@ export async function runJob(
   now = new Date()
 ): Promise<Ran> {
   let next: Date | null = null
+  let after: (() => Promise<void>) | undefined
   try {
     const ran = await kit.withOrg({ orgId }, async (db): Promise<Ran> => {
+      after = undefined
       const job = await claimedJob(db, jobId, now)
       if (!job) return "stale"
       if (!(await orgOpen(db))) {
@@ -106,9 +124,10 @@ export async function runJob(
         .returning({ jobId: jobRuns.jobId })
       if (!run) return "stale"
       const handler = handlers[job.kind]
-      const result = handler
-        ? await handler({ db, env, job })
-        : { outcome: "skipped" as const, detail: "no handler" }
+      const result: Awaited<ReturnType<Handler>> = handler
+        ? await handler({ db, env, job, now })
+        : { outcome: "skipped", detail: "no handler" }
+      after = result?.after
       if (result)
         await db
           .update(jobRuns)
@@ -132,6 +151,16 @@ export async function runJob(
       return result?.outcome ?? "ok"
     })
     if (next) await lowerNextDue(env.SCHEDULE, next)
+    // Committed. A failure here leaves the handler's delivery rows pending.
+    await after?.().catch((error: unknown) =>
+      console.error(
+        JSON.stringify({
+          code: "jobs.after_failed",
+          job_id: jobId,
+          error: failureCode(error),
+        })
+      )
+    )
     return ran
   } catch (error) {
     return failed(kit, env, { jobId, orgId }, error, now)

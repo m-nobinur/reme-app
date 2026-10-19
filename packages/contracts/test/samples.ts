@@ -1016,7 +1016,18 @@ export const samples: Record<ContractName, unknown> = {
     attempts: 1,
     sent_at: LATER,
     error: null,
+    lease_until: null,
+    created_at: LATER,
   },
+  PushSubscribeRequest: {
+    endpoint: "https://fcm.googleapis.com/fcm/send/abc123",
+    keys: {
+      p256dh: "BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA",
+      auth: "tBHItJI5svbpez7KI4CCXg",
+    },
+  },
+  PushSubscribed: { id: "8b9c0d1e-2f3a-4b4c-9d5e-6f7a8b9c0d1e" },
+  PushConfig: { public_key: "BEl62iUYgUivxIkv69yViEuiBIa-Ib9" },
   OrgSchedule: {
     time_zone: "Europe/London",
     quiet_start: "21:00",
@@ -1204,6 +1215,12 @@ export const samples: Record<ContractName, unknown> = {
           expires_at: LATER,
         },
         version: 4,
+      },
+      {
+        kind: "reminder",
+        reminder_id: "9c0d1e2f-3a4b-4c5d-8e6f-7a8b9c0d1e2f",
+        title: "Order more microfibre cloths",
+        due_at: NOW,
       },
     ],
     missing_facts: ["business.email"],
