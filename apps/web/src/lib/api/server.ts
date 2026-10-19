@@ -8,6 +8,7 @@ import {
   type DomainPurchaseStatus,
   GOAL_MAX,
   MessageFeedback,
+  PushSubscribeRequest,
   RegistrantDetails,
   Reminder,
   Timestamp,
@@ -333,6 +334,26 @@ export const completeReminder = createServerFn({ method: "POST" })
   .validator((input: unknown) => ({ id: id(record(input).id) }))
   .handler(async ({ data }): Promise<WriteOutcome> => {
     return await source.completeReminder(data.id)
+  })
+
+/** The key a browser subscribes to push with; null where push is off. */
+export const getPushKey = createServerFn({ method: "GET" }).handler(
+  async (): Promise<string | null> => {
+    return await source.pushKey()
+  }
+)
+
+/** This browser's push subscription, saved. Its id, or null when refused. */
+export const savePushSubscription = createServerFn({ method: "POST" })
+  .validator((input: unknown) => PushSubscribeRequest.parse(input))
+  .handler(async ({ data }): Promise<string | null> => {
+    return await source.subscribePush(data, crypto.randomUUID())
+  })
+
+export const removePushSubscription = createServerFn({ method: "POST" })
+  .validator((input: unknown) => ({ id: id(record(input).id) }))
+  .handler(async ({ data }): Promise<WriteOutcome> => {
+    return await source.unsubscribePush(data.id)
   })
 
 export const listConversations = createServerFn({ method: "GET" }).handler(

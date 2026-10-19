@@ -878,6 +878,32 @@ it("marks a reminder done once, however often Done is pressed", async () => {
   })
 })
 
+it("reads the push key, and treats a refused subscription as not saved", async () => {
+  answers["GET /push/config"] = { public_key: "BKey" }
+  expect(await apiSource.pushKey()).toBe("BKey")
+  answers["GET /push/config"] = { public_key: null }
+  expect(await apiSource.pushKey()).toBeNull()
+
+  const input = {
+    endpoint: "https://fcm.googleapis.com/fcm/send/a1",
+    keys: { p256dh: "p", auth: "a" },
+  }
+  answers["POST /push/subscriptions"] = { id: NOTE }
+  expect(await apiSource.subscribePush(input, "k-5")).toBe(NOTE)
+  expect(JSON.parse(String(calls.at(-1)?.init?.body))).toEqual(input)
+  expect(headerOf(calls.at(-1), "idempotency-key")).toBe("k-5")
+  answers["POST /push/subscriptions"] = refusal(403, "push.not_owner")
+  expect(await apiSource.subscribePush(input, "k-6")).toBeNull()
+})
+
+it("takes a push subscription off by its id", async () => {
+  answers[`DELETE /push/subscriptions/${NOTE}`] = {}
+  expect(await apiSource.unsubscribePush(NOTE)).toEqual({ done: true })
+  expect(calls.at(-1)?.init?.method).toBe("DELETE")
+  answers[`DELETE /push/subscriptions/${NOTE}`] = refusal(404, "push.not_found")
+  expect(await apiSource.unsubscribePush(NOTE)).toMatchObject({ done: false })
+})
+
 const DETAILS = {
   registrant: {
     name: "Jane Smith",

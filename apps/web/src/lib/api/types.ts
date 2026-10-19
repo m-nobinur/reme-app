@@ -15,6 +15,7 @@ import type {
   FactRecord,
   FactValueKey,
   MessageFeedback,
+  PushSubscribeRequest,
   RegistrantDetails,
   Reminder,
   WorkspaceStatus,
@@ -283,6 +284,14 @@ export type OwnerDataSource = {
     input: CreateReminderRequest,
     key: string
   ) => Promise<WriteOutcome>
+  /** The VAPID public key a browser subscribes with, or null where push is off. */
+  pushKey: () => Promise<string | null>
+  /** Saves this browser for push. Its id, or null when the api refused it. */
+  subscribePush: (
+    input: PushSubscribeRequest,
+    key: string
+  ) => Promise<string | null>
+  unsubscribePush: (id: string) => Promise<WriteOutcome>
   /** A domain purchase's Checkout, or the api's refusal code. Keyed by `key`. */
   domainCheckout: (
     name: string,
