@@ -19,6 +19,7 @@
     "@workspace/facade": "workspace:*",
     "@workspace/gates": "workspace:*",
     "@workspace/starter-site": "workspace:*",
+    "croner": "10.0.1",
     "hono": "4.13.13",
     "zod": "4.6.7"
   },

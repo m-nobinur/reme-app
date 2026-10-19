@@ -372,6 +372,24 @@ vi.mock("../src/validate.ts", () => ({
       : { outcome, report_id: "r", failed: [] }
   },
 }))
+// The minute's scan and the jobs consumer are driven in schedule.test.ts and
+// jobs.test.ts; here only which firing and which queue reach them.
+const scheduler = vi.hoisted(() => ({ scans: 0, batches: [] as string[] }))
+vi.mock("../src/schedule.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/schedule.ts")>()),
+  scanDue: async () => {
+    scheduler.scans++
+    return null
+  },
+}))
+vi.mock("../src/jobs.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/jobs.ts")>()),
+  jobsBatch: async (batch: MessageBatch) => {
+    scheduler.batches.push(batch.queue)
+  },
+}))
+const { SCHEDULE_CRON } = await import("../src/schedule.ts")
+const { JOBS_QUEUES } = await import("../src/jobs.ts")
 
 const {
   AssignmentWorkflow,
@@ -1159,6 +1177,20 @@ describe("the scheduled handler", () => {
     )
     expect(created).not.toHaveBeenCalled()
     expect(fetched).not.toHaveBeenCalled()
+    expect(scheduler.scans).toBe(0)
+  })
+
+  it("scans for due jobs every minute, and only then", async () => {
+    scheduler.scans = 0
+    const { created, fetched } = await fire(
+      "* * * * *",
+      "https://api.example.invalid/health"
+    )
+    expect(scheduler.scans).toBe(1)
+    expect(created).not.toHaveBeenCalled()
+    expect(fetched).not.toHaveBeenCalled()
+    await fire("0 * * * *")
+    expect(scheduler.scans).toBe(1)
   })
 
   it("schedules exactly the crons the handler matches", () => {
@@ -1167,7 +1199,38 @@ describe("the scheduled handler", () => {
       (m) => JSON.parse(m[1] ?? "[]") as string[]
     )
     const jobs = [...new Set([SWEEP_CRON, UPTIME_CRON])]
-    expect(crons).toEqual([[SWEEP_CRON], jobs])
+    expect(crons).toEqual([
+      [SWEEP_CRON, SCHEDULE_CRON],
+      [...jobs, SCHEDULE_CRON],
+    ])
+  })
+})
+
+describe("the queue handler", () => {
+  const batch = (queue: string) =>
+    ({ queue, messages: [] }) as unknown as MessageBatch
+
+  it("hands the jobs queue's batches to the jobs consumer in both environments", async () => {
+    scheduler.batches.length = 0
+    for (const queue of JOBS_QUEUES) await worker.queue(batch(queue), {} as Env)
+    expect(scheduler.batches).toEqual(JOBS_QUEUES)
+  })
+
+  it("acks nothing from a queue it does not consume", async () => {
+    await expect(
+      worker.queue(batch("reme-jobs-dlq"), {} as Env)
+    ).rejects.toThrow("no consumer")
+  })
+
+  it("consumes exactly the queues the config names", () => {
+    const config = readFileSync(
+      new URL("../wrangler.jsonc", import.meta.url),
+      "utf8"
+    )
+    const consumed = [
+      ...config.matchAll(/\{\s*"queue": "([^"]+)",\s*"max_retries"/g),
+    ].map((m) => m[1])
+    expect(consumed).toEqual(JOBS_QUEUES)
   })
 })
 

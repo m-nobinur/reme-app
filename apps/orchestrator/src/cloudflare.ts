@@ -43,6 +43,7 @@ import {
 import { critiqueRound, type Fix, repairMessage } from "./critic.ts"
 import { postStatus, type Say, sweepDomains } from "./domain-flow.ts"
 import { SAY_RETRIES } from "./domain-workflow.ts"
+import { JOBS_QUEUES, jobsBatch } from "./jobs.ts"
 import { makePhotos } from "./photo-step.ts"
 import { PLAN_ROUNDS, planRound, readDecision } from "./planner.ts"
 import {
@@ -86,6 +87,7 @@ import {
   takeWarm,
   whileHeld,
 } from "./sandbox.ts"
+import { type JobMessage, SCHEDULE_CRON, scanDue } from "./schedule.ts"
 import {
   afterPublish,
   hourAt,
@@ -1666,10 +1668,18 @@ export class SweepWorkflow extends WorkflowEntrypoint<Env, { hour: string }> {
  * jobs on the same schedule share one firing. The hourly cron creates the
  * hour's sweep; a second firing for the same hour is refused by the instance
  * id and swallowed. The uptime check does nothing without `HEALTH_URLS`, which
- * only production sets.
+ * only production sets. Queues are told apart by name, one handler each; a
+ * batch from a queue nothing here consumes throws, so it retries and
+ * dead-letters rather than being acked unread.
  */
 export default {
+  async queue(batch: MessageBatch, env: Env) {
+    if (JOBS_QUEUES.includes(batch.queue))
+      return jobsBatch(batch as MessageBatch<JobMessage>, env)
+    throw new Error(`no consumer for queue ${batch.queue}`)
+  },
   async scheduled(controller: ScheduledController, env: Env) {
+    if (controller.cron === SCHEDULE_CRON) await scanDue(env)
     if (controller.cron === SWEEP_CRON) {
       const hour = sweepHour(controller.scheduledTime)
       try {
