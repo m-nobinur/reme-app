@@ -32,15 +32,41 @@ environments, reads the earliest `next_run_at` from KV first and queries Postgre
 something is due. Each scan writes the new earliest time back. So a quiet minute costs one KV read
 and no Postgres wake-up.
 
+The KV key `jobs:next-due` (binding `SCHEDULE`, one namespace shared by the orchestrator and the
+api) holds `{next, scanned}`: the earliest due time and when Postgres was last scanned. The cron
+returns without a query when `next` is in the future and the last scan is under 55 minutes old.
+KV can only ever hold a time later than the truth, through a lost write, two writers racing, or
+a write not yet propagated, and the fallback scan finds the job from its own row, so the worst a
+KV fault does is delay a job to the next hourly scan. A scan claims up to 100 jobs, sends one
+message each, then writes `next_due_at()` back. Anything that creates a job or moves one earlier
+calls `lowerNextDue` from `@workspace/db` after its commit, which stores `min(stored, at)` and
+never throws.
+
 The claim is one `SECURITY DEFINER` function, `claim_due_jobs(limit)`, a single statement with
-`FOR UPDATE SKIP LOCKED` that returns `(job_id, org_id)` and nothing else. It is the second
-function after `list_org_ids()` that crosses orgs, and the tenancy suite inspects it the same way.
-Every claimed job goes to a Queue as one message, and the consumer runs it under `withOrg`.
+`FOR UPDATE SKIP LOCKED` that returns `(job_id, org_id)` and nothing else. `next_due_at()`
+(migration 0021) is the second for the scheduler: one timestamp, no ids, with a claimed row
+counted from the end of its 20-minute lease so a dead consumer's job comes back without waiting
+for the fallback scan. The tenancy suite probes both functions' shapes. Every claimed job goes to
+a Queue as one message, and the consumer runs it under `withOrg`.
 
 **A run happens once.** `job_runs (job_id, org_id, run_at, outcome, detail)` is unique on
-`(job_id, run_at)`, so a redelivered message finds its run written and does nothing. A failed run
-backs off `min(60, 2^failures)` minutes, pauses after five failures in a row, and raises an
-`alert.raised` the owner sees.
+`(job_id, run_at)`. The consumer locks the job and runs it only if it is still claimed, unpaused
+and due; then it inserts the run with `on conflict do nothing`, so a redelivered message, even one
+racing the first, finds the run written and does nothing. The insert, the handler and the move to
+the next time are one transaction: a crash leaves nothing behind and the job is retaken when its
+claim lapses. A handler therefore writes only to Postgres, sends through the outbox, and fits
+inside `withOrg`'s 15-second idle limit. A kind with no handler is recorded `skipped`.
+
+Success clears `claimed_at` and `failures` and moves `next_run_at` to the rule's next time after
+now, or pauses a one-off for good. A failed run rolls back, is recorded `failed` in a transaction
+of its own, and backs off `min(60, 2^failures)` minutes. The fifth failure in a row pauses the job,
+raises `alert.raised` `{kind: "job.paused"}` and posts one fixed chat message, keyed by the pause
+so it posts once. A job whose org is closed (ADR-035) is paused without running, and deleting the
+account deletes the org's jobs.
+
+Across a DST change croner keeps wall-clock meaning: a time that happens twice fires once, at the
+first; a time the clocks skip fires an hour later (02:30 becomes 03:30). An hourly rule skips the
+repeated hour. Rules are five-part cron, so nothing runs more often than the cron does.
 
 **One outbox.** `deliveries (org_id, key, channel, state, attempts, sent_at, error)`, unique on
 `(org_id, key)`. The key names the cause, such as `reminder:<id>` or
