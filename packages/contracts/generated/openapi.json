@@ -28758,12 +28758,16 @@
                     ],
                     "additionalProperties": false
                   }
+                },
+                "undoable": {
+                  "type": "boolean"
                 }
               },
               "required": [
                 "version",
                 "at",
-                "changes"
+                "changes",
+                "undoable"
               ],
               "additionalProperties": false
             }

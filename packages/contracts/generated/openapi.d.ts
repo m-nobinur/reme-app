@@ -7942,6 +7942,7 @@ export interface components {
           /** @enum {string} */
           source: "owner_said" | "owner_confirmed" | "reflection"
         }[]
+        undoable: boolean
       }[]
     }
     MessageFeedback: {

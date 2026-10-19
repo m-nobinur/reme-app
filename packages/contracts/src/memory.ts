@@ -120,6 +120,8 @@ export const ProfileVersion = z.strictObject({
       })
     )
     .max(40),
+  /** Whether undoing this change still applies to the current lines. */
+  undoable: z.boolean(),
 })
 
 /** `GET /memory`: the current lines and the versions behind them, newest first. */

@@ -971,6 +971,7 @@ export const samples: Record<ContractName, unknown> = {
             source: "owner_said",
           },
         ],
+        undoable: true,
       },
     ],
   },
