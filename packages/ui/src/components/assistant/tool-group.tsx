@@ -92,7 +92,7 @@ function ToolGroupTrigger({
     <CollapsibleTrigger
       data-slot="tool-group-trigger"
       className={cn(
-        "aui-tool-group-trigger group/trigger flex items-center gap-2 px-1 py-1.5 text-muted-foreground text-sm transition-colors hover:text-foreground active:translate-y-px",
+        "aui-tool-group-trigger group/trigger flex items-center gap-2 px-1 py-1.5 text-chat-step text-muted-foreground transition-colors hover:text-foreground active:translate-y-px",
         "rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring",
         className
       )}
@@ -107,7 +107,7 @@ function ToolGroupTrigger({
       <span
         data-slot="tool-group-trigger-label"
         className={cn(
-          "aui-tool-group-trigger-label-wrapper inline-block text-start text-xs leading-none",
+          "aui-tool-group-trigger-label-wrapper inline-block text-start leading-none",
           active && "shimmer motion-reduce:animate-none"
         )}
       >

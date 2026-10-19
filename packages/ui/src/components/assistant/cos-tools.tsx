@@ -87,7 +87,7 @@ function Read<O>({
     return (
       <p
         className={cn(
-          "px-1 py-1.5 text-muted-foreground text-sm",
+          "px-1 py-1.5 text-chat-step text-muted-foreground",
           working && "shimmer motion-reduce:animate-none"
         )}
         data-slot={slot}
@@ -99,7 +99,7 @@ function Read<O>({
   }
   return (
     <Collapsible data-slot={slot}>
-      <CollapsibleTrigger className="group/read flex items-center gap-1.5 rounded-lg px-1 py-1.5 text-muted-foreground text-sm outline-none transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring">
+      <CollapsibleTrigger className="group/read flex items-center gap-1.5 rounded-lg px-1 py-1.5 text-chat-step text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring">
         {labels.done}
         <CaretDownIcon
           aria-hidden
@@ -276,7 +276,7 @@ const DomainRead: ToolCallMessagePartComponent = (props) => {
   if (view.state === "done") {
     return (
       <p
-        className="px-1 py-1.5 text-muted-foreground text-sm"
+        className="px-1 py-1.5 text-chat-step text-muted-foreground"
         data-slot="cos-read-domain"
       >
         {view.output.outcome === "checked"

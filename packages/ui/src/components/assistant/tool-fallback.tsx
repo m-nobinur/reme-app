@@ -9,7 +9,7 @@ import {
 } from "@assistant-ui/react"
 import {
   CaretDownIcon,
-  CheckIcon,
+  CheckCircleIcon,
   SpinnerGapIcon,
   WarningCircleIcon,
   XCircleIcon,
@@ -86,7 +86,7 @@ type ToolStatus = ToolCallMessagePartStatus["type"]
 
 const statusIconMap: Record<ToolStatus, React.ElementType> = {
   running: SpinnerGapIcon,
-  complete: CheckIcon,
+  complete: CheckCircleIcon,
   incomplete: XCircleIcon,
   "requires-action": WarningCircleIcon,
 }
@@ -141,7 +141,7 @@ function ToolFallbackTrigger({
     <CollapsibleTrigger
       data-slot="tool-fallback-trigger"
       className={cn(
-        "aui-tool-fallback-trigger group/trigger flex w-fit items-center gap-2 px-1 py-1.5 text-muted-foreground text-sm transition-colors hover:text-foreground active:translate-y-px",
+        "aui-tool-fallback-trigger group/trigger flex w-fit items-center gap-2 px-1 py-1.5 text-chat-step text-muted-foreground transition-colors hover:text-foreground active:translate-y-px",
         "rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring",
         className
       )}
