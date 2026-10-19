@@ -25,6 +25,12 @@ export type Spent = {
 export const GATE = {
   model: "typesafe/jev-1.13",
   question: "Is any of this worth interrupting the owner for now?",
+  /** What each answer means, as the onboarding gate (apps/api/src/jev.ts) spells its own out. */
+  criteria: {
+    true: "An item needs the owner to decide, answer or act, something went wrong that visitors or customers would notice, or it is news about their business they would want to hear today",
+    false:
+      "Every item is routine, already known to the owner, or a fault Reme fixes on its own",
+  },
   /** The bar each dial sets: the lower it is, the more gets through. */
   threshold: { low: 0.95, default: 0.9, high: 0.8 },
   timeoutMs: 5_000,
@@ -64,7 +70,13 @@ export async function askGate(
     .evaluationModel(GATE.model)
     .doEvaluate({
       state,
-      questions: { worth_it: { type: "boolean", instructions: GATE.question } },
+      questions: {
+        worth_it: {
+          type: "boolean",
+          instructions: GATE.question,
+          criteria: GATE.criteria,
+        },
+      },
       abortSignal: AbortSignal.timeout(GATE.timeoutMs),
     })
   const answer = Object.entries(result.answers).find(
