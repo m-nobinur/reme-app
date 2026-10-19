@@ -78,6 +78,28 @@ repeated hour. Rules are five-part cron, so nothing runs more often than the cro
 twice. A Queue consumer sends: in-app through `postAssistantMessage`, email through the
 `send_email` binding. A reminder goes to `reminders.conversation_id`, not the newest conversation.
 
+**The heartbeat.** Each org has one `heartbeat` job, with its rule set by `orgs.proactivity` in
+the org's zone: `off` has no job, `low` runs every 8 hours, `default` every 4 and `high` hourly.
+A time inside quiet hours (`quiet_start` to `quiet_end`, 21:00 to 08:00 by default, which may
+cross midnight) moves to their end by wall clock, so 08:00 stays 08:00 across a DST change.
+Signup makes the job and the hourly sweep ensures it for every org, so existing orgs need no
+backfill; whatever later changes the dial calls the same `ensureHeartbeat`, and a change of zone
+or quiet hours calls `recomputeOrgJobs`. Quiet hours apply to the heartbeat only: a reminder
+fires at the time the owner named.
+
+The handler stops with no model call in quiet hours (a retry's backoff can land there) and when
+the org had a CoS turn in the last 15 minutes, since the owner is in the chat. Otherwise it reads
+a digest in code: reviews recorded, Developer questions waiting, approvals waiting over a day,
+reminders due in the next 24 hours, and site, domain and search alerts. Each item is
+`{key: "<kind>:<entity id>:<seq>", since, facts}`, sorted by key, with absolute times only, so
+the same state read an hour later is the same digest. A ledger drops items already surfaced: a
+`deliveries` row keyed `heartbeat-item:<org>:<item key>`, inserted if absent and never sent. It is
+written before any model runs, so a model that fails does not raise the same items again. A
+digest query that fails rolls the run back, ledger included, so a source error is not a change.
+An empty digest, or one with nothing new, ends the run `skipped`. `job_outcome` has no
+`owner_active` or `error` value and adding one needs a migration, so those runs are `skipped`
+and `failed` with the reason in `detail`.
+
 **Email out is Cloudflare Email Sending** on a `send_email` binding, after
 `wrangler email sending enable remeai.co.uk`, which also adds the DMARC record the domain lacks.
 3,000 a month are included, then $0.35 per 1,000. `E_RECIPIENT_SUPPRESSED` turns the owner's
