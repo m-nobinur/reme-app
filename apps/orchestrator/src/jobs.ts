@@ -57,7 +57,8 @@ export type Ran = "ok" | "skipped" | "failed" | "paused" | "closed" | "stale"
 
 /**
  * The job, locked, if this message may still run it: claimed, not paused,
- * and due. A redelivery after the run finds the claim cleared.
+ * and due. A redelivery after the run finds the claim cleared. Due is by
+ * Postgres's clock at the claim, so this Worker's clock gets a minute's grace.
  */
 async function claimedJob(db: OrgScopedDb, jobId: string, now: Date) {
   const [job] = await db
@@ -65,7 +66,11 @@ async function claimedJob(db: OrgScopedDb, jobId: string, now: Date) {
     .from(scheduledJobs)
     .where(eq(scheduledJobs.id, jobId))
     .for("update")
-  return job?.claimedAt && !job.pausedAt && job.nextRunAt <= now ? job : null
+  return job?.claimedAt &&
+    !job.pausedAt &&
+    job.nextRunAt.getTime() <= now.getTime() + 60_000
+    ? job
+    : null
 }
 
 /**
