@@ -1135,6 +1135,8 @@ const TOOL_FAILED =
   "tool_failed (orchestrator.off_contract): the builder answered in a shape we do not accept, so nothing was done."
 const UNKNOWN =
   "unknown_outcome (orchestrator.timeout): the tool did not report back."
+const EXPIRED_LINE =
+  "approval_expired: the owner's yes on this card has expired, so nothing was done."
 
 type CallFields = {
   args?: unknown
@@ -1290,6 +1292,11 @@ function decisionStates(
       approval: approval("failed", true),
       isError: true,
       result: { error: TOOL_FAILED },
+    }),
+    call("expired", {
+      approval: approval("expired", true),
+      isError: true,
+      result: { error: EXPIRED_LINE },
     }),
   ]
 }
