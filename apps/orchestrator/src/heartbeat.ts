@@ -9,7 +9,6 @@ import {
   failureCode,
   inQuiet,
   jobRuns,
-  newUlid,
   type OrgScopedDb,
   orgs,
   reminders,
@@ -23,6 +22,7 @@ import {
   askGate,
   GATE,
   type Look,
+  logSpend,
   modelInput,
   type Reply,
   replyOf,
@@ -371,18 +371,7 @@ async function speak(kit: Tenancy, env: Env, models: Models, beat: Beat) {
         .where(thisRun)
     )
   const spend = (job: string, outcome: string, spent: Spent) =>
-    kit.withOrg({ orgId }, (db) =>
-      db.insert(events).values({
-        eventId: newUlid(),
-        orgId,
-        staffId: null,
-        assignmentId: null,
-        type: "cos.background_step",
-        occurredAt: new Date(),
-        idempotencyKey: newUlid(),
-        payload: { job, outcome, ...spent },
-      })
-    )
+    logSpend(kit, orgId, job, outcome, spent)
 
   const { state, data } = modelInput(beat)
   let gate: Awaited<ReturnType<Models["gate"]>>

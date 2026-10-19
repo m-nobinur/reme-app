@@ -1,5 +1,6 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider"
 import type { Proactivity } from "@workspace/contracts"
+import { events, failureCode, newUlid, type Tenancy } from "@workspace/db"
 import models from "@workspace/facade/models/openrouter.models.json" with {
   type: "json",
 }
@@ -123,7 +124,8 @@ export async function askGate(
 export async function writeText(
   apiKey: string,
   system: string,
-  data: unknown
+  data: unknown,
+  timeoutMs: number = WRITER.timeoutMs
 ): Promise<{ text: string; spent: Spent }> {
   const entry = models.find((m) => m.id === WRITER.model)
   const routing = entry?.compat.openRouterRouting
@@ -138,7 +140,7 @@ export async function writeText(
     system,
     prompt: JSON.stringify(data),
     maxOutputTokens: WRITER.maxOutputTokens,
-    abortSignal: AbortSignal.timeout(WRITER.timeoutMs),
+    abortSignal: AbortSignal.timeout(timeoutMs),
   })
   const input = result.usage.inputTokens ?? 0
   const output = result.usage.outputTokens ?? 0
@@ -353,4 +355,99 @@ export function overLimit(text: string): string | null {
   if (sentencesIn(text) > LIMITS.sentences) return "sentences"
   if ((text.match(/\?/g) ?? []).length > LIMITS.questions) return "questions"
   return null
+}
+
+/** A model call's cost as a `cos.background_step`, which the CoS's daily cap counts. */
+export async function logSpend(
+  kit: Tenancy,
+  orgId: string,
+  job: string,
+  outcome: string,
+  spent: Spent
+): Promise<void> {
+  await kit.withOrg({ orgId }, (db) =>
+    db.insert(events).values({
+      eventId: newUlid(),
+      orgId,
+      staffId: null,
+      assignmentId: null,
+      type: "cos.background_step",
+      occurredAt: new Date(),
+      idempotencyKey: newUlid(),
+      payload: { job, outcome, ...spent },
+    })
+  )
+}
+
+/**
+ * An update that answers something the owner started (a site going live, a
+ * domain connecting): what happened as `facts`, each value a string to be
+ * quoted exactly, and today's fixed `template`, which is what the owner
+ * gets whenever the model's text cannot be trusted.
+ */
+export type Update = { facts: Record<string, string>; template: string }
+
+const UPDATE_PROMPT = [
+  "You are Reme, the assistant to the owner of a small service business. Something the owner started has just moved on, and you are telling them.",
+  "You get the facts and a draft. Write the update in your own words as one short, warm message: the point first, then what happens next or what the owner can do.",
+  "Quote every value in the facts exactly as written. Add no number, date, name, web address or DNS value that is not in the facts. No greeting, no thanks, no sign-off.",
+  `At most ${LIMITS.sentences} sentences and ${LIMITS.chars} characters, and at most one question.`,
+].join("\n\n")
+
+/** Updates run inside a Workflow step, so the model gets less time than a heartbeat. */
+const UPDATE_TIMEOUT_MS = 15_000
+
+/**
+ * Whether `text` may stand in for the template: a message inside the limits,
+ * every fact's value in it verbatim, no number the facts do not hold, and no
+ * link or phone number other than theirs.
+ */
+export function faithful(text: string, facts: Record<string, string>): boolean {
+  const values = Object.values(facts)
+  const reply = replyOf(text, [
+    { key: "update", since: "", facts, trusted: Object.keys(facts) },
+  ])
+  if (reply.kind !== "message") return false
+  if (!values.every((value) => reply.text.includes(value))) return false
+  const numbers = new Set(values.flatMap((value) => value.match(/\d+/g) ?? []))
+  return (reply.text.match(/\d+/g) ?? []).every((n) => numbers.has(n))
+}
+
+/**
+ * The owner's update in the model's words, or the template when there is no
+ * key, the call fails, or the text is not `faithful`. Never throws. These
+ * answer the owner's own actions, so quiet hours do not apply.
+ */
+export async function writeUpdate(
+  env: { OPENROUTER_API_KEY?: string },
+  kit: Tenancy,
+  orgId: string,
+  update: Update,
+  write: typeof writeText = writeText
+): Promise<string> {
+  const key = env.OPENROUTER_API_KEY
+  if (!key) return update.template
+  try {
+    const written = await write(
+      key,
+      UPDATE_PROMPT,
+      { facts: update.facts, draft: update.template },
+      UPDATE_TIMEOUT_MS
+    )
+    const text = written.text.trim()
+    const kept = faithful(text, update.facts)
+    await logSpend(
+      kit,
+      orgId,
+      "update",
+      kept ? "written" : "template",
+      written.spent
+    ).catch(() => undefined)
+    return kept ? text : update.template
+  } catch (error) {
+    console.error(
+      JSON.stringify({ code: "update.write_failed", error: failureCode(error) })
+    )
+    return update.template
+  }
 }
