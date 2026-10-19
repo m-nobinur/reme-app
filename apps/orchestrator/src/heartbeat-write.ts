@@ -189,34 +189,38 @@ const CONTACT =
   /https?:\/\/[^\s"”)]+|[\w.+-]+@[\w-]+(?:\.[\w-]+)+|(?:[\w-]+\.)+[a-z]{2,}\b|\+?\d[\d ()-]{6,}\d/gi
 
 /**
- * Facts code or the owner wrote: an alert's host, a reminder's title. A
- * review, a Developer's question and a search query are someone else's text.
+ * The contacts in `text`, each in one form: compatibility characters folded
+ * (a fullwidth dot is a dot), `[.]` and `(.)` read as dots, lower case, and
+ * no spaces, brackets or dashes, so one number written two ways is one.
  */
-const TRUSTED = new Set(["host", "title"])
+const contactsIn = (text: string) =>
+  (
+    text
+      .normalize("NFKC")
+      .replace(/\[\.\]|\(\.\)/g, ".")
+      .match(CONTACT) ?? []
+  ).map((found) => found.toLowerCase().replace(/[\s()-]/g, ""))
 
 /**
  * `readReply`, with a message that breaks a limit read as an error, and so
- * is one that carries a link, an email address or a phone number no trusted
- * fact holds: text injected into an item can shape the message, never point
- * the owner somewhere.
+ * is one that carries a link, an email address or a phone number that no
+ * fact the item vouches for (`DigestItem.trusted`) holds exactly: text
+ * injected into a review or a page can shape the message, never point the
+ * owner somewhere.
  */
 export function replyOf(raw: string, items: DigestItem[] = []): Reply {
   const reply = readReply(raw)
   if (reply.kind !== "message") return reply
   const over = overLimit(reply.text)
   if (over) return { kind: "error", detail: `over_limit:${over}` }
-  const trusted = items
-    .flatMap((item) =>
-      Object.entries(item.facts).flatMap(([k, v]) =>
-        TRUSTED.has(k) ? [v] : []
-      )
+  const allowed = new Set(
+    items.flatMap((item) =>
+      (item.trusted ?? []).flatMap((name) => contactsIn(item.facts[name] ?? ""))
     )
-    .join("\n")
-    .toLowerCase()
-  const stray = (reply.text.match(CONTACT) ?? []).find(
-    (found) => !trusted.includes(found.toLowerCase())
   )
-  return stray ? { kind: "error", detail: "unsourced_contact" } : reply
+  return contactsIn(reply.text).every((found) => allowed.has(found))
+    ? reply
+    : { kind: "error", detail: "unsourced_contact" }
 }
 
 /** "Monday, 19 October 2026 at 14:00", in `zone` (UTC when null). */

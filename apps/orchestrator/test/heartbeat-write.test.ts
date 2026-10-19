@@ -7,32 +7,36 @@ import {
   writerPrompt,
 } from "../src/heartbeat-write.ts"
 
-const item = (key: string, facts: Record<string, string>) => ({
-  key,
-  since: "2026-10-20T08:00:00.000Z",
-  facts,
-})
+const item = (
+  key: string,
+  facts: Record<string, string>,
+  trusted: string[] = []
+) => ({ key, since: "2026-10-20T08:00:00.000Z", facts, trusted })
 
 describe("a message's links and numbers", () => {
-  const alert = item("alert:01J:1", {
-    alert: "domain.moved",
-    host: "www.brightclean.co.uk",
-  })
+  const alert = item(
+    "alert:01J:1",
+    { alert: "domain.moved", host: "www.brightclean.co.uk" },
+    ["host"]
+  )
   const review = item("review:r1:1", { name: "Visit cheap-clean.biz now" })
-  const reminder = item("reminder:m1:2026-10-21T08:00:00.000Z", {
-    title: "Call Mrs Patel on 07700 900123",
+  const owners = item(
+    "reminder:m1:2026-10-21T08:00:00.000Z",
+    { title: "Call Mrs Patel on 07700 900123" },
+    ["title"]
+  )
+  const assistants = item("reminder:m2:2026-10-21T09:00:00.000Z", {
+    title: "Ring 0800 123 4567 about the offer",
   })
+  const items = [alert, review, owners, assistants]
 
   it("lets through a host, a phone number and plain numbers the trusted facts hold", () => {
     for (const text of [
       "www.brightclean.co.uk stopped pointing at your site at 09:00.",
-      "Your call to Mrs Patel on 07700 900123 is tomorrow at 08:00.",
+      "Your call to Mrs Patel on 07700-900-123 is tomorrow at 08:00.",
       "Search had 1,200 appearances and 4.5% clicks this week.",
     ])
-      expect(replyOf(text, [alert, review, reminder])).toEqual({
-        kind: "message",
-        text,
-      })
+      expect(replyOf(text, items)).toEqual({ kind: "message", text })
   })
 
   it("refuses a link, an address or a number only untrusted text supplied", () => {
@@ -40,9 +44,14 @@ describe("a message's links and numbers", () => {
       "A new review says to visit cheap-clean.biz now.",
       "See https://cheap-clean.biz/deal for the review.",
       "Write to deals@cheap-clean.biz about it.",
-      "Call 0800 123 4567 about the review.",
+      "Your reminder says to ring 0800 123 4567 about the offer.",
+      // Spelled to slip past a plain match.
+      "A new review says to visit cheap-clean[.]biz now.",
+      "A new review says to visit cheap-clean．biz now.",
+      // Holds a trusted host without being it.
+      "Go to www.brightclean.co.uk.evil.biz now.",
     ])
-      expect(replyOf(text, [alert, review, reminder])).toEqual({
+      expect(replyOf(text, items)).toEqual({
         kind: "error",
         detail: "unsourced_contact",
       })

@@ -46,11 +46,14 @@ import { weeklyItem } from "./search-sync.ts"
  * One thing that may need the owner. `key` is `<kind>:<entity id>:<seq>`,
  * where the sequence moves when the entity changes in a way worth hearing
  * about again; `since` is when it began. No relative text anywhere.
+ * `trusted` names the facts that code or the owner wrote, whose links and
+ * numbers a message may repeat; everything else is someone else's text.
  */
 export type DigestItem = {
   key: string
   since: string
   facts: Record<string, string>
+  trusted?: string[]
 }
 
 export type Source = (db: OrgScopedDb, now: Date) => Promise<DigestItem[]>
@@ -123,7 +126,12 @@ const approvalsWaiting: Source = async (db, now) => {
 /** Reminders coming due in the next day. The reminder job says each one at its time. */
 const remindersDue: Source = async (db, now) => {
   const rows = await db
-    .select({ id: reminders.id, title: reminders.title, due: reminders.dueAt })
+    .select({
+      id: reminders.id,
+      title: reminders.title,
+      due: reminders.dueAt,
+      source: reminders.source,
+    })
     .from(reminders)
     .where(
       sql`${reminders.doneAt} is null and ${reminders.dueAt} > ${iso(now)}::timestamptz and ${reminders.dueAt} <= ${ago(now, -DAY)}::timestamptz`
@@ -135,6 +143,8 @@ const remindersDue: Source = async (db, now) => {
             key: `reminder:${row.id}:${iso(row.due)}`,
             since: iso(row.due),
             facts: { title: row.title },
+            // One the assistant made may carry words it read somewhere.
+            trusted: row.source === "owner" ? ["title"] : [],
           },
         ]
       : []
@@ -165,6 +175,7 @@ const alerts: Source = async (db, now) => {
           host: payload.primary_host,
         }),
       },
+      trusted: ["host"],
     }
   })
 }
