@@ -14,6 +14,7 @@ import {
   RegistrantDetails,
 } from "./domain.ts"
 import { ToolCallId } from "./ids.ts"
+import { RememberInput, RememberOutput } from "./memory.ts"
 import {
   BuildSummary,
   CreateReminderRequest,
@@ -328,6 +329,7 @@ export const COS_TOOLS = {
     output: GetSearchPerformanceOutput,
   },
   get_indexing: { input: GetIndexingInput, output: GetIndexingOutput },
+  remember: { input: RememberInput, output: RememberOutput },
 } as const
 
 export type CosToolName = keyof typeof COS_TOOLS
@@ -498,6 +500,11 @@ export const CosToolResult = z.discriminatedUnion("tool", [
     ...Called,
     tool: z.literal("get_indexing"),
     output: COS_TOOLS.get_indexing.output,
+  }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("remember"),
+    output: COS_TOOLS.remember.output,
   }),
 ])
 
