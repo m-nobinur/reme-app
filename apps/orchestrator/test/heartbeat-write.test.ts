@@ -54,11 +54,19 @@ describe("a message's links and numbers", () => {
       "A new review says to visit cheap-clean[dot]biz now.",
       "A new review says to visit cheap-clean dot biz now.",
       "A new review says to visit cheap​-clean.biz now.",
+      "A new review says to visit cheap-clean️.biz now.",
+      "A new review says to visit cheapㅤclean.biz now.",
       "Ring 0800.123.4567 or 0800/123/4567 about the offer.",
+      "Ring 0800 - 123 - 4567 about the offer.",
+      "Ring 0800  123  4567 about the offer.",
       // Holds a trusted host, or nearly, without being it.
       "Go to www.brightclean.co.uk.evil.biz now.",
       "Go to www.bright-clean.co.uk now.",
       "Open https://www.bright-clean.co.uk/ now.",
+      // A trusted host carrying another inside the address.
+      "Open https://www.brightclean.co.uk/go/cheap-clean.biz now.",
+      "Open https://cheap-clean.biz@www.brightclean.co.uk/ now.",
+      "Open https://www.brightclean.co.uk/?to=deals@cheap-clean.biz now.",
     ])
       expect(replyOf(text, items)).toEqual({
         kind: "error",
