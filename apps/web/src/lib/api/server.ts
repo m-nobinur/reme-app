@@ -18,7 +18,7 @@ import { PANEL_COOKIE, RAIL_COOKIE } from "@workspace/ui/lib/panel"
 import { titleText } from "@workspace/ui/lib/title"
 import { EMPTY_WORKSPACE, readWorkspace, waitingOnOwner } from "@/lib/attention"
 import { oneOf, record, text } from "@/lib/auth/input"
-import { ORG_INTENT } from "@/lib/auth/org-intent"
+import { orgIntentCookie } from "@/lib/auth/org-intent"
 import { seenAtOf, seenCookie } from "@/lib/notifications"
 import { source } from "./source"
 import type {
@@ -120,7 +120,7 @@ export const getWorkspaceFrame = createServerFn({ method: "GET" }).handler(
     if (!active) {
       return {
         active,
-        orgPending: getCookie(ORG_INTENT) !== undefined,
+        orgPending: getCookie(orgIntentCookie()) !== undefined,
         panelOpen: getCookie(PANEL_COOKIE) !== "closed",
         railOpen: getCookie(RAIL_COOKIE) !== "closed",
         workspace: EMPTY_WORKSPACE,
