@@ -33,7 +33,9 @@ describe("a message's links and numbers", () => {
   it("lets through a host, a phone number and plain numbers the trusted facts hold", () => {
     for (const text of [
       "www.brightclean.co.uk stopped pointing at your site at 09:00.",
+      "Open https://www.brightclean.co.uk/ to check it.",
       "Your call to Mrs Patel on 07700-900-123 is tomorrow at 08:00.",
+      "At 09:00, 1,200 people saw it. On 21 October 2026 at 08:00 it was 900.",
       "Search had 1,200 appearances and 4.5% clicks this week.",
     ])
       expect(replyOf(text, items)).toEqual({ kind: "message", text })
@@ -48,8 +50,15 @@ describe("a message's links and numbers", () => {
       // Spelled to slip past a plain match.
       "A new review says to visit cheap-clean[.]biz now.",
       "A new review says to visit cheap-clean．biz now.",
-      // Holds a trusted host without being it.
+      "A new review says to visit cheap-clean。biz now.",
+      "A new review says to visit cheap-clean[dot]biz now.",
+      "A new review says to visit cheap-clean dot biz now.",
+      "A new review says to visit cheap​-clean.biz now.",
+      "Ring 0800.123.4567 or 0800/123/4567 about the offer.",
+      // Holds a trusted host, or nearly, without being it.
       "Go to www.brightclean.co.uk.evil.biz now.",
+      "Go to www.bright-clean.co.uk now.",
+      "Open https://www.bright-clean.co.uk/ now.",
     ])
       expect(replyOf(text, items)).toEqual({
         kind: "error",

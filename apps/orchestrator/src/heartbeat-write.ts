@@ -184,22 +184,38 @@ export function readReply(raw: string): Reply {
   return { kind: "message", text }
 }
 
-/** Web and email addresses, bare hosts and phone numbers. */
-const CONTACT =
-  /https?:\/\/[^\s"”)]+|[\w.+-]+@[\w-]+(?:\.[\w-]+)+|(?:[\w-]+\.)+[a-z]{2,}\b|\+?\d[\d ()-]{6,}\d/gi
+/** Web and email addresses and bare hosts. */
+const ADDRESS =
+  /https?:\/\/[^\s"”)]+|[\w.+-]+@[\w-]+(?:\.[\w-]+)+|(?:[\w-]+\.)+[a-z]{2,}\b/gi
+/** Seven digits or more, each pair apart by at most one space, dot, slash, bracket or dash. */
+const PHONE = /\+?\d(?:[\s./()\-‐-―]?\d){6,}/gu
+/** Ways to write a dot that a reader still reads as one. */
+const DOTS = /[․。﹒．｡]|[[({]\s*(?:\.|dot)\s*[\])}]|\s+dot\s+/giu
 
 /**
- * The contacts in `text`, each in one form: compatibility characters folded
- * (a fullwidth dot is a dot), `[.]` and `(.)` read as dots, lower case, and
- * no spaces, brackets or dashes, so one number written two ways is one.
+ * The contacts in `text`, each in one form, after folding what could hide
+ * one: compatibility characters, invisible format characters and dot
+ * look-alikes. A web address counts as its host and a phone number as its
+ * digits; a host keeps its dashes, so `bright-clean` is not `brightclean`.
  */
-const contactsIn = (text: string) =>
-  (
-    text
-      .normalize("NFKC")
-      .replace(/\[\.\]|\(\.\)/g, ".")
-      .match(CONTACT) ?? []
-  ).map((found) => found.toLowerCase().replace(/[\s()-]/g, ""))
+function contactsIn(text: string): string[] {
+  const plain = text
+    .normalize("NFKC")
+    .replace(/\p{Cf}/gu, "")
+    .replace(DOTS, ".")
+  const addresses = (plain.match(ADDRESS) ?? []).map((found) => {
+    if (!/^https?:/i.test(found)) return found.toLowerCase()
+    try {
+      return new URL(found).hostname
+    } catch {
+      return found.toLowerCase()
+    }
+  })
+  const phones = (plain.match(PHONE) ?? []).map((found) =>
+    found.replace(/\D/g, "")
+  )
+  return [...addresses, ...phones]
+}
 
 /**
  * `readReply`, with a message that breaks a limit read as an error, and so
