@@ -198,7 +198,11 @@ test("New chat starts an empty conversation", async ({ page }) => {
   await page.getByLabel("Send message").click()
   await expect(page.getByText("How did this week go?")).toBeVisible()
 
-  await page.getByRole("link", { name: "New chat" }).click()
+  // The rail's; the top bar carries one too.
+  await page
+    .getByRole("complementary", { name: "Workspace" })
+    .getByRole("link", { name: "New chat" })
+    .click()
   await expect(
     page.getByRole("heading", { name: "What should we do today?" })
   ).toBeVisible()
