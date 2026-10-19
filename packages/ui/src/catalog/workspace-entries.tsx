@@ -1,16 +1,22 @@
 import {
+  AlarmIcon,
+  BellIcon,
   BuildingsIcon,
+  ChatCircleTextIcon,
   CheckCircleIcon,
   FlowArrowIcon,
   GearSixIcon,
+  GlobeIcon,
   MoonIcon,
   NotePencilIcon,
   QuestionIcon,
+  ShieldCheckIcon,
   SignOutIcon,
   UsersThreeIcon,
 } from "@phosphor-icons/react"
 import { railItemClass } from "@workspace/ui/components/app-shell"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
+import { DefinitionList } from "@workspace/ui/components/definition-list"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,6 +30,13 @@ import {
   type HistoryEntry,
   HistoryMenu,
 } from "@workspace/ui/components/history-menu"
+import { LogoMark } from "@workspace/ui/components/logo"
+import {
+  Settings,
+  SettingsContent,
+  type SettingsSection,
+  SettingsTrigger,
+} from "@workspace/ui/components/settings-dialog"
 import {
   Sheet,
   SheetContent,
@@ -103,32 +116,149 @@ function AccountMenu() {
   )
 }
 
-/** The compact rail: the organisation at the top, help, theme and profile below. */
+const SETTINGS: SettingsSection[] = [
+  {
+    id: "general",
+    label: "General",
+    icon: <GearSixIcon aria-hidden />,
+    content: (
+      <div className="flex flex-col gap-6">
+        <DefinitionList
+          items={[
+            { id: "name", term: "Name", description: "Sam Fixture" },
+            { id: "email", term: "Email", description: "sam@example.com" },
+            { id: "business", term: "Business", description: "Brightclean" },
+          ]}
+        />
+        <div>
+          <Button onClick={toggleTheme} variant="outline">
+            <MoonIcon aria-hidden />
+            Switch theme
+          </Button>
+        </div>
+      </div>
+    ),
+  },
+  {
+    id: "website",
+    label: "Website",
+    icon: <GlobeIcon aria-hidden />,
+    content: (
+      <p className="text-muted-foreground">
+        brightclean.example.com is live.{" "}
+        <a
+          className="text-primary underline-offset-4 hover:underline"
+          href="#website"
+        >
+          Open the website page
+        </a>
+      </p>
+    ),
+  },
+  {
+    id: "help",
+    label: "Help & support",
+    icon: <QuestionIcon aria-hidden />,
+    content: <p className="text-muted-foreground">Ask Reme in the chat.</p>,
+  },
+  {
+    id: "legal",
+    label: "Legal info",
+    icon: <ShieldCheckIcon aria-hidden />,
+    content: <p className="text-muted-foreground">Privacy and terms.</p>,
+  },
+]
+
+/** The round avatar at the foot of the rail, which opens the settings. */
+function SettingsSample() {
+  return (
+    <Settings>
+      <Hint label="Sam Fixture" side="right">
+        <SettingsTrigger
+          render={
+            <button
+              aria-label="Settings, Sam Fixture"
+              className={railItemClass}
+              type="button"
+            />
+          }
+        >
+          <span
+            aria-hidden
+            className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary font-semibold text-primary-foreground text-xs"
+            data-slot="mark"
+          >
+            SF
+          </span>
+          <span className="truncate" data-slot="rail-label">
+            Sam Fixture
+          </span>
+        </SettingsTrigger>
+      </Hint>
+      <SettingsContent sections={SETTINGS} signOutHref="#sign-out" />
+    </Settings>
+  )
+}
+
+const RAIL_NAV = [
+  { href: "#new", label: "New chat", icon: NotePencilIcon },
+  { href: "#chat", label: "Chat", icon: ChatCircleTextIcon, current: true },
+  { href: "#website", label: "Website", icon: GlobeIcon },
+  { href: "#business", label: "Brightclean", icon: BuildingsIcon },
+  { href: "#staff", label: "Staff", icon: UsersThreeIcon },
+  { href: "#pipeline", label: "Pipeline", icon: FlowArrowIcon },
+]
+
+/**
+ * The rail: the mark, a new chat and the app's sections, reminders under a
+ * hairline, and the notifications and the owner's avatar at the foot.
+ */
 function Rail() {
   return (
     <>
-      <Hint label="Brightclean" side="right">
-        <a className={railItemClass} href="#business">
-          <span
-            aria-hidden
-            className="flex size-6 shrink-0 items-center justify-center rounded-md bg-foreground font-semibold text-[0.6875rem] text-background"
-            data-slot="mark"
-          >
-            B
-          </span>
-          <span className="truncate font-medium" data-slot="rail-label">
-            Brightclean
-          </span>
-        </a>
-      </Hint>
-      <div className="mt-auto flex flex-col gap-1">
-        <Hint label="Help" side="right">
-          <button aria-label="Help" className={railItemClass} type="button">
-            <QuestionIcon aria-hidden />
-            <span data-slot="rail-label">Help</span>
-          </button>
+      <span className="flex h-11 shrink-0 items-center px-2.5 text-foreground">
+        <LogoMark />
+      </span>
+      <nav aria-label="Main" className="flex flex-col gap-1">
+        {RAIL_NAV.map((item) => (
+          <Hint key={item.href} label={item.label} side="right">
+            <a
+              aria-current={item.current ? "page" : undefined}
+              className={railItemClass}
+              href={item.href}
+            >
+              <item.icon aria-hidden />
+              <span className="truncate" data-slot="rail-label">
+                {item.label}
+              </span>
+            </a>
+          </Hint>
+        ))}
+        <hr className="mx-2 my-2 border-border" />
+        <Hint label="Reminders" side="right">
+          <a className={railItemClass} href="#reminders">
+            <AlarmIcon aria-hidden />
+            <span data-slot="rail-label">Reminders</span>
+          </a>
         </Hint>
-        <AccountMenu />
+      </nav>
+      <div className="mt-auto flex flex-col gap-1">
+        <Hint label="Notifications" side="right">
+          <a
+            aria-label="Notifications, 3 unread"
+            className={railItemClass}
+            href="#notifications"
+          >
+            <BellIcon aria-hidden />
+            <span
+              aria-hidden
+              className="absolute start-7 top-2 size-2 rounded-full bg-destructive ring-2 ring-rail"
+              data-slot="unread-dot"
+            />
+            <span data-slot="rail-label">Notifications</span>
+          </a>
+        </Hint>
+        <SettingsSample />
       </div>
     </>
   )
@@ -326,6 +456,16 @@ const workspaceCatalog: Entry[] = [
       </WorkspacePage>
     ),
   },
+  {
+    name: "Settings",
+    render: () => (
+      <div className="flex max-w-60 rounded-lg bg-rail p-3 text-rail-foreground">
+        <SettingsSample />
+      </div>
+    ),
+  },
+  { name: "SettingsTrigger", render: () => <SettingsSample /> },
+  { name: "SettingsContent", render: () => <SettingsSample /> },
   { name: "Sheet", render: () => <SheetSample /> },
   { name: "SheetTrigger", render: () => <SheetSample /> },
   { name: "SheetContent", render: () => <SheetSample /> },
