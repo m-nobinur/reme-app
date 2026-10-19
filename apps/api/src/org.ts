@@ -14,7 +14,6 @@ import {
   orgs,
   resolveOrg,
   rootStaffId,
-  sql,
   staff,
   supersedeFact,
   type Tenancy,
@@ -119,12 +118,6 @@ export class EmailTaken extends Error {}
  * organisation per person. It is the signup writer, and a second business for
  * the same owner is a different story with a different shape.
  *
- * Two signups by one person at once would both find no membership and both
- * create an organization, so each holds a lock on the person for the whole
- * write, and the second replays what the first made. The lock lives in a
- * transaction of its own that stays open across the WorkOS calls: three of
- * them, `WORKOS_TIMEOUT_MS` each, inside `LIMITS.idle`.
- *
  * The person is written first, in a transaction of its own that
  * `users_self_insert` passes because the context names the person signing up.
  * The org's inserts, the starting team's included, then run in one `withOrg`
@@ -145,24 +138,6 @@ export async function createOrg(
     displayName: string | null
   },
   newId: () => string = () => crypto.randomUUID()
-): Promise<Org> {
-  // Key 6: 2 to 5 are the conversation, org, domain and fact locks.
-  return kit.withOrg(
-    { orgId: crypto.randomUUID(), workosUserId: input.workosUserId },
-    async (db) => {
-      await db.execute(
-        sql`select pg_advisory_xact_lock(6, hashtext(${input.workosUserId}::text))`
-      )
-      return writeOrg(kit, directory, input, newId)
-    }
-  )
-}
-
-async function writeOrg(
-  kit: Tenancy,
-  directory: Directory,
-  input: Parameters<typeof createOrg>[2],
-  newId: () => string
 ): Promise<Org> {
   // The person first, before any vendor call, so an email another row holds
   // is refused before a WorkOS organization exists to be left behind. Under a
