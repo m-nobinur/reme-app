@@ -570,6 +570,10 @@ export const samples: Record<ContractName, unknown> = {
     replaced_range: { from_seq: 4, to_seq: 31 },
     dropped_refs: [ULID],
   },
+  CosToolStarted: {
+    tool_call_id: "functions.create_reminder:0",
+    approval_id: "approval_9fK2",
+  },
   CosToolUnknown: {
     tool_call_id: "functions.create_reminder:0",
     approval_id: "approval_9fK2",

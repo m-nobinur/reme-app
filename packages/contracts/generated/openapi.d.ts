@@ -6373,6 +6373,10 @@ export interface components {
                 }
               }
         }
+    CosToolStarted: {
+      tool_call_id: string
+      approval_id: string
+    }
     CosToolUnknown: {
       tool_call_id: string
       approval_id: string
