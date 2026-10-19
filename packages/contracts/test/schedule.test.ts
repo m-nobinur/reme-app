@@ -65,6 +65,15 @@ describe("Delivery", () => {
     )
   })
 
+  it.each(["pending", "sending", "unknown", "sent", "failed", "suppressed"])(
+    "accepts the %s state",
+    (state) => {
+      expect(verdict("Delivery", Delivery, { ...delivery, state })).toEqual(
+        ACCEPTED
+      )
+    }
+  )
+
   it.each([
     ["a push channel, which comes later", { ...delivery, channel: "push" }],
     ["an empty key", { ...delivery, key: "" }],
