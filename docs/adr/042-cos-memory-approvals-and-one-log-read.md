@@ -22,14 +22,19 @@ from the session's event log. Three things in it no longer fit.
 
 ## Decision
 
-**One log read per turn.** `startModel` reads the session once and passes the rows through
-`AgentTurn`. `prepareStep` reads only events after the last sequence it holds
-(`readSessionSince`) and appends them. The integrity check is unchanged in what it proves: the hash
-still covers the whole derived message list, and the call is refused on any mismatch. It holds
+**One log read per turn.** The turn's first transaction reads the session whole once, after its
+`cos.context` is written and under the same lock, and passes the rows through `AgentTurn`, so it
+costs no transaction of its own. `settle` and `startModel` work from those rows; `settle` reads
+again only after it ran a call, and leaves the rows caught up. `prepareStep` reads only events after
+the last sequence it holds (`readSessionSince`), appends them, checks the hash and writes the
+step's `cos.call`, all in one transaction. The integrity check is unchanged in what it proves: the
+hash still covers the whole derived message list, and the call is refused on any mismatch. It holds
 because the turn is the only writer to its session while it holds its token and the conversation
 lock, so the rows it holds plus the rows after its last sequence are the log. The workspace load
-starts beside `lookAhead`, the domains query folds into the status read, and the second fact read
-goes. This replaces ADR-034's "each model call costs one extra read of the session's events".
+(status, domains and facts in one transaction) starts beside `lookAhead`, and its facts give the
+persona, so the second fact read goes. An onboarding turn starts the load too and drops it, since
+`lookAhead` is what says which kind of turn it is. This replaces ADR-034's "each model call costs
+one extra read of the session's events".
 
 **Approvals are bound.** For each approval request `onStepEnd` appends
 `cos.approval {turn_id, approval_id, tool_call_id, input_sha256, expires_at}`. The answer is
