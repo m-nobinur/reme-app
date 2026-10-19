@@ -28,7 +28,11 @@ const SET = new Date(DUE.getTime() - 24 * 60 * MINUTE)
 describe.skipIf(!url)("firing a reminder", () => {
   afterAll(() => kit.close())
 
-  const queue = { send: vi.fn(async () => undefined) }
+  const queue = {
+    send: vi.fn(
+      async (_message: DeliveryMessage, _options?: unknown) => undefined
+    ),
+  }
   const env = {
     SCHEDULE: {
       get: async () => ({ next: null, scanned: 0 }),
@@ -93,10 +97,7 @@ describe.skipIf(!url)("firing a reminder", () => {
   const fire = (jobId: string, now: Date, handlers = HANDLERS) =>
     runJob(kit, env, { jobId, orgId }, handlers, now)
 
-  const sent = () =>
-    queue.send.mock.calls.map(
-      (call) => (call as unknown as [DeliveryMessage, unknown])[0]
-    )
+  const sent = () => queue.send.mock.calls.map(([message]) => message)
 
   const rows = () =>
     kit.withOrg({ orgId }, (db) => db.select().from(deliveries))
