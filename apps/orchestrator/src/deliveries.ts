@@ -6,6 +6,7 @@ import {
   failureCode,
   logFailure,
   memberships,
+  type OrgScopedDb,
   postAssistantMessage,
   sql,
   type Tenancy,
@@ -48,19 +49,20 @@ type BatchEnv = {
   APP_ORIGIN: string
 }
 
+const insertRow = (db: OrgScopedDb, { orgId, key, channel }: DeliveryMessage) =>
+  db
+    .insert(deliveries)
+    .values({ orgId, key, channel })
+    .onConflictDoNothing()
+    .returning({ key: deliveries.key })
+
 export async function deliver(
   kit: Tenancy,
   env: SendEnv,
   delivery: DeliveryMessage
 ): Promise<"queued" | "exists"> {
-  const { orgId, key, channel } = delivery
-  const inserted = await kit.withOrg({ orgId }, (db) =>
-    db
-      .insert(deliveries)
-      .values({ orgId, key, channel })
-      .onConflictDoNothing()
-      .returning({ key: deliveries.key })
-  )
+  const { orgId, key } = delivery
+  const inserted = await kit.withOrg({ orgId }, (db) => insertRow(db, delivery))
   if (inserted.length === 0) return "exists"
   try {
     await env.DELIVERIES.send(delivery)
@@ -71,6 +73,28 @@ export async function deliver(
     )
     throw error
   }
+  return "queued"
+}
+
+/** How long a message waits in the Queue, for the transaction that wrote its row to commit. */
+const COMMIT_GRACE_SECONDS = 5
+
+/**
+ * `deliver` for a caller already inside a transaction, such as a job
+ * handler: the row is written with `db`, so it commits with the caller's
+ * work or not at all. The message goes to the Queue now, a few seconds
+ * delayed so the commit lands first. A rolled-back caller leaves a message
+ * for a row that does not exist, which `attempt` treats as nothing to do.
+ * If the send throws, so does this, and the caller's rollback drops the row.
+ */
+export async function deliverIn(
+  db: OrgScopedDb,
+  env: SendEnv,
+  delivery: DeliveryMessage
+): Promise<"queued" | "exists"> {
+  const inserted = await insertRow(db, delivery)
+  if (inserted.length === 0) return "exists"
+  await env.DELIVERIES.send(delivery, { delaySeconds: COMMIT_GRACE_SECONDS })
   return "queued"
 }
 

@@ -14,6 +14,7 @@ import {
   type Tenancy,
 } from "@workspace/db"
 import { withKit } from "./domain-flow.ts"
+import { reminderJob } from "./reminder-job.ts"
 import type { JobMessage } from "./schedule.ts"
 
 type ScheduledJob = typeof scheduledJobs.$inferSelect
@@ -25,7 +26,12 @@ type ScheduledJob = typeof scheduledJobs.$inferSelect
  * claim lapses. Anything that leaves Postgres goes through the outbox, and
  * the transaction's 15-second idle limit bounds the work done inside it.
  */
-export type JobRun = { db: OrgScopedDb; env: Env; job: ScheduledJob }
+export type JobRun = {
+  db: OrgScopedDb
+  env: Env
+  job: ScheduledJob
+  now: Date
+}
 
 /** Nothing returned means `ok`. Throwing is a failure, with backoff. */
 export type Handler = (
@@ -38,7 +44,7 @@ export type Handlers = Partial<Record<ScheduledJob["kind"], Handler>>
 export const JOBS_QUEUES = ["reme-jobs", "reme-jobs-production"]
 
 /** One handler per kind, added by the story that adds the kind. */
-export const HANDLERS: Handlers = {}
+export const HANDLERS: Handlers = { reminder: reminderJob }
 
 /** Failures in a row before a job pauses and the owner is told. */
 export const MAX_FAILURES = 5
@@ -107,7 +113,7 @@ export async function runJob(
       if (!run) return "stale"
       const handler = handlers[job.kind]
       const result = handler
-        ? await handler({ db, env, job })
+        ? await handler({ db, env, job, now })
         : { outcome: "skipped" as const, detail: "no handler" }
       if (result)
         await db
