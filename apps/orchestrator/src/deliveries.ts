@@ -6,6 +6,7 @@ import {
   failureCode,
   logFailure,
   memberships,
+  type OrgScopedDb,
   postAssistantMessage,
   sql,
   type Tenancy,
@@ -66,20 +67,34 @@ type BatchEnv = {
   REPLY_DOMAIN: string
 }
 
+/**
+ * Writes the outbox row, holding the message so the sweep can queue it again
+ * (it carries no address; the owner's is read at send time). False when the
+ * key already has a row. The caller queues the message after its commit.
+ */
+export async function insertDelivery(
+  db: OrgScopedDb,
+  delivery: DeliveryMessage
+): Promise<boolean> {
+  const { orgId, key, channel } = delivery
+  const inserted = await db
+    .insert(deliveries)
+    .values({ orgId, key, channel, payload: delivery })
+    .onConflictDoNothing()
+    .returning({ key: deliveries.key })
+  return inserted.length > 0
+}
+
 export async function deliver(
   kit: Tenancy,
   env: SendEnv,
   delivery: DeliveryMessage
 ): Promise<"queued" | "exists"> {
-  const { orgId, key, channel } = delivery
+  const { orgId, key } = delivery
   const inserted = await kit.withOrg({ orgId }, (db) =>
-    db
-      .insert(deliveries)
-      .values({ orgId, key, channel, payload: delivery })
-      .onConflictDoNothing()
-      .returning({ key: deliveries.key })
+    insertDelivery(db, delivery)
   )
-  if (inserted.length === 0) return "exists"
+  if (!inserted) return "exists"
   try {
     await env.DELIVERIES.send(delivery)
   } catch (error) {
