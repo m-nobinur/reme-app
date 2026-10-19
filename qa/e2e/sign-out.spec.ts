@@ -62,7 +62,9 @@ test("pointing at Sign out leaves the owner signed in", async ({ page }) => {
   await expectSignedIn(page)
 
   await page.getByRole("button", { name: "Probe Runner" }).click()
-  const item = page.getByRole("menuitem", { name: "Sign out" })
+  const item = page
+    .getByRole("dialog", { name: "Settings" })
+    .getByRole("link", { name: "Log out" })
   await pointAt(page, item)
   await page.keyboard.press("Escape")
   await expectSignedIn(page)

@@ -1,21 +1,11 @@
 import {
   AlarmIcon,
-  ArrowUpRightIcon,
+  BellIcon,
   BuildingsIcon,
-  ChatCircleDotsIcon,
   ChatCircleTextIcon,
-  FileTextIcon,
   FlowArrowIcon,
-  GearSixIcon,
   GlobeIcon,
-  HouseIcon,
-  MoonIcon,
   NotePencilIcon,
-  QuestionIcon,
-  ShieldCheckIcon,
-  SignOutIcon,
-  SparkleIcon,
-  SunIcon,
   UsersThreeIcon,
 } from "@phosphor-icons/react"
 import {
@@ -35,25 +25,14 @@ import { railItemClass } from "@workspace/ui/components/app-shell"
 import { SiteNameProvider } from "@workspace/ui/components/assistant/blueprint-card"
 import { buttonVariants } from "@workspace/ui/components/button"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLinkItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@workspace/ui/components/dropdown-menu"
-import {
   type HistoryEntry,
   HistoryMenu,
 } from "@workspace/ui/components/history-menu"
+import { LogoMark } from "@workspace/ui/components/logo"
 import {
   type NotificationEntry,
   NotificationMenu,
 } from "@workspace/ui/components/notification-list"
-import {
-  toggleTheme,
-  useDarkTheme,
-} from "@workspace/ui/components/theme-toggle"
 import { Hint } from "@workspace/ui/components/tooltip"
 import {
   ConversationMenu,
@@ -89,6 +68,7 @@ import {
   unreadCount,
 } from "@/lib/notifications"
 import { onboardingFor } from "@/lib/onboarding"
+import { OwnerSettings } from "@/lib/owner-settings"
 import { anchorOf } from "@/lib/reminders"
 import { requireOwner } from "@/lib/tenant"
 import { LiveWorkspaceProvider, useLiveWorkspaceState } from "@/lib/workspace"
@@ -136,58 +116,19 @@ export const Route = createFileRoute("/app")({
   component: AppLayout,
 })
 
-/** The owner's own pages, in the profile menu above Account. */
-const PROFILE_NAV = [
-  { to: "/app/profile", label: "Business", icon: BuildingsIcon },
+/**
+ * The rail's sections after the chat. The business is named for the
+ * organisation, so its label is filled in where the name is known.
+ */
+const SECTIONS = [
+  { to: "/app/website", label: "Website", icon: GlobeIcon },
+  { to: "/app/profile", label: null, icon: BuildingsIcon },
   { to: "/app/staff", label: "Staff", icon: UsersThreeIcon },
   { to: "/app/pipeline", label: "Pipeline", icon: FlowArrowIcon },
 ] as const
 
-/** Up to two initials for the profile button: "N Khan" is "NK". */
-const initialsOf = (name: string) =>
-  name
-    .split(/[\s@.]+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((word) => word[0]?.toUpperCase())
-    .join("")
-
-/**
- * What "Ask Reme for help" sends as the first message of a new chat: short,
- * so it reads as the owner's own question in the thread.
- */
-const HELP_PROMPT =
-  "What can you help me with? Suggest a few things you could do for my business right now."
-
 /** How many notifications the bell's menu lists before "View all". */
 const MENU_ITEMS = 6
-
-/**
- * The theme switch in the profile menu, named for what it switches to. The
- * menu stays open, so the owner sees the change and can switch back.
- */
-function ThemeItem() {
-  const dark = useDarkTheme()
-  return (
-    <DropdownMenuItem closeOnClick={false} onClick={toggleTheme}>
-      {dark ? <SunIcon aria-hidden /> : <MoonIcon aria-hidden />}
-      {dark ? "Light theme" : "Dark theme"}
-    </DropdownMenuItem>
-  )
-}
-
-/** The organisation's initials on a rounded square, where its name goes. */
-function OrgMark({ name }: { name: string }) {
-  return (
-    <span
-      aria-hidden
-      className="flex size-6 shrink-0 items-center justify-center rounded-md bg-foreground font-semibold text-[0.6875rem] text-background"
-      data-slot="mark"
-    >
-      {initialsOf(name)}
-    </span>
-  )
-}
 
 /** The panel's poll, through the server, with the tag it last saw. */
 const readWorkspace = async (etag: string | null): Promise<WorkspacePoll> => {
@@ -220,7 +161,6 @@ function AppLayout() {
   const panel = usePanel(live.workspace)
   const hasPanel = panel !== null || live.workspace === null
   const orgName = active?.name ?? "No organisation"
-  const ownerName = owner.name || owner.email
   const notifications = notificationsOf(
     live.workspace?.attention ?? [],
     activity ?? []
@@ -422,26 +362,21 @@ function AppLayout() {
           }
           rail={
             <>
-              <Hint label={orgName} side="right">
-                <Link className={railItemClass} to="/app/profile">
-                  <OrgMark name={orgName} />
-                  <span className="truncate font-medium" data-slot="rail-label">
-                    {orgName}
-                  </span>
-                </Link>
-              </Hint>
+              <span className="flex h-11 shrink-0 items-center px-2.5 text-foreground">
+                <LogoMark />
+              </span>
               <nav aria-label="Main" className="flex flex-col gap-1">
-                <Hint label="Home" side="right">
-                  {/* Home is the new-chat screen, so it starts one as "New
-                    chat" does, and is current only on the bare address. */}
+                <Hint label="New chat" side="right">
+                  {/* The new-chat screen is home, so this is current only on
+                    the bare address, and a fresh state starts one each time. */}
                   <Link
                     activeOptions={{ exact: true }}
                     className={railItemClass}
                     state={() => ({ chat: crypto.randomUUID() })}
                     to="/app"
                   >
-                    <HouseIcon aria-hidden />
-                    <span data-slot="rail-label">Home</span>
+                    <NotePencilIcon aria-hidden />
+                    <span data-slot="rail-label">New chat</span>
                   </Link>
                 </Hint>
                 {last ? (
@@ -469,12 +404,21 @@ function AppLayout() {
                     </button>
                   </Hint>
                 )}
-                <Hint label="Website" side="right">
-                  <Link className={railItemClass} to="/app/website">
-                    <GlobeIcon aria-hidden />
-                    <span data-slot="rail-label">Website</span>
-                  </Link>
-                </Hint>
+                {SECTIONS.map((item) => (
+                  <Hint
+                    key={item.to}
+                    label={item.label ?? orgName}
+                    side="right"
+                  >
+                    <Link className={railItemClass} to={item.to}>
+                      <item.icon aria-hidden />
+                      <span className="truncate" data-slot="rail-label">
+                        {item.label ?? orgName}
+                      </span>
+                    </Link>
+                  </Hint>
+                ))}
+                <hr className="mx-2 my-2 border-border" />
                 <Hint label="Reminders" side="right">
                   <Link className={railItemClass} to="/app/reminders">
                     <AlarmIcon aria-hidden />
@@ -483,145 +427,33 @@ function AppLayout() {
                 </Hint>
               </nav>
               <div className="mt-auto flex flex-col gap-1">
-                <DropdownMenu>
-                  <Hint label="Help" side="right">
-                    <DropdownMenuTrigger
-                      render={
-                        <button
-                          aria-label="Help"
-                          className={railItemClass}
-                          type="button"
-                        />
-                      }
-                    >
-                      <QuestionIcon aria-hidden />
-                      <span data-slot="rail-label">Help</span>
-                    </DropdownMenuTrigger>
-                  </Hint>
-                  <DropdownMenuContent
-                    align="end"
-                    className="w-56"
-                    side="right"
+                <Hint label="Notifications" side="right">
+                  <Link
+                    aria-label={
+                      unread > 0
+                        ? `Notifications, ${unread} unread`
+                        : "Notifications"
+                    }
+                    className={railItemClass}
+                    to="/app/notifications"
                   >
-                    {onboarding ? (
-                      <DropdownMenuLinkItem
-                        render={
-                          <Link params={{ id: onboarding }} to="/app/c/$id" />
-                        }
-                      >
-                        <SparkleIcon aria-hidden />
-                        Getting started
-                      </DropdownMenuLinkItem>
-                    ) : null}
-                    <DropdownMenuLinkItem
-                      render={
-                        <Link
-                          state={() => ({
-                            chat: crypto.randomUUID(),
-                            ask: HELP_PROMPT,
-                          })}
-                          to="/app"
-                        />
-                      }
-                    >
-                      <ChatCircleDotsIcon aria-hidden />
-                      Ask Reme for help
-                    </DropdownMenuLinkItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuLinkItem
-                      href="/privacy"
-                      rel="noreferrer"
-                      target="_blank"
-                    >
-                      <ShieldCheckIcon aria-hidden />
-                      Privacy
-                      <ArrowUpRightIcon
-                        aria-hidden
-                        className="ms-auto text-muted-foreground"
-                      />
-                    </DropdownMenuLinkItem>
-                    <DropdownMenuLinkItem
-                      href="/terms"
-                      rel="noreferrer"
-                      target="_blank"
-                    >
-                      <FileTextIcon aria-hidden />
-                      Terms
-                      <ArrowUpRightIcon
-                        aria-hidden
-                        className="ms-auto text-muted-foreground"
-                      />
-                    </DropdownMenuLinkItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                <DropdownMenu>
-                  <Hint label={ownerName} side="right">
-                    <DropdownMenuTrigger
-                      render={
-                        <button
-                          aria-label={`Profile, ${ownerName}`}
-                          className={railItemClass}
-                          data-slot="profile-menu"
-                          type="button"
-                        />
-                      }
-                    >
+                    <BellIcon aria-hidden />
+                    {unread > 0 ? (
                       <span
                         aria-hidden
-                        className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary font-semibold text-[0.6875rem] text-primary-foreground"
-                        data-slot="mark"
-                      >
-                        {initialsOf(ownerName)}
-                      </span>
-                      <span className="truncate" data-slot="rail-label">
-                        {ownerName}
-                      </span>
-                    </DropdownMenuTrigger>
-                  </Hint>
-                  <DropdownMenuContent
-                    align="end"
-                    className="w-60"
-                    side="right"
-                  >
-                    <div className="flex flex-col px-2.5 py-1.5">
-                      <span className="truncate font-medium text-sm">
-                        {ownerName}
-                      </span>
-                      {owner.name ? (
-                        <span className="truncate text-muted-foreground text-xs">
-                          {owner.email}
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="flex items-center gap-2 px-2.5 py-1.5 text-sm">
-                      <OrgMark name={orgName} />
-                      <span className="truncate">{orgName}</span>
-                    </div>
-                    <DropdownMenuSeparator />
-                    {PROFILE_NAV.map((item) => (
-                      <DropdownMenuLinkItem
-                        key={item.to}
-                        render={<Link to={item.to} />}
-                      >
-                        <item.icon aria-hidden />
-                        {item.label}
-                      </DropdownMenuLinkItem>
-                    ))}
-                    <DropdownMenuLinkItem render={<Link to="/app/account" />}>
-                      <GearSixIcon aria-hidden />
-                      Account
-                    </DropdownMenuLinkItem>
-                    <ThemeItem />
-                    <DropdownMenuSeparator />
-                    {/* A plain link, not a router one: the router preloads a
-                    route on hover and focus, and /sign-out signs out in its
-                    loader. */}
-                    <DropdownMenuLinkItem href="/sign-out">
-                      <SignOutIcon aria-hidden />
-                      Sign out
-                    </DropdownMenuLinkItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                        className="absolute start-7 top-2 size-2 rounded-full bg-destructive ring-2 ring-rail"
+                        data-slot="unread-dot"
+                      />
+                    ) : null}
+                    <span data-slot="rail-label">Notifications</span>
+                  </Link>
+                </Hint>
+                <OwnerSettings
+                  onboarding={onboarding}
+                  orgName={orgName}
+                  owner={owner}
+                  unread={unread}
+                />
               </div>
             </>
           }
