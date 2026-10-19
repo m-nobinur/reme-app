@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { clearOrgs } from "../fixtures/seed.ts"
 import { connect, connectionString } from "../src/client.ts"
 import { orgs, scheduledJobs } from "../src/schema.ts"
-import { claimDueJobs, tenancy, withOrg } from "../src/tenancy.ts"
+import { claimDueJobs, nextDueAt, tenancy, withOrg } from "../src/tenancy.ts"
 
 /**
  * `claim_due_jobs` (migration 0020) against Postgres. Two orgs of its own, so
@@ -156,5 +156,43 @@ describe("claim_due_jobs", () => {
     await seedJobs(3)
     expect(await claimDueJobs(kit, 0)).toEqual([])
     expect(await claimDueJobs(kit, 2)).toHaveLength(2)
+  })
+})
+
+describe("next_due_at", () => {
+  const kit = tenancy(connectionString(), { max: 1 })
+  afterAll(() => kit.close())
+
+  // Times older than any other test's rows, so each is the minimum when it
+  // counts; every row is paused before the case ends, so no claim takes it.
+  const LONG_AGO = new Date("2000-01-01T00:00:00.123Z")
+  const LONGER_AGO = new Date("1999-01-01T00:00:00.456Z")
+
+  const pause = (rows: { id: string; orgId: string }[]) =>
+    Promise.all(
+      rows.map((row) =>
+        withOrg({ orgId: row.orgId }, (db) =>
+          db
+            .update(scheduledJobs)
+            .set({ pausedAt: new Date() })
+            .where(eq(scheduledJobs.id, row.id))
+        )
+      )
+    )
+
+  it("is the earliest unpaused job, and a claimed one counts from its lease's end", async () => {
+    const due = await seedJobs(1, { nextRunAt: LONG_AGO })
+    const claimed = await seedJobs(1, {
+      nextRunAt: LONGER_AGO,
+      claimedAt: new Date(),
+    })
+    try {
+      expect(await nextDueAt(kit)).toEqual(LONG_AGO)
+      await pause(due)
+      const next = await nextDueAt(kit)
+      expect(next?.getTime()).toBeGreaterThan(LONG_AGO.getTime())
+    } finally {
+      await pause([...due, ...claimed])
+    }
   })
 })
