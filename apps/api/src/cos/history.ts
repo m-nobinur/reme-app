@@ -62,20 +62,32 @@ export type ContextPolicy = {
   turns: number
   /** The newest turns that keep their tool calls; older turns keep only their text. */
   toolTurns: number
+  /**
+   * The most history tokens kept, at four characters a token: the oldest
+   * whole turns after the summary go first, never the newest turn.
+   */
+  historyTokens: number
 }
 
 /**
  * Version 2 escapes `<` in the context's workspace data, so the text inside
  * cannot close its `<data>` tag. Version 3 adds the Now line to the context.
  * Version 4 adds the website change line after the mode line. Versions 1 to
- * 4 keep 12 turns. Version 6 folds in compaction (ADR-042), which bounds the
- * history, so its 80 turns only stop it growing while the job lags.
+ * 4 keep 12 turns and no token cap. Version 6 folds in compaction (ADR-042),
+ * which bounds the history, so its 80 turns and 16,000 tokens only bound it
+ * while the job lags or fails: 16,000 leaves a turn's own steps and the
+ * fixed part of about 10,000 tokens room under the 30,000-token step
+ * reservation.
  */
 export const CONTEXT_POLICY: ContextPolicy = {
   version: "6",
   turns: 80,
   toolTurns: 2,
+  historyTokens: 16_000,
 }
+
+/** The summary message's id prefix. A `:` is outside every message id the chat accepts. */
+export const SUMMARY_ID = "compaction:"
 
 /**
  * The summary's header, in our words after hermes' `SUMMARY_PREFIX` (MIT).
@@ -223,7 +235,7 @@ export function loggedMessages(
   const byId = new Map<string, Logged>()
   for (const event of log) {
     if (range && event.seq >= range.from_seq && event.seq <= range.to_seq) {
-      const id = `compaction-${latest?.seq}`
+      const id = `${SUMMARY_ID}${latest?.seq}`
       if (!byId.has(id)) {
         byId.set(id, {
           message: summaryMessage(id, compaction?.summary ?? ""),
@@ -281,8 +293,9 @@ export const historyTokens = (messages: Message[]) =>
 
 /**
  * The newest `policy.turns` turns, with tool calls kept only in the newest
- * `policy.toolTurns`. A message left with nothing but step boundaries is
- * dropped. Messages before the first owner message count as a turn.
+ * `policy.toolTurns`, within `policy.historyTokens`. A message left with
+ * nothing but step boundaries is dropped. Messages before the first owner
+ * message count as a turn.
  */
 function pruned(messages: Message[], policy: ContextPolicy): Message[] {
   const turns: Message[][] = []
@@ -293,7 +306,7 @@ function pruned(messages: Message[], policy: ContextPolicy): Message[] {
   }
   const kept = turns.slice(-policy.turns)
   const full = kept.length - policy.toolTurns
-  return kept.flatMap((turn, i) =>
+  const shaped = kept.map((turn, i) =>
     i >= full
       ? turn
       : turn.flatMap((message) => {
@@ -303,6 +316,15 @@ function pruned(messages: Message[], policy: ContextPolicy): Message[] {
             : []
         })
   )
+  const sizes = shaped.map((turn) => JSON.stringify(turn).length / 4)
+  let total = sizes.reduce((sum, size) => sum + size, 0)
+  let from = shaped[0]?.[0]?.id.startsWith(SUMMARY_ID) ? 1 : 0
+  while (total > policy.historyTokens && from < shaped.length - 1) {
+    total -= sizes[from] ?? 0
+    shaped[from] = []
+    from += 1
+  }
+  return shaped.flat()
 }
 
 /**

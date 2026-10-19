@@ -317,10 +317,10 @@ export async function writeAsTurn(
 
 /**
  * Appends a `cos.compaction` as the session's CoS staff row, under the
- * conversation's lock and outside any turn's token: the fold reads only
- * compactions logged before a turn's context, so one landing during a turn
- * changes nothing that turn derives. Returns its seq, or null, writing
- * nothing, when a compaction already logged reaches as far.
+ * conversation's lock, between turns: a closed turn holds no token, so the
+ * write checks instead that no turn is open, and throws `SessionBusy`,
+ * writing nothing, when one is. Returns its seq, or null, writing nothing,
+ * when a compaction already logged reaches as far.
  */
 export async function writeCompaction(
   db: OrgScopedDb,
@@ -333,6 +333,9 @@ export async function writeCompaction(
     throw new Error(`cos.turns: a compaction from ${from_seq} to ${to_seq}`)
   }
   await lock(db, session.sessionId)
+  if (await openTurn(db, session.sessionId, 0)) {
+    throw new SessionBusy(session.sessionId)
+  }
   const [covered] = await db.execute(sql`
     select 1 from ${events}
     where session_id = ${session.sessionId} and type = 'cos.compaction'

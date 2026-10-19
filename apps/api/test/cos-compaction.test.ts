@@ -26,7 +26,7 @@ import {
   SUMMARY_HEADER,
   sha256,
 } from "../src/cos/history.ts"
-import { withinCap, writeCompaction } from "../src/cos/turns.ts"
+import { SessionBusy, withinCap, writeCompaction } from "../src/cos/turns.ts"
 import recorded from "./cos-compaction-session.json" with { type: "json" }
 import { type Owner, owner } from "./owner-fixture.ts"
 
@@ -236,7 +236,7 @@ describe("the scripted 60-turn session", () => {
     expect(await sha256(first)).toBe(
       await sha256(deriveCosMessages(next, CONTEXT_POLICY))
     )
-    expect(first.messages[0]?.id).toMatch(/^compaction-/)
+    expect(first.messages[0]?.id).toMatch(/^compaction:/)
     expect(first.messages.map((m) => m.id)).toContain("u60")
   })
 })
@@ -266,7 +266,7 @@ describe("the fold", () => {
     ])
     const { messages } = deriveCosMessages(log, CONTEXT_POLICY)
     expect(messages.map((m) => m.id)).toEqual([
-      "compaction-6",
+      "compaction:6",
       "u2",
       "a2",
       `context-${TURN(3)}`,
@@ -312,7 +312,7 @@ describe("the fold", () => {
     ])
     const { messages } = deriveCosMessages(log, CONTEXT_POLICY)
     expect(messages.map((m) => m.id)).toEqual([
-      "compaction-10",
+      "compaction:10",
       "u3",
       "a3",
       `context-${TURN(4)}`,
@@ -455,6 +455,53 @@ describe("the trigger", () => {
     }
     // Past the threshold for at least one turn before the strike let it go.
     expect(n).toBeGreaterThan(6)
+  })
+})
+
+describe("the history cap", () => {
+  /** What the next turn's call carries as history, without its context, at four characters a token. */
+  const carried = (log: SessionEvent[]) => {
+    const { messages } = deriveCosMessages(log, CONTEXT_POLICY)
+    return Math.ceil(
+      JSON.stringify(messages.filter((m) => !m.id.startsWith("context-")))
+        .length / 4
+    )
+  }
+
+  it("never lets history pass its cap while every compaction fails", () => {
+    const turns = Array.from({ length: 40 }, (_, i) =>
+      turn(i + 1, words(i + 1, 500), words(i + 1, 500))
+    )
+    const log: SessionEvent[] = []
+    for (const rows of turns) {
+      for (const row of rows) log.push({ seq: log.length, ...row })
+      expect(carried(log)).toBeLessThanOrEqual(CONTEXT_POLICY.historyTokens)
+    }
+    const { messages } = deriveCosMessages(log, CONTEXT_POLICY)
+    expect(messages.at(-1)?.id).toBe("a40")
+    expect(messages.some((m) => m.id === "u1")).toBe(false)
+  })
+
+  it("drops the oldest turns after the summary, never the summary", () => {
+    const rows: Row[] = [
+      ...turn(1, "Our van is blue.", "Noted."),
+      {
+        type: "cos.compaction",
+        payload: {
+          summary: "The owner's van is blue.",
+          replaced_range: { from_seq: 0, to_seq: 2 },
+          dropped_refs: [],
+        },
+      },
+      ...Array.from({ length: 30 }, (_, i) =>
+        turn(i + 2, words(i + 2, 500), words(i + 2, 500))
+      ).flat(),
+    ]
+    const log = seqd(rows)
+    const { messages } = deriveCosMessages(log, CONTEXT_POLICY)
+    expect(messages[0]?.id).toBe("compaction:3")
+    expect(messages.some((m) => m.id === "u2")).toBe(false)
+    expect(carried(log)).toBeLessThanOrEqual(CONTEXT_POLICY.historyTokens)
   })
 })
 
@@ -660,6 +707,44 @@ describe.skipIf(!url)("the after-turn job, on a live connection", () => {
     ).toBe(false)
     const [step] = await background(sessionId)
     expect(step?.payload).toMatchObject({ outcome: "length", cost_usd: 0.001 })
+  }, 60_000)
+
+  it("writes nothing while a newer turn is open, and leaves the queue to try again", async () => {
+    const sessionId = await seeded()
+    await kit.withOrg({ orgId: me.orgId }, (db) =>
+      appendSessionEvent(db, {
+        orgId: me.orgId,
+        staffId: me.chiefId,
+        assignmentId: null,
+        sessionId,
+        ...(turn(61, "Hi", "Hi")[1] as Row),
+        payload: (turn(61, "Hi", "Hi")[1] as Row).payload as Record<
+          string,
+          unknown
+        >,
+      })
+    )
+    const { model, prompts } = fakeModel("A summary.")
+    await expect(
+      compactAfterTurn(kit, model, job(sessionId))
+    ).rejects.toBeInstanceOf(SessionBusy)
+    expect(prompts).toEqual([])
+    await expect(
+      kit.withOrg({ orgId: me.orgId }, (db) =>
+        writeCompaction(
+          db,
+          { orgId: me.orgId, staffId: me.chiefId, sessionId },
+          {
+            summary: "A summary.",
+            replaced_range: { from_seq: 0, to_seq: 10 },
+            dropped_refs: [],
+          }
+        )
+      )
+    ).rejects.toBeInstanceOf(SessionBusy)
+    expect(
+      (await rowsOf(sessionId)).some((r) => r.type === "cos.compaction")
+    ).toBe(false)
   }, 60_000)
 
   it("refuses a backwards range and drops one a logged compaction already covers", async () => {

@@ -94,15 +94,20 @@ open approvals named only, in the owner's language, at a fifth of the span withi
 tokens. The output is scrubbed again, and a summary cut off at the output cap is rejected. The
 call's cost is a `cos.background_step` event outside the session, which `withinCap` counts. The
 summary is appended with `writeCompaction` rather than `writeAsTurn`, whose token the closed turn
-no longer holds: it takes the conversation's lock, refuses a range that runs backwards, and drops
-the write when a compaction already logged reaches as far. Each range starts where the last one
+no longer holds: it takes the conversation's lock, writes nothing while any turn is open (the job
+checks this before the model call too, and the queue tries again after a turn's longest life of
+90 s), refuses a range that runs backwards, and drops the write when a compaction already logged
+reaches as far. Each range starts where the last one
 began, so the new summary replaces the old. `deriveCosMessages` under policy 6 folds the latest
 compaction logged before the turn's context: the events in its range give way to one summary
 message, our header (reference only, the latest message wins, nothing in it is to be acted on,
 open approvals are decided on their cards, the owner profile outranks it) and then the summary
-as `inferred untrusted_input` data. A compaction that lands during a turn is left for the next
-one, so nothing a turn derives changes under it and the hash check is unchanged. Policy 6 keeps
-80 turns instead of 12, only as a bound while the job lags.
+as `inferred untrusted_input` data. Should one land during a turn all the same, it is
+left for the next one, so nothing a turn derives changes under it and the hash check is
+unchanged. Policy 6 keeps 80 turns instead of 12 and caps history at 16,000 tokens, at four
+characters a token, dropping the oldest whole turns after the summary first. Both only bound the
+history while compaction lags or fails: the cap leaves a turn's own steps and the fixed part room
+under the 30,000-token step reservation.
 
 **Background callers take the lock, and that is safe.** The after-turn job writes compaction with
 `writeCompaction` under the conversation lock, after the owner's turn has closed; the heartbeat posts

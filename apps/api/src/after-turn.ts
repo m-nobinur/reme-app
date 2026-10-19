@@ -1,6 +1,7 @@
 import { tenancy } from "@workspace/db"
-import { openrouterModel } from "./cos/agent.ts"
+import { LIMITS, openrouterModel } from "./cos/agent.ts"
 import { COMPACTION, compactAfterTurn } from "./cos/compaction.ts"
+import { GRACE_MS, SessionBusy } from "./cos/turns.ts"
 
 /** What a closed turn tells the queue: ids only, never text. */
 export type AfterTurn = {
@@ -40,7 +41,8 @@ export async function enqueueAfterTurn(
 
 /**
  * The work after each closed turn: compaction for now. A message whose job
- * threw is retried, then goes to the dead-letter queue.
+ * threw is retried, after a newer turn's longest life when it is open, then
+ * goes to the dead-letter queue.
  */
 export async function afterTurnBatch(
   batch: MessageBatch<AfterTurn>,
@@ -64,7 +66,12 @@ export async function afterTurnBatch(
             error: error instanceof Error ? error.name : "unknown",
           })
         )
-        message.retry()
+        // A turn that is open has closed or lapsed by then.
+        message.retry(
+          error instanceof SessionBusy
+            ? { delaySeconds: (LIMITS.totalMs + GRACE_MS) / 1000 }
+            : undefined
+        )
       }
     }
   } finally {

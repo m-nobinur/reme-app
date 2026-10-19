@@ -298,6 +298,7 @@ const logged = (rows: SessionEvent[]): UIMessage[] =>
     ...CONTEXT_POLICY,
     turns: Number.POSITIVE_INFINITY,
     toolTurns: Number.POSITIVE_INFINITY,
+    historyTokens: Number.POSITIVE_INFINITY,
   }).messages
 
 /**

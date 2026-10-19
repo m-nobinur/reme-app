@@ -11,8 +11,9 @@ import {
   loggedMessages,
   readSession,
   type SessionEvent,
+  SUMMARY_ID,
 } from "./history.ts"
-import { withinCap, writeCompaction } from "./turns.ts"
+import { SessionBusy, withinCap, writeCompaction } from "./turns.ts"
 
 /**
  * Compaction (ADR-042, §10.6): after a turn closes, history past a
@@ -85,7 +86,7 @@ export function planCompaction(rows: readonly SessionEvent[]): Plan | null {
     if (tokens < historyTokens(after) + COMPACTION.strike) return null
   }
 
-  const summaryId = latest ? `compaction-${latest.seq}` : null
+  const summaryId = latest ? `${SUMMARY_ID}${latest.seq}` : null
   const starts = all.flatMap((m, i) =>
     m.message.role === "user" && m.message.id !== summaryId ? [i] : []
   )
@@ -314,8 +315,8 @@ export async function summarise(
  * cost as a `cos.background_step` outside the session so the daily cap
  * counts it, and appends the summary under the lock. A turn not yet closed
  * (its close may have failed), a session frozen by an integrity failure, or
- * a log that needs nothing is left alone. Throws only on a database error,
- * so the queue retries.
+ * a log that needs nothing is left alone. Throws `SessionBusy` while a
+ * newer turn is open, and on a database error, so the queue retries.
  */
 export async function compactAfterTurn(
   kit: Tenancy,
@@ -340,6 +341,13 @@ export async function compactAfterTurn(
   )
   if (!turns.some((t) => t.turn_id === job.turnId)) return log("turn_open")
   if (turns.some((t) => t.outcome === "integrity")) return log("frozen")
+  // A newer turn is running: the queue tries again once it has closed.
+  const newest = rows.filter((e) => e.type === "cos.context").at(-1)
+  const running = (newest?.payload as { turn_id?: unknown } | undefined)
+    ?.turn_id
+  if (!turns.some((t) => t.turn_id === running)) {
+    throw new SessionBusy(job.sessionId)
+  }
   const plan = planCompaction(rows)
   if (!plan) return
   if (!model) return log("no_model")
