@@ -163,7 +163,7 @@ describe("a sandbox's first command", () => {
     expect(container.ran[0]?.options).toEqual({ user: "0:0" })
     expect(container.timeouts).toEqual([30 * 60 * 1000])
     expect(container.ran[1]).toEqual({
-      argv: ["bash", "-c", "echo hi"],
+      argv: ["bash", "-c", 'export -n REME_COMMAND; eval "$REME_COMMAND"'],
       options: {
         cwd: "/workspace",
         env: {
@@ -171,6 +171,7 @@ describe("a sandbox's first command", () => {
           PLAYWRIGHT_BROWSERS_PATH: "/opt/pw-browsers",
           NODE_EXTRA_CA_CERTS:
             "/etc/cloudflare/certs/cloudflare-containers-ca.crt",
+          REME_COMMAND: "echo hi",
         },
       },
     })
@@ -228,8 +229,19 @@ describe("a command", () => {
       "120",
       "bash",
       "-c",
-      "astro build",
+      'export -n REME_COMMAND; eval "$REME_COMMAND"',
     ])
+  })
+
+  it("never puts the command in a command line, where its own pkill -f would match it", async () => {
+    const { sandbox, container } = newSandbox()
+    const script =
+      "pkill -f '[a]stro preview' || true; ./node_modules/.bin/astro preview"
+    await sandbox.exec(script, { timeout: 120_000 })
+    expect(container.ran.at(-1)?.argv.join(" ")).not.toContain("astro")
+    expect(container.ran.at(-1)?.options?.env).toMatchObject({
+      REME_COMMAND: script,
+    })
   })
 
   it("returns a failure as a result, not a throw", async () => {

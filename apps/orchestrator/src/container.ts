@@ -208,12 +208,20 @@ export class RemeSandbox extends DurableObject<Env> {
   async exec(command: string, options: ExecOptions = {}) {
     return this.use(async () => {
       const seconds = options.timeout ? Math.ceil(options.timeout / 1000) : 0
-      const shell = ["bash", "-c", command]
+      // The command reaches bash in a variable, never in argv: as in a 0.12
+      // session, no command line holds it, so its own `pkill -f` cannot match
+      // the shell running it (the screenshot step's does). Un-exported, so
+      // what it starts never sees it.
+      const shell = [
+        "bash",
+        "-c",
+        'export -n REME_COMMAND; eval "$REME_COMMAND"',
+      ]
       const process = await this.container.exec(
         seconds ? ["timeout", "--kill-after=5", `${seconds}`, ...shell] : shell,
         {
           cwd: options.cwd ?? WORKSPACE,
-          env: { ...EXEC_ENV, ...options.env },
+          env: { ...EXEC_ENV, ...options.env, REME_COMMAND: command },
         }
       )
       const out = await process.output()
