@@ -123,33 +123,56 @@ describe("authenticated", () => {
     expect(authenticated([other, ours], "example.com")).toBe(false)
   })
 
-  it("reads the ARC copy only when there is no Authentication-Results, from the topmost and highest instance", () => {
+  it("reads the ARC copy when that is all there is, from its topmost and highest instance", () => {
     const arc = (value: string) => header("arc-authentication-results", value)
     const pass = "mx.cloudflare.net; dmarc=pass header.from=example.com"
     expect(authenticated([arc(`i=1; ${pass}`)], "example.com")).toBe(true)
-    // A header above the real one, or an instance higher than the top's.
     expect(
       authenticated([arc(`i=1; ${pass}`), arc(`i=2; ${pass}`)], "example.com")
     ).toBe(false)
+    // The sender's own provider sealed it first; Email Routing's is above.
     expect(
       authenticated(
         [
-          arc("i=2; mail.attacker.test; dmarc=pass header.from=example.com"),
-          arc(`i=1; ${pass}`),
+          arc(`i=2; ${pass}`),
+          arc("i=1; mx.google.com; dmarc=pass header.from=example.com"),
+        ],
+        "example.com"
+      )
+    ).toBe(true)
+  })
+
+  it("lets a planted Authentication-Results answer for nothing Cloudflare wrote as ARC", () => {
+    const arc = (value: string) => header("arc-authentication-results", value)
+    const planted = results(
+      "mx.cloudflare.net; dmarc=pass header.from=example.com"
+    )
+    // Cloudflare's ARC result is a failure, or says nothing of the domain.
+    expect(
+      authenticated(
+        [
+          planted,
+          arc("i=1; mx.cloudflare.net; dmarc=fail header.from=example.com"),
         ],
         "example.com"
       )
     ).toBe(false)
-    // An untrusted Authentication-Results does not fall through to a good ARC.
     expect(
       authenticated(
-        [
-          results("mail.attacker.test; dmarc=pass header.from=example.com"),
-          arc(`i=1; ${pass}`),
-        ],
+        [planted, arc("i=1; mx.cloudflare.net; spf=fail smtp.mailfrom=x.test")],
         "example.com"
       )
     ).toBe(false)
+    // An untrusted Authentication-Results does not hide a good ARC result.
+    expect(
+      authenticated(
+        [
+          results("mail.attacker.test; dmarc=fail header.from=example.com"),
+          arc("i=1; mx.cloudflare.net; dmarc=pass header.from=example.com"),
+        ],
+        "example.com"
+      )
+    ).toBe(true)
   })
 
   it("fails closed with no results, or none it can read", () => {
