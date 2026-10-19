@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync } from "node:fs"
+import { URL } from "node:url"
 import {
   formatSiteRevision,
   SITE_PROBE_HEADER,

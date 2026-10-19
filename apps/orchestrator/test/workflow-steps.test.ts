@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs"
+import { URL } from "node:url"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { UPTIME_CRON } from "../src/uptime.ts"
 import steps from "./workflow-steps.json" with { type: "json" }

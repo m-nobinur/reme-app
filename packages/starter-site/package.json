@@ -34,7 +34,7 @@
     "@astrojs/check": "0.9.10",
     "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.63.0",
-    "@types/node": "^22",
+    "@types/node": "^24",
     "@workspace/contracts": "workspace:*",
     "parse5": "8.0.1",
     "schema-dts": "2.0.0",

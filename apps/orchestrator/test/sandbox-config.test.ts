@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync } from "node:fs"
+import { URL } from "node:url"
 import { describe, expect, it } from "vitest"
 
 /**
