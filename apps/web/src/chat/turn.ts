@@ -140,6 +140,22 @@ function ownerResults(last: ChatMessage | undefined): ChatResult[] {
 }
 
 /**
+ * `messages` with the message that holds `toolCallId` swapped for the stored
+ * one. A typed yes or no that answered a card (`CARD_ANSWERED`) was shown as
+ * cancelled when it was sent; the stored message has what the api did.
+ */
+export function withStoredCard(
+  messages: ChatMessage[],
+  stored: ChatMessage[],
+  toolCallId: string
+): ChatMessage[] {
+  const fresh = stored.find((m) =>
+    m.parts.some((p) => isToolUIPart(p) && p.toolCallId === toolCallId)
+  )
+  return fresh ? messages.map((m) => (m.id === fresh.id ? fresh : m)) : messages
+}
+
+/**
  * A typed message overtakes the calls still waiting on the owner, the way
  * `apps/api` cancels them in the stored row: an unanswered question or an
  * undecided change becomes cancelled. So does a yes or no held back while

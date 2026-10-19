@@ -1,5 +1,6 @@
 import {
   APPROVAL_EXPIRED,
+  CARD_ANSWERED,
   ChangeKind,
   ChatRequest,
   COS_TOOLS,
@@ -3137,6 +3138,14 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       })
       expect(wire(sent)).toContain("created")
       expect((await turnsOf(id)).at(-1)?.outcome).toBe("answered")
+      // The stream names the card it answered, for the web to show.
+      expect(done.chunks.filter((c) => c.type === CARD_ANSWERED)).toEqual([
+        {
+          type: CARD_ANSWERED,
+          data: { tool_call_id: call.toolCallId },
+          transient: true,
+        },
+      ])
     })
 
     it("echoes the reading in one line when no model answers", async () => {
@@ -3144,6 +3153,9 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       const done = await turn(me, typed(id, "go ahead"), { model: null })
       expect(done.response.status, done.text).toBe(200)
       expect(await remindersOf(id)).toHaveLength(1)
+      expect(done.chunks.filter((c) => c.type === CARD_ANSWERED)).toHaveLength(
+        1
+      )
       const row = (await rowsOf(me, id)).at(-1)
       expect(row?.content).toMatchObject({
         parts: [
@@ -3202,6 +3214,8 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       })
       expect(done.response.status, done.text).toBe(200)
       expect(approval).toHaveBeenCalledTimes(1)
+      // Nothing answered the card, so the web keeps it cancelled.
+      expect(done.chunks.some((c) => c.type === CARD_ANSWERED)).toBe(false)
       expect(await remindersOf(id)).toEqual([])
       expect(await cardState(id, call.toolCallId)).toMatchObject({
         state: "output-error",

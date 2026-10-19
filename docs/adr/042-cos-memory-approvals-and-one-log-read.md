@@ -94,8 +94,10 @@ review and Developer-answer cards keep ADR-034's rule: a typed message cancels t
   all apply, so a typed yes on an expired or changed card is refused with the same line. The
   owner's words are then logged as their message and the model answers in a new message, so it
   says what ran. With no model, one line says how the reply was read ("Taken as a yes: ..."). The
-  stream carries only the new message, so the web, which cancels a pending card on screen when
-  the owner types (`cancelOvertaken`), shows this one as cancelled until it reloads.
+  stream carries only the new message, and opens with a transient `CARD_ANSWERED` chunk naming the
+  card. The web cancels a pending card on screen when the owner types (`cancelOvertaken`), so on
+  that chunk it reads the card's stored message again and shows what happened, approved or
+  declined, as a click would; a typed message that answered nothing leaves the card cancelled.
 
 **Memory does not move the CoS to the lite runtime**, owner decision 4. The owner profile is one
 fact, `owner.profile`, at most 1,500 characters, written with `supersedeFact` and injected as

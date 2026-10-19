@@ -41,6 +41,13 @@ export const TOOL_CALL_CANCELLED =
   "User cancelled tool call by sending a new message."
 
 /**
+ * The transient chunk that opens the stream of a typed yes or no which
+ * answered a card (ADR-042): `{ tool_call_id }`. The web has shown that card
+ * as cancelled, so it reads the stored message again and shows the outcome.
+ */
+export const CARD_ANSWERED = "data-card_answered"
+
+/**
  * How a Chief of Staff tool's error text begins (ADR-034). `TOOL_FAILED`
  * means the call did nothing: the builder answered in a shape the api does
  * not accept. `TOOL_UNKNOWN` means nobody can vouch for the outcome: it may

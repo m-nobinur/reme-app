@@ -1,5 +1,6 @@
 import {
   BuildSummary,
+  CARD_ANSWERED,
   ChatRequest,
   type ChatResult,
   CosChangeRequest,
@@ -1013,6 +1014,18 @@ type Opened = {
 /** A typed reply read as the answer to the open card `callId`, with the line that says so. */
 type Typed = { callId: string; approved: boolean; line: string }
 
+/** Tells the web which card the typed reply answered, so it stops showing it as cancelled. */
+const answeredChunk = (heard: Typed | null): UIMessageChunk[] =>
+  heard
+    ? [
+        {
+          type: CARD_ANSWERED,
+          data: { tool_call_id: heard.callId },
+          transient: true,
+        },
+      ]
+    : []
+
 /** What the card proposes, in the words the owner and Jev read it in. */
 function proposed(card: CosPart): string {
   const { text, title, due_at } = (card.input ?? {}) as Record<string, unknown>
@@ -1466,7 +1479,7 @@ async function startModel(
     modelId: a.modelId,
     uiMessages: messages,
     newMessageId: a.newId,
-    lead: tail ? settledLead(messages, tail.id) : [],
+    lead: tail ? settledLead(messages, tail.id) : answeredChunk(a.opened.typed),
     rows,
     // The stream's reader ends after `closeRun`, so the turn is closed here.
     waitUntil: (reading) =>
@@ -1517,7 +1530,10 @@ async function fallbackTurn(
         parts: [{ type: "step-start" }, ...step],
       })
     })
-    return stream(assistantId, step, [writtenAt()])
+    return stream(assistantId, step, [
+      ...answeredChunk(a.opened.typed),
+      writtenAt(),
+    ])
   }
   const history = await run.kit.withOrg({ orgId: run.turn.orgId }, (db) =>
     caughtUp(db, run)
