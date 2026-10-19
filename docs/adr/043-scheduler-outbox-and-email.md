@@ -38,7 +38,8 @@ returns without a query when `next` is in the future and the last scan is under 
 KV can only ever hold a time later than the truth, through a lost write, two writers racing, or
 a write not yet propagated, and the fallback scan finds the job from its own row, so the worst a
 KV fault does is delay a job to the next hourly scan. A scan claims up to 100 jobs, sends one
-message each, then writes `next_due_at()` back. Anything that creates a job or moves one earlier
+message each, then writes `next_due_at()` back. When the send fails, the scan clears those claims
+at once and leaves KV due, so the jobs wait a minute rather than the 20-minute lease. Anything that creates a job or moves one earlier
 calls `lowerNextDue` from `@workspace/db` after its commit, which stores `min(stored, at)` and
 never throws.
 
@@ -58,7 +59,10 @@ claim lapses. A handler therefore writes only to Postgres, sends through the out
 inside `withOrg`'s 15-second idle limit. A kind with no handler is recorded `skipped`.
 
 Success clears `claimed_at` and `failures` and moves `next_run_at` to the rule's next time after
-now, or pauses a one-off for good. A failed run rolls back, is recorded `failed` in a transaction
+now, or pauses a one-off for good. Computing from now collapses missed fires: a daily job down
+for three days runs once, never three times. When `orgs.time_zone` changes, `recomputeOrgJobs`
+(in `@workspace/db`, with `nextRun`) moves the org's upcoming recurring jobs into the new zone in
+the same transaction. A failed run rolls back, is recorded `failed` in a transaction
 of its own, and backs off `min(60, 2^failures)` minutes. The fifth failure in a row pauses the job,
 raises `alert.raised` `{kind: "job.paused"}` and posts one fixed chat message, keyed by the pause
 so it posts once. A job whose org is closed (ADR-035) is paused without running, and deleting the

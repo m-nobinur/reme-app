@@ -1,11 +1,12 @@
 import {
   claimDueJobs,
+  eq,
   NEXT_DUE_KEY,
   type NextDue,
   nextDueAt,
   readNextDue,
+  scheduledJobs,
 } from "@workspace/db"
-import { Cron } from "croner"
 import { withKit } from "./domain-flow.ts"
 
 /**
@@ -53,12 +54,25 @@ export async function scanDue(
   )
     return null
   return withKit(env, async (kit) => {
-    // A claim whose send fails is retaken when its lease runs out.
     const claimed = await claimDueJobs(kit, CLAIM_BATCH)
-    if (claimed.length > 0)
-      await env.JOBS.sendBatch(
-        claimed.map((body): { body: JobMessage } => ({ body }))
-      )
+    if (claimed.length > 0) {
+      try {
+        await env.JOBS.sendBatch(
+          claimed.map((body): { body: JobMessage } => ({ body }))
+        )
+      } catch (error) {
+        // Unsent, so give the claims back: the next minute retakes them,
+        // rather than the lease 20 minutes on. KV is left as it was, due.
+        for (const { jobId, orgId } of claimed)
+          await kit.withOrg({ orgId }, (db) =>
+            db
+              .update(scheduledJobs)
+              .set({ claimedAt: null })
+              .where(eq(scheduledJobs.id, jobId))
+          )
+        throw error
+      }
+    }
     const next = (await nextDueAt(kit))?.getTime() ?? null
     await env.SCHEDULE.put(
       NEXT_DUE_KEY,
@@ -69,19 +83,4 @@ export async function scanDue(
     )
     return claimed.length
   })
-}
-
-/**
- * The first time strictly after `after` that `rule`, a five-part cron
- * expression, matches in `zone` (UTC when null). Across a DST change croner
- * keeps wall-clock meaning: a time that happens twice fires at the first, and
- * a time the clocks skip fires an hour later (02:30 becomes 03:30).
- */
-export function nextRun(rule: string, zone: string | null, after: Date): Date {
-  const next = new Cron(rule, {
-    timezone: zone ?? "UTC",
-    mode: "5-part",
-  }).nextRun(after)
-  if (!next) throw new Error("jobs.rule_never_matches")
-  return next
 }

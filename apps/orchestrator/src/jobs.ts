@@ -4,6 +4,7 @@ import {
   failureCode,
   jobRuns,
   lowerNextDue,
+  nextRun,
   type OrgScopedDb,
   orgOpen,
   orgs,
@@ -13,7 +14,7 @@ import {
   type Tenancy,
 } from "@workspace/db"
 import { withKit } from "./domain-flow.ts"
-import { type JobMessage, nextRun } from "./schedule.ts"
+import type { JobMessage } from "./schedule.ts"
 
 type ScheduledJob = typeof scheduledJobs.$inferSelect
 

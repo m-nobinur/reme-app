@@ -169,6 +169,18 @@ describe.skipIf(!url)("running a claimed job", () => {
     expect(kv.stored().next).toBe(Date.parse("2026-11-02T06:30:00Z"))
   })
 
+  it("runs a daily job that missed three days once, and moves it past now", async () => {
+    const message = await claimed(FIRST_0130, "30 1 * * *")
+    const late = new Date("2026-11-04T12:00:00Z")
+    expect(await runJob(kit, env, message, { reminder: counting }, late)).toBe(
+      "ok"
+    )
+    const { job, runs } = await read(message.jobId)
+    expect(calls).toHaveLength(1)
+    expect(runs.map((r) => r.runAt)).toEqual([FIRST_0130])
+    expect(job?.nextRunAt).toEqual(new Date("2026-11-05T06:30:00Z"))
+  })
+
   it("records a kind with no handler as skipped and moves on", async () => {
     const message = await claimed(FIRST_0130, "30 1 * * *")
     expect(await runJob(kit, env, message, {}, after(FIRST_0130))).toBe(
