@@ -72,51 +72,53 @@ const aligned = (checked: string | undefined, from: string) =>
 
 /**
  * Whether Email Routing's own results show the From domain authenticated: DMARC
- * passed, or SPF or DKIM passed for a domain aligned with it. Only the topmost
- * `Authentication-Results` is read, and it must be the trusted server's: the
- * receiving server prepends its header, so one written by the sender sits
- * below it, and if the topmost is not ours, ours was never written. Likewise
- * for `ARC-Authentication-Results`, where the topmost must also carry the
- * highest instance. A header is never skipped for a lower one; the ARC copy is
- * read only when there is no `Authentication-Results` at all. No such header,
- * an unreadable one or an explicit DMARC failure is a no, so a change in what
- * Cloudflare writes fails closed.
+ * passed, or SPF or DKIM passed for a domain aligned with it. Of each of
+ * `Authentication-Results` and `ARC-Authentication-Results` only the topmost
+ * header counts (for ARC also the highest instance), since the receiving
+ * server prepends its own and a sender's copy sits below it. A kind whose
+ * topmost names another server is left out, which is what an ARC header from
+ * the sender's own provider looks like. Every kind that does name the trusted
+ * server must pass, so a header the sender planted cannot answer for one
+ * Cloudflare wrote: it is not known which of the two Cloudflare writes. None
+ * naming it, an unreadable one or an explicit DMARC failure is a no, so a
+ * change in what Cloudflare writes fails closed.
  */
 export function authenticated(headers: Header[], fromDomain: string): boolean {
   const from = fromDomain.toLowerCase()
   const instance = (value: string) =>
     Number(/^\s*i=(\d+)/.exec(value)?.[1] ?? 0)
-  for (const name of ["authentication-results", "arc-authentication-results"]) {
-    const all = headers.filter((h) => h.key === name)
-    const [top] = all
-    if (!top) continue
-    if (
-      name.startsWith("arc") &&
-      instance(top.value) < Math.max(...all.map((h) => instance(h.value)))
-    ) {
-      return false
-    }
-    const mine = results(top.value)
-    if (mine.server !== TRUSTED_AUTH_SERVER) return false
-    const pass = (method: string, prop: string) =>
-      mine.results.some(
-        (r) =>
-          r.method === method &&
-          r.value === "pass" &&
-          (method === "dmarc"
-            ? r.props.get(prop) === from
-            : aligned(r.props.get(prop)?.split("@").pop(), from))
+  const verdicts = ["authentication-results", "arc-authentication-results"]
+    .flatMap((name) => {
+      const all = headers.filter((h) => h.key === name)
+      const [top] = all
+      if (!top) return []
+      if (
+        name.startsWith("arc") &&
+        instance(top.value) < Math.max(...all.map((h) => instance(h.value)))
+      ) {
+        return []
+      }
+      const mine = results(top.value)
+      return mine.server === TRUSTED_AUTH_SERVER ? [mine] : []
+    })
+    .map((mine) => {
+      const pass = (method: string, prop: string) =>
+        mine.results.some(
+          (r) =>
+            r.method === method &&
+            r.value === "pass" &&
+            (method === "dmarc"
+              ? r.props.get(prop) === from
+              : aligned(r.props.get(prop)?.split("@").pop(), from))
+        )
+      return (
+        !mine.results.some((r) => r.method === "dmarc" && r.value === "fail") &&
+        (pass("dmarc", "header.from") ||
+          pass("dkim", "header.d") ||
+          pass("spf", "smtp.mailfrom"))
       )
-    if (mine.results.some((r) => r.method === "dmarc" && r.value === "fail")) {
-      return false
-    }
-    return (
-      pass("dmarc", "header.from") ||
-      pass("dkim", "header.d") ||
-      pass("spf", "smtp.mailfrom")
-    )
-  }
-  return false
+    })
+  return verdicts.length > 0 && verdicts.every(Boolean)
 }
 
 /** Where a client starts quoting the message it replies to, in the languages owners write in. */
