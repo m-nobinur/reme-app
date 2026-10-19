@@ -1018,6 +1018,18 @@ describe("a planned turn", () => {
     expect(sent).toContain("bookings@regal.invalid")
   })
 
+  it("sends the planner no secret-shaped string the owner typed", async () => {
+    const { model, prompts } = planner([plan({ say: "Got it." })])
+    await planTurn(
+      model,
+      PRICE,
+      typed("my key is sk-fake12345678", onboarding(without("business.phone")))
+    )
+    const sent = JSON.stringify(prompts[0])
+    expect(sent).not.toContain("sk-fake12345678")
+    expect(sent).toContain("my key is [redacted]")
+  })
+
   it("takes a terse reply, and a correction that replaces what was held", async () => {
     const o = onboarding(without("business.phone"))
     const terse = planner([

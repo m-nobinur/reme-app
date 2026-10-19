@@ -10,6 +10,7 @@ import {
   CosFeedback,
   CosToolName,
   CosToolResult,
+  CosToolStarted,
   CosToolUnknown,
   CosTurn,
   CosWorkspace,
@@ -438,6 +439,22 @@ describe("CosApproval", () => {
     ["the input itself", { ...approval, input: { title: "x" } }],
   ])("refuses %s", (_name, value) => {
     expect(verdict("CosApproval", CosApproval, value)).toEqual(REFUSED)
+  })
+})
+
+describe("CosToolStarted", () => {
+  const started = samples.CosToolStarted as Record<string, unknown>
+
+  it("accepts a call and the approval it runs under", () => {
+    expect(verdict("CosToolStarted", CosToolStarted, started)).toEqual(ACCEPTED)
+  })
+
+  it.each([
+    ["no approval", { ...started, approval_id: undefined }],
+    ["an empty call id", { ...started, tool_call_id: "" }],
+    ["a time", { ...started, at: "2026-10-19T12:00:00Z" }],
+  ])("refuses %s", (_name, value) => {
+    expect(verdict("CosToolStarted", CosToolStarted, value)).toEqual(REFUSED)
   })
 })
 

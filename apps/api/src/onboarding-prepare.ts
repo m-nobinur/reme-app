@@ -8,6 +8,7 @@ import {
   sql,
   type Tenancy,
 } from "@workspace/db"
+import { scrub } from "@workspace/facade/tee"
 import { generateText, type LanguageModel, Output } from "ai"
 import { type Price, stepCost } from "./cos/agent.ts"
 import { withinCap } from "./cos/turns.ts"
@@ -195,7 +196,8 @@ export async function prepare(
       const result = await generateText({
         model,
         system: INSTRUCTIONS,
-        prompt: data,
+        // Redacted, as every model call is (ADR-042).
+        prompt: scrub(data),
         output: Output.json(),
         maxOutputTokens: PREPARE.maxOutputTokens,
         maxRetries: 0,

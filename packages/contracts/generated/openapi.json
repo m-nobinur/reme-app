@@ -23021,6 +23021,25 @@
           }
         ]
       },
+      "CosToolStarted": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "tool_call_id": {
+            "type": "string",
+            "pattern": "^[\\x21-\\x7E]{1,128}$"
+          },
+          "approval_id": {
+            "type": "string",
+            "pattern": "^[\\x21-\\x7E]{1,128}$"
+          }
+        },
+        "required": [
+          "tool_call_id",
+          "approval_id"
+        ],
+        "additionalProperties": false
+      },
       "CosToolUnknown": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",

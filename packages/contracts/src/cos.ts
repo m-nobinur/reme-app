@@ -544,6 +544,16 @@ export const CosApproval = z.strictObject({
 })
 
 /**
+ * The `cos.tool_started` payload: an act call passed its approval check and
+ * is about to run. One with no result five minutes later, as a Worker killed
+ * mid-call leaves it, counts as `cos.tool_unknown`. No free text.
+ */
+export const CosToolStarted = z.strictObject({
+  tool_call_id: ToolCallId,
+  approval_id: ToolCallId,
+})
+
+/**
  * The `cos.tool_unknown` payload: a tool call whose outcome is not known, so
  * it is never run again and the owner is asked. No free text.
  */
@@ -597,5 +607,6 @@ export type CosStep = z.infer<typeof CosStep>
 export type CosCall = z.infer<typeof CosCall>
 export type CosFeedback = z.infer<typeof CosFeedback>
 export type CosApproval = z.infer<typeof CosApproval>
+export type CosToolStarted = z.infer<typeof CosToolStarted>
 export type CosToolUnknown = z.infer<typeof CosToolUnknown>
 export type CosCompaction = z.infer<typeof CosCompaction>

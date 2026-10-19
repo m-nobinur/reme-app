@@ -51,6 +51,13 @@ export const TOOL_FAILED = "tool_failed"
 export const TOOL_UNKNOWN = "unknown_outcome"
 
 /**
+ * How the error text begins when the owner's yes on a CoS card no longer
+ * runs its call: the card expired, or the call is not the one it showed
+ * (ADR-042). Nothing was done. Callers check it before `toolErrorKind`.
+ */
+export const APPROVAL_EXPIRED = "approval_expired"
+
+/**
  * What a tool's error text says happened. Only a `TOOL_FAILED` line, which
  * names its code as `tool_failed (<code>)`, is `failed`. Every other text is
  * `unknown`, a future or unrecognised one included, and so is an older

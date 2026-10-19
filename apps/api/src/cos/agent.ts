@@ -1,12 +1,15 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider"
 import {
+  APPROVAL_EXPIRED,
   BuyDomainAsk,
   type ChatRequest,
   COS_TOOLS,
+  type CosApproval,
   type CosPrefix,
   type CosStep,
   type CosToolName,
   type CosToolResult,
+  type CosToolUnknown,
   type CosWorkspace,
   FactValue,
   PRONOUNS,
@@ -16,10 +19,19 @@ import {
   TOOL_UNKNOWN,
   type ToneId,
 } from "@workspace/contracts"
-import { failureCode, type Tenancy } from "@workspace/db"
+import {
+  deployments,
+  eq,
+  failureCode,
+  type OrgScopedDb,
+  siteRevisions,
+  sql,
+  type Tenancy,
+} from "@workspace/db"
 import models from "@workspace/facade/models/openrouter.models.json" with {
   type: "json",
 }
+import { scrub } from "@workspace/facade/tee"
 import {
   asSchema,
   convertToModelMessages,
@@ -37,7 +49,9 @@ import { connectGoogle } from "../google.ts"
 import {
   CONTEXT_POLICY,
   deriveCosMessages,
-  readSession,
+  type LoggedEvent,
+  readSessionSince,
+  type SessionEvent,
   sha256,
 } from "./history.ts"
 import { getIndexing, getSearchPerformance } from "./search-tools.ts"
@@ -58,7 +72,7 @@ import {
   type ToolContext,
   ToolFailed,
 } from "./tools.ts"
-import { type Turn, TurnClosed, writeAsTurn } from "./turns.ts"
+import { startedBefore, type Turn, TurnClosed, writeAsTurn } from "./turns.ts"
 
 /**
  * The Chief of Staff as an AI SDK `ToolLoopAgent` (ADR-034), built per turn
@@ -573,6 +587,25 @@ export type AgentTurn = {
   abort: AbortController
   /** The owner's zone from this turn's request, or null for none. */
   zone: string | null
+  /**
+   * The session's log as the turn last read it: read whole once when the
+   * turn opened, and caught up by `caughtUp` after that.
+   */
+  log: LoggedEvent[]
+}
+
+/**
+ * `run.log` with the rows written since its last seq appended, read in
+ * `db`. The turn is the session's only writer while it holds its token, so
+ * these rows and the ones it holds are the whole log (ADR-042).
+ */
+export async function caughtUp(
+  db: OrgScopedDb,
+  run: Pick<AgentTurn, "turn" | "log">
+): Promise<LoggedEvent[]> {
+  const after = run.log.at(-1)?.seq ?? -1
+  run.log.push(...(await readSessionSince(db, run.turn.sessionId, after)))
+  return run.log
 }
 
 /** Thrown in `prepareStep` when the messages are not the ones the log derives. */
@@ -609,12 +642,85 @@ const BODIES = {
   connect_google: connectGoogle,
 }
 
+/** How long a CoS card's yes stays good (ADR-042). Publish approvals keep their own 72 hours. */
+export const APPROVAL_TTL_MS = 24 * 3_600_000
+
+/**
+ * A call `runTool` refuses before it runs: its card's approval has expired
+ * or no longer matches the call, or its outcome is already unknown.
+ */
+export class NotRun extends Error {
+  constructor(readonly reason: "expired" | "unknown") {
+    super(`cos.not_run.${reason}`)
+  }
+}
+
+/** The `cos.approval` `rows` hold for `approvalId`. */
+const approvalIn = (rows: readonly SessionEvent[], approvalId: string) =>
+  rows.find(
+    (e) =>
+      e.type === "cos.approval" &&
+      (e.payload as CosApproval).approval_id === approvalId
+  )?.payload as CosApproval | undefined
+
+/** Whether `rows` hold a `cos.tool_unknown` for `toolCallId`. */
+const unknownIn = (rows: readonly SessionEvent[], call: CosToolUnknown) =>
+  rows.some(
+    (e) =>
+      e.type === "cos.tool_unknown" &&
+      (e.payload as CosToolUnknown).tool_call_id === call.tool_call_id &&
+      (e.payload as CosToolUnknown).approval_id === call.approval_id
+  )
+
+/** How long a started act call may go without a result before its outcome counts as unknown. */
+export const STARTED_MS = 5 * 60_000
+
+/**
+ * The input a card's hash covers. `request_change` acts on the live site,
+ * so its live version is bound too, and a yes given after a publish is
+ * refused. No other tool acts on a versioned target.
+ */
+export async function boundInput(
+  db: OrgScopedDb,
+  name: CosToolName,
+  input: unknown
+): Promise<unknown> {
+  if (name !== "request_change") return input
+  const [live] = await db
+    .select({ version: siteRevisions.version })
+    .from(deployments)
+    .innerJoin(siteRevisions, eq(siteRevisions.id, deployments.revisionId))
+    .orderBy(sql`${deployments.configVersion} desc`)
+    .limit(1)
+  return { input, site_version: live?.version ?? null }
+}
+
+/**
+ * Whether a yes on the card `approval` logged still runs this call at
+ * `now`: the same call, the same input the card showed, and not expired.
+ * A card with no record, shown before records were kept, binds nothing.
+ */
+export async function binds(
+  approval: CosApproval | undefined,
+  toolCallId: string,
+  input: unknown,
+  now: number
+): Promise<boolean> {
+  return (
+    approval !== undefined &&
+    approval.tool_call_id === toolCallId &&
+    Date.parse(approval.expires_at) > now &&
+    approval.input_sha256 === (await sha256(input))
+  )
+}
+
 /**
  * Runs one tool and logs its output under the turn's token. An act tool
  * takes its approval id as its key, so running it again replays the first
- * run. A `ToolFailed` goes up as it is and logs nothing: an unknown outcome
- * is never stored as an answer, so the call stays open for the next turn to
- * run again under the same key.
+ * run, and it runs only while its card's approval binds it. A `ToolFailed`
+ * goes up as it is and logs no result: an unknown outcome is never stored as
+ * an answer. For an act tool it logs `cos.tool_unknown` first, so the call
+ * never runs again and the owner is asked instead (ADR-042).
  */
 export async function runTool(
   run: AgentTurn,
@@ -634,7 +740,60 @@ export async function runTool(
   if (ACT_TOOLS.includes(name) && !key) {
     throw new Error(`cos.agent: ${name} ran without an approval`)
   }
-  const output = await body(run.tools, input, key ?? "", run.turn, run.zone)
+  if (key) {
+    const verdict = await run.kit.withOrg(
+      { orgId: run.turn.orgId },
+      async (db) => {
+        const log = await caughtUp(db, run)
+        const call = { tool_call_id: toolCallId, approval_id: key }
+        if (unknownIn(log, call)) return "unknown" as const
+        // A start with no result this long ago is a Worker killed mid-call.
+        if (await startedBefore(db, run.turn.sessionId, call, STARTED_MS)) {
+          await writeAsTurn(db, run.turn, [
+            { type: "cos.tool_unknown", payload: call },
+          ])
+          return "unknown" as const
+        }
+        if (
+          approvalId &&
+          !UNAPPROVED.includes(name) &&
+          !(await binds(
+            approvalIn(log, approvalId),
+            toolCallId,
+            await boundInput(db, name, input),
+            Date.now()
+          ))
+        ) {
+          return "expired" as const
+        }
+        await writeAsTurn(db, run.turn, [
+          { type: "cos.tool_started", payload: call },
+        ])
+        return null
+      }
+    )
+    if (verdict) throw new NotRun(verdict)
+  }
+  let output: unknown
+  try {
+    output = await body(run.tools, input, key ?? "", run.turn, run.zone)
+  } catch (error) {
+    if (
+      key &&
+      error instanceof ToolFailed &&
+      error.error.class !== "integrity"
+    ) {
+      await run.kit.withOrg({ orgId: run.turn.orgId }, (db) =>
+        writeAsTurn(db, run.turn, [
+          {
+            type: "cos.tool_unknown",
+            payload: { tool_call_id: toolCallId, approval_id: key },
+          },
+        ])
+      )
+    }
+    throw error
+  }
   run.state.tools.push(name)
   await logResult(run, {
     turn_id: run.turn.turnId,
@@ -653,6 +812,9 @@ export async function runTool(
  * `TOOL_FAILED`: it did nothing. Anything else left the outcome unknown.
  */
 export function toolErrorText(error: unknown): string {
+  if (error instanceof NotRun && error.reason === "expired") {
+    return `${APPROVAL_EXPIRED}: the owner's yes on this card has expired or no longer matches what the card showed, so nothing was done. Tell the owner and offer to propose it again.`
+  }
   if (error instanceof ToolFailed && error.error.class === "integrity") {
     return `${TOOL_FAILED} (${error.error.code}): the builder answered in a shape we do not accept, so nothing was done. Tell the owner it did not go through.`
   }
@@ -781,19 +943,47 @@ function toolsFor(run: AgentTurn) {
   }
 }
 
+/** Provider data is the provider's own, never words the model reads, and is passed on as it is. */
+const PROVIDER_KEYS = new Set(["providerOptions", "providerMetadata"])
+
+/**
+ * `value` with facade's `scrub` over every string a model reads: text, a
+ * tool's input and output, a reason. Plain objects and arrays only; the
+ * CoS's messages are JSON, as the log holds them. Running it twice changes
+ * nothing, so messages the SDK carries over from a redacted step stay equal.
+ */
+export function redacted<T>(value: T): T {
+  if (typeof value === "string") return scrub(value) as T
+  if (Array.isArray(value)) return value.map(redacted) as T
+  if (
+    value !== null &&
+    typeof value === "object" &&
+    Object.getPrototypeOf(value) === Object.prototype
+  ) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, inner]) => [
+        key,
+        PROVIDER_KEYS.has(key) ? inner : redacted(inner),
+      ])
+    ) as T
+  }
+  return value
+}
+
 /**
  * The messages the log derives for the turn's next call, as the SDK sends
  * them: the history through `convertToModelMessages`, then the steps the
  * turn has logged.
  */
 async function derivedCall(
-  run: Pick<AgentTurn, "kit" | "turn">,
+  db: OrgScopedDb,
+  run: Pick<AgentTurn, "turn" | "log">,
   tools: ToolSet
 ): Promise<ModelMessage[]> {
-  const rows = await run.kit.withOrg({ orgId: run.turn.orgId }, (db) =>
-    readSession(db, run.turn.sessionId)
+  const { messages, steps } = deriveCosMessages(
+    await caughtUp(db, run),
+    CONTEXT_POLICY
   )
-  const { messages, steps } = deriveCosMessages(rows, CONTEXT_POLICY)
   return [...(await convertToModelMessages(messages, { tools })), ...steps]
 }
 
@@ -858,49 +1048,42 @@ export function cosAgent(
         },
       }
     },
-    prepareStep: async ({ messages, stepNumber }) => {
-      // A failed read is not a mismatch: the turn ends as an error and the
-      // conversation stays open.
-      let expected: string
-      try {
-        expected = await sha256(await derivedCall(run, tools))
-      } catch (error) {
-        run.state.readFailed = true
-        console.error(
-          JSON.stringify({
-            code: "cos.derive_failed",
-            turn_id: run.turn.turnId,
-            error: failureCode(error),
-          })
-        )
-        throw error
-      }
+    // The check and the step's `cos.call` share one transaction. Both sides
+    // are hashed redacted, and the model is sent the redacted messages, so
+    // the hash covers what it saw (ADR-042).
+    prepareStep: async ({ messages: held, stepNumber }) => {
+      const messages = redacted(held)
       const sent = await sha256(messages)
-      if (expected !== sent) {
-        run.state.integrity = true
-        console.error(
-          JSON.stringify({
-            alert: "cos.integrity",
-            turn_id: run.turn.turnId,
-            step: stepNumber,
-          })
-        )
-        throw new IntegrityError()
-      }
       // The first call is checked here; later ones are stopped by `stopWhen`.
       const chars =
         JSON.stringify(messages).length +
         JSON.stringify(await cosPrefix()).length
-      if (
-        stepNumber === 0 &&
-        worstStep(run.price, tokensIn(chars)) > run.reserved
-      ) {
-        run.state.overBudget = true
-        throw new Error("cos.over_budget")
-      }
+      let checked = false
       try {
-        await run.kit.withOrg({ orgId: run.turn.orgId }, (db) =>
-          writeAsTurn(db, run.turn, [
+        await run.kit.withOrg({ orgId: run.turn.orgId }, async (db) => {
+          const expected = await sha256(
+            redacted(await derivedCall(db, run, tools))
+          )
+          if (expected !== sent) {
+            run.state.integrity = true
+            console.error(
+              JSON.stringify({
+                alert: "cos.integrity",
+                turn_id: run.turn.turnId,
+                step: stepNumber,
+              })
+            )
+            throw new IntegrityError()
+          }
+          if (
+            stepNumber === 0 &&
+            worstStep(run.price, tokensIn(chars)) > run.reserved
+          ) {
+            run.state.overBudget = true
+            throw new Error("cos.over_budget")
+          }
+          checked = true
+          await writeAsTurn(db, run.turn, [
             {
               type: "cos.call",
               payload: {
@@ -910,12 +1093,24 @@ export function cosAgent(
               },
             },
           ])
-        )
+        })
       } catch (error) {
+        // A failed read is not a mismatch: the turn ends as an error and
+        // the conversation stays open.
+        if (!(checked || run.state.integrity || run.state.overBudget)) {
+          run.state.readFailed = true
+          console.error(
+            JSON.stringify({
+              code: "cos.derive_failed",
+              turn_id: run.turn.turnId,
+              error: failureCode(error),
+            })
+          )
+        }
         closed(error)
         throw error
       }
-      return undefined
+      return { messages }
     },
     onStepEnd: async (step) => {
       const usage = usageOf(step.usage)
@@ -928,10 +1123,38 @@ export function cosAgent(
           run.state.usage.cached_input_tokens + usage.cached_input_tokens,
         output_tokens: run.state.usage.output_tokens + usage.output_tokens,
       }
+      // Each card as it was shown, written with its step, so a step logged
+      // always has its cards' records.
+      const expiresAt = new Date(Date.now() + APPROVAL_TTL_MS).toISOString()
+      const cards = (db: OrgScopedDb) =>
+        Promise.all(
+          step.content.flatMap((part) =>
+            part.type === "tool-approval-request"
+              ? [
+                  (async () => ({
+                    type: "cos.approval" as const,
+                    payload: {
+                      turn_id: run.turn.turnId,
+                      approval_id: part.approvalId,
+                      tool_call_id: part.toolCall.toolCallId,
+                      input_sha256: await sha256(
+                        await boundInput(
+                          db,
+                          part.toolCall.toolName as CosToolName,
+                          part.toolCall.input
+                        )
+                      ),
+                      expires_at: expiresAt,
+                    },
+                  }))(),
+                ]
+              : []
+          )
+        )
       // The SDK swallows an error here, so a failed write shows up as a
       // mismatch at the next `prepareStep` rather than as a gap.
       try {
-        await run.kit.withOrg({ orgId: run.turn.orgId }, (db) =>
+        await run.kit.withOrg({ orgId: run.turn.orgId }, async (db) =>
           writeAsTurn(db, run.turn, [
             {
               type: "cos.step",
@@ -956,6 +1179,7 @@ export function cosAgent(
                   : []),
               ],
             },
+            ...(await cards(db)),
           ])
         )
       } catch (error) {
