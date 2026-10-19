@@ -48,9 +48,21 @@ matter. CoS acts expire after 24 hours; publish approvals keep ADR-032's 72. Whe
 throws a `ToolFailed` that is not an answer off the contract, its outcome is unknown: `runTool`
 appends `cos.tool_unknown {tool_call_id, approval_id}`, `settle` closes the call with the unknown
 line, and the turn goes on to the model, which asks the owner. This replaces ADR-034's 503 that
-left the call open to run again. `runTool` refuses any call the log marks unknown, so a turn that
-died after the mark never runs it twice. Other errors keep ADR-034's path: the turn ends as an
-error and the next turn replays the call under its approval key. Both events sit outside
+left the call open to run again. Every act call is checked and marked in one transaction before
+it runs: the log is caught up, the approval checked, and `cos.tool_started {tool_call_id,
+approval_id}` appended. A start with no result five minutes later, by the database's clock, is a
+Worker killed mid-call: the next `runTool` appends `cos.tool_unknown` instead of running it. A
+start younger than that is run again under its key, which replays it, as ADR-034 had it. `runTool`
+refuses any call the log marks unknown, matched by call id and approval id together, since
+provider call ids repeat across turns. Other errors keep ADR-034's path: the turn ends as an error
+and the next turn replays the call under its approval key. A card answered twice runs its tool
+once: the second answer finds the conversation busy or the card already resolved.
+
+Only `request_change` acts on a versioned target, the live site, so its card's hash covers
+`{input, site_version}`, the version from the latest deployment when the card is shown and again
+when it is answered: a publish in between refuses the yes as expired. `answer_question`,
+`create_reminder`, `record_review`, `connect_domain` and `remove_domain` act on targets the input
+names in full, so their hash covers the input alone. Both events sit outside
 `deriveCosMessages`, which ignores types it does not know, so the model's view and the integrity
 hash do not change.
 
