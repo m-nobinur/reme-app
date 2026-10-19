@@ -42,7 +42,9 @@
     "REGISTRAR_API": "registrar-sandbox",
     "ROUTER_SERVICE": "reme-router",
     // The router serves it at /{key}.txt; the same value per environment.
-    "INDEXNOW_KEY": "e589181a6d7f0ffecc3cfe5285688213"
+    "INDEXNOW_KEY": "e589181a6d7f0ffecc3cfe5285688213",
+    // Where an owner email links (src/deliveries.ts): the web app, as apps/api's WEB_ORIGIN.
+    "APP_ORIGIN": "https://staging.remeai.co.uk"
   },
   "hyperdrive": [
     { "binding": "HYPERDRIVE", "id": "51fda187d78445c6852dbc334d9ac7ed" }
@@ -122,6 +124,22 @@
     { "binding": "SITES", "bucket_name": "reme-sites" },
     { "binding": "BACKUP_BUCKET", "bucket_name": "reme-sites" }
   ],
+  // The outbox (src/deliveries.ts). `OWNER_MAIL` is Cloudflare Email Sending
+  // from hello@remeai.co.uk, after `wrangler email sending enable remeai.co.uk`;
+  // the uptime alert keeps its own binding. A message that fails five retries
+  // is settled as failed in the row, so the dead-letter queue only holds what
+  // the consumer itself could not handle.
+  "send_email": [{ "name": "OWNER_MAIL" }],
+  "queues": {
+    "producers": [{ "binding": "DELIVERIES", "queue": "reme-deliveries" }],
+    "consumers": [
+      {
+        "queue": "reme-deliveries",
+        "max_retries": 5,
+        "dead_letter_queue": "reme-deliveries-dlq"
+      }
+    ]
+  },
   "env": {
     "production": {
       "name": "reme-orchestrator-production",
@@ -145,6 +163,7 @@
         "REGISTRAR_API": "registrar",
         "ROUTER_SERVICE": "reme-router-production",
         "INDEXNOW_KEY": "50d33f2d3b42e6d093cb945653fea6ca",
+        "APP_ORIGIN": "https://preview.remeai.co.uk",
         // What the hourly uptime check fetches (src/uptime.ts). Not the
         // orchestrator's own hostname: a Worker fetching itself through its
         // custom domain gets 522 (measured 2026-09-29), and the check running
@@ -156,7 +175,7 @@
       "triggers": { "crons": ["0 * * * *"] },
       // The uptime check's alert email (src/uptime.ts). No destination
       // restriction: `ALERT_TO`, a secret, picks a verified address.
-      "send_email": [{ "name": "ALERTS" }],
+      "send_email": [{ "name": "ALERTS" }, { "name": "OWNER_MAIL" }],
       "hyperdrive": [
         { "binding": "HYPERDRIVE", "id": "42db5d04bb0e4249b3e5a88e62549218" }
       ],
@@ -219,7 +238,19 @@
           "bucket_name": "reme-sites-production-eu",
           "jurisdiction": "eu"
         }
-      ]
+      ],
+      "queues": {
+        "producers": [
+          { "binding": "DELIVERIES", "queue": "reme-deliveries-production" }
+        ],
+        "consumers": [
+          {
+            "queue": "reme-deliveries-production",
+            "max_retries": 5,
+            "dead_letter_queue": "reme-deliveries-dlq-production"
+          }
+        ]
+      }
     }
   }
 }
