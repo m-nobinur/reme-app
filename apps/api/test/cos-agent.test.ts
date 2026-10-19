@@ -13,10 +13,12 @@ import {
   appendSessionEvent,
   assignments,
   conversationMessages,
+  emailMessageId,
   eq,
   events,
   failureCode,
   postAssistantMessage,
+  postOwnerEmail,
   reminders,
   serverMessageId,
   sql,
@@ -912,6 +914,39 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     )
     expect(posts).toHaveLength(1)
     expect(posts[0]?.taint).toEqual(["inferred"])
+  })
+
+  it("sends the model an emailed reply on the owner's next turn, as untrusted owner input, logged once", async () => {
+    const id = await conversation(me)
+    await turn(me, typed(id, "Remind me about the quote", "ask"), {
+      model: scripted(said("Will do.")).model,
+    })
+    const key = `<reply-${id}@mail.example.com>`
+    expect(
+      await postOwnerEmail(kit, {
+        orgId: me.orgId,
+        conversationId: id,
+        key,
+        text: "Make it Thursday, not Friday.",
+      })
+    ).toBe("posted")
+    const next = scripted(said("Thursday it is."))
+    await turn(me, typed(id, "Did you get my email?", "ask"), {
+      model: next.model,
+    })
+    const sent = wire(next.sent)
+    expect(sent).toContain("Make it Thursday, not Friday.")
+    expect(sent.indexOf("Make it Thursday")).toBeLessThan(
+      sent.indexOf("Did you get my email?")
+    )
+    const again = scripted(said("Yes."))
+    await turn(me, typed(id, "Thanks", "ask"), { model: again.model })
+    const posts = (await logOf(id)).filter(
+      (e) =>
+        e.type === "cos.message" && e.payload.message.id === emailMessageId(key)
+    )
+    expect(posts).toHaveLength(1)
+    expect(posts[0]?.taint).toEqual(["untrusted_input"])
   })
 
   it("answers a typed message and logs the turn, and the model never sees a tenancy id", async () => {
