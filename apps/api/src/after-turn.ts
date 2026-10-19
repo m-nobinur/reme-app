@@ -1,6 +1,12 @@
+import { tenancy } from "@workspace/db"
+import { openrouterModel } from "./cos/agent.ts"
+import { COMPACTION, compactAfterTurn } from "./cos/compaction.ts"
+
 /** What a closed turn tells the queue: ids only, never text. */
 export type AfterTurn = {
   orgId: string
+  /** The org's Chief of Staff staff row, which writes the job's events. */
+  staffId: string
   sessionId: string
   turnId: string
 }
@@ -17,6 +23,7 @@ export async function enqueueAfterTurn(
   try {
     await env.AFTER_TURN.send({
       orgId: turn.orgId,
+      staffId: turn.staffId,
       sessionId: turn.sessionId,
       turnId: turn.turnId,
     })
@@ -31,18 +38,36 @@ export async function enqueueAfterTurn(
   }
 }
 
-/** A no-op job for now: one line per message and an ack, with no database. */
+/**
+ * The work after each closed turn: compaction for now. A message whose job
+ * threw is retried, then goes to the dead-letter queue.
+ */
 export async function afterTurnBatch(
-  batch: MessageBatch<AfterTurn>
+  batch: MessageBatch<AfterTurn>,
+  env: Env
 ): Promise<void> {
-  for (const message of batch.messages) {
-    console.log(
-      JSON.stringify({
-        code: "after_turn.job",
-        turn_id: message.body.turnId,
-        attempts: message.attempts,
-      })
-    )
-    message.ack()
+  const kit = tenancy(env.HYPERDRIVE.connectionString)
+  const model = env.OPENROUTER_API_KEY
+    ? openrouterModel(env.OPENROUTER_API_KEY, COMPACTION.model)
+    : null
+  try {
+    for (const message of batch.messages) {
+      try {
+        await compactAfterTurn(kit, model, message.body)
+        message.ack()
+      } catch (error) {
+        console.error(
+          JSON.stringify({
+            code: "after_turn.failed",
+            turn_id: message.body.turnId,
+            attempts: message.attempts,
+            error: error instanceof Error ? error.name : "unknown",
+          })
+        )
+        message.retry()
+      }
+    }
+  } finally {
+    await kit.close()
   }
 }

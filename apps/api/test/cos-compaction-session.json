@@ -1,0 +1,4497 @@
+{
+  "_": "A scripted 60-turn Chief of Staff session for compaction (MM1): ten owner facts seeded in turns 3 to 34, one corrected in turn 21, a reminder made in turn 17, and two approvals left open in turn 60. Each turn's events in append order, without seqs, so a replay can add compactions between turns. The business and every name are fictional.",
+  "facts": [
+    {
+      "question": "Who leads our team?",
+      "answer": ["Priya"]
+    },
+    {
+      "question": "After what time should you call me?",
+      "answer": ["4pm", "4 pm", "16:00", "4:00"]
+    },
+    {
+      "question": "Which day of the week do we never work?",
+      "answer": ["Sunday"]
+    },
+    {
+      "question": "Which brand of cleaning products do we use?",
+      "answer": ["Ecover"]
+    },
+    {
+      "question": "Who is our biggest client?",
+      "answer": ["Harbour View"]
+    },
+    {
+      "question": "What do we charge for an end of tenancy clean of a two-bed flat?",
+      "answer": ["240"]
+    },
+    {
+      "question": "When does our insurance renew?",
+      "answer": [
+        "14 November",
+        "November 14",
+        "14 Nov",
+        "14th November",
+        "November 14th"
+      ]
+    },
+    {
+      "question": "Which town do we no longer cover?",
+      "answer": ["Keynsham"]
+    },
+    {
+      "question": "Which word must the site never use about us?",
+      "answer": ["cheap"]
+    },
+    {
+      "question": "Who is my accountant?",
+      "answer": ["Martin Hale"]
+    }
+  ],
+  "open_approvals": ["appr_rem60", "appr_chg60"],
+  "turns": [
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000001",
+          "message": {
+            "id": "u1",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Can you explain what the Developer is working on?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000001",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-01T09:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000001",
+          "message": {
+            "id": "a1",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"can you explain what the developer is working on\": here is where things stand as of turn 1. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000001",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000002",
+          "message": {
+            "id": "u2",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "What should I post about on Google this month?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000002",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-01T14:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000002",
+          "message": {
+            "id": "a2",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"what should i post about on google this month\": here is where things stand as of turn 2. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000002",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000003",
+          "message": {
+            "id": "u3",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Our team lead is Priya Nair, she runs the Tuesday and Thursday crews.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000003",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-02T09:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000003",
+          "message": {
+            "id": "a3",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "Noted: Priya Nair leads the team and runs the Tuesday and Thursday crews. On \"your note\": here is where things stand as of turn 3. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page ma",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000003",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000004",
+          "message": {
+            "id": "u4",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Do people find us when they search for cleaners in Bristol?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000004",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-02T14:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000004",
+          "message": {
+            "id": "a4",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"do people find us when they search for cleaners in bristol\": here is where things stand as of turn 4. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000004",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000005",
+          "message": {
+            "id": "u5",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Call me after 3pm if you need me, I'm out on jobs every morning.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000005",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-03T09:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000005",
+          "message": {
+            "id": "a5",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "Got it, I'll keep anything that needs a call for after 3pm. On \"your note\": here is where things stand as of turn 5. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page ma",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000005",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000006",
+          "message": {
+            "id": "u6",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Should we ask more customers for reviews?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000006",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-03T14:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000006",
+          "message": {
+            "id": "a6",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"should we ask more customers for reviews\": here is where things stand as of turn 6. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000006",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000007",
+          "message": {
+            "id": "u7",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "We never work Sundays, no exceptions, even for big clients.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000007",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-04T09:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000007",
+          "message": {
+            "id": "a7",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "Understood, Sundays are off for everyone, whatever the client. On \"your note\": here is where things stand as of turn 7. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page ma",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000007",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000008",
+          "message": {
+            "id": "u8",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Can you remind me what pages the site has?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000008",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-04T14:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000008",
+          "message": {
+            "id": "a8",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"can you remind me what pages the site has\": here is where things stand as of turn 8. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000008",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000009",
+          "message": {
+            "id": "u9",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "We only use Ecover products, clients keep asking for eco cleaning.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000009",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-05T09:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000009",
+          "message": {
+            "id": "a9",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "Good to know, Ecover only. That's worth saying on the site too. On \"your note\": here is where things stand as of turn 9. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page ma",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000009",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000010",
+          "message": {
+            "id": "u10",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "How is the website doing this week?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000010",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-05T14:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000010",
+          "message": {
+            "id": "a10",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"how is the website doing this week\": here is where things stand as of turn 10. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000010",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000011",
+          "message": {
+            "id": "u11",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Can you explain what the Developer is working on?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000011",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-06T09:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000011",
+          "message": {
+            "id": "a11",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"can you explain what the developer is working on\": here is where things stand as of turn 11. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000011",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000012",
+          "message": {
+            "id": "u12",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Our biggest client is Harbour View Dental, we clean their surgery every weekday evening.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000012",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-06T14:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000012",
+          "message": {
+            "id": "a12",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "Harbour View Dental sounds like a great anchor client. On \"your note\": here is where things stand as of turn 12. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page m",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000012",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000013",
+          "message": {
+            "id": "u13",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Is there anything I should answer for the site?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000013",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-07T09:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000013",
+          "message": {
+            "id": "a13",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"is there anything i should answer for the site\": here is where things stand as of turn 13. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000013",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000014",
+          "message": {
+            "id": "u14",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "End of tenancy cleans are £240 for a two-bed flat.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000014",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-07T14:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000014",
+          "message": {
+            "id": "a14",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "Thanks, £240 for a two-bed end of tenancy clean. On \"your note\": here is where things stand as of turn 14. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page m",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000014",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000015",
+          "message": {
+            "id": "u15",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "What do you think of adding a gallery of before and after photos?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000015",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-08T09:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000015",
+          "message": {
+            "id": "a15",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"what do you think of adding a gallery of before and after photos\": here is where things stand as of turn 15. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000015",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000016",
+          "message": {
+            "id": "u16",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Should we ask more customers for reviews?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000016",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-08T14:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000016",
+          "message": {
+            "id": "a16",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"should we ask more customers for reviews\": here is where things stand as of turn 16. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000016",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000017",
+          "message": {
+            "id": "u17",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Insurance renews on 14 November, don't let me forget. Remind me on 7 November at 9am.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000017",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-09T09:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000017",
+          "message": {
+            "id": "a17",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-create_reminder",
+                "toolCallId": "call_rem17",
+                "state": "output-available",
+                "input": {
+                  "title": "Insurance renews on 14 November",
+                  "due_at": "2026-11-07T09:00:00.000Z"
+                },
+                "output": {
+                  "outcome": "created",
+                  "due_at": "2026-11-07T09:00:00.000Z"
+                },
+                "approval": {
+                  "id": "appr_rem17",
+                  "approved": true
+                }
+              },
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "Done. I'll remind you on 7 November at 9am that the insurance renews on 14 November.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000017",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": ["create_reminder"],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000018",
+          "message": {
+            "id": "u18",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Can you remind me what pages the site has?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000018",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-09T14:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000018",
+          "message": {
+            "id": "a18",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"can you remind me what pages the site has\": here is where things stand as of turn 18. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000018",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000019",
+          "message": {
+            "id": "u19",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Is the booking form working properly?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000019",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-10T09:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000019",
+          "message": {
+            "id": "a19",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"is the booking form working properly\": here is where things stand as of turn 19. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000019",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000020",
+          "message": {
+            "id": "u20",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "How is the website doing this week?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000020",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-10T14:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000020",
+          "message": {
+            "id": "a20",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"how is the website doing this week\": here is where things stand as of turn 20. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000020",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000021",
+          "message": {
+            "id": "u21",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Actually, call me after 4pm now, not 3. The school pickup moved.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000021",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-11T09:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000021",
+          "message": {
+            "id": "a21",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "No problem, after 4pm from now on. On \"your note\": here is where things stand as of turn 21. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page m",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000021",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000022",
+          "message": {
+            "id": "u22",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "What should I post about on Google this month?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000022",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-11T14:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000022",
+          "message": {
+            "id": "a22",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"what should i post about on google this month\": here is where things stand as of turn 22. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000022",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000023",
+          "message": {
+            "id": "u23",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Is there anything I should answer for the site?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000023",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-12T09:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000023",
+          "message": {
+            "id": "a23",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"is there anything i should answer for the site\": here is where things stand as of turn 23. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000023",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000024",
+          "message": {
+            "id": "u24",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Do people find us when they search for cleaners in Bristol?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000024",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-12T14:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000024",
+          "message": {
+            "id": "a24",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"do people find us when they search for cleaners in bristol\": here is where things stand as of turn 24. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000024",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000025",
+          "message": {
+            "id": "u25",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "We don't go out to Keynsham any more, the traffic kills us.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000025",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-13T09:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000025",
+          "message": {
+            "id": "a25",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "Okay, Keynsham is off the list. On \"your note\": here is where things stand as of turn 25. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page m",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000025",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000026",
+          "message": {
+            "id": "u26",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Should we ask more customers for reviews?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000026",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-13T14:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000026",
+          "message": {
+            "id": "a26",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"should we ask more customers for reviews\": here is where things stand as of turn 26. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000026",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000027",
+          "message": {
+            "id": "u27",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "How long does a site change usually take?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000027",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-14T09:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000027",
+          "message": {
+            "id": "a27",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"how long does a site change usually take\": here is where things stand as of turn 27. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000027",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000028",
+          "message": {
+            "id": "u28",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Can you remind me what pages the site has?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000028",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-14T14:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000028",
+          "message": {
+            "id": "a28",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"can you remind me what pages the site has\": here is where things stand as of turn 28. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000028",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000029",
+          "message": {
+            "id": "u29",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Is the booking form working properly?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000029",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-15T09:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000029",
+          "message": {
+            "id": "a29",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"is the booking form working properly\": here is where things stand as of turn 29. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000029",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000030",
+          "message": {
+            "id": "u30",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Never call us cheap on the site. Say affordable instead.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000030",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-15T14:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000030",
+          "message": {
+            "id": "a30",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "Understood: affordable, never cheap. On \"your note\": here is where things stand as of turn 30. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page m",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000030",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000031",
+          "message": {
+            "id": "u31",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Can you explain what the Developer is working on?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000031",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-16T09:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000031",
+          "message": {
+            "id": "a31",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"can you explain what the developer is working on\": here is where things stand as of turn 31. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000031",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000032",
+          "message": {
+            "id": "u32",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "What should I post about on Google this month?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000032",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-16T14:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000032",
+          "message": {
+            "id": "a32",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"what should i post about on google this month\": here is where things stand as of turn 32. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000032",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000033",
+          "message": {
+            "id": "u33",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Is there anything I should answer for the site?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000033",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-17T09:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000033",
+          "message": {
+            "id": "a33",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"is there anything i should answer for the site\": here is where things stand as of turn 33. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000033",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000034",
+          "message": {
+            "id": "u34",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "My accountant is Martin Hale at Hale & Co, he does our books quarterly.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000034",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-17T14:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000034",
+          "message": {
+            "id": "a34",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "Thanks, Martin Hale at Hale & Co does the quarterly books. On \"your note\": here is where things stand as of turn 34. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page m",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000034",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000035",
+          "message": {
+            "id": "u35",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "What do you think of adding a gallery of before and after photos?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000035",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-18T09:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000035",
+          "message": {
+            "id": "a35",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"what do you think of adding a gallery of before and after photos\": here is where things stand as of turn 35. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000035",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000036",
+          "message": {
+            "id": "u36",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Should we ask more customers for reviews?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000036",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-18T14:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000036",
+          "message": {
+            "id": "a36",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"should we ask more customers for reviews\": here is where things stand as of turn 36. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000036",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000037",
+          "message": {
+            "id": "u37",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "How long does a site change usually take?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000037",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-19T09:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000037",
+          "message": {
+            "id": "a37",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"how long does a site change usually take\": here is where things stand as of turn 37. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000037",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000038",
+          "message": {
+            "id": "u38",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Can you remind me what pages the site has?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000038",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-19T14:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000038",
+          "message": {
+            "id": "a38",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"can you remind me what pages the site has\": here is where things stand as of turn 38. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000038",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000039",
+          "message": {
+            "id": "u39",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Is the booking form working properly?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000039",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-20T09:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000039",
+          "message": {
+            "id": "a39",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"is the booking form working properly\": here is where things stand as of turn 39. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000039",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000040",
+          "message": {
+            "id": "u40",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "How is the website doing this week?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000040",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-20T14:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000040",
+          "message": {
+            "id": "a40",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"how is the website doing this week\": here is where things stand as of turn 40. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000040",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000041",
+          "message": {
+            "id": "u41",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Can you explain what the Developer is working on?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000041",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-21T09:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000041",
+          "message": {
+            "id": "a41",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"can you explain what the developer is working on\": here is where things stand as of turn 41. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000041",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000042",
+          "message": {
+            "id": "u42",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "What should I post about on Google this month?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000042",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-21T14:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000042",
+          "message": {
+            "id": "a42",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"what should i post about on google this month\": here is where things stand as of turn 42. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000042",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000043",
+          "message": {
+            "id": "u43",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Is there anything I should answer for the site?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000043",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-22T09:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000043",
+          "message": {
+            "id": "a43",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"is there anything i should answer for the site\": here is where things stand as of turn 43. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000043",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000044",
+          "message": {
+            "id": "u44",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Do people find us when they search for cleaners in Bristol?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000044",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-22T14:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000044",
+          "message": {
+            "id": "a44",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"do people find us when they search for cleaners in bristol\": here is where things stand as of turn 44. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000044",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000045",
+          "message": {
+            "id": "u45",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "What do you think of adding a gallery of before and after photos?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000045",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-23T09:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000045",
+          "message": {
+            "id": "a45",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"what do you think of adding a gallery of before and after photos\": here is where things stand as of turn 45. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000045",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000046",
+          "message": {
+            "id": "u46",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Should we ask more customers for reviews?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000046",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-23T14:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000046",
+          "message": {
+            "id": "a46",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"should we ask more customers for reviews\": here is where things stand as of turn 46. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000046",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000047",
+          "message": {
+            "id": "u47",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "How long does a site change usually take?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000047",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-24T09:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000047",
+          "message": {
+            "id": "a47",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"how long does a site change usually take\": here is where things stand as of turn 47. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000047",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000048",
+          "message": {
+            "id": "u48",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Can you remind me what pages the site has?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000048",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-24T14:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000048",
+          "message": {
+            "id": "a48",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"can you remind me what pages the site has\": here is where things stand as of turn 48. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000048",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000049",
+          "message": {
+            "id": "u49",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Is the booking form working properly?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000049",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-25T09:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000049",
+          "message": {
+            "id": "a49",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"is the booking form working properly\": here is where things stand as of turn 49. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000049",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000050",
+          "message": {
+            "id": "u50",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "How is the website doing this week?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000050",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-25T14:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000050",
+          "message": {
+            "id": "a50",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"how is the website doing this week\": here is where things stand as of turn 50. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000050",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000051",
+          "message": {
+            "id": "u51",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Can you explain what the Developer is working on?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000051",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-26T09:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000051",
+          "message": {
+            "id": "a51",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"can you explain what the developer is working on\": here is where things stand as of turn 51. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000051",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000052",
+          "message": {
+            "id": "u52",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "What should I post about on Google this month?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000052",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-26T14:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000052",
+          "message": {
+            "id": "a52",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"what should i post about on google this month\": here is where things stand as of turn 52. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000052",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000053",
+          "message": {
+            "id": "u53",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Is there anything I should answer for the site?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000053",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-27T09:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000053",
+          "message": {
+            "id": "a53",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"is there anything i should answer for the site\": here is where things stand as of turn 53. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000053",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000054",
+          "message": {
+            "id": "u54",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Do people find us when they search for cleaners in Bristol?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000054",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-27T14:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000054",
+          "message": {
+            "id": "a54",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"do people find us when they search for cleaners in bristol\": here is where things stand as of turn 54. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000054",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000055",
+          "message": {
+            "id": "u55",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "What do you think of adding a gallery of before and after photos?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000055",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-28T09:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000055",
+          "message": {
+            "id": "a55",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"what do you think of adding a gallery of before and after photos\": here is where things stand as of turn 55. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000055",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000056",
+          "message": {
+            "id": "u56",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Should we ask more customers for reviews?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000056",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-28T14:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000056",
+          "message": {
+            "id": "a56",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"should we ask more customers for reviews\": here is where things stand as of turn 56. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000056",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000057",
+          "message": {
+            "id": "u57",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "How long does a site change usually take?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000057",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-29T09:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000057",
+          "message": {
+            "id": "a57",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"how long does a site change usually take\": here is where things stand as of turn 57. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000057",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000058",
+          "message": {
+            "id": "u58",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Can you remind me what pages the site has?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000058",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-29T14:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000058",
+          "message": {
+            "id": "a58",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"can you remind me what pages the site has\": here is where things stand as of turn 58. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000058",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000059",
+          "message": {
+            "id": "u59",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Is the booking form working properly?",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000059",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-30T09:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000059",
+          "message": {
+            "id": "a59",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "On \"is the booking form working properly\": here is where things stand as of turn 59. The site is live and the last build went through without problems. Visitors mostly land on the home page and the services page, and the contact form is the main way they get in touch. Nothing is waiting on you right now. If you want, I can look at the search figures again next week and tell you whether the new wording on the services page made a difference. A small step that usually helps is asking two or three happy customers for a short review, since recent reviews count for more than old ones. Tell me if you want me to draft the wording for that or to change anything on the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000059",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": [],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ],
+    [
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000060",
+          "message": {
+            "id": "u60",
+            "role": "user",
+            "parts": [
+              {
+                "type": "text",
+                "text": "Remind me on Friday at 9 to chase the Harbour View invoice, and add our new Saturday hours, 8 till 1, to the site.",
+                "state": "done"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.context",
+        "payload": {
+          "turn_id": "01K6C000000000000000000060",
+          "prefix_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "context_policy_version": "6",
+          "mode": "act",
+          "active_tools": [
+            "get_workspace",
+            "get_facts",
+            "request_change",
+            "create_reminder"
+          ],
+          "text": "Mode: act. You may read, and propose changes or answers for the owner to approve.\nNow: 2026-09-30T14:15 (Europe/London)\n<data source=\"workspace\" taint=\"none\">{}</data>",
+          "reserved_usd": 0.05
+        }
+      },
+      {
+        "type": "cos.message",
+        "payload": {
+          "turn_id": "01K6C000000000000000000060",
+          "message": {
+            "id": "a60",
+            "role": "assistant",
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "text",
+                "text": "I've set both up for you to approve.",
+                "state": "done"
+              },
+              {
+                "type": "tool-create_reminder",
+                "toolCallId": "call_rem60",
+                "state": "approval-requested",
+                "input": {
+                  "title": "Chase the Harbour View invoice",
+                  "due_at": "2026-10-02T08:00:00.000Z"
+                },
+                "approval": {
+                  "id": "appr_rem60"
+                }
+              },
+              {
+                "type": "tool-request_change",
+                "toolCallId": "call_chg60",
+                "state": "approval-requested",
+                "input": {
+                  "text": "Add Saturday opening hours, 8am to 1pm, to the site."
+                },
+                "approval": {
+                  "id": "appr_chg60"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "cos.approval",
+        "payload": {
+          "turn_id": "01K6C000000000000000000060",
+          "approval_id": "appr_rem60",
+          "tool_call_id": "call_rem60",
+          "input_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "expires_at": "2026-10-02T09:00:00.000Z"
+        }
+      },
+      {
+        "type": "cos.approval",
+        "payload": {
+          "turn_id": "01K6C000000000000000000060",
+          "approval_id": "appr_chg60",
+          "tool_call_id": "call_chg60",
+          "input_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "expires_at": "2026-10-02T09:00:00.000Z"
+        }
+      },
+      {
+        "type": "cos.turn",
+        "payload": {
+          "outcome": "answered",
+          "turn_id": "01K6C000000000000000000060",
+          "model": "openai/gpt-6.1-sol",
+          "usage": {
+            "input_tokens": 9000,
+            "cached_input_tokens": 7000,
+            "output_tokens": 300
+          },
+          "cost_usd": 0.004,
+          "tools": ["create_reminder", "request_change"],
+          "steps": 1,
+          "first_chunk_ms": 900
+        }
+      }
+    ]
+  ]
+}

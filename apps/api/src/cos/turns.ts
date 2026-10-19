@@ -1,6 +1,7 @@
 import {
   CosApproval,
   CosCall,
+  CosCompaction,
   CosContext,
   CosMessage,
   CosPrefix,
@@ -315,6 +316,40 @@ export async function writeAsTurn(
 }
 
 /**
+ * Appends a `cos.compaction` as the session's CoS staff row, under the
+ * conversation's lock and outside any turn's token: the fold reads only
+ * compactions logged before a turn's context, so one landing during a turn
+ * changes nothing that turn derives. Returns its seq, or null, writing
+ * nothing, when a compaction already logged reaches as far.
+ */
+export async function writeCompaction(
+  db: OrgScopedDb,
+  session: Omit<Turn, "turnId">,
+  compaction: CosCompaction
+): Promise<number | null> {
+  const payload = CosCompaction.parse(compaction)
+  const { from_seq, to_seq } = payload.replaced_range
+  if (from_seq > to_seq) {
+    throw new Error(`cos.turns: a compaction from ${from_seq} to ${to_seq}`)
+  }
+  await lock(db, session.sessionId)
+  const [covered] = await db.execute(sql`
+    select 1 from ${events}
+    where session_id = ${session.sessionId} and type = 'cos.compaction'
+      and (payload->'replaced_range'->>'to_seq')::int >= ${to_seq}
+    limit 1`)
+  if (covered) return null
+  const seq = await append(db, session, {
+    type: "cos.compaction",
+    payload,
+    // Model-written, from the owner's words.
+    taint: ["inferred", "untrusted_input"],
+  })
+  if (seq === null) throw new SessionBusy(session.sessionId)
+  return seq
+}
+
+/**
  * A run that aborted closes its own turn at once (ADR-034, "the budget
  * lock and the stream"): `cos.turn` with outcome `abandoned`, the spend its
  * steps logged and its reservation, under its own token.
@@ -426,10 +461,15 @@ export async function withinCap(
     where c.org_id = ${orgId} and c.type = 'cos.context'
       and c.recorded_at >= date_trunc('day', now() at time zone 'utc') at time zone 'utc'`)
   // Onboarding's background copy call: its cost once written, its
-  // reservation until then (`onboarding-prepare.ts`).
+  // reservation until then (`onboarding-prepare.ts`). And the CoS's
+  // background calls, compaction's among them, at their cost.
   const [prepared] = await db.execute<{ spent: number }>(sql`
     select coalesce(sum(coalesce(
-        (r.payload->>'cost_usd')::float8, (p.payload->>'reserved_usd')::float8)), 0) as spent
+        (r.payload->>'cost_usd')::float8, (p.payload->>'reserved_usd')::float8)), 0) + (
+      select coalesce(sum((b.payload->>'cost_usd')::float8), 0) from ${events} b
+      where b.org_id = ${orgId} and b.type = 'cos.background_step'
+        and b.recorded_at >= date_trunc('day', now() at time zone 'utc') at time zone 'utc'
+    ) as spent
     from ${events} p
     left join ${events} r on r.org_id = p.org_id and r.type = 'onboarding.prepared'
       and r.payload->>'conversation_id' = p.payload->>'conversation_id'

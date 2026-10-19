@@ -193,6 +193,7 @@ const RELEASED: Record<string, { turns: number; toolTurns: number }> = {
   "2": { turns: 12, toolTurns: 2 },
   "3": { turns: 12, toolTurns: 2 },
   "4": { turns: 12, toolTurns: 2 },
+  "6": { turns: 80, toolTurns: 2 },
 }
 
 describe("CONTEXT_POLICY", () => {
