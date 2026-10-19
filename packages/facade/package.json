@@ -10,8 +10,8 @@
     "test:live": "vitest run --dir live"
   },
   "dependencies": {
-    "@earendil-works/pi-ai": "0.87.1",
-    "@flue/runtime": "2.2.2",
+    "@earendil-works/pi-ai": "1.3.0",
+    "@flue/runtime": "2.3.0",
     "@workspace/contracts": "workspace:*",
     "ulid": "3.0.2",
     "valibot": "1.5.0",
