@@ -68,6 +68,7 @@ import {
   personaOf,
   priceOf,
   ROUTES,
+  redacted,
   reservation,
   routeOf,
   SITE_CHANGE_LINE,
@@ -657,6 +658,33 @@ describe("the CoS's model and price", () => {
     expect(await binds(card, "call_other", input, now)).toBe(false)
     expect(await binds(card, "call_rc", input, now + 1000)).toBe(false)
     expect(await binds(undefined, "call_rc", input, now)).toBe(false)
+  })
+
+  it("redacts every string a model reads, once, and passes provider data on as it is", () => {
+    const messages = [
+      {
+        role: "user",
+        content: [{ type: "text", text: "key sk-abcdefgh1234" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call_1",
+            toolName: "get_facts",
+            input: { note: "Bearer abcdefgh12345678" },
+            providerOptions: { openrouter: { reasoning: "sk-keepthisasis" } },
+          },
+        ],
+      },
+    ]
+    const once = redacted(messages)
+    expect(JSON.stringify(once)).not.toMatch(/sk-abcdefgh1234|abcdefgh12345678/)
+    expect(JSON.stringify(once)).toContain("sk-keepthisasis")
+    expect(redacted(once)).toStrictEqual(once)
+    // The caller's messages are left as they were.
+    expect(JSON.stringify(messages)).toContain("key sk-abcdefgh1234")
   })
 
   it("writes a refused yes so the web reads it as expired, never as a failure or unknown", () => {
@@ -1429,6 +1457,39 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       "untrusted_input",
     ])
     await s.state(asking, "cancelled")
+  })
+
+  it("sends no model call a secret-shaped string from the owner or a tool, and the check still passes", async () => {
+    const s = seed(kit, me)
+    const build = await s.assignment("implementing")
+    // Fake, and short of the repo's own secret scan, but secret-shaped to scrub.
+    const dsn = "postgres://db.internal/reme"
+    await admin`update assignments set goal = ${`Move the site off ${dsn}`} where id = ${build}`
+    const key = "sk-fake12345678"
+    const id = await conversation(me)
+    const { model, sent } = scripted(
+      calls({ id: "call_ws", tool: "get_workspace", input: {} }),
+      said("Your build is under way.")
+    )
+    const done = await turn(
+      me,
+      typed(id, `My key is ${key}. How is the build going?`, "ask"),
+      { model }
+    )
+    expect(done.response.status, done.text).toBe(200)
+    expect(sent).toHaveLength(2)
+    expect(wire(sent)).not.toContain(key)
+    expect(wire(sent)).not.toContain(dsn)
+    // Step 1 read the tool's output, redacted.
+    expect(JSON.stringify(sent[1]?.prompt)).toContain(
+      "Move the site off [redacted]"
+    )
+    expect((await turnsOf(id)).map((t) => t.outcome)).toEqual(["answered"])
+    // The log keeps what was said and returned; only the model's copy is redacted.
+    const log = JSON.stringify(await logOf(id))
+    expect(log).toContain(key)
+    expect(log).toContain(dsn)
+    await s.state(build, "cancelled")
   })
 
   /** A tail the CoS made, waiting on the four calls ADR-034's fallback proof resolves. */

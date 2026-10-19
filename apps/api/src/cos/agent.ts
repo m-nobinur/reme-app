@@ -31,6 +31,7 @@ import {
 import models from "@workspace/facade/models/openrouter.models.json" with {
   type: "json",
 }
+import { scrub } from "@workspace/facade/tee"
 import {
   asSchema,
   convertToModelMessages,
@@ -942,6 +943,33 @@ function toolsFor(run: AgentTurn) {
   }
 }
 
+/** Provider data is the provider's own, never words the model reads, and is passed on as it is. */
+const PROVIDER_KEYS = new Set(["providerOptions", "providerMetadata"])
+
+/**
+ * `value` with facade's `scrub` over every string a model reads: text, a
+ * tool's input and output, a reason. Plain objects and arrays only; the
+ * CoS's messages are JSON, as the log holds them. Running it twice changes
+ * nothing, so messages the SDK carries over from a redacted step stay equal.
+ */
+export function redacted<T>(value: T): T {
+  if (typeof value === "string") return scrub(value) as T
+  if (Array.isArray(value)) return value.map(redacted) as T
+  if (
+    value !== null &&
+    typeof value === "object" &&
+    Object.getPrototypeOf(value) === Object.prototype
+  ) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, inner]) => [
+        key,
+        PROVIDER_KEYS.has(key) ? inner : redacted(inner),
+      ])
+    ) as T
+  }
+  return value
+}
+
 /**
  * The messages the log derives for the turn's next call, as the SDK sends
  * them: the history through `convertToModelMessages`, then the steps the
@@ -1020,8 +1048,11 @@ export function cosAgent(
         },
       }
     },
-    // The check and the step's `cos.call` share one transaction.
-    prepareStep: async ({ messages, stepNumber }) => {
+    // The check and the step's `cos.call` share one transaction. Both sides
+    // are hashed redacted, and the model is sent the redacted messages, so
+    // the hash covers what it saw (ADR-042).
+    prepareStep: async ({ messages: held, stepNumber }) => {
+      const messages = redacted(held)
       const sent = await sha256(messages)
       // The first call is checked here; later ones are stopped by `stopWhen`.
       const chars =
@@ -1030,7 +1061,9 @@ export function cosAgent(
       let checked = false
       try {
         await run.kit.withOrg({ orgId: run.turn.orgId }, async (db) => {
-          const expected = await sha256(await derivedCall(db, run, tools))
+          const expected = await sha256(
+            redacted(await derivedCall(db, run, tools))
+          )
           if (expected !== sent) {
             run.state.integrity = true
             console.error(
@@ -1077,7 +1110,7 @@ export function cosAgent(
         closed(error)
         throw error
       }
-      return undefined
+      return { messages }
     },
     onStepEnd: async (step) => {
       const usage = usageOf(step.usage)
