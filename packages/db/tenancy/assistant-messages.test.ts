@@ -261,6 +261,35 @@ describe("postAssistantMessage", () => {
     expect(await post()).toBe("posted")
   })
 
+  it("posts to the named conversation, not the newest, and says none for a stranger's", async () => {
+    const o = await org()
+    const older = await conversation(o, "assistant", new Date(2026, 0, 1), said)
+    const newest = await conversation(
+      o,
+      "assistant",
+      new Date(2026, 0, 3),
+      said
+    )
+    const other = await org()
+    const theirs = await conversation(
+      other,
+      "assistant",
+      new Date(2026, 0, 1),
+      said
+    )
+    const post = (conversationId: string) =>
+      postAssistantMessage(kit, {
+        orgId: o.orgId,
+        key: "reminder:r1",
+        message: { text },
+        conversationId,
+      })
+    expect(await post(theirs)).toBe("none")
+    expect(await post(older)).toBe("posted")
+    expect((await rows(o.orgId, older)).map((r) => r.id)).toHaveLength(2)
+    expect(await rows(o.orgId, newest)).toHaveLength(1)
+  })
+
   it("refuses a message the contract refuses, before any write", async () => {
     const o = await org()
     await expect(
