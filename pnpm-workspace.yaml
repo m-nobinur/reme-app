@@ -7,5 +7,19 @@ allowBuilds:
   esbuild: true
   lightningcss: true
   workerd: true
+overrides:
+  # Each lifts only the vulnerable range to its lowest fixed version. Drop an entry once its parent requires the fix.
+  # OAuth client could send credentials to an authorization server it should not trust. Flue pins 2.0.0.
+  '@modelcontextprotocol/client@>=2.0.0 <2.2.0': 2.2.0
+  # Same advisory, reached through @google/genai.
+  '@modelcontextprotocol/sdk@>=1.12.0 <1.31.0': 1.31.0
+  # maxTotalMergeKeys does not limit CPU use for empty merge sources.
+  'js-yaml@>=4.0.0 <4.3.2': 4.3.2
+  # Authority injection, host confusion and inconsistent host case normalization.
+  'fast-uri@>=3.0.0 <3.1.8': 3.1.8
+  # Denial of service through recursion and quadratic-time expansion.
+  'brace-expansion@>=2.0.0 <2.1.7': 2.1.7
+  # Event-loop denial of service through indexed source maps.
+  'source-map-js@>=1.0.0 <1.2.2': 1.2.2
 patchedDependencies:
   '@workos/authkit-session@0.7.1': patches/@workos__authkit-session@0.7.1.patch

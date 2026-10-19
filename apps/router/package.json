@@ -14,12 +14,12 @@
     "@workspace/contracts": "workspace:*",
     "@workspace/db": "workspace:*",
     "@workspace/gates": "workspace:*",
-    "hono": "4.13.11"
+    "hono": "4.13.13"
   },
   "devDependencies": {
     "@types/node": "^22",
     "typescript": "^6",
     "vitest": "^4.1.11",
-    "wrangler": "4.144.0"
+    "wrangler": "4.151.1"
   }
 }

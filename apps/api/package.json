@@ -19,14 +19,14 @@
     "@workspace/facade": "workspace:*",
     "@workspace/gates": "workspace:*",
     "@workspace/starter-site": "workspace:*",
-    "ai": "7.0.123"
+    "ai": "7.0.143"
   },
   "devDependencies": {
-    "@playwright/test": "^1.63.0",
+    "@playwright/test": "^1.64.1",
     "@types/node": "^22",
     "iron-webcrypto": "2.0.0",
     "typescript": "^6",
     "vitest": "^4.1.11",
-    "wrangler": "4.144.0"
+    "wrangler": "4.151.1"
   }
 }
