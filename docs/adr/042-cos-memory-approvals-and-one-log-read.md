@@ -99,7 +99,11 @@ from a redacted step hashes the same again. The hash, and the `cos.call` that lo
 the model saw the redaction of the derived log, which is what it was sent. Two lists that differ
 only inside a secret-shaped string hash alike; the model sees the same text either way. The log
 keeps the words as they were said and returned: redaction is at the model boundary, not before
-append. Compaction and reflection must call the same scrub when they send a transcript.
+append. That is the answer to §14.2's "before event append" half: the log is the system of
+record, and a replay must see what the owner and the tools said, so the scrub runs where text
+leaves for a provider instead. The other api model calls run the same scrub over what they send:
+Jev's question state, the onboarding planner's turn data and the background copy call's prompt.
+Compaction and reflection must call it too when they send a transcript.
 
 ## What was rejected
 
