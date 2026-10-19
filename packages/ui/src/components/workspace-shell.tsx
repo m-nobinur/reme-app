@@ -111,7 +111,7 @@ const useWide = () =>
  * The owner workspace: a compact rail of icons, the conversation, and the
  * live panel floating at the top right, under the notifications bell.
  *
- * From `md` the rail is a column of icons, each named on hover, that hides
+ * From `md` the rail is a 72px column of icons, each named on hover, that hides
  * with the toggle at the top left, remembered in a cookie; below `md` it is a
  * sheet from the left, where the names show beside the icons. A rail label
  * is a `data-slot="rail-label"` span. The panel is a rounded
@@ -243,14 +243,14 @@ function WorkspaceShell({
           aria-label="Workspace"
           className={cn(
             "hidden shrink-0 flex-col overflow-hidden border-border bg-rail text-rail-foreground transition-[width] duration-200 ease-out motion-reduce:transition-none md:flex",
-            railOpen ? "w-14 border-r" : "w-0",
+            railOpen ? "w-18 border-r" : "w-0",
             "[&_[data-slot=rail-label]]:sr-only"
           )}
           data-state={railOpen ? "open" : "closed"}
           id="workspace-rail"
           inert={!railOpen}
         >
-          <div className="flex min-h-0 w-14 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden p-2">
+          <div className="flex min-h-0 w-18 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden px-3.5 py-3">
             {rail}
           </div>
         </aside>
@@ -580,4 +580,4 @@ function ConversationMenu({
   )
 }
 
-export { ConversationMenu, WorkspacePage, WorkspaceShell }
+export { ConversationMenu, closeOnLink, WorkspacePage, WorkspaceShell }

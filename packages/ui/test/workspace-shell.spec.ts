@@ -98,7 +98,7 @@ test("the layout changes shape at md and lg", async ({ page }) => {
   const rail = page.getByRole("complementary", { name: "Workspace" })
 
   await open(page, "WorkspaceShell", WIDTHS.desktop)
-  expect((await rail.boundingBox())?.width).toBe(56)
+  expect((await rail.boundingBox())?.width).toBe(72)
   expect((await panel(page).boundingBox())?.width).toBe(352)
   await expect(panelToggle(page)).toHaveAttribute("aria-expanded", "true")
   await expect(railToggle(page)).toBeHidden()
@@ -156,9 +156,11 @@ test("the rail names each icon on hover", async ({ page }) => {
   await open(page, "WorkspaceShell", WIDTHS.desktop)
   await page
     .getByRole("complementary", { name: "Workspace" })
-    .getByRole("button", { name: "Help" })
+    .getByRole("link", { name: "Staff" })
     .hover()
-  await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText("Help")
+  await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText(
+    "Staff"
+  )
 })
 
 test("the history lists chats newest first, searchable, a page at a time", async ({
@@ -252,7 +254,7 @@ test("the rail collapses and remembers it in a cookie", async ({ page }) => {
   expect(await cookie(page, "reme-rail")).toBe("closed")
 
   await page.getByRole("button", { name: "Show sidebar" }).click()
-  await expect.poll(async () => (await rail.boundingBox())?.width ?? 0).toBe(56)
+  await expect.poll(async () => (await rail.boundingBox())?.width ?? 0).toBe(72)
   expect(await cookie(page, "reme-rail")).toBe("open")
 })
 
