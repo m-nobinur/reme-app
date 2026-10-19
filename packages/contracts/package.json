@@ -13,7 +13,7 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
-    "@types/node": "^22",
+    "@types/node": "^24",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "fast-check": "^4.10.2",

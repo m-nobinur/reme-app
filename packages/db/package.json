@@ -21,7 +21,7 @@
     "ulid": "3.0.2"
   },
   "devDependencies": {
-    "@types/node": "^22",
+    "@types/node": "^24",
     "drizzle-kit": "0.31.11",
     "typescript": "^6",
     "vitest": "^4.1.11"
