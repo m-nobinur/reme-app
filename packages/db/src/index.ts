@@ -11,6 +11,13 @@ export {
 } from "./assistant-messages.ts"
 export { activeDomainHost, domainHeldElsewhere } from "./domains.ts"
 export {
+  type DueStore,
+  lowerNextDue,
+  NEXT_DUE_KEY,
+  type NextDue,
+  readNextDue,
+} from "./due.ts"
+export {
   type AppendEvent,
   type AppendSessionEvent,
   appendEvent,
@@ -20,6 +27,7 @@ export {
 export { currentFacts, supersedeFact } from "./facts.ts"
 export * from "./map.ts"
 export { type Waited, waitedOn } from "./questions.ts"
+export { nextRun, recomputeOrgJobs } from "./recurrence.ts"
 export * from "./schema.ts"
 export {
   chiefStaffId,
@@ -42,6 +50,7 @@ export {
   failureCode,
   listOrgIds,
   logFailure,
+  nextDueAt,
   ORG_SETTING,
   pgCode,
   recentDesigns,

@@ -363,6 +363,22 @@ export async function claimDueJobs(
   })
 }
 
+/**
+ * The earliest time a claim could return a job, across orgs, or null when
+ * nothing is scheduled: what the Cron Trigger keeps in KV so Postgres sleeps
+ * until then. `next_due_at` (migration 0021) is SECURITY DEFINER and returns
+ * one timestamp and nothing else.
+ */
+export async function nextDueAt(kit: Tenancy): Promise<Date | null> {
+  return kit[pool].transaction(async (tx) => {
+    await tx.execute(ENTER_APP_ROLE)
+    const [row] = await tx.execute<{ at: string | Date | null }>(
+      sql`select public.next_due_at() as at`
+    )
+    return row?.at ? new Date(row.at) : null
+  })
+}
+
 /** A design another business in the same industry was planned with. */
 export type RecentDesign = {
   direction: string | null

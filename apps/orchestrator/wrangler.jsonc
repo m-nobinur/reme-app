@@ -87,12 +87,40 @@
   // The hourly retention sweep (ADR-032), created by the `scheduled` handler
   // in src/cloudflare.ts; on Mondays at 07 UTC it also sends the weekly
   // search message. Production restates it; its uptime check shares the firing.
-  "triggers": { "crons": ["0 * * * *"] },
+  // Every minute the scheduler (src/schedule.ts, ADR-043) reads KV and wakes
+  // Postgres only when a job is due.
+  "triggers": { "crons": ["0 * * * *", "* * * * *"] },
   // The routing cache the router reads (§11.1.3), written by publish.ts and
-  // by nothing else in this Worker; a test holds that.
+  // by nothing else in this Worker; a test holds that. `SCHEDULE` holds the
+  // earliest due job (src/schedule.ts), shared with the api, which lowers it.
   "kv_namespaces": [
-    { "binding": "ROUTES", "id": "1f8dffa950774f3cb41e2b28dac89767" }
+    { "binding": "ROUTES", "id": "1f8dffa950774f3cb41e2b28dac89767" },
+    { "binding": "SCHEDULE", "id": "REPLACE_WITH_reme-schedule_ID" }
   ],
+  // Claimed jobs, one message each (src/jobs.ts). The first attempt and three
+  // retries, then the dead-letter queue; the job's claim lapses and the cron
+  // retakes it either way.
+  // The outbox (src/deliveries.ts). A message that fails five retries is
+  // settled as failed in the row, so the dead-letter queue only holds what
+  // the consumer itself could not handle.
+  "queues": {
+    "producers": [
+      { "binding": "JOBS", "queue": "reme-jobs" },
+      { "binding": "DELIVERIES", "queue": "reme-deliveries" }
+    ],
+    "consumers": [
+      {
+        "queue": "reme-jobs",
+        "max_retries": 3,
+        "dead_letter_queue": "reme-jobs-dlq"
+      },
+      {
+        "queue": "reme-deliveries",
+        "max_retries": 5,
+        "dead_letter_queue": "reme-deliveries-dlq"
+      }
+    ]
+  },
   // The builder sandbox (ADR-031). The image is a registry reference pinned
   // by digest, so a deploy needs no Docker and a PR that touches no image
   // never builds one; .github/workflows/sandbox-image.yml builds and pushes
@@ -124,22 +152,10 @@
     { "binding": "SITES", "bucket_name": "reme-sites" },
     { "binding": "BACKUP_BUCKET", "bucket_name": "reme-sites" }
   ],
-  // The outbox (src/deliveries.ts). `OWNER_MAIL` is Cloudflare Email Sending
-  // from hello@remeai.co.uk, after `wrangler email sending enable remeai.co.uk`;
-  // the uptime alert keeps its own binding. A message that fails five retries
-  // is settled as failed in the row, so the dead-letter queue only holds what
-  // the consumer itself could not handle.
+  // `OWNER_MAIL` is Cloudflare Email Sending from hello@remeai.co.uk, after
+  // `wrangler email sending enable remeai.co.uk`; the uptime alert keeps its
+  // own binding.
   "send_email": [{ "name": "OWNER_MAIL" }],
-  "queues": {
-    "producers": [{ "binding": "DELIVERIES", "queue": "reme-deliveries" }],
-    "consumers": [
-      {
-        "queue": "reme-deliveries",
-        "max_retries": 5,
-        "dead_letter_queue": "reme-deliveries-dlq"
-      }
-    ]
-  },
   "env": {
     "production": {
       "name": "reme-orchestrator-production",
@@ -172,7 +188,8 @@
       },
       // The sweep and the uptime check, one firing an hour so the database
       // wakes once (UPTIME_CRON). Staging has no HEALTH_URLS, so it sweeps only.
-      "triggers": { "crons": ["0 * * * *"] },
+      // The per-minute scheduler touches Postgres only when a job is due.
+      "triggers": { "crons": ["0 * * * *", "* * * * *"] },
       // The uptime check's alert email (src/uptime.ts). No destination
       // restriction: `ALERT_TO`, a secret, picks a verified address.
       "send_email": [{ "name": "ALERTS" }, { "name": "OWNER_MAIL" }],
@@ -212,8 +229,30 @@
         }
       ],
       "kv_namespaces": [
-        { "binding": "ROUTES", "id": "a9aa0dcef20f49539b24ee10a2f9e83b" }
+        { "binding": "ROUTES", "id": "a9aa0dcef20f49539b24ee10a2f9e83b" },
+        {
+          "binding": "SCHEDULE",
+          "id": "REPLACE_WITH_reme-schedule-production_ID"
+        }
       ],
+      "queues": {
+        "producers": [
+          { "binding": "JOBS", "queue": "reme-jobs-production" },
+          { "binding": "DELIVERIES", "queue": "reme-deliveries-production" }
+        ],
+        "consumers": [
+          {
+            "queue": "reme-jobs-production",
+            "max_retries": 3,
+            "dead_letter_queue": "reme-jobs-dlq-production"
+          },
+          {
+            "queue": "reme-deliveries-production",
+            "max_retries": 5,
+            "dead_letter_queue": "reme-deliveries-dlq-production"
+          }
+        ]
+      },
       "containers": [
         {
           "class_name": "RemeSandbox",
@@ -238,19 +277,7 @@
           "bucket_name": "reme-sites-production-eu",
           "jurisdiction": "eu"
         }
-      ],
-      "queues": {
-        "producers": [
-          { "binding": "DELIVERIES", "queue": "reme-deliveries-production" }
-        ],
-        "consumers": [
-          {
-            "queue": "reme-deliveries-production",
-            "max_retries": 5,
-            "dead_letter_queue": "reme-deliveries-dlq-production"
-          }
-        ]
-      }
+      ]
     }
   }
 }

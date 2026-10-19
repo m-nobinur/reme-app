@@ -23,6 +23,11 @@ import {
  */
 
 export const OWNER_FROM = { name: "Reme", email: "hello@remeai.co.uk" }
+/** The `deliveries` Queue's name in each environment, as the wrangler config spells it. */
+export const DELIVERIES_QUEUES = [
+  "reme-deliveries",
+  "reme-deliveries-production",
+]
 /** Matched to `max_retries` in wrangler.jsonc: the last attempt settles the row as failed. */
 export const MAX_RETRIES = 5
 

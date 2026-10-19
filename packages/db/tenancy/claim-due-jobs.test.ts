@@ -2,8 +2,9 @@ import { eq } from "drizzle-orm"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { clearOrgs } from "../fixtures/seed.ts"
 import { connect, connectionString } from "../src/client.ts"
+import { recomputeOrgJobs } from "../src/recurrence.ts"
 import { orgs, scheduledJobs } from "../src/schema.ts"
-import { claimDueJobs, tenancy, withOrg } from "../src/tenancy.ts"
+import { claimDueJobs, nextDueAt, tenancy, withOrg } from "../src/tenancy.ts"
 
 /**
  * `claim_due_jobs` (migration 0020) against Postgres. Two orgs of its own, so
@@ -42,6 +43,19 @@ async function seedJobs(count: number, over: Job = {}) {
 }
 
 const idsOf = (rows: { id: string }[]) => new Set(rows.map((row) => row.id))
+
+/** Takes rows out of every later claim, so no other case sees them due. */
+const pause = (rows: { id: string; orgId: string }[]) =>
+  Promise.all(
+    rows.map((row) =>
+      withOrg({ orgId: row.orgId }, (db) =>
+        db
+          .update(scheduledJobs)
+          .set({ pausedAt: new Date() })
+          .where(eq(scheduledJobs.id, row.id))
+      )
+    )
+  )
 
 beforeAll(async () => {
   for (const orgId of ORGS) {
@@ -156,5 +170,82 @@ describe("claim_due_jobs", () => {
     await seedJobs(3)
     expect(await claimDueJobs(kit, 0)).toEqual([])
     expect(await claimDueJobs(kit, 2)).toHaveLength(2)
+  })
+})
+
+describe("next_due_at", () => {
+  const kit = tenancy(connectionString(), { max: 1 })
+  afterAll(() => kit.close())
+
+  // Times older than any other test's rows, so each is the minimum when it
+  // counts; every row is paused before the case ends, so no claim takes it.
+  const LONG_AGO = new Date("2000-01-01T00:00:00.123Z")
+  const LONGER_AGO = new Date("1999-01-01T00:00:00.456Z")
+
+  it("is the earliest unpaused job, and a claimed one counts from its lease's end", async () => {
+    const due = await seedJobs(1, { nextRunAt: LONG_AGO })
+    const claimed = await seedJobs(1, {
+      nextRunAt: LONGER_AGO,
+      claimedAt: new Date(),
+    })
+    try {
+      expect(await nextDueAt(kit)).toEqual(LONG_AGO)
+      await pause(due)
+      const next = await nextDueAt(kit)
+      expect(next?.getTime()).toBeGreaterThan(LONG_AGO.getTime())
+    } finally {
+      await pause([...due, ...claimed])
+    }
+  })
+})
+
+describe("recomputeOrgJobs", () => {
+  it("moves the org's upcoming recurring jobs to the new zone, and leaves the rest", async () => {
+    const now = new Date("2026-10-19T12:00:00Z")
+    const tomorrow = new Date("2026-10-20T09:00:00Z")
+    const rows: Record<string, Job & { nextRunAt: Date }> = {
+      recurring: { rule: "0 9 * * *", nextRunAt: tomorrow },
+      oneOff: { rule: null, nextRunAt: tomorrow },
+      due: { rule: "0 9 * * *", nextRunAt: new Date("2026-10-19T11:00:00Z") },
+      claimed: { rule: "0 9 * * *", nextRunAt: tomorrow, claimedAt: now },
+      paused: { rule: "0 9 * * *", nextRunAt: tomorrow, pausedAt: now },
+    }
+    const made = Object.entries(rows).map(([name, row]) => ({
+      name,
+      row,
+      id: crypto.randomUUID(),
+      orgId: ORG_ONE,
+    }))
+    try {
+      const earliest = await withOrg({ orgId: ORG_ONE }, async (db) => {
+        for (const { row, id } of made)
+          await db
+            .insert(scheduledJobs)
+            .values({ ...row, id, orgId: ORG_ONE, kind: "heartbeat" })
+        return recomputeOrgJobs(db, "America/New_York", now)
+      })
+      // 09:00 in New York on 2026-10-19 is 13:00Z, the first after now.
+      expect(earliest).toEqual(new Date("2026-10-19T13:00:00Z"))
+      const got = await withOrg({ orgId: ORG_ONE }, (db) =>
+        db
+          .select({ id: scheduledJobs.id, at: scheduledJobs.nextRunAt })
+          .from(scheduledJobs)
+      )
+      const at = (name: string) =>
+        got
+          .find((row) => row.id === made.find((m) => m.name === name)?.id)
+          ?.at.toISOString()
+      expect(
+        Object.fromEntries(made.map(({ name }) => [name, at(name)]))
+      ).toEqual({
+        recurring: "2026-10-19T13:00:00.000Z",
+        oneOff: tomorrow.toISOString(),
+        due: "2026-10-19T11:00:00.000Z",
+        claimed: tomorrow.toISOString(),
+        paused: tomorrow.toISOString(),
+      })
+    } finally {
+      await pause(made)
+    }
   })
 })
