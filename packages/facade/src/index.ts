@@ -60,7 +60,7 @@ export {
   verifySpec,
 } from "./spec.ts"
 export type { EventSink, Tee, TeeIds } from "./tee.ts"
-export { createTee, redact } from "./tee.ts"
+export { createTee, redact, scrub } from "./tee.ts"
 export type { ModelEnv, Transport } from "./transport.ts"
 export {
   buildProviders,
