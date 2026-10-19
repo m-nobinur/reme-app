@@ -8,6 +8,7 @@ describe("ScheduledJob", () => {
 
   it.each([
     ["a one-off reminder", job],
+    ["a claimed job", { ...job, claimed_at: "2026-08-27T09:30:00Z" }],
     [
       "a recurring job",
       { ...job, kind: "heartbeat", ref_id: null, rule: "0 */4 * * *" },
@@ -28,6 +29,7 @@ describe("ScheduledJob", () => {
       { ...job, next_run_at: "2026-08-27T09:30:00" },
     ],
     ["an empty rule", { ...job, rule: "" }],
+    ["no claim field", { ...job, claimed_at: undefined }],
     ["a negative failure count", { ...job, failures: -1 }],
     ["no org", { ...job, org_id: undefined }],
   ])("refuses %s", (_name, value) => {
