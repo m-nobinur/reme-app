@@ -39,7 +39,7 @@
     "parse5": "8.0.1",
     "schema-dts": "2.0.0",
     "typescript": "5.9.3",
-    "vitest": "^4.1.11",
+    "vitest": "^5.0.5",
     "yaml": "2.9.1"
   },
   "exports": {
