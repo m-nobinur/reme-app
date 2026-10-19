@@ -159,6 +159,8 @@ export type ThreadProps = {
    * `seen` records that it now has.
    */
   reveal?: ThreadReveal | undefined
+  /** What the owner calls the assistant, named above each reply. */
+  assistantName?: string | undefined
 }
 
 export type ThreadReveal = {
@@ -265,6 +267,7 @@ export const Thread: FC<ThreadProps> = ({
   mode,
   after,
   reveal,
+  assistantName,
 }) => {
   // A stored conversation with nothing in it is as empty as a new chat, once
   // its history is in: the same welcome and suggestions, with the composer in
@@ -290,6 +293,7 @@ export const Thread: FC<ThreadProps> = ({
       quickActions,
       mode,
       reveal,
+      assistantName,
     }),
     [
       stored,
@@ -299,6 +303,7 @@ export const Thread: FC<ThreadProps> = ({
       quickActions,
       mode,
       reveal,
+      assistantName,
     ]
   )
   // The composer's input, which a card can hand the owner to.
@@ -647,7 +652,7 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
                   ? questionPlaceholder
                   : placeholder)
           }
-          className="aui-composer-input max-h-48 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base leading-6 caret-primary outline-none placeholder:text-muted-foreground/60 sm:text-chat"
+          className="aui-composer-input max-h-48 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-chat text-chat-foreground caret-primary outline-none placeholder:text-muted-foreground/60"
           rows={1}
           autoFocus={autoFocus}
           disabled={!sendable}
@@ -922,6 +927,7 @@ const AssistantMessage: FC = () => {
     ToolGroup = DefaultToolGroup,
     ReasoningGroup = DefaultReasoningGroup,
   } = useContext(ThreadComponentsContext)
+  const { assistantName = "Reme" } = useContext(ThreadSettingsContext)
 
   const ACTION_BAR_PT = "pt-1.5"
   // Keep the action bar inside the contained root's paint box, then cancel its reserved space in flow.
@@ -934,13 +940,21 @@ const AssistantMessage: FC = () => {
     <MessagePrimitive.Root
       data-slot="aui_assistant-message-root"
       data-role="assistant"
-      className="group/message relative -mb-7.5 flex items-start gap-2.5 ps-2 pb-7.5 [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
+      className="group/message relative -mb-7.5 ps-2 pb-7.5 [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
     >
-      <PersonaAvatar className="mt-0.5 size-7" />
-      <div className="min-w-0 flex-1">
+      <div
+        data-slot="aui_assistant-message-header"
+        className="mb-1.5 flex items-center gap-2"
+      >
+        <PersonaAvatar className="size-6" />
+        <span className="font-semibold text-foreground text-sm">
+          {assistantName}
+        </span>
+      </div>
+      <div className="min-w-0">
         <div
           data-slot="aui_assistant-message-content"
-          className="wrap-break-word pe-2 text-chat text-foreground"
+          className="wrap-break-word pe-2 text-chat text-chat-foreground"
           // A played-in message is read out once, whole, when it is done.
           aria-live={reveal.phase === "still" ? undefined : "polite"}
         >
@@ -1148,7 +1162,7 @@ const UserMessage: FC = () => {
       data-role="user"
     >
       <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0">
-        <div className="aui-user-message-content wrap-break-word relative rounded-3xl bg-muted px-4 py-2 text-chat text-foreground empty:hidden">
+        <div className="aui-user-message-content wrap-break-word relative rounded-3xl bg-muted px-4 py-2.5 text-chat text-chat-foreground empty:hidden sm:px-5 sm:py-3">
           <MessagePrimitive.Parts components={USER_PARTS} />
         </div>
         <span

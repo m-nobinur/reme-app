@@ -28,6 +28,24 @@
   --primary-foreground: oklch(0.17 0.02 172);
 }
 
+/* Message text: 16px on a phone, where it is also the composer's size and the
+   least iOS opens a field at without zooming, and 17px from the sm breakpoint
+   up. The colour is a step off the foreground, so long replies do not glare.
+   Measured: 17.7:1 on the light background and 16.2:1 on its bubble, 14.7:1
+   on the dark background and 11.2:1 on its bubble. */
+:root {
+  --chat-size: 1rem;
+  --chat-foreground: oklch(0.21 0 0);
+}
+.dark {
+  --chat-foreground: oklch(0.9 0 0);
+}
+@media (width >= 40rem) {
+  :root {
+    --chat-size: 1.0625rem;
+  }
+}
+
 /* Sections rise into place as they scroll in. Pure CSS, so it costs no script
    and does nothing where scroll timelines are unsupported or motion is off. */
 @utility reveal {
@@ -105,10 +123,13 @@
   --animate-persona-blink-once: persona-blink-once 0.28s ease-in-out;
   --animate-flow: flow 1.4s linear infinite;
   --animate-note-cycle: note-cycle 9s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-  /* The conversation's body size: 15px on a 24px line, what native chat apps
-     set message text at. */
-  --text-chat: 0.9375rem;
-  --text-chat--line-height: 1.5rem;
+  /* The conversation's reading type, sized per viewport by `--chat-size`. A
+     step line (a check the assistant ran) sits a size under the reply. */
+  --text-chat: var(--chat-size);
+  --text-chat--line-height: 1.625;
+  --text-chat-step: 0.9375rem;
+  --text-chat-step--line-height: 1.5;
+  --color-chat-foreground: var(--chat-foreground);
   @keyframes persona-float {
     0%,
     100% {
