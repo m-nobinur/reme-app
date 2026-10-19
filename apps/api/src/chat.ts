@@ -1324,24 +1324,31 @@ async function fallbackTurn(
 }
 
 /**
- * The messages the assistant posted on its own (`postAssistantMessage`,
- * ids `srv_…`) that the session's log does not hold yet, oldest first, cut
- * to their text. A typed turn logs them before the owner's message, so the
- * model's history, which reads the log alone, holds what it already told
- * the owner.
+ * The messages posted outside a turn that the session's log does not hold
+ * yet, oldest first, cut to their text: the assistant's own (`srv_…`,
+ * `postAssistantMessage`) and the owner's emailed replies (`eml_…`,
+ * `postOwnerEmail`). A typed turn logs them before the owner's message, so
+ * the model's history, which reads the log alone, holds what it already told
+ * the owner and what the owner answered by email.
  */
 async function unloggedPosts(db: OrgScopedDb, id: string) {
-  const rows = await db.execute<{ id: string; parts: Part[] }>(sql`
-    select m.id, m.content->'parts' as parts from ${conversationMessages} m
-    where m.conversation_id = ${id} and m.id like 'srv\_%'
-      and m.content->>'role' = 'assistant'
+  const rows = await db.execute<{
+    id: string
+    role: "assistant" | "user"
+    parts: Part[]
+  }>(sql`
+    select m.id, m.content->>'role' as role, m.content->'parts' as parts
+    from ${conversationMessages} m
+    where m.conversation_id = ${id} and (
+        (m.id like 'srv\_%' and m.content->>'role' = 'assistant')
+        or (m.id like 'eml\_%' and m.content->>'role' = 'user'))
       and not exists (select 1 from ${events} e
         where e.session_id = ${id} and e.type = 'cos.message'
           and e.payload->'message'->>'id' = m.id)
     order by m.seq`)
   return rows.map((row) => ({
     id: row.id,
-    role: "assistant" as const,
+    role: row.role,
     parts: row.parts.filter(
       (p) => p.type === "step-start" || p.type === "text"
     ),

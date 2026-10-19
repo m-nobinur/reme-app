@@ -2,7 +2,9 @@ import { sql } from "drizzle-orm"
 import { afterAll, describe, expect, it } from "vitest"
 import { clearOrgs } from "../fixtures/seed.ts"
 import {
+  emailMessageId,
   postAssistantMessage,
+  postOwnerEmail,
   serverMessageId,
 } from "../src/assistant-messages.ts"
 import { connect, connectionString } from "../src/client.ts"
@@ -305,5 +307,122 @@ describe("postAssistantMessage", () => {
         },
       })
     ).rejects.toThrow()
+  })
+})
+
+describe("postOwnerEmail", () => {
+  it("stores the reply as the owner's message under a stable eml_ id, once", async () => {
+    const o = await org()
+    const id = await conversation(o, "assistant", new Date(), said)
+    const post = () =>
+      postOwnerEmail(kit, {
+        orgId: o.orgId,
+        conversationId: id,
+        key: "<m1@mail.example.com>",
+        text: "Move it to Friday.",
+      })
+    expect(await post()).toBe("posted")
+    expect(await post()).toBe("exists")
+    const stored = await rows(o.orgId, id)
+    expect(stored.map((r) => [r.id, r.parent_id])).toEqual([
+      ["tail_1", null],
+      [emailMessageId("<m1@mail.example.com>"), "tail_1"],
+    ])
+    expect(emailMessageId("a")).toMatch(/^eml_[0-9a-f]{40}$/)
+    expect(stored[1]?.content).toEqual({
+      role: "user",
+      parts: [{ type: "text", text: "Move it to Friday." }],
+    })
+  })
+
+  it("leaves an open card open: an emailed yes waits and writes nothing", async () => {
+    const o = await org()
+    const id = await conversation(
+      o,
+      "assistant",
+      new Date(),
+      card("approval-requested")
+    )
+    expect(
+      await postOwnerEmail(kit, {
+        orgId: o.orgId,
+        conversationId: id,
+        key: "<yes@mail.example.com>",
+        text: "yes go ahead",
+      })
+    ).toBe("waiting")
+    const stored = await rows(o.orgId, id)
+    expect(stored).toHaveLength(1)
+    expect(stored[0]?.content).toEqual({
+      role: "assistant",
+      parts: card("approval-requested"),
+    })
+  })
+
+  it("posts once the card is answered in the app, not before", async () => {
+    const o = await org()
+    const id = await conversation(
+      o,
+      "assistant",
+      new Date(),
+      card("approval-requested")
+    )
+    await withOrg({ orgId: o.orgId }, (db) =>
+      db.execute(sql`update ${conversationMessages}
+        set content = jsonb_set(content, '{parts,1,state}', '"output-available"')
+        where conversation_id = ${id}`)
+    )
+    expect(
+      await postOwnerEmail(kit, {
+        orgId: o.orgId,
+        conversationId: id,
+        key: "<later@mail.example.com>",
+        text: "thanks",
+      })
+    ).toBe("posted")
+  })
+
+  it("says none for a conversation the org does not have", async () => {
+    const o = await org()
+    const other = await org()
+    const theirs = await conversation(other, "assistant", new Date(), said)
+    expect(
+      await postOwnerEmail(kit, {
+        orgId: o.orgId,
+        conversationId: theirs,
+        key: "<m2@mail.example.com>",
+        text: "hello",
+      })
+    ).toBe("none")
+  })
+
+  it("is busy while a turn holds the conversation's lock", async () => {
+    const o = await org()
+    const id = await conversation(o, "assistant", new Date(), said)
+    let release: () => void = () => undefined
+    let locked: () => void = () => undefined
+    const held = new Promise<void>((resolve) => {
+      locked = resolve
+    })
+    const turn = withOrg({ orgId: o.orgId }, async (db) => {
+      await db.execute(
+        sql`select pg_advisory_xact_lock(2, hashtext(${id}::text))`
+      )
+      locked()
+      await new Promise<void>((resolve) => {
+        release = resolve
+      })
+    })
+    await held
+    expect(
+      await postOwnerEmail(kit, {
+        orgId: o.orgId,
+        conversationId: id,
+        key: "<m3@mail.example.com>",
+        text: "hello",
+      })
+    ).toBe("busy")
+    release()
+    await turn
   })
 })
