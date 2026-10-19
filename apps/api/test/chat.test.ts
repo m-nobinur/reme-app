@@ -2642,6 +2642,37 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       expect(prep.calls).toHaveLength(1)
     }, 60_000)
 
+    it("sends the background copy call no secret-shaped string from the facts", async () => {
+      const who = await owner(kit, url as string, "chat-prepare-scrub")
+      await who.call(stubOrchestrator(), "/facts", {
+        method: "POST",
+        headers: { "idempotency-key": crypto.randomUUID() },
+        body: JSON.stringify({
+          facts: [
+            ...UP_TO_PHOTOS.filter((f) => f.key !== "business.name"),
+            {
+              key: "business.name",
+              value: { name: "Bearer abcdefgh12345678" },
+            },
+          ],
+        }),
+      })
+      const id = await talker(who).onboarding()
+      const prep = planner([
+        { photo_question: "Any photos?", services_phrase: "your cleans" },
+      ])
+      const later: Promise<unknown>[] = []
+      await talker(who, undefined, {
+        planner: null,
+        prepare: prep.model,
+        waitUntil: (promise) => later.push(promise),
+      }).say(id, "u_scrub_1", "The address and how often")
+      await Promise.all(later)
+      expect(prep.calls).toHaveLength(1)
+      expect(prep.calls[0]).not.toContain("abcdefgh12345678")
+      expect(prep.calls[0]).toContain("[redacted]")
+    }, 60_000)
+
     it("proposes the quote form, takes changes as words, states the confirmed form, then the photos and the build", async () => {
       const who = await owner(kit, url as string, "chat-quote")
       await who.call(stubOrchestrator(), "/facts", {
