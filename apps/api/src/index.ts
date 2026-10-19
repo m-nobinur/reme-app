@@ -10,6 +10,7 @@ import {
   removeObjects,
   type Takedown,
 } from "./account.ts"
+import { type AfterTurn, afterTurnBatch } from "./after-turn.ts"
 import { bridge, type Owner } from "./changes.ts"
 import { stripeWebhook } from "./domain-buy.ts"
 import { checkTenantPath } from "./health.ts"
@@ -338,4 +339,5 @@ export default {
       ctx.waitUntil(Promise.allSettled(running).then(() => kit.close()))
     }
   },
-} satisfies ExportedHandler<Env>
+  queue: afterTurnBatch,
+} satisfies ExportedHandler<Env, AfterTurn>
