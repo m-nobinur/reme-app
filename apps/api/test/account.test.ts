@@ -1,9 +1,11 @@
 import { ErrorEnvelope, OWNER_BRIDGE_HEADERS } from "@workspace/contracts"
 import {
   eq,
+  jobRuns,
   memberships,
   orgOpen,
   resolveOrg,
+  scheduledJobs,
   sql,
   tenancy,
   users,
@@ -280,6 +282,19 @@ describe.skipIf(!url)("deleting an account, on a live connection", () => {
 
   it("frees the email, ends the membership and removes the WorkOS identity", async () => {
     const { orgId, session, email } = await signup("sole")
+    const jobId = crypto.randomUUID()
+    await kit.withOrg({ orgId }, async (db) => {
+      await db.insert(scheduledJobs).values({
+        id: jobId,
+        orgId,
+        kind: "heartbeat",
+        rule: "0 */4 * * *",
+        nextRunAt: new Date(),
+      })
+      await db
+        .insert(jobRuns)
+        .values({ jobId, orgId, runAt: new Date(0), outcome: "ok" })
+    })
     const workos = fakeWorkos({
       [session.workosOrganizationId]: [session.workosUserId],
     })
@@ -301,6 +316,11 @@ describe.skipIf(!url)("deleting an account, on a live connection", () => {
     expect(membership?.status).toBe("inactive")
     expect(await resolveOrg(kit, session)).toBeNull()
     expect(await logged(orgId)).toBe(1)
+    // Nothing is left to run for the org.
+    const [jobs] = await admin<{ jobs: number; runs: number }[]>`
+      select (select count(*)::int from scheduled_jobs where org_id = ${orgId}) as jobs,
+        (select count(*)::int from job_runs where org_id = ${orgId}) as runs`
+    expect(jobs).toEqual({ jobs: 0, runs: 0 })
     expect(workos.gone).toEqual([
       session.workosOrganizationId,
       session.workosUserId,
