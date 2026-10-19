@@ -24,6 +24,7 @@ import {
   verificationToken,
   verifyResource,
 } from "./google.ts"
+import { writeUpdate } from "./heartbeat-write.ts"
 import {
   activeDeployment,
   dropVerification,
@@ -529,21 +530,23 @@ export async function markFailed(
 }
 
 /**
- * `announce`: one message, keyed by the instance. A busy chat or one
+ * `announce`: one message, keyed by the instance, worded by the model from
+ * the host or else the template (heartbeat-write.ts). A busy chat or one
  * holding a card throws, for the step's retries.
  */
 export async function announce(
+  env: { OPENROUTER_API_KEY?: string },
   kit: Tenancy,
   { org_id: orgId, host }: SearchParams
 ): Promise<void> {
+  const text = await writeUpdate(env, kit, orgId, {
+    facts: { host },
+    template: `${host} is now in your Google Search Console. I've sent Google your page list. New sites take days to a few weeks to show up.`,
+  })
   const posted = await postAssistantMessage(kit, {
     orgId,
     key: searchInstanceId(orgId, host),
-    message: {
-      text: [
-        `${host} is now in your Google Search Console. I've sent Google your page list. New sites take days to a few weeks to show up.`,
-      ],
-    },
+    message: { text: [text] },
   })
   if (posted === "busy" || posted === "waiting") {
     throw new GoogleError(`search.chat_${posted}`)

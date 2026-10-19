@@ -1292,6 +1292,7 @@ export class PublishWorkflow extends WorkflowEntrypoint<Env, PublishParams> {
           await step.do("say live", LIVE_SAY, () =>
             run((kit) =>
               sayLive(
+                this.env,
                 kit,
                 orgId,
                 target.site_id,

@@ -17,6 +17,7 @@ import {
   DEADLINE_MS,
   expireDomain,
   look,
+  nudge,
   postStatus,
   remove,
   repoint,
@@ -442,7 +443,15 @@ describe.skipIf(!url)("custom domains against a database", () => {
     await claimHostnames(env, kit, site.orgId, domainId)
     const before = new Map(site.store.pointers)
 
-    await expireDomain(env, kit, site.orgId, domainId, "timeout")
+    // With no model key, the nudge and the failed line are today's templates.
+    expect((await nudge(env, kit, site.orgId, domainId))?.text).toBe(
+      `I'm still waiting for the records for ${name}. There's no need to tell me when they're in; I'll see them.`
+    )
+    expect(
+      (await expireDomain(env, kit, site.orgId, domainId, "timeout"))?.text
+    ).toBe(
+      `I didn't see the records for ${name} within 3 days, so I've stopped watching. Your site stays on ${site.slug}. Ask me again any time.`
+    )
     await expireDomain(env, kit, site.orgId, domainId, "timeout")
     expect(await rowOf(site.orgId, name)).toMatchObject({ state: "failed" })
     expect(site.store.pointers).toEqual(before)

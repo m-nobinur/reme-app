@@ -1,5 +1,12 @@
-import type { Tenancy } from "@workspace/db"
-import { describe, expect, it, vi } from "vitest"
+import {
+  conversationMessages,
+  conversations,
+  eq,
+  serverMessageId,
+  staff,
+  type Tenancy,
+} from "@workspace/db"
+import { afterAll, describe, expect, it, vi } from "vitest"
 import {
   faithful,
   type Spent,
@@ -7,6 +14,76 @@ import {
   type writeText,
   writeUpdate,
 } from "../src/heartbeat-write.ts"
+import { sayLive } from "../src/publish.ts"
+import { announce, searchInstanceId } from "../src/search.ts"
+import { freshOrg, kit as pool } from "./fixture.ts"
+
+vi.mock("@cloudflare/sandbox", () => ({
+  Sandbox: class {},
+  ContainerProxy: class {},
+}))
+vi.mock("../src/sandbox.ts", () => ({}))
+vi.mock("../src/agents/developer.ts", () => ({ Developer: {} }))
+
+describe.skipIf(!process.env.DATABASE_URL)("today's templates", () => {
+  afterAll(() => pool.close())
+
+  /** The text posted under `key` in a fresh org's chat, with no model key set. */
+  async function posted(
+    say: (orgId: string) => Promise<void>,
+    key: (orgId: string) => string
+  ) {
+    const orgId = await freshOrg(pool)
+    await pool.withOrg({ orgId }, async (db) => {
+      const [chief] = await db
+        .select({ id: staff.id })
+        .from(staff)
+        .where(eq(staff.staffCode, "COS-001"))
+      await db.insert(conversations).values({
+        orgId,
+        kind: "assistant",
+        createdByStaffId: chief?.id as string,
+      })
+    })
+    await say(orgId)
+    const [row] = await pool.withOrg({ orgId }, (db) =>
+      db
+        .select({ content: conversationMessages.content })
+        .from(conversationMessages)
+        .where(eq(conversationMessages.id, serverMessageId(key(orgId))))
+    )
+    const content = row?.content as
+      | { parts: { type: string; text?: string }[] }
+      | undefined
+    return (content?.parts ?? [])
+      .filter((p) => p.type === "text")
+      .map((p) => p.text)
+  }
+
+  it("say the site is live as they did", async () => {
+    expect(
+      await posted(
+        (orgId) =>
+          sayLive({}, pool, orgId, "site-1", "https://sparkle.example.test/"),
+        () => "site.live:site-1"
+      )
+    ).toEqual([
+      "Your website is live at sparkle.example.test. Next I can put it on Google so people find it, or on a domain of your own. Just say which.",
+    ])
+  })
+
+  it("announce Search Console as they did", async () => {
+    const host = "sparkle.example.test"
+    expect(
+      await posted(
+        (orgId) => announce({}, pool, { org_id: orgId, host }),
+        (orgId) => searchInstanceId(orgId, host)
+      )
+    ).toEqual([
+      `${host} is now in your Google Search Console. I've sent Google your page list. New sites take days to a few weeks to show up.`,
+    ])
+  })
+})
 
 const SPENT: Spent = {
   model: "stand-in",
