@@ -360,7 +360,7 @@ export const reservation = (price: Price) =>
 export type Usage = CosStep["usage"]
 
 /** The SDK's usage as the log holds it. */
-function usageOf(usage: LanguageModelUsage): Usage {
+export function usageOf(usage: LanguageModelUsage): Usage {
   return {
     input_tokens: usage.inputTokens ?? 0,
     cached_input_tokens: usage.inputTokenDetails.cacheReadTokens ?? 0,

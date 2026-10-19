@@ -188,11 +188,15 @@ const tools = {
  * The eval replay derives an old turn with its logged version, so a version's
  * numbers never change: a new policy is a new row and a new version.
  */
-const RELEASED: Record<string, { turns: number; toolTurns: number }> = {
+const RELEASED: Record<
+  string,
+  { turns: number; toolTurns: number; historyTokens?: number }
+> = {
   "1": { turns: 12, toolTurns: 2 },
   "2": { turns: 12, toolTurns: 2 },
   "3": { turns: 12, toolTurns: 2 },
   "4": { turns: 12, toolTurns: 2 },
+  "6": { turns: 80, toolTurns: 2, historyTokens: 16_000 },
 }
 
 describe("CONTEXT_POLICY", () => {

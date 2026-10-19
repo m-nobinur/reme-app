@@ -28,6 +28,7 @@ export {
 } from "./events.ts"
 export { currentFacts, supersedeFact } from "./facts.ts"
 export * from "./map.ts"
+export { addPushSubscription, PUSH_SUBSCRIPTION_CAP } from "./push.ts"
 export { type Waited, waitedOn } from "./questions.ts"
 export {
   afterQuiet,

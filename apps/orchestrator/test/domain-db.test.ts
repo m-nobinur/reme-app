@@ -30,9 +30,10 @@ import { kit, previewed, SUFFIX, type storage, workflowEnv } from "./site.ts"
 
 // The site fixture reaches the sandbox module through brief.ts; stood in
 // for as in the publish suite.
-vi.mock("@cloudflare/sandbox", () => ({
-  Sandbox: class {},
-  ContainerProxy: class {},
+vi.mock("../src/container.ts", () => ({
+  RemeSandbox: class {},
+  SandboxEgress: class {},
+  SandboxPool: class {},
 }))
 vi.mock("../src/sandbox.ts", () => ({}))
 vi.mock("../src/agents/developer.ts", () => ({ Developer: {} }))

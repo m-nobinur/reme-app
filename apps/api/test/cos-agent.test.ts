@@ -2836,21 +2836,19 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     expect(await second).toBe(false)
   })
 
-  it("falls back as budgetary, with no model call, when the first call alone could pass the reservation", async () => {
+  it("drops an old turn past the history cap, so the first call stays within its reservation", async () => {
     const id = await conversation(me)
-    // A logged history far larger than a reservation's input guess.
+    // A logged turn far larger than a reservation's input guess.
     await admin`
       insert into events (event_id, org_id, staff_id, session_id, seq, type, occurred_at, idempotency_key, payload, taint)
       values (${ulid()}, ${me.orgId}, ${me.chiefId}, ${id}, 0, 'cos.message', now(), ${ulid()},
         ${admin.json({ turn_id: "01K6A00000000000000000HGGE", message: { id: "m-huge", role: "user", parts: [{ type: "text", text: "x".repeat(900_000) }] } })}, '{"untrusted_input"}')`
-    const { model, sent } = scripted(said("never sent"))
+    const { model, sent } = scripted(said("Hello again."))
     const done = await turn(me, typed(id, "Hello", "ask"), { model })
     expect(done.response.status, done.text).toBe(200)
-    expect(sent).toHaveLength(0)
-    expect((await turnsOf(id)).at(-1)).toMatchObject({
-      outcome: "fallback",
-      reason: "budgetary",
-    })
+    expect(sent).toHaveLength(1)
+    expect(JSON.stringify(sent[0]?.prompt)).not.toContain("x".repeat(1000))
+    expect((await turnsOf(id)).at(-1)).toMatchObject({ outcome: "answered" })
   })
 
   it("tells the model a transient tool failure is unknown, never that it was refused", async () => {

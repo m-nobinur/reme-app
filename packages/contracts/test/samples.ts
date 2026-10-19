@@ -1019,6 +1019,15 @@ export const samples: Record<ContractName, unknown> = {
     lease_until: null,
     created_at: LATER,
   },
+  PushSubscribeRequest: {
+    endpoint: "https://fcm.googleapis.com/fcm/send/abc123",
+    keys: {
+      p256dh: "BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA",
+      auth: "tBHItJI5svbpez7KI4CCXg",
+    },
+  },
+  PushSubscribed: { id: "8b9c0d1e-2f3a-4b4c-9d5e-6f7a8b9c0d1e" },
+  PushConfig: { public_key: "BEl62iUYgUivxIkv69yViEuiBIa-Ib9" },
   OrgSchedule: {
     time_zone: "Europe/London",
     quiet_start: "21:00",

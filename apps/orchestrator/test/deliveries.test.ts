@@ -41,6 +41,7 @@ function stubs() {
       APP_ORIGIN: "https://app.example.invalid",
       REPLY_TOKEN_KEY: "k".repeat(32),
       REPLY_DOMAIN: "reply.example.invalid",
+      VAPID_SUBJECT: "mailto:ops@example.invalid",
       HYPERDRIVE: {} as Hyperdrive,
     },
   }

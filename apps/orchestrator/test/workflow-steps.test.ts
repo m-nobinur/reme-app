@@ -24,9 +24,10 @@ vi.mock("cloudflare:workers", () => ({
 vi.mock("cloudflare:workflows", () => ({
   NonRetryableError: class NonRetryableError extends Error {},
 }))
-vi.mock("@cloudflare/sandbox", () => ({
-  Sandbox: class {},
-  ContainerProxy: class {},
+vi.mock("../src/container.ts", () => ({
+  RemeSandbox: class {},
+  SandboxEgress: class {},
+  SandboxPool: class {},
 }))
 vi.mock("../src/agents/developer.ts", () => ({ Developer: {} }))
 // The publisher's step bodies are driven for real, against a database, in

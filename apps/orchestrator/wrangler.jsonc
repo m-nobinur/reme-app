@@ -29,11 +29,13 @@
   // `CONSOLE_APPROVALS` lets the staff console approve a publish, which
   // staging allows and production never does (ADR-032).
   "vars": {
-    "SANDBOX_TRANSPORT": "rpc",
     "SITE_HOST_SUFFIX": "-stg.remeai.co.uk",
     // The domain of an owner email's Reply-To (src/deliveries.ts); the api's
     // inbound handler must hold the same value.
     "REPLY_DOMAIN": "reply.remeai.co.uk",
+    // Who a push service may contact about our pushes (src/push.ts); the
+    // VAPID_PRIVATE_KEY secret signs them.
+    "VAPID_SUBJECT": "mailto:hello@remeai.co.uk",
     "CONSOLE_APPROVALS": "allow",
     // The Cloudflare for SaaS zone custom hostnames live in (src/domains.ts).
     // Staging shares it with production; `CF_DOMAINS_TOKEN` is the secret.
@@ -124,29 +126,38 @@
       }
     ]
   },
-  // The builder sandbox (ADR-031). The image is a registry reference pinned
-  // by digest, so a deploy needs no Docker and a PR that touches no image
-  // never builds one; .github/workflows/sandbox-image.yml builds and pushes
-  // on infra/sandbox/** and weekly, and a PR moves this pin. `standard-2` is
-  // the §6.3 builder class. `max_instances` is the pool the Workflow waits on
-  // with a `pool.exhausted` event when it is full.
+  // The builder sandbox (ADR-031, amended for Sandbox SDK 1.0). The image is
+  // a registry reference pinned by digest, so a deploy needs no Docker and a
+  // PR that touches no image never builds one; a PR moves this pin. Under the
+  // `durable_object` policy, which cannot be undone, `RemeSandbox` starts its
+  // own container: the §6.3 `standard-2` class and the pool of five
+  // (`SandboxPool`) are in src/container.ts. The `name` is new because the
+  // 0.12 application keeps its generated one until it is deleted.
   "containers": [
     {
       "class_name": "RemeSandbox",
-      "image": "registry.cloudflare.com/f161d624d34c45dd59579f9ee45c4396/reme-sandbox@sha256:7ee0e400c961d6720b2ff412150a5a796e5cbf65647b02cbe6a2515914ef4ee2",
-      "instance_type": "standard-2",
-      "max_instances": 5
+      "name": "reme-orchestrator-sandbox-sdk1",
+      "scheduling_policy": "durable_object",
+      "images": {
+        "sandbox": {
+          "image": "registry.cloudflare.com/f161d624d34c45dd59579f9ee45c4396/reme-sandbox@sha256:7ee0e400c961d6720b2ff412150a5a796e5cbf65647b02cbe6a2515914ef4ee2"
+        }
+      }
     }
   ],
   "durable_objects": {
-    "bindings": [{ "name": "SANDBOX", "class_name": "RemeSandbox" }]
+    "bindings": [
+      { "name": "SANDBOX", "class_name": "RemeSandbox" },
+      { "name": "SANDBOX_POOL", "class_name": "SandboxPool" }
+    ]
   },
   // `FlueDeveloperAgent` is the class flue generates for the Developer agent
   // (src/agents/developer.ts); the migration is ours to author, the binding
   // is flue's. Append-only, per the DO migration rules.
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["RemeSandbox"] },
-    { "tag": "v2", "new_sqlite_classes": ["FlueDeveloperAgent"] }
+    { "tag": "v2", "new_sqlite_classes": ["FlueDeveloperAgent"] },
+    { "tag": "v3", "new_sqlite_classes": ["SandboxPool"] }
   ],
   // Site artifacts and source snapshots, `sites/{site_id}/{revision_id}/...`
   // (ADR-031). The same bucket under the name the Sandbox SDK's backups read,
@@ -173,9 +184,9 @@
         }
       ],
       "vars": {
-        "SANDBOX_TRANSPORT": "rpc",
         "SITE_HOST_SUFFIX": ".remeai.co.uk",
         "REPLY_DOMAIN": "reply.remeai.co.uk",
+        "VAPID_SUBJECT": "mailto:hello@remeai.co.uk",
         "CF_DOMAINS_ZONE_ID": "a786a7b1f7e583b37a42936788d877c3",
         // The live registrar: real, non-refundable registrations, so buying
         // stays off until STRIPE_SECRET_KEY is set here.
@@ -260,13 +271,20 @@
       "containers": [
         {
           "class_name": "RemeSandbox",
-          "image": "registry.cloudflare.com/f161d624d34c45dd59579f9ee45c4396/reme-sandbox@sha256:7ee0e400c961d6720b2ff412150a5a796e5cbf65647b02cbe6a2515914ef4ee2",
-          "instance_type": "standard-2",
-          "max_instances": 5
+          "name": "reme-orchestrator-production-sandbox-sdk1",
+          "scheduling_policy": "durable_object",
+          "images": {
+            "sandbox": {
+              "image": "registry.cloudflare.com/f161d624d34c45dd59579f9ee45c4396/reme-sandbox@sha256:7ee0e400c961d6720b2ff412150a5a796e5cbf65647b02cbe6a2515914ef4ee2"
+            }
+          }
         }
       ],
       "durable_objects": {
-        "bindings": [{ "name": "SANDBOX", "class_name": "RemeSandbox" }]
+        "bindings": [
+          { "name": "SANDBOX", "class_name": "RemeSandbox" },
+          { "name": "SANDBOX_POOL", "class_name": "SandboxPool" }
+        ]
       },
       // Created with `wrangler r2 bucket create --jurisdiction eu`; the router
       // reads it. The EU jurisdiction keeps tenant files in the EU.
