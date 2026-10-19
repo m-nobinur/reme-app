@@ -26,7 +26,7 @@
     "@types/node": "^22",
     "iron-webcrypto": "2.0.0",
     "typescript": "^6",
-    "vitest": "^4.1.11",
+    "vitest": "^5.0.5",
     "wrangler": "4.144.0"
   }
 }
