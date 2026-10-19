@@ -747,8 +747,16 @@
     ]
   },
   "SweepWorkflow": {
-    "one chunk": ["list orgs", "sweep 1", "search 1"],
-    "two chunks": ["list orgs", "sweep 1", "sweep 2", "search 1", "search 2"],
+    "one chunk": ["list orgs", "sweep 1", "search 1", "deliveries 1"],
+    "two chunks": [
+      "list orgs",
+      "sweep 1",
+      "sweep 2",
+      "search 1",
+      "search 2",
+      "deliveries 1",
+      "deliveries 2"
+    ],
     "daily domains": [
       "list orgs",
       "sweep 1",
@@ -757,7 +765,9 @@
       "say dom-1:sweep:2026091606",
       "domains 2",
       "search 1",
-      "search 2"
+      "search 2",
+      "deliveries 1",
+      "deliveries 2"
     ],
     "weekly search": [
       "list orgs",
@@ -767,7 +777,9 @@
       "search 2",
       "weekly 1",
       "say search-weekly-org-1-2026-W39",
-      "weekly 2"
+      "weekly 2",
+      "deliveries 1",
+      "deliveries 2"
     ]
   },
   "DomainWorkflow": {

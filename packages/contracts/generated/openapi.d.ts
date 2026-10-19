@@ -6726,10 +6726,19 @@ export interface components {
       /** @enum {string} */
       channel: "in_app" | "email"
       /** @enum {string} */
-      state: "pending" | "sent" | "failed" | "suppressed"
+      state:
+        | "pending"
+        | "sending"
+        | "unknown"
+        | "sent"
+        | "failed"
+        | "suppressed"
       attempts: number
       sent_at: string | null
       error: string | null
+      lease_until: string | null
+      /** Format: date-time */
+      created_at: string
     }
     DeploymentManifest: {
       /** Format: uuid */

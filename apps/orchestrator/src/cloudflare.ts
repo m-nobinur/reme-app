@@ -45,6 +45,7 @@ import {
   DELIVERIES_QUEUES,
   type DeliveryMessage,
   deliveriesBatch,
+  redriveDeliveries,
 } from "./deliveries.ts"
 import { postStatus, type Say, sweepDomains } from "./domain-flow.ts"
 import { SAY_RETRIES } from "./domain-workflow.ts"
@@ -1660,6 +1661,27 @@ export class SweepWorkflow extends WorkflowEntrypoint<Env, { hour: string }> {
           }
         }
       }
+    }
+    // The outbox (deliveries.ts): rows the Queue lost are queued again.
+    for (let i = 0; i < orgIds.length; i += SWEEP_CHUNK) {
+      const chunk = orgIds.slice(i, i + SWEEP_CHUNK)
+      await step.do(`deliveries ${i / SWEEP_CHUNK + 1}`, () =>
+        withKit(this.env, async (kit) => {
+          for (const orgId of chunk) {
+            try {
+              await redriveDeliveries(kit, this.env, orgId)
+            } catch (error) {
+              console.error(
+                JSON.stringify({
+                  sweep: hour,
+                  org_id: orgId,
+                  code: failureCode(error),
+                })
+              )
+            }
+          }
+        })
+      )
     }
     // The run's one line, for the alert on a sweep that deletes nothing for a week.
     console.log(JSON.stringify({ sweep: event.payload.hour, ...totals }))
