@@ -34,6 +34,9 @@
     // The domain of an owner email's Reply-To (src/deliveries.ts); the api's
     // inbound handler must hold the same value.
     "REPLY_DOMAIN": "reply.remeai.co.uk",
+    // Who a push service may contact about our pushes (src/push.ts); the
+    // VAPID_PRIVATE_KEY secret signs them.
+    "VAPID_SUBJECT": "mailto:hello@remeai.co.uk",
     "CONSOLE_APPROVALS": "allow",
     // The Cloudflare for SaaS zone custom hostnames live in (src/domains.ts).
     // Staging shares it with production; `CF_DOMAINS_TOKEN` is the secret.
@@ -176,6 +179,7 @@
         "SANDBOX_TRANSPORT": "rpc",
         "SITE_HOST_SUFFIX": ".remeai.co.uk",
         "REPLY_DOMAIN": "reply.remeai.co.uk",
+        "VAPID_SUBJECT": "mailto:hello@remeai.co.uk",
         "CF_DOMAINS_ZONE_ID": "a786a7b1f7e583b37a42936788d877c3",
         // The live registrar: real, non-refundable registrations, so buying
         // stays off until STRIPE_SECRET_KEY is set here.

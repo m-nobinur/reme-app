@@ -13,6 +13,7 @@ import {
   tenancy,
   users,
 } from "@workspace/db"
+import { type PushDelivery, pushFor, sendPush } from "./push.ts"
 
 /**
  * The outbox (ADR-043). `deliver` writes the row and queues one message; the
@@ -23,7 +24,7 @@ import {
  * crash past the lease can repeat one email, which the in-app path avoids by
  * posting under a stable message id. An email whose send fails with no
  * provider code may have left, so it settles as `unknown` and is never
- * sent again.
+ * sent again. A delivered in-app message also queues a push (push.ts).
  */
 
 export const OWNER_FROM = { name: "Reme", email: "hello@remeai.co.uk" }
@@ -55,11 +56,15 @@ export type DeliveryMessage = { orgId: string; key: string } & (
       /** The conversation a reply goes to; with none, the email takes no reply. */
       conversationId?: string
     }
+  | PushDelivery
 )
 
 type SendEnv = { DELIVERIES: Queue<DeliveryMessage> }
-type BatchEnv = {
+type BatchEnv = SendEnv & {
   HYPERDRIVE: Hyperdrive
+  /** Signs the push request; unset, a push fails as `push_unset`. */
+  VAPID_PRIVATE_KEY?: string
+  VAPID_SUBJECT: string
   OWNER_MAIL: SendEmail
   APP_ORIGIN: string
   /** Signs the Reply-To token; unset, an email goes without one. */
@@ -171,13 +176,21 @@ async function attempt(
   )
   if (claimed.length === 0) return null
   if (body.channel === "email") return sendEmail(kit, env, body)
+  if (body.channel === "push") return sendPush(kit, env, orgId, body)
   const posted = await postAssistantMessage(kit, {
     orgId,
     key,
     message: body.message,
     conversationId: body.conversationId,
   })
-  if (posted === "posted" || posted === "exists") return { state: "sent" }
+  if (posted === "posted" || posted === "exists") {
+    // Also on "exists": a crash after the post must not lose the push, and a
+    // key already queued makes this a no-op.
+    const push = await pushFor(kit, body)
+    if (push)
+      await deliver(kit, env, { orgId, key: push.key, ...push.delivery })
+    return { state: "sent" }
+  }
   if (posted === "none") return { state: "failed", error: "no_conversation" }
   return { state: "retry", error: posted }
 }

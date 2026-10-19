@@ -1,5 +1,5 @@
 import { buildPushHTTPRequest } from "@pushforge/builder"
-import type { ServerMessage } from "@workspace/contracts"
+import { PUSH_ENDPOINT, type ServerMessage } from "@workspace/contracts"
 import {
   conversations,
   eq,
@@ -125,6 +125,8 @@ export async function sendPush(
   const privateJWK = JSON.parse(env.VAPID_PRIVATE_KEY)
   const statuses = await Promise.all(
     subs.map(async (sub) => {
+      // Re-checked here as well as when saved: the server posts to this address.
+      if (!PUSH_ENDPOINT.test(sub.endpoint)) return 410
       try {
         const request = await buildPushHTTPRequest({
           privateJWK,
@@ -159,10 +161,11 @@ export async function sendPush(
         await db.delete(pushSubscriptions).where(eq(pushSubscriptions.id, id))
     })
   }
+  // One device reached is sent: retrying for the others would buzz that one again.
+  if (statuses.some((s) => s >= 200 && s < 300)) return { state: "sent" }
   const retryable = statuses.find((s) => s === 0 || s === 429 || s >= 500)
   if (retryable !== undefined)
     return { state: "retry", error: `push_${retryable}` }
-  if (statuses.some((s) => s >= 200 && s < 300)) return { state: "sent" }
   if (gone.length === subs.length) return { state: "suppressed" }
   return { state: "failed", error: `push_${statuses.find((s) => s >= 400)}` }
 }

@@ -74,14 +74,19 @@ export const Delivery = z.strictObject({
 })
 
 /**
+ * The hosts the browsers' push services answer on (Chrome and Edge's FCM,
+ * Firefox, Safari, Windows). The server posts to a stored endpoint, so a
+ * subscription may not aim it anywhere else: no other host, port or userinfo.
+ */
+export const PUSH_ENDPOINT =
+  /^https:\/\/(fcm\.googleapis\.com|updates\.push\.services\.mozilla\.com|web\.push\.apple\.com|[a-z0-9-]+\.notify\.windows\.com)\/[^\s]*$/
+
+/**
  * `POST /push/subscriptions`: what a browser's `PushSubscription.toJSON()`
- * holds, less the expiry. A push service's endpoint is an https address.
+ * holds, less the expiry.
  */
 export const PushSubscribeRequest = z.strictObject({
-  endpoint: z
-    .string()
-    .max(2000)
-    .regex(/^https:\/\/[^\s]+$/),
+  endpoint: z.string().max(2000).regex(PUSH_ENDPOINT),
   keys: z.strictObject({
     p256dh: z.string().min(1).max(200),
     auth: z.string().min(1).max(200),

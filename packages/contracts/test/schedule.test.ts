@@ -104,12 +104,27 @@ describe("PushSubscribeRequest", () => {
   it.each([
     [
       "an http endpoint",
-      { ...request, endpoint: "http://push.example.test/a" },
+      { ...request, endpoint: "http://fcm.googleapis.com/fcm/send/a" },
+    ],
+    [
+      "a host that is no push service",
+      { ...request, endpoint: "https://internal.example.test/a" },
+    ],
+    [
+      "a push host with userinfo",
+      { ...request, endpoint: "https://fcm.googleapis.com@evil.test/a" },
+    ],
+    [
+      "a push host with a port",
+      { ...request, endpoint: "https://fcm.googleapis.com:8443/a" },
     ],
     ["no endpoint", { ...request, endpoint: undefined }],
     [
       "an endpoint over 2000 characters",
-      { ...request, endpoint: `https://p.test/${"a".repeat(2000)}` },
+      {
+        ...request,
+        endpoint: `https://fcm.googleapis.com/${"a".repeat(2000)}`,
+      },
     ],
     ["no auth secret", { ...request, keys: { p256dh: "k" } }],
     ["a stray field", { ...request, expirationTime: null }],

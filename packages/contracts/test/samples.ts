@@ -1020,7 +1020,7 @@ export const samples: Record<ContractName, unknown> = {
     created_at: LATER,
   },
   PushSubscribeRequest: {
-    endpoint: "https://push.example.test/send/abc123",
+    endpoint: "https://fcm.googleapis.com/fcm/send/abc123",
     keys: {
       p256dh: "BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA",
       auth: "tBHItJI5svbpez7KI4CCXg",
