@@ -1,0 +1,95 @@
+# ADR-043: A Postgres scheduler, one outbox, and email both ways through Cloudflare
+
+Status: proposed, 2026-10-19. Applies to `apps/orchestrator`, `apps/api`, `packages/db`,
+`packages/contracts` and `infra/`. Implements the outbox §13 describes and §28.2 says exists, which
+it did not. Changes no DR. Email provider decided by the owner on 2026-10-19; `4-integrations.md`
+§3 says the same.
+
+## Context
+
+Reminders are stored and never fire: nothing reads `reminders.due_at` except the list sort. No
+scheduled job ever runs the Chief of Staff, so it cannot speak first, and the weekly search report
+runs at Monday 07:00 UTC whatever the owner's zone. Every message that leaves Reme goes through
+its own path: `postAssistantMessage` for in-app, the `ALERTS` `send_email` binding for uptime
+alerts, nothing for an owner's email.
+
+Two limits shape the answer. Hyperdrive allows no advisory locks or session state across
+statements. Both Neon projects are on Free, which suspends a compute after 5 idle minutes and
+allows 100 CU-hours a month; a query every minute would keep production awake all month and get
+it suspended.
+
+## Decision
+
+**Jobs are rows.** `scheduled_jobs (id, org_id, kind, ref_id, rule, next_run_at, last_run_at,
+failures, paused_at, created_at)`, kind `reminder`, `heartbeat` or `weekly_report`, with a partial
+index on `next_run_at where paused_at is null`. `rule` is a cron expression read in the org's zone
+with `croner` 10.0.1, pinned, and null for a one-off. `next_run_at` is stored in UTC and
+recomputed after each run. A reminder's job is written in the same transaction as the reminder,
+and editing or finishing the reminder updates or deletes it.
+
+**A cron claims, a Queue runs.** A Cron Trigger at `* * * * *` in the orchestrator, in both
+environments, reads the earliest `next_run_at` from KV first and queries Postgres only when
+something is due. Each scan writes the new earliest time back. So a quiet minute costs one KV read
+and no Postgres wake-up.
+
+The claim is one `SECURITY DEFINER` function, `claim_due_jobs(limit)`, a single statement with
+`FOR UPDATE SKIP LOCKED` that returns `(job_id, org_id)` and nothing else. It is the second
+function after `list_org_ids()` that crosses orgs, and the tenancy suite inspects it the same way.
+Every claimed job goes to a Queue as one message, and the consumer runs it under `withOrg`.
+
+**A run happens once.** `job_runs (job_id, org_id, run_at, outcome, detail)` is unique on
+`(job_id, run_at)`, so a redelivered message finds its run written and does nothing. A failed run
+backs off `min(60, 2^failures)` minutes, pauses after five failures in a row, and raises an
+`alert.raised` the owner sees.
+
+**One outbox.** `deliveries (org_id, key, channel, state, attempts, sent_at, error)`, unique on
+`(org_id, key)`. The key names the cause, such as `reminder:<id>` or
+`heartbeat:<org>:<digest hash>`, never the time sent. A second insert is a no-op, so nothing sends
+twice. A Queue consumer sends: in-app through `postAssistantMessage`, email through the
+`send_email` binding. A reminder goes to `reminders.conversation_id`, not the newest conversation.
+
+**Email out is Cloudflare Email Sending** on a `send_email` binding, after
+`wrangler email sending enable remeai.co.uk`, which also adds the DMARC record the domain lacks.
+3,000 a month are included, then $0.35 per 1,000. `E_RECIPIENT_SUPPRESSED` turns the owner's
+email channel off. An email carries no secret and no session link: it links to the app, which
+asks for sign-in, and to the notification settings.
+
+**Email in is Email Routing to an Email Worker on `reply.remeai.co.uk`.** Every outbound email
+sets `Reply-To: reply+<token>@reply.remeai.co.uk`; plus addressing routes every token to one rule.
+The token is HMAC-signed and bound to one org and one conversation. The Worker's `email()` handler
+parses MIME with `postal-mime` 4.0.11, drops mail without an SPF or DKIM pass aligned with the
+sender's DMARC, drops a sender that is not an owner of that org, strips quoted history, caps the
+body and stores it with `untrusted_input` taint as the owner's message in that conversation. An
+emailed "yes" approves nothing: a reply can add information, never run a card.
+
+**Background work runs in Queue consumers, never `ctx.waitUntil`**, which stops at 30 seconds
+with no retry. Approvals that wait outside chat keep using Workflows `waitForEvent`.
+
+## What was rejected
+
+- **A Workflow per reminder.** $54 to $111 a month at 10,000 orgs against about $8, and an
+  instance id cannot be reused when a reminder is edited.
+- **A Durable Object per org.** It splits job state between SQLite and Postgres and puts it
+  outside RLS, branching and backups.
+- **Querying Postgres every minute.** It keeps Neon Free awake all month; the KV guard is the
+  price of the per-minute cron.
+- **Resend as the primary sender.** A new vendor and API key for 100 a day free or $20 for
+  50,000, against a binding type we already deploy. It stays the fallback.
+- **An inbound email webhook.** A public endpoint with a signature to verify, where the Email
+  Worker runs inside our own Worker with neither.
+
+## Consequences
+
+- Production gains a per-minute cron next to the hourly one. The uptime check stays hourly.
+- `orgs` gains `time_zone`, `quiet_start`, `quiet_end` and `proactivity`. The weekly report, the
+  daily spend cap's day and printed dates move to the org's zone; Google's Pacific day stays.
+- Onboarding `remeai.co.uk` for sending and `reply.remeai.co.uk` for routing are one-time
+  Cloudflare steps per account, done when the owner pushes.
+- Email Sending is a public beta. Its starting daily quota for this account is not known yet.
+
+## Change if
+
+Email Sending misses on deliverability or quota during its beta (move out to Resend; inbound
+stays); a heartbeat cadence needs finer than a minute; Neon moves to a paid plan, which lets the
+KV guard go; or a customer-facing email channel arrives, which needs customer-scoped tokens and
+the injection corpus suite first.
