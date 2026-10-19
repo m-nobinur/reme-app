@@ -50,7 +50,6 @@ const attention = {
     at: NOW,
     reason: "build_failed",
   },
-  reminder: { kind: "reminder", reminder: samples.Reminder },
 }
 
 const facts = {
@@ -131,7 +130,7 @@ const facts = {
 }
 
 describe("AttentionItem", () => {
-  it("has a case here for exactly the five kinds: §7.3's four and a due reminder", () => {
+  it("has a case here for exactly the four kinds of §7.3", () => {
     const kinds = AttentionItem.options.map((o) => o.shape.kind.value)
     expect(new Set(kinds)).toEqual(new Set(Object.keys(attention)))
   })
@@ -141,12 +140,7 @@ describe("AttentionItem", () => {
   })
 
   const refused: [string, unknown][] = [
-    ["a sixth kind", { ...attention.report, kind: "note" }],
-    ["a reminder with no row", { kind: "reminder" }],
-    [
-      "a reminder carrying a bare id",
-      { kind: "reminder", reminder_id: "8b9c0d1e-2f3a-4b4c-9d5e-6f7a8b9c0d1e" },
-    ],
+    ["a fifth kind", { ...attention.report, kind: "reminder" }],
     [
       "a question carrying an approval",
       { kind: "question", request: samples.ApprovalRequest },

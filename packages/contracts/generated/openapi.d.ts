@@ -2136,24 +2136,6 @@ export interface components {
           /** @enum {string} */
           cause?: "stalled" | "unfinished" | "unanswered" | "service" | "other"
         }
-      | {
-          /** @constant */
-          kind: "reminder"
-          reminder: {
-            /** Format: uuid */
-            id: string
-            title: string
-            due_at: string | null
-            done_at: string | null
-            /** @enum {string} */
-            source: "owner" | "assistant"
-            conversation_id: string | null
-            /** Format: date-time */
-            created_at: string
-            /** Format: date-time */
-            updated_at: string
-          }
-        }
     Blueprint: {
       direction: string
       /** @enum {string} */
@@ -10042,24 +10024,6 @@ export interface components {
               | "unanswered"
               | "service"
               | "other"
-          }
-        | {
-            /** @constant */
-            kind: "reminder"
-            reminder: {
-              /** Format: uuid */
-              id: string
-              title: string
-              due_at: string | null
-              done_at: string | null
-              /** @enum {string} */
-              source: "owner" | "assistant"
-              conversation_id: string | null
-              /** Format: date-time */
-              created_at: string
-              /** Format: date-time */
-              updated_at: string
-            }
           }
       )[]
       missing_facts: (
