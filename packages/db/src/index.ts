@@ -5,8 +5,10 @@
 export { asc, eq, type SQL, sql } from "drizzle-orm"
 export { orgOpen, tombstone } from "./accounts.ts"
 export {
+  emailMessageId,
   type Posted,
   postAssistantMessage,
+  postOwnerEmail,
   serverMessageId,
 } from "./assistant-messages.ts"
 export { activeDomainHost, domainHeldElsewhere } from "./domains.ts"
