@@ -84,6 +84,8 @@ type AttentionBase = {
 export type AttentionItem =
   // A failed build's alert carries why it stopped.
   | (AttentionBase & { kind: "report" | "alert"; stopped?: BuildStopCause })
+  // A reminder that came due and is not done; `id` is the reminder's.
+  | (AttentionBase & { kind: "reminder" })
   // A question carries what answering it needs: the build it blocks, and the
   // inputs, derived on the server so the raw `answer_schema` never travels.
   | (AttentionBase & {
