@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest"
+import { describe, expect, it } from "vitest"
 
 /**
  * A blocked build's site survives its container stopping: the checkpoint
@@ -9,44 +9,36 @@ import { describe, expect, it, vi } from "vitest"
 const disk = new Map<string, string>()
 const commands: string[] = []
 let destroyed = 0
-// Declared rather than written as a class expression in the factory, which
-// biome cannot parse there.
-const { Unavailable } = vi.hoisted(() => {
-  class ContainerUnavailable extends Error {}
-  return { Unavailable: ContainerUnavailable }
-})
-vi.mock("@cloudflare/sandbox", () => ({
-  ContainerUnavailableError: Unavailable,
-  getSandbox: () => ({
-    exec: async (command: string) => {
-      commands.push(command)
-      if (command.startsWith("test -d")) {
-        return { exitCode: disk.has("site") ? 0 : 1, stdout: "", stderr: "" }
-      }
-      if (command.startsWith("tar --zstd -cf")) {
-        disk.set("/tmp/checkpoint.tar.zst", "packed site")
-      }
-      if (command.includes("tar --zstd -xf")) disk.set("site", "restored")
-      return { exitCode: 0, stdout: "", stderr: "" }
-    },
-    readFile: async (path: string) => ({
-      content: btoa(disk.get(path) ?? ""),
-    }),
-    writeFile: async (path: string, body: unknown) => {
-      disk.set(path, String(body))
-    },
-    destroy: async () => {
-      destroyed++
-    },
+/** The site's `RemeSandbox` stub, as `getByName` returns it. */
+const stub = {
+  exec: async (command: string) => {
+    commands.push(command)
+    if (command.startsWith("test -d")) {
+      return { exitCode: disk.has("site") ? 0 : 1, stdout: "", stderr: "" }
+    }
+    if (command.startsWith("tar --zstd -cf")) {
+      disk.set("/tmp/checkpoint.tar.zst", "packed site")
+    }
+    if (command.includes("tar --zstd -xf")) disk.set("site", "restored")
+    return { exitCode: 0, stdout: "", stderr: "" }
+  },
+  readFile: async (path: string) => ({
+    content: btoa(disk.get(path) ?? ""),
   }),
-}))
+  writeFile: async (path: string, body: unknown) => {
+    disk.set(path, String(body))
+  },
+  destroy: async () => {
+    destroyed++
+  },
+}
 
 const { checkpoint, checkpointKey, endSandbox, recover, rehydrate } =
   await import("../src/sandbox.ts")
 
 const bucket = new Map<string, Uint8Array>()
 const env = {
-  SANDBOX: {},
+  SANDBOX: { getByName: () => stub },
   SITES: {
     put: async (key: string, body: Uint8Array) => {
       bucket.set(key, body)

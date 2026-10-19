@@ -25,9 +25,10 @@ import {
 import { freshOrg } from "./fixture.ts"
 import { kit, storage } from "./site.ts"
 
-vi.mock("@cloudflare/sandbox", () => ({
-  Sandbox: class {},
-  ContainerProxy: class {},
+vi.mock("../src/container.ts", () => ({
+  RemeSandbox: class {},
+  SandboxEgress: class {},
+  SandboxPool: class {},
 }))
 vi.mock("../src/sandbox.ts", () => ({}))
 vi.mock("../src/agents/developer.ts", () => ({ Developer: {} }))

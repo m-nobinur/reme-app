@@ -1,8 +1,4 @@
-import {
-  ContainerUnavailableError,
-  getSandbox,
-  type Sandbox,
-} from "@cloudflare/sandbox"
+import type { RemeSandbox } from "./container.ts"
 import { restore, SITE_ROOT } from "./revise.ts"
 import {
   CROP_WIDTHS,
@@ -17,8 +13,8 @@ import {
  * keyed by the site id (the org id while an org has one site), a filesystem
  * and a shell and nothing else. The site lock (`assignments_site_writer_key`)
  * means one assignment at a time works in it; after `preview_ready` it stays
- * up, warm, for the next edit. The egress and sleep rules are class fields on `RemeSandbox`
- * in cloudflare.ts; this module is the two things the Workflow and the
+ * up, warm, for the next edit. The egress, sleep and pool rules are in
+ * `RemeSandbox` in container.ts; this module is the two things the Workflow and the
  * console do with a container before the Developer attaches to it.
  */
 
@@ -46,11 +42,14 @@ export const SLEEP_AFTER = 30 * 60
  */
 const REVISION_FILE = "/workspace/.reme/revision"
 
-/** The reasons of `ContainerUnavailableError` that mean the pool is full. */
-const POOL_FULL = new Set([
-  "no_container_instance_available",
-  "max_container_instances_exceeded",
-])
+/**
+ * How many containers run at once (§8.3), held by `SandboxPool` in
+ * container.ts: the `durable_object` scheduling policy has no `max_instances`.
+ */
+export const POOL_SIZE = 5
+
+/** The reason a full pool reports, as 0.12's platform cap named it. */
+const POOL_FULL = "max_container_instances_exceeded"
 
 /** §8.3: the pool is full. The caller waits; nothing else is wrong. */
 export class PoolExhaustedError extends Error {
@@ -63,9 +62,7 @@ export class PoolExhaustedError extends Error {
 // `wrangler types` cannot see the class behind the binding, so the namespace
 // arrives untyped and is narrowed here, once.
 export const sandboxFor = (env: Env, id: string) =>
-  getSandbox(env.SANDBOX as DurableObjectNamespace<Sandbox<Env>>, id, {
-    sleepAfter: SLEEP_AFTER,
-  })
+  (env.SANDBOX as DurableObjectNamespace<RemeSandbox>).getByName(id)
 
 /**
  * The site's sandbox as the build tail reads it (`tail.ts`), for a step that
@@ -111,30 +108,11 @@ export async function provision(
   await env.SITES.put(holderKey(ids.orgId), "", {
     customMetadata: { holder: ids.assignmentId },
   })
-  const start = () => sandboxFor(env, ids.orgId).exec("true")
+  const start = () => sandboxFor(env, ids.orgId).open()
   let evicted: string | null = null
-  try {
-    await start()
-  } catch (error) {
-    if (
-      !(error instanceof ContainerUnavailableError) ||
-      !POOL_FULL.has(error.reason)
-    ) {
-      throw error
-    }
+  if (!(await start())) {
     evicted = await evictWarm(env, ids.orgId)
-    if (!evicted) throw new PoolExhaustedError(error.reason)
-    try {
-      await start()
-    } catch (again) {
-      if (
-        again instanceof ContainerUnavailableError &&
-        POOL_FULL.has(again.reason)
-      ) {
-        throw new PoolExhaustedError(again.reason)
-      }
-      throw again
-    }
+    if (!evicted || !(await start())) throw new PoolExhaustedError(POOL_FULL)
   }
   return { cold_start_ms: Date.now() - started, evicted }
 }
