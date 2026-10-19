@@ -2,6 +2,7 @@ import {
   type CosToolName as CosTool,
   CosToolName,
   type CosTurn,
+  type MemoryChip,
 } from "@workspace/contracts"
 import type { OrgScopedDb } from "@workspace/db"
 import {
@@ -81,6 +82,8 @@ type StreamTurn = {
   newMessageId: () => string
   /** Chunks sent right after `start`: the owner's results as resolved. */
   lead: UIMessageChunk[]
+  /** Memory changes not yet shown: the reply's first part, in the stream, the log and the row. */
+  chip: MemoryChip | null
   rows: Rows
   waitUntil: (promise: Promise<unknown>) => void
 }
@@ -193,6 +196,11 @@ export async function streamTurn(
   }
   const firstChunkMs = Date.now() - started
 
+  // Streamed as a data part, and kept with the message like any other part.
+  const chip = input.chip
+    ? ({ type: "data-memory", data: input.chip } as const)
+    : null
+
   /** The closing transaction: the response, its `cos.turn` and its rows. */
   const closeRun = async () => {
     const last = await ended
@@ -213,7 +221,10 @@ export async function streamTurn(
     const message = {
       id: last.message.id,
       role: last.message.role,
-      parts: last.message.parts.filter((p) => !unfinished(p)),
+      parts: [
+        ...(chip ? [chip] : []),
+        ...last.message.parts.filter((p) => !unfinished(p)),
+      ],
     }
     await closeTurn(
       run,
@@ -226,7 +237,10 @@ export async function streamTurn(
 
   let queued = [...head]
   const [start, ...rest] = queued
-  queued = start?.type === "start" ? [start, ...input.lead, ...rest] : queued
+  queued =
+    start?.type === "start"
+      ? [start, ...(chip ? [chip] : []), ...input.lead, ...rest]
+      : queued
   // A message the history does not hold yet gets its row at the close.
   const fresh =
     start?.type === "start" &&

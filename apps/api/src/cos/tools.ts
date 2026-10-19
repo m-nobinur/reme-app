@@ -26,6 +26,7 @@ import {
   InformationAnswer,
   OwnerAnswerText,
   PreviewLink,
+  type ProfileLine,
   REVIEW_FACT_KEYS,
   type RecordReviewInput,
   type RecordReviewOutput,
@@ -68,7 +69,9 @@ import {
   wakeScheduler,
 } from "../reminders.ts"
 import { readFacts, statusWithFacts } from "../workspace.ts"
+import type { Opening } from "./agent.ts"
 import { readSession } from "./history.ts"
+import { readProfile } from "./memory.ts"
 import { wallToUtc } from "./time.ts"
 import type { Turn } from "./turns.ts"
 
@@ -168,8 +171,12 @@ export async function getWorkspace(
 export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
   workspace: CosWorkspace
   facts: FactRecord[]
+  /** What the owner told the CoS about themselves. */
+  profile: ProfileLine[]
+  /** The open reminders with a time, soonest first, for a conversation's first turn. */
+  reminders: Opening["reminders"]
 }> {
-  const [{ status, facts }, rows] = await kit.withOrg(
+  const [{ status, facts }, rows, { lines: profile }] = await kit.withOrg(
     { orgId: owner.orgId },
     (db) =>
       Promise.all([
@@ -184,6 +191,7 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
           .where(live)
           .orderBy(sql`${domains.createdAt} desc`)
           .limit(10),
+        readProfile(db),
       ])
   )
   const workspace = CosWorkspace.parse({
@@ -225,7 +233,15 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
     })),
     expected_seconds: status.expected_seconds,
   })
-  return { workspace, facts }
+  return {
+    workspace,
+    facts,
+    profile,
+    reminders: status.reminders.notes
+      .filter((n) => n.due_at !== null)
+      .slice(0, 5)
+      .map((n) => ({ title: n.title, due_at: n.due_at })),
+  }
 }
 
 /**

@@ -7,6 +7,7 @@ import {
   type CosTurn,
   ErrorEnvelope,
   type FactRecord,
+  type MemoryChip,
   OnboardingPlan,
   RequestChangeOutput,
   TOOL_CALL_CANCELLED,
@@ -63,6 +64,7 @@ import {
   readSession,
   sha256,
 } from "./cos/history.ts"
+import { takeChip } from "./cos/memory.ts"
 import { retrying } from "./cos/retry.ts"
 import {
   closeTurn,
@@ -823,14 +825,16 @@ export async function chat(
       const opening = await openCos(db, held, id, parsed.data, log)
       if (opening instanceof Response) return opening
       const cosTurn: Turn = { ...session, turnId: newUlid() }
-      const { workspace, facts } = loaded ?? (await loadWorkspace(tools))
+      const { workspace, facts, profile, reminders } =
+        loaded ?? (await loadWorkspace(tools))
       const context = contextOf(
         mode,
         workspace,
         zone ?? null,
         new Date(),
         turn.kind === "message" ? parsed.data.intent : undefined,
-        personaOf(facts)
+        personaOf(facts, profile),
+        turn.kind === "message" && log.fresh ? { reminders } : null
       )
       await beginTurn(db, cosTurn, {
         prefix: log.prefixLogged ? null : prefix,
@@ -861,6 +865,11 @@ export async function chat(
         tail: opening.tail,
         // The turn's one whole read of its log (ADR-042), under its lock.
         log: await readSession(db, id),
+        // The memory changes the chat has not shown yet, shown on this reply.
+        chip:
+          !fallback && turn.kind === "message"
+            ? await takeChip(db, owner.orgId)
+            : null,
       }
     })
   } catch (error) {
@@ -943,6 +952,7 @@ type Opened = {
   /** For a results turn: the message its results resolved. */
   tail: { id: string } | null
   log: LoggedEvent[]
+  chip: MemoryChip | null
 }
 
 /** A turn the script answers: everything before the CoS, unchanged. */
@@ -1328,6 +1338,7 @@ async function startModel(
     uiMessages: messages,
     newMessageId: a.newId,
     lead: tail ? settledLead(messages, tail.id) : [],
+    chip: a.opened.chip,
     rows,
     // The stream's reader ends after `closeRun`, so the turn is closed here.
     waitUntil: (reading) =>
