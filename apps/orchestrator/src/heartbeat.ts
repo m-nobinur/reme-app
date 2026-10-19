@@ -319,35 +319,6 @@ async function typedSince(db: OrgScopedDb, since: Date) {
 const localDate = (at: Date, zone: string | null) =>
   at.toLocaleDateString("en-CA", { timeZone: zone ?? "UTC" })
 
-/** "Monday, 19 October 2026 at 14:00", in `zone`. */
-const localTime = (at: Date, zone: string | null) =>
-  new Intl.DateTimeFormat("en-GB", {
-    timeZone: zone ?? "UTC",
-    dateStyle: "full",
-    timeStyle: "short",
-  }).format(at)
-
-const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/
-
-/**
- * An item as the models read it: scrubbed of anything secret-shaped, and
- * every time in the owner's zone, so a date the writer copies is one the
- * owner reads. The key keeps only its kind.
- */
-function forModel(item: DigestItem, zone: string | null) {
-  const values = Object.fromEntries(
-    Object.entries(item.facts).map(([k, v]) => [
-      k,
-      ISO.test(v) ? localTime(new Date(v), zone) : scrub(v),
-    ])
-  )
-  return {
-    kind: item.key.split(":")[0] ?? "",
-    since: localTime(new Date(item.since), zone),
-    ...values,
-  }
-}
-
 /** The two model calls, apart from the key, so a test can stand in for them. */
 export type Models = {
   gate: (state: Parameters<typeof askGate>[1]) => ReturnType<typeof askGate>
@@ -360,17 +331,12 @@ const liveModels = (env: Env): Models => ({
 })
 
 /** What the model step needs, read inside the run's transaction. */
-type Beat = {
+type Beat = Look & {
   orgId: string
   jobId: string
   /** The run's `run_at`: the `job_runs` row this beat updates, and its delivery's slot. */
   slot: Date
   level: Exclude<Proactivity, "off">
-  zone: string | null
-  now: Date
-  items: DigestItem[]
-  profile: string | null
-  last: { text: string; at: Date } | null
   /** The owner typed since the last heartbeat, so the app is enough. */
   typed: boolean
 }
@@ -407,14 +373,10 @@ async function speak(kit: Tenancy, env: Env, models: Models, beat: Beat) {
       })
     )
 
-  const items = beat.items.map((item) => forModel(item, beat.zone))
-  const profile = beat.profile ? scrub(beat.profile).slice(0, 1_500) : null
+  const { state, data } = modelInput(beat)
   let gate: Awaited<ReturnType<Models["gate"]>>
   try {
-    gate = await models.gate({
-      items,
-      ...(profile && { owner_profile: profile }),
-    })
+    gate = await models.gate(state)
   } catch (error) {
     return record("failed", `gate_error:${failureCode(error)}`)
   }
@@ -434,20 +396,8 @@ async function speak(kit: Tenancy, env: Env, models: Models, beat: Beat) {
 
   let reply: Reply
   try {
-    const written = await models.write(writerPrompt(beat.level), {
-      now: localTime(beat.now, beat.zone),
-      ...(profile && { owner_profile: profile }),
-      ...(beat.last && {
-        last_message: {
-          text: scrub(beat.last.text),
-          sent: localTime(beat.last.at, beat.zone),
-        },
-      }),
-      items,
-    })
-    reply = readReply(written.text)
-    const over = reply.kind === "message" ? overLimit(reply.text) : null
-    if (over) reply = { kind: "error", detail: `over_limit:${over}` }
+    const written = await models.write(writerPrompt(beat.level), data)
+    reply = replyOf(written.text)
     await spend("heartbeat_writer", reply.kind, written.spent)
   } catch (error) {
     reply = { kind: "error", detail: `writer_error:${failureCode(error)}` }

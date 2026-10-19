@@ -3,7 +3,9 @@ import type { Proactivity } from "@workspace/contracts"
 import models from "@workspace/facade/models/openrouter.models.json" with {
   type: "json",
 }
+import { scrub } from "@workspace/facade/tee"
 import { generateText } from "ai"
+import type { DigestItem } from "./heartbeat.ts"
 
 /**
  * The heartbeat's two model calls and what code checks in their answers.
@@ -180,6 +182,72 @@ export function readReply(raw: string): Reply {
   if (MARKER_PREFIX.test(text))
     return { kind: "quiet", reason: reasonOf(text.replace(MARKER_PREFIX, "")) }
   return { kind: "message", text }
+}
+
+/** `readReply`, with a message that breaks a limit read as an error. */
+export function replyOf(raw: string): Reply {
+  const reply = readReply(raw)
+  const over = reply.kind === "message" ? overLimit(reply.text) : null
+  return over ? { kind: "error", detail: `over_limit:${over}` } : reply
+}
+
+/** "Monday, 19 October 2026 at 14:00", in `zone` (UTC when null). */
+export const localTime = (at: Date, zone: string | null) =>
+  new Intl.DateTimeFormat("en-GB", {
+    timeZone: zone ?? "UTC",
+    dateStyle: "full",
+    timeStyle: "short",
+  }).format(at)
+
+const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/
+
+/**
+ * An item as the models read it: scrubbed of anything secret-shaped, and
+ * every time in the owner's zone, so a date the writer copies is one the
+ * owner reads. The key keeps only its kind.
+ */
+function forModel(item: DigestItem, zone: string | null) {
+  const values = Object.fromEntries(
+    Object.entries(item.facts).map(([k, v]) => [
+      k,
+      ISO.test(v) ? localTime(new Date(v), zone) : scrub(v),
+    ])
+  )
+  return {
+    kind: item.key.split(":")[0] ?? "",
+    since: localTime(new Date(item.since), zone),
+    ...values,
+  }
+}
+
+/** What one beat shows the models: its new items and what it knows of the owner. */
+export type Look = {
+  zone: string | null
+  now: Date
+  items: DigestItem[]
+  profile: string | null
+  last: { text: string; at: Date } | null
+}
+
+/** Jev's state and the writer's data for a beat, both scrubbed. */
+export function modelInput(look: Look) {
+  const items = look.items.map((item) => forModel(item, look.zone))
+  const profile = look.profile ? scrub(look.profile).slice(0, 1_500) : null
+  const known = profile ? { owner_profile: profile } : {}
+  return {
+    state: { items, ...known },
+    data: {
+      now: localTime(look.now, look.zone),
+      ...known,
+      ...(look.last && {
+        last_message: {
+          text: scrub(look.last.text),
+          sent: localTime(look.last.at, look.zone),
+        },
+      }),
+      items,
+    },
+  }
 }
 
 /** Sentences as a reader counts them: a stop followed by a space or the end. */
