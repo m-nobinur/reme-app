@@ -238,27 +238,30 @@ test("the top bar holds new chat, the history and the bell", async ({
     page.getByPlaceholder("Search your conversations…")
   ).toBeVisible()
   await page.keyboard.press("Escape")
-  // The rail keeps only the organisation, help, theme and profile.
+  // The rail starts one too, at the head of its sections.
   await expect(
     page
       .getByRole("complementary", { name: "Workspace" })
       .getByRole("link", { name: "New chat" })
-  ).toHaveCount(0)
+  ).toBeVisible()
 })
 
-test("the profile menu switches the theme", async ({ page }) => {
+test("the settings switch the theme", async ({ page }) => {
   await visit(page, "/app/staff")
   const dark = () =>
     page.evaluate(() => document.documentElement.classList.contains("dark"))
   const before = await dark()
   await page.locator('[data-slot="profile-menu"]').click()
-  await page
-    .getByRole("menuitem", { name: before ? "Light theme" : "Dark theme" })
+  const settings = page.getByRole("dialog", { name: "Settings" })
+  await settings
+    .getByRole("button", { name: before ? "Light theme" : "Dark theme" })
     .click()
   await expect.poll(dark).toBe(!before)
   // It stays open and names the way back.
   await expect(
-    page.getByRole("menuitem", { name: before ? "Dark theme" : "Light theme" })
+    settings.getByRole("button", {
+      name: before ? "Dark theme" : "Light theme",
+    })
   ).toBeVisible()
 })
 
@@ -267,12 +270,14 @@ test("Ask Reme for help sends its question in a new chat", async ({ page }) => {
   const sent = page
     .waitForRequest((request) => request.url().endsWith("/api/chat"))
     .then((request) => JSON.stringify(request.postDataJSON()))
-  await page.getByRole("button", { name: "Help" }).click()
+  await page.locator('[data-slot="profile-menu"]').click()
+  const settings = page.getByRole("dialog", { name: "Settings" })
+  await settings.getByRole("button", { name: "Help & support" }).click()
   // An owner with no organisation has nothing to get started on.
   await expect(
-    page.getByRole("menuitem", { name: "Getting started" })
+    settings.getByRole("link", { name: "Getting started" })
   ).toHaveCount(0)
-  await page.getByRole("menuitem", { name: "Ask Reme for help" }).click()
+  await settings.getByRole("link", { name: "Ask Reme for help" }).click()
   expect(await sent).toContain("What can you help me with?")
   await expect(page.getByText(/^What can you help me with\?/)).toBeVisible()
 })
@@ -315,8 +320,10 @@ test("each page opens at the top, and Back returns to where the owner was", asyn
       })
   )
 
-  await page.locator('[data-slot="profile-menu"]').click()
-  await page.getByRole("menuitem", { name: "Pipeline" }).click()
+  await page
+    .getByRole("complementary", { name: "Workspace" })
+    .getByRole("link", { name: "Pipeline" })
+    .click()
   await expect(page).toHaveURL(/\/app\/pipeline/)
   await expect.poll(top).toBe(0)
 
