@@ -1234,7 +1234,7 @@ async function fellBack(
   payload: CosTurn
 ): Promise<Response> {
   const response = await fallbackTurn(run, a, rows, payload)
-  await enqueueAfterTurn(a.env, run.turn)
+  a.waitUntil(enqueueAfterTurn(a.env, run.turn))
   return response
 }
 
