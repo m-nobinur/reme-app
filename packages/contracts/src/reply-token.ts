@@ -70,7 +70,7 @@ export async function readReplyToken(
   key: string,
   token: string
 ): Promise<{ orgId: string; conversationId: string } | null> {
-  if (!/^[A-Za-z0-9_-]{56}$/.test(token)) return null
+  if (!key || !/^[A-Za-z0-9_-]{56}$/.test(token)) return null
   const bytes = Uint8Array.from(
     atob(token.replaceAll("-", "+").replaceAll("_", "/")),
     (c) => c.charCodeAt(0)

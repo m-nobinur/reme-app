@@ -1,4 +1,15 @@
-import type { Header } from "postal-mime"
+import { readReplyToken } from "@workspace/contracts"
+import {
+  eq,
+  logFailure,
+  memberships,
+  type Posted,
+  postOwnerEmail,
+  sql,
+  type Tenancy,
+  users,
+} from "@workspace/db"
+import PostalMime, { type Header } from "postal-mime"
 
 /**
  * An owner's emailed reply (ADR-043). Everything in the message is attacker
@@ -131,4 +142,116 @@ export function stripReply(text: string): string {
     .trim()
     .replace(DEVICE_LINE, "")
     .trim()
+}
+
+type Refusal = { reason: string; say?: string }
+
+/** What a refused mail is told when the sender is not yet known to be the owner: nothing a probe could use. */
+const NOT_ACCEPTED = "Message not accepted."
+/** What the owner is told once the sender has checked out as the owner. */
+const OPEN_REME = "Reme could not take this reply. Open Reme to continue."
+
+type InboundEnv = {
+  HYPERDRIVE: Hyperdrive
+  REPLY_TOKEN_KEY: string
+  /** Where replies are addressed: `reply.remeai.co.uk`, or the apex when the rule sits there. */
+  REPLY_DOMAIN: string
+}
+
+/** The token in `reply+<token>@<REPLY_DOMAIN>`, or null for any other address. */
+function tokenOf(to: string, domain: string): string | null {
+  const at = to.lastIndexOf("@")
+  const local = to.slice(0, at)
+  if (at < 0 || to.slice(at + 1).toLowerCase() !== domain.toLowerCase()) {
+    return null
+  }
+  return local.startsWith("reply+") ? local.slice("reply+".length) : null
+}
+
+/**
+ * The Email Worker (ADR-043). A refusal is `setReject`, a permanent error in
+ * the SMTP session itself, so nothing here sends a bounce to a sender that
+ * may be forged. Cheap checks run first, and none reads the body before the
+ * token and the size are right. Starts no model turn: the row it writes is
+ * logged to the CoS by the owner's next typed turn.
+ */
+export async function receive(
+  message: ForwardableEmailMessage,
+  env: InboundEnv,
+  kit: Tenancy
+): Promise<void> {
+  const seen: { org_id?: string } = {}
+  const done = (outcome: "accepted" | "refused", reason: string) =>
+    console.log(
+      JSON.stringify({ code: "inbound_email", outcome, reason, ...seen })
+    )
+  const refuse = ({ reason, say = NOT_ACCEPTED }: Refusal) => {
+    message.setReject(say)
+    done("refused", reason)
+  }
+  try {
+    const token = tokenOf(message.to, env.REPLY_DOMAIN)
+    if (!token) return refuse({ reason: "address" })
+    const named = await readReplyToken(env.REPLY_TOKEN_KEY, token)
+    if (!named) return refuse({ reason: "token" })
+    if (message.rawSize > MAX_RAW_BYTES) return refuse({ reason: "size" })
+    const raw = await new Response(message.raw).arrayBuffer()
+    if (raw.byteLength > MAX_RAW_BYTES) return refuse({ reason: "size" })
+    const mail = await PostalMime.parse(raw)
+    const sender = mail.from?.address?.toLowerCase()
+    if (!sender?.includes("@")) return refuse({ reason: "sender" })
+    if (!authenticated(mail.headers, sender.split("@").pop() as string)) {
+      return refuse({ reason: "authentication" })
+    }
+    seen.org_id = named.orgId
+    if (!(await isOwner(kit, named.orgId, sender))) {
+      return refuse({ reason: "not_owner" })
+    }
+    // From here the sender is the owner, so a refusal may say why.
+    const text = stripReply(mail.text ?? "")
+    if (!text) return refuse({ reason: "empty", say: OPEN_REME })
+    if (text.length > MAX_TEXT) {
+      return refuse({
+        reason: "text_length",
+        say: "That reply is too long for Reme. Open Reme to write it there.",
+      })
+    }
+    const posted = await postOwnerEmail(kit, {
+      orgId: named.orgId,
+      conversationId: named.conversationId,
+      // The Message-ID makes a redelivery `exists`; without one the words do.
+      key: mail.messageId ?? `${named.conversationId}:${text}`,
+      text,
+    })
+    const say: Record<Exclude<Posted, "posted" | "exists">, string> = {
+      none: OPEN_REME,
+      busy: "Reme is busy with this conversation. Send your reply again in a minute.",
+      waiting:
+        "Reme is waiting for your answer in the app. Open Reme to reply.",
+    }
+    if (posted === "posted" || posted === "exists")
+      return done("accepted", posted)
+    refuse({ reason: posted, say: say[posted] })
+  } catch (error) {
+    logFailure({ where: "inbound_email" }, error)
+    refuse({ reason: "error", say: OPEN_REME })
+  }
+}
+
+/** Whether `email` is the address of an active owner of the org. */
+async function isOwner(
+  kit: Tenancy,
+  orgId: string,
+  email: string
+): Promise<boolean> {
+  const rows = await kit.withOrg({ orgId }, (db) =>
+    db
+      .select({ email: users.email })
+      .from(memberships)
+      .innerJoin(users, eq(users.id, memberships.userId))
+      .where(
+        sql`${memberships.role} = 'owner' and ${memberships.status} = 'active'`
+      )
+  )
+  return rows.some((row) => row.email.toLowerCase() === email)
 }

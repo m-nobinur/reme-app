@@ -22,6 +22,7 @@ import {
   readBody,
   tooLarge,
 } from "./http.ts"
+import { receive } from "./inbound-email.ts"
 import { limitWrites } from "./limit.ts"
 import {
   createOrg,
@@ -340,4 +341,13 @@ export default {
     }
   },
   queue: afterTurnBatch,
+  // Owners' emailed replies (ADR-043), routed here by Email Routing.
+  async email(message, env, ctx) {
+    const kit = tenancy(env.HYPERDRIVE.connectionString)
+    try {
+      await receive(message, env, kit)
+    } finally {
+      ctx.waitUntil(kit.close())
+    }
+  },
 } satisfies ExportedHandler<Env, AfterTurn>

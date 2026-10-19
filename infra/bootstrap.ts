@@ -70,6 +70,8 @@ const environments = {
         "OPENROUTER_API_KEY",
         // Whether connect_google offers the button.
         "GOOGLE_CLIENT_ID",
+        // Verifies the reply token the orchestrator signs; the same value on both.
+        "REPLY_TOKEN_KEY",
       ],
       // The console bearer, the spec signing key and the model plane: this
       // Worker holds no session. The REME_MODEL_* values are configuration
@@ -90,6 +92,8 @@ const environments = {
         "GOOGLE_CLIENT_ID",
         "GOOGLE_CLIENT_SECRET",
         "GOOGLE_TOKEN_KEY",
+        // Signs the Reply-To token on an owner email; the api verifies it.
+        "REPLY_TOKEN_KEY",
       ],
       // Verifies the claims the orchestrator signs; the same value on both.
       "reme-router": ["PREVIEW_KEY"],
@@ -127,6 +131,7 @@ const environments = {
         "WORKOS_COOKIE_PASSWORD",
         "OPENROUTER_API_KEY",
         "GOOGLE_CLIENT_ID",
+        "REPLY_TOKEN_KEY",
       ],
       "reme-orchestrator-production": [
         "ORCHESTRATOR_TOKEN",
@@ -143,6 +148,7 @@ const environments = {
         "GOOGLE_CLIENT_ID",
         "GOOGLE_CLIENT_SECRET",
         "GOOGLE_TOKEN_KEY",
+        "REPLY_TOKEN_KEY",
       ],
       "reme-router-production": ["PREVIEW_KEY"],
     },
@@ -484,7 +490,9 @@ for (const [worker, secrets] of Object.entries(config.secrets)) {
         `${secret} is empty in .env.local, so ${worker} cannot have it`,
         secret === "WORKOS_COOKIE_PASSWORD"
           ? "openssl rand -base64 32   (the same value on both Workers)"
-          : secret === "ORCHESTRATOR_TOKEN" || secret === "RUNTIME_SPEC_KEY"
+          : secret === "ORCHESTRATOR_TOKEN" ||
+              secret === "RUNTIME_SPEC_KEY" ||
+              secret === "REPLY_TOKEN_KEY"
             ? "openssl rand -hex 32   (see .env.example)"
             : secret.startsWith("REME_MODEL_") ||
                 secret === "OPENROUTER_API_KEY"
