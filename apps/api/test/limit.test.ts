@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs"
-import { fileURLToPath } from "node:url"
+import { fileURLToPath, URL } from "node:url"
 import { ErrorEnvelope } from "@workspace/contracts"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import worker from "../src/index.ts"

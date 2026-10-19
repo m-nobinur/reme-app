@@ -1,6 +1,6 @@
 import { execSync } from "node:child_process"
 import { readFileSync } from "node:fs"
-import { fileURLToPath } from "node:url"
+import { fileURLToPath, URL } from "node:url"
 import { type FactRecord, siteHost } from "@workspace/contracts"
 import { describe, expect, it } from "vitest"
 import { repoMap } from "../src/repo-map.ts"

@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs"
+import { URL } from "node:url"
 import type { FactRecord } from "@workspace/contracts"
 import { COPY_WORDS } from "@workspace/gates"
 import DIRECTIONS from "@workspace/starter-site/directions.json"

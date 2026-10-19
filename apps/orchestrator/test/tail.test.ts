@@ -8,6 +8,7 @@ import {
 } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
+import { URL } from "node:url"
 import { describe, expect, it } from "vitest"
 import { SITE_ROOT } from "../src/revise.ts"
 import { finishRevision, runAxe, SEAL_PHOTOS, uploadDist } from "../src/tail.ts"

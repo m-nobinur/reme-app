@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process"
 import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
-import { fileURLToPath } from "node:url"
+import { fileURLToPath, URL } from "node:url"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 
 /**

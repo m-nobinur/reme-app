@@ -31,7 +31,10 @@ export function loadLocalEnv() {
     return
   }
   try {
-    process.loadEnvFile(new URL("../../../.env.local", import.meta.url))
+    // The cast is for Worker projects, whose generated global URL does not fit Node's.
+    process.loadEnvFile(
+      new URL("../../../.env.local", import.meta.url) as import("node:url").URL
+    )
   } catch {
     // No .env.local. Every caller either has DATABASE_URL in the environment
     // already or is about to fail in `parseEnv` naming the variable.
