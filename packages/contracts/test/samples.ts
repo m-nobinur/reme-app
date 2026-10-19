@@ -991,6 +991,7 @@ export const samples: Record<ContractName, unknown> = {
     ref_id: "8b9c0d1e-2f3a-4b4c-9d5e-6f7a8b9c0d1e",
     rule: null,
     next_run_at: LATER,
+    claimed_at: null,
     last_run_at: null,
     failures: 0,
     paused_at: null,

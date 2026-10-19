@@ -8761,6 +8761,7 @@ export interface components {
       rule: string | null
       /** Format: date-time */
       next_run_at: string
+      claimed_at: string | null
       last_run_at: string | null
       failures: number
       paused_at: string | null

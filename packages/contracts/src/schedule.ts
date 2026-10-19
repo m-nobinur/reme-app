@@ -25,6 +25,9 @@ export const ScheduledJob = z.strictObject({
   ref_id: Uuid.nullable(),
   rule: z.string().min(1).max(200).nullable(),
   next_run_at: Timestamp,
+  /** When the Cron Trigger took the job. Cleared when the run ends. */
+  claimed_at: Timestamp.nullable(),
+  /** When the last run ended. */
   last_run_at: Timestamp.nullable(),
   failures: z.int().nonnegative(),
   paused_at: Timestamp.nullable(),
