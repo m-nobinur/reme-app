@@ -118,7 +118,9 @@ for (const theme of ["light", "dark"] as const) {
     // One axe run per entry: with the live panel's states the catalog took
     // 25 to 30 s on a loaded machine, against the 30 s default, and with the
     // onboarding cards and thread fixtures it passed 90 s under a full suite.
-    test.setTimeout(180_000)
+    // With the rail and settings entries it took 2.6 min alone and passed 3
+    // under the pre-push suite (2026-10-19).
+    test.setTimeout(300_000)
     // Entries fade in, and a scan mid-fade reads text at a fraction of its
     // colour; every entrance is `motion-safe:`, so reduced motion shows it
     // settled.
