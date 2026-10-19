@@ -37,13 +37,22 @@ persona, so the second fact read goes. An onboarding turn starts the load too an
 one extra read of the session's events".
 
 **Approvals are bound.** For each approval request `onStepEnd` appends
-`cos.approval {turn_id, approval_id, tool_call_id, input_sha256, expires_at}`. The answer is
-checked in `openCos` and again in `runTool` before execute: a different input hash or a passed
-expiry is refused with a fixed line, and the card shows "expired". CoS acts expire after 24 hours;
-publish approvals keep ADR-032's 72. A call whose outcome is unknown appends
-`cos.tool_unknown {tool_call_id, approval_id}`. Settle never runs it again; the owner is asked.
-Both events sit outside `deriveCosMessages`, which ignores types it does not know, so the model's
-view and the integrity hash do not change.
+`cos.approval {turn_id, approval_id, tool_call_id, input_sha256, expires_at}` in the same write as
+its `cos.step`, so a logged step always has its cards' records. The answer is checked in `openCos`
+and again in `runTool` before execute: another call id, a different input hash or a passed expiry
+is refused. The call closes as `output-error` with a line that starts `APPROVAL_EXPIRED` (from the
+contracts), the model reads it and tells the owner, and the card shows "expired" for every one of
+these reasons. A card with no record, shown before this change, is refused the same way. Expiry
+is written and checked on the Worker's clock: a day is long enough that seconds of skew do not
+matter. CoS acts expire after 24 hours; publish approvals keep ADR-032's 72. When an act tool
+throws a `ToolFailed` that is not an answer off the contract, its outcome is unknown: `runTool`
+appends `cos.tool_unknown {tool_call_id, approval_id}`, `settle` closes the call with the unknown
+line, and the turn goes on to the model, which asks the owner. This replaces ADR-034's 503 that
+left the call open to run again. `runTool` refuses any call the log marks unknown, so a turn that
+died after the mark never runs it twice. Other errors keep ADR-034's path: the turn ends as an
+error and the next turn replays the call under its approval key. Both events sit outside
+`deriveCosMessages`, which ignores types it does not know, so the model's view and the integrity
+hash do not change.
 
 **A typed yes over a card**, owner decision 2: allowed only for `create_reminder` and
 `request_change`, exact phrases first, then Jev's `noul` questions at the existing thresholds,
