@@ -6,8 +6,8 @@
 # The tag must equal the @cloudflare/sandbox version in
 # apps/orchestrator/package.json: the SDK and the control server in the image
 # speak one protocol per release. The digest pins what that tag resolved to on
-# 2026-09-15. Bump the two together, and re-pin the digest.
-FROM docker.io/cloudflare/sandbox:0.12.9@sha256:4a56a37a3cfd9b38d65bb4b5d0b341e6490a3a4c0226274ae4c1cca4948e85fe
+# 2026-10-19. Bump the two together, and re-pin the digest.
+FROM docker.io/cloudflare/sandbox:0.12.10@sha256:35c932d3e5b35f28d350800cf00551cac46dfe28274afb54e16325b8d8f560d1
 
 # Toolchain versions, checked against npm on 2026-09-15.
 ARG PNPM_VERSION=10.33.4
