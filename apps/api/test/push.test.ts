@@ -1,8 +1,17 @@
 import { ErrorEnvelope, PushConfig, PushSubscribed } from "@workspace/contracts"
-import { pushSubscriptions, type Tenancy, tenancy } from "@workspace/db"
+import {
+  eq,
+  memberships,
+  orgs,
+  pushSubscriptions,
+  type Tenancy,
+  tenancy,
+  users,
+} from "@workspace/db"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import worker from "../src/index.ts"
 import { type Owner, owner, stubOrchestrator } from "./owner-fixture.ts"
-import { stubJwksFetch } from "./sealed-session.ts"
+import { cookieHeader, env, stubJwksFetch } from "./sealed-session.ts"
 
 /**
  * The push routes on a live connection. Who may subscribe is the org's owner;
@@ -139,5 +148,87 @@ describe.skipIf(!url)("push routes, on a live connection", () => {
       (await call(mine, "/push/subscriptions/not-an-id", keyed("DELETE")))
         .status
     ).toBe(404)
+  })
+
+  /** A signed-in member of `as`'s org who is not its owner, calling the api. */
+  async function asMember(as: Owner) {
+    const run = crypto.randomUUID().slice(0, 8)
+    const workosUserId = `user_probe_member_${run}`
+    const [org] = await kit.withOrg({ orgId: as.orgId }, (db) =>
+      db
+        .select({ workos: orgs.workosOrganizationId })
+        .from(orgs)
+        .where(eq(orgs.id, as.orgId))
+    )
+    await kit.withOrg({ orgId: as.orgId, workosUserId }, async (db) => {
+      await db
+        .insert(users)
+        .values({ workosUserId, email: `member-${run}@owner-probe.invalid` })
+      const [person] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.workosUserId, workosUserId))
+      await db.insert(memberships).values({
+        orgId: as.orgId,
+        userId: person?.id as string,
+        workosMembershipId: `om_member_${run}`,
+        role: "member",
+        status: "active",
+      })
+    })
+    return async (path: string, init: RequestInit = {}) =>
+      worker.fetch(
+        new Request(`http://api.invalid${path}`, {
+          ...init,
+          headers: {
+            ...(await cookieHeader({
+              sub: workosUserId,
+              org_id: org?.workos as string,
+              role: "member",
+            })),
+            ...(init.headers as Record<string, string>),
+          },
+        }),
+        {
+          ...env(url as string),
+          ORCHESTRATOR: stubOrchestrator(),
+        } as unknown as Env,
+        { waitUntil: () => undefined } as unknown as ExecutionContext
+      )
+  }
+
+  it("refuses a member who is not the owner: no subscribing, no removing, and the owner's list is untouched", async () => {
+    const [own] = await rows(mine)
+    const member = await asMember(mine)
+
+    const added = await member(
+      "/push/subscriptions",
+      keyed("POST", subscription("https://fcm.googleapis.com/fcm/send/m1"))
+    )
+    expect(added.status).toBe(403)
+    expect(ErrorEnvelope.parse(await added.json()).code).toBe("push.not_owner")
+
+    const removed = await member(
+      `/push/subscriptions/${own?.id}`,
+      keyed("DELETE")
+    )
+    expect(removed.status).toBe(403)
+    expect(ErrorEnvelope.parse(await removed.json()).code).toBe(
+      "push.not_owner"
+    )
+
+    // Only the owner's subscription is there.
+    const left = await rows(mine)
+    expect(left.map((row) => row.id)).toEqual(own ? [own.id] : [])
+    expect(left.some((row) => row.endpoint.endsWith("/m1"))).toBe(false)
+  })
+
+  it("answers a member's config request, since the public key is no secret", async () => {
+    const member = await asMember(mine)
+    const response = await member("/push/config")
+    expect(response.status).toBe(200)
+    expect(PushConfig.parse(await response.json())).toEqual({
+      public_key: null,
+    })
   })
 })
