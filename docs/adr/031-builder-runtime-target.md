@@ -142,9 +142,12 @@ host. What carries it changes:
   inactivity timeout that was `sleepAfter`. Its methods are the ones flue's `cloudflareSandbox`
   calls on a 0.x stub (`exec`, `readFile`, `writeFile`, `exists`, `mkdir`, `deleteFile`,
   `getState`), with 0.x meanings, so flue needs no adapter and the Workflow's call sites keep
-  their commands. A command runs in `bash -c` from `/workspace` with three literal variables
+  their commands. A command runs in bash from `/workspace` with three literal variables
   (`HOME`, `PLAYWRIGHT_BROWSERS_PATH`, `NODE_EXTRA_CA_CERTS`); a timeout runs it under GNU
-  `timeout` and throws as 0.12 did. Files go through `Files` and the `sandbox-shim` helper.
+  `timeout` and throws as 0.12 did. Bash gets the command in a variable it un-exports, never in
+  argv: as in a 0.12 session no command line holds it, so the screenshot step's
+  `pkill -f '[a]stro preview'` cannot kill the shell running it (it did, in the first local
+  run). Files go through `Files` and the `sandbox-shim` helper.
 - `SandboxEgress` is §8.3's rule as code: `registry.npmjs.org` is fetched, every other host gets
   0.12's `520 Origin is disallowed`.
 - The `durable_object` scheduling policy has no `max_instances`, so the pool of five is
