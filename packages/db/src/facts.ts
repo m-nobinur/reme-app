@@ -1,3 +1,4 @@
+import { PRIVATE_FACT_KEYS } from "@workspace/contracts"
 import { eq, sql } from "drizzle-orm"
 import { facts } from "./schema.ts"
 import type { OrgScopedDb } from "./tenancy.ts"
@@ -77,11 +78,40 @@ export async function supersedeFact(
   }
 }
 
-/** The org's current facts, one row per key, in key order. */
+/**
+ * The org's current business facts, one row per key, in key order. The
+ * Chief of Staff's memory of the owner (`PRIVATE_FACT_KEYS`) is left out
+ * here, so no snapshot, tool or page built from this reads it by accident;
+ * `currentFact` reads one on purpose.
+ */
 export function currentFacts(db: OrgScopedDb) {
   return db
     .select()
     .from(facts)
-    .where(sql`${facts.validTo} is null`)
+    .where(
+      sql`${facts.validTo} is null and ${facts.key} not in (${sql.join(
+        PRIVATE_FACT_KEYS.map((key) => sql`${key}`),
+        sql`, `
+      )})`
+    )
     .orderBy(facts.key)
+}
+
+/** The current row of one key, or undefined. */
+export async function currentFact(db: OrgScopedDb, key: string) {
+  const [row] = await db
+    .select()
+    .from(facts)
+    .where(sql`${facts.key} = ${key} and ${facts.validTo} is null`)
+  return row
+}
+
+/** One key's versions, newest first. */
+export function factVersions(db: OrgScopedDb, key: string, limit: number) {
+  return db
+    .select()
+    .from(facts)
+    .where(eq(facts.key, key))
+    .orderBy(sql`${facts.version} desc`)
+    .limit(limit)
 }
