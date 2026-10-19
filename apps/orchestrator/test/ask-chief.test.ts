@@ -16,10 +16,6 @@ vi.mock("cloudflare:workers", () => ({
     },
   },
 }))
-vi.mock("@cloudflare/sandbox", () => ({
-  getSandbox: () => ({}),
-  OperationInterruptedError: class extends Error {},
-}))
 vi.mock("@workspace/facade/cloudflare", () => ({
   cloudflareSandbox: () => ({}),
 }))

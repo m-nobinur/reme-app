@@ -5,7 +5,6 @@ import {
   type WorkflowStep,
 } from "cloudflare:workers"
 import { NonRetryableError } from "cloudflare:workflows"
-import { Sandbox } from "@cloudflare/sandbox"
 import {
   Blueprint,
   type BuildLane,
@@ -81,11 +80,9 @@ import {
   checkpoint,
   endSandbox,
   keepWarm,
-  NPM_REGISTRY_HOST,
   PoolExhaustedError,
   provision,
   rehydrate,
-  SLEEP_AFTER,
   sandboxFor,
   tailSandbox,
   takeScreenshots,
@@ -114,38 +111,9 @@ import { LEAD_TURN_MS, logTiming, since, type ToolTimings } from "./timing.ts"
 import { checkUptime, UPTIME_CRON } from "./uptime.ts"
 import { assignmentFacts, checkA11y, validateRevision } from "./validate.ts"
 
-// The outbound proxy the platform routes container egress through; the SDK
-// needs it exported from the Worker for its own internal hosts.
-export { ContainerProxy } from "@cloudflare/sandbox"
+export { RemeSandbox, SandboxEgress, SandboxPool } from "./container.ts"
 export { DomainWorkflow } from "./domain-workflow.ts"
 export { SearchSyncWorkflow, SearchWorkflow } from "./search-workflow.ts"
-
-/**
- * The container behind every site (ADR-031): egress denied by default
- * with the registry as the one exception, asleep after `SLEEP_AFTER`, and
- * holding nothing the Worker holds. The image is infra/sandbox/Dockerfile;
- * the instance type and the pool size are in wrangler.jsonc.
- */
-export class RemeSandbox extends Sandbox<Env> {
-  override enableInternet = false
-  override allowedHosts = [NPM_REGISTRY_HOST]
-  // Without this, port 443 is closed outright and the allowlist never sees
-  // an HTTPS request: the platform intercepts only what it is told to. With
-  // it, HTTPS is terminated at the outbound proxy, the container trusts the
-  // proxy's ephemeral CA, and the allowlist decides. Measured on staging
-  // 2026-09-15: the registry timed out at the TCP level until this was set.
-  override interceptHttps = true
-  override sleepAfter = SLEEP_AFTER
-}
-
-// The platform injects the proxy's CA into the container only when an
-// outbound handler exists, and the control server refuses to start under
-// HTTPS interception without that CA (measured 2026-09-15: "Certificate not
-// found, refusing to start"). This handler is the allowlist's pass-through:
-// the proxy has already refused every host not in `allowedHosts` by the time
-// it runs. Assigned rather than declared as a static field, because a field
-// would shadow the base class's setter instead of registering the handler.
-RemeSandbox.outbound = (request: Request) => fetch(request)
 
 /** The owner's route tree: the bridge routes alone, behind `ownerAuth`. */
 const ownerApp = new Hono<ConsoleEnv>({ strict: false })

@@ -13,7 +13,7 @@
     "test:probe": "node ../../scripts/floor.mjs orchestrator-probe -- vitest run --dir probe"
   },
   "dependencies": {
-    "@cloudflare/sandbox": "0.12.10",
+    "@cloudflare/sandbox": "1.0.1",
     "@workspace/contracts": "workspace:*",
     "@workspace/db": "workspace:*",
     "@workspace/facade": "workspace:*",
