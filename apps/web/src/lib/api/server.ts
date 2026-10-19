@@ -345,7 +345,7 @@ export const getPushKey = createServerFn({ method: "GET" }).handler(
 
 /** This browser's push subscription, saved. Its id, or null when refused. */
 export const savePushSubscription = createServerFn({ method: "POST" })
-  .validator((input: unknown) => PushSubscribeRequest.parse(input))
+  .validator((input: unknown) => PushSubscribeRequest.parse(record(input)))
   .handler(async ({ data }): Promise<string | null> => {
     return await source.subscribePush(data, crypto.randomUUID())
   })
