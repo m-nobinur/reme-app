@@ -6,15 +6,18 @@ import {
   assignmentTransitions,
   conversationMessages,
   conversations,
+  deliveries,
   departments,
   deployments,
   domains,
   events,
   facts,
+  jobRuns,
   memberships,
   orgs,
   reminders,
   roles,
+  scheduledJobs,
   searchConnections,
   searchDaily,
   searchProperties,
@@ -126,6 +129,10 @@ export async function clearOrgs(
   }
   // A domain cites its approval, so it goes before the approvals.
   await tx.delete(domains).where(inArray(domains.orgId, ids))
+  // A run cites its job; a job points at a reminder, with no key to say so.
+  await tx.delete(deliveries).where(inArray(deliveries.orgId, ids))
+  await tx.delete(jobRuns).where(inArray(jobRuns.orgId, ids))
+  await tx.delete(scheduledJobs).where(inArray(scheduledJobs.orgId, ids))
   // A reminder and a message cite their conversation, and a conversation its
   // creator.
   await tx.delete(reminders).where(inArray(reminders.orgId, ids))

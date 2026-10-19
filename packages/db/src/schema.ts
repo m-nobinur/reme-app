@@ -138,6 +138,14 @@ const updatedAt = timestamp("updated_at", { withTimezone: true })
   .defaultNow()
   .$onUpdate(() => new Date())
 
+/** `Proactivity`: how often the heartbeat looks. */
+export const proactivity = pgEnum("proactivity", [
+  "off",
+  "low",
+  "default",
+  "high",
+])
+
 /** The tenant root. Everything else is scoped to one of these. */
 export const orgs = pgTable(
   "orgs",
@@ -163,12 +171,29 @@ export const orgs = pgTable(
     workosOrganizationId: text("workos_organization_id"),
     /** The org's one Stripe Customer, made on its first domain purchase. */
     stripeCustomerId: text("stripe_customer_id"),
+    /**
+     * The owner's IANA zone, written from the browser on a chat turn. Null
+     * until the first one; every time of day below is read in it.
+     */
+    timeZone: text("time_zone"),
+    /** Quiet hours as `HH:MM`. They may cross midnight; equal means none. */
+    quietStart: text("quiet_start").notNull().default("21:00"),
+    quietEnd: text("quiet_end").notNull().default("08:00"),
+    proactivity: proactivity("proactivity").notNull().default("default"),
     createdAt,
     updatedAt,
   },
   (t) => [
     unique("orgs_workos_organization_key").on(t.workosOrganizationId),
     unique("orgs_stripe_customer_key").on(t.stripeCustomerId),
+    check(
+      "orgs_time_zone_name",
+      sql`time_zone ~ '^[A-Za-z][A-Za-z0-9_+/-]{0,63}$'`
+    ),
+    check(
+      "orgs_quiet_hours_time",
+      sql`quiet_start ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' and quiet_end ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'`
+    ),
     // The tenant root carries no org_id: it scopes on its own key.
     pgPolicy("orgs_org_isolation", {
       for: "all",
@@ -1128,6 +1153,127 @@ export const reminders = pgTable(
       sql`char_length(title) between 1 and 200 and title ~ '[^ \\t\\n\\v\\f\\r]'`
     ),
     orgIsolation("reminders"),
+  ]
+)
+
+/** `JobKind`. */
+export const jobKind = pgEnum("job_kind", [
+  "reminder",
+  "heartbeat",
+  "weekly_report",
+])
+
+/**
+ * A thing to do at a time: a reminder coming due, an org's heartbeat, its
+ * weekly report. The Cron Trigger claims the due rows through
+ * `claim_due_jobs` (migration 0020) and the consumer runs each under
+ * `withOrg`.
+ *
+ * `claimed_at` is the claim: the function sets it, and a row with one is not
+ * due again until the lease runs out (the claimer died). When a run ends the
+ * consumer writes `last_run_at`, clears `claimed_at` and moves `next_run_at`
+ * forward, so the row is due again only at its next occurrence. `ref_id`
+ * points at a `reminders` row and has no foreign key, because the other kinds
+ * point at nothing.
+ */
+export const scheduledJobs = pgTable(
+  "scheduled_jobs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    kind: jobKind("kind").notNull(),
+    refId: uuid("ref_id"),
+    /** A cron expression in the org's zone. Null for a one-off. */
+    rule: text("rule"),
+    nextRunAt: timestamp("next_run_at", { withTimezone: true }).notNull(),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    lastRunAt: timestamp("last_run_at", { withTimezone: true }),
+    failures: integer("failures").notNull().default(0),
+    pausedAt: timestamp("paused_at", { withTimezone: true }),
+    createdAt,
+  },
+  (t) => [
+    unique("scheduled_jobs_id_org_key").on(t.id, t.orgId),
+    // What the claim scans: the unpaused rows, soonest first.
+    index("scheduled_jobs_due_idx")
+      .on(t.nextRunAt)
+      .where(sql`paused_at is null`),
+    check(
+      "scheduled_jobs_rule_length",
+      sql`char_length(rule) between 1 and 200`
+    ),
+    check("scheduled_jobs_failures_count", sql`failures >= 0`),
+    orgIsolation("scheduled_jobs"),
+  ]
+)
+
+/** `JobRun.outcome`. */
+export const jobOutcome = pgEnum("job_outcome", ["ok", "skipped", "failed"])
+
+/**
+ * One row per occurrence of a job. The primary key is what makes a redelivered
+ * Queue message a no-op: its insert finds the run already written.
+ */
+export const jobRuns = pgTable(
+  "job_runs",
+  {
+    jobId: uuid("job_id").notNull(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    runAt: timestamp("run_at", { withTimezone: true }).notNull(),
+    outcome: jobOutcome("outcome").notNull(),
+    detail: text("detail"),
+  },
+  (t) => [
+    primaryKey({ name: "job_runs_pkey", columns: [t.jobId, t.runAt] }),
+    foreignKey({
+      name: "job_runs_job_fk",
+      columns: [t.jobId, t.orgId],
+      foreignColumns: [scheduledJobs.id, scheduledJobs.orgId],
+    }).onDelete("cascade"),
+    check("job_runs_detail_length", sql`char_length(detail) <= 500`),
+    orgIsolation("job_runs"),
+  ]
+)
+
+/** `Delivery.channel`. */
+export const deliveryChannel = pgEnum("delivery_channel", ["in_app", "email"])
+
+/** `Delivery.state`. */
+export const deliveryState = pgEnum("delivery_state", [
+  "pending",
+  "sent",
+  "failed",
+  "suppressed",
+])
+
+/**
+ * The outbox. The key is one message on one channel, and it is unique per org
+ * rather than alone, so an insert in one org can neither collide with another
+ * org's key nor tell that it exists.
+ */
+export const deliveries = pgTable(
+  "deliveries",
+  {
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    key: text("key").notNull(),
+    channel: deliveryChannel("channel").notNull(),
+    state: deliveryState("state").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    error: text("error"),
+  },
+  (t) => [
+    primaryKey({ name: "deliveries_pkey", columns: [t.orgId, t.key] }),
+    check("deliveries_key_length", sql`char_length(key) between 1 and 200`),
+    check("deliveries_attempts_count", sql`attempts >= 0`),
+    check("deliveries_error_length", sql`char_length(error) <= 500`),
+    orgIsolation("deliveries"),
   ]
 )
 

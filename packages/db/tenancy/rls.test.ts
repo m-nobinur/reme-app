@@ -229,6 +229,23 @@ const SECURITY_DEFINER_FUNCTIONS: Record<
       }
     },
   },
+  // The scheduler's claim (migration 0020): the due jobs, marked claimed, as
+  // `(job_id, org_id)`. It writes, so calling it here would take rows from
+  // `claim-due-jobs.test.ts`; what crosses tenants is the row shape, so the
+  // shape is the probe, as for `recent_designs`. A column added to it fails
+  // here. The claim itself is driven in that file.
+  claim_due_jobs: {
+    probe: async (raw) => {
+      const [row] = await raw<{ result: string }[]>`
+        select pg_get_function_result(
+          'public.claim_due_jobs(integer)'::regprocedure) as result`
+      const shape = "TABLE(job_id uuid, org_id uuid)"
+      return {
+        granted: [row?.result === shape ? shape : null],
+        refused: [],
+      }
+    },
+  },
   // The planner's diversity note (ADR-038, migration 0014). What crosses
   // tenants is the row shape, so the shape is the probe: three library ids,
   // no org id, no text. A column added to it fails here. The caller's own org
