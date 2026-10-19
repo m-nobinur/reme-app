@@ -248,6 +248,14 @@ ok(`${state("account")}${account ?? "unknown"}`)
  * Hyperdrive, and forgotten. Nothing reads it back. If the Hyperdrive config is
  * ever missing, this run mints a new one rather than trying to recover the old.
  */
+// Without a key neonctl falls back to its saved login, which can belong to
+// another Neon account (the projects moved accounts on 2026-10-17); the key in
+// .env.local is the one these projects answer to.
+process.env.NEON_API_KEY ??= (
+  existsSync(".env.local") ? readFileSync(".env.local", "utf8") : ""
+)
+  .match(/^NEON_API_KEY=(.*)$/m)?.[1]
+  ?.trim()
 const neon = cli("npx", [
   // Pinned: neonctl 7.0.0 shipped depending on a `neon@7.0.0` npm does not have.
   "neonctl@6.4.0",
