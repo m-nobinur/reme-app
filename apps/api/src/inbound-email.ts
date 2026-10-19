@@ -25,8 +25,7 @@ export const MAX_TEXT = 4000
 
 /**
  * The only authserv-id whose results are believed: the one Email Routing
- * writes for the checks it ran on receipt. A header any other host wrote, or
- * the sender put there, names another id and is skipped.
+ * writes for the checks it ran on receipt, and only as the topmost header.
  */
 export const TRUSTED_AUTH_SERVER = "mx.cloudflare.net"
 
@@ -74,19 +73,31 @@ const aligned = (checked: string | undefined, from: string) =>
 /**
  * Whether Email Routing's own results show the From domain authenticated: DMARC
  * passed, or SPF or DKIM passed for a domain aligned with it. Only the topmost
- * header the trusted server wrote is read, since a result a sender planted
- * sits below the one added on receipt. No such header, an unreadable one or an
- * explicit DMARC failure is a no, so a change in what Cloudflare writes fails
- * closed.
+ * `Authentication-Results` is read, and it must be the trusted server's: the
+ * receiving server prepends its header, so one written by the sender sits
+ * below it, and if the topmost is not ours, ours was never written. Likewise
+ * for `ARC-Authentication-Results`, where the topmost must also carry the
+ * highest instance. A header is never skipped for a lower one; the ARC copy is
+ * read only when there is no `Authentication-Results` at all. No such header,
+ * an unreadable one or an explicit DMARC failure is a no, so a change in what
+ * Cloudflare writes fails closed.
  */
 export function authenticated(headers: Header[], fromDomain: string): boolean {
   const from = fromDomain.toLowerCase()
+  const instance = (value: string) =>
+    Number(/^\s*i=(\d+)/.exec(value)?.[1] ?? 0)
   for (const name of ["authentication-results", "arc-authentication-results"]) {
-    const mine = headers
-      .filter((h) => h.key === name)
-      .map((h) => results(h.value))
-      .find((r) => r.server === TRUSTED_AUTH_SERVER)
-    if (!mine) continue
+    const all = headers.filter((h) => h.key === name)
+    const [top] = all
+    if (!top) continue
+    if (
+      name.startsWith("arc") &&
+      instance(top.value) < Math.max(...all.map((h) => instance(h.value)))
+    ) {
+      return false
+    }
+    const mine = results(top.value)
+    if (mine.server !== TRUSTED_AUTH_SERVER) return false
     const pass = (method: string, prop: string) =>
       mine.results.some(
         (r) =>

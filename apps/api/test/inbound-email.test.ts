@@ -96,7 +96,7 @@ describe("authenticated", () => {
     ).toBe(false)
   })
 
-  it("believes only the server Email Routing names, and its topmost header", () => {
+  it("believes only the topmost header, and only when it is Email Routing's", () => {
     const planted = results(
       "mx.cloudflare.net; dmarc=pass header.from=example.com"
     )
@@ -104,11 +104,52 @@ describe("authenticated", () => {
       "mail.attacker.test; dmarc=pass header.from=example.com"
     )
     const ours = results(
-      "mx.cloudflare.net; dmarc=fail header.from=example.com"
+      "mx.cloudflare.net; dkim=pass header.d=example.com; dmarc=pass header.from=example.com"
     )
-    expect(authenticated([other], "example.com")).toBe(false)
-    // Ours is written on top at receipt; the sender's copy sits below it.
-    expect(authenticated([ours, planted], "example.com")).toBe(false)
+    // The real one on top, as the receiving server writes it.
+    expect(authenticated([ours, planted], "example.com")).toBe(true)
+    expect(
+      authenticated(
+        [
+          results("mx.cloudflare.net; dmarc=fail header.from=example.com"),
+          planted,
+        ],
+        "example.com"
+      )
+    ).toBe(false)
+    // Nothing the sender writes can sit above the header written on receipt,
+    // so a planted copy is only ever below something else, and is not read.
+    expect(authenticated([other, planted], "example.com")).toBe(false)
+    expect(authenticated([other, ours], "example.com")).toBe(false)
+  })
+
+  it("reads the ARC copy only when there is no Authentication-Results, from the topmost and highest instance", () => {
+    const arc = (value: string) => header("arc-authentication-results", value)
+    const pass = "mx.cloudflare.net; dmarc=pass header.from=example.com"
+    expect(authenticated([arc(`i=1; ${pass}`)], "example.com")).toBe(true)
+    // A header above the real one, or an instance higher than the top's.
+    expect(
+      authenticated([arc(`i=1; ${pass}`), arc(`i=2; ${pass}`)], "example.com")
+    ).toBe(false)
+    expect(
+      authenticated(
+        [
+          arc("i=2; mail.attacker.test; dmarc=pass header.from=example.com"),
+          arc(`i=1; ${pass}`),
+        ],
+        "example.com"
+      )
+    ).toBe(false)
+    // An untrusted Authentication-Results does not fall through to a good ARC.
+    expect(
+      authenticated(
+        [
+          results("mail.attacker.test; dmarc=pass header.from=example.com"),
+          arc(`i=1; ${pass}`),
+        ],
+        "example.com"
+      )
+    ).toBe(false)
   })
 
   it("fails closed with no results, or none it can read", () => {
