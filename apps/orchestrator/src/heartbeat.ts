@@ -18,14 +18,14 @@ import {
   type Tenancy,
   waitedOn,
 } from "@workspace/db"
-import { scrub } from "@workspace/facade/tee"
 import { deliverIn } from "./deliveries.ts"
 import {
   askGate,
   GATE,
-  overLimit,
+  type Look,
+  modelInput,
   type Reply,
-  readReply,
+  replyOf,
   type Spent,
   writerPrompt,
   writeText,
@@ -397,7 +397,7 @@ async function speak(kit: Tenancy, env: Env, models: Models, beat: Beat) {
   let reply: Reply
   try {
     const written = await models.write(writerPrompt(beat.level), data)
-    reply = replyOf(written.text)
+    reply = replyOf(written.text, beat.items)
     await spend("heartbeat_writer", reply.kind, written.spent)
   } catch (error) {
     reply = { kind: "error", detail: `writer_error:${failureCode(error)}` }

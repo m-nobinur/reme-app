@@ -184,11 +184,39 @@ export function readReply(raw: string): Reply {
   return { kind: "message", text }
 }
 
-/** `readReply`, with a message that breaks a limit read as an error. */
-export function replyOf(raw: string): Reply {
+/** Web and email addresses, bare hosts and phone numbers. */
+const CONTACT =
+  /https?:\/\/[^\s"”)]+|[\w.+-]+@[\w-]+(?:\.[\w-]+)+|(?:[\w-]+\.)+[a-z]{2,}\b|\+?\d[\d ()-]{6,}\d/gi
+
+/**
+ * Facts code or the owner wrote: an alert's host, a reminder's title. A
+ * review, a Developer's question and a search query are someone else's text.
+ */
+const TRUSTED = new Set(["host", "title"])
+
+/**
+ * `readReply`, with a message that breaks a limit read as an error, and so
+ * is one that carries a link, an email address or a phone number no trusted
+ * fact holds: text injected into an item can shape the message, never point
+ * the owner somewhere.
+ */
+export function replyOf(raw: string, items: DigestItem[] = []): Reply {
   const reply = readReply(raw)
-  const over = reply.kind === "message" ? overLimit(reply.text) : null
-  return over ? { kind: "error", detail: `over_limit:${over}` } : reply
+  if (reply.kind !== "message") return reply
+  const over = overLimit(reply.text)
+  if (over) return { kind: "error", detail: `over_limit:${over}` }
+  const trusted = items
+    .flatMap((item) =>
+      Object.entries(item.facts).flatMap(([k, v]) =>
+        TRUSTED.has(k) ? [v] : []
+      )
+    )
+    .join("\n")
+    .toLowerCase()
+  const stray = (reply.text.match(CONTACT) ?? []).find(
+    (found) => !trusted.includes(found.toLowerCase())
+  )
+  return stray ? { kind: "error", detail: "unsourced_contact" } : reply
 }
 
 /** "Monday, 19 October 2026 at 14:00", in `zone` (UTC when null). */

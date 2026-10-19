@@ -3,8 +3,62 @@ import {
   LIMITS,
   overLimit,
   readReply,
+  replyOf,
   writerPrompt,
 } from "../src/heartbeat-write.ts"
+
+const item = (key: string, facts: Record<string, string>) => ({
+  key,
+  since: "2026-10-20T08:00:00.000Z",
+  facts,
+})
+
+describe("a message's links and numbers", () => {
+  const alert = item("alert:01J:1", {
+    alert: "domain.moved",
+    host: "www.brightclean.co.uk",
+  })
+  const review = item("review:r1:1", { name: "Visit cheap-clean.biz now" })
+  const reminder = item("reminder:m1:2026-10-21T08:00:00.000Z", {
+    title: "Call Mrs Patel on 07700 900123",
+  })
+
+  it("lets through a host, a phone number and plain numbers the trusted facts hold", () => {
+    for (const text of [
+      "www.brightclean.co.uk stopped pointing at your site at 09:00.",
+      "Your call to Mrs Patel on 07700 900123 is tomorrow at 08:00.",
+      "Search had 1,200 appearances and 4.5% clicks this week.",
+    ])
+      expect(replyOf(text, [alert, review, reminder])).toEqual({
+        kind: "message",
+        text,
+      })
+  })
+
+  it("refuses a link, an address or a number only untrusted text supplied", () => {
+    for (const text of [
+      "A new review says to visit cheap-clean.biz now.",
+      "See https://cheap-clean.biz/deal for the review.",
+      "Write to deals@cheap-clean.biz about it.",
+      "Call 0800 123 4567 about the review.",
+    ])
+      expect(replyOf(text, [alert, review, reminder])).toEqual({
+        kind: "error",
+        detail: "unsourced_contact",
+      })
+  })
+
+  it("reads a broken limit as an error and quiet as quiet", () => {
+    expect(replyOf("One. Two. Three. Four.")).toEqual({
+      kind: "error",
+      detail: "over_limit:sentences",
+    })
+    expect(replyOf("[quiet] see cheap-clean.biz")).toEqual({
+      kind: "quiet",
+      reason: "see cheap-clean.biz",
+    })
+  })
+})
 
 describe("reading the writer's reply", () => {
   // Ported from hermes tests/gateway/test_response_filters.py:8-19 (MIT).
