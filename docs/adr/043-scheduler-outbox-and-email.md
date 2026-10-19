@@ -74,7 +74,7 @@ repeated hour. Rules are five-part cron, so nothing runs more often than the cro
 
 **One outbox.** `deliveries (org_id, key, channel, state, attempts, sent_at, error)`, unique on
 `(org_id, key)`. The key names the cause, such as `reminder:<id>` or
-`heartbeat:<org>:<digest hash>`, never the time sent. A second insert is a no-op, so nothing sends
+`heartbeat:<org>:<job>:<slot>`, never the time sent. A second insert is a no-op, so nothing sends
 twice. A Queue consumer sends: in-app through `postAssistantMessage`, email through the
 `send_email` binding. A reminder goes to `reminders.conversation_id`, not the newest conversation.
 
@@ -99,6 +99,31 @@ digest query that fails rolls the run back, ledger included, so a source error i
 An empty digest, or one with nothing new, ends the run `skipped`. `job_outcome` has no
 `owner_active` or `error` value and adding one needs a migration, so those runs are `skipped`
 and `failed` with the reason in `detail`.
+
+New items go to two models after the run commits, in its `after`. First Jev
+(`typesafe/jev-1.13` through the AI SDK provider's `evaluationModel`, the second Jev caller)
+answers "Is any of this worth interrupting the owner for now?" over the scrubbed items and the
+owner profile; under the dial's bar (low 0.95, default 0.9, high 0.8) the beat stops. On a yes
+the beat takes the day's one unprompted message, a `deliveries` row keyed
+`unprompted:<org>:<local date>` inserted if absent; already taken, it stops before the writer.
+The writer is `openai/gpt-6.1-sol` at low effort on the CoS's OpenRouter routing, with no tools,
+the items as data, the profile, and its own last heartbeat and its date. The prompt sets the bar
+by dial (low: something finished or a decision; default: real progress or news the owner would
+want; high: short updates even when on track) and allows `[quiet]` with a reason, read by
+hermes' loose rule. Code checks the message: at most 3 sentences, 450 characters and one
+question, and no link, email address or phone number that a fact the item vouches for (an
+alert's host, a title the owner wrote) does not hold exactly. A quiet, failed or refused reply
+gives the day back, so a later beat can still speak; the reason goes in `job_runs.detail`. A
+message goes in-app keyed `heartbeat:<org>:<job>:<slot>`, and by email too when the owner has
+not typed since the last heartbeat, which the daily cap keeps to one a day. Each Jev and writer
+call is logged as a `cos.background_step` (`job: heartbeat_gate` or `heartbeat_writer`), so the
+CoS's daily cap counts it.
+
+The weekly search report is a heartbeat item on the org's own Monday (`search_report:<ISO
+week>:1`, or `search_report:connect:1` for the one ask to connect), so the report and the
+heartbeat coalesce into one message and the report follows the owner's zone. The sweep's Monday
+07:00 UTC step is gone. Nothing creates a `weekly_report` job any more; the value stays in
+`job_kind` and the contract until a migration can drop it.
 
 **Email out is Cloudflare Email Sending** on a `send_email` binding, after
 `wrangler email sending enable remeai.co.uk`, which also adds the DMARC record the domain lacks.
