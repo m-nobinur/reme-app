@@ -1,4 +1,5 @@
 import {
+  APPROVAL_EXPIRED,
   AskChoiceInput,
   AskChoiceOutput,
   AskDesignInput,
@@ -51,19 +52,25 @@ export const BROKEN = "This step did not come through. Reload the conversation."
 /**
  * Why a call ended without an output, from the contracts' own reading of
  * the api's error text, which is written for the model and never shown.
- * Only a `failed` error says nothing was done; any other may follow a side
- * effect that happened, so the owner is told to check before asking again.
+ * Only a `failed` or `expired` error says nothing was done; any other may
+ * follow a side effect that happened, so the owner is told to check before
+ * asking again. `expired` is a yes that came after the card's time ran out,
+ * or on a card that no longer matched its call.
  */
-export type Failure = "cancelled" | "unconfirmed" | "failed"
+export type Failure = "cancelled" | "unconfirmed" | "failed" | "expired"
 
 const failureOf = (result: unknown): Failure => {
   const text = errorOf(result)
   if (text === TOOL_CALL_CANCELLED) return "cancelled"
+  if (text.startsWith(`${APPROVAL_EXPIRED}:`)) return "expired"
   return toolErrorKind(text) === "failed" ? "failed" : "unconfirmed"
 }
 
 /** What a failed act tool tells the owner. */
 export const NOT_DONE = "This did not go through. Ask again."
+/** What a card whose yes came too late tells the owner. */
+export const EXPIRED =
+  "This expired before your yes, so nothing was done. Ask again."
 export const UNCONFIRMED =
   "We could not confirm this went through. Check the panel before you ask again."
 

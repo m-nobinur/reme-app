@@ -247,6 +247,12 @@ function logged(item: Logged): { title: string; detail: string } {
         detail:
           "The new version failed its checks once live, so your site went back to the one before.",
       }
+    case "job_paused":
+      return {
+        title: "A scheduled task was paused",
+        detail:
+          "Something Reme does on a schedule kept failing, so it was paused.",
+      }
   }
 }
 
@@ -343,6 +349,18 @@ function toAttention(
         onExpiry: item.request.blocking
           ? "The build waits on you until you answer."
           : "The build carries on without it.",
+      }
+    case "reminder":
+      return {
+        kind: "reminder",
+        id: item.reminder_id,
+        title: item.title,
+        detail: "You asked to be reminded. Mark it done on the Reminders page.",
+        raisedBy: SYSTEM,
+        raisedById: null,
+        raisedAt: item.due_at,
+        expiresAt: null,
+        onExpiry: "It stays here until you mark it done.",
       }
     default:
       return {

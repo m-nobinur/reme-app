@@ -570,6 +570,10 @@ export const samples: Record<ContractName, unknown> = {
     replaced_range: { from_seq: 4, to_seq: 31 },
     dropped_refs: [ULID],
   },
+  CosToolStarted: {
+    tool_call_id: "functions.create_reminder:0",
+    approval_id: "approval_9fK2",
+  },
   CosToolUnknown: {
     tool_call_id: "functions.create_reminder:0",
     approval_id: "approval_9fK2",
@@ -1012,6 +1016,8 @@ export const samples: Record<ContractName, unknown> = {
     attempts: 1,
     sent_at: LATER,
     error: null,
+    lease_until: null,
+    created_at: LATER,
   },
   OrgSchedule: {
     time_zone: "Europe/London",
@@ -1200,6 +1206,12 @@ export const samples: Record<ContractName, unknown> = {
           expires_at: LATER,
         },
         version: 4,
+      },
+      {
+        kind: "reminder",
+        reminder_id: "9c0d1e2f-3a4b-4c5d-8e6f-7a8b9c0d1e2f",
+        title: "Order more microfibre cloths",
+        due_at: NOW,
       },
     ],
     missing_facts: ["business.email"],

@@ -17,6 +17,12 @@ it("lists only what waits on an answer: approvals and questions", () => {
   ).toHaveLength(3)
 })
 
+it("keeps a due reminder, which the notifications page lists", () => {
+  expect(
+    waitingOnOwner([item("reminder"), item("report"), item("alert")])
+  ).toHaveLength(1)
+})
+
 it("lists nothing when there are only reports and alerts", () => {
   expect(waitingOnOwner([item("report"), item("alert")])).toEqual([])
 })

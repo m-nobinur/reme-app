@@ -1,4 +1,5 @@
 import {
+  AlarmIcon,
   ClipboardTextIcon,
   QuestionIcon,
   SealCheckIcon,
@@ -6,12 +7,13 @@ import {
 } from "@phosphor-icons/react"
 
 /**
- * The owner attention contract (§7.3): Question, ApprovalRequest, Report and
- * Alert, and nothing else. A fifth kind is a change to what the product
- * promises the owner, so it is an ADR rather than a new value here, and the
- * union below is what makes that a type error instead of a code review.
+ * The owner attention contract (§7.3): Question, ApprovalRequest, Report,
+ * Alert and Reminder, and nothing else. A sixth kind is a change to what the
+ * product promises the owner, so it is an ADR rather than a new value here,
+ * and the union below is what makes that a type error instead of a code
+ * review.
  */
-type AttentionKind = "question" | "approval" | "report" | "alert"
+type AttentionKind = "question" | "approval" | "report" | "alert" | "reminder"
 
 const KIND: Record<
   AttentionKind,
@@ -25,6 +27,7 @@ const KIND: Record<
   approval: { label: "Approval", icon: SealCheckIcon, variant: "secondary" },
   report: { label: "Report", icon: ClipboardTextIcon, variant: "secondary" },
   alert: { label: "Alert", icon: WarningIcon, variant: "destructive" },
+  reminder: { label: "Reminder", icon: AlarmIcon, variant: "secondary" },
 }
 
 export type { AttentionKind }

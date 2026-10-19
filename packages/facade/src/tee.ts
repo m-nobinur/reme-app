@@ -79,7 +79,12 @@ export function redact(observation: FlueObservation): Record<string, unknown> {
   return clone
 }
 
-function scrub(text: string): string {
+/**
+ * `text` with every secret-shaped string replaced by `[redacted]`, and NUL
+ * removed. The one scrub: the tee runs it over observations, and the Chief
+ * of Staff over every message it sends a model (ADR-042).
+ */
+export function scrub(text: string): string {
   // Postgres refuses \u0000 in jsonb, and one refused batch blocks every later one.
   let out = text.replaceAll("\u0000", "")
   for (const shape of SECRET_SHAPES) out = out.replace(shape, "[redacted]")

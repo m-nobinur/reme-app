@@ -50,6 +50,12 @@ const attention = {
     at: NOW,
     reason: "build_failed",
   },
+  reminder: {
+    kind: "reminder",
+    reminder_id: ASSIGNMENT,
+    title: "Ring the boiler engineer",
+    due_at: NOW,
+  },
 }
 
 const facts = {
@@ -130,7 +136,7 @@ const facts = {
 }
 
 describe("AttentionItem", () => {
-  it("has a case here for exactly the four kinds of §7.3", () => {
+  it("has a case here for exactly the five kinds of §7.3", () => {
     const kinds = AttentionItem.options.map((o) => o.shape.kind.value)
     expect(new Set(kinds)).toEqual(new Set(Object.keys(attention)))
   })
@@ -140,7 +146,10 @@ describe("AttentionItem", () => {
   })
 
   const refused: [string, unknown][] = [
-    ["a fifth kind", { ...attention.report, kind: "reminder" }],
+    ["a sixth kind", { ...attention.report, kind: "digest" }],
+    ["a reminder with no due time", { ...attention.reminder, due_at: null }],
+    ["a reminder with a blank title", { ...attention.reminder, title: " " }],
+    ["a reminder carrying copy", { ...attention.reminder, message: "Now" }],
     [
       "a question carrying an approval",
       { kind: "question", request: samples.ApprovalRequest },
@@ -356,6 +365,8 @@ describe("the requests around them", () => {
       verdict("ActivityFeed", ActivityFeed, { items: [item] })
     expect(feed(attention.report)).toEqual(ACCEPTED)
     expect(feed(attention.alert)).toEqual(ACCEPTED)
+    expect(feed({ ...attention.alert, reason: "job_paused" })).toEqual(ACCEPTED)
+    expect(feed(attention.reminder)).toEqual(REFUSED)
     expect(feed(attention.question)).toEqual(REFUSED)
     expect(feed(attention.approval)).toEqual(REFUSED)
   })

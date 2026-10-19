@@ -11,6 +11,7 @@ import { refusalText } from "@workspace/ui/lib/refusal"
 import {
   BROKEN,
   type DecisionView,
+  EXPIRED,
   heldText,
   isHeld,
   NOT_DONE,
@@ -159,6 +160,8 @@ export function Decision<I, O>({
         <Problem text={UNCONFIRMED} />
       ) : view.state === "failed" ? (
         <Problem text={NOT_DONE} />
+      ) : view.state === "expired" ? (
+        <Problem text={EXPIRED} />
       ) : null}
     </section>
   )

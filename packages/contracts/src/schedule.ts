@@ -51,15 +51,26 @@ export const JobRun = z.strictObject({
  * The outbox. `key` is the idempotency key: one per message and channel, so
  * a second insert is a no-op and nothing sends twice. `suppressed` is a
  * recipient the provider refused for good, and turns the channel off.
+ * `sending` is a consumer's claim until `lease_until`; `unknown` is an email
+ * whose send may have left and is never sent again.
  */
 export const Delivery = z.strictObject({
   org_id: Uuid,
   key: z.string().min(1).max(200),
   channel: z.enum(["in_app", "email"]),
-  state: z.enum(["pending", "sent", "failed", "suppressed"]),
+  state: z.enum([
+    "pending",
+    "sending",
+    "unknown",
+    "sent",
+    "failed",
+    "suppressed",
+  ]),
   attempts: z.int().nonnegative(),
   sent_at: Timestamp.nullable(),
   error: z.string().max(500).nullable(),
+  lease_until: Timestamp.nullable(),
+  created_at: Timestamp,
 })
 
 /** Wall-clock time of day in the org's zone, as `HH:MM`. */

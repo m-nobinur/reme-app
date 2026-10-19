@@ -1,12 +1,12 @@
 import type { AttentionItem } from "./api/types"
 
 /**
- * The owner's notifications: the four §7.3 kinds, newest first. Questions
- * and approvals come from `/workspace` (the open ones), reports and alerts
- * from `/activity` (30 days). `/workspace` also carries the last day's
- * reports and alerts, so each kind is taken from one read only, or a report
- * would show twice: `attention` is the frame's, which `waitingOnOwner` has
- * already cut to questions and approvals.
+ * The owner's notifications: the five §7.3 kinds, newest first. Questions,
+ * approvals and reminders that came due come from `/workspace` (the open
+ * ones), reports and alerts from `/activity` (30 days). `/workspace` also
+ * carries the last day's reports and alerts, so each kind is taken from one
+ * read only, or a report would show twice: `attention` is the frame's, which
+ * `waitingOnOwner` has already cut to questions, approvals and reminders.
  */
 export function notificationsOf(
   attention: AttentionItem[],

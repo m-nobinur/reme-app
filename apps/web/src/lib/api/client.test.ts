@@ -398,6 +398,39 @@ it("makes no request for a pipeline it cannot read yet", async () => {
   expect(calls).toEqual([])
 })
 
+it("reads a due reminder as an item raised when it fell due, and a paused job as an alert", async () => {
+  const reminder = {
+    kind: "reminder",
+    reminder_id: "9c0d1e2f-3a4b-4c5d-8e6f-7a8b9c0d1e2f",
+    title: "Ring the boiler engineer",
+    due_at: AT,
+  }
+  const paused = { ...alert, reason: "job_paused", assignment_id: null }
+  answers["GET /workspace"] = { ...workspace, attention: [reminder] }
+  answers["GET /activity"] = { items: [paused] }
+  const { attention } = await apiSource.workspace(Promise.resolve([]))
+  expect(attention).toEqual([
+    {
+      kind: "reminder",
+      id: reminder.reminder_id,
+      title: "Ring the boiler engineer",
+      detail: "You asked to be reminded. Mark it done on the Reminders page.",
+      raisedBy: "Reme",
+      raisedById: null,
+      raisedAt: AT,
+      expiresAt: null,
+      onExpiry: "It stays here until you mark it done.",
+    },
+  ])
+  expect(await apiSource.activity()).toMatchObject([
+    {
+      kind: "alert",
+      id: paused.event_id,
+      title: "A scheduled task was paused",
+    },
+  ])
+})
+
 it("answers empty for a session with no organisation", async () => {
   vi.stubGlobal(
     "fetch",

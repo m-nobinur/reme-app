@@ -122,6 +122,21 @@ describe("the Jev gate", () => {
     expect(typeof line.ms).toBe("number")
   })
 
+  it("sends Jev no secret-shaped string from the reply or the question", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined)
+    const { fetchImpl, sent } = fake(answers(1, "answer", 1, ["modern", 1]))
+    await jev(
+      "k",
+      template,
+      "Which layout? postgres://db.internal/reme",
+      "Modern, and my key is sk-fake12345678",
+      fetchImpl
+    )
+    const body = JSON.parse(sent[0]?.init.body as string)
+    expect(JSON.stringify(body)).not.toMatch(/sk-fake|db\.internal/)
+    expect(body.state.owner_replied).toBe("Modern, and my key is [redacted]")
+  })
+
   it("never asks which option on a details card or a card that takes several", async () => {
     vi.spyOn(console, "log").mockImplementation(() => undefined)
     for (const card of [contact, pages]) {

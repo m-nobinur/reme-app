@@ -5,7 +5,7 @@ import {
   CosToolResult,
   type TaintLabel,
 } from "@workspace/contracts"
-import { eq, events, type OrgScopedDb } from "@workspace/db"
+import { events, type OrgScopedDb, sql } from "@workspace/db"
 import type { ModelMessage, UIMessage } from "ai"
 import { sha256Hex, sortedKeys } from "../http.ts"
 
@@ -20,15 +20,22 @@ import { sha256Hex, sortedKeys } from "../http.ts"
 export type SessionEvent = { seq: number; type: string; payload: unknown }
 
 /** A row as the log holds it, with the taint labels it was written with. */
-type LoggedEvent = SessionEvent & { taint: TaintLabel[] }
+export type LoggedEvent = SessionEvent & { taint: TaintLabel[] }
 
 /**
  * A session's events, in seq order. `sessionId` is a conversation id read
  * under the same `withOrg`.
  */
-export async function readSession(
+export const readSession = (
   db: OrgScopedDb,
   sessionId: string
+): Promise<LoggedEvent[]> => readSessionSince(db, sessionId, -1)
+
+/** A session's events after seq `after`, in seq order. */
+export async function readSessionSince(
+  db: OrgScopedDb,
+  sessionId: string,
+  after: number
 ): Promise<LoggedEvent[]> {
   const rows = await db
     .select({
@@ -38,7 +45,7 @@ export async function readSession(
       taint: events.taint,
     })
     .from(events)
-    .where(eq(events.sessionId, sessionId))
+    .where(sql`${events.sessionId} = ${sessionId} and ${events.seq} > ${after}`)
     .orderBy(events.seq)
   return rows.map((row) => ({ ...row, seq: Number(row.seq) }))
 }

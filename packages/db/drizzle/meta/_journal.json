@@ -155,6 +155,20 @@
       "when": 1792401208737,
       "tag": "0021_next_due_at",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1792402576170,
+      "tag": "0022_signup_claim",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1792403464553,
+      "tag": "0023_delivery_claim",
+      "breakpoints": true
     }
   ]
 }

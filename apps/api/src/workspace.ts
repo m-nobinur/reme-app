@@ -31,6 +31,7 @@ import {
   events,
   type OrgScopedDb,
   orgs,
+  reminders,
   siteRevisions,
   sql,
   type Tenancy,
@@ -513,10 +514,47 @@ export async function readQuestions(
   }))
 }
 
+/** How many due reminders the panel lists; the rest wait on the reminders page. */
+const DUE_REMINDERS_MAX = 10
+
+/**
+ * Reminders that came due and are not done, the most recently due first. One
+ * stays until the owner marks it done, so a missed one is still there.
+ */
+export async function readDueReminders(
+  db: OrgScopedDb,
+  now: Date
+): Promise<Extract<AttentionItem, { kind: "reminder" }>[]> {
+  const rows = await db
+    .select({
+      id: reminders.id,
+      title: reminders.title,
+      dueAt: reminders.dueAt,
+    })
+    .from(reminders)
+    .where(
+      sql`${reminders.doneAt} is null and ${reminders.dueAt} <= ${iso(now)}::timestamptz`
+    )
+    .orderBy(sql`${reminders.dueAt} desc`)
+    .limit(DUE_REMINDERS_MAX)
+  return rows.flatMap((row) =>
+    row.dueAt
+      ? [
+          {
+            kind: "reminder" as const,
+            reminder_id: row.id,
+            title: row.title,
+            due_at: iso(row.dueAt),
+          },
+        ]
+      : []
+  )
+}
+
 /**
  * Reports and alerts from the last `hours`, newest first: a publish, a
  * failed build, a build parked on its budget, a publish the probes rolled
- * back. Reached through the org's recently touched assignments, so the
+ * back, a job that kept failing. Reached through the org's recently touched assignments, so the
  * event index is probed per build rather than the org's whole log scanned.
  */
 async function readFeed(
@@ -524,39 +562,50 @@ async function readFeed(
   hours: number,
   limit: number
 ): Promise<(Report | Alert)[]> {
-  const rows = await db
-    .select({
-      eventId: events.eventId,
-      assignmentId: events.assignmentId,
-      type: events.type,
-      at: events.occurredAt,
-      version: siteRevisions.version,
-      revisionId: siteRevisions.id,
-      // A failed build's reason, from its transition row by
-      // `assignment_transitions_version_key`.
-      failure: sql<
-        string | null
-      >`(select t.reason from assignment_transitions t where ${events.type} = 'assignment.state_changed' and t.assignment_id = ${events.assignmentId} and t.version = (${events.payload}->>'version')::int)`,
-    })
-    .from(assignments)
-    .innerJoin(
-      events,
-      sql`${events.assignmentId} = ${assignments.id} and ${events.type} in ('deployment.activated', 'alert.raised', 'budget.exhausted', 'assignment.state_changed')`
-    )
-    .leftJoin(
-      siteRevisions,
-      sql`${siteRevisions.id} = case when ${events.type} = 'deployment.activated' then (${events.payload}->>'revision_id')::uuid end`
-    )
-    .where(
-      sql`${assignments.updatedAt} > now() - make_interval(hours => ${hours}) and ${events.occurredAt} > now() - make_interval(hours => ${hours}) and (
+  const [rows, paused] = await Promise.all([
+    db
+      .select({
+        eventId: events.eventId,
+        assignmentId: events.assignmentId,
+        type: events.type,
+        at: events.occurredAt,
+        version: siteRevisions.version,
+        revisionId: siteRevisions.id,
+        // A failed build's reason, from its transition row by
+        // `assignment_transitions_version_key`.
+        failure: sql<
+          string | null
+        >`(select t.reason from assignment_transitions t where ${events.type} = 'assignment.state_changed' and t.assignment_id = ${events.assignmentId} and t.version = (${events.payload}->>'version')::int)`,
+      })
+      .from(assignments)
+      .innerJoin(
+        events,
+        sql`${events.assignmentId} = ${assignments.id} and ${events.type} in ('deployment.activated', 'alert.raised', 'budget.exhausted', 'assignment.state_changed')`
+      )
+      .leftJoin(
+        siteRevisions,
+        sql`${siteRevisions.id} = case when ${events.type} = 'deployment.activated' then (${events.payload}->>'revision_id')::uuid end`
+      )
+      .where(
+        sql`${assignments.updatedAt} > now() - make_interval(hours => ${hours}) and ${events.occurredAt} > now() - make_interval(hours => ${hours}) and (
         (${events.type} = 'deployment.activated' and ${events.payload}->>'kind' = 'publish')
         or (${events.type} = 'alert.raised' and ${events.payload}->>'kind' = 'publish.rolled_back')
         or ${events.type} = 'budget.exhausted'
         or (${events.type} = 'assignment.state_changed' and ${events.payload}->>'to' = 'failed'))`
-    )
-    .orderBy(sql`${events.eventId} desc`)
-    .limit(limit)
-  return rows.flatMap((row): (Report | Alert)[] => {
+      )
+      .orderBy(sql`${events.eventId} desc`)
+      .limit(limit),
+    // A paused job belongs to no build, so the join above cannot reach it.
+    db
+      .select({ eventId: events.eventId, at: events.occurredAt })
+      .from(events)
+      .where(
+        sql`${events.type} = 'alert.raised' and ${events.payload}->>'kind' = 'job.paused' and ${events.occurredAt} > now() - make_interval(hours => ${hours})`
+      )
+      .orderBy(sql`${events.eventId} desc`)
+      .limit(limit),
+  ])
+  const built = rows.flatMap((row): (Report | Alert)[] => {
     const logged = {
       event_id: row.eventId,
       assignment_id: row.assignmentId,
@@ -589,6 +638,19 @@ async function readFeed(
       },
     ]
   })
+  const jobs = paused.map(
+    (row): Alert => ({
+      kind: "alert",
+      event_id: row.eventId,
+      assignment_id: null,
+      at: iso(row.at),
+      reason: "job_paused",
+    })
+  )
+  // Event ids are ULIDs, so the string order is the time order.
+  return [...built, ...jobs]
+    .sort((a, b) => (a.event_id < b.event_id ? 1 : -1))
+    .slice(0, limit)
 }
 
 /** The orchestrator's failure reasons, by the cause the owner is told. */
@@ -668,15 +730,17 @@ export function assistantName(current: FactRecord[]): string | null {
     : null
 }
 
-/** §7.3's order: approvals, questions, then alerts and reports, each list as read. */
+/** §7.3's order: approvals, questions, due reminders, then alerts and reports, each list as read. */
 export function orderAttention(
   approvalItems: AttentionItem[],
   questions: AttentionItem[],
-  feed: (Report | Alert)[]
+  feed: (Report | Alert)[],
+  due: AttentionItem[] = []
 ): AttentionItem[] {
   return [
     ...approvalItems,
     ...questions,
+    ...due,
     ...feed.filter((item) => item.kind === "alert"),
     ...feed.filter((item) => item.kind === "report"),
   ]
@@ -772,9 +836,18 @@ export async function statusOf(
   config: SiteConfig,
   now: Date
 ): Promise<WorkspaceStatus> {
+  return (await statusWithFacts(db, config, now)).status
+}
+
+/** `statusOf` and the facts it was read from, for a caller that needs both. */
+export async function statusWithFacts(
+  db: OrgScopedDb,
+  config: SiteConfig,
+  now: Date
+): Promise<{ status: WorkspaceStatus; facts: FactRecord[] }> {
   // Issued together, so postgres.js pipelines them on the transaction's one
   // connection instead of paying a round trip each.
-  const [builds, approvalItems, questions, feed, current, site, notes] =
+  const [builds, approvalItems, questions, feed, current, site, notes, due] =
     await Promise.all([
       readBuilds(db),
       readApprovals(db),
@@ -783,13 +856,14 @@ export async function statusOf(
       readFacts(db),
       readSite(db, config),
       readReminderNotes(db),
+      readDueReminders(db, now),
     ])
   const missing = missingFacts(current)
-  return WorkspaceStatus.parse({
+  const status = WorkspaceStatus.parse({
     site,
     builds,
     expected_seconds: EXPECTED_SECONDS,
-    attention: orderAttention(approvalItems, questions, feed),
+    attention: orderAttention(approvalItems, questions, feed, due),
     missing_facts: missing,
     assistant_name: assistantName(current),
     reminders: {
@@ -800,6 +874,7 @@ export async function statusOf(
       ),
     },
   })
+  return { status, facts: current }
 }
 
 export async function readActivity(

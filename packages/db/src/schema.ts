@@ -233,6 +233,12 @@ export const users = pgTable(
     workosUserId: text("workos_user_id").notNull(),
     email: text("email").notNull(),
     name: text("name"),
+    /**
+     * Set while one signup is creating this person's org, so a second one at
+     * the same moment waits for it instead of making a second org. Null when
+     * no signup is running (`apps/api/src/org.ts`).
+     */
+    signupClaimedAt: timestamp("signup_claimed_at", { withTimezone: true }),
     createdAt,
     updatedAt,
   },
@@ -1245,6 +1251,8 @@ export const deliveryChannel = pgEnum("delivery_channel", ["in_app", "email"])
 /** `Delivery.state`. */
 export const deliveryState = pgEnum("delivery_state", [
   "pending",
+  "sending",
+  "unknown",
   "sent",
   "failed",
   "suppressed",
@@ -1267,6 +1275,17 @@ export const deliveries = pgTable(
     attempts: integer("attempts").notNull().default(0),
     sentAt: timestamp("sent_at", { withTimezone: true }),
     error: text("error"),
+    /** The consumer's claim: another consumer may take a `sending` row once it lapses. */
+    leaseUntil: timestamp("lease_until", { withTimezone: true }),
+    /** Ages a row for the hourly sweep. */
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    /**
+     * The queued message while the row is outstanding, so the sweep can queue
+     * it again; null once settled.
+     */
+    payload: jsonb("payload").$type<Record<string, unknown>>(),
   },
   (t) => [
     primaryKey({ name: "deliveries_pkey", columns: [t.orgId, t.key] }),
