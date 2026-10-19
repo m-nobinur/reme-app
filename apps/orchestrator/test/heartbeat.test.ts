@@ -332,11 +332,11 @@ describe.skipIf(!url)("the heartbeat", () => {
   describe("the gate, the cap and the writer", () => {
     it("stops under the dial's bar with no writer call and no cap taken", async () => {
       await seed(later(NOON, 20), later(NOON, -2))
-      probability = 0.85
+      probability = 0.55
       await beat(NOON)
       expect(await run(NOON)).toEqual({
         outcome: "skipped",
-        detail: "gate:0.85",
+        detail: "gate:0.55",
       })
       expect(models.write).not.toHaveBeenCalled()
       expect(await cap()).toEqual([])
@@ -354,7 +354,7 @@ describe.skipIf(!url)("the heartbeat", () => {
         db.update(orgs).set({ proactivity: "high" })
       )
       await seed(later(NOON, 20), later(NOON, -2))
-      probability = 0.85
+      probability = 0.55
       await beat(NOON)
       expect(models.write).toHaveBeenCalledTimes(1)
       expect(models.write.mock.calls[0]?.[0]).toMatch(/on track/)

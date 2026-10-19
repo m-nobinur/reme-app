@@ -24,15 +24,27 @@ export type Spent = {
 
 export const GATE = {
   model: "typesafe/jev-1.13",
-  question: "Is any of this worth interrupting the owner for now?",
-  /** What each answer means, as the onboarding gate (apps/api/src/jev.ts) spells its own out. */
-  criteria: {
-    true: "An item needs the owner to decide, answer or act, something went wrong that visitors or customers would notice, or it is news about their business they would want to hear today",
-    false:
-      "Every item is routine, already known to the owner, or a fault Reme fixes on its own",
+  /**
+   * "Is any of this worth interrupting the owner for now?", asked as the
+   * three reasons it could be; the beat goes on when any is likely. One
+   * question scored every digest between 0.15 and 0.68 on the eval set,
+   * these three spread it from 0.26 to 0.96.
+   */
+  questions: {
+    needs_owner:
+      "Does any item need the owner to decide, answer a question, or do something?",
+    visible_problem:
+      "Did something go wrong that the business's visitors or customers would notice?",
+    wanted_news:
+      "Is any item news about the business the owner would want to hear today?",
   },
-  /** The bar each dial sets: the lower it is, the more gets through. */
-  threshold: { low: 0.95, default: 0.9, high: 0.8 },
+  /**
+   * The bar each dial sets: the lower it is, the more gets through, and the
+   * writer's `[quiet]` is the second filter. Tuned on the coordinator's seed
+   * labels (evals/heartbeat), to recheck on the owner's labels and on the
+   * dismiss rate of the first 50 real heartbeats.
+   */
+  threshold: { low: 0.9, default: 0.6, high: 0.5 },
   timeoutMs: 5_000,
   /** Per Mtok of input, for when OpenRouter reports no cost. */
   inputPrice: 0.042,
@@ -60,7 +72,7 @@ type GateState = Parameters<
   >["doEvaluate"]
 >[0]["state"]
 
-/** Jev's probability that `state` is worth interrupting the owner for. */
+/** Jev's probability that `state` is worth interrupting the owner for: the likeliest of its reasons. */
 export async function askGate(
   apiKey: string,
   state: GateState
@@ -70,22 +82,25 @@ export async function askGate(
     .evaluationModel(GATE.model)
     .doEvaluate({
       state,
-      questions: {
-        worth_it: {
-          type: "boolean",
-          instructions: GATE.question,
-          criteria: GATE.criteria,
-        },
-      },
+      questions: Object.fromEntries(
+        Object.entries(GATE.questions).map(([id, instructions]) => [
+          id,
+          { type: "boolean" as const, instructions },
+        ])
+      ),
       abortSignal: AbortSignal.timeout(GATE.timeoutMs),
     })
-  const answer = Object.entries(result.answers).find(
-    ([id]) => id === "worth_it"
-  )?.[1]
-  if (answer?.type !== "boolean") throw new Error("heartbeat.gate_unanswered")
+  const answers = Object.keys(GATE.questions).map(
+    (id) => Object.entries(result.answers).find(([key]) => key === id)?.[1]
+  )
+  let probability = 0
+  for (const answer of answers) {
+    if (answer?.type !== "boolean") throw new Error("heartbeat.gate_unanswered")
+    probability = Math.max(probability, answer.probability)
+  }
   const input = result.usage?.inputTokens ?? 0
   return {
-    probability: answer.probability,
+    probability,
     spent: {
       model: GATE.model,
       cost_usd:
