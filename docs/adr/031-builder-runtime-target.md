@@ -184,7 +184,8 @@ version deploys code that cannot build a site. Do not roll back. Every fix is fo
    `docker build --platform linux/amd64 -t reme-sandbox:sdk1-<date> infra/sandbox`.
 2. Push it: `cd apps/orchestrator && FORCE_COLOR=0 pnpm exec wrangler containers push
    reme-sandbox:sdk1-<date>`. Put the printed digest in both `images.sandbox.image` entries of
-   `apps/orchestrator/wrangler.jsonc` if it differs from the pin, and land that.
+   `apps/orchestrator/wrangler.jsonc` and land that. Until then they pin the 0.12 image, whose
+   entrypoint is the old control server and which has no `sandbox-shim`: 1.0 cannot run on it.
 3. On staging, leave a sandbox running: build a site to `preview_ready`, so a warm sandbox exists
    at the switch, as one will in production. Note `wrangler containers list`.
 4. Deploy with `stage.sh`, which waits until no assignment or publish instance is live.
