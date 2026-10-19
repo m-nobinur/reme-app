@@ -9,8 +9,8 @@
     "golden": "E2E_BASE_URL=${E2E_BASE_URL:-https://staging.remeai.co.uk} playwright test golden.spec.ts --grep @live"
   },
   "devDependencies": {
-    "@axe-core/playwright": "^4.13.0",
-    "@playwright/test": "^1.63.0",
+    "@axe-core/playwright": "^4.14.0",
+    "@playwright/test": "^1.64.1",
     "@types/node": "^24",
     "postgres": "3.4.9",
     "typescript": "^6"
