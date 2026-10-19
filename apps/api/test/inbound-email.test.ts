@@ -1,6 +1,23 @@
+import { replyToken } from "@workspace/contracts"
+import {
+  conversationMessages,
+  conversations,
+  eq,
+  memberships,
+  sql,
+  type Tenancy,
+  tenancy,
+  users,
+} from "@workspace/db"
 import type { Header } from "postal-mime"
-import { describe, expect, it } from "vitest"
-import { authenticated, stripReply } from "../src/inbound-email.ts"
+import { afterAll, describe, expect, it, vi } from "vitest"
+import {
+  authenticated,
+  MAX_RAW_BYTES,
+  receive,
+  stripReply,
+} from "../src/inbound-email.ts"
+import { owner } from "./owner-fixture.ts"
 
 const header = (key: string, value: string): Header => ({
   key,
@@ -159,5 +176,251 @@ describe("stripReply", () => {
     expect(stripReply("On Friday I wrote the cheque.\nThanks.")).toBe(
       "On Friday I wrote the cheque.\nThanks."
     )
+  })
+})
+
+const url = process.env.DATABASE_URL
+const KEY = "reply-key-for-tests-0123456789ab"
+const DOMAIN = "reply.example.invalid"
+
+describe.skipIf(!url)("receive, against a database", () => {
+  const kit: Tenancy = tenancy(url as string)
+  afterAll(() => kit.close())
+
+  /** An org with its owner, and a conversation whose tail is `tail`. */
+  async function setup(tail: Record<string, unknown>[] = []) {
+    const who = await owner(kit, url as string, "mail")
+    const conversationId = crypto.randomUUID()
+    const [row] = await kit.withOrg({ orgId: who.orgId }, async (db) => {
+      await db.insert(conversations).values({
+        id: conversationId,
+        orgId: who.orgId,
+        kind: "assistant",
+        createdByStaffId: who.chiefId,
+      })
+      await db.insert(conversationMessages).values({
+        conversationId,
+        id: "tail_1",
+        orgId: who.orgId,
+        format: "ai-sdk/v6",
+        content: { role: "assistant", parts: tail },
+      })
+      return db
+        .select({ email: users.email })
+        .from(memberships)
+        .innerJoin(users, eq(users.id, memberships.userId))
+        .where(sql`${memberships.orgId} = ${who.orgId}`)
+    })
+    return { ...who, conversationId, email: (row?.email ?? "") as string }
+  }
+
+  const rows = (orgId: string, id: string) =>
+    kit.withOrg({ orgId }, (db) =>
+      db.execute<{ id: string; content: unknown }>(
+        sql`select id, content from ${conversationMessages}
+          where conversation_id = ${id} order by seq`
+      )
+    )
+
+  const passing = (domain: string) =>
+    `Authentication-Results: mx.cloudflare.net; dkim=pass header.d=${domain}; dmarc=pass header.from=${domain}`
+
+  /** An inbound message as Email Routing hands it over. */
+  function inbound(options: {
+    token: string
+    from: string
+    auth?: string
+    body?: string
+    messageId?: string
+    size?: number
+  }) {
+    const { token, from, body = "Move it to Friday." } = options
+    const domain = from.split("@")[1] as string
+    const mime = [
+      options.auth ?? passing(domain),
+      `From: Someone <${from}>`,
+      `To: reply+${token}@${DOMAIN}`,
+      "Subject: Re: Your reminder",
+      `Message-ID: ${options.messageId ?? `<${crypto.randomUUID()}@mail.example>`}`,
+      "Content-Type: text/plain; charset=utf-8",
+      "",
+      body,
+    ].join("\r\n")
+    const setReject = vi.fn()
+    const message = {
+      from,
+      to: `reply+${token}@${DOMAIN}`,
+      headers: new Headers(),
+      raw: new Response(mime).body,
+      rawSize: options.size ?? mime.length,
+      setReject,
+    } as unknown as ForwardableEmailMessage
+    return { message, setReject }
+  }
+
+  const env = {
+    HYPERDRIVE: {} as Hyperdrive,
+    REPLY_TOKEN_KEY: KEY,
+    REPLY_DOMAIN: DOMAIN,
+  }
+  const quiet = () =>
+    vi.spyOn(console, "log").mockImplementation(() => undefined)
+
+  it("posts a valid reply as the owner's message, with the quoted history cut, and logs no address or body", async () => {
+    const log = quiet()
+    const o = await setup()
+    const token = await replyToken(KEY, o.orgId, o.conversationId)
+    const { message, setReject } = inbound({
+      token,
+      from: o.email,
+      body: [
+        "Move it to Friday.",
+        "",
+        "On Mon, 19 Oct 2026 at 09:00 Reme <hello@remeai.co.uk> wrote:",
+        "> Your reminder is due.",
+      ].join("\r\n"),
+    })
+    await receive(message, env, kit)
+    expect(setReject).not.toHaveBeenCalled()
+    const stored = await rows(o.orgId, o.conversationId)
+    expect(stored).toHaveLength(2)
+    expect(stored[1]?.id).toMatch(/^eml_/)
+    expect(stored[1]?.content).toEqual({
+      role: "user",
+      parts: [{ type: "text", text: "Move it to Friday." }],
+    })
+    const lines = log.mock.calls.map((c) => String(c[0]))
+    expect(lines).toHaveLength(1)
+    expect(JSON.parse(lines[0] as string)).toMatchObject({
+      code: "inbound_email",
+      outcome: "accepted",
+      reason: "posted",
+    })
+    expect(lines[0]).not.toContain(o.email)
+    expect(lines[0]).not.toContain("Friday")
+    log.mockRestore()
+  })
+
+  it("posts a redelivered mail once", async () => {
+    const log = quiet()
+    const o = await setup()
+    const token = await replyToken(KEY, o.orgId, o.conversationId)
+    for (let i = 0; i < 2; i++) {
+      const { message, setReject } = inbound({
+        token,
+        from: o.email,
+        messageId: "<same@mail.example>",
+      })
+      await receive(message, env, kit)
+      expect(setReject).not.toHaveBeenCalled()
+    }
+    expect(await rows(o.orgId, o.conversationId)).toHaveLength(2)
+    log.mockRestore()
+  })
+
+  it("posts nothing for a forged token, a token for a conversation the org lacks, or a wrong domain", async () => {
+    const log = quiet()
+    const o = await setup()
+    const other = await setup()
+    const refused = async (token: string, domain = DOMAIN) => {
+      const { message, setReject } = inbound({ token, from: o.email })
+      Object.assign(message, { to: `reply+${token}@${domain}` })
+      await receive(message, env, kit)
+      expect(setReject).toHaveBeenCalledTimes(1)
+    }
+    await refused(
+      await replyToken(
+        "another-key-0123456789abcdefghij",
+        o.orgId,
+        o.conversationId
+      )
+    )
+    await refused("A".repeat(56))
+    await refused("short")
+    // Signed by us, but naming a conversation that belongs to another org.
+    await refused(await replyToken(KEY, o.orgId, other.conversationId))
+    await refused(
+      await replyToken(KEY, o.orgId, o.conversationId),
+      "elsewhere.invalid"
+    )
+    expect(await rows(o.orgId, o.conversationId)).toHaveLength(1)
+    expect(await rows(other.orgId, other.conversationId)).toHaveLength(1)
+    log.mockRestore()
+  })
+
+  it("posts nothing from a sender who is not an owner of the org", async () => {
+    const log = quiet()
+    const o = await setup()
+    const token = await replyToken(KEY, o.orgId, o.conversationId)
+    const { message, setReject } = inbound({
+      token,
+      from: "stranger@elsewhere.example",
+    })
+    await receive(message, env, kit)
+    expect(setReject).toHaveBeenCalledTimes(1)
+    expect(await rows(o.orgId, o.conversationId)).toHaveLength(1)
+    log.mockRestore()
+  })
+
+  it("posts nothing when authentication fails: a spoofed owner address, a planted header, no header", async () => {
+    const log = quiet()
+    const o = await setup()
+    const token = await replyToken(KEY, o.orgId, o.conversationId)
+    const domain = o.email.split("@")[1] as string
+    for (const auth of [
+      // The owner's address, signed by the attacker's own domain.
+      `Authentication-Results: mx.cloudflare.net; dkim=pass header.d=attacker.example; dmarc=fail header.from=${domain}`,
+      // A pass the sender wrote for themselves, under another server's name.
+      `Authentication-Results: mail.attacker.example; dmarc=pass header.from=${domain}`,
+      "X-Nothing: here",
+    ]) {
+      const { message, setReject } = inbound({ token, from: o.email, auth })
+      await receive(message, env, kit)
+      expect(setReject).toHaveBeenCalledTimes(1)
+    }
+    expect(await rows(o.orgId, o.conversationId)).toHaveLength(1)
+    log.mockRestore()
+  })
+
+  it("posts nothing over the size cap, and does not read the body", async () => {
+    const log = quiet()
+    const o = await setup()
+    const token = await replyToken(KEY, o.orgId, o.conversationId)
+    const { message, setReject } = inbound({
+      token,
+      from: o.email,
+      size: MAX_RAW_BYTES + 1,
+    })
+    await receive(message, env, kit)
+    expect(setReject).toHaveBeenCalledTimes(1)
+    expect(message.raw.locked).toBe(false)
+    expect(await rows(o.orgId, o.conversationId)).toHaveLength(1)
+    log.mockRestore()
+  })
+
+  it("approves nothing: an emailed yes beside an open card is refused and the card stays open", async () => {
+    const log = quiet()
+    const card = [
+      { type: "step-start" },
+      {
+        type: "tool-ask_choice",
+        toolCallId: "call_1",
+        state: "approval-requested",
+        input: { key: "manual_builder" },
+      },
+    ]
+    const o = await setup(card)
+    const token = await replyToken(KEY, o.orgId, o.conversationId)
+    const { message, setReject } = inbound({
+      token,
+      from: o.email,
+      body: "yes go ahead",
+    })
+    await receive(message, env, kit)
+    expect(setReject).toHaveBeenCalledTimes(1)
+    const stored = await rows(o.orgId, o.conversationId)
+    expect(stored).toHaveLength(1)
+    expect(stored[0]?.content).toEqual({ role: "assistant", parts: card })
+    log.mockRestore()
   })
 })
