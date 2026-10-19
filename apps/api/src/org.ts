@@ -8,6 +8,7 @@ import {
   asc,
   conversationMessages,
   conversations,
+  ensureHeartbeat,
   ensureStartingTeam,
   eq,
   memberships,
@@ -368,6 +369,9 @@ async function writeOrg(
           newId
         ),
       })
+      // The first beat is hours away, so the scheduler's hourly fallback scan
+      // finds it without lowering the KV guard from here.
+      await ensureHeartbeat(db)
       return true
     }
   )

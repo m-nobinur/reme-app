@@ -29,7 +29,16 @@ export {
 export { currentFacts, supersedeFact } from "./facts.ts"
 export * from "./map.ts"
 export { type Waited, waitedOn } from "./questions.ts"
-export { nextRun, recomputeOrgJobs } from "./recurrence.ts"
+export {
+  afterQuiet,
+  ensureHeartbeat,
+  HEARTBEAT_RULES,
+  inQuiet,
+  nextFor,
+  nextRun,
+  type Quiet,
+  recomputeOrgJobs,
+} from "./recurrence.ts"
 export * from "./schema.ts"
 export {
   chiefStaffId,

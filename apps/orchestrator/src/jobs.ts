@@ -4,7 +4,7 @@ import {
   failureCode,
   jobRuns,
   lowerNextDue,
-  nextRun,
+  nextFor,
   type OrgScopedDb,
   orgOpen,
   orgs,
@@ -14,6 +14,7 @@ import {
   type Tenancy,
 } from "@workspace/db"
 import { withKit } from "./domain-flow.ts"
+import { heartbeatJob } from "./heartbeat.ts"
 import { reminderJob } from "./reminder-job.ts"
 import type { JobMessage } from "./schedule.ts"
 
@@ -54,7 +55,10 @@ export type Handlers = Partial<Record<ScheduledJob["kind"], Handler>>
 export const JOBS_QUEUES = ["reme-jobs", "reme-jobs-production"]
 
 /** One handler per kind, added by the story that adds the kind. */
-export const HANDLERS: Handlers = { reminder: reminderJob }
+export const HANDLERS: Handlers = {
+  reminder: reminderJob,
+  heartbeat: heartbeatJob,
+}
 
 /** Failures in a row before a job pauses and the owner is told. */
 export const MAX_FAILURES = 5
@@ -136,8 +140,15 @@ export async function runJob(
             sql`${eq(jobRuns.jobId, jobId)} and ${eq(jobRuns.runAt, job.nextRunAt)}`
           )
       if (job.rule) {
-        const [org] = await db.select({ zone: orgs.timeZone }).from(orgs)
-        next = nextRun(job.rule, org?.zone ?? null, now)
+        const [org] = await db
+          .select({
+            timeZone: orgs.timeZone,
+            quietStart: orgs.quietStart,
+            quietEnd: orgs.quietEnd,
+          })
+          .from(orgs)
+        if (!org) throw new Error("jobs.org_unreadable")
+        next = nextFor({ kind: job.kind, rule: job.rule }, org, now)
       }
       await db
         .update(scheduledJobs)
