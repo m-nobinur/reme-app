@@ -133,6 +133,17 @@ heartbeat coalesce into one message and the report follows the owner's zone. The
 07:00 UTC step is gone. Nothing creates a `weekly_report` job any more; the value stays in
 `job_kind` and the contract until a migration can drop it.
 
+**Updates the owner set in motion are worded by the model.** The site-live line, the Search
+Console announcement and the domain nudge, live and failed lines go through one function,
+`writeUpdate`: the facts (hosts, the domain, its DNS provider, the 3-day limit) and today's
+fixed text go to the same writer at low effort with a 15-second limit, since each runs inside a
+Workflow step. The model's text is used only when every fact's value appears in it verbatim, it
+holds no number the facts do not, no link or phone number other than theirs, and it keeps the
+heartbeat's limits; otherwise, on any error, or with no key, the fixed text is sent. Each call
+is a `cos.background_step` (`job: update`). `statusText`'s DNS records and the no-model lines
+(`ASK_REPLY`, `NO_ANSWER`, `PLANNED_ERROR`) stay fixed. These lines answer the owner's own
+actions, so quiet hours do not apply to them.
+
 **Email out is Cloudflare Email Sending** on a `send_email` binding, after
 `wrangler email sending enable remeai.co.uk`, which also adds the DMARC record the domain lacks.
 3,000 a month are included, then $0.35 per 1,000. `E_RECIPIENT_SUPPRESSED` turns the owner's
