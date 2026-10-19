@@ -312,6 +312,13 @@ describe("a typed reply over an open card", () => {
     // A change request wins over an approval, however sure the approval is.
     expect(verdictOf(noul(0.99, 0.01, 0.4))).toBeNull()
     expect(verdictOf(noul(0.99, 0.01, 0.11))).toBeNull()
+    // It stops a decline only when it is sure: "nope, leave it" and "I don't
+    // want that" scored 0.71 and 0.42 on it in the live run.
+    expect(verdictOf(noul(0.03, 0.97, 0.71))).toBe("decline")
+    expect(verdictOf(noul(0.01, 0.98, 0.42))).toBe("decline")
+    expect(verdictOf(noul(0.02, 0.95, 0.9))).toBeNull()
+    // And a decline still needs the approval to be unlikely.
+    expect(verdictOf(noul(0.3, 0.97, 0.05))).toBeNull()
     // Unsure, or sure of both, or nothing in the body.
     expect(verdictOf(noul(0.85, 0.02, 0.02))).toBeNull()
     expect(verdictOf(noul(0.95, 0.95, 0.02))).toBeNull()

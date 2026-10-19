@@ -277,9 +277,14 @@ export async function readReply(
 
 /**
  * The verdict from Jev's three answers, or null for the normal turn. A false
- * yes runs a tool and a false null only costs a turn, so every question must
- * be sure: the deciding one at `sure`, the other two at its complement, and
- * a request for a change beats an approval.
+ * yes runs a tool, so an approval needs the deciding question at `sure` and
+ * the other two at its complement: a request for a change beats an approval.
+ * A decline only closes a card the assistant can propose again, with the
+ * owner's words still in the log, so it needs `approves` at the complement
+ * and a change request only stops it when sure. Measured on 2026-10-19: clear
+ * declines ("nope, leave it", "I don't want that") scored 0.97 and 0.98 on
+ * `declines` but 0.71 and 0.42 on `asks_change`, which read "leave it" as
+ * a different action.
  */
 export function verdictOf(body: JevResponse): Verdict | null {
   const answers = body.answers ?? {}
@@ -287,9 +292,8 @@ export function verdictOf(body: JevResponse): Verdict | null {
   const no = num(answers.declines?.noul)
   const change = num(answers.asks_change?.noul)
   const unlikely = 1 - JEV.sure
-  if (change > unlikely) return null
-  if (yes >= JEV.sure && no <= unlikely) return "approve"
-  if (no >= JEV.sure && yes <= unlikely) return "decline"
+  if (yes >= JEV.sure && no <= unlikely && change <= unlikely) return "approve"
+  if (no >= JEV.sure && yes <= unlikely && change < JEV.sure) return "decline"
   return null
 }
 

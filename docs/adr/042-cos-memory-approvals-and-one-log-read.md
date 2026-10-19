@@ -78,13 +78,17 @@ review and Developer-answer cards keep ADR-034's rule: a typed message cancels t
   message cancels the open card before the CoS can propose another, and an emailed reply is not
   stored while a card waits (`postOwnerEmail` returns `waiting`).
 - **What counts.** A whole reply that is one short phrase (`PHRASES` in `jev.ts`: yes, yes please,
-  go ahead, do it, ok; no, no thanks, don't, cancel, stop), ignoring case and punctuation. Anything
+  go ahead, do it, ok; no, nope, no thanks, don't, cancel, stop), ignoring case and punctuation. Anything
   longer, "yes but make it 5pm" included, is never an approval and takes the normal turn, where the
   CoS proposes a new card. Otherwise, while Jev is available, one call with three `noul` questions:
   approves it, declines it, asks for a change. A false yes runs a tool and a false null costs a
-  turn, so the deciding question must reach `JEV.sure` (0.9), the other two must be at most 0.1,
-  and a change request beats an approval. Unsure, a Jev error or a timeout is the normal turn. If
-  CM2 drops Jev from the chat, `readReply` is left with its phrase half and nothing else changes.
+  turn, so an approval needs "approves it" at `JEV.sure` (0.9) and the other two at most 0.1: a
+  change request beats an approval. A decline only closes a card the CoS can propose again, and
+  the owner's words stay in the log, so it needs "declines it" at 0.9 and "approves it" at most
+  0.1, and a change request stops it only at 0.9. Clear declines ("nope, leave it") scored 0.7
+  on the change question in the first live run. Unsure, a Jev error or a timeout is the normal
+  turn. If CM2 drops Jev from the chat, `readReply` is left with its phrase half and nothing else
+  changes.
 - **The same path as a click.** The turn resolves the card with the code a results turn uses
   (`resolveApprovals`): the version binding, the 24 hour expiry and the `cos.tool_started` mark
   all apply, so a typed yes on an expired or changed card is refused with the same line. The
