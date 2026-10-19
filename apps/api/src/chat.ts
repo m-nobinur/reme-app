@@ -17,9 +17,11 @@ import {
   conversations,
   eq,
   events,
+  lowerNextDue,
   newUlid,
   type OrgScopedDb,
   orgs,
+  recomputeOrgJobs,
   sql,
   type Tenancy,
 } from "@workspace/db"
@@ -615,6 +617,23 @@ async function gateAnswer(
 /** A typed reply already read, by Jev and code, with the state it was read on. */
 type Given = { onboarding: Onboarding; answer: Answer }
 
+/**
+ * The org's time zone after a turn that carried the browser's. A new zone is
+ * written and the org's recurring jobs move into it in the same transaction;
+ * `next` is the earliest of them, for `lowerNextDue` after the commit.
+ */
+async function rememberZone(
+  db: OrgScopedDb,
+  orgId: string,
+  browser: string | undefined
+): Promise<{ zone: string | null; next: Date | null }> {
+  const [org] = await db.select({ zone: orgs.timeZone }).from(orgs)
+  const held = org?.zone ?? null
+  if (!browser || browser === held) return { zone: held, next: null }
+  await db.update(orgs).set({ timeZone: browser }).where(eq(orgs.id, orgId))
+  return { zone: browser, next: await recomputeOrgJobs(db, browser) }
+}
+
 export async function chat(
   request: Request,
   env: Env,
@@ -629,18 +648,29 @@ export async function chat(
   if (!parsed.success) return invalid(parsed.error.issues)
   // Postgres refuses NUL in text and jsonb, and a refusal there is a 500.
   if (holdsNul(parsed.data)) return invalid([{ path: ["turn"] }])
-  const { conversation_id: id, mode, turn, time_zone: zone } = parsed.data
-  if (zone && !knownZone(zone)) return invalid([{ path: ["time_zone"] }])
+  const { conversation_id: id, mode, turn, time_zone: browser } = parsed.data
+  if (browser && !knownZone(browser)) return invalid([{ path: ["time_zone"] }])
   const scope = { orgId: owner.orgId, workosUserId: owner.session.workosUserId }
   const tools = { env, kit, owner }
   // Read before the turn's lock is taken, beside `lookAhead`; the CoS's
   // context is built from it. An onboarding turn reads it and drops it.
   const loading = loadWorkspace(tools)
   loading.catch(() => undefined)
-  const [ahead, prefix] = await Promise.all([
-    kit.withOrg(scope, (db) => lookAhead(db, id)),
+  const [[ahead, stored], prefix] = await Promise.all([
+    kit.withOrg(
+      scope,
+      async (db) =>
+        [
+          await lookAhead(db, id),
+          await rememberZone(db, owner.orgId, browser),
+        ] as const
+    ),
     cosPrefix(),
   ])
+  // The org's zone: the browser's, now stored, or the stored one when the
+  // request carries none (ADR-034's change-if).
+  const zone = stored.zone
+  if (stored.next) await lowerNextDue(env.SCHEDULE, stored.next)
   const loaded = ahead.onboarding ? null : await loading
   const gateOf =
     deps.jev !== undefined

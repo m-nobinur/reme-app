@@ -6,6 +6,7 @@ import {
   failureCode,
   logFailure,
   memberships,
+  type OrgScopedDb,
   postAssistantMessage,
   sql,
   type Tenancy,
@@ -66,19 +67,26 @@ type BatchEnv = {
   REPLY_DOMAIN: string
 }
 
+/** The row for one delivery; `payload` is what the sweep queues again. */
+const insertRow = (db: OrgScopedDb, delivery: DeliveryMessage) =>
+  db
+    .insert(deliveries)
+    .values({
+      orgId: delivery.orgId,
+      key: delivery.key,
+      channel: delivery.channel,
+      payload: delivery,
+    })
+    .onConflictDoNothing()
+    .returning({ key: deliveries.key })
+
 export async function deliver(
   kit: Tenancy,
   env: SendEnv,
   delivery: DeliveryMessage
 ): Promise<"queued" | "exists"> {
-  const { orgId, key, channel } = delivery
-  const inserted = await kit.withOrg({ orgId }, (db) =>
-    db
-      .insert(deliveries)
-      .values({ orgId, key, channel, payload: delivery })
-      .onConflictDoNothing()
-      .returning({ key: deliveries.key })
-  )
+  const { orgId, key } = delivery
+  const inserted = await kit.withOrg({ orgId }, (db) => insertRow(db, delivery))
   if (inserted.length === 0) return "exists"
   try {
     await env.DELIVERIES.send(delivery)
@@ -90,6 +98,25 @@ export async function deliver(
     throw error
   }
   return "queued"
+}
+
+/**
+ * `deliver` for a caller already inside a transaction, such as a job
+ * handler: the row is written with `db`, so it commits with the caller's
+ * work or not at all. Returns the Queue send for the caller to run once that
+ * transaction has committed (a job handler's `after`), or null when the key
+ * already exists. Sent any earlier, the consumer could look for a row that
+ * is not visible yet and drop the message.
+ */
+export async function deliverIn(
+  db: OrgScopedDb,
+  env: SendEnv,
+  delivery: DeliveryMessage
+): Promise<(() => Promise<void>) | null> {
+  const inserted = await insertRow(db, delivery)
+  return inserted.length === 0
+    ? null
+    : async () => void (await env.DELIVERIES.send(delivery))
 }
 
 type Outcome =

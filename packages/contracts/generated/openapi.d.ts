@@ -32,7 +32,11 @@ export interface components {
             /** Format: date-time */
             at: string
             /** @enum {string} */
-            reason: "build_failed" | "budget_parked" | "publish_rolled_back"
+            reason:
+              | "build_failed"
+              | "budget_parked"
+              | "publish_rolled_back"
+              | "job_paused"
             /** @enum {string} */
             cause?:
               | "stalled"
@@ -2132,9 +2136,22 @@ export interface components {
           /** Format: date-time */
           at: string
           /** @enum {string} */
-          reason: "build_failed" | "budget_parked" | "publish_rolled_back"
+          reason:
+            | "build_failed"
+            | "budget_parked"
+            | "publish_rolled_back"
+            | "job_paused"
           /** @enum {string} */
           cause?: "stalled" | "unfinished" | "unanswered" | "service" | "other"
+        }
+      | {
+          /** @constant */
+          kind: "reminder"
+          /** Format: uuid */
+          reminder_id: string
+          title: string
+          /** Format: date-time */
+          due_at: string
         }
     Blueprint: {
       direction: string
@@ -10030,7 +10047,11 @@ export interface components {
             /** Format: date-time */
             at: string
             /** @enum {string} */
-            reason: "build_failed" | "budget_parked" | "publish_rolled_back"
+            reason:
+              | "build_failed"
+              | "budget_parked"
+              | "publish_rolled_back"
+              | "job_paused"
             /** @enum {string} */
             cause?:
               | "stalled"
@@ -10038,6 +10059,15 @@ export interface components {
               | "unanswered"
               | "service"
               | "other"
+          }
+        | {
+            /** @constant */
+            kind: "reminder"
+            /** Format: uuid */
+            reminder_id: string
+            title: string
+            /** Format: date-time */
+            due_at: string
           }
       )[]
       missing_facts: (
