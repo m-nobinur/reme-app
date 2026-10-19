@@ -65,6 +65,7 @@ import { failure } from "../http.ts"
 import {
   ASSISTANT_KEY_PREFIX,
   createReminder as storeReminder,
+  wakeScheduler,
 } from "../reminders.ts"
 import { readFacts, readWorkspace } from "../workspace.ts"
 import { readSession } from "./history.ts"
@@ -502,7 +503,7 @@ export async function answerQuestion(
  * `createReminder` answers; a database error leaves the outcome unknown.
  */
 export async function createReminder(
-  { kit, owner }: ToolContext,
+  { env, kit, owner }: ToolContext,
   input: CreateReminderRequest,
   approvalId: string,
   turn: Turn,
@@ -535,6 +536,7 @@ export async function createReminder(
     })
   }
   if (made instanceof Response) return refused(made)
+  await wakeScheduler(env, made)
   return { outcome: "created", due_at: made.due_at }
 }
 

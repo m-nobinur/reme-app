@@ -94,6 +94,12 @@
   // under `uploads/{org_id}/{asset_id}`, and the orchestrator copies them into
   // the build's sandbox.
   "r2_buckets": [{ "binding": "SITES", "bucket_name": "reme-sites" }],
+  // The scheduler's earliest due job, shared with the orchestrator, whose cron
+  // reads it. The api only lowers it, after the commit that wrote a job
+  // (ADR-043).
+  "kv_namespaces": [
+    { "binding": "SCHEDULE", "id": "REPLACE_WITH_reme-schedule_ID" }
+  ],
   // Resizes generated photos to thumbnails in `GET /photos/:id`. Local
   // `wrangler dev` runs a low-fidelity offline version (width and format).
   "images": { "binding": "IMAGES" },
@@ -172,6 +178,12 @@
           "binding": "SITES",
           "bucket_name": "reme-sites-production-eu",
           "jurisdiction": "eu"
+        }
+      ],
+      "kv_namespaces": [
+        {
+          "binding": "SCHEDULE",
+          "id": "REPLACE_WITH_reme-schedule-production_ID"
         }
       ],
       // Its own namespace: staging and production people share one WorkOS

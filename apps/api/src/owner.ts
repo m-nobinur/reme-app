@@ -245,7 +245,7 @@ export async function ownerRoute(
   if (noun === "conversations") {
     return conversationRoute(request, kit, owner, id, action)
   }
-  if (noun === "reminders") return reminderRoute(request, kit, owner, id)
+  if (noun === "reminders") return reminderRoute(request, env, kit, owner, id)
   if (noun === "domains" && method === "DELETE" && !action) {
     return removeDomain(request, env, kit, owner, id)
   }

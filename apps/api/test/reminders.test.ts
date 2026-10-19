@@ -5,7 +5,15 @@ import {
   Reminder,
   WorkspaceStatus,
 } from "@workspace/contracts"
-import { reminders, sql, type Tenancy, tenancy } from "@workspace/db"
+import {
+  eq,
+  NEXT_DUE_KEY,
+  reminders,
+  scheduledJobs,
+  sql,
+  type Tenancy,
+  tenancy,
+} from "@workspace/db"
 import postgres from "postgres"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { createReminder } from "../src/reminders.ts"
@@ -35,8 +43,23 @@ describe.skipIf(!url)("reminders, on a live connection", () => {
   let realFetch: typeof fetch
   let who: Owner
 
+  // The scheduler's guard, holding a time far off so a lowering shows.
+  const kv = (() => {
+    const map = new Map<string, string>()
+    return {
+      get: async (key: string) => JSON.parse(map.get(key) ?? "null"),
+      put: async (key: string, value: string) => void map.set(key, value),
+      reset: (next: number | null) =>
+        map.set(NEXT_DUE_KEY, JSON.stringify({ next, scanned: Date.now() })),
+      next: () => JSON.parse(map.get(NEXT_DUE_KEY) ?? "null")?.next as number,
+    }
+  })()
+
   const call = (path: string, init: RequestInit = {}) =>
-    who.call(stubOrchestrator(), path, init)
+    who.call(stubOrchestrator(), path, {
+      ...init,
+      bindings: { SCHEDULE: kv },
+    })
 
   const post = async (body: unknown, key?: string) => {
     const response = await call("/reminders", keyed("POST", body, key))
@@ -451,6 +474,129 @@ describe.skipIf(!url)("reminders, on a live connection", () => {
       const notes = await notesOf(lister)
       expect(notes).toHaveLength(REMINDER_NOTES_MAX)
       expect(notes.map((n) => n.title)).not.toContain("note 0")
+    })
+  })
+
+  describe("the job that fires it", () => {
+    const jobsOf = (id: string) =>
+      kit.withOrg({ orgId: who.orgId }, (db) =>
+        db.select().from(scheduledJobs).where(eq(scheduledJobs.refId, id))
+      )
+
+    const FAR = Date.now() + 30 * DAY
+
+    const idOf = async (title: string, due_at: string | null) =>
+      Reminder.parse((await post({ title, due_at })).body).id
+
+    it("writes a one-off job at the due time and lowers the guard after the commit", async () => {
+      kv.reset(FAR)
+      const due = new Date(Date.now() + 2 * MINUTE).toISOString()
+      const id = await idOf("Ring the plumber", due)
+      const [job, ...rest] = await jobsOf(id)
+      expect(rest).toEqual([])
+      expect(job).toMatchObject({
+        kind: "reminder",
+        refId: id,
+        rule: null,
+        claimedAt: null,
+        pausedAt: null,
+      })
+      expect(job?.nextRunAt.toISOString()).toBe(due)
+      expect(kv.next()).toBe(Date.parse(due))
+    })
+
+    it("writes no job for a reminder with no time, and leaves the guard alone", async () => {
+      kv.reset(FAR)
+      expect(await jobsOf(await idOf("Someday", null))).toEqual([])
+      expect(kv.next()).toBe(FAR)
+    })
+
+    it("writes the Chief of Staff's reminder through the same function, and a replay adds no second job", async () => {
+      const input = {
+        title: "Chase the invoice",
+        due_at: new Date(Date.now() + 3 * MINUTE).toISOString(),
+      }
+      const key = `approval:${crypto.randomUUID()}`
+      const first = (await direct(who, input, key)) as Reminder
+      await direct(who, input, key)
+      expect(await jobsOf(first.id)).toHaveLength(1)
+    })
+
+    it("writes the job in the reminder's transaction: a rollback leaves neither", async () => {
+      const key = `approval:${crypto.randomUUID()}`
+      let id = ""
+      await expect(
+        kit.withOrg({ orgId: who.orgId }, async (db) => {
+          const made = await createReminder(
+            db,
+            {
+              orgId: who.orgId,
+              createdByStaffId: who.chiefId,
+              source: "assistant",
+              conversationId: null,
+              idempotencyKey: key,
+            },
+            {
+              title: "Never made",
+              due_at: new Date(Date.now() + 3 * MINUTE).toISOString(),
+            }
+          )
+          id = (made as Reminder).id
+          throw new Error("rolled back")
+        })
+      ).rejects.toThrow("rolled back")
+      expect(id).not.toBe("")
+      expect(await jobsOf(id)).toEqual([])
+      const kept = await kit.withOrg({ orgId: who.orgId }, (db) =>
+        db.select().from(reminders).where(eq(reminders.id, id))
+      )
+      expect(kept).toEqual([])
+    })
+
+    it("deletes the job when the reminder is done, and arms it again on reopen while the time is ahead", async () => {
+      const due = new Date(Date.now() + 10 * MINUTE).toISOString()
+      const id = await idOf("Pay the van tax", due)
+      await patch(id, { done: true })
+      expect(await jobsOf(id)).toEqual([])
+      kv.reset(FAR)
+      await patch(id, { done: false })
+      const [job] = await jobsOf(id)
+      expect(job?.nextRunAt.toISOString()).toBe(due)
+      expect(kv.next()).toBe(Date.parse(due))
+    })
+
+    it("does not arm a reopened reminder whose time has gone by", async () => {
+      const id = await idOf(
+        "Already past",
+        new Date(Date.now() + 10 * MINUTE).toISOString()
+      )
+      await patch(id, { done: true })
+      await kit.withOrg({ orgId: who.orgId }, (db) =>
+        db
+          .update(reminders)
+          .set({ dueAt: new Date(Date.now() - MINUTE) })
+          .where(eq(reminders.id, id))
+      )
+      await patch(id, { done: false })
+      expect(await jobsOf(id)).toEqual([])
+    })
+
+    it("re-arms a job that already ran, so the reopened reminder fires again", async () => {
+      const id = await idOf(
+        "Second chance",
+        new Date(Date.now() + 10 * MINUTE).toISOString()
+      )
+      // The run that paused the one-off for good.
+      await kit.withOrg({ orgId: who.orgId }, (db) =>
+        db
+          .update(scheduledJobs)
+          .set({ pausedAt: new Date(), lastRunAt: new Date() })
+          .where(eq(scheduledJobs.refId, id))
+      )
+      await patch(id, { done: true })
+      await patch(id, { done: false })
+      const [job] = await jobsOf(id)
+      expect(job).toMatchObject({ pausedAt: null, lastRunAt: null })
     })
   })
 })
