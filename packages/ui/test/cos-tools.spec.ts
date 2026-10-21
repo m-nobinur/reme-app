@@ -73,7 +73,7 @@ for (const [entry, slot, yes, busy, target, detail, done, refused] of [
   test(`${entry} shows every state in the owner's words`, async ({ page }) => {
     await open(page, entry)
     const cards = page.locator(`[data-entry="${entry}"] [data-slot="${slot}"]`)
-    await expect(cards).toHaveCount(13)
+    await expect(cards).toHaveCount(14)
     // Nothing to approve while the model is still writing it, and a call
     // the stream left unfinished stops rather than working forever.
     await expect(cards.nth(0)).toHaveText("Writing this out")
@@ -112,6 +112,11 @@ for (const [entry, slot, yes, busy, target, detail, done, refused] of [
     await expect(cards.nth(12)).toContainText(
       "This did not go through. Ask again."
     )
+    // A yes that came after the card's time ran out: nothing was done.
+    await expect(cards.nth(13)).toContainText(
+      "This expired before your yes, so nothing was done."
+    )
+    await expect(cards.nth(13).getByRole("button")).toHaveCount(0)
     const shown = await page.locator(`[data-entry="${entry}"]`).innerText()
     expect(shown).not.toMatch(WIRE)
     // The api's refusal message is never what the owner reads.
