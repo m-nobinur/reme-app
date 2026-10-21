@@ -47,6 +47,14 @@ const TRUST = [
 timeout 10 sh -c 'until [ -s ${CA} ]; do sleep 0.1; done' && cat ${SYSTEM} ${CA} >${BUNDLE}.tmp && mv ${BUNDLE}.tmp ${BUNDLE}`,
 ]
 
+/**
+ * What bash runs for every `exec`: the cwd and the command come in its env.
+ * A cwd that does not exist yet is made, as `writeFile` makes its directory:
+ * the Developer's first command is `mkdir -p /workspace/site` from inside it.
+ */
+export const EXEC_SCRIPT =
+  'mkdir -p -- "$REME_CWD" && cd -- "$REME_CWD" || exit 1; export -n REME_COMMAND REME_CWD; eval "$REME_COMMAND"'
+
 /** GNU `timeout`'s exit code when the command ran out of time. */
 const TIMED_OUT = 124
 
@@ -203,7 +211,7 @@ export class RemeSandbox extends DurableObject<Env> {
    * One command in bash, as a 0.12 session ran it, from /workspace unless
    * `cwd` says otherwise. Nothing carries from one call to the next. A
    * `timeout` stops the command and everything it started, and throws as
-   * 0.12 did.
+   * 0.12 did. A `cwd` that does not exist is made first.
    */
   async exec(command: string, options: ExecOptions = {}) {
     return this.use(async () => {
@@ -211,17 +219,21 @@ export class RemeSandbox extends DurableObject<Env> {
       // The command reaches bash in a variable, never in argv: as in a 0.12
       // session, no command line holds it, so its own `pkill -f` cannot match
       // the shell running it (the screenshot step's does). Un-exported, so
-      // what it starts never sees it.
-      const shell = [
-        "bash",
-        "-c",
-        'export -n REME_COMMAND; eval "$REME_COMMAND"',
-      ]
+      // what it starts never sees it. The process starts in /workspace and
+      // changes directory itself: on Containers a spawn into a missing
+      // directory throws "Command `bash` was not found", which ended the
+      // Developer's `mkdir -p /workspace/site` on staging.
+      const shell = ["bash", "-c", EXEC_SCRIPT]
       const process = await this.container.exec(
         seconds ? ["timeout", "--kill-after=5", `${seconds}`, ...shell] : shell,
         {
-          cwd: options.cwd ?? WORKSPACE,
-          env: { ...EXEC_ENV, ...options.env, REME_COMMAND: command },
+          cwd: WORKSPACE,
+          env: {
+            ...EXEC_ENV,
+            ...options.env,
+            REME_COMMAND: command,
+            REME_CWD: options.cwd ?? WORKSPACE,
+          },
         }
       )
       const out = await process.output()

@@ -1,3 +1,7 @@
+import { spawnSync } from "node:child_process"
+import { existsSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 /**
@@ -55,9 +59,8 @@ vi.mock("@cloudflare/sandbox", () => {
   }
 })
 
-const { LEASE_MS, RemeSandbox, SandboxEgress, SandboxPool } = await import(
-  "../src/container.ts"
-)
+const { EXEC_SCRIPT, LEASE_MS, RemeSandbox, SandboxEgress, SandboxPool } =
+  await import("../src/container.ts")
 
 const encode = (s: string) => new TextEncoder().encode(s).buffer
 type Ran = { argv: string[]; options: Record<string, unknown> | undefined }
@@ -163,7 +166,7 @@ describe("a sandbox's first command", () => {
     expect(container.ran[0]?.options).toEqual({ user: "0:0" })
     expect(container.timeouts).toEqual([30 * 60 * 1000])
     expect(container.ran[1]).toEqual({
-      argv: ["bash", "-c", 'export -n REME_COMMAND; eval "$REME_COMMAND"'],
+      argv: ["bash", "-c", EXEC_SCRIPT],
       options: {
         cwd: "/workspace",
         env: {
@@ -172,6 +175,7 @@ describe("a sandbox's first command", () => {
           NODE_EXTRA_CA_CERTS:
             "/etc/cloudflare/certs/cloudflare-containers-ca.crt",
           REME_COMMAND: "echo hi",
+          REME_CWD: "/workspace",
         },
       },
     })
@@ -229,7 +233,7 @@ describe("a command", () => {
       "120",
       "bash",
       "-c",
-      'export -n REME_COMMAND; eval "$REME_COMMAND"',
+      EXEC_SCRIPT,
     ])
   })
 
@@ -256,7 +260,57 @@ describe("a command", () => {
       stdout: "",
       stderr: "nope",
     })
-    expect(container.ran.at(-1)?.options?.cwd).toBe("/tmp")
+    // The process starts where it always exists; the shell goes to `cwd`.
+    expect(container.ran.at(-1)?.options?.cwd).toBe("/workspace")
+    expect(container.ran.at(-1)?.options?.env).toMatchObject({
+      REME_CWD: "/tmp",
+    })
+  })
+})
+
+describe("the shell an exec runs", () => {
+  // The real script, in a real bash, as the container runs it.
+  const run = (cwd: string, command: string) =>
+    spawnSync("bash", ["-c", EXEC_SCRIPT], {
+      cwd: tmpdir(),
+      // The Worker typings require its vars on ProcessEnv; this shell needs three.
+      env: {
+        PATH: process.env.PATH ?? "",
+        REME_CWD: cwd,
+        REME_COMMAND: command,
+      } as unknown as NodeJS.ProcessEnv,
+      encoding: "utf8",
+    })
+
+  it("runs in the cwd it was given", () => {
+    const at = mkdtempSync(join(tmpdir(), "reme-cwd-"))
+    expect(run(at, "pwd -P").stdout.trim()).toBe(realpathSync(at))
+  })
+
+  it("makes a cwd that does not exist yet, then runs there", () => {
+    const at = join(mkdtempSync(join(tmpdir(), "reme-cwd-")), "site")
+    const result = run(at, "mkdir -p src && pwd -P")
+    expect(result.status).toBe(0)
+    expect(result.stdout.trim()).toBe(realpathSync(at))
+    expect(existsSync(join(at, "src"))).toBe(true)
+  })
+
+  it("fails with exit 1 and runs nothing when the cwd cannot be made", () => {
+    const at = mkdtempSync(join(tmpdir(), "reme-cwd-"))
+    const file = join(at, "file")
+    writeFileSync(file, "")
+    const marker = join(at, "ran")
+    const result = run(join(file, "below"), `touch ${marker}`)
+    expect(result.status).toBe(1)
+    expect(existsSync(marker)).toBe(false)
+  })
+
+  it("leaves neither variable to what the command starts", () => {
+    const at = mkdtempSync(join(tmpdir(), "reme-cwd-"))
+    // Single quotes: the child shell expands them, not this one.
+    expect(
+      run(at, `bash -c 'echo "[$REME_COMMAND][$REME_CWD]"'`).stdout.trim()
+    ).toBe("[][]")
   })
 })
 
