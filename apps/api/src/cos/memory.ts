@@ -101,14 +101,24 @@ const contentWords = (text: string) =>
     .map(stem)
 
 /**
- * Whether every content word of `line` is one the owner wrote. This is what
+ * Words a line may add to the owner's own: they frame a statement about a
+ * person and carry no business claim ("Prefers calls after 4pm").
+ */
+const FRAMING = new Set(
+  "prefers likes wants dislikes hates goes by called usually works is has"
+    .split(" ")
+    .map(stem)
+)
+
+/**
+ * Whether every content word of `line` is one the owner wrote, or a framing word. This is what
  * keeps text from a review, an email or a page out of the profile: a line
  * that says something the owner did not say has a word they did not write.
  * "Before" and "not" are content words, so a reversal fails too.
  */
 export function inOwnersWords(line: string, said: readonly string[]) {
   const held = new Set(said.flatMap(contentWords))
-  return contentWords(line).every((w) => held.has(w))
+  return contentWords(line).every((w) => held.has(w) || FRAMING.has(w))
 }
 
 const norm = (text: string) => text.trim().replace(/\s+/g, " ")

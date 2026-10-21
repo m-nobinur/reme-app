@@ -120,6 +120,20 @@ describe("the owner's own words", () => {
   })
 })
 
+describe("the words a line may add", () => {
+  it.each([
+    ["Prefers calls after 4pm", ["Call me after 4pm"], true],
+    ["Wants calls short", ["Keep calls short"], true],
+    ["Goes by Sam", ["Call me Sam"], true],
+    ["Prices are free", ["Please add this review: Great team!"], false],
+    ["Prefers prices free", ["Call me after 4pm"], false],
+    ["সন্ধ্যায় ফোন করা পছন্দ", ["আমি সন্ধ্যায় ফোন করা পছন্দ করি"], true],
+    ["Prefers calls in the evening", ["আমি সন্ধ্যায় ফোন করা পছন্দ করি"], false],
+  ])("%s: %s", (text, said, want) => {
+    expect(inOwnersWords(text, said)).toBe(want)
+  })
+})
+
 describe("applying operations", () => {
   const held = [
     line("Prefers calls after 4pm"),
