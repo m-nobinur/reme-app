@@ -78,6 +78,24 @@ untrusted data with a fullness marker. Compaction is a `cos.compaction` event (Â
 exactly what the model saw. ADR-034's first change-if now reads: the delivery plan's lite-runtime
 row, or the first CoS tool that reads documents or skills.
 
+**The owner profile.** `owner.profile` holds `{lines: [{id, text, source, at}]}`, with `source` one of
+`owner_said`, `owner_confirmed` and `reflection`, at most 1,500 characters counted on the lines joined by newlines. It
+is a private fact: `supersedeFact` refuses it and `owner.memory_review`, and only the memory module writes them,
+through `supersedePrivateFact`, since a Developer question can name any field. `currentFacts` leaves both out, so
+no builder snapshot, `get_facts`, business page, website or claims gate reads them. The context of each turn
+carries the lines inside an `untrusted_input` data block headed by how full it is (`[62%, 930/1,500 chars]`); the
+context is logged, so the derivation reproduces it and the integrity check is unchanged. The `remember` tool takes
+batched `add`, `replace` and `remove` operations, applied together or not at all, with no card, in both modes. It
+refuses an exact duplicate ("already saved"), a line that reads as an attack or an order to the assistant
+("Call me Sam" passes), and any line with a content word the owner did not write in the session's chat messages, so
+a review or page the model read cannot reach the profile through the tool. A result past the limit comes back with
+the current lines and "full: merge or remove first"; after three such answers in a turn the tool answers "stop
+retrying memory and continue your reply". A promise or deadline is a reminder. The first owner turn of a
+conversation adds one context line: mention in a sentence anything in the profile or the open reminders that
+matters now, or leave it. The chat shows "Saved to memory" once, on the reply after a change, as the net change
+since the last one it showed; the page at `/app/memory` lists every version and undoes any one whose change still
+applies, as a new version.
+
 **Compaction.** After each closed turn the after-turn job (`cos/compaction.ts`)
 measures the history the next turn would read: the derived messages at four characters a token,
 older turns without their tool calls, and never the instructions, tools or context, which no
