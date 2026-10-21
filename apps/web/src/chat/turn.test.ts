@@ -16,6 +16,7 @@ import {
   SKIPPED,
   sendsOn,
   turnBody,
+  withStoredCard,
 } from "./turn"
 
 const CONVERSATION = "7d1c2a4e-2f0b-4c8e-9a51-3b6f0e2d9c10"
@@ -462,6 +463,37 @@ it("a typed message drops a call still streaming its input, as a reload would", 
   expect(cancelled.at(-1)?.parts.slice(1)).toEqual([
     change("output-error", { errorText: CANCELLED }),
   ])
+})
+
+it("shows a card a typed yes answered as the stored message has it, and nothing else", () => {
+  const card = change("approval-requested", { approval: { id: "appr_1" } })
+  const typed: ChatMessage = {
+    id: "msg_user",
+    role: "user",
+    parts: [{ type: "text", text: "yes please" }],
+  }
+  // Sent: the card shows cancelled, the reply streams in below.
+  const shown = [...cancelOvertaken([assistant(card)]), typed]
+  expect(shown[0]?.parts.slice(1)).toEqual([
+    change("output-error", { errorText: CANCELLED }),
+  ])
+  const done = change("output-available", {
+    output: { outcome: "started" },
+    approval: { id: "appr_1", approved: true },
+  })
+  const other: ChatMessage = { ...assistant(ask("input-available")), id: "x" }
+  const swapped = withStoredCard(shown, [assistant(done), other], "call_change")
+  expect(swapped[0]?.parts.slice(1)).toEqual([done])
+  expect(swapped.slice(1)).toEqual([typed])
+  // A card the stored rows do not hold leaves the thread as it is.
+  expect(withStoredCard(shown, [other], "call_change")).toBe(shown)
+  // A declined card reads as declined.
+  const declined = change("output-denied", {
+    approval: { id: "appr_1", approved: false },
+  })
+  expect(
+    withStoredCard(shown, [assistant(declined)], "call_change")[0]?.parts[1]
+  ).toEqual(declined)
 })
 
 it("a not now stays not now when the owner types next", () => {
