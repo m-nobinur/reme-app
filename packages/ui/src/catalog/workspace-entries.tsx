@@ -91,6 +91,7 @@ function AccountMenu() {
             SF
           </span>
           <span className="truncate" data-slot="rail-label">
+            <span className="sr-only">Settings, </span>
             Sam Fixture
           </span>
         </DropdownMenuTrigger>
@@ -175,13 +176,7 @@ function SettingsSample() {
     <Settings>
       <Hint label="Sam Fixture" side="right">
         <SettingsTrigger
-          render={
-            <button
-              aria-label="Settings, Sam Fixture"
-              className={railItemClass}
-              type="button"
-            />
-          }
+          render={<button className={railItemClass} type="button" />}
         >
           <span
             aria-hidden
@@ -191,6 +186,7 @@ function SettingsSample() {
             SF
           </span>
           <span className="truncate" data-slot="rail-label">
+            <span className="sr-only">Settings, </span>
             Sam Fixture
           </span>
         </SettingsTrigger>
