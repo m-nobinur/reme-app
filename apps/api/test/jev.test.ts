@@ -1,5 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { decisionOf, JEV, jev, matched } from "../src/jev.ts"
+import replies from "../../../evals/typed-replies/replies.json" with {
+  type: "json",
+}
+import {
+  decisionOf,
+  JEV,
+  jev,
+  jevApproval,
+  matched,
+  phrased,
+  readReply,
+  verdictOf,
+} from "../src/jev.ts"
 import { choiceCard, detailsCard, type Onboarding } from "../src/onboarding.ts"
 
 const o: Onboarding = {
@@ -245,5 +257,155 @@ describe("the exact matcher", () => {
     expect(matched(pages, "Home")).toBeNull()
     expect(matched(contact, "07700 900412")).toBeNull()
     expect(log).not.toHaveBeenCalled()
+  })
+})
+
+const noul = (approves: number, declines: number, change: number) => ({
+  answers: {
+    approves: { type: "noul", noul: approves },
+    declines: { type: "noul", noul: declines },
+    asks_change: { type: "noul", noul: change },
+  },
+  usage: { cost: 0.00003 },
+})
+
+describe("a typed reply over an open card", () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  it("reads only a whole phrase, in any case and punctuation", () => {
+    for (const reply of [
+      "yes",
+      "Yes, please!",
+      "  GO AHEAD. ",
+      "Do it",
+      "OK",
+    ]) {
+      expect(phrased(reply)).toBe("approve")
+    }
+    for (const reply of [
+      "no",
+      "Nope!",
+      "No thanks.",
+      "Don't",
+      "don’t",
+      "cancel",
+      "STOP",
+    ]) {
+      expect(phrased(reply)).toBe("decline")
+    }
+    for (const reply of [
+      "yes but make it 5pm",
+      "yes, and add Sundays",
+      "no wait",
+      "ok then",
+      "okay",
+      "yes yes",
+      "",
+    ]) {
+      expect(phrased(reply)).toBeNull()
+    }
+  })
+
+  it("takes Jev's yes or no only when the deciding question is sure and the others are not", () => {
+    expect(verdictOf(noul(0.97, 0.02, 0.03))).toBe("approve")
+    expect(verdictOf(noul(0.02, 0.96, 0.01))).toBe("decline")
+    // A change request wins over an approval, however sure the approval is.
+    expect(verdictOf(noul(0.99, 0.01, 0.4))).toBeNull()
+    expect(verdictOf(noul(0.99, 0.01, 0.11))).toBeNull()
+    // It stops a decline only when it is sure: "nope, leave it" and "I don't
+    // want that" scored 0.71 and 0.42 on it in the live run.
+    expect(verdictOf(noul(0.03, 0.97, 0.71))).toBe("decline")
+    expect(verdictOf(noul(0.01, 0.98, 0.42))).toBe("decline")
+    expect(verdictOf(noul(0.02, 0.95, 0.9))).toBeNull()
+    // And a decline still needs the approval to be unlikely.
+    expect(verdictOf(noul(0.3, 0.97, 0.05))).toBeNull()
+    // Unsure, or sure of both, or nothing in the body.
+    expect(verdictOf(noul(0.85, 0.02, 0.02))).toBeNull()
+    expect(verdictOf(noul(0.95, 0.95, 0.02))).toBeNull()
+    expect(verdictOf({})).toBeNull()
+  })
+
+  it("asks Jev three noul questions in one call, scrubbed, and logs one line", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined)
+    const { fetchImpl, sent } = fake(noul(1, 0, 0))
+    expect(
+      await jevApproval(
+        "k",
+        "a reminder: Call the supplier",
+        "sure, my key is sk-fake12345678",
+        fetchImpl
+      )
+    ).toBe("approve")
+    expect(sent).toHaveLength(1)
+    const body = JSON.parse(sent[0]?.init.body as string)
+    expect(body.model).toBe(JEV.model)
+    expect(Object.keys(body.questions)).toEqual([
+      "approves",
+      "declines",
+      "asks_change",
+    ])
+    for (const q of Object.values(body.questions) as { type: string }[]) {
+      expect(q.type).toBe("noul")
+    }
+    expect(body.state.proposed_action).toBe("a reminder: Call the supplier")
+    expect(body.state.owner_replied).toBe("sure, my key is [redacted]")
+    expect(log).toHaveBeenCalledTimes(1)
+    expect(JSON.parse(log.mock.calls[0]?.[0] as string)).toMatchObject({
+      code: "approval.jev",
+      verdict: "approve",
+      error: null,
+      cost_usd: 0.00003,
+    })
+  })
+
+  it("leaves the reply to the normal turn on a non-200 or a failed fetch", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined)
+    expect(
+      await jevApproval("k", "x", "yes", fake({ error: "x" }, 500).fetchImpl)
+    ).toBeNull()
+    expect(JSON.parse(log.mock.calls.at(-1)?.[0] as string).error).toBe(
+      "status 500"
+    )
+    const broken = (async () => {
+      throw new TypeError("network")
+    }) as unknown as typeof fetch
+    expect(await jevApproval("k", "x", "yes", broken)).toBeNull()
+    expect(JSON.parse(log.mock.calls.at(-1)?.[0] as string).error).toBe("fetch")
+  })
+
+  it("sends all 40 recorded replies the way the label says, asking Jev only for those no phrase reads", async () => {
+    const byReply = new Map(replies.replies.map((r) => [r.reply, r]))
+    const asked: string[] = []
+    // A Jev that is always right: this proves the plumbing, not Jev. The real
+    // Jev's rate is `evals/typed-replies/measure.mjs`.
+    const oracle = async (reply: string) => {
+      asked.push(reply)
+      const path = byReply.get(reply)?.path
+      return path === "approve" || path === "decline" ? path : null
+    }
+    const counts = new Map<string, number>()
+    for (const { reply, kind, path } of replies.replies) {
+      counts.set(kind, (counts.get(kind) ?? 0) + 1)
+      expect((await readReply(reply, oracle)) ?? "normal", reply).toBe(path)
+      // Nothing but a plain yes or no is ever a phrase.
+      if (kind !== "plain") expect(phrased(reply), reply).toBeNull()
+    }
+    expect([...counts]).toEqual([
+      ["yes_but", 10],
+      ["plain", 10],
+      ["unrelated", 10],
+      ["borderline", 10],
+    ])
+    expect(asked.filter((reply) => phrased(reply))).toEqual([])
+    expect(asked).toHaveLength(
+      replies.replies.filter((r) => !phrased(r.reply)).length
+    )
+    // Jev down: only the phrases still answer.
+    expect(await readReply("sure thing", null)).toBeNull()
+    expect(
+      await readReply("sure thing", async () => {
+        throw new Error("down")
+      })
+    ).toBeNull()
   })
 })

@@ -6,7 +6,7 @@ import {
   useAuiState,
 } from "@assistant-ui/react"
 import { useAISDKRuntime } from "@assistant-ui/react-ai-sdk"
-import type { ChatRequest } from "@workspace/contracts"
+import { CARD_ANSWERED, type ChatRequest } from "@workspace/contracts"
 import { SESSION_ENDED } from "@workspace/ui/lib/tool-state"
 import { DefaultChatTransport } from "ai"
 import { useEffect, useRef, useState } from "react"
@@ -23,6 +23,7 @@ import {
   sendsOn,
   textOf,
   turnBody,
+  withStoredCard,
 } from "./turn"
 
 /**
@@ -104,11 +105,26 @@ export function useConversationRuntime({
   // inline, and a typed message goes back into the composer. Through a ref,
   // because the chat keeps the first `onError` it is given.
   const restore = useRef<(error: Error) => void>(() => undefined)
+  // The card a typed yes or no answered (`CARD_ANSWERED`): the thread showed
+  // it cancelled when the message went, so its stored message is read again
+  // when the stream names it and once more when the turn ends. A ref for the
+  // same reason as `restore`.
+  const answered = useRef<string | null>(null)
+  const showAnswered = useRef<() => void>(() => undefined)
   const chat = useChat<ChatMessage>({
     id,
     transport,
     sendAutomaticallyWhen: sendsOn,
-    onFinish,
+    onData: (part) => {
+      if (part.type !== CARD_ANSWERED) return
+      answered.current = (part.data as { tool_call_id: string }).tool_call_id
+      showAnswered.current()
+    },
+    onFinish: () => {
+      showAnswered.current()
+      answered.current = null
+      onFinish()
+    },
     onError: (error) => restore.current(error),
   })
   // The owner's message carries the time it was sent, as a stored row does:
@@ -149,6 +165,18 @@ export function useConversationRuntime({
           runtime.thread.composer.setText(textOf(last))
         }
       })
+      .catch(() => undefined)
+  }
+  showAnswered.current = () => {
+    const callId = answered.current
+    const read = callId ? storedRows() : null
+    if (!callId || !read) return
+    void read
+      .then((rows) =>
+        chat.setMessages((messages) =>
+          withStoredCard(messages, rows.map(toUIMessage), callId)
+        )
+      )
       .catch(() => undefined)
   }
   // A message the assistant posted on its own: the polled tag names it, and

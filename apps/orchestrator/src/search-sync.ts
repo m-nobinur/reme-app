@@ -1,16 +1,12 @@
-import {
-  DeploymentManifest,
-  type ServerMessage,
-  siteHost,
-} from "@workspace/contracts"
+import { DeploymentManifest, siteHost } from "@workspace/contracts"
 import {
   appendEvent,
   conversationMessages,
   eq,
   events,
   failureCode,
+  type OrgScopedDb,
   orgs,
-  postAssistantMessage,
   searchConnections,
   searchDaily,
   searchProperties,
@@ -538,25 +534,8 @@ export async function inspectPages(
 }
 
 // ---------------------------------------------------------------------------
-// The Monday message
+// The Monday report
 // ---------------------------------------------------------------------------
-
-/** The sweep hour (`YYYYMMDDHH`, UTC) as a time, so a replayed step sees the same one. */
-export const hourAt = (hour: string) =>
-  new Date(
-    Date.UTC(
-      Number(hour.slice(0, 4)),
-      Number(hour.slice(4, 6)) - 1,
-      Number(hour.slice(6, 8)),
-      Number(hour.slice(8, 10))
-    )
-  )
-
-/** The sweep that also sends the Monday message: 07:00 UTC on a Monday. */
-export const isWeeklyHour = (hour: string) => {
-  const at = hourAt(hour)
-  return at.getUTCDay() === 1 && at.getUTCHours() === 7
-}
 
 /** `2026-W42`, the ISO week `now` falls in. */
 export function isoWeek(now: Date): string {
@@ -610,35 +589,53 @@ function windowOf(days: DailyRow[], weeksBack: number): Window | null {
   }
 }
 
-export type Weekly = { key: string; message: Omit<ServerMessage, "id"> }
+/** A heartbeat digest item (heartbeat.ts), as this file makes one. */
+export type WeeklyItem = {
+  key: string
+  since: string
+  facts: Record<string, string>
+}
 
 /**
- * The org's Monday message, or null: the week's numbers and at most one
- * suggestion for a connected org, a sign-in prompt for a paused one, and for
- * an org never connected with a live site the one reminder ever. A fault on
- * our side (a noindex, a robots block, a sitemap error, another canonical)
- * raises an alert instead, never an owner message.
+ * The org's Monday report as a heartbeat item, or null: the week's numbers
+ * and at most one suggestion for a connected org, a sign-in prompt for a
+ * paused one, and for an org never connected with a live site the one
+ * reminder ever. `day` is the org's local Monday at 00:00 UTC, so the week is
+ * the owner's week whatever the zone. The facts carry the template's text
+ * for the writer, and `chip`, the button the message gets. A fault on our
+ * side (a noindex, a robots block, a sitemap error, another canonical)
+ * raises an alert instead, once a week, never an owner message.
  */
-export async function weeklyFor(
-  kit: Tenancy,
+export async function weeklyItem(
+  db: OrgScopedDb,
   orgId: string,
-  now: Date
-): Promise<Weekly | null> {
-  const week = isoWeek(now)
-  const input = await kit.withOrg({ orgId }, async (db) => {
+  now: Date,
+  day: Date
+): Promise<WeeklyItem | null> {
+  const week = isoWeek(day)
+  const since = day.toISOString()
+  const input = await (async () => {
     const [connection] = await db
       .select({ state: searchConnections.state })
       .from(searchConnections)
     if (!connection) {
       if (!(await activeDeployment(db, orgId))) return null
-      const key = `search-reminder-${orgId}`
+      // Asked by the Monday message before the heartbeat took it over.
       const [sent] = await db
         .select({ id: conversationMessages.id })
         .from(conversationMessages)
-        .where(eq(conversationMessages.id, serverMessageId(key)))
-      return { key, report: { state: "never" as const, reminded: !!sent } }
+        .where(
+          eq(
+            conversationMessages.id,
+            serverMessageId(`search-reminder-${orgId}`)
+          )
+        )
+      return {
+        key: "search_report:connect:1",
+        report: { state: "never" as const, reminded: !!sent },
+      }
     }
-    const key = `search-weekly-${orgId}-${week}`
+    const key = `search_report:${week}:1`
     if (connection.state !== "active") {
       const [paused] = await db
         .select({ at: events.recordedAt })
@@ -702,6 +699,15 @@ export async function weeklyFor(
       now
     )
     for (const alert of alerts) {
+      // Every Monday beat reads the report until one surfaces it.
+      const [raised] = await db
+        .select({ id: events.eventId })
+        .from(events)
+        .where(
+          sql`${events.type} = 'alert.raised' and ${events.occurredAt} > ${new Date(now.getTime() - 8 * DAY).toISOString()}::timestamptz and ${events.payload}->>'kind' = ${`search.${alert.kind}`} and ${events.payload}->>'week' = ${week}`
+        )
+        .limit(1)
+      if (raised) continue
       await appendEvent(db, {
         orgId,
         assignmentId: null,
@@ -723,31 +729,15 @@ export async function weeklyFor(
         suggestion,
       },
     }
-  })
+  })()
   if (!input) return null
   const report = weeklyReport(input.report)
   if (!report) return null
   const [chip] = report.chips
   return {
     key: input.key,
-    message: {
-      text: report.text,
-      ...(chip && {
-        button: { label: chip, action: { kind: "ask" as const, text: chip } },
-      }),
-    },
-  }
-}
-
-/** The post, in its own step; a busy chat or one holding a card throws for the step's retries. */
-export async function postWeekly(
-  kit: Tenancy,
-  orgId: string,
-  weekly: Weekly
-): Promise<void> {
-  const posted = await postAssistantMessage(kit, { orgId, ...weekly })
-  if (posted === "busy" || posted === "waiting") {
-    throw new GoogleError(`search.chat_${posted}`)
+    since,
+    facts: { report: report.text.join(" "), ...(chip && { chip }) },
   }
 }
 

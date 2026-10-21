@@ -342,18 +342,9 @@ vi.mock("../src/domain-flow.ts", async (importOriginal) => ({
     orgId === "org-1" ? [{ key: `dom-1:sweep:${hour}`, text: "moved" }] : [],
   postStatus: async () => undefined,
 }))
-// The Monday look finds one message for org-1; its post is a step of its own.
 vi.mock("../src/search-sync.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/search-sync.ts")>()),
   startDueSyncs: async () => 0,
-  weeklyFor: async (_kit: unknown, orgId: string, now: Date) =>
-    orgId === "org-1"
-      ? {
-          key: `search-weekly-org-1-${(await import("../src/search-sync.ts")).isoWeek(now)}`,
-          message: { text: ["Search this week"] },
-        }
-      : null,
-  postWeekly: async () => undefined,
 }))
 vi.mock("../src/validate.ts", () => ({
   assignmentFacts: async () => [],
@@ -1112,10 +1103,9 @@ describe("the sweep Workflow's step names", () => {
     expect(daily.totals.orgs).toBe(51)
   })
 
-  it("sends the weekly search message on Monday at 07 UTC, each post a step of its own", async () => {
+  it("sends no search message of its own on Monday: the heartbeat says it", async () => {
     const monday = await sweep(51, [], "2026092107")
-    expect(monday.names).toEqual(steps.SweepWorkflow["weekly search"])
-    expect((await sweep(51, [], "2026092207")).names).not.toContain("weekly 1")
+    expect(monday.names).toEqual(steps.SweepWorkflow["two chunks"])
   })
 
   it("names the hour the way the cron does", () => {

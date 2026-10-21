@@ -43,6 +43,7 @@ import {
   relative,
   zoneApex,
 } from "./domains.ts"
+import { writeUpdate } from "./heartbeat-write.ts"
 import {
   activeDeployment,
   dropDomainPointers,
@@ -558,8 +559,14 @@ export async function look(
   }
 }
 
-/** The 24-hour reminder, once, with where the owner's DNS settings are. */
+/**
+ * The 24-hour reminder, once, with where the owner's DNS settings are. This
+ * line, the live one and the failed ones are worded by the model from their
+ * facts, or else are the template (heartbeat-write.ts); `statusText`'s DNS
+ * records stay fixed.
+ */
 export async function nudge(
+  env: { OPENROUTER_API_KEY?: string },
   kit: Tenancy,
   orgId: string,
   domainId: string
@@ -573,7 +580,13 @@ export async function nudge(
   const button = settingsButton(row.provider)
   return {
     key: `${domainId}:nudge`,
-    text: `I'm still waiting for the records for ${row.name}.${where} There's no need to tell me when they're in; I'll see them.`,
+    text: await writeUpdate(env, kit, orgId, {
+      facts: {
+        domain: row.name,
+        ...(provider.success && { provider: provider.data.name }),
+      },
+      template: `I'm still waiting for the records for ${row.name}.${where} There's no need to tell me when they're in; I'll see them.`,
+    }),
     ...(button && { button }),
   }
 }
@@ -613,7 +626,10 @@ export async function activateDomain(
   await writePointer(env, kit, orgId, done.row.siteId, done.slug)
   return {
     key: `${domainId}:active`,
-    text: `${done.row.primaryHost} is live. ${done.slug} now forwards to it, so links you've shared still work.`,
+    text: await writeUpdate(env, kit, orgId, {
+      facts: { host: done.row.primaryHost, old_host: done.slug },
+      template: `${done.row.primaryHost} is live. ${done.slug} now forwards to it, so links you've shared still work.`,
+    }),
     button: {
       label: "Open your website",
       action: { kind: "open", url: `https://${done.row.primaryHost}/` },
@@ -627,7 +643,8 @@ export async function activateDomain(
  * hostnames are deleted, and what to tell the owner is returned.
  */
 export async function expireDomain(
-  env: CloudflareEnv & Pick<Env, "SITE_HOST_SUFFIX">,
+  env: CloudflareEnv &
+    Pick<Env, "SITE_HOST_SUFFIX"> & { OPENROUTER_API_KEY?: string },
   kit: Tenancy,
   orgId: string,
   domainId: string,
@@ -652,14 +669,21 @@ export async function expireDomain(
   await dropHostnames(env, found.row.cfIds)
   const where = ` Your site stays on ${found.slug}.`
   const name = found.row.name
+  const facts = { domain: name, site: found.slug }
   return reason === "held"
     ? {
         key: `${domainId}:failed`,
-        text: `I couldn't connect ${name}: it's already set up somewhere else.${where}`,
+        text: await writeUpdate(env, kit, orgId, {
+          facts,
+          template: `I couldn't connect ${name}: it's already set up somewhere else.${where}`,
+        }),
       }
     : {
         key: `${domainId}:failed`,
-        text: `I didn't see the records for ${name} within 3 days, so I've stopped watching.${where} Ask me again any time.`,
+        text: await writeUpdate(env, kit, orgId, {
+          facts: { ...facts, days: "3" },
+          template: `I didn't see the records for ${name} within 3 days, so I've stopped watching.${where} Ask me again any time.`,
+        }),
         button: {
           label: "Try again",
           action: { kind: "ask", text: `Connect ${name} to my website again.` },

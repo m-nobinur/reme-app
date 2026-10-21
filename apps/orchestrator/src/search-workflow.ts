@@ -129,7 +129,7 @@ export class SearchWorkflow extends WorkflowEntrypoint<Env, SearchParams> {
     )
     try {
       await step.do("announce", SAY_RETRIES, () =>
-        withKit(env, (kit) => announce(kit, params))
+        withKit(env, (kit) => announce(env, kit, params))
       )
     } catch {
       // The chat stayed busy past every retry; the audit rows keep it.

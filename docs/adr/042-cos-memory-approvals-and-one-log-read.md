@@ -67,9 +67,37 @@ names in full, so their hash covers the input alone. Both events sit outside
 hash do not change.
 
 **A typed yes over a card**, owner decision 2: allowed only for `create_reminder` and
-`request_change`, exact phrases first, then Jev's `noul` questions at the existing thresholds,
-while creative builder's CM2 keeps Jev. Domain, review and Developer-answer cards keep ADR-034's
-rule: a typed message cancels them. An emailed "yes" approves nothing.
+`request_change`, exact phrases first, then Jev, while creative builder's CM2 keeps Jev. Domain,
+review and Developer-answer cards keep ADR-034's rule: a typed message cancels them. An emailed
+"yes" approves nothing.
+
+- **Which card.** `lookAhead` reads the tail for a typed message: its last step holds exactly one
+  pending call, and it is one of those two cards. Two pending cards, or any other tool, and the
+  message takes the normal turn. The tail is the message a click answers, so a card behind a later
+  row is out of reach. That also gives one card to answer without a "superseded" state: a typed
+  message cancels the open card before the CoS can propose another, and an emailed reply is not
+  stored while a card waits (`postOwnerEmail` returns `waiting`).
+- **What counts.** A whole reply that is one short phrase (`PHRASES` in `jev.ts`: yes, yes please,
+  go ahead, do it, ok; no, nope, no thanks, don't, cancel, stop), ignoring case and punctuation. Anything
+  longer, "yes but make it 5pm" included, is never an approval and takes the normal turn, where the
+  CoS proposes a new card. Otherwise, while Jev is available, one call with three `noul` questions:
+  approves it, declines it, asks for a change. A false yes runs a tool and a false null costs a
+  turn, so an approval needs "approves it" at `JEV.sure` (0.9) and the other two at most 0.1: a
+  change request beats an approval. A decline only closes a card the CoS can propose again, and
+  the owner's words stay in the log, so it needs "declines it" at 0.9 and "approves it" at most
+  0.1, and a change request stops it only at 0.9. Clear declines ("nope, leave it") scored 0.7
+  on the change question in the first live run. Unsure, a Jev error or a timeout is the normal
+  turn. If CM2 drops Jev from the chat, `readReply` is left with its phrase half and nothing else
+  changes.
+- **The same path as a click.** The turn resolves the card with the code a results turn uses
+  (`resolveApprovals`): the version binding, the 24 hour expiry and the `cos.tool_started` mark
+  all apply, so a typed yes on an expired or changed card is refused with the same line. The
+  owner's words are then logged as their message and the model answers in a new message, so it
+  says what ran. With no model, one line says how the reply was read ("Taken as a yes: ..."). The
+  stream carries only the new message, and opens with a transient `CARD_ANSWERED` chunk naming the
+  card. The web cancels a pending card on screen when the owner types (`cancelOvertaken`), so on
+  that chunk it reads the card's stored message again and shows what happened, approved or
+  declined, as a click would; a typed message that answered nothing leaves the card cancelled.
 
 **Memory does not move the CoS to the lite runtime**, owner decision 4. The owner profile is one
 fact, `owner.profile`, at most 1,500 characters, written with `supersedeFact` and injected as
