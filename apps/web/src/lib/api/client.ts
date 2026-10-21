@@ -14,6 +14,7 @@ import {
   DomainPurchaseStatus,
   ErrorEnvelope,
   FactList,
+  type MemoryReviewAction,
   MemoryView,
   type MessageFeedback,
   Org,
@@ -651,6 +652,23 @@ async function undoMemory(
   return MemoryView.parse(await response.json())
 }
 
+async function reviewMemory(
+  action: MemoryReviewAction
+): Promise<MemoryView | "stale" | null> {
+  const response = await call("/memory/review", {
+    method: "POST",
+    body: action,
+  })
+  if (!response || response.status === 401 || response.status === 403) {
+    return null
+  }
+  if (response.status === 409) return "stale"
+  if (!response.ok) {
+    throw new Error(`apps/api answered ${response.status} for /memory/review`)
+  }
+  return MemoryView.parse(await response.json())
+}
+
 async function pushKey(): Promise<string | null> {
   const body = await get("/push/config")
   return body === null ? null : PushConfig.parse(body).public_key
@@ -796,6 +814,7 @@ export const apiSource: OwnerDataSource = {
   completeReminder,
   memory,
   undoMemory,
+  reviewMemory,
   pushKey,
   subscribePush,
   unsubscribePush,

@@ -14,6 +14,7 @@ import type {
   DomainPurchaseStatus,
   FactRecord,
   FactValueKey,
+  MemoryReviewAction,
   MemoryView,
   MessageFeedback,
   PushSubscribeRequest,
@@ -255,6 +256,10 @@ export type OwnerDataSource = {
    * edited since, so nothing is left to undo.
    */
   undoMemory: (version: number) => Promise<MemoryView | "stale" | null>
+  /** The owner's choice about asking first, or their answer to one proposal. "stale" when it is gone. */
+  reviewMemory: (
+    action: MemoryReviewAction
+  ) => Promise<MemoryView | "stale" | null>
   /** Reports and alerts from the last 30 days, newest first as listed. */
   activity: () => Promise<AttentionItem[]>
   /**

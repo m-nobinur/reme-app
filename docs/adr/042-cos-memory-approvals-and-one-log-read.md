@@ -124,6 +124,20 @@ matters now, or leave it. The chat shows "Saved to memory" once, on the reply af
 since the last one it showed; the page at `/app/memory` lists every version and undoes any one whose change still
 applies, as a new version.
 
+**Reflection.** The after-turn queue also carries a copy of each closed turn's message delayed by 20 minutes. A pass
+(`cos/reflection.ts`) is due once six owner messages have gathered since the last one, or when the delayed copy finds no
+newer turn. It is spent without a call when `remember` saved in the window, and left to grow when the owner wrote under
+40 characters. The window holds the owner's chat messages and the assistant's replies, nothing from a tool result,
+an email or a post. Haiku 5.5, through the path compaction uses, with its input and output scrubbed, answers a JSON list
+of operations that is empty most of the time; its cost is a `cos.background_step` that `withinCap` counts, and the same
+event records how far the pass read, so the next window starts there. Code decides what is written: a new line must be
+in the owner's words from the window, must not read as an order or an attack, and must hold no price, email address or
+phone number; a line the owner said or confirmed is never removed and is replaced only with words the profile already
+holds; one pass changes at most a fifth of the lines, one at least. Each change is its own version, from
+`supersedeFact`'s inferred provenance and a `reflection` source, so undo is per change. With "Ask me before saving",
+kept with the chat's mark in `owner.memory_review`, the changes wait as proposals on the memory page, and accepting one
+saves it as `owner_confirmed`.
+
 **Compaction.** After each closed turn the after-turn job (`cos/compaction.ts`)
 measures the history the next turn would read: the derived messages at four characters a token,
 older turns without their tool calls, and never the instructions, tools or context, which no
