@@ -39,12 +39,13 @@ export const GATE = {
       "Is any item news about the business the owner would want to hear today?",
   },
   /**
-   * The bar each dial sets: the lower it is, the more gets through, and the
-   * writer's `[quiet]` is the second filter. Tuned on the coordinator's seed
-   * labels (evals/heartbeat), to recheck on the owner's labels and on the
-   * dismiss rate of the first 50 real heartbeats.
+   * Jev stops only what is plainly not worth a word; the writer, told the
+   * dial's bar, judges the rest and may answer `[quiet]`. On the
+   * coordinator's seed labels (evals/heartbeat) this agreed on 25 of 30, and
+   * a bar per dial (0.9, 0.6, 0.5) on 24. Recheck on the owner's labels and
+   * on the dismiss rate of the first 50 real heartbeats.
    */
-  threshold: { low: 0.9, default: 0.6, high: 0.5 },
+  floor: 0.3,
   timeoutMs: 5_000,
   /** Per Mtok of input, for when OpenRouter reports no cost. */
   inputPrice: 0.042,

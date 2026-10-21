@@ -330,13 +330,13 @@ describe.skipIf(!url)("the heartbeat", () => {
   })
 
   describe("the gate, the cap and the writer", () => {
-    it("stops under the dial's bar with no writer call and no cap taken", async () => {
+    it("stops under the floor with no writer call and no cap taken", async () => {
       await seed(later(NOON, 20), later(NOON, -2))
-      probability = 0.55
+      probability = 0.25
       await beat(NOON)
       expect(await run(NOON)).toEqual({
         outcome: "skipped",
-        detail: "gate:0.55",
+        detail: "gate:0.25",
       })
       expect(models.write).not.toHaveBeenCalled()
       expect(await cap()).toEqual([])
@@ -349,7 +349,7 @@ describe.skipIf(!url)("the heartbeat", () => {
       ])
     })
 
-    it("lets the same answer through on the high dial", async () => {
+    it("passes the floor on any dial and gives the writer the dial's bar", async () => {
       await kit.withOrg({ orgId }, (db) =>
         db.update(orgs).set({ proactivity: "high" })
       )

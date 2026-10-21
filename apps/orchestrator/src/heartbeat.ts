@@ -391,7 +391,7 @@ async function speak(kit: Tenancy, env: Env, models: Models, beat: Beat) {
   } catch (error) {
     return record("failed", `gate_error:${failureCode(error)}`)
   }
-  const pass = gate.probability >= GATE.threshold[beat.level]
+  const pass = gate.probability >= GATE.floor
   await spend("heartbeat_gate", pass ? "pass" : "stop", gate.spent)
   if (!pass) return record("skipped", `gate:${gate.probability.toFixed(2)}`)
 

@@ -17,18 +17,19 @@ import {
  * goes through the beat as the handler runs it: an owner in the chat or
  * nothing new stops it in code; otherwise Jev's gate, then the writer at low
  * effort, whose reply speaks only as a message inside the limits. Two gates
- * are scored from the same calls: `dial`, the dial's bar in `GATE.threshold`,
- * and `floor`, Jev at 0.3 with the writer judging the rest. Passes when
- * either agrees with the labels on 25 of 30, and prints the cost. `--dry`
+ * are scored from the same calls: `floor`, the shipped `GATE.floor` with the
+ * writer judging the rest, and `dial`, the bar per dial it was chosen over.
+ * Passes when `floor` agrees with the labels on 25 of 30; prints the cost. `--dry`
  * makes no model call: it checks the set's shape and the cases code decides
  * alone. Live, it spends real money on `OPENROUTER_API_KEY`.
  */
 
-const FLOOR = 0.3
+/** The bar per dial that `GATE.floor` was chosen over, kept to compare on new labels. */
+const DIAL = { low: 0.9, default: 0.6, high: 0.5 }
 /** The most one run may spend, in USD; the run stops before a call past it. */
 const BUDGET = 0.15
 const sum = (xs) => xs.reduce((s, x) => s + x, 0)
-const GATES = ["dial", "floor"]
+const GATES = ["floor", "dial"]
 
 const set = JSON.parse(
   readFileSync(new URL("./heartbeat/digests.json", import.meta.url), "utf8")
@@ -48,7 +49,7 @@ const spend = { gate: [], writer: [] }
 const rows = []
 for (const c of set.cases) {
   const fresh = c.items.filter((item) => !(c.surfaced ?? []).includes(item.key))
-  const bars = { dial: GATE.threshold[c.dial], floor: FLOOR }
+  const bars = { floor: GATE.floor, dial: DIAL[c.dial] }
   const decided = {}
   let step
   let text = ""
@@ -96,11 +97,11 @@ for (const c of set.cases) {
   )
 }
 
-let best = 0
+let shipped = 0
 for (const g of GATES) {
   const counted = rows.filter((r) => r.decided[g] !== null)
   const agree = counted.filter((r) => r.decided[g] === r.label).length
-  best = Math.max(best, agree)
+  if (g === "floor") shipped = agree
   const byGroup = ["quiet", "speak", "borderline"]
     .map((group) => {
       const of = counted.filter((r) => r.group === group)
@@ -121,7 +122,7 @@ if (!dry) {
   console.log(
     `cost: gate $${gate.toFixed(6)} over ${spend.gate.length} calls, writer $${writer.toFixed(6)} over ${spend.writer.length} calls, total $${(gate + writer).toFixed(6)}`
   )
-  if (best < 25) process.exitCode = 1
+  if (shipped < 25) process.exitCode = 1
 } else if (
   rows.some((r) => GATES.some((g) => r.decided[g] && r.decided[g] !== r.label))
 )
