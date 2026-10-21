@@ -141,7 +141,7 @@ test("the bell carries the unread count and opens the newest", async ({
   await expect(page.locator('[data-slot="unread-count"]')).toHaveText("3")
   await bell.click()
   const menu = page.getByRole("menu")
-  await expect(menu.getByRole("menuitem")).toHaveCount(5)
+  await expect(menu.getByRole("menuitem")).toHaveCount(6)
   await settle(page)
   await expect(
     menu.getByRole("menuitem", { name: "View all notifications" })

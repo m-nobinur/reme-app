@@ -217,7 +217,6 @@ export function OwnerSettings({
         <SettingsTrigger
           render={
             <button
-              aria-label={`Settings, ${ownerName}`}
               className={railItemClass}
               data-slot="profile-menu"
               type="button"
@@ -232,6 +231,7 @@ export function OwnerSettings({
             {initialsOf(ownerName)}
           </span>
           <span className="truncate" data-slot="rail-label">
+            <span className="sr-only">Settings, </span>
             {ownerName}
           </span>
         </SettingsTrigger>
