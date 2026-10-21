@@ -75,13 +75,7 @@ function AccountMenu() {
     <DropdownMenu>
       <Hint label="Sam Fixture" side="right">
         <DropdownMenuTrigger
-          render={
-            <button
-              aria-label="Profile, Sam Fixture"
-              className={railItemClass}
-              type="button"
-            />
-          }
+          render={<button className={railItemClass} type="button" />}
         >
           <span
             aria-hidden
@@ -91,7 +85,7 @@ function AccountMenu() {
             SF
           </span>
           <span className="truncate" data-slot="rail-label">
-            <span className="sr-only">Settings, </span>
+            <span className="sr-only">Profile, </span>
             Sam Fixture
           </span>
         </DropdownMenuTrigger>
