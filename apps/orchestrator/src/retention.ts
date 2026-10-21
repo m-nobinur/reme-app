@@ -2,7 +2,9 @@ import {
   appendEvent,
   approvals,
   assignments,
+  ensureHeartbeat,
   events,
+  lowerNextDue,
   type OrgScopedDb,
   siteRevisions,
   sql,
@@ -187,16 +189,19 @@ export type SweepCounts = {
 }
 
 /**
- * One org's hour: park what expired, re-drive what queued, delete what is
- * due. Every part is idempotent, so a retried chunk redoing a finished org
- * changes nothing. One `retention.swept` event per org that had work.
+ * One org's hour: give it the heartbeat job its dial asks for, park what
+ * expired, re-drive what queued, delete what is due. Every part is
+ * idempotent, so a retried chunk redoing a finished org changes nothing. One
+ * `retention.swept` event per org that had work.
  */
 export async function sweepOrg(
-  env: Pick<Env, "ASSIGNMENTS" | "SITES">,
+  env: Pick<Env, "ASSIGNMENTS" | "SITES" | "SCHEDULE">,
   kit: Tenancy,
   orgId: string,
   now: Date = new Date()
 ): Promise<SweepCounts> {
+  const beat = await kit.withOrg({ orgId }, (db) => ensureHeartbeat(db, now))
+  if (beat) await lowerNextDue(env.SCHEDULE, beat)
   const parked = await kit.withOrg({ orgId }, (db) =>
     parkExpiredReviews(db, now)
   )

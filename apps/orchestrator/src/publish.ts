@@ -29,6 +29,7 @@ import {
   type Tenancy,
 } from "@workspace/db"
 import { checkBuild, checkContent, parsePage } from "@workspace/gates"
+import { writeUpdate } from "./heartbeat-write.ts"
 import {
   enteredFrom,
   type Ids,
@@ -647,22 +648,26 @@ export const LIVE_SAY: WorkflowStepConfig = {
 
 /**
  * The owner's first version is live: said once in their chat, keyed by the
- * site, with what Ava can do next and the site to open.
+ * site, with what Ava can do next and the site to open. The model words it
+ * from the host, or the template stands (heartbeat-write.ts).
  */
 export async function sayLive(
+  env: { OPENROUTER_API_KEY?: string },
   kit: Tenancy,
   orgId: string,
   siteId: string,
   url: string
 ): Promise<void> {
   const host = url.replace(/^https?:\/\//, "").replace(/\/$/, "")
+  const text = await writeUpdate(env, kit, orgId, {
+    facts: { host },
+    template: `Your website is live at ${host}. Next I can put it on Google so people find it, or on a domain of your own. Just say which.`,
+  })
   const posted = await postAssistantMessage(kit, {
     orgId,
     key: `site.live:${siteId}`,
     message: {
-      text: [
-        `Your website is live at ${host}. Next I can put it on Google so people find it, or on a domain of your own. Just say which.`,
-      ],
+      text: [text],
       ...(url.startsWith("https://") && {
         button: { label: "Visit your website", action: { kind: "open", url } },
       }),

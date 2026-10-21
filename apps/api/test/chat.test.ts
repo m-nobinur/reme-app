@@ -1357,14 +1357,15 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
             await db.select({ at: scheduledJobs.nextRunAt }).from(scheduledJobs)
           )[0]?.at.toISOString(),
         }))
+      // Signup made the heartbeat; daily at 09:00 in the org's zone.
       await kit.withOrg({ orgId: fresh.orgId }, (db) =>
-        db.insert(scheduledJobs).values({
-          orgId: fresh.orgId,
-          kind: "heartbeat",
-          // Daily at 09:00 in the org's zone.
-          rule: "0 9 * * *",
-          nextRunAt: new Date(Date.now() + 30 * 86_400_000),
-        })
+        db
+          .update(scheduledJobs)
+          .set({
+            rule: "0 9 * * *",
+            nextRunAt: new Date(Date.now() + 30 * 86_400_000),
+          })
+          .where(eq(scheduledJobs.kind, "heartbeat"))
       )
       const turn = (n: number, time_zone?: string) =>
         talk.send({

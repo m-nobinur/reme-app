@@ -74,9 +74,75 @@ repeated hour. Rules are five-part cron, so nothing runs more often than the cro
 
 **One outbox.** `deliveries (org_id, key, channel, state, attempts, sent_at, error)`, unique on
 `(org_id, key)`. The key names the cause, such as `reminder:<id>` or
-`heartbeat:<org>:<digest hash>`, never the time sent. A second insert is a no-op, so nothing sends
+`heartbeat:<org>:<job>:<slot>`, never the time sent. A second insert is a no-op, so nothing sends
 twice. A Queue consumer sends: in-app through `postAssistantMessage`, email through the
 `send_email` binding. A reminder goes to `reminders.conversation_id`, not the newest conversation.
+
+**The heartbeat.** Each org has one `heartbeat` job, with its rule set by `orgs.proactivity` in
+the org's zone: `off` has no job, `low` runs every 8 hours, `default` every 4 and `high` hourly.
+A time inside quiet hours (`quiet_start` to `quiet_end`, 21:00 to 08:00 by default, which may
+cross midnight) moves to their end by wall clock, so 08:00 stays 08:00 across a DST change.
+Signup makes the job and the hourly sweep ensures it for every org, so existing orgs need no
+backfill; whatever later changes the dial calls the same `ensureHeartbeat`, and a change of zone
+or quiet hours calls `recomputeOrgJobs`. Quiet hours apply to the heartbeat only: a reminder
+fires at the time the owner named.
+
+The handler stops with no model call in quiet hours (a retry's backoff can land there) and when
+the org had a CoS turn in the last 15 minutes, since the owner is in the chat. Otherwise it reads
+a digest in code: reviews recorded, Developer questions waiting, approvals waiting over a day,
+reminders due in the next 24 hours, and site, domain and search alerts. Each item is
+`{key: "<kind>:<entity id>:<seq>", since, facts}`, sorted by key, with absolute times only, so
+the same state read an hour later is the same digest. A ledger drops items already surfaced: a
+`deliveries` row keyed `heartbeat-item:<org>:<item key>`, inserted if absent and never sent. It is
+written before any model runs, so a model that fails does not raise the same items again. A
+digest query that fails rolls the run back, ledger included, so a source error is not a change.
+An empty digest, or one with nothing new, ends the run `skipped`. `job_outcome` has no
+`owner_active` or `error` value and adding one needs a migration, so those runs are `skipped`
+and `failed` with the reason in `detail`.
+
+New items go to two models after the run commits, in its `after`. First Jev
+(`typesafe/jev-1.13` through the AI SDK provider's `evaluationModel`, the second Jev caller)
+answers "Is any of this worth interrupting the owner for now?" over the scrubbed items and the
+owner profile, asked as three yes-or-no questions (does an item need the owner to decide or act,
+did something go wrong that visitors would notice, is it news the owner would want today), and
+the beat goes on when the likeliest reaches 0.3. Jev is a floor that stops plain noise; the
+writer, told the dial's bar, judges the rest. On the 30 labelled digests in `evals/heartbeat`
+(2026-10-21) the floor agreed with the labels on 25, against 24 for a bar per dial (low 0.9,
+default 0.6, high 0.5) and 15 for one question at the bars first planned (0.95, 0.9, 0.8), which
+Jev never reached: one question scored every digest between 0.15 and 0.68. The labels are the
+coordinator's seed, so the floor and the writer's bar are to be rechecked on the owner's labels
+and on the dismiss rate of the first 50 real heartbeats. On a yes
+the beat takes the day's one unprompted message, a `deliveries` row keyed
+`unprompted:<org>:<local date>` inserted if absent; already taken, it stops before the writer.
+The writer is `openai/gpt-6.1-sol` at low effort on the CoS's OpenRouter routing, with no tools,
+the items as data, the profile, and its own last heartbeat and its date. The prompt sets the bar
+by dial (low: something finished or a decision; default: real progress or news the owner would
+want; high: short updates even when on track) and allows `[quiet]` with a reason, read by
+hermes' loose rule. Code checks the message: at most 3 sentences, 450 characters and one
+question, and no link, email address or phone number that a fact the item vouches for (an
+alert's host, a title the owner wrote) does not hold exactly. A quiet, failed or refused reply
+gives the day back, so a later beat can still speak; the reason goes in `job_runs.detail`. A
+message goes in-app keyed `heartbeat:<org>:<job>:<slot>`, and by email too when the owner has
+not typed since the last heartbeat, which the daily cap keeps to one a day. Each Jev and writer
+call is logged as a `cos.background_step` (`job: heartbeat_gate` or `heartbeat_writer`), so the
+CoS's daily cap counts it.
+
+The weekly search report is a heartbeat item on the org's own Monday (`search_report:<ISO
+week>:1`, or `search_report:connect:1` for the one ask to connect), so the report and the
+heartbeat coalesce into one message and the report follows the owner's zone. The sweep's Monday
+07:00 UTC step is gone. Nothing creates a `weekly_report` job any more; the value stays in
+`job_kind` and the contract until a migration can drop it.
+
+**Updates the owner set in motion are worded by the model.** The site-live line, the Search
+Console announcement and the domain nudge, live and failed lines go through one function,
+`writeUpdate`: the facts (hosts, the domain, its DNS provider, the 3-day limit) and today's
+fixed text go to the same writer at low effort with a 15-second limit, since each runs inside a
+Workflow step. The model's text is used only when every fact's value appears in it verbatim, it
+holds no number the facts do not, no link or phone number other than theirs, and it keeps the
+heartbeat's limits; otherwise, on any error, or with no key, the fixed text is sent. Each call
+is a `cos.background_step` (`job: update`). `statusText`'s DNS records and the no-model lines
+(`ASK_REPLY`, `NO_ANSWER`, `PLANNED_ERROR`) stay fixed. These lines answer the owner's own
+actions, so quiet hours do not apply to them.
 
 **Email out is Cloudflare Email Sending** on a `send_email` binding, after
 `wrangler email sending enable remeai.co.uk`, which also adds the DMARC record the domain lacks.
