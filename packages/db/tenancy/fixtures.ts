@@ -7,15 +7,19 @@ import {
   assignmentTransitions,
   conversationMessages,
   conversations,
+  deliveries,
   departments,
   deployments,
   domains,
   events,
   facts,
+  jobRuns,
   memberships,
   orgs,
+  pushSubscriptions,
   reminders,
   roles,
+  scheduledJobs,
   searchConnections,
   searchDaily,
   searchProperties,
@@ -328,6 +332,33 @@ export async function seedTwoOrgs() {
       conversationId: per(tag, 15),
       createdByStaffId: per(tag, 4),
       idempotencyKey: `tenancy_reminder_${tag}`,
+    })
+    // A job for that reminder, not due for a year so the claim never takes it,
+    // with its one run and the delivery that run made.
+    await db.insert(scheduledJobs).values({
+      id: per(tag, 20),
+      orgId: org,
+      kind: "reminder",
+      refId: per(tag, 16),
+      nextRunAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+    })
+    await db.insert(jobRuns).values({
+      jobId: per(tag, 20),
+      orgId: org,
+      runAt: new Date("2026-10-15T09:00:00Z"),
+      outcome: "ok",
+    })
+    await db.insert(deliveries).values({
+      orgId: org,
+      key: `tenancy_delivery_${tag}`,
+      channel: "in_app",
+    })
+    await db.insert(pushSubscriptions).values({
+      orgId: org,
+      staffId: per(tag, 4),
+      endpoint: `https://push.example.test/tenancy-${tag}`,
+      p256dh: "tenancy-p256dh",
+      auth: "tenancy-auth",
     })
     // The org's connected domain: live, served on its apex (org A on `www.`).
     await db.insert(domains).values({

@@ -32,7 +32,11 @@ export interface components {
             /** Format: date-time */
             at: string
             /** @enum {string} */
-            reason: "build_failed" | "budget_parked" | "publish_rolled_back"
+            reason:
+              | "build_failed"
+              | "budget_parked"
+              | "publish_rolled_back"
+              | "job_paused"
             /** @enum {string} */
             cause?:
               | "stalled"
@@ -2132,9 +2136,22 @@ export interface components {
           /** Format: date-time */
           at: string
           /** @enum {string} */
-          reason: "build_failed" | "budget_parked" | "publish_rolled_back"
+          reason:
+            | "build_failed"
+            | "budget_parked"
+            | "publish_rolled_back"
+            | "job_paused"
           /** @enum {string} */
           cause?: "stalled" | "unfinished" | "unanswered" | "service" | "other"
+        }
+      | {
+          /** @constant */
+          kind: "reminder"
+          /** Format: uuid */
+          reminder_id: string
+          title: string
+          /** Format: date-time */
+          due_at: string
         }
     Blueprint: {
       direction: string
@@ -4397,10 +4414,26 @@ export interface components {
       | {
           archived: boolean
         }
+    CosApproval: {
+      turn_id: string
+      approval_id: string
+      tool_call_id: string
+      input_sha256: string
+      /** Format: date-time */
+      expires_at: string
+    }
     CosCall: {
       turn_id: string
       step: number
       sha256: string
+    }
+    CosCompaction: {
+      summary: string
+      replaced_range: {
+        from_seq: number
+        to_seq: number
+      }
+      dropped_refs: string[]
     }
     CosContext: {
       turn_id: string
@@ -4424,6 +4457,7 @@ export interface components {
         | "connect_google"
         | "get_search_performance"
         | "get_indexing"
+        | "remember"
       )[]
       text: string
       reserved_usd: number
@@ -4767,6 +4801,7 @@ export interface components {
           | "connect_google"
           | "get_search_performance"
           | "get_indexing"
+          | "remember"
         description: string
         input_schema: {
           [key: string]: unknown
@@ -6357,6 +6392,57 @@ export interface components {
                 }
               }
         }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "remember"
+          output:
+            | {
+                /** @constant */
+                outcome: "saved"
+                note: string
+                fullness: string
+              }
+            | {
+                /** @constant */
+                outcome: "full"
+                note: string
+                fullness: string
+                lines: string[]
+              }
+            | {
+                /** @constant */
+                outcome: "stopped"
+                note: string
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                }
+              }
+        }
+    CosToolStarted: {
+      tool_call_id: string
+      approval_id: string
+    }
+    CosToolUnknown: {
+      tool_call_id: string
+      approval_id: string
+    }
     CosTurn:
       | {
           /** @constant */
@@ -6385,6 +6471,7 @@ export interface components {
             | "connect_google"
             | "get_search_performance"
             | "get_indexing"
+            | "remember"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -6418,6 +6505,7 @@ export interface components {
             | "connect_google"
             | "get_search_performance"
             | "get_indexing"
+            | "remember"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -6449,6 +6537,7 @@ export interface components {
             | "connect_google"
             | "get_search_performance"
             | "get_indexing"
+            | "remember"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -6480,6 +6569,7 @@ export interface components {
             | "connect_google"
             | "get_search_performance"
             | "get_indexing"
+            | "remember"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -6511,6 +6601,7 @@ export interface components {
             | "connect_google"
             | "get_search_performance"
             | "get_indexing"
+            | "remember"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -6694,6 +6785,27 @@ export interface components {
       decision: "approved" | "rejected"
       /** Format: uuid */
       revision_id: string
+    }
+    Delivery: {
+      /** Format: uuid */
+      org_id: string
+      key: string
+      /** @enum {string} */
+      channel: "in_app" | "email" | "push"
+      /** @enum {string} */
+      state:
+        | "pending"
+        | "sending"
+        | "unknown"
+        | "sent"
+        | "failed"
+        | "suppressed"
+      attempts: number
+      sent_at: string | null
+      error: string | null
+      lease_until: string | null
+      /** Format: date-time */
+      created_at: string
     }
     DeploymentManifest: {
       /** Format: uuid */
@@ -7784,6 +7896,94 @@ export interface components {
       requested_at: string
       expires_at: string | null
     }
+    JobRun: {
+      /** Format: uuid */
+      job_id: string
+      /** Format: uuid */
+      org_id: string
+      /** Format: date-time */
+      run_at: string
+      /** @enum {string} */
+      outcome: "ok" | "skipped" | "failed"
+      detail: string | null
+    }
+    MemoryChip: {
+      version: number
+      changes: {
+        /** @enum {string} */
+        kind: "added" | "changed" | "removed"
+        text: string
+        /** @enum {string} */
+        source: "owner_said" | "owner_confirmed" | "reflection"
+      }[]
+    }
+    MemoryProposal: {
+      /** Format: uuid */
+      id: string
+      /** @enum {string} */
+      action: "add" | "replace" | "remove"
+      text?: string
+      was?: string
+      /** Format: date-time */
+      at: string
+    }
+    MemoryReviewAction:
+      | {
+          /** @constant */
+          action: "ask_first"
+          value: boolean
+        }
+      | {
+          /** @constant */
+          action: "accept"
+          /** Format: uuid */
+          id: string
+        }
+      | {
+          /** @constant */
+          action: "dismiss"
+          /** Format: uuid */
+          id: string
+        }
+    MemoryUndo: {
+      version: number
+    }
+    MemoryView: {
+      version: number
+      lines: {
+        /** Format: uuid */
+        id: string
+        text: string & (unknown & unknown)
+        /** @enum {string} */
+        source: "owner_said" | "owner_confirmed" | "reflection"
+        /** Format: date-time */
+        at: string
+      }[]
+      versions: {
+        version: number
+        /** Format: date-time */
+        at: string
+        changes: {
+          /** @enum {string} */
+          kind: "added" | "changed" | "removed"
+          text: string
+          /** @enum {string} */
+          source: "owner_said" | "owner_confirmed" | "reflection"
+        }[]
+        undoable: boolean
+      }[]
+      ask_first: boolean
+      proposals: {
+        /** Format: uuid */
+        id: string
+        /** @enum {string} */
+        action: "add" | "replace" | "remove"
+        text?: string
+        was?: string
+        /** Format: date-time */
+        at: string
+      }[]
+    }
     MessageFeedback: {
       message_id: string
       /** @enum {string} */
@@ -7797,6 +7997,13 @@ export interface components {
       /** Format: date-time */
       created_at: string
     }
+    OrgSchedule: {
+      time_zone: string | null
+      quiet_start: string
+      quiet_end: string
+      /** @enum {string} */
+      proactivity: "off" | "low" | "default" | "high"
+    }
     OwnerChangeRequest: {
       text: string
       /**
@@ -7804,6 +8011,31 @@ export interface components {
        * @enum {string}
        */
       change_kind?: "copy" | "style" | "section" | "photo" | "creative"
+    }
+    OwnerMemoryReview: {
+      ask_first: boolean
+      proposals: {
+        /** Format: uuid */
+        id: string
+        /** @enum {string} */
+        action: "add" | "replace" | "remove"
+        text?: string
+        was?: string
+        /** Format: date-time */
+        at: string
+      }[]
+      chip_through: number
+    }
+    OwnerProfile: {
+      lines: {
+        /** Format: uuid */
+        id: string
+        text: string & (unknown & unknown)
+        /** @enum {string} */
+        source: "owner_said" | "owner_confirmed" | "reflection"
+        /** Format: date-time */
+        at: string
+      }[]
     }
     Palette: {
       /** @enum {string} */
@@ -7859,6 +8091,15 @@ export interface components {
       /** Format: date-time */
       expires_at: string
     }
+    ProfileLine: {
+      /** Format: uuid */
+      id: string
+      text: string & (unknown & unknown)
+      /** @enum {string} */
+      source: "owner_said" | "owner_confirmed" | "reflection"
+      /** Format: date-time */
+      at: string
+    }
     ProgressEvent: {
       /** @enum {string} */
       state:
@@ -7882,6 +8123,20 @@ export interface components {
       metrics: {
         [key: string]: number
       }
+    }
+    PushConfig: {
+      public_key: string | null
+    }
+    PushSubscribeRequest: {
+      endpoint: string
+      keys: {
+        p256dh: string
+        auth: string
+      }
+    }
+    PushSubscribed: {
+      /** Format: uuid */
+      id: string
     }
     QuoteField: {
       key: string
@@ -7928,6 +8183,53 @@ export interface components {
     RedirectPointer: {
       redirect_to: string
     }
+    RememberInput: {
+      operations: {
+        /** @enum {string} */
+        action: "add" | "replace" | "remove"
+        /** @description The line, as a plain statement about the owner. Required for add and replace. */
+        text?: string
+        /** @description A short piece of the existing line that no other line holds. Required for replace and remove. */
+        match?: string
+      }[]
+    }
+    RememberOutput:
+      | {
+          /** @constant */
+          outcome: "saved"
+          note: string
+          fullness: string
+        }
+      | {
+          /** @constant */
+          outcome: "full"
+          note: string
+          fullness: string
+          lines: string[]
+        }
+      | {
+          /** @constant */
+          outcome: "stopped"
+          note: string
+        }
+      | {
+          /** @constant */
+          outcome: "refused"
+          error: {
+            /** @enum {string} */
+            class:
+              | "validation"
+              | "permission"
+              | "transient"
+              | "resource"
+              | "provider"
+              | "integrity"
+              | "security"
+              | "budgetary"
+            code: string
+            message: string
+          }
+        }
     Reminder: {
       /** Format: uuid */
       id: string
@@ -8699,6 +9001,24 @@ export interface components {
       /** Format: date-time */
       expires_at: string
       signature: string
+    }
+    ScheduledJob: {
+      /** Format: uuid */
+      id: string
+      /** Format: uuid */
+      org_id: string
+      /** @enum {string} */
+      kind: "reminder" | "heartbeat" | "weekly_report"
+      ref_id: string | null
+      rule: string | null
+      /** Format: date-time */
+      next_run_at: string
+      claimed_at: string | null
+      last_run_at: string | null
+      failures: number
+      paused_at: string | null
+      /** Format: date-time */
+      created_at: string
     }
     SearchConnection: {
       /** @enum {string} */
@@ -9949,7 +10269,11 @@ export interface components {
             /** Format: date-time */
             at: string
             /** @enum {string} */
-            reason: "build_failed" | "budget_parked" | "publish_rolled_back"
+            reason:
+              | "build_failed"
+              | "budget_parked"
+              | "publish_rolled_back"
+              | "job_paused"
             /** @enum {string} */
             cause?:
               | "stalled"
@@ -9957,6 +10281,15 @@ export interface components {
               | "unanswered"
               | "service"
               | "other"
+          }
+        | {
+            /** @constant */
+            kind: "reminder"
+            /** Format: uuid */
+            reminder_id: string
+            title: string
+            /** Format: date-time */
+            due_at: string
           }
       )[]
       missing_facts: (

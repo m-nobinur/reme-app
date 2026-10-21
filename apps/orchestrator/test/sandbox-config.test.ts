@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync } from "node:fs"
+import { URL } from "node:url"
 import { describe, expect, it } from "vitest"
 
 /**
@@ -15,15 +16,14 @@ const read = (path: string) =>
 const SECRET_NAME = /(_KEY|_TOKEN|_SECRET|PASSWORD|DATABASE_URL)\b/
 
 describe("the sandbox egress rule", () => {
-  const source = read("src/cloudflare.ts")
-  const body =
-    /export class RemeSandbox extends Sandbox<Env> \{([\s\S]*?)\n\}/.exec(
-      source
-    )?.[1] ?? ""
+  const source = read("src/container.ts")
 
   it("denies the internet and allows the registry and nothing else", () => {
-    expect(body).toMatch(/^\s*override enableInternet = false$/m)
-    expect(body).toMatch(/^\s*override allowedHosts = \[NPM_REGISTRY_HOST\]$/m)
+    expect(source).toMatch(/^\s*enableInternet: false,$/m)
+    expect(source).not.toMatch(/enableInternet: true/)
+    expect(source).toMatch(
+      /if \(host === NPM_REGISTRY_HOST\) return fetch\(request\)/
+    )
     expect(read("src/sandbox.ts")).toMatch(
       /export const NPM_REGISTRY_HOST = "registry\.npmjs\.org"$/m
     )
@@ -39,10 +39,18 @@ describe("the sandbox credential rule", () => {
       .map((f) => [String(f), read(`src/${f}`)] as const)
     for (const [file, text] of src) {
       expect(text, file).not.toMatch(/\benvVars\b|\bsetEnvVars\b/)
-      // `exec` and `startProcess` take an `env` option; none of ours sets one.
-      expect(text, file).not.toMatch(
-        /\.(exec|startProcess)\([^;]*\{[^;{}]*\benv\s*:/
-      )
+      if (file === "container.ts") continue
+      // Only the container's own class sets a command's `env`.
+      expect(text, file).not.toMatch(/\.exec\([^;]*\{[^;{}]*\benv\s*:/)
+    }
+    // And what it sets is literal paths, none of them a secret.
+    const env =
+      /const EXEC_ENV = \{([^}]*)\}/.exec(read("src/container.ts"))?.[1] ?? ""
+    const entries = env.trim().split(/,\s*/).filter(Boolean)
+    expect(entries.length).toBeGreaterThan(0)
+    for (const entry of entries) {
+      expect(entry).toMatch(/^[A-Z_]+: ("[^"]*"|CA)$/)
+      expect(entry).not.toMatch(SECRET_NAME)
     }
   })
 

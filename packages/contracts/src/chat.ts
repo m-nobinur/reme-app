@@ -41,6 +41,13 @@ export const TOOL_CALL_CANCELLED =
   "User cancelled tool call by sending a new message."
 
 /**
+ * The transient chunk that opens the stream of a typed yes or no which
+ * answered a card (ADR-042): `{ tool_call_id }`. The web has shown that card
+ * as cancelled, so it reads the stored message again and shows the outcome.
+ */
+export const CARD_ANSWERED = "data-card_answered"
+
+/**
  * How a Chief of Staff tool's error text begins (ADR-034). `TOOL_FAILED`
  * means the call did nothing: the builder answered in a shape the api does
  * not accept. `TOOL_UNKNOWN` means nobody can vouch for the outcome: it may
@@ -49,6 +56,13 @@ export const TOOL_CALL_CANCELLED =
  */
 export const TOOL_FAILED = "tool_failed"
 export const TOOL_UNKNOWN = "unknown_outcome"
+
+/**
+ * How the error text begins when the owner's yes on a CoS card no longer
+ * runs its call: the card expired, or the call is not the one it showed
+ * (ADR-042). Nothing was done. Callers check it before `toolErrorKind`.
+ */
+export const APPROVAL_EXPIRED = "approval_expired"
 
 /**
  * What a tool's error text says happened. Only a `TOOL_FAILED` line, which
@@ -412,7 +426,7 @@ const ChatResult = z.discriminatedUnion("kind", [
  * An IANA zone name as the browser's `Intl` reports it, such as
  * `Europe/London`. The shape only: the api refuses a name `Intl` rejects.
  */
-const TimeZone = z.string().regex(/^[A-Za-z][A-Za-z0-9_+/-]{0,63}$/)
+export const TimeZone = z.string().regex(/^[A-Za-z][A-Za-z0-9_+/-]{0,63}$/)
 
 /**
  * `POST /chat`: one turn of one conversation. The client sends only what

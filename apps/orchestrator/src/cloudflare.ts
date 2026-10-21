@@ -5,7 +5,6 @@ import {
   type WorkflowStep,
 } from "cloudflare:workers"
 import { NonRetryableError } from "cloudflare:workflows"
-import { Sandbox } from "@cloudflare/sandbox"
 import {
   Blueprint,
   type BuildLane,
@@ -41,8 +40,15 @@ import {
   takeSnapshot,
 } from "./brief.ts"
 import { critiqueRound, type Fix, repairMessage } from "./critic.ts"
+import {
+  DELIVERIES_QUEUES,
+  type DeliveryMessage,
+  deliveriesBatch,
+  redriveDeliveries,
+} from "./deliveries.ts"
 import { postStatus, type Say, sweepDomains } from "./domain-flow.ts"
 import { SAY_RETRIES } from "./domain-workflow.ts"
+import { JOBS_QUEUES, jobsBatch } from "./jobs.ts"
 import { makePhotos } from "./photo-step.ts"
 import { PLAN_ROUNDS, planRound, readDecision } from "./planner.ts"
 import {
@@ -75,26 +81,17 @@ import {
   checkpoint,
   endSandbox,
   keepWarm,
-  NPM_REGISTRY_HOST,
   PoolExhaustedError,
   provision,
   rehydrate,
-  SLEEP_AFTER,
   sandboxFor,
   tailSandbox,
   takeScreenshots,
   takeWarm,
   whileHeld,
 } from "./sandbox.ts"
-import {
-  afterPublish,
-  hourAt,
-  isWeeklyHour,
-  postWeekly,
-  startDueSyncs,
-  type Weekly,
-  weeklyFor,
-} from "./search-sync.ts"
+import { type JobMessage, SCHEDULE_CRON, scanDue } from "./schedule.ts"
+import { afterPublish, startDueSyncs } from "./search-sync.ts"
 import {
   advance,
   claim,
@@ -107,38 +104,9 @@ import { LEAD_TURN_MS, logTiming, since, type ToolTimings } from "./timing.ts"
 import { checkUptime, UPTIME_CRON } from "./uptime.ts"
 import { assignmentFacts, checkA11y, validateRevision } from "./validate.ts"
 
-// The outbound proxy the platform routes container egress through; the SDK
-// needs it exported from the Worker for its own internal hosts.
-export { ContainerProxy } from "@cloudflare/sandbox"
+export { RemeSandbox, SandboxEgress, SandboxPool } from "./container.ts"
 export { DomainWorkflow } from "./domain-workflow.ts"
 export { SearchSyncWorkflow, SearchWorkflow } from "./search-workflow.ts"
-
-/**
- * The container behind every site (ADR-031): egress denied by default
- * with the registry as the one exception, asleep after `SLEEP_AFTER`, and
- * holding nothing the Worker holds. The image is infra/sandbox/Dockerfile;
- * the instance type and the pool size are in wrangler.jsonc.
- */
-export class RemeSandbox extends Sandbox<Env> {
-  override enableInternet = false
-  override allowedHosts = [NPM_REGISTRY_HOST]
-  // Without this, port 443 is closed outright and the allowlist never sees
-  // an HTTPS request: the platform intercepts only what it is told to. With
-  // it, HTTPS is terminated at the outbound proxy, the container trusts the
-  // proxy's ephemeral CA, and the allowlist decides. Measured on staging
-  // 2026-09-15: the registry timed out at the TCP level until this was set.
-  override interceptHttps = true
-  override sleepAfter = SLEEP_AFTER
-}
-
-// The platform injects the proxy's CA into the container only when an
-// outbound handler exists, and the control server refuses to start under
-// HTTPS interception without that CA (measured 2026-09-15: "Certificate not
-// found, refusing to start"). This handler is the allowlist's pass-through:
-// the proxy has already refused every host not in `allowedHosts` by the time
-// it runs. Assigned rather than declared as a static field, because a field
-// would shadow the base class's setter instead of registering the handler.
-RemeSandbox.outbound = (request: Request) => fetch(request)
 
 /** The owner's route tree: the bridge routes alone, behind `ownerAuth`. */
 const ownerApp = new Hono<ConsoleEnv>({ strict: false })
@@ -1324,6 +1292,7 @@ export class PublishWorkflow extends WorkflowEntrypoint<Env, PublishParams> {
           await step.do("say live", LIVE_SAY, () =>
             run((kit) =>
               sayLive(
+                this.env,
                 kit,
                 orgId,
                 target.site_id,
@@ -1609,8 +1578,7 @@ export class SweepWorkflow extends WorkflowEntrypoint<Env, { hour: string }> {
     }
     // Search Console (search-sync.ts): each org due a pull gets its own
     // instance, since a sweep calling Google for every org would pass the
-    // subrequest limit; and on Monday at 07 UTC the weekly message, each
-    // posted in a step of its own like the domain messages.
+    // subrequest limit. The Monday report is a heartbeat item (heartbeat.ts).
     const { hour } = event.payload
     const day = `${hour.slice(0, 4)}-${hour.slice(4, 6)}-${hour.slice(6, 8)}`
     for (let i = 0; i < orgIds.length; i += SWEEP_CHUNK) {
@@ -1619,40 +1587,26 @@ export class SweepWorkflow extends WorkflowEntrypoint<Env, { hour: string }> {
         withKit(this.env, (kit) => startDueSyncs(this.env, kit, chunk, day))
       )
     }
-    if (isWeeklyHour(hour)) {
-      const now = hourAt(hour)
-      for (let i = 0; i < orgIds.length; i += SWEEP_CHUNK) {
-        const chunk = orgIds.slice(i, i + SWEEP_CHUNK)
-        const weeklies = await step.do(`weekly ${i / SWEEP_CHUNK + 1}`, () =>
-          withKit(this.env, async (kit) => {
-            const found: { orgId: string; weekly: Weekly }[] = []
-            for (const orgId of chunk) {
-              try {
-                const weekly = await weeklyFor(kit, orgId, now)
-                if (weekly) found.push({ orgId, weekly })
-              } catch (error) {
-                console.error(
-                  JSON.stringify({
-                    sweep: hour,
-                    org_id: orgId,
-                    code: failureCode(error),
-                  })
-                )
-              }
+    // The outbox (deliveries.ts): rows the Queue lost are queued again.
+    for (let i = 0; i < orgIds.length; i += SWEEP_CHUNK) {
+      const chunk = orgIds.slice(i, i + SWEEP_CHUNK)
+      await step.do(`deliveries ${i / SWEEP_CHUNK + 1}`, () =>
+        withKit(this.env, async (kit) => {
+          for (const orgId of chunk) {
+            try {
+              await redriveDeliveries(kit, this.env, orgId)
+            } catch (error) {
+              console.error(
+                JSON.stringify({
+                  sweep: hour,
+                  org_id: orgId,
+                  code: failureCode(error),
+                })
+              )
             }
-            return found
-          })
-        )
-        for (const { orgId, weekly } of weeklies) {
-          try {
-            await step.do(`say ${weekly.key}`, SAY_RETRIES, () =>
-              withKit(this.env, (kit) => postWeekly(kit, orgId, weekly))
-            )
-          } catch {
-            // The chat stayed busy past every retry; next Monday says it again.
           }
-        }
-      }
+        })
+      )
     }
     // The run's one line, for the alert on a sweep that deletes nothing for a week.
     console.log(JSON.stringify({ sweep: event.payload.hour, ...totals }))
@@ -1666,10 +1620,20 @@ export class SweepWorkflow extends WorkflowEntrypoint<Env, { hour: string }> {
  * jobs on the same schedule share one firing. The hourly cron creates the
  * hour's sweep; a second firing for the same hour is refused by the instance
  * id and swallowed. The uptime check does nothing without `HEALTH_URLS`, which
- * only production sets.
+ * only production sets. Queues are told apart by name, one handler each; a
+ * batch from a queue nothing here consumes throws, so it retries and
+ * dead-letters rather than being acked unread.
  */
 export default {
+  async queue(batch: MessageBatch, env: Env) {
+    if (JOBS_QUEUES.includes(batch.queue))
+      return jobsBatch(batch as MessageBatch<JobMessage>, env)
+    if (DELIVERIES_QUEUES.includes(batch.queue))
+      return deliveriesBatch(batch as MessageBatch<DeliveryMessage>, env)
+    throw new Error(`no consumer for queue ${batch.queue}`)
+  },
   async scheduled(controller: ScheduledController, env: Env) {
+    if (controller.cron === SCHEDULE_CRON) await scanDue(env)
     if (controller.cron === SWEEP_CRON) {
       const hour = sweepHour(controller.scheduledTime)
       try {

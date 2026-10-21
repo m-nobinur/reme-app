@@ -7,7 +7,11 @@ import {
   DomainName,
   type DomainPurchaseStatus,
   GOAL_MAX,
+  MemoryReviewAction,
+  MemoryUndo,
+  type MemoryView,
   MessageFeedback,
+  PushSubscribeRequest,
   RegistrantDetails,
   Reminder,
   Timestamp,
@@ -18,7 +22,7 @@ import { PANEL_COOKIE, RAIL_COOKIE } from "@workspace/ui/lib/panel"
 import { titleText } from "@workspace/ui/lib/title"
 import { EMPTY_WORKSPACE, readWorkspace, waitingOnOwner } from "@/lib/attention"
 import { oneOf, record, text } from "@/lib/auth/input"
-import { ORG_INTENT } from "@/lib/auth/org-intent"
+import { orgIntentCookie } from "@/lib/auth/org-intent"
 import { seenAtOf, seenCookie } from "@/lib/notifications"
 import { source } from "./source"
 import type {
@@ -120,7 +124,7 @@ export const getWorkspaceFrame = createServerFn({ method: "GET" }).handler(
     if (!active) {
       return {
         active,
-        orgPending: getCookie(ORG_INTENT) !== undefined,
+        orgPending: getCookie(orgIntentCookie()) !== undefined,
         panelOpen: getCookie(PANEL_COOKIE) !== "closed",
         railOpen: getCookie(RAIL_COOKIE) !== "closed",
         workspace: EMPTY_WORKSPACE,
@@ -333,6 +337,47 @@ export const completeReminder = createServerFn({ method: "POST" })
   .validator((input: unknown) => ({ id: id(record(input).id) }))
   .handler(async ({ data }): Promise<WriteOutcome> => {
     return await source.completeReminder(data.id)
+  })
+
+/** What the Chief of Staff remembers of the owner. */
+export const getMemory = createServerFn({ method: "GET" }).handler(
+  async (): Promise<MemoryView | null> => await source.memory()
+)
+
+/** One remembered change taken back; "stale" when nothing is left of it to undo. */
+export const undoMemory = createServerFn({ method: "POST" })
+  .validator((input: unknown) => MemoryUndo.parse(record(input)))
+  .handler(
+    async ({ data }): Promise<MemoryView | "stale" | null> =>
+      await source.undoMemory(data.version)
+  )
+
+/** The owner's choice about being asked first, or their answer to one proposal. */
+export const reviewMemory = createServerFn({ method: "POST" })
+  .validator((input: unknown) => MemoryReviewAction.parse(record(input)))
+  .handler(
+    async ({ data }): Promise<MemoryView | "stale" | null> =>
+      await source.reviewMemory(data)
+  )
+
+/** The key a browser subscribes to push with; null where push is off. */
+export const getPushKey = createServerFn({ method: "GET" }).handler(
+  async (): Promise<string | null> => {
+    return await source.pushKey()
+  }
+)
+
+/** This browser's push subscription, saved. Its id, or null when refused. */
+export const savePushSubscription = createServerFn({ method: "POST" })
+  .validator((input: unknown) => PushSubscribeRequest.parse(record(input)))
+  .handler(async ({ data }): Promise<string | null> => {
+    return await source.subscribePush(data, crypto.randomUUID())
+  })
+
+export const removePushSubscription = createServerFn({ method: "POST" })
+  .validator((input: unknown) => ({ id: id(record(input).id) }))
+  .handler(async ({ data }): Promise<WriteOutcome> => {
+    return await source.unsubscribePush(data.id)
   })
 
 export const listConversations = createServerFn({ method: "GET" }).handler(

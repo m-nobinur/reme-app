@@ -88,12 +88,23 @@
   "vars": {
     "SITE_HOST_SUFFIX": "-stg.remeai.co.uk",
     // Where Checkout sends an owner back after a redirect-based payment.
-    "WEB_ORIGIN": "https://staging.remeai.co.uk"
+    "WEB_ORIGIN": "https://staging.remeai.co.uk",
+    // The base address an owner's emailed reply goes to (src/inbound-email.ts),
+    // its own per environment because one routing rule reaches one Worker. A
+    // short name on the apex (`rstg@remeai.co.uk`) if Email Routing cannot
+    // route plus addresses on the subdomain; the orchestrator holds the same.
+    "REPLY_MAILBOX": "reply@reply-stg.remeai.co.uk"
   },
   // The orchestrator's site bucket. The api writes only the owner's photos,
   // under `uploads/{org_id}/{asset_id}`, and the orchestrator copies them into
   // the build's sandbox.
   "r2_buckets": [{ "binding": "SITES", "bucket_name": "reme-sites" }],
+  // The scheduler's earliest due job, shared with the orchestrator, whose cron
+  // reads it. The api only lowers it, after the commit that wrote a job
+  // (ADR-043).
+  "kv_namespaces": [
+    { "binding": "SCHEDULE", "id": "ba285b5477564b44b27ab15fa4bdd957" }
+  ],
   // Resizes generated photos to thumbnails in `GET /photos/:id`. Local
   // `wrangler dev` runs a low-fidelity offline version (width and format).
   "images": { "binding": "IMAGES" },
@@ -109,6 +120,20 @@
       "simple": { "limit": 30, "period": 60 }
     }
   ],
+  // Closed turns, for the work that follows one (compaction, reflection). A
+  // message holds ids only, so a consumer never carries a conversation's text.
+  // The first attempt and three retries, then the dead-letter queue, where a
+  // poisoned job waits to be read instead of retrying forever.
+  "queues": {
+    "producers": [{ "binding": "AFTER_TURN", "queue": "reme-after-turn" }],
+    "consumers": [
+      {
+        "queue": "reme-after-turn",
+        "max_retries": 3,
+        "dead_letter_queue": "reme-after-turn-dlq"
+      }
+    ]
+  },
   // Production. Everything above is staging, which is what the default
   // environment has always been; naming that is a later cleanup.
   //
@@ -150,7 +175,8 @@
       ],
       "vars": {
         "SITE_HOST_SUFFIX": ".remeai.co.uk",
-        "WEB_ORIGIN": "https://preview.remeai.co.uk"
+        "WEB_ORIGIN": "https://preview.remeai.co.uk",
+        "REPLY_MAILBOX": "reply@reply.remeai.co.uk"
       },
       "images": { "binding": "IMAGES" },
       "r2_buckets": [
@@ -158,6 +184,12 @@
           "binding": "SITES",
           "bucket_name": "reme-sites-production-eu",
           "jurisdiction": "eu"
+        }
+      ],
+      "kv_namespaces": [
+        {
+          "binding": "SCHEDULE",
+          "id": "6f08f01d3fb144a78608139824bca704"
         }
       ],
       // Its own namespace: staging and production people share one WorkOS
@@ -168,7 +200,19 @@
           "namespace_id": "1004",
           "simple": { "limit": 30, "period": 60 }
         }
-      ]
+      ],
+      "queues": {
+        "producers": [
+          { "binding": "AFTER_TURN", "queue": "reme-after-turn-production" }
+        ],
+        "consumers": [
+          {
+            "queue": "reme-after-turn-production",
+            "max_retries": 3,
+            "dead_letter_queue": "reme-after-turn-dlq-production"
+          }
+        ]
+      }
     }
   }
 }

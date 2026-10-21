@@ -4,12 +4,16 @@ import {
   AssignmentState,
   ConnectMethod,
   Conversation,
+  Delivery,
   DomainOrigin,
   DomainState,
   EventEnvelope,
   FactProvenance,
   FactRecord,
+  JobKind,
+  JobRun,
   Org,
+  Proactivity,
   Reminder,
   SearchConnectionState,
   SearchPropertyKind,
@@ -42,9 +46,14 @@ import {
   assignmentState,
   connectMethod,
   conversationKind,
+  deliveryChannel,
+  deliveryState,
   domainOrigin,
   domainState,
   factSource,
+  jobKind,
+  jobOutcome,
+  proactivity,
   reminderSource,
   searchConnectionState,
   searchPropertyKind,
@@ -127,6 +136,22 @@ describe("enums match the contract", () => {
   })
 })
 
+describe("scheduler enums match the contract", () => {
+  it("job kinds and outcomes", () => {
+    expect(jobKind.enumValues).toEqual(JobKind.options)
+    expect(jobOutcome.enumValues).toEqual(JobRun.shape.outcome.options)
+  })
+
+  it("delivery channels and states", () => {
+    expect(deliveryChannel.enumValues).toEqual(Delivery.shape.channel.options)
+    expect(deliveryState.enumValues).toEqual(Delivery.shape.state.options)
+  })
+
+  it("proactivity", () => {
+    expect(proactivity.enumValues).toEqual(Proactivity.options)
+  })
+})
+
 describe("rows map onto contracts", () => {
   const factRow: typeof facts.$inferSelect = {
     id: "0198f2d6-1f2b-7a4a-9c6e-2f3b4c5d6e70",
@@ -169,6 +194,10 @@ describe("rows map onto contracts", () => {
     name: "Brightclean Cleaning Co. (fixture)",
     workosOrganizationId: "org_fixture_brightclean",
     stripeCustomerId: null,
+    timeZone: null,
+    quietStart: "21:00",
+    quietEnd: "08:00",
+    proactivity: "default",
     createdAt: now,
     updatedAt: now,
   }

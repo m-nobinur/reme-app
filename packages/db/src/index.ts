@@ -5,11 +5,20 @@
 export { asc, eq, type SQL, sql } from "drizzle-orm"
 export { orgOpen, tombstone } from "./accounts.ts"
 export {
+  emailMessageId,
   type Posted,
   postAssistantMessage,
+  postOwnerEmail,
   serverMessageId,
 } from "./assistant-messages.ts"
 export { activeDomainHost, domainHeldElsewhere } from "./domains.ts"
+export {
+  type DueStore,
+  lowerNextDue,
+  NEXT_DUE_KEY,
+  type NextDue,
+  readNextDue,
+} from "./due.ts"
 export {
   type AppendEvent,
   type AppendSessionEvent,
@@ -17,9 +26,26 @@ export {
   appendSessionEvent,
   newUlid,
 } from "./events.ts"
-export { currentFacts, supersedeFact } from "./facts.ts"
+export {
+  currentFact,
+  currentFacts,
+  factVersions,
+  supersedeFact,
+  supersedePrivateFact,
+} from "./facts.ts"
 export * from "./map.ts"
+export { addPushSubscription, PUSH_SUBSCRIPTION_CAP } from "./push.ts"
 export { type Waited, waitedOn } from "./questions.ts"
+export {
+  afterQuiet,
+  ensureHeartbeat,
+  HEARTBEAT_RULES,
+  inQuiet,
+  nextFor,
+  nextRun,
+  type Quiet,
+  recomputeOrgJobs,
+} from "./recurrence.ts"
 export * from "./schema.ts"
 export {
   chiefStaffId,
@@ -38,9 +64,11 @@ export type {
 // Named rather than a star, so what the tenancy kit exposes to the rest of the
 // repo is a decision someone makes rather than whatever happens to be exported.
 export {
+  claimDueJobs,
   failureCode,
   listOrgIds,
   logFailure,
+  nextDueAt,
   ORG_SETTING,
   pgCode,
   recentDesigns,

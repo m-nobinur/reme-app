@@ -70,7 +70,10 @@ if (
 // The floor. With no scenarios yet, replaying the fixtures is all this gate
 // does, so an empty `fixtures/` would make `pnpm eval` a green step that ran
 // nothing. Same rule as scripts/floor.mjs and the secret scan.
-const fixtureNames = readdirSync(dir("./fixtures")).sort()
+// Recordings are .jsonl; other files here are authored inputs for tests.
+const fixtureNames = readdirSync(dir("./fixtures"))
+  .filter((name) => name.endsWith(".jsonl"))
+  .sort()
 if (fixtureNames.length === 0) {
   fail("evals/fixtures holds no fixtures, so this run checked nothing")
 }

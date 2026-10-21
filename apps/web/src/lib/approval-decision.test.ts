@@ -215,7 +215,8 @@ it("sends only the revision shown beside Approve, pressed in the panel", async (
     ),
     { numRuns: 60 }
   )
-})
+  // Up to 240 renders: 0.1 s alone, past 5 s when the pre-push hook runs every suite at once.
+}, 30_000)
 
 it("disables Approve for anything but a revision", () => {
   fc.assert(

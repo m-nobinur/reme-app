@@ -14,6 +14,7 @@ import {
   RegistrantDetails,
 } from "./domain.ts"
 import { ToolCallId } from "./ids.ts"
+import { RememberInput, RememberOutput } from "./memory.ts"
 import {
   BuildSummary,
   CreateReminderRequest,
@@ -328,6 +329,7 @@ export const COS_TOOLS = {
     output: GetSearchPerformanceOutput,
   },
   get_indexing: { input: GetIndexingInput, output: GetIndexingOutput },
+  remember: { input: RememberInput, output: RememberOutput },
 } as const
 
 export type CosToolName = keyof typeof COS_TOOLS
@@ -499,6 +501,11 @@ export const CosToolResult = z.discriminatedUnion("tool", [
     tool: z.literal("get_indexing"),
     output: COS_TOOLS.get_indexing.output,
   }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("remember"),
+    output: COS_TOOLS.remember.output,
+  }),
 ])
 
 /** The `cos.step` payload: a step's response messages as the SDK holds them. Model-written, so `inferred`. */
@@ -529,6 +536,55 @@ export const CosFeedback = z.strictObject({
   rating: MessageRating,
 })
 
+/**
+ * The `cos.approval` payload: an approval card as it was shown. The answer
+ * must match `input_sha256` (the hash of the tool input the card showed) and
+ * arrive before `expires_at`, or it is refused. `approval_id` is the SDK's
+ * and has the shape of a provider id. No free text, so no taint label.
+ */
+export const CosApproval = z.strictObject({
+  turn_id: Ulid,
+  approval_id: ToolCallId,
+  tool_call_id: ToolCallId,
+  input_sha256: Sha256,
+  expires_at: Timestamp,
+})
+
+/**
+ * The `cos.tool_started` payload: an act call passed its approval check and
+ * is about to run. One with no result five minutes later, as a Worker killed
+ * mid-call leaves it, counts as `cos.tool_unknown`. No free text.
+ */
+export const CosToolStarted = z.strictObject({
+  tool_call_id: ToolCallId,
+  approval_id: ToolCallId,
+})
+
+/**
+ * The `cos.tool_unknown` payload: a tool call whose outcome is not known, so
+ * it is never run again and the owner is asked. No free text.
+ */
+export const CosToolUnknown = z.strictObject({
+  tool_call_id: ToolCallId,
+  approval_id: ToolCallId,
+})
+
+/**
+ * The `cos.compaction` payload (§10.6): `summary` stands in for the events in
+ * `replaced_range`, which stay in the log. `dropped_refs` are the ids of
+ * events the summary does not carry. The summary is model-written, so the
+ * event is labelled `inferred`.
+ */
+export const CosCompaction = z.strictObject({
+  summary: Text(8000),
+  /** Positions in the session's stream, both included. */
+  replaced_range: z.strictObject({
+    from_seq: z.int().nonnegative(),
+    to_seq: z.int().nonnegative(),
+  }),
+  dropped_refs: z.array(Ulid).max(500),
+})
+
 export type CosWorkspace = z.infer<typeof CosWorkspace>
 export type CosFacts = z.infer<typeof CosFacts>
 export type CosChangeRequest = z.infer<typeof CosChangeRequest>
@@ -557,3 +613,7 @@ export type CosToolResult = z.infer<typeof CosToolResult>
 export type CosStep = z.infer<typeof CosStep>
 export type CosCall = z.infer<typeof CosCall>
 export type CosFeedback = z.infer<typeof CosFeedback>
+export type CosApproval = z.infer<typeof CosApproval>
+export type CosToolStarted = z.infer<typeof CosToolStarted>
+export type CosToolUnknown = z.infer<typeof CosToolUnknown>
+export type CosCompaction = z.infer<typeof CosCompaction>

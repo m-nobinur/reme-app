@@ -51,12 +51,12 @@ test("the list shows one row of each kind the contract has, in its order", async
   page,
 }) => {
   await open(page, "NotificationList")
-  await expect(page.locator("li[data-kind]")).toHaveCount(4)
+  await expect(page.locator("li[data-kind]")).toHaveCount(5)
   expect(
     await page
       .locator("li[data-kind]")
       .evaluateAll((rows) => rows.map((row) => row.getAttribute("data-kind")))
-  ).toEqual(["question", "approval", "report", "alert"])
+  ).toEqual(["question", "approval", "report", "alert", "reminder"])
   // A question and an approval link to where they are acted on.
   await expect(
     page.getByRole("link", { name: "Answer in the panel" })
@@ -64,12 +64,13 @@ test("the list shows one row of each kind the contract has, in its order", async
   await expect(
     page.getByRole("link", { name: "Review version 4" })
   ).toBeVisible()
+  await expect(page.getByRole("link", { name: "Open reminders" })).toBeVisible()
 })
 
 test("every alert reason and report has a row", async ({ page }) => {
   await open(page, "NotificationList reports and alerts")
   await expect(page.locator('li[data-kind="report"]')).toHaveCount(1)
-  await expect(page.locator('li[data-kind="alert"]')).toHaveCount(3)
+  await expect(page.locator('li[data-kind="alert"]')).toHaveCount(4)
 })
 
 test("the empty list says what lands there", async ({ page }) => {

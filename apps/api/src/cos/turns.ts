@@ -1,10 +1,14 @@
 import {
+  CosApproval,
   CosCall,
+  CosCompaction,
   CosContext,
   CosMessage,
   CosPrefix,
   CosStep,
   CosToolResult,
+  CosToolStarted,
+  CosToolUnknown,
   CosTurn,
   type TaintLabel,
 } from "@workspace/contracts"
@@ -77,7 +81,8 @@ export class NoSuchSession extends Error {
  * An event a turn writes after its first transaction. Taint is the
  * caller's to say from what the payload carries. A step is the model's
  * output, so it is always `inferred`, plus the labels of the tool outputs
- * it carries; `cos.call` and `cos.turn` carry no text and no label.
+ * it carries; `cos.call`, `cos.turn`, `cos.approval` and a call's marks,
+ * `cos.tool_started` and `cos.tool_unknown`, carry no text and no label.
  */
 type TurnEvent =
   | { type: "cos.message"; payload: CosMessage; taint: TaintLabel[] }
@@ -85,6 +90,9 @@ type TurnEvent =
   | { type: "cos.step"; payload: CosStep; taint?: TaintLabel[] }
   | { type: "cos.call"; payload: CosCall }
   | { type: "cos.turn"; payload: CosTurn }
+  | { type: "cos.approval"; payload: CosApproval }
+  | { type: "cos.tool_started"; payload: CosToolStarted }
+  | { type: "cos.tool_unknown"; payload: CosToolUnknown }
 
 const SCHEMAS = {
   "cos.message": CosMessage,
@@ -92,24 +100,36 @@ const SCHEMAS = {
   "cos.step": CosStep,
   "cos.call": CosCall,
   "cos.turn": CosTurn,
+  "cos.approval": CosApproval,
+  "cos.tool_started": CosToolStarted,
+  "cos.tool_unknown": CosToolUnknown,
 } as const
+
+/** The writes whose payload names a call and its approval, not a turn. */
+const CALL_MARKS: readonly TurnEvent["type"][] = [
+  "cos.tool_started",
+  "cos.tool_unknown",
+]
 
 type Checked = {
   type: TurnEvent["type"]
-  payload: { turn_id: string } & Record<string, unknown>
+  payload: Record<string, unknown>
   taint: TaintLabel[]
 }
 
 /**
  * The whole batch checked before anything is written: each payload against
- * its contract and naming `turnId`, a step holding only the model's
- * messages, at most one result per call, and nothing after a `cos.turn`.
+ * its contract and naming `turnId` (a call's marks name no turn), a
+ * step holding only the model's messages, at most one result per call, and
+ * nothing after a `cos.turn`.
  */
 function checked(turnId: string, writes: TurnEvent[]): Checked[] {
   const calls = new Set<string>()
   return writes.map((write, i) => {
-    const payload = SCHEMAS[write.type].parse(write.payload)
-    if (payload.turn_id !== turnId) {
+    const payload: Record<string, unknown> = SCHEMAS[write.type].parse(
+      write.payload
+    )
+    if (!CALL_MARKS.includes(write.type) && payload.turn_id !== turnId) {
       throw new Error(`cos.turns: a ${write.type} for another turn`)
     }
     if (write.type === "cos.turn" && i < writes.length - 1) {
@@ -296,6 +316,43 @@ export async function writeAsTurn(
 }
 
 /**
+ * Appends a `cos.compaction` as the session's CoS staff row, under the
+ * conversation's lock, between turns: a closed turn holds no token, so the
+ * write checks instead that no turn is open, and throws `SessionBusy`,
+ * writing nothing, when one is. Returns its seq, or null, writing nothing,
+ * when a compaction already logged reaches as far.
+ */
+export async function writeCompaction(
+  db: OrgScopedDb,
+  session: Omit<Turn, "turnId">,
+  compaction: CosCompaction
+): Promise<number | null> {
+  const payload = CosCompaction.parse(compaction)
+  const { from_seq, to_seq } = payload.replaced_range
+  if (from_seq > to_seq) {
+    throw new Error(`cos.turns: a compaction from ${from_seq} to ${to_seq}`)
+  }
+  await lock(db, session.sessionId)
+  if (await openTurn(db, session.sessionId, 0)) {
+    throw new SessionBusy(session.sessionId)
+  }
+  const [covered] = await db.execute(sql`
+    select 1 from ${events}
+    where session_id = ${session.sessionId} and type = 'cos.compaction'
+      and (payload->'replaced_range'->>'to_seq')::int >= ${to_seq}
+    limit 1`)
+  if (covered) return null
+  const seq = await append(db, session, {
+    type: "cos.compaction",
+    payload,
+    // Model-written, from the owner's words.
+    taint: ["inferred", "untrusted_input"],
+  })
+  if (seq === null) throw new SessionBusy(session.sessionId)
+  return seq
+}
+
+/**
  * A run that aborted closes its own turn at once (ADR-034, "the budget
  * lock and the stream"): `cos.turn` with outcome `abandoned`, the spend its
  * steps logged and its reservation, under its own token.
@@ -347,6 +404,8 @@ export type SessionState = {
   prefixLogged: boolean
   /** A `cos.message` in the session names this message id, so the CoS made it. */
   named: boolean
+  /** No turn has opened in the session yet: the next is the conversation's first. */
+  fresh: boolean
 }
 
 export async function sessionState(
@@ -362,11 +421,14 @@ export async function sessionState(
       exists (select 1 from ${events} where session_id = ${sessionId}
         and type = 'cos.prefix' and payload->>'sha256' = ${prefixSha}) as "prefixLogged",
       exists (select 1 from ${events} where session_id = ${sessionId}
-        and type = 'cos.message' and payload->'message'->>'id' = ${messageId ?? ""}) as named`)
+        and type = 'cos.message' and payload->'message'->>'id' = ${messageId ?? ""}) as named,
+      not exists (select 1 from ${events} where session_id = ${sessionId}
+        and type = 'cos.context') as fresh`)
   return {
     frozen: row?.frozen === true,
     prefixLogged: row?.prefixLogged === true,
     named: row?.named === true,
+    fresh: row?.fresh === true,
   }
 }
 
@@ -407,10 +469,15 @@ export async function withinCap(
     where c.org_id = ${orgId} and c.type = 'cos.context'
       and c.recorded_at >= date_trunc('day', now() at time zone 'utc') at time zone 'utc'`)
   // Onboarding's background copy call: its cost once written, its
-  // reservation until then (`onboarding-prepare.ts`).
+  // reservation until then (`onboarding-prepare.ts`). And the CoS's
+  // background calls, compaction's among them, at their cost.
   const [prepared] = await db.execute<{ spent: number }>(sql`
     select coalesce(sum(coalesce(
-        (r.payload->>'cost_usd')::float8, (p.payload->>'reserved_usd')::float8)), 0) as spent
+        (r.payload->>'cost_usd')::float8, (p.payload->>'reserved_usd')::float8)), 0) + (
+      select coalesce(sum((b.payload->>'cost_usd')::float8), 0) from ${events} b
+      where b.org_id = ${orgId} and b.type = 'cos.background_step'
+        and b.recorded_at >= date_trunc('day', now() at time zone 'utc') at time zone 'utc'
+    ) as spent
     from ${events} p
     left join ${events} r on r.org_id = p.org_id and r.type = 'onboarding.prepared'
       and r.payload->>'conversation_id' = p.payload->>'conversation_id'
@@ -467,6 +534,41 @@ export async function beginTurn(
       throw new SessionBusy(turn.sessionId)
     }
   }
+}
+
+/**
+ * Whether the session logged `call` as started at least `afterMs` ago, by
+ * the database's clock. `runTool` asks only for a call with no result.
+ */
+export async function startedBefore(
+  db: OrgScopedDb,
+  sessionId: string,
+  call: CosToolStarted,
+  afterMs: number
+): Promise<boolean> {
+  const [row] = await db.execute<{ stale: boolean }>(sql`
+    select exists (
+      select 1 from ${events}
+      where session_id = ${sessionId} and type = 'cos.tool_started'
+        and payload->>'tool_call_id' = ${call.tool_call_id}
+        and payload->>'approval_id' = ${call.approval_id}
+        and recorded_at + make_interval(secs => ${afterMs / 1000}) <= now()
+    ) as stale`)
+  return row?.stale === true
+}
+
+/** The `cos.approval` rows the session logged for `approvalIds`. */
+export async function loggedApprovals(
+  db: OrgScopedDb,
+  sessionId: string,
+  approvalIds: string[]
+): Promise<CosApproval[]> {
+  if (approvalIds.length === 0) return []
+  const rows = await db.execute<{ payload: unknown }>(sql`
+    select payload from ${events}
+    where session_id = ${sessionId} and type = 'cos.approval'
+      and payload->>'approval_id' in ${approvalIds}`)
+  return rows.map((row) => CosApproval.parse(row.payload))
 }
 
 /**

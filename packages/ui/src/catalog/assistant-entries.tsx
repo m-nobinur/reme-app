@@ -34,6 +34,7 @@ import {
   DomainPurchaseProvider,
 } from "@workspace/ui/components/assistant/buy-domain"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
+import { MemoryChipUI } from "@workspace/ui/components/assistant/memory-chip"
 import { ServerButtonUI } from "@workspace/ui/components/assistant/server-button"
 import { SiteReady } from "@workspace/ui/components/assistant/site-ready"
 import {
@@ -1135,6 +1136,8 @@ const TOOL_FAILED =
   "tool_failed (orchestrator.off_contract): the builder answered in a shape we do not accept, so nothing was done."
 const UNKNOWN =
   "unknown_outcome (orchestrator.timeout): the tool did not report back."
+const EXPIRED_LINE =
+  "approval_expired: the owner's yes on this card has expired, so nothing was done."
 
 type CallFields = {
   args?: unknown
@@ -1290,6 +1293,11 @@ function decisionStates(
       approval: approval("failed", true),
       isError: true,
       result: { error: TOOL_FAILED },
+    }),
+    call("expired", {
+      approval: approval("expired", true),
+      isError: true,
+      result: { error: EXPIRED_LINE },
     }),
   ]
 }
@@ -1573,6 +1581,38 @@ const CONNECT_GOOGLE_STATES: ThreadMessageLike[] = [
   cosCall("connect_google", "google_refused", {
     result: refusal("search.not_owner", "Only the owner can connect Google."),
   }),
+]
+
+/** A reply that opens with what the assistant remembered since the owner last looked. */
+const REMEMBERED: ThreadMessageLike[] = [
+  ask("Thanks, that is all."),
+  {
+    content: [
+      {
+        type: "data",
+        name: "memory",
+        data: {
+          version: 4,
+          changes: [
+            {
+              kind: "added",
+              text: "Prefers calls after 4pm",
+              source: "owner_said",
+            },
+            {
+              kind: "changed",
+              text: "Quotes go out on Fridays",
+              source: "reflection",
+            },
+            { kind: "removed", text: "Away in August", source: "owner_said" },
+          ],
+        },
+      },
+      { text: "Any time.", type: "text" },
+    ],
+    role: "assistant",
+    status: DONE,
+  },
 ]
 
 /** Messages the assistant posted on its own, each with the button it can carry. */
@@ -2401,6 +2441,14 @@ const assistantCatalog = [
     render: () => (
       <FixtureThread height="h-[34rem]" messages={POSTED}>
         <ServerButtonUI />
+      </FixtureThread>
+    ),
+  },
+  {
+    name: "MemoryChipUI",
+    render: () => (
+      <FixtureThread height="h-[24rem]" messages={REMEMBERED}>
+        <MemoryChipUI />
       </FixtureThread>
     ),
   },

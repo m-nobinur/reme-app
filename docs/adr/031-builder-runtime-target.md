@@ -128,3 +128,96 @@ present a credential to a TCP connection from the Worker side. Either would make
 in the container possible again, and the question would then be whether it is worth having two
 execution shapes. Or flue's Cloudflare target gains the Postgres adapter, at which point the DO
 SQLite tee becomes optional and §6.4's `lite` reconciliation is the thing to revisit.
+
+## Amendment, 2026-10-19: the sandbox moves to Sandbox SDK 1.0
+
+`@cloudflare/sandbox` 1.0 no longer ships the `Sandbox` Durable Object, `getSandbox` or the
+control server in the image. 0.x gets fixes until 2026-12-31, so the builder moves now. The
+container is still a filesystem and a shell, with no credential and the registry as its one
+host. What carries it changes:
+
+- `RemeSandbox` (`apps/orchestrator/src/container.ts`) is our own class on `DurableObject`. It
+  starts its container through `ctx.container` on `standard-2` with the Internet off, routes
+  ports 80 and 443 to `SandboxEgress`, trusts the intercept CA as root, and sets the 30 minute
+  inactivity timeout that was `sleepAfter`. Its methods are the ones flue's `cloudflareSandbox`
+  calls on a 0.x stub (`exec`, `readFile`, `writeFile`, `exists`, `mkdir`, `deleteFile`,
+  `getState`), with 0.x meanings, so flue needs no adapter and the Workflow's call sites keep
+  their commands. A command runs in bash from `/workspace` with three literal variables
+  (`HOME`, `PLAYWRIGHT_BROWSERS_PATH`, `NODE_EXTRA_CA_CERTS`); a timeout runs it under GNU
+  `timeout` and throws as 0.12 did. Bash gets the command in a variable it un-exports, never in
+  argv: as in a 0.12 session no command line holds it, so the screenshot step's
+  `pkill -f '[a]stro preview'` cannot kill the shell running it (it did, in the first local
+  run). Files go through `Files` and the `sandbox-shim` helper.
+- `SandboxEgress` is §8.3's rule as code: `registry.npmjs.org` is fetched, every other host gets
+  0.12's `520 Origin is disallowed`.
+- The `durable_object` scheduling policy has no `max_instances`, so the pool of five is
+  `SandboxPool`: one Durable Object (`getByName("pool")`) whose methods never await, so grants
+  cannot race. A sandbox asks it for a slot before it starts a container, renews its lease at
+  most once a minute while it works, and releases it on `destroy()`. A lease runs 35 minutes
+  from the last call, the sleep plus slack, so a container that slept or crashed frees its slot
+  by itself. A refused slot is `open()` answering false, and `provision()` keeps its path:
+  evict the least recently edited warm sandbox, else `PoolExhaustedError` and `pool.exhausted`.
+- The image is `node:22-trixie-slim` with the tools, fonts, Playwright, pnpm and `/opt/astro`
+  the 0.12 base gave us, plus `sandbox-shim` from `cloudflare/sandbox:1.0.1`.
+
+What behaves differently:
+
+- Nothing carries from one command to the next. Every call site already changed directory
+  inside its own command, and flue passes the working directory on every call.
+- A command that times out is stopped with everything it started. 0.12 threw and left it
+  running.
+- Under this policy every process has root's capabilities, whatever its user. The `reme` user
+  now only sets who owns new files, so file permissions no longer keep a command off `/opt`.
+  The egress rule and the no-credential rule are enforced outside the container and still hold.
+- `output()` waits for every process that holds the command's output open, so a command that
+  backgrounds a process must redirect its output, as the screenshot script does.
+- A container that stops under a call surfaces as flue's `sandbox_died`, which the turn gate
+  maps to `sandbox.updating` as it did `OPERATION_INTERRUPTED`.
+- A deploy no longer restarts running containers, and a new image reaches only containers that
+  start after it. A slept container also holds its slot for up to five minutes past its sleep.
+
+### Staging rehearsal and production cut-over
+
+The deploy that moves `RemeSandbox` to `scheduling_policy: "durable_object"` cannot be undone.
+After it, 0.12 code cannot start containers for the class, and `wrangler rollback` to a 0.12
+version deploys code that cannot build a site. Do not roll back. Every fix is forward.
+
+1. Build the image from the release commit and run the in-image check (sharp, astro,
+   `@axe-core/playwright` from `/opt/astro`, the font count):
+   `docker build --platform linux/amd64 -t reme-sandbox:sdk1-<date> infra/sandbox`.
+2. Push it: `cd apps/orchestrator && FORCE_COLOR=0 pnpm exec wrangler containers push
+   reme-sandbox:sdk1-<date>`. Put the printed digest in both `images.sandbox.image` entries of
+   `apps/orchestrator/wrangler.jsonc` and land that. Until then they pin the 0.12 image, whose
+   entrypoint is the old control server and which has no `sandbox-shim`: 1.0 cannot run on it.
+3. On staging, leave a sandbox running: build a site to `preview_ready`, so a warm sandbox exists
+   at the switch, as one will in production. Note `wrangler containers list`.
+4. Deploy with `stage.sh`, which waits until no assignment or publish instance is live.
+5. Check, in this order:
+   - `wrangler containers list` shows `reme-orchestrator-sandbox-sdk1` beside the old
+     application, which Wrangler named from the Worker and class.
+   - `ORCHESTRATOR_URL=https://staging-orchestrator.remeai.co.uk ORCHESTRATOR_TOKEN=<token> pnpm
+     --filter orchestrator test:probe` passes all five cases: the public internet refused, the
+     registry 200, no secret in `env`, the Astro build, a cold start.
+   - A change to the site from step 3 reaches `preview_ready`. Its container is new, so the
+     build restores from R2 and `sandbox.provisioned` shows a cold start; screenshots land and
+     the a11y gate runs.
+   - A new site's first build reaches `preview_ready`.
+   - Worker logs show no `sandbox.lease_failed` and no error from `RemeSandbox.alarm`.
+6. Delete the old staging application: `wrangler containers delete <old application id>`. It
+   bills until then.
+7. Production: the same steps against `CLOUDFLARE_ENV=production` and the production URL, at a
+   time with no live `reme-assignment-production` or `reme-publish-production` instance. The
+   pushed image serves both, since one registry holds it. The new application is
+   `reme-orchestrator-production-sandbox-sdk1`.
+
+If a check fails after the switch, builds fail at their `sandbox` step and end `failed`, which
+releases the site lock; published sites are untouched, because the router never reads a
+container. Read the Worker logs for the failing call, fix forward and deploy again:
+
+- No container starts, or `Files` calls fail with a protocol error: the image. Fix the
+  Dockerfile, rebuild, push, move the pin.
+- Every call fails with "did not trust the intercept CA": the CA never appeared. Check that
+  `interceptOutboundHttps` is registered before `TRUST` runs.
+- The registry probe fails and the denied probe passes: `SandboxEgress`.
+- Builds wait on `pool.exhausted` with nothing running: leases are not being released. Slots
+  free themselves 35 minutes after their last call; a forward fix is `SandboxPool`.

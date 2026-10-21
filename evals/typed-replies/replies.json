@@ -1,0 +1,251 @@
+{
+  "cards": {
+    "create_reminder": "a reminder: Call the supplier, due 2026-10-20T09:00:00Z",
+    "request_change": "a website change: Add a Saturday slot to the booking page."
+  },
+  "replies": [
+    {
+      "reply": "yes, but make it 5pm",
+      "card": "create_reminder",
+      "kind": "yes_but",
+      "path": "normal"
+    },
+    {
+      "reply": "Yes but call it \"Supplier chase\" instead",
+      "card": "create_reminder",
+      "kind": "yes_but",
+      "path": "normal"
+    },
+    {
+      "reply": "ok, but only on weekdays",
+      "card": "create_reminder",
+      "kind": "yes_but",
+      "path": "normal"
+    },
+    {
+      "reply": "go ahead, and also remind me on Friday",
+      "card": "create_reminder",
+      "kind": "yes_but",
+      "path": "normal"
+    },
+    {
+      "reply": "yes please - and send it to my email too",
+      "card": "create_reminder",
+      "kind": "yes_but",
+      "path": "normal"
+    },
+    {
+      "reply": "do it but make the Saturday slot 10am to 2pm",
+      "card": "request_change",
+      "kind": "yes_but",
+      "path": "normal"
+    },
+    {
+      "reply": "Yes, and add Sundays as well",
+      "card": "request_change",
+      "kind": "yes_but",
+      "path": "normal"
+    },
+    {
+      "reply": "ok but keep the footer as it is",
+      "card": "request_change",
+      "kind": "yes_but",
+      "path": "normal"
+    },
+    {
+      "reply": "yes if you can make the button blue",
+      "card": "request_change",
+      "kind": "yes_but",
+      "path": "normal"
+    },
+    {
+      "reply": "no wait, make it tomorrow instead",
+      "card": "create_reminder",
+      "kind": "yes_but",
+      "path": "normal"
+    },
+
+    {
+      "reply": "Yes",
+      "card": "create_reminder",
+      "kind": "plain",
+      "path": "approve"
+    },
+    {
+      "reply": "yes please",
+      "card": "request_change",
+      "kind": "plain",
+      "path": "approve"
+    },
+    {
+      "reply": "OK!",
+      "card": "create_reminder",
+      "kind": "plain",
+      "path": "approve"
+    },
+    {
+      "reply": "Go ahead.",
+      "card": "request_change",
+      "kind": "plain",
+      "path": "approve"
+    },
+    {
+      "reply": "sure thing",
+      "card": "create_reminder",
+      "kind": "plain",
+      "path": "approve"
+    },
+    {
+      "reply": "looks good",
+      "card": "request_change",
+      "kind": "plain",
+      "path": "approve"
+    },
+    {
+      "reply": "No",
+      "card": "create_reminder",
+      "kind": "plain",
+      "path": "decline"
+    },
+    {
+      "reply": "Cancel",
+      "card": "request_change",
+      "kind": "plain",
+      "path": "decline"
+    },
+    {
+      "reply": "nope, leave it",
+      "card": "create_reminder",
+      "kind": "plain",
+      "path": "decline"
+    },
+    {
+      "reply": "I don't want that",
+      "card": "request_change",
+      "kind": "plain",
+      "path": "decline"
+    },
+
+    {
+      "reply": "What's on my calendar tomorrow?",
+      "card": "create_reminder",
+      "kind": "unrelated",
+      "path": "normal"
+    },
+    {
+      "reply": "How many reviews have I had this month?",
+      "card": "request_change",
+      "kind": "unrelated",
+      "path": "normal"
+    },
+    {
+      "reply": "Thanks!",
+      "card": "create_reminder",
+      "kind": "unrelated",
+      "path": "normal"
+    },
+    {
+      "reply": "Can you rewrite my about page?",
+      "card": "request_change",
+      "kind": "unrelated",
+      "path": "normal"
+    },
+    {
+      "reply": "Good morning",
+      "card": "create_reminder",
+      "kind": "unrelated",
+      "path": "normal"
+    },
+    {
+      "reply": "What is my website address?",
+      "card": "request_change",
+      "kind": "unrelated",
+      "path": "normal"
+    },
+    {
+      "reply": "Remind me to buy milk on the way home",
+      "card": "create_reminder",
+      "kind": "unrelated",
+      "path": "normal"
+    },
+    {
+      "reply": "Who is my next customer?",
+      "card": "request_change",
+      "kind": "unrelated",
+      "path": "normal"
+    },
+    {
+      "reply": "Connect my domain sparkleclean.co.uk",
+      "card": "create_reminder",
+      "kind": "unrelated",
+      "path": "normal"
+    },
+    {
+      "reply": "Pause the Google ads this week",
+      "card": "request_change",
+      "kind": "unrelated",
+      "path": "normal"
+    },
+
+    {
+      "reply": "maybe",
+      "card": "create_reminder",
+      "kind": "borderline",
+      "path": "normal"
+    },
+    {
+      "reply": "I think so?",
+      "card": "request_change",
+      "kind": "borderline",
+      "path": "normal"
+    },
+    {
+      "reply": "hmm, let me think about it",
+      "card": "create_reminder",
+      "kind": "borderline",
+      "path": "normal"
+    },
+    {
+      "reply": "yes and no",
+      "card": "request_change",
+      "kind": "borderline",
+      "path": "normal"
+    },
+    {
+      "reply": "what time is it set for?",
+      "card": "create_reminder",
+      "kind": "borderline",
+      "path": "normal"
+    },
+    {
+      "reply": "why Saturday?",
+      "card": "request_change",
+      "kind": "borderline",
+      "path": "normal"
+    },
+    {
+      "reply": "whatever you think",
+      "card": "create_reminder",
+      "kind": "borderline",
+      "path": "normal"
+    },
+    {
+      "reply": "fine, I guess",
+      "card": "request_change",
+      "kind": "borderline",
+      "path": "normal"
+    },
+    {
+      "reply": "not sure yet",
+      "card": "create_reminder",
+      "kind": "borderline",
+      "path": "normal"
+    },
+    {
+      "reply": "sure, if it doesn't cost anything",
+      "card": "request_change",
+      "kind": "borderline",
+      "path": "normal"
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 import {
   AlarmIcon,
   BellIcon,
+  BrainIcon,
   BuildingsIcon,
   ChatCircleTextIcon,
   FlowArrowIcon,
@@ -423,6 +424,12 @@ function AppLayout() {
                   <Link className={railItemClass} to="/app/reminders">
                     <AlarmIcon aria-hidden />
                     <span data-slot="rail-label">Reminders</span>
+                  </Link>
+                </Hint>
+                <Hint label="Memory" side="right">
+                  <Link className={railItemClass} to="/app/memory">
+                    <BrainIcon aria-hidden />
+                    <span data-slot="rail-label">Memory</span>
                   </Link>
                 </Hint>
               </nav>

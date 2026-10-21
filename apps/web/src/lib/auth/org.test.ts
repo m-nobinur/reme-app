@@ -123,6 +123,31 @@ describe("the org write signup sends", () => {
     }
   })
 
+  it("fails, for the caller to keep the name and retry, when apps/api answers busy", async () => {
+    // What `apps/api` answers while another signup for the person is still
+    // running (`SignupBusy`): its 503 for anything it did not finish.
+    globalThis.fetch = (async (
+      input: RequestInfo | URL,
+      init?: RequestInit
+    ) => {
+      calls.push({ url: String(input), init: init ?? {} })
+      return Response.json(
+        {
+          error: {
+            class: "transient",
+            code: "request.failed",
+            message: "The request could not be completed.",
+            detail: {},
+          },
+        },
+        { status: 503 }
+      )
+    }) as typeof fetch
+    await expect(write()).rejects.toThrow("503")
+    // No refresh into an organisation that may not exist yet.
+    expect(calls.map((call) => call.url)).toEqual([`${API}/org`])
+  })
+
   it("refuses a name the contract would refuse, before the request", async () => {
     globalThis.fetch = stub([])
     await expect(write("")).rejects.toThrow()

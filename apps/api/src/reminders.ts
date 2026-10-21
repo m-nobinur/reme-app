@@ -8,8 +8,10 @@ import {
 } from "@workspace/contracts"
 import {
   eq,
+  lowerNextDue,
   type OrgScopedDb,
   reminders,
+  scheduledJobs,
   sql,
   type Tenancy,
 } from "@workspace/db"
@@ -43,6 +45,38 @@ const toReminder = (row: Row): Reminder =>
 const PAST_MS = 5 * 60_000
 /** How far ahead a due time may be. */
 const AHEAD_MS = 366 * 24 * 3_600_000
+
+/**
+ * Puts the reminder's job at `dueAt`, or removes it when there is none. A
+ * reminder has at most one job, a one-off, so moving it is a delete and an
+ * insert; a job that already ran or paused comes back armed.
+ */
+async function armJob(
+  db: OrgScopedDb,
+  orgId: string,
+  id: string,
+  dueAt: Date | null
+) {
+  await db
+    .delete(scheduledJobs)
+    .where(
+      sql`${scheduledJobs.kind} = 'reminder' and ${scheduledJobs.refId} = ${id}`
+    )
+  if (dueAt)
+    await db
+      .insert(scheduledJobs)
+      .values({ orgId, kind: "reminder", refId: id, nextRunAt: dueAt })
+}
+
+/**
+ * Tells the scheduler's KV guard about a reminder's due time. Call it after
+ * the transaction that wrote the reminder commits, or the cron could scan
+ * before the job exists and write a later time back.
+ */
+export const wakeScheduler = (env: Pick<Env, "SCHEDULE">, made: Reminder) =>
+  made.due_at && !made.done_at
+    ? lowerNextDue(env.SCHEDULE, new Date(made.due_at))
+    : Promise.resolve()
 
 const keyed = async (db: OrgScopedDb, key: string) => {
   const [row] = await db
@@ -108,8 +142,11 @@ export async function createReminder(
     })
     .onConflictDoNothing()
     .returning()
-  // A concurrent call with the key committed first: its row is the answer.
-  return toReminder(row ?? ((await keyed(db, made.idempotencyKey)) as Row))
+  // A concurrent call with the key committed first: its row is the answer,
+  // and it armed the job.
+  if (!row) return toReminder((await keyed(db, made.idempotencyKey)) as Row)
+  await armJob(db, made.orgId, row.id, due)
+  return toReminder(row)
 }
 
 /**
@@ -130,7 +167,13 @@ async function setReminderDone(
       sql`${reminders.id} = ${id} and (${reminders.doneAt} is null) = ${done}`
     )
     .returning()
-  if (changed) return toReminder(changed)
+  if (changed) {
+    // Reopened with its time still ahead, it fires again; a time gone by stays
+    // in the notifications until it is done.
+    const ahead = !done && changed.dueAt && changed.dueAt > new Date()
+    await armJob(db, changed.orgId, id, ahead ? changed.dueAt : null)
+    return toReminder(changed)
+  }
   const [held] = await db.select().from(reminders).where(eq(reminders.id, id))
   return held ? toReminder(held) : null
 }
@@ -166,6 +209,7 @@ export const ASSISTANT_KEY_PREFIX = "approval:"
 /** `POST /reminders` when `id` is empty, `PATCH /reminders/:id` otherwise. */
 export async function reminderRoute(
   request: Request,
+  env: Pick<Env, "SCHEDULE">,
   kit: Tenancy,
   owner: Owner,
   id: string
@@ -189,7 +233,9 @@ export async function reminderRoute(
     const row = await kit.withOrg({ orgId: owner.orgId }, (db) =>
       setReminderDone(db, id, parsed.data.done)
     )
-    return row ? Response.json(row) : notFound()
+    if (!row) return notFound()
+    await wakeScheduler(env, row)
+    return Response.json(row)
   }
   const parsed = CreateReminderRequest.safeParse(body)
   if (!parsed.success) return invalid(parsed.error.issues)
@@ -213,5 +259,7 @@ export async function reminderRoute(
       )
   )
   // A replay answers as the first call did.
-  return made instanceof Response ? made : Response.json(made, { status: 201 })
+  if (made instanceof Response) return made
+  await wakeScheduler(env, made)
+  return Response.json(made, { status: 201 })
 }

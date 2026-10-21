@@ -557,7 +557,27 @@ export const samples: Record<ContractName, unknown> = {
     feedback: null,
   },
   ConversationPatch: { title: "Weekend prices" },
+  CosApproval: {
+    turn_id: ULID,
+    approval_id: "approval_9fK2",
+    tool_call_id: "functions.create_reminder:0",
+    input_sha256: SHA,
+    expires_at: LATER,
+  },
   CosCall: { turn_id: ULID, step: 0, sha256: SHA },
+  CosCompaction: {
+    summary: "The owner asked for Saturday hours and a price list reminder.",
+    replaced_range: { from_seq: 4, to_seq: 31 },
+    dropped_refs: [ULID],
+  },
+  CosToolStarted: {
+    tool_call_id: "functions.create_reminder:0",
+    approval_id: "approval_9fK2",
+  },
+  CosToolUnknown: {
+    tool_call_id: "functions.create_reminder:0",
+    approval_id: "approval_9fK2",
+  },
   CosFeedback: {
     conversation_id: CONVERSATION,
     message_id: "a_7Kd2Lm9Q",
@@ -923,6 +943,72 @@ export const samples: Record<ContractName, unknown> = {
     expires_at: LATER,
   },
   MessageFeedback: { message_id: "a_7Kd2Lm9Q", rating: "up" },
+  MemoryChip: {
+    version: 3,
+    changes: [
+      { kind: "added", text: "Prefers calls after 4pm", source: "owner_said" },
+    ],
+  },
+  MemoryUndo: { version: 3 },
+  MemoryView: {
+    version: 3,
+    lines: [
+      {
+        id: CONVERSATION,
+        text: "Prefers calls after 4pm",
+        source: "owner_said",
+        at: NOW,
+      },
+    ],
+    versions: [
+      {
+        version: 3,
+        at: NOW,
+        changes: [
+          {
+            kind: "added",
+            text: "Prefers calls after 4pm",
+            source: "owner_said",
+          },
+        ],
+        undoable: true,
+      },
+    ],
+    ask_first: false,
+    proposals: [],
+  },
+  MemoryProposal: {
+    id: CONVERSATION,
+    action: "add",
+    text: "Prefers calls after 4pm",
+    at: NOW,
+  },
+  MemoryReviewAction: { action: "ask_first", value: true },
+  OwnerMemoryReview: { ask_first: false, proposals: [], chip_through: 3 },
+  OwnerProfile: {
+    lines: [
+      {
+        id: CONVERSATION,
+        text: "Prefers calls after 4pm",
+        source: "owner_said",
+        at: NOW,
+      },
+    ],
+  },
+  ProfileLine: {
+    id: CONVERSATION,
+    text: "Prefers calls after 4pm",
+    source: "owner_said",
+    at: NOW,
+  },
+  RememberInput: {
+    operations: [{ action: "add", text: "Prefers calls after 4pm" }],
+  },
+  RememberOutput: {
+    outcome: "saved",
+    note: "Saved. This update is complete; do not repeat it.",
+    fullness: "2%, 23/1,500 chars",
+  },
   Org: {
     org_id: ORG,
     slug: "brightclean",
@@ -968,6 +1054,52 @@ export const samples: Record<ContractName, unknown> = {
     updated_at: NOW,
   },
   ReminderPatch: { done: true },
+  ScheduledJob: {
+    id: "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+    org_id: ORG,
+    kind: "reminder",
+    ref_id: "8b9c0d1e-2f3a-4b4c-9d5e-6f7a8b9c0d1e",
+    rule: null,
+    next_run_at: LATER,
+    claimed_at: null,
+    last_run_at: null,
+    failures: 0,
+    paused_at: null,
+    created_at: NOW,
+  },
+  JobRun: {
+    job_id: "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+    org_id: ORG,
+    run_at: LATER,
+    outcome: "ok",
+    detail: null,
+  },
+  Delivery: {
+    org_id: ORG,
+    key: "reminder:8b9c0d1e-2f3a-4b4c-9d5e-6f7a8b9c0d1e:in_app",
+    channel: "in_app",
+    state: "sent",
+    attempts: 1,
+    sent_at: LATER,
+    error: null,
+    lease_until: null,
+    created_at: LATER,
+  },
+  PushSubscribeRequest: {
+    endpoint: "https://fcm.googleapis.com/fcm/send/abc123",
+    keys: {
+      p256dh: "BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA",
+      auth: "tBHItJI5svbpez7KI4CCXg",
+    },
+  },
+  PushSubscribed: { id: "8b9c0d1e-2f3a-4b4c-9d5e-6f7a8b9c0d1e" },
+  PushConfig: { public_key: "BEl62iUYgUivxIkv69yViEuiBIa-Ib9" },
+  OrgSchedule: {
+    time_zone: "Europe/London",
+    quiet_start: "21:00",
+    quiet_end: "08:00",
+    proactivity: "default",
+  },
   RecordReviewInput: {
     slot: 1,
     quote:
@@ -1149,6 +1281,12 @@ export const samples: Record<ContractName, unknown> = {
           expires_at: LATER,
         },
         version: 4,
+      },
+      {
+        kind: "reminder",
+        reminder_id: "9c0d1e2f-3a4b-4c5d-8e6f-7a8b9c0d1e2f",
+        title: "Order more microfibre cloths",
+        due_at: NOW,
       },
     ],
     missing_facts: ["business.email"],

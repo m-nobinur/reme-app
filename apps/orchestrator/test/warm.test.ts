@@ -6,61 +6,48 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
  * one before a build waits, and only the assignment holding it ends it.
  */
 
-const { Unavailable } = vi.hoisted(() => {
-  class ContainerUnavailable extends Error {
-    constructor(readonly reason: string) {
-      super(reason)
-    }
-  }
-  return { Unavailable: ContainerUnavailable }
-})
 const files = new Map<string, string>()
 /** Runs once a marker is written, to land a claim before the holder entry is set. */
 let afterMark: ((site: string) => Promise<void>) | null = null
 const destroyed: string[] = []
-/** Sites whose next `exec` the platform refuses for a full pool. */
+/** Sites whose next start the pool refuses for want of a slot. */
 const refuse = new Set<string>()
 /** Sites whose container came back with the image's empty disk. */
 const lost = new Set<string>()
-vi.mock("@cloudflare/sandbox", () => ({
-  ContainerUnavailableError: Unavailable,
-  getSandbox: (_ns: unknown, id: string) => ({
-    exec: async (command: string) => {
-      if (refuse.delete(id)) {
-        throw new Unavailable("no_container_instance_available")
+/** The site's `RemeSandbox` stub, as `getByName` returns it. */
+const stubFor = (id: string) => ({
+  open: async () => !refuse.delete(id),
+  exec: async (command: string) => {
+    if (command.startsWith("test -d")) {
+      return { exitCode: lost.has(id) ? 1 : 0, stdout: "", stderr: "" }
+    }
+    if (command.startsWith("cat ")) {
+      const held = files.get(`${id}:revision`) ?? ""
+      files.delete(`${id}:revision`)
+      return { exitCode: 0, stdout: held, stderr: "" }
+    }
+    const unmark = /^grep -qx '([^']+)' /.exec(command)
+    if (unmark) {
+      if (files.get(`${id}:revision`) !== unmark[1]) {
+        return { exitCode: 1, stdout: "", stderr: "" }
       }
-      if (command.startsWith("test -d")) {
-        return { exitCode: lost.has(id) ? 1 : 0, stdout: "", stderr: "" }
-      }
-      if (command.startsWith("cat ")) {
-        const held = files.get(`${id}:revision`) ?? ""
-        files.delete(`${id}:revision`)
-        return { exitCode: 0, stdout: held, stderr: "" }
-      }
-      const unmark = /^grep -qx '([^']+)' /.exec(command)
-      if (unmark) {
-        if (files.get(`${id}:revision`) !== unmark[1]) {
-          return { exitCode: 1, stdout: "", stderr: "" }
-        }
-        files.delete(`${id}:revision`)
-      }
-      return { exitCode: 0, stdout: "", stderr: "" }
-    },
-    writeFile: async (path: string, body: string) => {
-      if (path.endsWith("/.reme/revision")) {
-        files.set(`${id}:revision`, body)
-        await afterMark?.(id)
-      }
-    },
-    destroy: async () => {
-      destroyed.push(id)
-    },
-  }),
-}))
+      files.delete(`${id}:revision`)
+    }
+    return { exitCode: 0, stdout: "", stderr: "" }
+  },
+  writeFile: async (path: string, body: string) => {
+    if (path.endsWith("/.reme/revision")) {
+      files.set(`${id}:revision`, body)
+      await afterMark?.(id)
+    }
+  },
+  destroy: async () => {
+    destroyed.push(id)
+  },
+})
 
 const { endSandbox, keepWarm, PoolExhaustedError, provision, takeWarm } =
   await import("../src/sandbox.ts")
-const { getSandbox } = await import("@cloudflare/sandbox")
 
 type Entry = {
   uploaded: Date
@@ -73,7 +60,7 @@ let writes = 0
 let beforeHead: ((key: string) => Promise<void>) | null = null
 let now = Date.parse("2026-10-14T09:00:00Z")
 const env = {
-  SANDBOX: {},
+  SANDBOX: { getByName: stubFor },
   SITES: {
     put: async (
       key: string,
@@ -123,7 +110,7 @@ const builtWarm = async (
   await provision(env, { orgId: site, assignmentId: assignment })
   await keepWarm(env, { orgId: site, assignmentId: assignment }, revision)
 }
-const sandbox = (site: string) => getSandbox(env.SANDBOX as never, site)
+const sandbox = stubFor
 
 beforeEach(() => {
   bucket.clear()

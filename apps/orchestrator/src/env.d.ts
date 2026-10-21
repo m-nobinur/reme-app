@@ -15,6 +15,17 @@ interface __BaseEnv_Env {
   ORCHESTRATOR_TOKEN: string
   /** Signs the RuntimeSpec the Developer verifies. */
   RUNTIME_SPEC_KEY: string
+  /**
+   * Signs the Reply-To token on an owner email (`@workspace/contracts`
+   * reply-token). The same value on the api, which verifies the reply.
+   */
+  REPLY_TOKEN_KEY: string
+  /**
+   * The VAPID private key as a JWK string, which signs a web push (src/push.ts).
+   * `npx @pushforge/builder vapid` makes the pair; the api holds the public
+   * half. Unset, a push fails as `push_unset`.
+   */
+  VAPID_PRIVATE_KEY?: string
   /** Signs preview claims here; the router verifies them (ADR-032). */
   PREVIEW_KEY: string
   /**

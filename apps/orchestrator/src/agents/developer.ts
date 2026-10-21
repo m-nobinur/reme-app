@@ -1,6 +1,5 @@
 "use agent"
 import { env } from "cloudflare:workers"
-import { getSandbox, OperationInterruptedError } from "@cloudflare/sandbox"
 import {
   CompletionReport,
   FactSnapshot,
@@ -69,7 +68,7 @@ import {
 } from "../question.ts"
 import { logTurn } from "../quick.ts"
 import { placePhotos, SITE_ROOT } from "../revise.ts"
-import { checkpoint, recover } from "../sandbox.ts"
+import { checkpoint, recover, sandboxFor } from "../sandbox.ts"
 import { QUOTE_FORM_FILE, quoteFormFile, seedFiles } from "../seed.ts"
 import { eventSink } from "../sink.ts"
 import { assignmentCost, turnCount } from "../state.ts"
@@ -121,7 +120,8 @@ observe((observation, ctx) => {
   const found = sessions.get(ctx.id)
   if (!found) return
   found.tee.subscriber(observation)
-  found.budget.instrumentation.observe(observation, ctx)
+  // Typed void | Promise<void>, but the budget guard's observer is synchronous.
+  void found.budget.instrumentation.observe(observation, ctx)
   interrupted(found, observation)
 })
 
@@ -181,15 +181,13 @@ function wake(
 const WAKING_TOOLS = new Set(["report_complete", "ask_chief"])
 
 /**
- * The sandbox SDK's own class for a container the platform replaced under a
- * running command: the model cannot fix it, so the gate ends the turn at once
- * and the Workflow resumes when the runtime is back (architect ruling, open
- * item 55). The code check covers an error that lost its prototype crossing
- * a boundary; the message is never matched.
+ * flue's error for a container that stopped under a running call: the model
+ * cannot fix it, so the gate ends the turn at once and the Workflow resumes
+ * when the runtime is back (architect ruling, open item 55). Its `type` and
+ * not its class, which a boundary can strip; the message is never matched.
  */
 const platformInterrupted = (error: unknown) =>
-  error instanceof OperationInterruptedError ||
-  (error as { code?: string }).code === "OPERATION_INTERRUPTED"
+  (error as { type?: string } | null)?.type === "sandbox_died"
     ? SANDBOX_UPDATING
     : null
 instrument({
@@ -407,8 +405,7 @@ function render({ id }: AgentProps) {
   // QE2: the site's sandbox, the one the Workflow provisioned and may have
   // found warm. One per site is safe because the site lock
   // (`assignments_site_writer_key`) lets one assignment at a time write it.
-  const stub = getSandbox(env.SANDBOX as never, runtime.spec.org_id)
-  const base = cloudflareSandbox(stub as never)
+  const base = cloudflareSandbox(sandboxFor(env, runtime.spec.org_id))
   useSandbox(
     {
       createSandbox: unlisted(base.createSandbox),
@@ -628,7 +625,7 @@ const writePagesTool = (current: Session) =>
       const orgId = spec.org_id
       const assignmentId = brief.snapshot.assignment_id
       const sandbox = harness.sandbox
-      const stub = getSandbox(env.SANDBOX as never, orgId)
+      const stub = sandboxFor(env, orgId)
       const plan = brief.blueprint
       const tasks = writerTasks(plan, serviceCount(brief))
       const total = plan.pages.length

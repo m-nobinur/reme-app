@@ -50,6 +50,9 @@ try {
       "check",
       `--config-path=${ROOT}`,
       "--reporter=json",
+      // The fixture sits outside the repo, and Biome 2.5.15 panics reading the
+      // repo's ignore file for a path outside its root.
+      "--vcs-enabled=false",
       // Only this plugin. The fixture is deliberately bad code and would trip
       // half the rule set otherwise.
       "--only=plugin",

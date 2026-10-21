@@ -343,6 +343,42 @@ export async function listOrgIds(kit: Tenancy): Promise<string[]> {
   })
 }
 
+/**
+ * The jobs that are due, claimed: the Cron Trigger's one read across orgs.
+ * `claim_due_jobs` (migration 0020) is SECURITY DEFINER, marks what it returns
+ * in the same statement, and gives back `(job_id, org_id)` and nothing else;
+ * the run then opens that org's own `withOrg`. A second call does not return
+ * a row the first claimed, which `tenancy/claim-due-jobs.test.ts` drives.
+ */
+export async function claimDueJobs(
+  kit: Tenancy,
+  limit: number
+): Promise<{ jobId: string; orgId: string }[]> {
+  return kit[pool].transaction(async (tx) => {
+    await tx.execute(ENTER_APP_ROLE)
+    const rows = await tx.execute<{ job_id: string; org_id: string }>(
+      sql`select job_id, org_id from public.claim_due_jobs(${limit})`
+    )
+    return rows.map((row) => ({ jobId: row.job_id, orgId: row.org_id }))
+  })
+}
+
+/**
+ * The earliest time a claim could return a job, across orgs, or null when
+ * nothing is scheduled: what the Cron Trigger keeps in KV so Postgres sleeps
+ * until then. `next_due_at` (migration 0021) is SECURITY DEFINER and returns
+ * one timestamp and nothing else.
+ */
+export async function nextDueAt(kit: Tenancy): Promise<Date | null> {
+  return kit[pool].transaction(async (tx) => {
+    await tx.execute(ENTER_APP_ROLE)
+    const [row] = await tx.execute<{ at: string | Date | null }>(
+      sql`select public.next_due_at() as at`
+    )
+    return row?.at ? new Date(row.at) : null
+  })
+}
+
 /** A design another business in the same industry was planned with. */
 export type RecentDesign = {
   direction: string | null

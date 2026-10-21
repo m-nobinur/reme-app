@@ -16,15 +16,16 @@
   "dependencies": {
     "@workspace/config": "workspace:*",
     "@workspace/contracts": "workspace:*",
-    "drizzle-orm": "0.45.3",
+    "croner": "10.0.1",
+    "drizzle-orm": "0.45.4",
     "postgres": "3.4.9",
     "ulid": "3.0.2"
   },
   "devDependencies": {
-    "@types/node": "^22",
+    "@types/node": "^24",
     "drizzle-kit": "0.31.11",
     "typescript": "^6",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.5"
   },
   "exports": {
     ".": "./src/index.ts",

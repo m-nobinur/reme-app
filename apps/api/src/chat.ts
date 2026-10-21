@@ -1,11 +1,14 @@
 import {
   BuildSummary,
+  CARD_ANSWERED,
   ChatRequest,
   type ChatResult,
   CosChangeRequest,
+  type CosToolName,
   type CosTurn,
   ErrorEnvelope,
   type FactRecord,
+  type MemoryChip,
   OnboardingPlan,
   RequestChangeOutput,
   TOOL_CALL_CANCELLED,
@@ -16,9 +19,11 @@ import {
   conversations,
   eq,
   events,
+  lowerNextDue,
   newUlid,
   type OrgScopedDb,
   orgs,
+  recomputeOrgJobs,
   sql,
   type Tenancy,
 } from "@workspace/db"
@@ -30,29 +35,37 @@ import {
   type UIMessage,
   type UIMessageChunk,
 } from "ai"
+import { enqueueAfterTurn } from "./after-turn.ts"
 import { type Owner, stateFacts } from "./changes.ts"
 import { holdsNul, notFound } from "./conversations.ts"
 import {
   type AgentTurn,
   activeTools,
+  binds,
+  boundInput,
+  caughtUp,
   contextOf,
   cosPrefix,
   knownZone,
   LIMITS,
   messageTaint,
+  NotRun,
   newRunState,
   openrouterModel,
   personaOf,
   priceOf,
   reservation,
   routeOf,
+  toolErrorText,
 } from "./cos/agent.ts"
 import {
   CONTEXT_POLICY,
   deriveCosMessages,
+  type LoggedEvent,
   readSession,
   sha256,
 } from "./cos/history.ts"
+import { takeChip } from "./cos/memory.ts"
 import { retrying } from "./cos/retry.ts"
 import {
   closeTurn,
@@ -63,10 +76,11 @@ import {
   streamTurn,
   writtenAt,
 } from "./cos/run.ts"
-import { getWorkspace, startOwnerChange, type ToolFailed } from "./cos/tools.ts"
+import { loadWorkspace, startOwnerChange } from "./cos/tools.ts"
 import {
   beginTurn,
   closeLapsedTurn,
+  loggedApprovals,
   loggedMessage,
   NoSuchSession,
   type Opening,
@@ -85,7 +99,14 @@ import {
   titleFrom,
   withoutProviderData,
 } from "./http.ts"
-import { type JevDecision, jev, matched } from "./jev.ts"
+import {
+  type JevDecision,
+  jev,
+  jevApproval,
+  matched,
+  readReply,
+  type Verdict,
+} from "./jev.ts"
 import {
   type Answer,
   again,
@@ -535,6 +556,12 @@ export type ChatDeps = {
    * the planner's model at medium effort when the api holds a key.
    */
   prepare?: LanguageModel | null
+  /**
+   * The gate on a typed reply to one open reminder or change card that no
+   * exact phrase read: left out, Jev on OpenRouter when the api holds a
+   * key. Tests pass one.
+   */
+  approval?: ((card: string, reply: string) => Promise<Verdict | null>) | null
 }
 
 /** What a turn is, read before its lock: whether onboarding runs, and the card it waits on. */
@@ -543,16 +570,52 @@ type Ahead = {
   card: ToolPart | undefined
   /** The words of the step that holds the card: the question the owner is answering. */
   asked: string
+  /** The one reminder or change card a typed yes or no may answer; read for a typed message only. */
+  open?: CosPart
 }
 
-async function lookAhead(db: OrgScopedDb, id: string): Promise<Ahead> {
+/** The cards a typed yes or no may answer (ADR-042); every other card a typed message cancels. */
+const TYPED_CARDS: ReadonlySet<string> = new Set([
+  "tool-create_reminder",
+  "tool-request_change",
+])
+
+/**
+ * The tail's last step holds exactly one pending call, and it is a card a
+ * typed reply may answer. The tail is the message a click would answer, so
+ * an emailed reply, which is a later row, leaves a card out of reach.
+ */
+function typedCard(tail: Tail | null): CosPart | undefined {
+  if (tail?.content.role !== "assistant") return undefined
+  const parts = tail.content.parts as CosPart[]
+  const last = parts.slice(parts.map((p) => p.type).lastIndexOf("step-start"))
+  const [card, ...more] = last.filter(
+    (p) => p.type.startsWith("tool-") && pending(p as ToolPart)
+  )
+  return more.length === 0 &&
+    card?.state === "approval-requested" &&
+    card.approval &&
+    TYPED_CARDS.has(card.type)
+    ? card
+    : undefined
+}
+
+async function lookAhead(
+  db: OrgScopedDb,
+  id: string,
+  typing: boolean
+): Promise<Ahead> {
   const none = { onboarding: false, card: undefined, asked: "" }
   const [conversation] = await db
     .select({ kind: conversations.kind })
     .from(conversations)
     .where(eq(conversations.id, id))
-  if (conversation?.kind !== "onboarding") return none
-  if (scriptEnded(await readScript(db, id))) return none
+  if (
+    conversation?.kind !== "onboarding" ||
+    scriptEnded(await readScript(db, id))
+  ) {
+    return typing ? { ...none, open: typedCard(await readTail(db, id)) } : none
+  }
   const tail = await readTail(db, id)
   const parts = tail?.content.role === "assistant" ? tail.content.parts : []
   const last = parts.slice(parts.map((p) => p.type).lastIndexOf("step-start"))
@@ -606,6 +669,23 @@ async function gateAnswer(
 /** A typed reply already read, by Jev and code, with the state it was read on. */
 type Given = { onboarding: Onboarding; answer: Answer }
 
+/**
+ * The org's time zone after a turn that carried the browser's. A new zone is
+ * written and the org's recurring jobs move into it in the same transaction;
+ * `next` is the earliest of them, for `lowerNextDue` after the commit.
+ */
+async function rememberZone(
+  db: OrgScopedDb,
+  orgId: string,
+  browser: string | undefined
+): Promise<{ zone: string | null; next: Date | null }> {
+  const [org] = await db.select({ zone: orgs.timeZone }).from(orgs)
+  const held = org?.zone ?? null
+  if (!browser || browser === held) return { zone: held, next: null }
+  await db.update(orgs).set({ timeZone: browser }).where(eq(orgs.id, orgId))
+  return { zone: browser, next: await recomputeOrgJobs(db, browser) }
+}
+
 export async function chat(
   request: Request,
   env: Env,
@@ -620,17 +700,30 @@ export async function chat(
   if (!parsed.success) return invalid(parsed.error.issues)
   // Postgres refuses NUL in text and jsonb, and a refusal there is a 500.
   if (holdsNul(parsed.data)) return invalid([{ path: ["turn"] }])
-  const { conversation_id: id, mode, turn, time_zone: zone } = parsed.data
-  if (zone && !knownZone(zone)) return invalid([{ path: ["time_zone"] }])
+  const { conversation_id: id, mode, turn, time_zone: browser } = parsed.data
+  if (browser && !knownZone(browser)) return invalid([{ path: ["time_zone"] }])
   const scope = { orgId: owner.orgId, workosUserId: owner.session.workosUserId }
   const tools = { env, kit, owner }
-  const ahead = await kit.withOrg(scope, (db) => lookAhead(db, id))
-  // Read before the turn's lock is taken; the CoS's context is built from
-  // it. An onboarding turn never reads it.
-  const [workspace, prefix] = await Promise.all([
-    ahead.onboarding ? null : getWorkspace(tools, {}),
+  // Read before the turn's lock is taken, beside `lookAhead`; the CoS's
+  // context is built from it. An onboarding turn reads it and drops it.
+  const loading = loadWorkspace(tools)
+  loading.catch(() => undefined)
+  const [[ahead, stored], prefix] = await Promise.all([
+    kit.withOrg(
+      scope,
+      async (db) =>
+        [
+          await lookAhead(db, id, turn.kind === "message"),
+          await rememberZone(db, owner.orgId, browser),
+        ] as const
+    ),
     cosPrefix(),
   ])
+  // The org's zone: the browser's, now stored, or the stored one when the
+  // request carries none (ADR-034's change-if).
+  const zone = stored.zone
+  if (stored.next) await lowerNextDue(env.SCHEDULE, stored.next)
+  const loaded = ahead.onboarding ? null : await loading
   const gateOf =
     deps.jev !== undefined
       ? deps.jev
@@ -638,6 +731,19 @@ export async function chat(
         ? (card: ToolPart, asked: string, reply: string) =>
             jev(env.OPENROUTER_API_KEY as string, card, asked, reply)
         : null
+  const approvalOf =
+    deps.approval !== undefined
+      ? deps.approval
+      : env.OPENROUTER_API_KEY
+        ? (card: string, reply: string) =>
+            jevApproval(env.OPENROUTER_API_KEY as string, card, reply)
+        : null
+  // A typed reply over one open reminder or change card: an exact phrase
+  // answers it, else Jev reads it, here outside the transaction.
+  const heard =
+    turn.kind === "message" && ahead.open
+      ? await typedVerdict(ahead.open, turn.text, approvalOf)
+      : null
   const modelId = env.COS_MODEL ?? routeOf("owner_turn").model
   const price = priceOf(modelId)
   const model =
@@ -779,16 +885,19 @@ export async function chat(
           : (await withinCap(db, owner.orgId, reserve))
             ? null
             : "budgetary"
-      const opening = await openCos(db, held, id, parsed.data, log)
+      const opening = await openCos(db, held, id, parsed.data, log, heard)
       if (opening instanceof Response) return opening
       const cosTurn: Turn = { ...session, turnId: newUlid() }
+      const { workspace, facts, profile, reminders } =
+        loaded ?? (await loadWorkspace(tools))
       const context = contextOf(
         mode,
-        workspace ?? (await getWorkspace(tools, {})),
+        workspace,
         zone ?? null,
         new Date(),
         turn.kind === "message" ? parsed.data.intent : undefined,
-        personaOf(await readFacts(db))
+        personaOf(facts, profile),
+        turn.kind === "message" && log.fresh ? { reminders } : null
       )
       await beginTurn(db, cosTurn, {
         prefix: log.prefixLogged ? null : prefix,
@@ -817,6 +926,14 @@ export async function chat(
         fallback,
         reserved: fallback ? 0 : reserve,
         tail: opening.tail,
+        typed: opening.typed,
+        // The turn's one whole read of its log (ADR-042), under its lock.
+        log: await readSession(db, id),
+        // The memory changes the chat has not shown yet, shown on this reply.
+        chip:
+          !fallback && turn.kind === "message"
+            ? await takeChip(db, owner.orgId)
+            : null,
       }
     })
   } catch (error) {
@@ -855,6 +972,7 @@ export async function chat(
     state: newRunState(),
     abort: new AbortController(),
     zone: zone ?? null,
+    log: opened.log,
   }
   return answerCos(run, {
     env,
@@ -897,6 +1015,58 @@ type Opened = {
   reserved: number
   /** For a results turn: the message its results resolved. */
   tail: { id: string } | null
+  /** The typed yes or no this turn took as the card's answer, once the lock confirmed the card. */
+  typed: Typed | null
+  log: LoggedEvent[]
+  chip: MemoryChip | null
+}
+
+/** A typed reply read as the answer to the open card `callId`, with the line that says so. */
+type Typed = { callId: string; approved: boolean; line: string }
+
+/** Tells the web which card the typed reply answered, so it stops showing it as cancelled. */
+const answeredChunk = (heard: Typed | null): UIMessageChunk[] =>
+  heard
+    ? [
+        {
+          type: CARD_ANSWERED,
+          data: { tool_call_id: heard.callId },
+          transient: true,
+        },
+      ]
+    : []
+
+/** What the card proposes, in the words the owner and Jev read it in. */
+function proposed(card: CosPart): string {
+  const { text, title, due_at } = (card.input ?? {}) as Record<string, unknown>
+  const what =
+    card.type === "tool-request_change"
+      ? `a website change: ${text}`
+      : `a reminder: ${title}${due_at ? `, due ${due_at}` : ""}`
+  return what.slice(0, 200)
+}
+
+/**
+ * The card's answer in a typed reply: an exact phrase, else Jev when it is
+ * available, else none and the message takes the normal turn. An error from
+ * Jev reads as none.
+ */
+async function typedVerdict(
+  card: CosPart,
+  reply: string,
+  gate: ChatDeps["approval"]
+): Promise<Typed | null> {
+  const what = proposed(card)
+  const verdict = await readReply(reply, gate ? (r) => gate(what, r) : null)
+  if (!verdict) return null
+  return {
+    callId: card.toolCallId as string,
+    approved: verdict === "approve",
+    line:
+      verdict === "approve"
+        ? `Taken as a yes: ${what}.`
+        : `Taken as a no, so I left it: ${what}.`,
+  }
 }
 
 /** A turn the script answers: everything before the CoS, unchanged. */
@@ -957,6 +1127,7 @@ type CosPart = {
   type: string
   toolCallId?: string
   state?: string
+  input?: unknown
   output?: unknown
   errorText?: string
   approval?: { id: string; approved?: boolean; reason?: string }
@@ -1024,23 +1195,42 @@ function settledChunks(part: CosPart): UIMessageChunk[] {
  * CoS made it. A results turn must resolve exactly the pending calls of the
  * tail's last step, each once: an approval is `approval-responded` until
  * its tool runs, a denial is `output-denied`, and a reason is kept.
+ *
+ * A typed yes or no `heard` over the tail's one open card (ADR-042)
+ * resolves it by the results turn's own path, then logs the owner's words
+ * after it, so the card is never cancelled. A card that moved since the
+ * lookahead leaves the message to the cancelling path.
  */
 async function openCos(
   db: OrgScopedDb,
   held: Read,
   id: string,
   { turn }: ChatRequest,
-  log: SessionState
+  log: SessionState,
+  heard: Typed | null
 ): Promise<
   | {
       messages: Opening["messages"]
       tail: { id: string } | null
+      typed: Typed | null
     }
   | Response
 > {
   if (turn.kind === "message") {
     if (await messageTaken(db, id, turn.message_id)) return messageExists()
-    const cancelled = await cancelPending(db, id, held.tail)
+    const card = typedCard(held.tail)
+    const answered =
+      heard && held.tail && card?.toolCallId === heard.callId
+        ? await resolveApprovals(db, id, held.tail, [
+            {
+              kind: "approval",
+              approval_id: card.approval?.id ?? "",
+              approved: heard.approved,
+            },
+          ])
+        : null
+    if (answered instanceof Response) return answered
+    const cancelled = answered ? null : await cancelPending(db, id, held.tail)
     const user = {
       id: turn.message_id,
       role: "user" as const,
@@ -1052,18 +1242,38 @@ async function openCos(
         ? await loggedMessage(db, id, held.tail.id)
         : null
     const posts = await unloggedPosts(db, id)
-    const messages = logged
-      ? [...posts, { ...logged, parts: cancelParts(logged.parts) }, user]
-      : [...posts, user]
+    const messages = answered
+      ? [...posts, ...answered.messages.map((m) => m.message), user]
+      : logged
+        ? [...posts, { ...logged, parts: cancelParts(logged.parts) }, user]
+        : [...posts, user]
     return {
       messages: messages.map((m) => ({ message: m, taint: messageTaint(m) })),
       tail: null,
+      typed: answered ? heard : null,
     }
   }
   const { tail } = held
   if (tail?.id !== turn.message_id || tail.content.role !== "assistant") {
     return stale()
   }
+  const opened = await resolveApprovals(db, id, tail, turn.results)
+  return opened instanceof Response ? opened : { ...opened, typed: null }
+}
+
+/**
+ * Resolves the pending calls of the tail's last step with `results`, each
+ * once, and stores the tail as it now stands. The one path a click and a
+ * typed yes or no both take.
+ */
+async function resolveApprovals(
+  db: OrgScopedDb,
+  id: string,
+  tail: Tail,
+  results: ChatResult[]
+): Promise<
+  { messages: Opening["messages"]; tail: { id: string } | null } | Response
+> {
   // Resolved on the logged message, which keeps the reasoning the row leaves out.
   const logged = (await loggedMessage(db, id, tail.id)) ?? {
     id: tail.id,
@@ -1075,7 +1285,6 @@ async function openCos(
   const waiting = last.filter(
     (p) => p.type.startsWith("tool-") && p.state === "approval-requested"
   )
-  const results = turn.results
   const byApproval = new Map(
     results.flatMap((r) => (r.kind === "approval" ? [[r.approval_id, r]] : []))
   )
@@ -1086,9 +1295,41 @@ async function openCos(
   ) {
     return stale()
   }
+  // A yes counts only while the card's record binds its call (ADR-042);
+  // otherwise the call closes with the expired line and nothing runs.
+  const yeses = waiting.filter(
+    (p) => byApproval.get(p.approval?.id ?? "")?.approved
+  )
+  const cards = await loggedApprovals(
+    db,
+    id,
+    yeses.map((p) => p.approval?.id ?? "")
+  )
+  const now = Date.now()
+  const lapsed = new Set<string>()
+  for (const part of yeses) {
+    const approvalId = part.approval?.id ?? ""
+    const card = cards.find((c) => c.approval_id === approvalId)
+    const input = await boundInput(
+      db,
+      part.type.slice("tool-".length) as CosToolName,
+      part.input
+    )
+    if (!(await binds(card, part.toolCallId ?? "", input, now))) {
+      lapsed.add(approvalId)
+    }
+  }
   const applied = parts.map((part): CosPart => {
     const result = part.approval ? byApproval.get(part.approval.id) : undefined
     if (!result || !waiting.includes(part)) return part
+    if (lapsed.has(result.approval_id)) {
+      return {
+        ...part,
+        state: "output-error",
+        errorText: toolErrorText(new NotRun("expired")),
+        approval: { id: result.approval_id, approved: true },
+      }
+    }
     // A denial's reason is the owner's free text, so the model gets it
     // framed as the owner's no; it could otherwise open with words the
     // instructions give to a failure. The screen keeps the owner's words.
@@ -1189,20 +1430,15 @@ async function answerCos(run: AgentTurn, a: Answering): Promise<Response> {
   }
   // Anything that throws before a response exists closes the turn as an
   // error, so the next turn need not wait for it to lapse.
-  let failed: ToolFailed | null = null
   let streamed: Response | FellBack | null = null
   try {
-    failed = await settle(run, rows)
-    if (!failed && !a.opened.fallback && a.model) {
+    await settle(run, rows)
+    if (!a.opened.fallback && a.model) {
       streamed = await startModel(run, a, a.model, rows)
     }
   } catch (error) {
     await closeTurn(run, ended("error"), null, rows).catch(() => undefined)
     throw error
-  }
-  if (failed) {
-    await closeTurn(run, ended("error"), null, rows)
-    return failure(failed.status, { ...failed.error, detail: {} })
   }
   if (streamed instanceof Response) return streamed
   if (streamed && run.state.readFailed) {
@@ -1215,27 +1451,36 @@ async function answerCos(run: AgentTurn, a: Answering): Promise<Response> {
     })
   }
   if (streamed && run.state.integrity) {
-    return fallbackTurn(run, a, rows, ended("integrity"))
+    return fellBack(run, a, rows, ended("integrity"))
   }
   const fallback = streamed
     ? run.state.overBudget
       ? "budgetary"
       : "provider"
     : a.opened.fallback
-  return fallbackTurn(run, a, rows, ended("fallback", fallback ?? "resource"))
+  return fellBack(run, a, rows, ended("fallback", fallback ?? "resource"))
 }
 
-/** The model's run over the history the log derives now. */
+/** A turn that ran no model closes inside `fallbackTurn`; queue it after. */
+async function fellBack(
+  run: AgentTurn,
+  a: Answering,
+  rows: Rows,
+  payload: CosTurn
+): Promise<Response> {
+  const response = await fallbackTurn(run, a, rows, payload)
+  a.waitUntil(enqueueAfterTurn(a.env, run.turn))
+  return response
+}
+
+/** The model's run over the history the log derives now, which `settle` left caught up. */
 async function startModel(
   run: AgentTurn,
   a: Answering,
   model: LanguageModel,
   rows: Rows
 ): Promise<Response | FellBack> {
-  const history = await run.kit.withOrg({ orgId: run.turn.orgId }, (db) =>
-    readSession(db, run.turn.sessionId)
-  )
-  const { messages } = deriveCosMessages(history, CONTEXT_POLICY)
+  const { messages } = deriveCosMessages(run.log, CONTEXT_POLICY)
   const tail = a.opened.tail
   return streamTurn({
     run,
@@ -1244,9 +1489,12 @@ async function startModel(
     modelId: a.modelId,
     uiMessages: messages,
     newMessageId: a.newId,
-    lead: tail ? settledLead(messages, tail.id) : [],
+    lead: tail ? settledLead(messages, tail.id) : answeredChunk(a.opened.typed),
+    chip: a.opened.chip,
     rows,
-    waitUntil: a.waitUntil,
+    // The stream's reader ends after `closeRun`, so the turn is closed here.
+    waitUntil: (reading) =>
+      a.waitUntil(reading.then(() => enqueueAfterTurn(a.env, run.turn))),
   })
 }
 
@@ -1275,8 +1523,9 @@ async function fallbackTurn(
   payload: CosTurn
 ): Promise<Response> {
   if (a.turn.kind === "message") {
-    const step: Part[] =
-      payload.outcome === "fallback" && payload.reason === "provider"
+    const step: Part[] = a.opened.typed
+      ? [{ type: "text", text: a.opened.typed.line, state: "done" }]
+      : payload.outcome === "fallback" && payload.reason === "provider"
         ? [{ type: "text", text: NO_ANSWER, state: "done" }]
         : nextStep({
             onboarding: null,
@@ -1292,10 +1541,13 @@ async function fallbackTurn(
         parts: [{ type: "step-start" }, ...step],
       })
     })
-    return stream(assistantId, step, [writtenAt()])
+    return stream(assistantId, step, [
+      ...answeredChunk(a.opened.typed),
+      writtenAt(),
+    ])
   }
   const history = await run.kit.withOrg({ orgId: run.turn.orgId }, (db) =>
-    readSession(db, run.turn.sessionId)
+    caughtUp(db, run)
   )
   const { messages } = deriveCosMessages(history, CONTEXT_POLICY)
   const tailId = a.opened.tail?.id as string
@@ -1309,24 +1561,31 @@ async function fallbackTurn(
 }
 
 /**
- * The messages the assistant posted on its own (`postAssistantMessage`,
- * ids `srv_…`) that the session's log does not hold yet, oldest first, cut
- * to their text. A typed turn logs them before the owner's message, so the
- * model's history, which reads the log alone, holds what it already told
- * the owner.
+ * The messages posted outside a turn that the session's log does not hold
+ * yet, oldest first, cut to their text: the assistant's own (`srv_…`,
+ * `postAssistantMessage`) and the owner's emailed replies (`eml_…`,
+ * `postOwnerEmail`). A typed turn logs them before the owner's message, so
+ * the model's history, which reads the log alone, holds what it already told
+ * the owner and what the owner answered by email.
  */
 async function unloggedPosts(db: OrgScopedDb, id: string) {
-  const rows = await db.execute<{ id: string; parts: Part[] }>(sql`
-    select m.id, m.content->'parts' as parts from ${conversationMessages} m
-    where m.conversation_id = ${id} and m.id like 'srv\_%'
-      and m.content->>'role' = 'assistant'
+  const rows = await db.execute<{
+    id: string
+    role: "assistant" | "user"
+    parts: Part[]
+  }>(sql`
+    select m.id, m.content->>'role' as role, m.content->'parts' as parts
+    from ${conversationMessages} m
+    where m.conversation_id = ${id} and (
+        (m.id like 'srv\_%' and m.content->>'role' = 'assistant')
+        or (m.id like 'eml\_%' and m.content->>'role' = 'user'))
       and not exists (select 1 from ${events} e
         where e.session_id = ${id} and e.type = 'cos.message'
           and e.payload->'message'->>'id' = m.id)
     order by m.seq`)
   return rows.map((row) => ({
     id: row.id,
-    role: "assistant" as const,
+    role: row.role,
     parts: row.parts.filter(
       (p) => p.type === "step-start" || p.type === "text"
     ),

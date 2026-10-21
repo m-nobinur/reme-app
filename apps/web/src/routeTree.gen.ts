@@ -29,6 +29,7 @@ import { Route as ApiChatRouteImport } from './routes/api.chat'
 import { Route as AppConversationRouteImport } from './routes/app/_conversation'
 import { Route as AppAccountRouteImport } from './routes/app/account'
 import { Route as AppApprovalsRouteImport } from './routes/app/approvals'
+import { Route as AppMemoryRouteImport } from './routes/app/memory'
 import { Route as AppNotificationsRouteImport } from './routes/app/notifications'
 import { Route as AppPipelineRouteImport } from './routes/app/pipeline'
 import { Route as AppProfileRouteImport } from './routes/app/profile'
@@ -143,6 +144,11 @@ const AppApprovalsRoute = AppApprovalsRouteImport.update({
   path: '/approvals',
   getParentRoute: () => AppRoute,
 } as any)
+const AppMemoryRoute = AppMemoryRouteImport.update({
+  id: '/memory',
+  path: '/memory',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppNotificationsRoute = AppNotificationsRouteImport.update({
   id: '/notifications',
   path: '/notifications',
@@ -234,6 +240,7 @@ export interface FileRoutesByFullPath {
   '/api/chat': typeof ApiChatRoute
   '/app/account': typeof AppAccountRoute
   '/app/approvals': typeof AppApprovalsRoute
+  '/app/memory': typeof AppMemoryRoute
   '/app/notifications': typeof AppNotificationsRoute
   '/app/pipeline': typeof AppPipelineRoute
   '/app/profile': typeof AppProfileRoute
@@ -269,6 +276,7 @@ export interface FileRoutesByTo {
   '/api/chat': typeof ApiChatRoute
   '/app/account': typeof AppAccountRoute
   '/app/approvals': typeof AppApprovalsRoute
+  '/app/memory': typeof AppMemoryRoute
   '/app/notifications': typeof AppNotificationsRoute
   '/app/pipeline': typeof AppPipelineRoute
   '/app/profile': typeof AppProfileRoute
@@ -305,6 +313,7 @@ export interface FileRoutesById {
   '/app/_conversation': typeof AppConversationRouteWithChildren
   '/app/account': typeof AppAccountRoute
   '/app/approvals': typeof AppApprovalsRoute
+  '/app/memory': typeof AppMemoryRoute
   '/app/notifications': typeof AppNotificationsRoute
   '/app/pipeline': typeof AppPipelineRoute
   '/app/profile': typeof AppProfileRoute
@@ -342,6 +351,7 @@ export interface FileRouteTypes {
     | '/api/chat'
     | '/app/account'
     | '/app/approvals'
+    | '/app/memory'
     | '/app/notifications'
     | '/app/pipeline'
     | '/app/profile'
@@ -377,6 +387,7 @@ export interface FileRouteTypes {
     | '/api/chat'
     | '/app/account'
     | '/app/approvals'
+    | '/app/memory'
     | '/app/notifications'
     | '/app/pipeline'
     | '/app/profile'
@@ -412,6 +423,7 @@ export interface FileRouteTypes {
     | '/app/_conversation'
     | '/app/account'
     | '/app/approvals'
+    | '/app/memory'
     | '/app/notifications'
     | '/app/pipeline'
     | '/app/profile'
@@ -595,6 +607,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppApprovalsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/memory': {
+      id: '/app/memory'
+      path: '/memory'
+      fullPath: '/app/memory'
+      preLoaderRoute: typeof AppMemoryRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/notifications': {
       id: '/app/notifications'
       path: '/notifications'
@@ -714,6 +733,7 @@ interface AppRouteChildren {
   AppConversationRoute: typeof AppConversationRouteWithChildren
   AppAccountRoute: typeof AppAccountRoute
   AppApprovalsRoute: typeof AppApprovalsRoute
+  AppMemoryRoute: typeof AppMemoryRoute
   AppNotificationsRoute: typeof AppNotificationsRoute
   AppPipelineRoute: typeof AppPipelineRoute
   AppProfileRoute: typeof AppProfileRoute
@@ -727,6 +747,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppConversationRoute: AppConversationRouteWithChildren,
   AppAccountRoute: AppAccountRoute,
   AppApprovalsRoute: AppApprovalsRoute,
+  AppMemoryRoute: AppMemoryRoute,
   AppNotificationsRoute: AppNotificationsRoute,
   AppPipelineRoute: AppPipelineRoute,
   AppProfileRoute: AppProfileRoute,

@@ -12,6 +12,7 @@ import {
   eq,
   facts,
   memberships,
+  NEXT_DUE_KEY,
   reminders,
   sql,
   supersedeFact,
@@ -27,6 +28,7 @@ import {
   it,
   vi,
 } from "vitest"
+import { remember } from "../src/cos/memory.ts"
 import { getIndexing, getSearchPerformance } from "../src/cos/search-tools.ts"
 import {
   answerQuestion,
@@ -1127,6 +1129,28 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       })
     })
 
+    it("lowers the scheduler's guard to the due time, so the reminder fires within the minute", async () => {
+      const map = new Map([
+        [NEXT_DUE_KEY, JSON.stringify({ next: Date.now() + 9e9, scanned: 0 })],
+      ])
+      const kv = {
+        get: async (key: string) => JSON.parse(map.get(key) ?? "null"),
+        put: async (key: string, value: string) => void map.set(key, value),
+      }
+      const base = context(me)
+      const input = { title: "Ring the plumber", due_at: DUE }
+      await createReminder(
+        { ...base, env: { ...base.env, SCHEDULE: kv } as unknown as Env },
+        input,
+        crypto.randomUUID(),
+        await turnOf(me),
+        null
+      )
+      expect(JSON.parse(map.get(NEXT_DUE_KEY) as string).next).toBe(
+        Date.parse(DUE)
+      )
+    })
+
     it("never replays the owner's own reminder keyed by the bare approval id", async () => {
       const turn = await turnOf(me)
       const approval = crypto.randomUUID()
@@ -1708,6 +1732,22 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
     )
     expect(output).toEqual({
       url: "https://staging.remeai.co.uk/api/google/start",
+    })
+  })
+
+  describe("remember", () => {
+    it("saves a line of the owner's profile and answers that the write is complete", async () => {
+      const output = kept(
+        "remember",
+        await remember(
+          context(me),
+          { operations: [{ action: "add", text: "Prefers calls after 4pm" }] },
+          "",
+          await turnOf(me, ["I prefer calls after 4pm."])
+        )
+      )
+      expect(COS_TOOLS.remember.output.parse(output)).toEqual(output)
+      expect(output).toMatchObject({ outcome: "saved" })
     })
   })
 

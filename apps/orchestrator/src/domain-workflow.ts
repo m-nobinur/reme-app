@@ -246,7 +246,7 @@ export class DomainWorkflow extends WorkflowEntrypoint<Env, DomainParams> {
       }
       if (!nudged && seen.at - started >= NUDGE_AFTER_MS) {
         const message = await step.do("nudge", () =>
-          withKit(env, (kit) => nudge(kit, orgId, domainId))
+          withKit(env, (kit) => nudge(env, kit, orgId, domainId))
         )
         await say("say nudge", message)
         nudged = true

@@ -1,5 +1,9 @@
-// Aliased on import, as in ./pending.ts: a server helper, not a React hook.
-import { useSession as openSession } from "@tanstack/react-start/server"
+import {
+  clearSealed,
+  cookieName,
+  readSealed,
+  writeSealed,
+} from "./sealed-cookie"
 
 /**
  * A signup whose organisation was not written. The business name is kept,
@@ -13,31 +17,23 @@ import { useSession as openSession } from "@tanstack/react-start/server"
  */
 type OrgIntent = { userId: string; orgName: string }
 
-export const ORG_INTENT = "reme-org-intent"
+const NAME = "reme-org-intent"
+const LIFETIME_MS = 30 * 24 * 60 * 60 * 1000
 
-function config() {
-  const password = process.env.WORKOS_COOKIE_PASSWORD
-  if (!password) {
-    throw new Error("WORKOS_COOKIE_PASSWORD is not set on this Worker.")
-  }
-  return {
-    name: ORG_INTENT,
-    password,
-    maxAge: 30 * 24 * 60 * 60,
-    sessionHeader: false as const,
-  }
-}
+/** The cookie as the browser holds it, for a check that it is there at all. */
+export const orgIntentCookie = () => cookieName(NAME)
 
 export async function recordOrgIntent(intent: OrgIntent): Promise<void> {
-  const session = await openSession<OrgIntent>(config())
-  await session.update(intent)
+  await writeSealed(NAME, intent, Date.now() + LIFETIME_MS)
 }
 
 export async function readOrgIntent(): Promise<OrgIntent | null> {
-  const { userId, orgName } = (await openSession<OrgIntent>(config())).data
-  return userId && orgName ? { userId, orgName } : null
+  const sealed = await readSealed<OrgIntent>(NAME)
+  return sealed?.userId && sealed.orgName
+    ? { userId: sealed.userId, orgName: sealed.orgName }
+    : null
 }
 
 export async function clearOrgIntent(): Promise<void> {
-  await (await openSession<OrgIntent>(config())).clear()
+  clearSealed(NAME)
 }

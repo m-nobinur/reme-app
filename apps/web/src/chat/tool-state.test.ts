@@ -1,4 +1,5 @@
 import {
+  APPROVAL_EXPIRED,
   TOOL_CALL_CANCELLED as CANCELLED,
   CreateReminderOutput,
   CreateReminderRequest,
@@ -159,6 +160,26 @@ it("reads only the integrity refusal as not done; any other failure may have hap
       input: CHANGE,
     })
   }
+})
+
+it("reads a yes the api refused as too late or not matching the card as expired", () => {
+  expect(
+    change({
+      approval: { approved: true },
+      isError: true,
+      result: {
+        error: `${APPROVAL_EXPIRED}: the owner's yes on this card has expired, so nothing was done.`,
+      },
+    })
+  ).toEqual({ state: "expired", input: CHANGE })
+  // Only the line's own prefix: the words alone are not the api's line.
+  expect(
+    change({
+      approval: { approved: true },
+      isError: true,
+      result: { error: "The approval expired." },
+    })
+  ).toEqual({ state: "unconfirmed", input: CHANGE })
 })
 
 it("shows a call that succeeded as done, even when its output does not parse", () => {

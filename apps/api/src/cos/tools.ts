@@ -26,6 +26,7 @@ import {
   InformationAnswer,
   OwnerAnswerText,
   PreviewLink,
+  type ProfileLine,
   REVIEW_FACT_KEYS,
   type RecordReviewInput,
   type RecordReviewOutput,
@@ -65,9 +66,12 @@ import { failure } from "../http.ts"
 import {
   ASSISTANT_KEY_PREFIX,
   createReminder as storeReminder,
+  wakeScheduler,
 } from "../reminders.ts"
-import { readFacts, readWorkspace } from "../workspace.ts"
+import { readFacts, statusWithFacts } from "../workspace.ts"
+import type { Opening } from "./agent.ts"
 import { readSession } from "./history.ts"
+import { readProfile } from "./memory.ts"
 import { wallToUtc } from "./time.ts"
 import type { Turn } from "./turns.ts"
 
@@ -154,23 +158,43 @@ function optionsOf(requestId: string, options: string[] | null) {
 const live = sql`${domains.state} <> 'removed'`
 
 export async function getWorkspace(
-  { env, kit, owner }: ToolContext,
+  ctx: ToolContext,
   _input: Empty
 ): Promise<CosWorkspace> {
-  const status = await readWorkspace(kit, owner.orgId, env)
-  const rows = await kit.withOrg({ orgId: owner.orgId }, (db) =>
-    db
-      .select({
-        name: domains.name,
-        state: domains.state,
-        lastCheck: domains.lastCheck,
-      })
-      .from(domains)
-      .where(live)
-      .orderBy(sql`${domains.createdAt} desc`)
-      .limit(10)
+  return (await loadWorkspace(ctx)).workspace
+}
+
+/**
+ * The workspace the model reads and the facts it was read with, in one
+ * transaction: a turn's context needs both before its first token.
+ */
+export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
+  workspace: CosWorkspace
+  facts: FactRecord[]
+  /** What the owner told the CoS about themselves. */
+  profile: ProfileLine[]
+  /** The open reminders with a time, soonest first, for a conversation's first turn. */
+  reminders: Opening["reminders"]
+}> {
+  const [{ status, facts }, rows, { lines: profile }] = await kit.withOrg(
+    { orgId: owner.orgId },
+    (db) =>
+      Promise.all([
+        statusWithFacts(db, env, new Date()),
+        db
+          .select({
+            name: domains.name,
+            state: domains.state,
+            lastCheck: domains.lastCheck,
+          })
+          .from(domains)
+          .where(live)
+          .orderBy(sql`${domains.createdAt} desc`)
+          .limit(10),
+        readProfile(db),
+      ])
   )
-  return CosWorkspace.parse({
+  const workspace = CosWorkspace.parse({
     site: {
       host: status.site.host,
       live_version: status.site.live?.version ?? null,
@@ -209,6 +233,15 @@ export async function getWorkspace(
     })),
     expected_seconds: status.expected_seconds,
   })
+  return {
+    workspace,
+    facts,
+    profile,
+    reminders: status.reminders.notes
+      .filter((n) => n.due_at !== null)
+      .slice(0, 5)
+      .map((n) => ({ title: n.title, due_at: n.due_at })),
+  }
 }
 
 /**
@@ -502,7 +535,7 @@ export async function answerQuestion(
  * `createReminder` answers; a database error leaves the outcome unknown.
  */
 export async function createReminder(
-  { kit, owner }: ToolContext,
+  { env, kit, owner }: ToolContext,
   input: CreateReminderRequest,
   approvalId: string,
   turn: Turn,
@@ -535,6 +568,7 @@ export async function createReminder(
     })
   }
   if (made instanceof Response) return refused(made)
+  await wakeScheduler(env, made)
   return { outcome: "created", due_at: made.due_at }
 }
 

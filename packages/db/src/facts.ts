@@ -1,3 +1,4 @@
+import { PRIVATE_FACT_KEYS } from "@workspace/contracts"
 import { eq, sql } from "drizzle-orm"
 import { facts } from "./schema.ts"
 import type { OrgScopedDb } from "./tenancy.ts"
@@ -10,19 +11,38 @@ import type { OrgScopedDb } from "./tenancy.ts"
  * `facts_one_current_per_key` index catches a breach, it does not replace
  * this function (architect ruling, builder track N3).
  */
-export async function supersedeFact(
-  db: OrgScopedDb,
-  input: {
-    orgId: string
-    key: string
-    factType: string
-    value: unknown
-    provenance: {
-      source: "owner_stated" | "document" | "integration" | "inferred"
-      confidence: number
-      verifiedByStaffId?: string | null
-    }
+export async function supersedeFact(db: OrgScopedDb, input: FactInput) {
+  // A Developer question can name any field, so no business writer may reach
+  // the owner's memory by key.
+  if (PRIVATE_FACT_KEYS.includes(input.key)) {
+    throw new Error(`fact.private_key: ${input.key} is not a business fact`)
   }
+  return writeVersion(db, input)
+}
+
+/** The same write for the owner's memory (`PRIVATE_FACT_KEYS`), which only the memory module calls. */
+export async function supersedePrivateFact(db: OrgScopedDb, input: FactInput) {
+  if (!PRIVATE_FACT_KEYS.includes(input.key)) {
+    throw new Error(`fact.not_private_key: ${input.key} is a business fact`)
+  }
+  return writeVersion(db, input)
+}
+
+type FactInput = {
+  orgId: string
+  key: string
+  factType: string
+  value: unknown
+  provenance: {
+    source: "owner_stated" | "document" | "integration" | "inferred"
+    confidence: number
+    verifiedByStaffId?: string | null
+  }
+}
+
+async function writeVersion(
+  db: OrgScopedDb,
+  input: FactInput
 ): Promise<{
   factId: string
   version: number
@@ -77,11 +97,40 @@ export async function supersedeFact(
   }
 }
 
-/** The org's current facts, one row per key, in key order. */
+/**
+ * The org's current business facts, one row per key, in key order. The
+ * Chief of Staff's memory of the owner (`PRIVATE_FACT_KEYS`) is left out
+ * here, so no snapshot, tool or page built from this reads it by accident;
+ * `currentFact` reads one on purpose.
+ */
 export function currentFacts(db: OrgScopedDb) {
   return db
     .select()
     .from(facts)
-    .where(sql`${facts.validTo} is null`)
+    .where(
+      sql`${facts.validTo} is null and ${facts.key} not in (${sql.join(
+        PRIVATE_FACT_KEYS.map((key) => sql`${key}`),
+        sql`, `
+      )})`
+    )
     .orderBy(facts.key)
+}
+
+/** The current row of one key, or undefined. */
+export async function currentFact(db: OrgScopedDb, key: string) {
+  const [row] = await db
+    .select()
+    .from(facts)
+    .where(sql`${facts.key} = ${key} and ${facts.validTo} is null`)
+  return row
+}
+
+/** One key's versions, newest first. */
+export function factVersions(db: OrgScopedDb, key: string, limit: number) {
+  return db
+    .select()
+    .from(facts)
+    .where(eq(facts.key, key))
+    .orderBy(sql`${facts.version} desc`)
+    .limit(limit)
 }

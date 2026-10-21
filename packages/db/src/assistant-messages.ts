@@ -11,9 +11,18 @@ import type { OrgScopedDb, Tenancy } from "./tenancy.ts"
  */
 export type Posted = "posted" | "exists" | "busy" | "waiting" | "none"
 
+const digest = (key: string) =>
+  createHash("sha256").update(key).digest("hex").slice(0, 40)
+
 /** The message id a key posts under: stable, so a retry finds the first post. */
-export const serverMessageId = (key: string) =>
-  `srv_${createHash("sha256").update(key).digest("hex").slice(0, 40)}`
+export const serverMessageId = (key: string) => `srv_${digest(key)}`
+
+/**
+ * The id of an owner's emailed reply. The prefix is what marks a row as
+ * having come by email: `apps/api/src/chat.ts` reads it to log the row to the
+ * CoS, and nothing that approves a card reads a row with it.
+ */
+export const emailMessageId = (key: string) => `eml_${digest(key)}`
 
 /**
  * A message the assistant posts on its own, with no owner turn, in the
@@ -25,6 +34,9 @@ export const serverMessageId = (key: string) =>
  * message only, and while the onboarding script still runs there, because
  * the script reads that conversation's cards.
  *
+ * `conversationId` names the conversation instead (a reminder goes to the
+ * one it was set in), archived or not; one the org does not have is `none`.
+ *
  * Not written to the CoS session log here: `cos.message` belongs to a turn,
  * so apps/api/src/chat.ts logs this row on the owner's next typed turn.
  */
@@ -34,12 +46,77 @@ export async function postAssistantMessage(
     orgId,
     key,
     message,
-  }: { orgId: string; key: string; message: Omit<ServerMessage, "id"> }
+    conversationId,
+  }: {
+    orgId: string
+    key: string
+    message: Omit<ServerMessage, "id">
+    conversationId?: string
+  }
 ): Promise<Posted> {
   const { id, text, button } = ServerMessage.parse({
     ...message,
     id: serverMessageId(key),
   })
+  return post(kit, {
+    orgId,
+    id,
+    conversationId,
+    role: "assistant",
+    parts: [
+      { type: "step-start" },
+      ...text.map((words) => ({ type: "text", text: words, state: "done" })),
+      ...(button ? [{ type: "data-button", data: button }] : []),
+    ],
+  })
+}
+
+/**
+ * An owner's emailed reply, stored as the owner's message in the conversation
+ * the reply token named, under the same gates as an assistant post: it never
+ * lands inside a turn, nor after a card or approval the owner has not
+ * answered (it would stop being the last message, and the chat answers cards
+ * on the last message only), nor before the onboarding script has ended. So
+ * an emailed "yes" can never answer a card, and one sent while a card is open
+ * is `waiting` and stored nowhere. `key` is the mail's Message-ID, so
+ * redelivery is `exists`.
+ *
+ * The caller has already checked who sent it. Logged to the CoS by the owner's
+ * next typed turn, with the taint of any owner message.
+ */
+export const postOwnerEmail = (
+  kit: Tenancy,
+  {
+    orgId,
+    conversationId,
+    key,
+    text,
+  }: { orgId: string; conversationId: string; key: string; text: string }
+): Promise<Posted> =>
+  post(kit, {
+    orgId,
+    id: emailMessageId(key),
+    conversationId,
+    role: "user",
+    parts: [{ type: "text", text }],
+  })
+
+async function post(
+  kit: Tenancy,
+  {
+    orgId,
+    id,
+    conversationId,
+    role,
+    parts,
+  }: {
+    orgId: string
+    id: string
+    conversationId?: string
+    role: "assistant" | "user"
+    parts: Record<string, unknown>[]
+  }
+): Promise<Posted> {
   return kit.withOrg({ orgId }, async (db) => {
     // shortcut: no index on the id alone, so this filters the org's rows;
     // posts are a few per domain, add one if they grow common.
@@ -48,8 +125,10 @@ export async function postAssistantMessage(
     )
     if (posted) return "exists"
     const [target] = await db.execute<{ id: string; kind: string }>(
-      sql`select id, kind from ${conversations} where archived_at is null
-        order by updated_at desc limit 1`
+      conversationId
+        ? sql`select id, kind from ${conversations} where id = ${conversationId}`
+        : sql`select id, kind from ${conversations} where archived_at is null
+          order by updated_at desc limit 1`
     )
     if (!target) return "none"
     const [turn] = await db.execute<{ locked: boolean }>(
@@ -87,18 +166,7 @@ export async function postAssistantMessage(
       orgId,
       parentId: tail?.id ?? null,
       format: "ai-sdk/v6",
-      content: {
-        role: "assistant",
-        parts: [
-          { type: "step-start" },
-          ...text.map((words) => ({
-            type: "text",
-            text: words,
-            state: "done",
-          })),
-          ...(button ? [{ type: "data-button", data: button }] : []),
-        ],
-      },
+      content: { role, parts },
     })
     await db.execute(
       sql`update ${conversations} set updated_at = now() where id = ${target.id}`

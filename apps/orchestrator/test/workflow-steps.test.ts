@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs"
+import { URL } from "node:url"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { UPTIME_CRON } from "../src/uptime.ts"
 import steps from "./workflow-steps.json" with { type: "json" }
@@ -23,9 +24,10 @@ vi.mock("cloudflare:workers", () => ({
 vi.mock("cloudflare:workflows", () => ({
   NonRetryableError: class NonRetryableError extends Error {},
 }))
-vi.mock("@cloudflare/sandbox", () => ({
-  Sandbox: class {},
-  ContainerProxy: class {},
+vi.mock("../src/container.ts", () => ({
+  RemeSandbox: class {},
+  SandboxEgress: class {},
+  SandboxPool: class {},
 }))
 vi.mock("../src/agents/developer.ts", () => ({ Developer: {} }))
 // The publisher's step bodies are driven for real, against a database, in
@@ -315,6 +317,11 @@ vi.mock("../src/critic.ts", () => ({
   }),
   repairMessage: (fixes: unknown[]) => JSON.stringify({ fixes }),
 }))
+// The outbox look is driven in deliveries.test.ts; here it is only a step.
+vi.mock("../src/deliveries.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/deliveries.ts")>()),
+  redriveDeliveries: async () => 0,
+}))
 const sweepFailures = new Set<string>()
 vi.mock("../src/retention.ts", () => ({
   retireOthers: async () => [],
@@ -335,18 +342,9 @@ vi.mock("../src/domain-flow.ts", async (importOriginal) => ({
     orgId === "org-1" ? [{ key: `dom-1:sweep:${hour}`, text: "moved" }] : [],
   postStatus: async () => undefined,
 }))
-// The Monday look finds one message for org-1; its post is a step of its own.
 vi.mock("../src/search-sync.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/search-sync.ts")>()),
   startDueSyncs: async () => 0,
-  weeklyFor: async (_kit: unknown, orgId: string, now: Date) =>
-    orgId === "org-1"
-      ? {
-          key: `search-weekly-org-1-${(await import("../src/search-sync.ts")).isoWeek(now)}`,
-          message: { text: ["Search this week"] },
-        }
-      : null,
-  postWeekly: async () => undefined,
 }))
 vi.mock("../src/validate.ts", () => ({
   assignmentFacts: async () => [],
@@ -371,6 +369,25 @@ vi.mock("../src/validate.ts", () => ({
       : { outcome, report_id: "r", failed: [] }
   },
 }))
+// The minute's scan and the jobs consumer are driven in schedule.test.ts and
+// jobs.test.ts; here only which firing and which queue reach them.
+const scheduler = vi.hoisted(() => ({ scans: 0, batches: [] as string[] }))
+vi.mock("../src/schedule.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/schedule.ts")>()),
+  scanDue: async () => {
+    scheduler.scans++
+    return null
+  },
+}))
+vi.mock("../src/jobs.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/jobs.ts")>()),
+  jobsBatch: async (batch: MessageBatch) => {
+    scheduler.batches.push(batch.queue)
+  },
+}))
+const { SCHEDULE_CRON } = await import("../src/schedule.ts")
+const { JOBS_QUEUES } = await import("../src/jobs.ts")
+const { DELIVERIES_QUEUES } = await import("../src/deliveries.ts")
 
 const {
   AssignmentWorkflow,
@@ -1086,10 +1103,9 @@ describe("the sweep Workflow's step names", () => {
     expect(daily.totals.orgs).toBe(51)
   })
 
-  it("sends the weekly search message on Monday at 07 UTC, each post a step of its own", async () => {
+  it("sends no search message of its own on Monday: the heartbeat says it", async () => {
     const monday = await sweep(51, [], "2026092107")
-    expect(monday.names).toEqual(steps.SweepWorkflow["weekly search"])
-    expect((await sweep(51, [], "2026092207")).names).not.toContain("weekly 1")
+    expect(monday.names).toEqual(steps.SweepWorkflow["two chunks"])
   })
 
   it("names the hour the way the cron does", () => {
@@ -1158,6 +1174,20 @@ describe("the scheduled handler", () => {
     )
     expect(created).not.toHaveBeenCalled()
     expect(fetched).not.toHaveBeenCalled()
+    expect(scheduler.scans).toBe(0)
+  })
+
+  it("scans for due jobs every minute, and only then", async () => {
+    scheduler.scans = 0
+    const { created, fetched } = await fire(
+      "* * * * *",
+      "https://api.example.invalid/health"
+    )
+    expect(scheduler.scans).toBe(1)
+    expect(created).not.toHaveBeenCalled()
+    expect(fetched).not.toHaveBeenCalled()
+    await fire("0 * * * *")
+    expect(scheduler.scans).toBe(1)
   })
 
   it("schedules exactly the crons the handler matches", () => {
@@ -1166,7 +1196,40 @@ describe("the scheduled handler", () => {
       (m) => JSON.parse(m[1] ?? "[]") as string[]
     )
     const jobs = [...new Set([SWEEP_CRON, UPTIME_CRON])]
-    expect(crons).toEqual([[SWEEP_CRON], jobs])
+    expect(crons).toEqual([
+      [SWEEP_CRON, SCHEDULE_CRON],
+      [...jobs, SCHEDULE_CRON],
+    ])
+  })
+})
+
+describe("the queue handler", () => {
+  const batch = (queue: string) =>
+    ({ queue, messages: [] }) as unknown as MessageBatch
+
+  it("hands the jobs queue's batches to the jobs consumer in both environments", async () => {
+    scheduler.batches.length = 0
+    for (const queue of JOBS_QUEUES) await worker.queue(batch(queue), {} as Env)
+    expect(scheduler.batches).toEqual(JOBS_QUEUES)
+  })
+
+  it("acks nothing from a queue it does not consume", async () => {
+    await expect(
+      worker.queue(batch("reme-jobs-dlq"), {} as Env)
+    ).rejects.toThrow("no consumer")
+  })
+
+  it("consumes exactly the queues the config names", () => {
+    const config = readFileSync(
+      new URL("../wrangler.jsonc", import.meta.url),
+      "utf8"
+    )
+    const consumed = [
+      ...config.matchAll(/\{\s*"queue": "([^"]+)",\s*"max_retries"/g),
+    ].map((m) => m[1])
+    expect([...consumed].sort()).toEqual(
+      [...JOBS_QUEUES, ...DELIVERIES_QUEUES].sort()
+    )
   })
 })
 
