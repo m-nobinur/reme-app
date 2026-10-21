@@ -1,6 +1,7 @@
 import { tenancy } from "@workspace/db"
 import { LIMITS, openrouterModel } from "./cos/agent.ts"
 import { COMPACTION, compactAfterTurn } from "./cos/compaction.ts"
+import { REFLECTION, reflectAfterTurn } from "./cos/reflection.ts"
 import { GRACE_MS, SessionBusy } from "./cos/turns.ts"
 
 /** What a closed turn tells the queue: ids only, never text. */
@@ -10,6 +11,8 @@ export type AfterTurn = {
   staffId: string
   sessionId: string
   turnId: string
+  /** The copy sent to arrive after the conversation has been quiet, for reflection only. */
+  idle?: boolean
 }
 
 /**
@@ -21,13 +24,19 @@ export async function enqueueAfterTurn(
   env: Env,
   turn: AfterTurn
 ): Promise<void> {
+  const body = {
+    orgId: turn.orgId,
+    staffId: turn.staffId,
+    sessionId: turn.sessionId,
+    turnId: turn.turnId,
+  }
   try {
-    await env.AFTER_TURN.send({
-      orgId: turn.orgId,
-      staffId: turn.staffId,
-      sessionId: turn.sessionId,
-      turnId: turn.turnId,
-    })
+    await env.AFTER_TURN.send(body)
+    // Reflection also looks once the owner has been quiet for a while.
+    await env.AFTER_TURN.send(
+      { ...body, idle: true },
+      { delaySeconds: REFLECTION.idleSeconds }
+    )
   } catch (error) {
     console.error(
       JSON.stringify({
@@ -40,7 +49,7 @@ export async function enqueueAfterTurn(
 }
 
 /**
- * The work after each closed turn: compaction for now. A message whose job
+ * The work after each closed turn: compaction, then reflection. A message whose job
  * threw is retried, after a newer turn's longest life when it is open, then
  * goes to the dead-letter queue.
  */
@@ -55,7 +64,8 @@ export async function afterTurnBatch(
   try {
     for (const message of batch.messages) {
       try {
-        await compactAfterTurn(kit, model, message.body)
+        if (!message.body.idle) await compactAfterTurn(kit, model, message.body)
+        await reflectAfterTurn(kit, model, message.body)
         message.ack()
       } catch (error) {
         console.error(

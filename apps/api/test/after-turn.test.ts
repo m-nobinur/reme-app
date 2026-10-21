@@ -10,7 +10,7 @@ const turn = {
 }
 
 describe("enqueueAfterTurn", () => {
-  it("sends the four ids and nothing else", async () => {
+  it("sends the four ids and nothing else, then the idle copy after twenty minutes", async () => {
     const send = vi.fn().mockResolvedValue(undefined)
     // A turn carries more than ids; only the ids may leave.
     await enqueueAfterTurn(
@@ -20,7 +20,10 @@ describe("enqueueAfterTurn", () => {
         text: "private",
       } as typeof turn
     )
-    expect(send).toHaveBeenCalledExactlyOnceWith(turn)
+    expect(send.mock.calls).toEqual([
+      [turn],
+      [{ ...turn, idle: true }, { delaySeconds: 1200 }],
+    ])
   })
 
   it("logs a failed send and does not throw", async () => {
