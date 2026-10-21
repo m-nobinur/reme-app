@@ -34,6 +34,7 @@ import {
   DomainPurchaseProvider,
 } from "@workspace/ui/components/assistant/buy-domain"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
+import { MemoryChipUI } from "@workspace/ui/components/assistant/memory-chip"
 import { ServerButtonUI } from "@workspace/ui/components/assistant/server-button"
 import { SiteReady } from "@workspace/ui/components/assistant/site-ready"
 import {
@@ -1582,6 +1583,38 @@ const CONNECT_GOOGLE_STATES: ThreadMessageLike[] = [
   }),
 ]
 
+/** A reply that opens with what the assistant remembered since the owner last looked. */
+const REMEMBERED: ThreadMessageLike[] = [
+  ask("Thanks, that is all."),
+  {
+    content: [
+      {
+        type: "data",
+        name: "memory",
+        data: {
+          version: 4,
+          changes: [
+            {
+              kind: "added",
+              text: "Prefers calls after 4pm",
+              source: "owner_said",
+            },
+            {
+              kind: "changed",
+              text: "Quotes go out on Fridays",
+              source: "reflection",
+            },
+            { kind: "removed", text: "Away in August", source: "owner_said" },
+          ],
+        },
+      },
+      { text: "Any time.", type: "text" },
+    ],
+    role: "assistant",
+    status: DONE,
+  },
+]
+
 /** Messages the assistant posted on its own, each with the button it can carry. */
 const POSTED: ThreadMessageLike[] = [
   ask("Is my domain connected?"),
@@ -2408,6 +2441,14 @@ const assistantCatalog = [
     render: () => (
       <FixtureThread height="h-[34rem]" messages={POSTED}>
         <ServerButtonUI />
+      </FixtureThread>
+    ),
+  },
+  {
+    name: "MemoryChipUI",
+    render: () => (
+      <FixtureThread height="h-[24rem]" messages={REMEMBERED}>
+        <MemoryChipUI />
       </FixtureThread>
     ),
   },

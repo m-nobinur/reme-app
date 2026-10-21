@@ -33,6 +33,7 @@ import {
 } from "@phosphor-icons/react"
 import { OWNER_CARDS } from "@workspace/ui/components/assistant/approval"
 import { TraySlotProvider } from "@workspace/ui/components/assistant/ask-design"
+import { COS_QUIET } from "@workspace/ui/components/assistant/cos-tools"
 import { MarkdownText } from "@workspace/ui/components/assistant/markdown-text"
 import {
   ReasoningGroup as DefaultReasoningGroup,
@@ -192,7 +193,8 @@ const groupThreadParts = (part: PartState, context?: GroupByContext) =>
   part.type === "tool-call" &&
   (part.approval != null ||
     part.status?.type === "requires-action" ||
-    Object.hasOwn(OWNER_CARDS, part.toolName))
+    Object.hasOwn(OWNER_CARDS, part.toolName) ||
+    Object.hasOwn(COS_QUIET, part.toolName))
     ? UNGROUPED
     : groupByType(part, context)
 

@@ -104,8 +104,8 @@ describe("the owner's own words", () => {
     ["Prefers calls before 4pm", false],
     ["Prices are free", false],
     ["Does not take calls after 4pm", false],
-  ])("%s: %s", (line, want) => {
-    expect(inOwnersWords(line, said)).toBe(want)
+  ])("%s: %s", (text, want) => {
+    expect(inOwnersWords(text, said)).toBe(want)
   })
 
   it("refuses a batch with a line the owner did not say, and the profile is untouched", () => {
@@ -483,9 +483,9 @@ describe.skipIf(!url)("the profile, on a live connection", () => {
   })
 
   it("lets only the memory module write the owner's memory keys", async () => {
-    const write = (key: string, write: typeof supersedeFact) =>
+    const attempt = (key: string, writer: typeof supersedeFact) =>
       kit.withOrg({ orgId: me.orgId }, (db) =>
-        write(db, {
+        writer(db, {
           orgId: me.orgId,
           key,
           factType: "owner",
@@ -493,12 +493,12 @@ describe.skipIf(!url)("the profile, on a live connection", () => {
           provenance: { source: "owner_stated", confidence: 1 },
         })
       )
-    await expect(write(OWNER_PROFILE_KEY, supersedeFact)).rejects.toThrow(
+    await expect(attempt(OWNER_PROFILE_KEY, supersedeFact)).rejects.toThrow(
       "fact.private_key"
     )
-    await expect(write("business.name", supersedePrivateFact)).rejects.toThrow(
-      "fact.not_private_key"
-    )
+    await expect(
+      attempt("business.name", supersedePrivateFact)
+    ).rejects.toThrow("fact.not_private_key")
   })
 
   it("stays out of every reader of the business's facts", async () => {

@@ -7,6 +7,8 @@ import {
   DomainName,
   type DomainPurchaseStatus,
   GOAL_MAX,
+  MemoryUndo,
+  type MemoryView,
   MessageFeedback,
   PushSubscribeRequest,
   RegistrantDetails,
@@ -335,6 +337,19 @@ export const completeReminder = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<WriteOutcome> => {
     return await source.completeReminder(data.id)
   })
+
+/** What the Chief of Staff remembers of the owner. */
+export const getMemory = createServerFn({ method: "GET" }).handler(
+  async (): Promise<MemoryView | null> => await source.memory()
+)
+
+/** One remembered change taken back; "stale" when nothing is left of it to undo. */
+export const undoMemory = createServerFn({ method: "POST" })
+  .validator((input: unknown) => MemoryUndo.parse(record(input)))
+  .handler(
+    async ({ data }): Promise<MemoryView | "stale" | null> =>
+      await source.undoMemory(data.version)
+  )
 
 /** The key a browser subscribes to push with; null where push is off. */
 export const getPushKey = createServerFn({ method: "GET" }).handler(

@@ -16,6 +16,7 @@ import { SaveDesignAnswerProvider } from "@workspace/ui/components/assistant/ask
 import { UploadPhotosProvider } from "@workspace/ui/components/assistant/ask-upload"
 import { DomainPurchaseProvider } from "@workspace/ui/components/assistant/buy-domain"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
+import { MemoryChipUI } from "@workspace/ui/components/assistant/memory-chip"
 import { ServerButtonUI } from "@workspace/ui/components/assistant/server-button"
 import {
   OWNER_QUICK_ACTIONS,
@@ -184,6 +185,7 @@ export function ChatPage() {
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <ServerButtonUI />
+      <MemoryChipUI />
       {/* The shell's main scrolls; the thread owns its own scroll instead. */}
       <div className="h-full">
         {missing ? (

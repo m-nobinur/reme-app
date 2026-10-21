@@ -14,6 +14,7 @@ import type {
   DomainPurchaseStatus,
   FactRecord,
   FactValueKey,
+  MemoryView,
   MessageFeedback,
   PushSubscribeRequest,
   RegistrantDetails,
@@ -247,6 +248,13 @@ export type OwnerDataSource = {
   pipeline: () => Promise<PipelineItem[]>
   /** Null where the session has no organisation, the same as `org()`. */
   profile: () => Promise<BusinessProfile | null>
+  /** What the Chief of Staff remembers of the owner, or null where the session has no organisation. */
+  memory: () => Promise<MemoryView | null>
+  /**
+   * Undoes one remembered change. "stale" when it was already undone or
+   * edited since, so nothing is left to undo.
+   */
+  undoMemory: (version: number) => Promise<MemoryView | "stale" | null>
   /** Reports and alerts from the last 30 days, newest first as listed. */
   activity: () => Promise<AttentionItem[]>
   /**

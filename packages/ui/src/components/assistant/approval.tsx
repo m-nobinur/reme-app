@@ -16,6 +16,7 @@ import { AskUpload } from "@workspace/ui/components/assistant/ask-upload"
 import { ReviewBlueprint } from "@workspace/ui/components/assistant/blueprint-card"
 import {
   COS_CARDS,
+  COS_QUIET,
   COS_READS,
 } from "@workspace/ui/components/assistant/cos-tools"
 import { RequestChange } from "@workspace/ui/components/assistant/request-change"
@@ -164,7 +165,9 @@ const Approval: ToolCallMessagePartComponent = (props) => {
     ? OWNER_CARDS[toolName]
     : Object.hasOwn(COS_READS, toolName)
       ? COS_READS[toolName]
-      : undefined
+      : Object.hasOwn(COS_QUIET, toolName)
+        ? COS_QUIET[toolName]
+        : undefined
   if (Owned) return <Owned {...props} />
 
   // Only a real approval gate takes the card. A tool paused on an interrupt has
