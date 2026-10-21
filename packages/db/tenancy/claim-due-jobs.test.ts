@@ -89,19 +89,30 @@ describe("claim_due_jobs", () => {
     try {
       for (let round = 0; round < 15; round++) {
         const mine = await seedJobs(4)
-        const [a, b] = await Promise.all([
-          claimDueJobs(first, 50),
-          claimDueJobs(second, 50),
-        ])
         const ours = idsOf(mine)
-        const gotA = a.filter((row) => ours.has(row.jobId))
-        const gotB = b.filter((row) => ours.has(row.jobId))
+        const gotA: { jobId: string; orgId: string }[] = []
+        const gotB: { jobId: string; orgId: string }[] = []
+        // The claim crosses every org, and on a shared database other suites
+        // leave due jobs too, so a pair of calls may fill up on theirs: claim
+        // in concurrent pairs until every one of ours has gone to somebody.
+        for (let pair = 0; pair < 20; pair++) {
+          const [a, b] = await Promise.all([
+            claimDueJobs(first, 50),
+            claimDueJobs(second, 50),
+          ])
+          gotA.push(...a.filter((row) => ours.has(row.jobId)))
+          gotB.push(...b.filter((row) => ours.has(row.jobId)))
+          if (gotA.length + gotB.length >= mine.length) break
+        }
         const twice = gotA.filter((row) =>
           gotB.some((other) => other.jobId === row.jobId)
         )
         expect(twice, `round ${round}: claimed by both callers`).toEqual([])
-        // Every job went to somebody, and came back under its own org.
+        // Every job went to exactly one caller, under its own org.
         expect(gotA.length + gotB.length).toBe(mine.length)
+        expect(new Set([...gotA, ...gotB].map((row) => row.jobId)).size).toBe(
+          mine.length
+        )
         for (const row of [...gotA, ...gotB]) {
           expect(mine.find((job) => job.id === row.jobId)?.orgId).toBe(
             row.orgId
