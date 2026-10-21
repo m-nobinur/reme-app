@@ -1,4 +1,8 @@
-import type { Proactivity } from "@workspace/contracts"
+import {
+  OwnerProfile,
+  type Proactivity,
+  profileText,
+} from "@workspace/contracts"
 import {
   approvals,
   conversationMessages,
@@ -281,12 +285,11 @@ async function ownerProfile(db: OrgScopedDb): Promise<string | null> {
     .from(facts)
     .where(sql`${facts.key} = 'owner.profile' and ${facts.validTo} is null`)
   if (!row) return null
-  const value = row.value as { text?: unknown } | string
-  return typeof value === "string"
-    ? value
-    : typeof value.text === "string"
-      ? value.text
-      : JSON.stringify(value)
+  // The lines only: never ids or sources, and nothing when the value does not parse.
+  const parsed = OwnerProfile.safeParse(row.value)
+  return parsed.success && parsed.data.lines.length > 0
+    ? profileText(parsed.data.lines)
+    : null
 }
 
 /** The last heartbeat the owner was shown, for the writer's continuity. */
