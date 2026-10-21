@@ -9,10 +9,10 @@ allowBuilds:
   workerd: true
 overrides:
   # Each lifts only the vulnerable range to its lowest fixed version. Drop an entry once its parent requires the fix.
-  # OAuth client could send credentials to an authorization server it should not trust. Flue pins 2.0.0.
-  '@modelcontextprotocol/client@>=2.0.0 <2.2.0': 2.2.0
-  # Same advisory, reached through @google/genai.
-  '@modelcontextprotocol/sdk@>=1.12.0 <1.31.0': 1.31.0
+  # OAuth credentials sent to an untrusted authorization server, then the HTTP transports' advisory. Flue pins 2.0.0.
+  '@modelcontextprotocol/client@>=2.0.0 <2.3.0': 2.3.0
+  # That advisory, then unscoped tasks and memory exhaustion in validation, reached through @google/genai.
+  '@modelcontextprotocol/sdk@>=1.3.0 <1.32.0': 1.32.0
   # maxTotalMergeKeys does not limit CPU use for empty merge sources.
   'js-yaml@>=4.0.0 <4.3.2': 4.3.2
   # Authority injection, host confusion and inconsistent host case normalization.
