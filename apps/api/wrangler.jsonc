@@ -89,10 +89,11 @@
     "SITE_HOST_SUFFIX": "-stg.remeai.co.uk",
     // Where Checkout sends an owner back after a redirect-based payment.
     "WEB_ORIGIN": "https://staging.remeai.co.uk",
-    // The domain an owner's emailed reply is addressed to (src/inbound-email.ts).
-    // The apex `remeai.co.uk` instead if Email Routing cannot route plus
-    // addresses on the subdomain; the orchestrator carries the same value.
-    "REPLY_DOMAIN": "reply.remeai.co.uk"
+    // The base address an owner's emailed reply goes to (src/inbound-email.ts),
+    // its own per environment because one routing rule reaches one Worker. A
+    // short name on the apex (`rstg@remeai.co.uk`) if Email Routing cannot
+    // route plus addresses on the subdomain; the orchestrator holds the same.
+    "REPLY_MAILBOX": "reply@reply-stg.remeai.co.uk"
   },
   // The orchestrator's site bucket. The api writes only the owner's photos,
   // under `uploads/{org_id}/{asset_id}`, and the orchestrator copies them into
@@ -175,7 +176,7 @@
       "vars": {
         "SITE_HOST_SUFFIX": ".remeai.co.uk",
         "WEB_ORIGIN": "https://preview.remeai.co.uk",
-        "REPLY_DOMAIN": "reply.remeai.co.uk"
+        "REPLY_MAILBOX": "reply@reply.remeai.co.uk"
       },
       "images": { "binding": "IMAGES" },
       "r2_buckets": [

@@ -65,6 +65,34 @@ export async function replyToken(
   return toBase64Url(Uint8Array.from([...ids, ...(await mac(key, ids))]))
 }
 
+/**
+ * `mailbox` is the environment's base address, `reply@reply.remeai.co.uk` in
+ * production. Each environment needs its own, because one routing rule sends
+ * an address to one Worker. Its local part is at most 7 characters, so it,
+ * the `+` and the 56-character token fit a 64-character local part.
+ */
+export function replyAddress(mailbox: string, token: string): string {
+  const at = mailbox.indexOf("@")
+  if (at < 1 || at > 7)
+    throw new Error(
+      "A reply mailbox is a local part of 1 to 7 characters and a domain."
+    )
+  return `${mailbox.slice(0, at)}+${token}${mailbox.slice(at)}`
+}
+
+/** The token in `<local>+<token>@<domain>` for this mailbox, or null for any other address. */
+export function tokenFromAddress(mailbox: string, to: string): string | null {
+  const at = mailbox.indexOf("@")
+  const prefix = `${mailbox.slice(0, at)}+`.toLowerCase()
+  const domain = mailbox.slice(at + 1).toLowerCase()
+  const split = to.lastIndexOf("@")
+  if (split < 0 || to.slice(split + 1).toLowerCase() !== domain) return null
+  const local = to.slice(0, split)
+  return local.toLowerCase().startsWith(prefix)
+    ? local.slice(prefix.length)
+    : null
+}
+
 /** The pair a token names, or null when it is not one we issued under `key`. */
 export async function readReplyToken(
   key: string,

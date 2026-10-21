@@ -74,7 +74,7 @@ function stubs() {
       DELIVERIES: queue as unknown as Queue<DeliveryMessage>,
       OWNER_MAIL: { send: vi.fn() } as unknown as SendEmail,
       APP_ORIGIN: "https://app.example.invalid",
-      REPLY_DOMAIN: "reply.example.invalid",
+      REPLY_MAILBOX: "reply@reply.example.invalid",
       HYPERDRIVE: {} as Hyperdrive,
       VAPID_PRIVATE_KEY: vapidKey,
       VAPID_SUBJECT: "mailto:ops@example.invalid",

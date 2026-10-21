@@ -152,6 +152,11 @@ asks for sign-in, and to the notification settings.
 
 **Email in is Email Routing to an Email Worker on `reply.remeai.co.uk`.** Every outbound email
 sets `Reply-To: reply+<token>@reply.remeai.co.uk`; plus addressing routes every token to one rule.
+Each environment has its own base address (`REPLY_MAILBOX`: production `reply@reply.remeai.co.uk`,
+staging `reply@reply-stg.remeai.co.uk`), because one routing rule sends an address to one Worker.
+Its local part is at most 7 characters, so it, the `+` and the 56-character token fit the
+64-character limit; if subaddressing does not route on a subdomain, short names on the apex
+(`reply@`, `rstg@`) work with no code change.
 The token is HMAC-signed and bound to one org and one conversation. The Worker's `email()` handler
 parses MIME with `postal-mime` 4.0.11, drops mail without an SPF or DKIM pass aligned with the
 sender's DMARC, drops a sender that is not an owner of that org, strips quoted history, caps the

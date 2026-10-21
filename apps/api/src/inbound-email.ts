@@ -1,4 +1,4 @@
-import { readReplyToken } from "@workspace/contracts"
+import { readReplyToken, tokenFromAddress } from "@workspace/contracts"
 import {
   eq,
   logFailure,
@@ -167,18 +167,8 @@ const OPEN_REME = "Reme could not take this reply. Open Reme to continue."
 type InboundEnv = {
   HYPERDRIVE: Hyperdrive
   REPLY_TOKEN_KEY: string
-  /** Where replies are addressed: `reply.remeai.co.uk`, or the apex when the rule sits there. */
-  REPLY_DOMAIN: string
-}
-
-/** The token in `reply+<token>@<REPLY_DOMAIN>`, or null for any other address. */
-function tokenOf(to: string, domain: string): string | null {
-  const at = to.lastIndexOf("@")
-  const local = to.slice(0, at)
-  if (at < 0 || to.slice(at + 1).toLowerCase() !== domain.toLowerCase()) {
-    return null
-  }
-  return local.startsWith("reply+") ? local.slice("reply+".length) : null
+  /** This environment's base reply address; see `replyAddress` in the contracts. */
+  REPLY_MAILBOX: string
 }
 
 /**
@@ -203,7 +193,7 @@ export async function receive(
     done("refused", reason)
   }
   try {
-    const token = tokenOf(message.to, env.REPLY_DOMAIN)
+    const token = tokenFromAddress(env.REPLY_MAILBOX, message.to)
     if (!token) return refuse({ reason: "address" })
     const named = await readReplyToken(env.REPLY_TOKEN_KEY, token)
     if (!named) return refuse({ reason: "token" })

@@ -1,5 +1,39 @@
 import { describe, expect, it } from "vitest"
-import { readReplyToken, replyToken } from "../src/reply-token.ts"
+import {
+  readReplyToken,
+  replyAddress,
+  replyToken,
+  tokenFromAddress,
+} from "../src/reply-token.ts"
+
+describe("reply address", () => {
+  const prod = "reply@reply.remeai.co.uk"
+  const staging = "reply@reply-stg.remeai.co.uk"
+  const token = `${"aB-_".repeat(14)}`
+
+  it("carries the token in the local part and reads it back with its case", () => {
+    const address = replyAddress(prod, token)
+    expect(address).toBe(`reply+${token}@reply.remeai.co.uk`)
+    expect(address.split("@")[0]?.length).toBeLessThanOrEqual(64)
+    expect(tokenFromAddress(prod, address)).toBe(token)
+  })
+
+  it("is read only by the mailbox of its own environment", () => {
+    expect(tokenFromAddress(staging, replyAddress(prod, token))).toBeNull()
+    expect(tokenFromAddress(prod, replyAddress(staging, token))).toBeNull()
+  })
+
+  it("refuses an address that is not a reply to this mailbox", () => {
+    expect(tokenFromAddress(prod, "owner@reply.remeai.co.uk")).toBeNull()
+    expect(tokenFromAddress(prod, `reply+${token}@remeai.co.uk`)).toBeNull()
+    expect(tokenFromAddress(prod, "not-an-address")).toBeNull()
+  })
+
+  it("refuses a base name too long to leave room for the token", () => {
+    expect(() => replyAddress("replies@remeai.co.uk", token)).not.toThrow()
+    expect(() => replyAddress("replyto1@remeai.co.uk", token)).toThrow()
+  })
+})
 
 const KEY = "k".repeat(32)
 const org = "0190a1b2-c3d4-7e5f-8a6b-7c8d9e0f1a2b"
