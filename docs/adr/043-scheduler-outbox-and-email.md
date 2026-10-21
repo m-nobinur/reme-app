@@ -103,7 +103,15 @@ and `failed` with the reason in `detail`.
 New items go to two models after the run commits, in its `after`. First Jev
 (`typesafe/jev-1.13` through the AI SDK provider's `evaluationModel`, the second Jev caller)
 answers "Is any of this worth interrupting the owner for now?" over the scrubbed items and the
-owner profile; under the dial's bar (low 0.95, default 0.9, high 0.8) the beat stops. On a yes
+owner profile, asked as three yes-or-no questions (does an item need the owner to decide or act,
+did something go wrong that visitors would notice, is it news the owner would want today), and
+the beat goes on when the likeliest reaches 0.3. Jev is a floor that stops plain noise; the
+writer, told the dial's bar, judges the rest. On the 30 labelled digests in `evals/heartbeat`
+(2026-10-21) the floor agreed with the labels on 25, against 24 for a bar per dial (low 0.9,
+default 0.6, high 0.5) and 15 for one question at the bars first planned (0.95, 0.9, 0.8), which
+Jev never reached: one question scored every digest between 0.15 and 0.68. The labels are the
+coordinator's seed, so the floor and the writer's bar are to be rechecked on the owner's labels
+and on the dismiss rate of the first 50 real heartbeats. On a yes
 the beat takes the day's one unprompted message, a `deliveries` row keyed
 `unprompted:<org>:<local date>` inserted if absent; already taken, it stops before the writer.
 The writer is `openai/gpt-6.1-sol` at low effort on the CoS's OpenRouter routing, with no tools,
