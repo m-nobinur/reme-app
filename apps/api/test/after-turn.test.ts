@@ -1,10 +1,16 @@
+import { newUlid } from "@workspace/db"
 import { describe, expect, it, vi } from "vitest"
 import { afterTurnBatch, enqueueAfterTurn } from "../src/after-turn.ts"
 
-const turn = { orgId: "org_1", sessionId: "ses_1", turnId: "turn_1" }
+const turn = {
+  orgId: "org_1",
+  staffId: "staff_1",
+  sessionId: "ses_1",
+  turnId: "turn_1",
+}
 
 describe("enqueueAfterTurn", () => {
-  it("sends the three ids and nothing else", async () => {
+  it("sends the four ids and nothing else", async () => {
     const send = vi.fn().mockResolvedValue(undefined)
     // A turn carries more than ids; only the ids may leave.
     await enqueueAfterTurn(
@@ -28,21 +34,37 @@ describe("enqueueAfterTurn", () => {
   })
 })
 
-describe("afterTurnBatch", () => {
-  it("acks each message", async () => {
+const url = process.env.DATABASE_URL
+
+describe.skipIf(!url)("afterTurnBatch, on a live connection", () => {
+  it("acks a turn with nothing to do and retries one whose job threw", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined)
-    const messages = [1, 2].map((attempts) => ({
-      body: { ...turn, turnId: `turn_${attempts}` },
-      attempts,
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined)
+    const message = (body: typeof turn) => ({
+      body,
+      attempts: 1,
       ack: vi.fn(),
       retry: vi.fn(),
-    }))
-    await afterTurnBatch({ messages } as unknown as MessageBatch<typeof turn>)
-    for (const m of messages) {
-      expect(m.ack).toHaveBeenCalledOnce()
-      expect(m.retry).not.toHaveBeenCalled()
-    }
-    expect(log).toHaveBeenCalledTimes(2)
+    })
+    // An org with no such session: its turn never closed, so nothing runs.
+    const idle = message({
+      orgId: crypto.randomUUID(),
+      staffId: crypto.randomUUID(),
+      sessionId: crypto.randomUUID(),
+      turnId: newUlid(),
+    })
+    // An org id the database refuses.
+    const broken = message(turn)
+    await afterTurnBatch(
+      { messages: [idle, broken] } as unknown as MessageBatch<typeof turn>,
+      { HYPERDRIVE: { connectionString: url } } as unknown as Env
+    )
+    expect(idle.ack).toHaveBeenCalledOnce()
+    expect(broken.retry).toHaveBeenCalledOnce()
+    expect(broken.ack).not.toHaveBeenCalled()
+    expect(log.mock.calls[0]?.[0]).toContain('"outcome":"turn_open"')
+    expect(error.mock.calls[0]?.[0]).toContain("after_turn.failed")
     log.mockRestore()
+    error.mockRestore()
   })
 })

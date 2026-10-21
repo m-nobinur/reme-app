@@ -311,10 +311,12 @@ describe.skipIf(!url)("firing a reminder", () => {
     // The consumer takes each one: the message lands and the email goes.
     const mail = vi.fn(async () => ({ messageId: "m" }))
     const batchEnv = {
+      DELIVERIES: queue as never,
       HYPERDRIVE: {} as Hyperdrive,
       OWNER_MAIL: { send: mail } as unknown as SendEmail,
       APP_ORIGIN: "https://app.example.invalid",
       REPLY_DOMAIN: "reply.example.invalid",
+      VAPID_SUBJECT: "mailto:test@example.invalid",
     }
     const messages = queued.map((body) => ({
       body,

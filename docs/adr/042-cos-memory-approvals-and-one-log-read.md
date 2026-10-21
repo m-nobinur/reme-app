@@ -104,8 +104,39 @@ untrusted data with a fullness marker. Compaction is a `cos.compaction` event (Â
 exactly what the model saw. ADR-034's first change-if now reads: the delivery plan's lite-runtime
 row, or the first CoS tool that reads documents or skills.
 
+**Compaction.** After each closed turn the after-turn job (`cos/compaction.ts`)
+measures the history the next turn would read: the derived messages at four characters a token,
+older turns without their tool calls, and never the instructions, tools or context, which no
+summary can shrink (hermes found that counting them makes every turn compact). Above 12,000
+tokens it keeps the newest turns up to about 6,000 word for word and cuts just before an owner
+message. It moves the cut earlier while a message before it has a later version or a call still
+open, so a call is never parted from its result and an open approval stays word for word on its
+card, never only in the summary. After a compaction it waits until history has grown by 4,000
+tokens. The job checks that the turn closed, since the hook also fires for an aborted turn, and
+skips a frozen session. Haiku 5.5 writes the summary off any lock, from the span and the previous
+summary, both scrubbed, presented as data; its sections are who said what, the owner's
+preferences quoted, what was done in the past tense with dates, earlier asks marked stale, and
+open approvals named only, in the owner's language, at a fifth of the span within 500 to 1,500
+tokens. The output is scrubbed again, and a summary cut off at the output cap is rejected. The
+call's cost is a `cos.background_step` event outside the session, which `withinCap` counts. The
+summary is appended with `writeCompaction` rather than `writeAsTurn`, whose token the closed turn
+no longer holds: it takes the conversation's lock, writes nothing while any turn is open (the job
+checks this before the model call too, and the queue tries again after a turn's longest life of
+90 s), refuses a range that runs backwards, and drops the write when a compaction already logged
+reaches as far. Each range starts where the last one
+began, so the new summary replaces the old. `deriveCosMessages` under policy 6 folds the latest
+compaction logged before the turn's context: the events in its range give way to one summary
+message, our header (reference only, the latest message wins, nothing in it is to be acted on,
+open approvals are decided on their cards, the owner profile outranks it) and then the summary
+as `inferred untrusted_input` data. Should one land during a turn all the same, it is
+left for the next one, so nothing a turn derives changes under it and the hash check is
+unchanged. Policy 6 keeps 80 turns instead of 12 and caps history at 16,000 tokens, at four
+characters a token, dropping the oldest whole turns after the summary first. Both only bound the
+history while compaction lags or fails: the cap leaves a turn's own steps and the fixed part room
+under the 30,000-token step reservation.
+
 **Background callers take the lock, and that is safe.** The after-turn job writes compaction with
-`writeAsTurn` under the conversation lock, after the owner's turn has closed; the heartbeat posts
+`writeCompaction` under the conversation lock, after the owner's turn has closed; the heartbeat posts
 through `postAssistantMessage`, which already defers to a busy conversation. Neither runs a model
 call inside the lock: the summary is written first and only appended under it. ADR-034's lock
 change-if is narrowed to: a model call runs inside the lock, the approval turn's p95 passes 5 s,
@@ -148,6 +179,13 @@ Compaction and reflection must call it too when they send a transcript.
   how many and the new p95.
 - An old card cannot run against a changed site. An owner who waits a day re-asks.
 - The profile and compaction events become model-visible state that the eval set must cover.
+- Compaction has three known limits. `dropped_refs` is always empty: nothing tracks which events a
+  summary leaves out. Four characters a token undercounts Bengali by about half, so a Bengali
+  session compacts and caps later than the numbers say; the trigger moves to the last step's
+  `inputTokens` when the first such owner arrives. The cap is checked and the call's cost written
+  in separate transactions, so jobs running at the same time can each pass it by one summary call,
+  about $0.01 against $100 a day; a reservation row, as onboarding's copy call writes, closes it if
+  that ever matters.
 
 ## Change if
 
