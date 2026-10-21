@@ -248,7 +248,8 @@ export function guard(
       op.text &&
       !inOwnersWords(
         op.text,
-        lines.map((l) => l.text)
+        lines.map((l) => l.text),
+        false
       )
     ) {
       dropped.push({ op, why: "protected" })

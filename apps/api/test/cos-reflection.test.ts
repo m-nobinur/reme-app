@@ -290,6 +290,21 @@ describe("the guards", () => {
         AT
       ).dropped[0]?.why
     ).toBe("protected")
+    // A framing word is no merge: only the profile's own words replace a line the owner said.
+    expect(
+      guard(
+        held,
+        [
+          {
+            action: "replace",
+            match: "Fridays",
+            text: "Likes quotes on Fridays",
+          },
+        ],
+        ["Likes quotes on Fridays"],
+        AT
+      ).dropped[0]?.why
+    ).toBe("protected")
     const merged = guard(
       held,
       [

@@ -102,12 +102,13 @@ const contentWords = (text: string) =>
 
 /**
  * Words a line may add to the owner's own: they frame a statement about a
- * person and carry no business claim ("Prefers calls after 4pm").
+ * person and carry no business claim ("Prefers calls after 4pm"). None can
+ * turn a word of the owner's into its opposite, so "dislikes", "hates",
+ * "usually" and "works" are not here: "Dislikes calls" from "call me" would
+ * reverse what was said.
  */
 const FRAMING = new Set(
-  "prefers likes wants dislikes hates goes by called usually works is has"
-    .split(" ")
-    .map(stem)
+  "prefers likes wants goes by called is has".split(" ").map(stem)
 )
 
 /**
@@ -116,9 +117,15 @@ const FRAMING = new Set(
  * that says something the owner did not say has a word they did not write.
  * "Before" and "not" are content words, so a reversal fails too.
  */
-export function inOwnersWords(line: string, said: readonly string[]) {
+export function inOwnersWords(
+  line: string,
+  said: readonly string[],
+  framing = true
+) {
   const held = new Set(said.flatMap(contentWords))
-  return contentWords(line).every((w) => held.has(w) || FRAMING.has(w))
+  return contentWords(line).every(
+    (w) => held.has(w) || (framing && FRAMING.has(w))
+  )
 }
 
 const norm = (text: string) => text.trim().replace(/\s+/g, " ")

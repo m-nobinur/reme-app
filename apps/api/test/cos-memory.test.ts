@@ -127,6 +127,9 @@ describe("the words a line may add", () => {
     ["Goes by Sam", ["Call me Sam"], true],
     ["Prices are free", ["Please add this review: Great team!"], false],
     ["Prefers prices free", ["Call me after 4pm"], false],
+    ["Dislikes calls", ["Call me after 4pm"], false],
+    ["Hates WhatsApp", ["WhatsApp is how to reach me"], false],
+    ["Usually works Sundays", ["Sundays are free"], false],
     ["সন্ধ্যায় ফোন করা পছন্দ", ["আমি সন্ধ্যায় ফোন করা পছন্দ করি"], true],
     ["Prefers calls in the evening", ["আমি সন্ধ্যায় ফোন করা পছন্দ করি"], false],
   ])("%s: %s", (text, said, want) => {
