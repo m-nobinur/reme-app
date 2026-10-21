@@ -7,6 +7,7 @@ import {
   DomainName,
   type DomainPurchaseStatus,
   GOAL_MAX,
+  MemoryReviewAction,
   MemoryUndo,
   type MemoryView,
   MessageFeedback,
@@ -349,6 +350,14 @@ export const undoMemory = createServerFn({ method: "POST" })
   .handler(
     async ({ data }): Promise<MemoryView | "stale" | null> =>
       await source.undoMemory(data.version)
+  )
+
+/** The owner's choice about being asked first, or their answer to one proposal. */
+export const reviewMemory = createServerFn({ method: "POST" })
+  .validator((input: unknown) => MemoryReviewAction.parse(record(input)))
+  .handler(
+    async ({ data }): Promise<MemoryView | "stale" | null> =>
+      await source.reviewMemory(data)
   )
 
 /** The key a browser subscribes to push with; null where push is off. */

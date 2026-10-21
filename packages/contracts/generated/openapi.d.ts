@@ -7917,6 +7917,34 @@ export interface components {
         source: "owner_said" | "owner_confirmed" | "reflection"
       }[]
     }
+    MemoryProposal: {
+      /** Format: uuid */
+      id: string
+      /** @enum {string} */
+      action: "add" | "replace" | "remove"
+      text?: string
+      was?: string
+      /** Format: date-time */
+      at: string
+    }
+    MemoryReviewAction:
+      | {
+          /** @constant */
+          action: "ask_first"
+          value: boolean
+        }
+      | {
+          /** @constant */
+          action: "accept"
+          /** Format: uuid */
+          id: string
+        }
+      | {
+          /** @constant */
+          action: "dismiss"
+          /** Format: uuid */
+          id: string
+        }
     MemoryUndo: {
       version: number
     }
@@ -7943,6 +7971,17 @@ export interface components {
           source: "owner_said" | "owner_confirmed" | "reflection"
         }[]
         undoable: boolean
+      }[]
+      ask_first: boolean
+      proposals: {
+        /** Format: uuid */
+        id: string
+        /** @enum {string} */
+        action: "add" | "replace" | "remove"
+        text?: string
+        was?: string
+        /** Format: date-time */
+        at: string
       }[]
     }
     MessageFeedback: {
@@ -7974,6 +8013,17 @@ export interface components {
       change_kind?: "copy" | "style" | "section" | "photo" | "creative"
     }
     OwnerMemoryReview: {
+      ask_first: boolean
+      proposals: {
+        /** Format: uuid */
+        id: string
+        /** @enum {string} */
+        action: "add" | "replace" | "remove"
+        text?: string
+        was?: string
+        /** Format: date-time */
+        at: string
+      }[]
       chip_through: number
     }
     OwnerProfile: {

@@ -9,7 +9,7 @@ import { Text } from "./text.ts"
 /** The profile's fact key. The profile is data about the person, not the business. */
 export const OWNER_PROFILE_KEY = "owner.profile"
 
-/** How far the chat has shown the profile's changes. */
+/** The owner's "Ask me before saving" choice, the changes reflection proposed, and how far the chat has shown the profile's changes. */
 export const OWNER_MEMORY_REVIEW_KEY = "owner.memory_review"
 
 /**
@@ -52,10 +52,25 @@ export const OwnerProfile = z
   })
 
 /**
+ * A change reflection wants to make while "Ask me before saving" is on. It
+ * waits on the owner's page: accepting it saves it as `owner_confirmed`.
+ * `was` is the whole line a replace or remove would touch.
+ */
+export const MemoryProposal = z.strictObject({
+  id: Uuid,
+  action: z.enum(["add", "replace", "remove"]),
+  text: Text(PROFILE_LINE_MAX).optional(),
+  was: Text(PROFILE_LINE_MAX).optional(),
+  at: Timestamp,
+})
+
+/**
  * `owner.memory_review`'s value. `chip_through` is the newest profile
  * version the chat has already shown, so a change is shown once.
  */
 export const OwnerMemoryReview = z.strictObject({
+  ask_first: z.boolean(),
+  proposals: z.array(MemoryProposal).max(10),
   chip_through: z.int().nonnegative(),
 })
 
@@ -129,7 +144,16 @@ export const MemoryView = z.strictObject({
   version: z.int().nonnegative(),
   lines: z.array(ProfileLine),
   versions: z.array(ProfileVersion).max(50),
+  ask_first: z.boolean(),
+  proposals: z.array(MemoryProposal).max(10),
 })
+
+/** `POST /memory/review`: the owner's choice, or their answer to one proposal. */
+export const MemoryReviewAction = z.discriminatedUnion("action", [
+  z.strictObject({ action: z.literal("ask_first"), value: z.boolean() }),
+  z.strictObject({ action: z.literal("accept"), id: Uuid }),
+  z.strictObject({ action: z.literal("dismiss"), id: Uuid }),
+])
 
 /** `POST /memory/undo`: undoes the newest version, named so a stale page undoes nothing. */
 export const MemoryUndo = z.strictObject({ version: z.int().positive() })
@@ -148,5 +172,7 @@ export type RememberInput = z.infer<typeof RememberInput>
 export type RememberOutput = z.infer<typeof RememberOutput>
 export type ProfileVersion = z.infer<typeof ProfileVersion>
 export type MemoryView = z.infer<typeof MemoryView>
+export type MemoryProposal = z.infer<typeof MemoryProposal>
+export type MemoryReviewAction = z.infer<typeof MemoryReviewAction>
 export type MemoryUndo = z.infer<typeof MemoryUndo>
 export type MemoryChip = z.infer<typeof MemoryChip>

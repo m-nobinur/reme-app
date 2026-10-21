@@ -1,6 +1,7 @@
 import { ArrowCounterClockwiseIcon, BrainIcon } from "@phosphor-icons/react"
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router"
 import {
+  type MemoryReviewAction,
   PROFILE_MAX_CHARS,
   type ProfileLine,
   profileText,
@@ -14,7 +15,7 @@ import { EmptyState } from "@workspace/ui/components/empty-state"
 import { formatDateTime } from "@workspace/ui/lib/format"
 import { META } from "@workspace/ui/lib/utils"
 import { useRef, useState } from "react"
-import { getMemory, undoMemory } from "@/lib/api/server"
+import { getMemory, reviewMemory, undoMemory } from "@/lib/api/server"
 import { useBrowserZone } from "@/panel/workspace-panel"
 
 /**
@@ -38,7 +39,7 @@ function Memory() {
   const router = useRouter()
   const zone = useBrowserZone()
   const [status, setStatus] = useState<string | null>(null)
-  const [busy, setBusy] = useState<number | null>(null)
+  const [busy, setBusy] = useState<string | number | null>(null)
   const announcer = useRef<HTMLParagraphElement>(null)
 
   if (!view) {
@@ -72,6 +73,28 @@ function Memory() {
     } finally {
       setBusy(null)
       // The button that was pressed is gone, so focus moves to the line that says so.
+      announcer.current?.focus()
+    }
+  }
+
+  async function answer(
+    action: MemoryReviewAction,
+    done: string,
+    key: string | number
+  ) {
+    setBusy(key)
+    try {
+      const out = await reviewMemory({ data: action })
+      setStatus(
+        out === "stale"
+          ? "That suggestion is gone or no longer fits. Nothing was changed."
+          : done
+      )
+      await router.invalidate()
+    } catch {
+      setStatus("That could not be saved. Nothing was changed.")
+    } finally {
+      setBusy(null)
       announcer.current?.focus()
     }
   }
@@ -130,6 +153,78 @@ function Memory() {
             </CardContent>
           </Card>
         )}
+      </section>
+
+      <section aria-labelledby="memory-ask" className="mb-8">
+        <h2 className="font-semibold text-sm" id="memory-ask">
+          Saving what Reme learns from chat
+        </h2>
+        <label className="mt-2 inline-flex min-h-8 w-fit cursor-pointer items-center gap-2 text-sm">
+          <input
+            checked={view.ask_first}
+            className="size-4 accent-primary"
+            disabled={busy !== null}
+            onChange={(event) =>
+              void answer(
+                { action: "ask_first", value: event.currentTarget.checked },
+                event.currentTarget.checked
+                  ? "Reme will ask before saving what it learns from chat."
+                  : "Reme will save what it learns from chat and tell you.",
+                "ask_first"
+              )
+            }
+            type="checkbox"
+          />
+          Ask me before saving
+        </label>
+        {view.proposals.length > 0 ? (
+          <ul className="mt-3 flex flex-col divide-y divide-border">
+            {view.proposals.map((proposal) => (
+              <li
+                className="flex flex-wrap items-start gap-3 py-2.5"
+                key={proposal.id}
+              >
+                <span className="wrap-break-word min-w-0 flex-1 text-sm">
+                  {proposal.action === "add"
+                    ? `Add "${proposal.text}"`
+                    : proposal.action === "replace"
+                      ? `Change "${proposal.was}" to "${proposal.text}"`
+                      : `Remove "${proposal.was}"`}
+                </span>
+                <Button
+                  disabled={busy !== null}
+                  onClick={() =>
+                    void answer(
+                      { action: "accept", id: proposal.id },
+                      "Saved.",
+                      proposal.id
+                    )
+                  }
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  Save
+                </Button>
+                <Button
+                  disabled={busy !== null}
+                  onClick={() =>
+                    void answer(
+                      { action: "dismiss", id: proposal.id },
+                      "Dismissed.",
+                      proposal.id
+                    )
+                  }
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  Dismiss
+                </Button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </section>
 
       {view.versions.length > 0 ? (

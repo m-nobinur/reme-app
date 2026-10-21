@@ -91,6 +91,8 @@ import { EventEnvelope } from "./event.ts"
 import { FactRecord, FactSnapshot } from "./fact.ts"
 import {
   MemoryChip,
+  MemoryProposal,
+  MemoryReviewAction,
   MemoryUndo,
   MemoryView,
   OwnerMemoryReview,
@@ -256,6 +258,8 @@ export const contracts = {
   JobRun,
   MessageFeedback,
   MemoryChip,
+  MemoryProposal,
+  MemoryReviewAction,
   MemoryUndo,
   MemoryView,
   OwnerMemoryReview,

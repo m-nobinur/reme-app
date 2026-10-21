@@ -46,7 +46,7 @@ import { readTaggedWorkspace } from "./workspace-tag.ts"
 
 /** The routes `ownerRoute` answers, for `index.ts` to resolve an org before. */
 export const OWNER_PATH =
-  /^\/(workspace|facts|assets|photos\/[^/]+|changes|activity|builds\/[^/]+\/(answer|blueprint|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback))?)?|reminders(\/[^/]+)?|memory(\/undo)?|push\/(config|subscriptions(\/[^/]+)?)|domains\/[^/]+(\/checkout)?|google\/(connect|disconnect)|chat)$/
+  /^\/(workspace|facts|assets|photos\/[^/]+|changes|activity|builds\/[^/]+\/(answer|blueprint|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback))?)?|reminders(\/[^/]+)?|memory(\/(undo|review))?|push\/(config|subscriptions(\/[^/]+)?)|domains\/[^/]+(\/checkout)?|google\/(connect|disconnect)|chat)$/
 
 async function setFacts(request: Request, kit: Tenancy, owner: Owner) {
   if (!idempotencyKey(request)) return keyMissing()

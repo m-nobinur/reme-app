@@ -1,5 +1,6 @@
 import {
   type MemoryChip,
+  MemoryReviewAction,
   MemoryUndo,
   MemoryView,
   OWNER_MEMORY_REVIEW_KEY,
@@ -95,19 +96,36 @@ const stem = (word: string) =>
 
 /** The content words of `text`: letters and digits apart, lower case, stems, no stopwords. */
 const contentWords = (text: string) =>
-  (text.toLowerCase().match(/\p{L}+|\p{N}+/gu) ?? [])
+  (text.toLowerCase().match(/[\p{L}\p{M}]+|\p{N}+/gu) ?? [])
     .filter((w) => !STOP.has(w))
     .map(stem)
 
 /**
- * Whether every content word of `line` is one the owner wrote. This is what
+ * Words a line may add to the owner's own: they frame a statement about a
+ * person and carry no business claim ("Prefers calls after 4pm"). None can
+ * turn a word of the owner's into its opposite, so "dislikes", "hates",
+ * "usually" and "works" are not here: "Dislikes calls" from "call me" would
+ * reverse what was said.
+ */
+const FRAMING = new Set(
+  "prefers likes wants goes by called is has".split(" ").map(stem)
+)
+
+/**
+ * Whether every content word of `line` is one the owner wrote, or a framing word. This is what
  * keeps text from a review, an email or a page out of the profile: a line
  * that says something the owner did not say has a word they did not write.
  * "Before" and "not" are content words, so a reversal fails too.
  */
-export function inOwnersWords(line: string, said: readonly string[]) {
+export function inOwnersWords(
+  line: string,
+  said: readonly string[],
+  framing = true
+) {
   const held = new Set(said.flatMap(contentWords))
-  return contentWords(line).every((w) => held.has(w))
+  return contentWords(line).every(
+    (w) => held.has(w) || (framing && FRAMING.has(w))
+  )
 }
 
 const norm = (text: string) => text.trim().replace(/\s+/g, " ")
@@ -135,6 +153,12 @@ const refusal = (code: Refusal["code"], message: string): Refusal => ({
 
 const STATEMENT =
   "Write it as a plain statement about the owner, such as 'Prefers calls after 4pm'. Instructions to the assistant are not saved."
+
+/** The lines that hold `match`, ignoring case and spacing: the one rule that picks the line a change touches. */
+export const linesMatching = (lines: readonly ProfileLine[], match: string) => {
+  const wanted = norm(match).toLowerCase()
+  return lines.filter((l) => l.text.toLowerCase().includes(wanted))
+}
 
 const OWN_WORDS =
   "Use the owner's own words: every word of a saved line must come from what the owner wrote in this conversation. Say it again with their words."
@@ -198,8 +222,7 @@ export function applyOperations(
       })
       continue
     }
-    const wanted = norm(op.match as string).toLowerCase()
-    const hits = held.filter((l) => l.text.toLowerCase().includes(wanted))
+    const hits = linesMatching(held, op.match as string)
     if (hits.length === 0) {
       return {
         ok: false,
@@ -429,10 +452,13 @@ export async function memoryView(db: OrgScopedDb): Promise<MemoryView> {
       undoable: inverse(before, after, current) !== null,
     }
   })
+  const review = await readReview(db)
   return {
     version: rows[0]?.version ?? 0,
     lines: current,
     versions,
+    ask_first: review.ask_first,
+    proposals: review.proposals,
   }
 }
 
@@ -454,21 +480,36 @@ export async function undoVersion(
   const written = await saveProfile(db, orgId, lines)
   // An undo the owner made is not a change to tell them about.
   const shown = await readReview(db)
-  if (shown.chip_through >= written - 1) await writeReview(db, orgId, written)
+  if (shown.chip_through >= written - 1) {
+    await writeReview(db, orgId, { chip_through: written })
+  }
   return { version: written }
 }
 
-async function readReview(db: OrgScopedDb): Promise<OwnerMemoryReview> {
+/** The review state; a row written before the choice existed reads as asking nothing. */
+export async function readReview(db: OrgScopedDb): Promise<OwnerMemoryReview> {
   const row = await currentFact(db, OWNER_MEMORY_REVIEW_KEY)
-  return OwnerMemoryReview.safeParse(row?.value).data ?? { chip_through: 0 }
+  return (
+    OwnerMemoryReview.safeParse({
+      ask_first: false,
+      proposals: [],
+      chip_through: 0,
+      ...(row?.value as object | undefined),
+    }).data ?? { ask_first: false, proposals: [], chip_through: 0 }
+  )
 }
 
-async function writeReview(db: OrgScopedDb, orgId: string, through: number) {
+/** Writes the review state with `patch` over what it was. */
+export async function writeReview(
+  db: OrgScopedDb,
+  orgId: string,
+  patch: Partial<OwnerMemoryReview>
+) {
   await supersedePrivateFact(db, {
     orgId,
     key: OWNER_MEMORY_REVIEW_KEY,
     factType: "owner",
-    value: { chip_through: through },
+    value: { ...(await readReview(db)), ...patch },
     provenance: { source: "owner_stated", confidence: 1 },
   })
 }
@@ -494,13 +535,51 @@ export async function takeChip(
     seen && seen.version <= review.chip_through ? linesOf(seen.value) : [],
     linesOf(newest.value)
   )
-  await writeReview(db, orgId, newest.version)
+  await writeReview(db, orgId, { chip_through: newest.version })
   return changes.length === 0
     ? null
     : { version: newest.version, changes: changes.slice(0, 10) }
 }
 
-/** `GET /memory`, and `POST /memory/undo` with `{version}`: the owner's page. */
+/**
+ * The owner's answer on their page: the choice to be asked first, or a
+ * proposal accepted (saved as \`owner_confirmed\`) or dismissed. False when
+ * the proposal is gone or no longer applies; a proposal that no longer
+ * applies is dropped.
+ */
+export async function reviewAction(
+  db: OrgScopedDb,
+  orgId: string,
+  action: MemoryReviewAction
+): Promise<boolean> {
+  await lockProfile(db, orgId)
+  if (action.action === "ask_first") {
+    await writeReview(db, orgId, { ask_first: action.value })
+    return true
+  }
+  const review = await readReview(db)
+  const proposal = review.proposals.find((p) => p.id === action.id)
+  if (!proposal) return false
+  const rest = review.proposals.filter((p) => p.id !== action.id)
+  if (action.action === "accept") {
+    const held = await readProfile(db)
+    const done = applyOperations(
+      held.lines,
+      [{ action: proposal.action, text: proposal.text, match: proposal.was }],
+      "owner_confirmed",
+      new Date().toISOString()
+    )
+    if (!done.ok) {
+      await writeReview(db, orgId, { proposals: rest })
+      return false
+    }
+    await saveProfile(db, orgId, done.lines)
+  }
+  await writeReview(db, orgId, { proposals: rest })
+  return true
+}
+
+/** The owner's page: `GET /memory`, `POST /memory/undo` and `POST /memory/review`. */
 export async function memoryRoute(
   request: Request,
   kit: Tenancy,
@@ -525,6 +604,25 @@ export async function memoryRoute(
         code: "memory.nothing_to_undo",
         message:
           "That change was already undone or has been edited since, so there is nothing left to undo.",
+        detail: {},
+      })
+    }
+    return Response.json(
+      MemoryView.parse(await kit.withOrg(at, (db) => memoryView(db)))
+    )
+  }
+  if (pathname === "/memory/review" && request.method === "POST") {
+    const parsed = MemoryReviewAction.safeParse(await readBody(request))
+    if (!parsed.success) return invalid(parsed.error.issues)
+    const done = await kit.withOrg(at, (db) =>
+      reviewAction(db, owner.orgId, parsed.data)
+    )
+    if (!done) {
+      return failure(409, {
+        class: "validation",
+        code: "memory.nothing_to_review",
+        message:
+          "That suggestion is gone or no longer fits, so nothing was changed.",
         detail: {},
       })
     }
