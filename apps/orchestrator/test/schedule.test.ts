@@ -74,6 +74,13 @@ describe("the KV guard", () => {
       "Postgres was touched"
     )
   })
+
+  it("scans on a wake even when KV says nothing is due", async () => {
+    const kv = fakeKv({ next: now + 60_000, scanned: now - 60_000 })
+    await expect(scanDue(asleep(kv), now, true)).rejects.toThrow(
+      "Postgres was touched"
+    )
+  })
 })
 
 const url = process.env.DATABASE_URL
@@ -103,6 +110,10 @@ describe.skipIf(!url)("a scan against a database", () => {
     const now = Date.now()
     try {
       expect(await scanDue(env, now)).toBeGreaterThanOrEqual(1)
+      // Other suites leave due jobs on a shared database and one scan takes
+      // 100, oldest first, so scan until this newest one has gone too.
+      for (let i = 0; i < 50 && !sent.some((m) => m.body.jobId === jobId); i++)
+        await scanDue(env, now)
       expect(sent.map((m) => m.body)).toContainEqual({ jobId, orgId })
       const stored = JSON.parse(kv.map.get(NEXT_DUE_KEY) ?? "") as NextDue
       expect(stored.scanned).toBe(now)

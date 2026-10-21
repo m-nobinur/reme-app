@@ -722,7 +722,7 @@ export async function chat(
   // The org's zone: the browser's, now stored, or the stored one when the
   // request carries none (ADR-034's change-if).
   const zone = stored.zone
-  if (stored.next) await lowerNextDue(env.SCHEDULE, stored.next)
+  if (stored.next) await lowerNextDue(env.SCHEDULE, stored.next, env.JOBS)
   const loaded = ahead.onboarding ? null : await loading
   const gateOf =
     deps.jev !== undefined

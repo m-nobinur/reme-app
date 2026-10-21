@@ -43,6 +43,16 @@ at once and leaves KV due, so the jobs wait a minute rather than the 20-minute l
 calls `lowerNextDue` from `@workspace/db` after its commit, which stores `min(stored, at)` and
 never throws.
 
+**A wake makes it punctual.** KV alone was not enough. On staging a reminder due at 20:04:59 was
+claimed at the 20:07 tick, because the api's write had not reached the location the cron ran in,
+and the cron's read is cached for a minute on top. So `lowerNextDue` also takes the `JOBS` queue
+and sends `{kind: "scan"}` with `delaySeconds` set to one second past the due time. The jobs
+consumer answers a scan message with `scanDue(..., force)`, which skips the KV check, claims what
+is due and sends it back to the same queue. The message names no job, so a duplicate or a stale
+one costs one claim. It is sent for anything within the queue's 12-hour delay limit, and later
+times wait for the cron. The api, the CoS tool and the job runner all wake; the retention sweep's
+heartbeat does not need to. The minute cron and its KV guard stay as the fallback.
+
 The claim is one `SECURITY DEFINER` function, `claim_due_jobs(limit)`, a single statement with
 `FOR UPDATE SKIP LOCKED` that returns `(job_id, org_id)` and nothing else. `next_due_at()`
 (migration 0021) is the second for the scheduler: one timestamp, no ids, with a claimed row

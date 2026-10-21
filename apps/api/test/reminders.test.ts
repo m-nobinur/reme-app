@@ -15,7 +15,7 @@ import {
   tenancy,
 } from "@workspace/db"
 import postgres from "postgres"
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { createReminder } from "../src/reminders.ts"
 import { type Owner, owner, stubOrchestrator } from "./owner-fixture.ts"
 import { stubJwksFetch } from "./sealed-session.ts"
@@ -54,11 +54,13 @@ describe.skipIf(!url)("reminders, on a live connection", () => {
       next: () => JSON.parse(map.get(NEXT_DUE_KEY) ?? "null")?.next as number,
     }
   })()
+  // The orchestrator's jobs queue, which the api only sends wakes to.
+  const jobs = { send: vi.fn(async () => undefined) }
 
   const call = (path: string, init: RequestInit = {}) =>
     who.call(stubOrchestrator(), path, {
       ...init,
-      bindings: { SCHEDULE: kv },
+      bindings: { SCHEDULE: kv, JOBS: jobs },
     })
 
   const post = async (body: unknown, key?: string) => {
@@ -488,8 +490,9 @@ describe.skipIf(!url)("reminders, on a live connection", () => {
     const idOf = async (title: string, due_at: string | null) =>
       Reminder.parse((await post({ title, due_at })).body).id
 
-    it("writes a one-off job at the due time and lowers the guard after the commit", async () => {
+    it("writes a one-off job at the due time, lowers the guard after the commit and wakes the scan for it", async () => {
       kv.reset(FAR)
+      jobs.send.mockClear()
       const due = new Date(Date.now() + 2 * MINUTE).toISOString()
       const id = await idOf("Ring the plumber", due)
       const [job, ...rest] = await jobsOf(id)
@@ -503,12 +506,24 @@ describe.skipIf(!url)("reminders, on a live connection", () => {
       })
       expect(job?.nextRunAt.toISOString()).toBe(due)
       expect(kv.next()).toBe(Date.parse(due))
+      // About two minutes out, a second over: the queue holds it till then.
+      expect(jobs.send).toHaveBeenCalledExactlyOnceWith(
+        { kind: "scan" },
+        { delaySeconds: expect.any(Number) }
+      )
+      const [[, { delaySeconds }]] = jobs.send.mock.calls as unknown as [
+        [unknown, { delaySeconds: number }],
+      ]
+      expect(delaySeconds).toBeGreaterThan(110)
+      expect(delaySeconds).toBeLessThanOrEqual(121)
     })
 
     it("writes no job for a reminder with no time, and leaves the guard alone", async () => {
       kv.reset(FAR)
+      jobs.send.mockClear()
       expect(await jobsOf(await idOf("Someday", null))).toEqual([])
       expect(kv.next()).toBe(FAR)
+      expect(jobs.send).not.toHaveBeenCalled()
     })
 
     it("writes the Chief of Staff's reminder through the same function, and a replay adds no second job", async () => {

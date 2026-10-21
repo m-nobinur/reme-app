@@ -16,7 +16,7 @@ import {
 import { withKit } from "./domain-flow.ts"
 import { heartbeatJob } from "./heartbeat.ts"
 import { reminderJob } from "./reminder-job.ts"
-import type { JobMessage } from "./schedule.ts"
+import { type JobMessage, type JobsQueueMessage, scanDue } from "./schedule.ts"
 
 type ScheduledJob = typeof scheduledJobs.$inferSelect
 
@@ -163,7 +163,7 @@ export async function runJob(
         .where(eq(scheduledJobs.id, jobId))
       return result?.outcome ?? "ok"
     })
-    if (next) await lowerNextDue(env.SCHEDULE, next)
+    if (next) await lowerNextDue(env.SCHEDULE, next, env.JOBS)
     // Committed. A failure here leaves the handler's delivery rows pending.
     await after?.().catch((error: unknown) =>
       console.error(
@@ -240,7 +240,7 @@ async function failed(
   })
   if (!after) return "stale"
   if (!after.paused) {
-    await lowerNextDue(env.SCHEDULE, after.next)
+    await lowerNextDue(env.SCHEDULE, after.next, env.JOBS)
     return "failed"
   }
   // Once per pause. A busy chat drops it; the alert row keeps it.
@@ -259,25 +259,43 @@ async function failed(
 /**
  * The `jobs` Queue's consumer. A message whose run cannot be recorded at all
  * (Postgres unreachable) is retried, then dead-lettered; its claim lapses and
- * the cron retakes the job either way.
+ * the cron retakes the job either way. A wake (`lowerNextDue`) scans now and
+ * sends what it claims back to this queue.
  */
 export async function jobsBatch(
-  batch: MessageBatch<JobMessage>,
-  env: Env
+  batch: MessageBatch<JobsQueueMessage>,
+  env: Env,
+  scan = scanDue
 ): Promise<void> {
   await withKit(env, async (kit) => {
     for (const message of batch.messages) {
+      const { body } = message
+      if ("kind" in body) {
+        try {
+          await scan(env, Date.now(), true)
+          message.ack()
+        } catch (error) {
+          console.error(
+            JSON.stringify({
+              code: "jobs.wake_failed",
+              error: failureCode(error),
+            })
+          )
+          message.retry()
+        }
+        continue
+      }
       try {
-        const ran = await runJob(kit, env, message.body)
+        const ran = await runJob(kit, env, body)
         console.log(
-          JSON.stringify({ type: "jobs.ran", job_id: message.body.jobId, ran })
+          JSON.stringify({ type: "jobs.ran", job_id: body.jobId, ran })
         )
         message.ack()
       } catch (error) {
         console.error(
           JSON.stringify({
             code: "jobs.unrecorded",
-            job_id: message.body.jobId,
+            job_id: body.jobId,
             error: failureCode(error),
           })
         )

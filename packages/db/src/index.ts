@@ -18,6 +18,9 @@ export {
   NEXT_DUE_KEY,
   type NextDue,
   readNextDue,
+  type ScanMessage,
+  WAKE_DELAY_MAX_S,
+  type WakeQueue,
 } from "./due.ts"
 export {
   type AppendEvent,

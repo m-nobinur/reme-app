@@ -90,7 +90,7 @@ import {
   takeWarm,
   whileHeld,
 } from "./sandbox.ts"
-import { type JobMessage, SCHEDULE_CRON, scanDue } from "./schedule.ts"
+import { type JobsQueueMessage, SCHEDULE_CRON, scanDue } from "./schedule.ts"
 import { afterPublish, startDueSyncs } from "./search-sync.ts"
 import {
   advance,
@@ -1627,7 +1627,7 @@ export class SweepWorkflow extends WorkflowEntrypoint<Env, { hour: string }> {
 export default {
   async queue(batch: MessageBatch, env: Env) {
     if (JOBS_QUEUES.includes(batch.queue))
-      return jobsBatch(batch as MessageBatch<JobMessage>, env)
+      return jobsBatch(batch as MessageBatch<JobsQueueMessage>, env)
     if (DELIVERIES_QUEUES.includes(batch.queue))
       return deliveriesBatch(batch as MessageBatch<DeliveryMessage>, env)
     throw new Error(`no consumer for queue ${batch.queue}`)
