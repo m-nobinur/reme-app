@@ -243,7 +243,7 @@ async function approveVersion(page: Page): Promise<number> {
 }
 
 /**
- * The live site's quote action: a "Request a quote" link to /quote/, and
+ * The live site's quote action: a link to /quote/, whatever its words, and
  * the form on that page. The site states no price, so this is the v1 content
  * a later change has to keep.
  */
@@ -251,8 +251,9 @@ async function expectQuote(page: Page, host: string) {
   const site = await page.context().newPage()
   try {
     await site.goto(`https://${host}/`)
-    const link = site.getByRole("link", { name: "Request a quote" }).first()
-    await expect(link).toHaveAttribute("href", /\/quote\/?$/)
+    // By where it goes: its words are site copy the Developer may edit.
+    const link = site.locator('a[href$="/quote/"], a[href$="/quote"]').first()
+    await expect(link).toBeVisible()
     const response = await site.goto(`https://${host}/quote/`)
     expect(response?.status()).toBe(200)
     const form = site.locator("form.quote-form")
@@ -386,7 +387,8 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
     expect(workspace.site.live?.version).toBe(first)
     host = workspace.site.host ?? ""
     expect(host, "the workspace names no host").not.toBe("")
-    await expectLive(page, host, ["Request a quote"])
+    await expectLive(page, host, [])
+    await expectQuote(page, host)
     await expect(
       panel(page)
         .getByRole("tabpanel")

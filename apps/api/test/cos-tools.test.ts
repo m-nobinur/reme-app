@@ -681,6 +681,10 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
           outcome: "refused",
           error: { class: "validation", code: "contact.not_typed" },
         })
+        // The model is told how out: without contact when the owner gave none.
+        expect(
+          (output as { error: { message: string } }).error.message
+        ).toContain("propose the change again without contact")
         expect(stub.calls).toHaveLength(0)
         expect(await phoneNow()).toEqual(before)
       }

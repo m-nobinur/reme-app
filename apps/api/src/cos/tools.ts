@@ -323,7 +323,9 @@ const untyped = (what: string) =>
   failure(400, {
     class: "validation",
     code: "contact.not_typed",
-    message: `That ${what} is not one the owner typed in this conversation, or the change text does not name it. Name it in the change, as the owner typed it, then propose again.`,
+    // The way out is in the message: a model that invented a placeholder
+    // re-proposed it verbatim when told only to name it (staging, 2026-10-22).
+    message: `That ${what} is not one the owner typed in this conversation, or the change text does not name it. If the owner gave no new ${what}, propose the change again without contact. Otherwise name it in the change, as the owner typed it, then propose again.`,
     detail: {},
   })
 
