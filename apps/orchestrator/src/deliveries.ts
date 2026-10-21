@@ -161,6 +161,14 @@ export async function deliveriesBatch(
         })
         message.ack()
       } else {
+        console.log(
+          JSON.stringify({
+            type: "deliveries.retry",
+            channel: message.body.channel,
+            reason: outcome.error,
+            attempts: message.attempts,
+          })
+        )
         await release(kit, message.body)
         message.retry({ delaySeconds })
       }

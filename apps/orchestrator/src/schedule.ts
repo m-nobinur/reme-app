@@ -5,6 +5,7 @@ import {
   type NextDue,
   nextDueAt,
   readNextDue,
+  type ScanMessage,
   scheduledJobs,
 } from "@workspace/db"
 import { withKit } from "./domain-flow.ts"
@@ -30,6 +31,9 @@ export const CLAIM_BATCH = 100
 /** One claimed job, which is all a Queue message carries. */
 export type JobMessage = { jobId: string; orgId: string }
 
+/** What `reme-jobs` carries: a claimed job, or a wake asking for a scan. */
+export type JobsQueueMessage = JobMessage | ScanMessage
+
 type ScheduleEnv = Pick<Env, "HYPERDRIVE" | "SCHEDULE" | "JOBS">
 
 /**
@@ -43,11 +47,14 @@ type ScheduleEnv = Pick<Env, "HYPERDRIVE" | "SCHEDULE" | "JOBS">
  */
 export async function scanDue(
   env: ScheduleEnv,
-  now = Date.now()
+  now = Date.now(),
+  /** A wake's scan (`ScanMessage`), which KV must not talk out of it. */
+  force = false
 ): Promise<number | null> {
   // An unreadable value counts as stale: the scan is the safe side.
   const stored = await readNextDue(env.SCHEDULE).catch(() => null)
   if (
+    !force &&
     stored &&
     (stored.next === null || stored.next > now) &&
     now - stored.scanned < FALLBACK_MS

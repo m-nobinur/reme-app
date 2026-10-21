@@ -73,9 +73,12 @@ async function armJob(
  * the transaction that wrote the reminder commits, or the cron could scan
  * before the job exists and write a later time back.
  */
-export const wakeScheduler = (env: Pick<Env, "SCHEDULE">, made: Reminder) =>
+export const wakeScheduler = (
+  env: Pick<Env, "SCHEDULE" | "JOBS">,
+  made: Reminder
+) =>
   made.due_at && !made.done_at
-    ? lowerNextDue(env.SCHEDULE, new Date(made.due_at))
+    ? lowerNextDue(env.SCHEDULE, new Date(made.due_at), env.JOBS)
     : Promise.resolve()
 
 const keyed = async (db: OrgScopedDb, key: string) => {
@@ -209,7 +212,7 @@ export const ASSISTANT_KEY_PREFIX = "approval:"
 /** `POST /reminders` when `id` is empty, `PATCH /reminders/:id` otherwise. */
 export async function reminderRoute(
   request: Request,
-  env: Pick<Env, "SCHEDULE">,
+  env: Pick<Env, "SCHEDULE" | "JOBS">,
   kit: Tenancy,
   owner: Owner,
   id: string

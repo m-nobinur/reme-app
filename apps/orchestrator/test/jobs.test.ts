@@ -18,7 +18,7 @@ import {
   PAUSED_TEXT,
   runJob,
 } from "../src/jobs.ts"
-import type { JobMessage } from "../src/schedule.ts"
+import type { JobMessage, JobsQueueMessage } from "../src/schedule.ts"
 import { freshOrg, kit } from "./fixture.ts"
 
 /** Every post the pause asked of the chat. */
@@ -36,6 +36,42 @@ describe("backoff", () => {
     expect([1, 2, 3, 4, 5, 6, 7].map(backoffMinutes)).toEqual([
       2, 4, 8, 16, 32, 60, 60,
     ])
+  })
+})
+
+describe("a wake on the jobs queue", () => {
+  // Never connected: a wake only scans, and the kit connects on first query.
+  const env = {
+    HYPERDRIVE: { connectionString: "postgres://wake@127.0.0.1:9/none" },
+  } as unknown as Env
+  const wake = () => {
+    const message = { body: { kind: "scan" }, ack: vi.fn(), retry: vi.fn() }
+    return {
+      message,
+      batch: {
+        messages: [message],
+      } as unknown as MessageBatch<JobsQueueMessage>,
+    }
+  }
+
+  it("scans now, past the KV guard, and acks", async () => {
+    const scan = vi.fn(async () => 0)
+    const { message, batch } = wake()
+    await jobsBatch(batch, env, scan)
+    expect(scan).toHaveBeenCalledExactlyOnceWith(env, expect.any(Number), true)
+    expect(message.ack).toHaveBeenCalledOnce()
+    expect(message.retry).not.toHaveBeenCalled()
+  })
+
+  it("retries a wake whose scan failed", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined)
+    const { message, batch } = wake()
+    await jobsBatch(batch, env, async () => {
+      throw new Error("Postgres away")
+    })
+    expect(message.retry).toHaveBeenCalledOnce()
+    expect(message.ack).not.toHaveBeenCalled()
+    vi.mocked(console.error).mockRestore()
   })
 })
 

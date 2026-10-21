@@ -123,9 +123,13 @@
   // Closed turns, for the work that follows one (compaction, reflection). A
   // message holds ids only, so a consumer never carries a conversation's text.
   // The first attempt and three retries, then the dead-letter queue, where a
-  // poisoned job waits to be read instead of retrying forever.
+  // poisoned job waits to be read instead of retrying forever. `JOBS` is the
+  // orchestrator's queue, here only to send a reminder's wake (ADR-043).
   "queues": {
-    "producers": [{ "binding": "AFTER_TURN", "queue": "reme-after-turn" }],
+    "producers": [
+      { "binding": "AFTER_TURN", "queue": "reme-after-turn" },
+      { "binding": "JOBS", "queue": "reme-jobs" }
+    ],
     "consumers": [
       {
         "queue": "reme-after-turn",
@@ -203,7 +207,8 @@
       ],
       "queues": {
         "producers": [
-          { "binding": "AFTER_TURN", "queue": "reme-after-turn-production" }
+          { "binding": "AFTER_TURN", "queue": "reme-after-turn-production" },
+          { "binding": "JOBS", "queue": "reme-jobs-production" }
         ],
         "consumers": [
           {
