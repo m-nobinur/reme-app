@@ -1743,7 +1743,7 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
           context(me),
           { operations: [{ action: "add", text: "Prefers calls after 4pm" }] },
           "",
-          await turnOf(me)
+          await turnOf(me, ["I prefer calls after 4pm."])
         )
       )
       expect(COS_TOOLS.remember.output.parse(output)).toEqual(output)

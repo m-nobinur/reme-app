@@ -960,7 +960,9 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     /** The profile block of the last call's prompt, as the model read it. */
     const profileIn = (sent: CallOptions[]) => {
       const text = (sent.at(-1)?.prompt ?? [])
-        .flatMap((m) => (Array.isArray(m.content) ? m.content : []))
+        .flatMap((m) =>
+          Array.isArray(m.content) ? (m.content as object[]) : []
+        )
         .map((part) => ("text" in part ? String(part.text) : ""))
         .join("\n")
       return /<data source="owner_profile"[^>]*>\n([^<]*)<\/data>/.exec(
@@ -991,15 +993,10 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
 
     it("recalls a preference twenty turns and one new conversation later, and undo restores the version before", async () => {
       const first = await conversation(me)
-      const told = await tell(
-        me,
-        first,
-        "I like calls after 4pm, not mornings.",
-        {
-          action: "add",
-          text: "Prefers calls after 4pm",
-        }
-      )
+      const told = await tell(me, first, "I prefer calls after 4pm.", {
+        action: "add",
+        text: "Prefers calls after 4pm",
+      })
       // The tool needed no card, and the turn checked its own log.
       expect(told.chunks.some((c) => c.type === "tool-approval-request")).toBe(
         false

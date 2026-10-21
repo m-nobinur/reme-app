@@ -31,6 +31,7 @@ export {
   currentFacts,
   factVersions,
   supersedeFact,
+  supersedePrivateFact,
 } from "./facts.ts"
 export * from "./map.ts"
 export { addPushSubscription, PUSH_SUBSCRIPTION_CAP } from "./push.ts"

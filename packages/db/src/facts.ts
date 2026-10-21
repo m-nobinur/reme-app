@@ -11,19 +11,38 @@ import type { OrgScopedDb } from "./tenancy.ts"
  * `facts_one_current_per_key` index catches a breach, it does not replace
  * this function (architect ruling, builder track N3).
  */
-export async function supersedeFact(
-  db: OrgScopedDb,
-  input: {
-    orgId: string
-    key: string
-    factType: string
-    value: unknown
-    provenance: {
-      source: "owner_stated" | "document" | "integration" | "inferred"
-      confidence: number
-      verifiedByStaffId?: string | null
-    }
+export async function supersedeFact(db: OrgScopedDb, input: FactInput) {
+  // A Developer question can name any field, so no business writer may reach
+  // the owner's memory by key.
+  if (PRIVATE_FACT_KEYS.includes(input.key)) {
+    throw new Error(`fact.private_key: ${input.key} is not a business fact`)
   }
+  return writeVersion(db, input)
+}
+
+/** The same write for the owner's memory (`PRIVATE_FACT_KEYS`), which only the memory module calls. */
+export async function supersedePrivateFact(db: OrgScopedDb, input: FactInput) {
+  if (!PRIVATE_FACT_KEYS.includes(input.key)) {
+    throw new Error(`fact.not_private_key: ${input.key} is a business fact`)
+  }
+  return writeVersion(db, input)
+}
+
+type FactInput = {
+  orgId: string
+  key: string
+  factType: string
+  value: unknown
+  provenance: {
+    source: "owner_stated" | "document" | "integration" | "inferred"
+    confidence: number
+    verifiedByStaffId?: string | null
+  }
+}
+
+async function writeVersion(
+  db: OrgScopedDb,
+  input: FactInput
 ): Promise<{
   factId: string
   version: number

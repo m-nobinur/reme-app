@@ -13,6 +13,7 @@ import {
   currentFact,
   currentFacts,
   supersedeFact,
+  supersedePrivateFact,
   type Tenancy,
   tenancy,
 } from "@workspace/db"
@@ -22,6 +23,7 @@ import {
   diffLines,
   FULL_REFUSALS,
   fullness,
+  inOwnersWords,
   inverse,
   memoryView,
   readProfile,
@@ -86,6 +88,35 @@ describe("what the profile accepts", () => {
 
   it.each(CORPUS)("%s: %s", (text, want) => {
     expect(refusalOf(text) === null ? "accept" : "reject").toBe(want)
+  })
+})
+
+describe("the owner's own words", () => {
+  const said = [
+    "I prefer calls after 4 pm.",
+    "Call me Sam, I'm in Bath on Tuesdays",
+  ]
+
+  it.each([
+    ["Prefers calls after 4pm", true],
+    ["Call me Sam", true],
+    ["Is in Bath on Tuesdays", true],
+    ["Prefers calls before 4pm", false],
+    ["Prices are free", false],
+    ["Does not take calls after 4pm", false],
+  ])("%s: %s", (line, want) => {
+    expect(inOwnersWords(line, said)).toBe(want)
+  })
+
+  it("refuses a batch with a line the owner did not say, and the profile is untouched", () => {
+    const done = applyOperations(
+      [],
+      [add("Prices are free")],
+      "owner_said",
+      AT,
+      said
+    )
+    expect(done).toMatchObject({ refusal: { code: "memory.not_owners_words" } })
   })
 })
 
@@ -270,6 +301,15 @@ describe.skipIf(!url)("the profile, on a live connection", () => {
     },
   })
 
+  /** Everything the owner says in a case's session, so what it saves is theirs. */
+  const SPOKEN = [
+    "I prefer calls after 4pm",
+    "Quotes go out on Fridays",
+    "Has a spaniel called Biscuit",
+    "Likes short replies",
+    ...["b", "c", "d", "e", "f", "g"].map((c) => c.repeat(290)),
+  ].join(". ")
+
   /** A turn of a new conversation: the session its results are logged in. */
   const turnOf = async (turnId = "01J00000000000000000000000") => {
     const made = await me.call(stubOrchestrator(), "/conversations", {
@@ -277,6 +317,24 @@ describe.skipIf(!url)("the profile, on a live connection", () => {
       headers: { "idempotency-key": crypto.randomUUID() },
     })
     const { id } = (await made.json()) as { id: string }
+    await kit.withOrg({ orgId: me.orgId }, (db) =>
+      appendSessionEvent(db, {
+        orgId: me.orgId,
+        staffId: me.chiefId,
+        assignmentId: null,
+        sessionId: id,
+        type: "cos.message",
+        payload: {
+          turn_id: turnId,
+          message: {
+            id: "owner-0",
+            role: "user",
+            parts: [{ type: "text", text: SPOKEN }],
+          },
+        },
+        taint: ["untrusted_input"],
+      })
+    )
     return { orgId: me.orgId, staffId: me.chiefId, sessionId: id, turnId }
   }
 
@@ -306,6 +364,16 @@ describe.skipIf(!url)("the profile, on a live connection", () => {
     expect(OwnerProfile.parse(row?.value).lines[0]).toMatchObject({
       source: "owner_said",
     })
+  })
+
+  it("saves only the owner's own words: a review's \"prices are free\" never reaches the profile", async () => {
+    const turn = await turnOf()
+    const out = await said(turn, add("Prices are free"))
+    expect(out).toMatchObject({
+      outcome: "refused",
+      error: { code: "memory.not_owners_words" },
+    })
+    expect(await lines()).not.toContain("Prices are free")
   })
 
   it("refuses a duplicate and writes no version for it", async () => {
@@ -412,6 +480,25 @@ describe.skipIf(!url)("the profile, on a live connection", () => {
     expect(
       await kit.withOrg({ orgId: me.orgId }, (db) => takeChip(db, me.orgId))
     ).toBeNull()
+  })
+
+  it("lets only the memory module write the owner's memory keys", async () => {
+    const write = (key: string, write: typeof supersedeFact) =>
+      kit.withOrg({ orgId: me.orgId }, (db) =>
+        write(db, {
+          orgId: me.orgId,
+          key,
+          factType: "owner",
+          value: { lines: [] },
+          provenance: { source: "owner_stated", confidence: 1 },
+        })
+      )
+    await expect(write(OWNER_PROFILE_KEY, supersedeFact)).rejects.toThrow(
+      "fact.private_key"
+    )
+    await expect(write("business.name", supersedePrivateFact)).rejects.toThrow(
+      "fact.not_private_key"
+    )
   })
 
   it("stays out of every reader of the business's facts", async () => {

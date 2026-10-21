@@ -19,7 +19,7 @@ import {
   factVersions,
   type OrgScopedDb,
   sql,
-  supersedeFact,
+  supersedePrivateFact,
   type Tenancy,
 } from "@workspace/db"
 import type { Owner } from "../changes.ts"
@@ -72,6 +72,44 @@ export function refusalOf(text: string): "attack" | "order" | null {
   return null
 }
 
+const STOP = new Set(
+  "a an the and or of to in on at by for with from is are was were be been am has have had do does did it its he she they them their his her my me i we our as that this".split(
+    " "
+  )
+)
+
+/**
+ * A word cut back to its stem, so "calls" and "call" meet. Rough on purpose:
+ * it only has to make honest rewording pass, not to be a stemmer.
+ */
+const stem = (word: string) =>
+  word.length > 4 && word.endsWith("ies")
+    ? `${word.slice(0, -3)}y`
+    : word.length > 5 && word.endsWith("ing")
+      ? word.slice(0, -3)
+      : word.length > 4 && word.endsWith("ed")
+        ? word.slice(0, -2)
+        : word.length > 3 && word.endsWith("s") && !word.endsWith("ss")
+          ? word.slice(0, -1)
+          : word
+
+/** The content words of `text`: letters and digits apart, lower case, stems, no stopwords. */
+const contentWords = (text: string) =>
+  (text.toLowerCase().match(/\p{L}+|\p{N}+/gu) ?? [])
+    .filter((w) => !STOP.has(w))
+    .map(stem)
+
+/**
+ * Whether every content word of `line` is one the owner wrote. This is what
+ * keeps text from a review, an email or a page out of the profile: a line
+ * that says something the owner did not say has a word they did not write.
+ * "Before" and "not" are content words, so a reversal fails too.
+ */
+export function inOwnersWords(line: string, said: readonly string[]) {
+  const held = new Set(said.flatMap(contentWords))
+  return contentWords(line).every((w) => held.has(w))
+}
+
 const norm = (text: string) => text.trim().replace(/\s+/g, " ")
 const same = (a: string, b: string) =>
   norm(a).toLowerCase() === norm(b).toLowerCase()
@@ -86,6 +124,7 @@ export type Refusal = {
     | "memory.no_match"
     | "memory.ambiguous_match"
     | "memory.not_a_statement"
+    | "memory.not_owners_words"
   message: string
 }
 
@@ -97,6 +136,9 @@ const refusal = (code: Refusal["code"], message: string): Refusal => ({
 const STATEMENT =
   "Write it as a plain statement about the owner, such as 'Prefers calls after 4pm'. Instructions to the assistant are not saved."
 
+const OWN_WORDS =
+  "Use the owner's own words: every word of a saved line must come from what the owner wrote in this conversation. Say it again with their words."
+
 /**
  * `ops` applied to a copy of `lines`, all or none. The limit is checked on
  * the result, so a batch may remove and add in one call. `full` names the
@@ -107,6 +149,7 @@ export function applyOperations(
   ops: readonly RememberOperation[],
   source: Source,
   at: string,
+  said: readonly string[] | null = null,
   newId: () => string = () => crypto.randomUUID()
 ):
   | { ok: true; lines: ProfileLine[] }
@@ -131,6 +174,12 @@ export function applyOperations(
         return {
           ok: false,
           refusal: refusal("memory.not_a_statement", STATEMENT),
+        }
+      }
+      if (said && !inOwnersWords(text, said)) {
+        return {
+          ok: false,
+          refusal: refusal("memory.not_owners_words", OWN_WORDS),
         }
       }
       if (held.some((l) => same(l.text, text))) {
@@ -222,7 +271,7 @@ export async function saveProfile(
     confidence: 1,
   }
 ): Promise<number> {
-  const written = await supersedeFact(db, {
+  const written = await supersedePrivateFact(db, {
     orgId,
     key: OWNER_PROFILE_KEY,
     factType: "owner",
@@ -230,6 +279,24 @@ export async function saveProfile(
     provenance,
   })
   return written.version
+}
+
+/**
+ * What the owner typed in the session, newest 40 messages. An emailed
+ * reply (`eml_`) is not counted: it crosses a channel the owner does not
+ * watch the way they watch the chat.
+ */
+export async function ownerWords(db: OrgScopedDb, sessionId: string) {
+  const rows = await db.execute<{ text: string | null }>(sql`
+    select p->>'text' as text
+    from (select payload from events
+      where session_id = ${sessionId} and type = 'cos.message'
+        and payload->'message'->>'role' = 'user'
+        and payload->'message'->>'id' not like 'eml\_%'
+      order by seq desc limit 40) e,
+      jsonb_array_elements(e.payload->'message'->'parts') p
+    where p->>'type' = 'text'`)
+  return [...rows].flatMap((r) => (r.text ? [r.text] : []))
 }
 
 /** The `remember` tool. Counts this turn's `full` answers from its own logged results. */
@@ -258,7 +325,8 @@ export async function remember(
       held.lines,
       input.operations,
       "owner_said",
-      new Date().toISOString()
+      new Date().toISOString(),
+      await ownerWords(db, turn.sessionId)
     )
     if ("refusal" in result) {
       return {
@@ -396,7 +464,7 @@ async function readReview(db: OrgScopedDb): Promise<OwnerMemoryReview> {
 }
 
 async function writeReview(db: OrgScopedDb, orgId: string, through: number) {
-  await supersedeFact(db, {
+  await supersedePrivateFact(db, {
     orgId,
     key: OWNER_MEMORY_REVIEW_KEY,
     factType: "owner",
