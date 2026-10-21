@@ -657,6 +657,47 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       expect(held?.provenanceSource).toBe("owner_stated")
     })
 
+    it("starts a change whose contact only restates the held phone and email, recording nothing", async () => {
+      await kit.withOrg({ orgId: me.orgId }, async (db) => {
+        for (const [key, value] of [
+          ["business.phone", { e164: "+441174960150" }],
+          ["business.email", { address: "hello@held.example" }],
+        ] as const)
+          await supersedeFact(db, {
+            orgId: me.orgId,
+            key,
+            factType: "business",
+            value,
+            provenance: { source: "owner_stated", confidence: 1 },
+          })
+      })
+      const versions = async () =>
+        (
+          await kit.withOrg({ orgId: me.orgId }, (db) =>
+            db.select().from(facts).where(eq(facts.key, "business.phone"))
+          )
+        ).length
+      const before = await versions()
+      // Typed in another conversation, so this one's log holds neither.
+      const turn = await turnOf(me, ["Change the hero to say hello"])
+      const stub = creating(me)
+      const output = kept(
+        "request_change",
+        await requestChange(
+          context(me, stub),
+          {
+            text: "Change the hero to say hello",
+            change_kind: "copy",
+            contact: { phone: "+441174960150", email: "Hello@held.example" },
+          },
+          crypto.randomUUID(),
+          turn
+        )
+      )
+      expect(output).toMatchObject({ outcome: "started" })
+      expect(await versions()).toBe(before)
+    })
+
     it.each([
       ["phone", { phone: "+441174960199" }],
       ["email", { email: "someone@invented.example" }],
