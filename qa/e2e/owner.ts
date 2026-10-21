@@ -199,7 +199,7 @@ export async function answerOnboarding(page: Page): Promise<void> {
   const assistant = page.locator('[data-slot="aui_assistant-message-root"]')
   const pending = page
     .locator(
-      '[data-slot="ask-fact"], [data-slot="ask-details"], [data-slot="ask-choice"], [data-slot="ask-upload"], [data-slot="review-quote-form"]'
+      '[data-slot="ask-fact"], [data-slot="ask-details"], [data-slot="ask-choice"], [data-slot="ask-design"], [data-slot="ask-upload"], [data-slot="review-quote-form"]'
     )
     .filter({ has: page.locator("form, input[type=file], button") })
   const started = page
@@ -259,6 +259,9 @@ export async function answerOnboarding(page: Page): Promise<void> {
       await step(() =>
         card.getByRole("button", { name: "Skip for now" }).click()
       )
+    } else if (slot === "ask-design") {
+      // The design tray: the assistant chooses what the owner skips.
+      await step(() => card.getByRole("button", { name: "Skip all" }).click())
     } else if (slot === "review-quote-form") {
       await step(() => card.getByRole("button", { name: "Looks good" }).click())
     } else if (slot === "ask-details") {

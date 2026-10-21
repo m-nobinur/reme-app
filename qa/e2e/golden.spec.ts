@@ -211,13 +211,22 @@ async function approveVersion(page: Page): Promise<number> {
     name: /^Approve and publish v\d+$/,
   })
   const question = panel(page).locator('[data-slot="question-item"]').first()
+  // A full build waits on the owner's yes to its plan, in the chat.
+  const blueprint = page
+    .locator('[data-slot="blueprint-card"]')
+    .getByRole("button", { name: "Build it" })
   const deadline = Date.now() + WAIT.approval
   // A guard against a build that asks forever.
   for (let asked = 0; asked < 5; asked++) {
-    await expect(approve.or(question).first()).toBeVisible({
+    await expect(approve.or(question).or(blueprint).first()).toBeVisible({
       timeout: Math.max(deadline - Date.now(), 1),
     })
     if (await approve.isVisible()) break
+    if (await blueprint.isVisible()) {
+      await blueprint.click()
+      await expect(blueprint).toHaveCount(0, { timeout: WAIT.chat })
+      continue
+    }
     await answer(page, question)
   }
   await expect(approve).toBeEnabled()
