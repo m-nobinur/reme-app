@@ -974,8 +974,17 @@ export const samples: Record<ContractName, unknown> = {
         undoable: true,
       },
     ],
+    ask_first: false,
+    proposals: [],
   },
-  OwnerMemoryReview: { chip_through: 3 },
+  MemoryProposal: {
+    id: CONVERSATION,
+    action: "add",
+    text: "Prefers calls after 4pm",
+    at: NOW,
+  },
+  MemoryReviewAction: { action: "ask_first", value: true },
+  OwnerMemoryReview: { ask_first: false, proposals: [], chip_through: 3 },
   OwnerProfile: {
     lines: [
       {
