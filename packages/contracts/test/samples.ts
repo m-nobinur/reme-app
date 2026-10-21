@@ -943,6 +943,63 @@ export const samples: Record<ContractName, unknown> = {
     expires_at: LATER,
   },
   MessageFeedback: { message_id: "a_7Kd2Lm9Q", rating: "up" },
+  MemoryChip: {
+    version: 3,
+    changes: [
+      { kind: "added", text: "Prefers calls after 4pm", source: "owner_said" },
+    ],
+  },
+  MemoryUndo: { version: 3 },
+  MemoryView: {
+    version: 3,
+    lines: [
+      {
+        id: CONVERSATION,
+        text: "Prefers calls after 4pm",
+        source: "owner_said",
+        at: NOW,
+      },
+    ],
+    versions: [
+      {
+        version: 3,
+        at: NOW,
+        changes: [
+          {
+            kind: "added",
+            text: "Prefers calls after 4pm",
+            source: "owner_said",
+          },
+        ],
+        undoable: true,
+      },
+    ],
+  },
+  OwnerMemoryReview: { chip_through: 3 },
+  OwnerProfile: {
+    lines: [
+      {
+        id: CONVERSATION,
+        text: "Prefers calls after 4pm",
+        source: "owner_said",
+        at: NOW,
+      },
+    ],
+  },
+  ProfileLine: {
+    id: CONVERSATION,
+    text: "Prefers calls after 4pm",
+    source: "owner_said",
+    at: NOW,
+  },
+  RememberInput: {
+    operations: [{ action: "add", text: "Prefers calls after 4pm" }],
+  },
+  RememberOutput: {
+    outcome: "saved",
+    note: "Saved. This update is complete; do not repeat it.",
+    fullness: "2%, 23/1,500 chars",
+  },
   Org: {
     org_id: ORG,
     slug: "brightclean",

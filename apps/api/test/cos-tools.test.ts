@@ -28,6 +28,7 @@ import {
   it,
   vi,
 } from "vitest"
+import { remember } from "../src/cos/memory.ts"
 import { getIndexing, getSearchPerformance } from "../src/cos/search-tools.ts"
 import {
   answerQuestion,
@@ -1731,6 +1732,22 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
     )
     expect(output).toEqual({
       url: "https://staging.remeai.co.uk/api/google/start",
+    })
+  })
+
+  describe("remember", () => {
+    it("saves a line of the owner's profile and answers that the write is complete", async () => {
+      const output = kept(
+        "remember",
+        await remember(
+          context(me),
+          { operations: [{ action: "add", text: "Prefers calls after 4pm" }] },
+          "",
+          await turnOf(me, ["I prefer calls after 4pm."])
+        )
+      )
+      expect(COS_TOOLS.remember.output.parse(output)).toEqual(output)
+      expect(output).toMatchObject({ outcome: "saved" })
     })
   })
 

@@ -4457,6 +4457,7 @@ export interface components {
         | "connect_google"
         | "get_search_performance"
         | "get_indexing"
+        | "remember"
       )[]
       text: string
       reserved_usd: number
@@ -4800,6 +4801,7 @@ export interface components {
           | "connect_google"
           | "get_search_performance"
           | "get_indexing"
+          | "remember"
         description: string
         input_schema: {
           [key: string]: unknown
@@ -6390,6 +6392,49 @@ export interface components {
                 }
               }
         }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "remember"
+          output:
+            | {
+                /** @constant */
+                outcome: "saved"
+                note: string
+                fullness: string
+              }
+            | {
+                /** @constant */
+                outcome: "full"
+                note: string
+                fullness: string
+                lines: string[]
+              }
+            | {
+                /** @constant */
+                outcome: "stopped"
+                note: string
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                }
+              }
+        }
     CosToolStarted: {
       tool_call_id: string
       approval_id: string
@@ -6426,6 +6471,7 @@ export interface components {
             | "connect_google"
             | "get_search_performance"
             | "get_indexing"
+            | "remember"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -6459,6 +6505,7 @@ export interface components {
             | "connect_google"
             | "get_search_performance"
             | "get_indexing"
+            | "remember"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -6490,6 +6537,7 @@ export interface components {
             | "connect_google"
             | "get_search_performance"
             | "get_indexing"
+            | "remember"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -6521,6 +6569,7 @@ export interface components {
             | "connect_google"
             | "get_search_performance"
             | "get_indexing"
+            | "remember"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -6552,6 +6601,7 @@ export interface components {
             | "connect_google"
             | "get_search_performance"
             | "get_indexing"
+            | "remember"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -7857,6 +7907,44 @@ export interface components {
       outcome: "ok" | "skipped" | "failed"
       detail: string | null
     }
+    MemoryChip: {
+      version: number
+      changes: {
+        /** @enum {string} */
+        kind: "added" | "changed" | "removed"
+        text: string
+        /** @enum {string} */
+        source: "owner_said" | "owner_confirmed" | "reflection"
+      }[]
+    }
+    MemoryUndo: {
+      version: number
+    }
+    MemoryView: {
+      version: number
+      lines: {
+        /** Format: uuid */
+        id: string
+        text: string & (unknown & unknown)
+        /** @enum {string} */
+        source: "owner_said" | "owner_confirmed" | "reflection"
+        /** Format: date-time */
+        at: string
+      }[]
+      versions: {
+        version: number
+        /** Format: date-time */
+        at: string
+        changes: {
+          /** @enum {string} */
+          kind: "added" | "changed" | "removed"
+          text: string
+          /** @enum {string} */
+          source: "owner_said" | "owner_confirmed" | "reflection"
+        }[]
+        undoable: boolean
+      }[]
+    }
     MessageFeedback: {
       message_id: string
       /** @enum {string} */
@@ -7884,6 +7972,20 @@ export interface components {
        * @enum {string}
        */
       change_kind?: "copy" | "style" | "section" | "photo" | "creative"
+    }
+    OwnerMemoryReview: {
+      chip_through: number
+    }
+    OwnerProfile: {
+      lines: {
+        /** Format: uuid */
+        id: string
+        text: string & (unknown & unknown)
+        /** @enum {string} */
+        source: "owner_said" | "owner_confirmed" | "reflection"
+        /** Format: date-time */
+        at: string
+      }[]
     }
     Palette: {
       /** @enum {string} */
@@ -7938,6 +8040,15 @@ export interface components {
       screenshots: string[]
       /** Format: date-time */
       expires_at: string
+    }
+    ProfileLine: {
+      /** Format: uuid */
+      id: string
+      text: string & (unknown & unknown)
+      /** @enum {string} */
+      source: "owner_said" | "owner_confirmed" | "reflection"
+      /** Format: date-time */
+      at: string
     }
     ProgressEvent: {
       /** @enum {string} */
@@ -8022,6 +8133,53 @@ export interface components {
     RedirectPointer: {
       redirect_to: string
     }
+    RememberInput: {
+      operations: {
+        /** @enum {string} */
+        action: "add" | "replace" | "remove"
+        /** @description The line, as a plain statement about the owner. Required for add and replace. */
+        text?: string
+        /** @description A short piece of the existing line that no other line holds. Required for replace and remove. */
+        match?: string
+      }[]
+    }
+    RememberOutput:
+      | {
+          /** @constant */
+          outcome: "saved"
+          note: string
+          fullness: string
+        }
+      | {
+          /** @constant */
+          outcome: "full"
+          note: string
+          fullness: string
+          lines: string[]
+        }
+      | {
+          /** @constant */
+          outcome: "stopped"
+          note: string
+        }
+      | {
+          /** @constant */
+          outcome: "refused"
+          error: {
+            /** @enum {string} */
+            class:
+              | "validation"
+              | "permission"
+              | "transient"
+              | "resource"
+              | "provider"
+              | "integrity"
+              | "security"
+              | "budgetary"
+            code: string
+            message: string
+          }
+        }
     Reminder: {
       /** Format: uuid */
       id: string

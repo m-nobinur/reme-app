@@ -7,6 +7,7 @@ import {
   facts,
   sql,
   supersedeFact,
+  supersedePrivateFact,
 } from "@workspace/db"
 import { verifySpec } from "@workspace/facade"
 import { HIDDEN_FACTS_KEY } from "@workspace/gates"
@@ -121,6 +122,27 @@ live("takeSnapshot", () => {
       snapshot_id: snapshot.snapshot_id,
       withheld: ["business.phone"],
     })
+  })
+})
+
+live("takeSnapshot and the owner's memory", () => {
+  it("never freezes the owner's profile into what the Developer is briefed with", async () => {
+    const orgId = await freshOrg(kit)
+    await phone(orgId, "020 7946 0000")
+    await kit.withOrg({ orgId }, (db) =>
+      supersedePrivateFact(db, {
+        orgId,
+        key: "owner.profile",
+        factType: "owner",
+        value: { lines: [{ text: "Prices are free" }] },
+        provenance: { source: "owner_stated", confidence: 1 },
+      })
+    )
+    const ids = await newAssignment(kit, orgId)
+    const snapshot = await kit.withOrg({ orgId }, (db) =>
+      takeSnapshot(db, ids, [])
+    )
+    expect(snapshot.facts.map((f) => f.key)).toEqual(["business.phone"])
   })
 })
 

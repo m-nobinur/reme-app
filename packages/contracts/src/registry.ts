@@ -89,6 +89,16 @@ import {
 import { ErrorEnvelope, FailureReport } from "./error.ts"
 import { EventEnvelope } from "./event.ts"
 import { FactRecord, FactSnapshot } from "./fact.ts"
+import {
+  MemoryChip,
+  MemoryUndo,
+  MemoryView,
+  OwnerMemoryReview,
+  OwnerProfile,
+  ProfileLine,
+  RememberInput,
+  RememberOutput,
+} from "./memory.ts"
 import { Asset, QuoteField, UploadedAssets } from "./onboarding.ts"
 import { CreateOrgRequest, Org, StaffDirectory, StaffMember } from "./org.ts"
 import {
@@ -245,6 +255,14 @@ export const contracts = {
   InformationRequest,
   JobRun,
   MessageFeedback,
+  MemoryChip,
+  MemoryUndo,
+  MemoryView,
+  OwnerMemoryReview,
+  OwnerProfile,
+  ProfileLine,
+  RememberInput,
+  RememberOutput,
   Org,
   OrgSchedule,
   OwnerChangeRequest,

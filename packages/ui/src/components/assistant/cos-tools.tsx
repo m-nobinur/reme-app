@@ -422,6 +422,14 @@ const RecordReview: ToolCallMessagePartComponent = (props) => (
   />
 )
 
+/**
+ * Tools that show nothing in the thread: the chat tells the owner what was
+ * remembered on the next reply, as a chip, so no tool card is drawn.
+ */
+export const COS_QUIET: Record<string, ToolCallMessagePartComponent> = {
+  remember: () => null,
+}
+
 /** The reads, which the thread may fold together, by tool name. */
 export const COS_READS: Record<string, ToolCallMessagePartComponent> = {
   get_workspace: WorkspaceRead,

@@ -14,6 +14,7 @@ import {
   DomainPurchaseStatus,
   ErrorEnvelope,
   FactList,
+  MemoryView,
   type MessageFeedback,
   Org,
   PreviewLink,
@@ -628,6 +629,28 @@ async function completeReminder(id: string): Promise<WriteOutcome> {
   )
 }
 
+async function memory(): Promise<MemoryView | null> {
+  const body = await get("/memory")
+  return body === null ? null : MemoryView.parse(body)
+}
+
+async function undoMemory(
+  version: number
+): Promise<MemoryView | "stale" | null> {
+  const response = await call("/memory/undo", {
+    method: "POST",
+    body: { version },
+  })
+  if (!response || response.status === 401 || response.status === 403) {
+    return null
+  }
+  if (response.status === 409) return "stale"
+  if (!response.ok) {
+    throw new Error(`apps/api answered ${response.status} for /memory/undo`)
+  }
+  return MemoryView.parse(await response.json())
+}
+
 async function pushKey(): Promise<string | null> {
   const body = await get("/push/config")
   return body === null ? null : PushConfig.parse(body).public_key
@@ -771,6 +794,8 @@ export const apiSource: OwnerDataSource = {
   requestChange,
   createReminder,
   completeReminder,
+  memory,
+  undoMemory,
   pushKey,
   subscribePush,
   unsubscribePush,

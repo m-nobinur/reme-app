@@ -8,6 +8,7 @@ import {
   type CosTurn,
   ErrorEnvelope,
   type FactRecord,
+  type MemoryChip,
   OnboardingPlan,
   RequestChangeOutput,
   TOOL_CALL_CANCELLED,
@@ -64,6 +65,7 @@ import {
   readSession,
   sha256,
 } from "./cos/history.ts"
+import { takeChip } from "./cos/memory.ts"
 import { retrying } from "./cos/retry.ts"
 import {
   closeTurn,
@@ -886,14 +888,16 @@ export async function chat(
       const opening = await openCos(db, held, id, parsed.data, log, heard)
       if (opening instanceof Response) return opening
       const cosTurn: Turn = { ...session, turnId: newUlid() }
-      const { workspace, facts } = loaded ?? (await loadWorkspace(tools))
+      const { workspace, facts, profile, reminders } =
+        loaded ?? (await loadWorkspace(tools))
       const context = contextOf(
         mode,
         workspace,
         zone ?? null,
         new Date(),
         turn.kind === "message" ? parsed.data.intent : undefined,
-        personaOf(facts)
+        personaOf(facts, profile),
+        turn.kind === "message" && log.fresh ? { reminders } : null
       )
       await beginTurn(db, cosTurn, {
         prefix: log.prefixLogged ? null : prefix,
@@ -925,6 +929,11 @@ export async function chat(
         typed: opening.typed,
         // The turn's one whole read of its log (ADR-042), under its lock.
         log: await readSession(db, id),
+        // The memory changes the chat has not shown yet, shown on this reply.
+        chip:
+          !fallback && turn.kind === "message"
+            ? await takeChip(db, owner.orgId)
+            : null,
       }
     })
   } catch (error) {
@@ -1009,6 +1018,7 @@ type Opened = {
   /** The typed yes or no this turn took as the card's answer, once the lock confirmed the card. */
   typed: Typed | null
   log: LoggedEvent[]
+  chip: MemoryChip | null
 }
 
 /** A typed reply read as the answer to the open card `callId`, with the line that says so. */
@@ -1480,6 +1490,7 @@ async function startModel(
     uiMessages: messages,
     newMessageId: a.newId,
     lead: tail ? settledLead(messages, tail.id) : answeredChunk(a.opened.typed),
+    chip: a.opened.chip,
     rows,
     // The stream's reader ends after `closeRun`, so the turn is closed here.
     waitUntil: (reading) =>

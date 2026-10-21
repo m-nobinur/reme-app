@@ -404,6 +404,8 @@ export type SessionState = {
   prefixLogged: boolean
   /** A `cos.message` in the session names this message id, so the CoS made it. */
   named: boolean
+  /** No turn has opened in the session yet: the next is the conversation's first. */
+  fresh: boolean
 }
 
 export async function sessionState(
@@ -419,11 +421,14 @@ export async function sessionState(
       exists (select 1 from ${events} where session_id = ${sessionId}
         and type = 'cos.prefix' and payload->>'sha256' = ${prefixSha}) as "prefixLogged",
       exists (select 1 from ${events} where session_id = ${sessionId}
-        and type = 'cos.message' and payload->'message'->>'id' = ${messageId ?? ""}) as named`)
+        and type = 'cos.message' and payload->'message'->>'id' = ${messageId ?? ""}) as named,
+      not exists (select 1 from ${events} where session_id = ${sessionId}
+        and type = 'cos.context') as fresh`)
   return {
     frozen: row?.frozen === true,
     prefixLogged: row?.prefixLogged === true,
     named: row?.named === true,
+    fresh: row?.fresh === true,
   }
 }
 
