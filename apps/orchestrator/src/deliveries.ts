@@ -1,5 +1,9 @@
 import { createHash } from "node:crypto"
-import { replyToken, type ServerMessage } from "@workspace/contracts"
+import {
+  replyAddress,
+  replyToken,
+  type ServerMessage,
+} from "@workspace/contracts"
 import {
   deliveries,
   eq,
@@ -69,7 +73,8 @@ type BatchEnv = SendEnv & {
   APP_ORIGIN: string
   /** Signs the Reply-To token; unset, an email goes without one. */
   REPLY_TOKEN_KEY?: string
-  REPLY_DOMAIN: string
+  /** This environment's base reply address; see `replyAddress` in the contracts. */
+  REPLY_MAILBOX: string
 }
 
 /**
@@ -337,7 +342,7 @@ async function sendEmail(
     await env.OWNER_MAIL.send({
       from: OWNER_FROM,
       to,
-      ...(token && { replyTo: `reply+${token}@${env.REPLY_DOMAIN}` }),
+      ...(token && { replyTo: replyAddress(env.REPLY_MAILBOX, token) }),
       subject,
       text: `${text}\n\nOpen Reme: ${link}`,
       html: `${text

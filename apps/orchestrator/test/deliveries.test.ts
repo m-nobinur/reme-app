@@ -40,7 +40,7 @@ function stubs() {
       OWNER_MAIL: { send } as unknown as SendEmail,
       APP_ORIGIN: "https://app.example.invalid",
       REPLY_TOKEN_KEY: "k".repeat(32),
-      REPLY_DOMAIN: "reply.example.invalid",
+      REPLY_MAILBOX: "reply@reply.example.invalid",
       VAPID_SUBJECT: "mailto:ops@example.invalid",
       HYPERDRIVE: {} as Hyperdrive,
     },

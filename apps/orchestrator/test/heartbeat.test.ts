@@ -11,6 +11,7 @@ import {
   scheduledJobs,
   sql,
   staff,
+  supersedePrivateFact,
 } from "@workspace/db"
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { type DeliveryMessage, deliveriesBatch } from "../src/deliveries.ts"
@@ -404,6 +405,40 @@ describe.skipIf(!url)("the heartbeat", () => {
         "heartbeat_gate",
         "heartbeat_writer",
       ])
+    })
+
+    it("gives the writer the owner profile's lines, never their ids or sources", async () => {
+      await kit.withOrg({ orgId }, (db) =>
+        supersedePrivateFact(db, {
+          orgId,
+          key: "owner.profile",
+          factType: "owner.profile",
+          value: {
+            lines: [
+              {
+                id: crypto.randomUUID(),
+                text: "Prefers calls after 4pm",
+                source: "owner_said",
+                at: NOON.toISOString(),
+              },
+              {
+                id: crypto.randomUUID(),
+                text: "Quotes go out on Fridays",
+                source: "reflection",
+                at: NOON.toISOString(),
+              },
+            ],
+          },
+          provenance: { source: "owner_stated", confidence: 1 },
+        })
+      )
+      await seed(later(NOON, 20), later(NOON, -2))
+      probability = 0.95
+      await beat(NOON)
+      const data = models.write.mock.calls[0]?.[1] as { owner_profile?: string }
+      expect(data.owner_profile).toBe(
+        "Prefers calls after 4pm\nQuotes go out on Fridays"
+      )
     })
 
     it("sends in-app only when the owner has typed since the last heartbeat", async () => {

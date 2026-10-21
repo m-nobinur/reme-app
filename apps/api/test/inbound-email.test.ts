@@ -325,7 +325,7 @@ describe.skipIf(!url)("receive, against a database", () => {
   const env = {
     HYPERDRIVE: {} as Hyperdrive,
     REPLY_TOKEN_KEY: KEY,
-    REPLY_DOMAIN: DOMAIN,
+    REPLY_MAILBOX: `reply@${DOMAIN}`,
   }
   const quiet = () =>
     vi.spyOn(console, "log").mockImplementation(() => undefined)

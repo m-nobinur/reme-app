@@ -30,9 +30,9 @@
   // staging allows and production never does (ADR-032).
   "vars": {
     "SITE_HOST_SUFFIX": "-stg.remeai.co.uk",
-    // The domain of an owner email's Reply-To (src/deliveries.ts); the api's
-    // inbound handler must hold the same value.
-    "REPLY_DOMAIN": "reply.remeai.co.uk",
+    // The base address of an owner email's Reply-To (src/deliveries.ts); the
+    // api's inbound handler must hold the same value.
+    "REPLY_MAILBOX": "reply@reply-stg.remeai.co.uk",
     // Who a push service may contact about our pushes (src/push.ts); the
     // VAPID_PRIVATE_KEY secret signs them.
     "VAPID_SUBJECT": "mailto:hello@remeai.co.uk",
@@ -185,7 +185,7 @@
       ],
       "vars": {
         "SITE_HOST_SUFFIX": ".remeai.co.uk",
-        "REPLY_DOMAIN": "reply.remeai.co.uk",
+        "REPLY_MAILBOX": "reply@reply.remeai.co.uk",
         "VAPID_SUBJECT": "mailto:hello@remeai.co.uk",
         "CF_DOMAINS_ZONE_ID": "a786a7b1f7e583b37a42936788d877c3",
         // The live registrar: real, non-refundable registrations, so buying
