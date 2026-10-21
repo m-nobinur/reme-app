@@ -100,7 +100,7 @@
   // earliest due job (src/schedule.ts), shared with the api, which lowers it.
   "kv_namespaces": [
     { "binding": "ROUTES", "id": "1f8dffa950774f3cb41e2b28dac89767" },
-    { "binding": "SCHEDULE", "id": "REPLACE_WITH_reme-schedule_ID" }
+    { "binding": "SCHEDULE", "id": "ba285b5477564b44b27ab15fa4bdd957" }
   ],
   // Claimed jobs, one message each (src/jobs.ts). The first attempt and three
   // retries, then the dead-letter queue; the job's claim lapses and the cron
@@ -247,7 +247,7 @@
         { "binding": "ROUTES", "id": "a9aa0dcef20f49539b24ee10a2f9e83b" },
         {
           "binding": "SCHEDULE",
-          "id": "REPLACE_WITH_reme-schedule-production_ID"
+          "id": "6f08f01d3fb144a78608139824bca704"
         }
       ],
       "queues": {

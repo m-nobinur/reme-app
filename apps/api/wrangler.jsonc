@@ -103,7 +103,7 @@
   // reads it. The api only lowers it, after the commit that wrote a job
   // (ADR-043).
   "kv_namespaces": [
-    { "binding": "SCHEDULE", "id": "REPLACE_WITH_reme-schedule_ID" }
+    { "binding": "SCHEDULE", "id": "ba285b5477564b44b27ab15fa4bdd957" }
   ],
   // Resizes generated photos to thumbnails in `GET /photos/:id`. Local
   // `wrangler dev` runs a low-fidelity offline version (width and format).
@@ -189,7 +189,7 @@
       "kv_namespaces": [
         {
           "binding": "SCHEDULE",
-          "id": "REPLACE_WITH_reme-schedule-production_ID"
+          "id": "6f08f01d3fb144a78608139824bca704"
         }
       ],
       // Its own namespace: staging and production people share one WorkOS
