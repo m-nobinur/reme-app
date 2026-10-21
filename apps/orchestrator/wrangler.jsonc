@@ -140,7 +140,7 @@
       "scheduling_policy": "durable_object",
       "images": {
         "sandbox": {
-          "image": "registry.cloudflare.com/f161d624d34c45dd59579f9ee45c4396/reme-sandbox@sha256:7ee0e400c961d6720b2ff412150a5a796e5cbf65647b02cbe6a2515914ef4ee2"
+          "image": "registry.cloudflare.com/f161d624d34c45dd59579f9ee45c4396/reme-sandbox@sha256:0aa2f718e2e3f253be72833836c8d64945a28d9cc8956481d965b4ca562bb35a"
         }
       }
     }
@@ -275,7 +275,7 @@
           "scheduling_policy": "durable_object",
           "images": {
             "sandbox": {
-              "image": "registry.cloudflare.com/f161d624d34c45dd59579f9ee45c4396/reme-sandbox@sha256:7ee0e400c961d6720b2ff412150a5a796e5cbf65647b02cbe6a2515914ef4ee2"
+              "image": "registry.cloudflare.com/f161d624d34c45dd59579f9ee45c4396/reme-sandbox@sha256:0aa2f718e2e3f253be72833836c8d64945a28d9cc8956481d965b4ca562bb35a"
             }
           }
         }
