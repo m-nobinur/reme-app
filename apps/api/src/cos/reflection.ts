@@ -20,6 +20,7 @@ import { readSession, type SessionEvent } from "./history.ts"
 import {
   applyOperations,
   inOwnersWords,
+  linesMatching,
   lockProfile,
   readProfile,
   readReview,
@@ -234,10 +235,7 @@ export function guard(
       dropped.push({ op, why: "business" })
       continue
     }
-    const wanted = op.match?.trim().toLowerCase()
-    const hits = wanted
-      ? lines.filter((l) => l.text.toLowerCase().includes(wanted))
-      : []
+    const hits = op.match ? linesMatching(lines, op.match) : []
     const target = hits.length === 1 ? hits[0] : undefined
     const kept = target && target.source !== "reflection"
     if (op.action === "remove" && kept) {
@@ -403,6 +401,13 @@ export async function reflectAfterTurn(
     return log("budgetary")
   }
   const made = await reflect(model, prompt)
+  // Recorded before anything can fail or be superseded, so the cap counts it.
+  await insertPass(kit, job, null, made.problem ?? "called", {
+    model: REFLECTION.model,
+    usage: made.usage,
+    cost_usd: made.cost,
+    ms: made.ms,
+  })
 
   const written = await kit.withOrg(at, async (db) => {
     await lockProfile(db, job.orgId)
@@ -437,10 +442,6 @@ export async function reflectAfterTurn(
       }
     }
     await insertPass(db, job, window.through, made.problem ?? "written", {
-      model: REFLECTION.model,
-      usage: made.usage,
-      cost_usd: made.cost,
-      ms: made.ms,
       changes: steps.length,
       dropped: dropped.map((d) => d.why),
       ask_first: review.ask_first,
@@ -455,11 +456,15 @@ export async function reflectAfterTurn(
   })
 }
 
-/** Records a pass, so the next window starts after it, and its cost for the daily cap. */
+/**
+ * Records a pass: with `through`, where the next window starts; with a cost,
+ * what the daily cap counts. The call's cost and the pass are separate events
+ * so a pass that is superseded or fails to write still costs.
+ */
 async function insertPass(
   from: Tenancy | OrgScopedDb,
   job: AfterTurn,
-  through: number,
+  through: number | null,
   outcome: string,
   extra: Record<string, unknown> = {}
 ) {
@@ -476,7 +481,7 @@ async function insertPass(
         job: "reflection",
         session_id: job.sessionId,
         turn_id: job.turnId,
-        through_seq: through,
+        ...(through === null ? {} : { through_seq: through }),
         outcome,
         cost_usd: 0,
         ...extra,

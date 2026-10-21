@@ -133,8 +133,7 @@ of operations that is empty most of the time; its cost is a `cos.background_step
 event records how far the pass read, so the next window starts there. Code decides what is written: a new line must be
 in the owner's words from the window, must not read as an order or an attack, and must hold no price, email address or
 phone number; a line the owner said or confirmed is never removed and is replaced only with words the profile already
-holds; one pass changes at most a fifth of the lines, one at least. Each change is its own version, from
-`supersedeFact`'s inferred provenance and a `reflection` source, so undo is per change. With "Ask me before saving",
+holds; one pass changes at most a fifth of the lines, one at least. Each change is its own version, with inferred provenance and a `reflection` source, so undo is per change. With "Ask me before saving",
 kept with the chat's mark in `owner.memory_review`, the changes wait as proposals on the memory page, and accepting one
 saves it as `owner_confirmed`.
 

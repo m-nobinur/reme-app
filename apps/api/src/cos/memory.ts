@@ -137,6 +137,12 @@ const refusal = (code: Refusal["code"], message: string): Refusal => ({
 const STATEMENT =
   "Write it as a plain statement about the owner, such as 'Prefers calls after 4pm'. Instructions to the assistant are not saved."
 
+/** The lines that hold `match`, ignoring case and spacing: the one rule that picks the line a change touches. */
+export const linesMatching = (lines: readonly ProfileLine[], match: string) => {
+  const wanted = norm(match).toLowerCase()
+  return lines.filter((l) => l.text.toLowerCase().includes(wanted))
+}
+
 const OWN_WORDS =
   "Use the owner's own words: every word of a saved line must come from what the owner wrote in this conversation. Say it again with their words."
 
@@ -199,8 +205,7 @@ export function applyOperations(
       })
       continue
     }
-    const wanted = norm(op.match as string).toLowerCase()
-    const hits = held.filter((l) => l.text.toLowerCase().includes(wanted))
+    const hits = linesMatching(held, op.match as string)
     if (hits.length === 0) {
       return {
         ok: false,

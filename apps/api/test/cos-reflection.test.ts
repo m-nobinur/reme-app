@@ -309,6 +309,18 @@ describe("the guards", () => {
     })
   })
 
+  it("protects a line however the model spaces the piece it names", () => {
+    const mine = line("Quotes go out on Fridays", "owner_said")
+    const done = guard(
+      [mine],
+      [{ action: "remove", match: "  GO   out " }],
+      said,
+      AT
+    )
+    expect(done.steps).toEqual([])
+    expect(done.dropped[0]?.why).toBe("protected")
+  })
+
   it("leaves a version for each change, each with the profile it leaves", () => {
     const held = Array.from({ length: 10 }, (_, i) => line(`Holds fact ${i}`))
     const done = guard(
@@ -464,7 +476,12 @@ describe.skipIf(!url)("a pass, on a live connection", () => {
               changes?: number
             }
         )
-        .filter((p) => p.job === "reflection" && p.session_id === sessionId)
+        .filter(
+          (p) =>
+            p.job === "reflection" &&
+            p.session_id === sessionId &&
+            p.through_seq !== undefined
+        )
     )
 
   const tens = () =>
@@ -595,7 +612,7 @@ describe.skipIf(!url)("a pass, on a live connection", () => {
     const job = await closed(talk)
     const { model } = fakeModel(answer())
     await reflectAfterTurn(kit, model, { ...job, idle: true })
-    const [pass] = await kit.withOrg(at(), (db) =>
+    const [pass] = await kit.withOrg(at(), async (db) =>
       db
         .select({ payload: events.payload })
         .from(events)
@@ -604,7 +621,8 @@ describe.skipIf(!url)("a pass, on a live connection", () => {
           r.filter(
             (x) =>
               (x.payload as { session_id?: string }).session_id ===
-              job.sessionId
+                job.sessionId &&
+              (x.payload as { outcome?: string }).outcome === "called"
           )
         )
     )
