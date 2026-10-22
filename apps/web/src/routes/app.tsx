@@ -1,8 +1,8 @@
 import {
   AlarmIcon,
   ChatCircleTextIcon,
-  FlowArrowIcon,
   GlobeIcon,
+  ListChecksIcon,
   NotePencilIcon,
 } from "@phosphor-icons/react"
 import {
@@ -21,17 +21,17 @@ import type { Conversation } from "@workspace/contracts"
 import { railItemClass } from "@workspace/ui/components/app-shell"
 import { SiteNameProvider } from "@workspace/ui/components/assistant/blueprint-card"
 import {
+  ChatHistory,
   type HistoryEntry,
-  HistoryMenu,
 } from "@workspace/ui/components/history-menu"
 import { LogoMark } from "@workspace/ui/components/logo"
 import {
   type NotificationEntry,
   NotificationMenu,
 } from "@workspace/ui/components/notification-list"
+import { PipelineIcon } from "@workspace/ui/components/pipeline-icon"
 import { Hint } from "@workspace/ui/components/tooltip"
 import {
-  ConversationMenu,
   WorkspacePage,
   WorkspaceShell,
 } from "@workspace/ui/components/workspace-shell"
@@ -105,7 +105,9 @@ export const Route = createFileRoute("/app")({
 /** The rail's sections after the chat. */
 const SECTIONS = [
   { to: "/app/website", label: "Website", icon: GlobeIcon },
-  { to: "/app/pipeline", label: "Pipeline", icon: FlowArrowIcon },
+  { to: "/app/pipeline", label: "Pipeline", icon: PipelineIcon },
+  { to: "/app/reminders", label: "Reminders", icon: AlarmIcon },
+  { to: "/app/tasks", label: "Tasks", icon: ListChecksIcon },
 ] as const
 
 /** How many notifications the rail's bell lists before "View all". */
@@ -171,7 +173,9 @@ function AppLayout() {
         .conversation,
   })
   const { id } = useParams({ strict: false })
-  const stored = conversations?.find((each) => each.id === id)
+  // A new conversation has no activity to show beside it yet: the composer
+  // takes the page, and the panel appears once the first message stores it.
+  const showPanel = hasPanel && !(conversation && !id)
   // Getting started stays in the help menu until the first build.
   const onboarding = onboardingFor(live.workspace, conversations)
   const router = useRouter()
@@ -247,52 +251,30 @@ function AppLayout() {
           defaultPanelOpen={panelOpen}
           defaultRailOpen={railOpen}
           openPanel={press}
-          menu={
-            conversation ? (
-              <ConversationMenu
-                newChat={
-                  <Link
-                    state={() => ({ chat: crypto.randomUUID() })}
-                    to="/app"
-                  />
-                }
-              />
-            ) : undefined
-          }
-          actions={<HistoryMenu current={id} items={history} />}
-          panel={hasPanel ? <WorkspacePanel panel={panel} /> : null}
-          panelLine={hasPanel ? <WorkspacePanelLine panel={panel} /> : null}
-          title={stored ? conversationTitle(stored) : conversation}
+          panel={showPanel ? <WorkspacePanel panel={panel} /> : null}
+          panelLine={showPanel ? <WorkspacePanelLine panel={panel} /> : null}
           rail={
             <>
-              <span className="flex h-10 shrink-0 items-center px-[9px] text-foreground">
+              <span className="mb-4 flex h-12 shrink-0 items-center px-2.5 text-foreground">
                 <LogoMark />
               </span>
-              <nav aria-label="Main" className="flex flex-col gap-1">
-                <Hint label="New conversation" side="right">
-                  {/* The new-conversation screen is home, so this is current only on
-                    the bare address, and a fresh state starts one each time. */}
-                  <Link
-                    activeOptions={{ exact: true }}
-                    className={railItemClass}
-                    state={() => ({ chat: crypto.randomUUID() })}
-                    to="/app"
-                  >
-                    <NotePencilIcon aria-hidden />
-                    <span data-slot="rail-label">New conversation</span>
-                  </Link>
-                </Hint>
+              <nav aria-label="Main" className="flex flex-col gap-2">
                 {last ? (
-                  <Hint label="Chat" side="right">
-                    <Link
-                      className={railItemClass}
-                      params={{ id: last.id }}
-                      to="/app/c/$id"
-                    >
-                      <ChatCircleTextIcon aria-hidden />
-                      <span data-slot="rail-label">Chat</span>
-                    </Link>
-                  </Hint>
+                  // Hovering the link lists every conversation beside it.
+                  <ChatHistory
+                    current={id}
+                    items={history}
+                    trigger={
+                      <Link
+                        className={railItemClass}
+                        params={{ id: last.id }}
+                        to="/app/c/$id"
+                      >
+                        <ChatCircleTextIcon aria-hidden />
+                        <span data-slot="rail-label">Chat</span>
+                      </Link>
+                    }
+                  />
                 ) : (
                   <Hint label="No chats yet" side="right">
                     {/* Nowhere to go yet, so no link: a button that does
@@ -307,6 +289,19 @@ function AppLayout() {
                     </button>
                   </Hint>
                 )}
+                <Hint label="New conversation" side="right">
+                  {/* The new-conversation screen is home, so this is current only on
+                    the bare address, and a fresh state starts one each time. */}
+                  <Link
+                    activeOptions={{ exact: true }}
+                    className={railItemClass}
+                    state={() => ({ chat: crypto.randomUUID() })}
+                    to="/app"
+                  >
+                    <NotePencilIcon aria-hidden />
+                    <span data-slot="rail-label">New conversation</span>
+                  </Link>
+                </Hint>
                 {SECTIONS.map((item) => (
                   <Hint key={item.to} label={item.label} side="right">
                     <Link className={railItemClass} to={item.to}>
@@ -317,14 +312,8 @@ function AppLayout() {
                     </Link>
                   </Hint>
                 ))}
-                <Hint label="Reminders" side="right">
-                  <Link className={railItemClass} to="/app/reminders">
-                    <AlarmIcon aria-hidden />
-                    <span data-slot="rail-label">Reminders</span>
-                  </Link>
-                </Hint>
               </nav>
-              <div className="mt-auto flex flex-col gap-1">
+              <div className="mt-auto flex flex-col gap-2">
                 <NotificationMenu
                   items={entries}
                   onOpenChange={markMenuSeen}

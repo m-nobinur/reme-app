@@ -6,6 +6,7 @@ import {
   FlowArrowIcon,
   GearSixIcon,
   GlobeIcon,
+  ListChecksIcon,
   MoonIcon,
   NotePencilIcon,
   QuestionIcon,
@@ -26,10 +27,11 @@ import {
 } from "@workspace/ui/components/dropdown-menu"
 import { EmptyState } from "@workspace/ui/components/empty-state"
 import {
+  ChatHistory,
   type HistoryEntry,
-  HistoryMenu,
 } from "@workspace/ui/components/history-menu"
 import { LogoMark } from "@workspace/ui/components/logo"
+import { PipelineIcon } from "@workspace/ui/components/pipeline-icon"
 import {
   Settings,
   SettingsContent,
@@ -45,7 +47,6 @@ import {
 import { toggleTheme } from "@workspace/ui/components/theme-toggle"
 import { Hint } from "@workspace/ui/components/tooltip"
 import {
-  ConversationMenu,
   WorkspacePage,
   WorkspaceShell,
 } from "@workspace/ui/components/workspace-shell"
@@ -173,7 +174,7 @@ function SettingsSample() {
         >
           <span
             aria-hidden
-            className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary font-semibold text-primary-foreground text-xs"
+            className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary font-semibold text-primary-foreground text-xs"
             data-slot="mark"
           >
             SF
@@ -190,10 +191,12 @@ function SettingsSample() {
 }
 
 const RAIL_NAV = [
-  { href: "#new", label: "New conversation", icon: NotePencilIcon },
   { href: "#chat", label: "Chat", icon: ChatCircleTextIcon, current: true },
+  { href: "#new", label: "New conversation", icon: NotePencilIcon },
   { href: "#website", label: "Website", icon: GlobeIcon },
-  { href: "#pipeline", label: "Pipeline", icon: FlowArrowIcon },
+  { href: "#pipeline", label: "Pipeline", icon: PipelineIcon },
+  { href: "#reminders", label: "Reminders", icon: AlarmIcon },
+  { href: "#tasks", label: "Tasks", icon: ListChecksIcon },
 ]
 
 /**
@@ -203,10 +206,10 @@ const RAIL_NAV = [
 function Rail() {
   return (
     <>
-      <span className="flex h-10 shrink-0 items-center px-[9px] text-foreground">
+      <span className="mb-4 flex h-12 shrink-0 items-center px-2.5 text-foreground">
         <LogoMark />
       </span>
-      <nav aria-label="Main" className="flex flex-col gap-1">
+      <nav aria-label="Main" className="flex flex-col gap-2">
         {RAIL_NAV.map((item) => (
           <Hint key={item.href} label={item.label} side="right">
             <a
@@ -221,14 +224,8 @@ function Rail() {
             </a>
           </Hint>
         ))}
-        <Hint label="Reminders" side="right">
-          <a className={railItemClass} href="#reminders">
-            <AlarmIcon aria-hidden />
-            <span data-slot="rail-label">Reminders</span>
-          </a>
-        </Hint>
       </nav>
-      <div className="mt-auto flex flex-col gap-1">
+      <div className="mt-auto flex flex-col gap-2">
         <BellSample unread={3} />
         <SettingsSample />
       </div>
@@ -243,15 +240,17 @@ const HISTORY: HistoryEntry[] = Array.from({ length: 30 }, (_, index) => ({
     ["Weekend prices", "New oven cleaning page", "Reply to a review"][
       index % 3
     ] + (index > 2 ? ` ${Math.floor(index / 3) + 1}` : ""),
-  at: new Date(Date.UTC(2026, 8, 30 - index)).toISOString(),
+  // The first three are recent, one under each of the first headings; the
+  // rest are fixed, so the list reads the same on any day.
+  at:
+    index < 3
+      ? new Date(
+          Date.now() - (index === 2 ? 3 : index) * 86_400_000
+        ).toISOString()
+      : new Date(Date.UTC(2026, 8, 30 - index)).toISOString(),
   // biome-ignore lint/a11y/useAnchorContent: the menu fills the link with the row.
   link: <a href={`#chat-${index}`} />,
 }))
-
-/** The top bar's icons: the history. */
-function TopActions() {
-  return <HistoryMenu current="chat-0" items={HISTORY} />
-}
 
 /** A named icon, as the rail and the top bar draw them. */
 function HintSample() {
@@ -271,7 +270,6 @@ function HintSample() {
 function ShellSample() {
   return (
     <WorkspaceShell
-      actions={<TopActions />}
       className="h-[40rem] border border-border"
       panel={<SamplePanel />}
       panelLine={<SamplePanelLine />}
@@ -284,24 +282,6 @@ function ShellSample() {
           icon={<CheckCircleIcon />}
           title="Nothing waiting on you"
         />
-      </WorkspacePage>
-    </WorkspaceShell>
-  )
-}
-
-/** A conversation's top bar: the ··· menu starts a new conversation. */
-function ConversationSample() {
-  return (
-    <WorkspaceShell
-      className="h-[24rem] border border-border"
-      menu={<ConversationMenu newChat={<a href="#new" />} />}
-      panel={<SamplePanel />}
-      panelLine={<SamplePanelLine />}
-      rail={<Rail />}
-      title="Weekend prices"
-    >
-      <WorkspacePage>
-        <p className="text-muted-foreground text-sm">The conversation.</p>
       </WorkspacePage>
     </WorkspaceShell>
   )
@@ -354,7 +334,6 @@ const workspaceCatalog: Entry[] = [
     name: "WorkspaceShell without a panel",
     render: () => (
       <WorkspaceShell
-        actions={<TopActions />}
         className="h-[24rem] border border-border"
         panel={null}
         panelLine={null}
@@ -370,23 +349,28 @@ const workspaceCatalog: Entry[] = [
     ),
   },
   {
-    name: "HistoryMenu",
+    // Opens on hover, beside the rail's link to the latest chat.
+    name: "ChatHistory",
     render: () => (
-      <div className="flex justify-end">
-        <HistoryMenu current="chat-0" items={HISTORY} />
+      <div className="flex h-72 w-16 flex-col rounded-lg bg-rail p-2.5 text-rail-foreground">
+        <ChatHistory
+          current="chat-0"
+          items={HISTORY}
+          trigger={
+            <a className={railItemClass} href="#chat-0">
+              <ChatCircleTextIcon aria-hidden />
+              <span data-slot="rail-label">Chat</span>
+            </a>
+          }
+        />
       </div>
     ),
   },
   {
-    name: "HistoryMenu empty",
-    render: () => (
-      <div className="flex justify-end">
-        <HistoryMenu items={[]} />
-      </div>
-    ),
+    name: "PipelineIcon",
+    render: () => <PipelineIcon className="size-8 text-foreground" />,
   },
   { name: "Hint", render: () => <HintSample /> },
-  { name: "ConversationActions", render: () => <ConversationSample /> },
   {
     name: "WorkspacePage",
     render: () => (

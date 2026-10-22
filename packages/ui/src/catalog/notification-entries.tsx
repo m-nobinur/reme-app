@@ -171,7 +171,7 @@ function BellSample({
 /** The rail's foot, where the bell sits. */
 function RailBell(props: ComponentProps<typeof BellSample>) {
   return (
-    <div className="flex h-[34rem] w-14 flex-col justify-end rounded-lg bg-rail p-2 text-rail-foreground">
+    <div className="flex h-[34rem] w-16 flex-col justify-end rounded-lg bg-rail p-2 text-rail-foreground">
       <BellSample {...props} />
     </div>
   )

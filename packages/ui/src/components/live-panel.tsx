@@ -778,7 +778,7 @@ function WaitingOnYou({
 
 /** A change note's text box, for a review and for the live site alike. */
 const NOTE =
-  "min-h-20 w-full rounded-2xl border border-transparent bg-input/50 px-3 py-2 text-base outline-none transition-[color,box-shadow] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring disabled:opacity-50 md:text-sm"
+  "min-h-20 w-full rounded-2xl border border-transparent bg-input/50 px-3 py-2 text-base outline-none transition-[color,box-shadow] placeholder:text-muted-foreground focus-visible:border-field-focus disabled:opacity-50 md:text-sm"
 
 const pending = (busy: boolean, idle: string, working: string) =>
   busy ? working : idle

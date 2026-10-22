@@ -1,9 +1,9 @@
-import { FlowArrowIcon } from "@phosphor-icons/react"
 import { createFileRoute } from "@tanstack/react-router"
 import { PageHeader } from "@workspace/ui/components/app-shell"
 import { Badge } from "@workspace/ui/components/badge"
 import { EmptyState } from "@workspace/ui/components/empty-state"
 import { ListFilter } from "@workspace/ui/components/list-filter"
+import { PipelineIcon } from "@workspace/ui/components/pipeline-icon"
 import {
   Table,
   TableBody,
@@ -57,7 +57,7 @@ function Pipeline() {
       {items.length === 0 ? (
         <EmptyState
           description="Enquiries appear here once your intake channels are connected."
-          icon={<FlowArrowIcon />}
+          icon={<PipelineIcon />}
           title="No enquiries yet"
         />
       ) : (
@@ -77,7 +77,7 @@ function Pipeline() {
           {matches.length === 0 ? (
             <EmptyState
               description="No enquiry matches that filter."
-              icon={<FlowArrowIcon />}
+              icon={<PipelineIcon />}
               title="No matches"
             />
           ) : (

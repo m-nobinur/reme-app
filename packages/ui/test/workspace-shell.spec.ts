@@ -98,7 +98,7 @@ test("the layout changes shape at md and lg", async ({ page }) => {
   const rail = page.getByRole("complementary", { name: "Workspace" })
 
   await open(page, "WorkspaceShell", WIDTHS.desktop)
-  expect((await rail.boundingBox())?.width).toBe(56)
+  expect((await rail.boundingBox())?.width).toBe(64)
   expect((await panel(page).boundingBox())?.width).toBe(352)
   await expect(panelToggle(page)).toHaveAttribute("aria-expanded", "true")
   await expect(railToggle(page)).toBeHidden()
@@ -174,16 +174,23 @@ test("the rail names each icon on hover", async ({ page }) => {
 test("the history lists chats newest first, searchable, a page at a time", async ({
   page,
 }) => {
-  await open(page, "WorkspaceShell", WIDTHS.desktop)
-  await page.getByRole("button", { name: "History" }).click()
-  const list = page.getByRole("list", { name: "Conversations" })
+  await open(page, "ChatHistory", WIDTHS.desktop)
+  const chat = page.getByRole("link", { name: "Chat" })
+  await chat.hover()
+  const list = page.locator('[data-slot="chat-history-content"]')
   await expect(list.getByRole("link")).toHaveCount(12)
+  await expect(list.getByRole("heading", { level: 3 })).toHaveText([
+    "Today",
+    "Yesterday",
+    "This week",
+    "Older",
+  ])
   await expect(list.getByRole("link").first()).toContainText("Weekend prices")
   await expect(list.getByRole("link").first()).toHaveAttribute(
     "aria-current",
     "page"
   )
-  await page.getByRole("button", { name: "Load more" }).click()
+  await page.getByRole("button", { name: "Load older conversations" }).click()
   await expect(list.getByRole("link")).toHaveCount(24)
 
   const search = page.getByRole("searchbox", {
@@ -204,24 +211,30 @@ test("the history lists chats newest first, searchable, a page at a time", async
 
   await search.fill("")
   await list.getByRole("link").nth(1).click()
-  await expect(page.locator('[data-slot="history-menu-content"]')).toHaveCount(
-    0
-  )
+  await expect(list).toHaveCount(0)
+
+  // Following the rail's own link closes it, and it stays shut under the pointer.
+  await chat.hover()
+  await expect(list).toBeVisible()
+  await chat.click()
+  await expect(list).toHaveCount(0)
+  await page.waitForTimeout(600)
+  await expect(list).toHaveCount(0)
 })
 
-test("the panel floats under the top bar, and the page centres in the full width", async ({
+test("the panel floats at the top right, and the page centres in the full width", async ({
   page,
 }) => {
   await open(page, "WorkspaceShell", WIDTHS.desktop)
-  const history = await page.locator('[data-slot="history-menu"]').boundingBox()
   const card = await panel(page).boundingBox()
   const main = await page.locator("#main").boundingBox()
   const page_ = await page.locator('[data-slot="workspace-page"]').boundingBox()
-  if (!history || !card || !main || !page_) throw new Error("not laid out")
-  expect(card.y).toBeGreaterThanOrEqual(history.y + history.height)
-  expect(card.x + card.width).toBeGreaterThanOrEqual(
-    history.x + history.width - 1
-  )
+  if (!card || !main || !page_) throw new Error("not laid out")
+  const header = await page.locator("header").boundingBox()
+  if (!header) throw new Error("not laid out")
+  // Level with the top bar, at the right edge: the top bar has nothing there.
+  expect(card.y - header.y).toBeLessThanOrEqual(16)
+  expect(main.x + main.width - (card.x + card.width)).toBeLessThanOrEqual(16)
   // Centred in main, open or not: the panel takes no column of its own.
   const left = page_.x - main.x
   const right = main.x + main.width - (page_.x + page_.width)
@@ -262,7 +275,7 @@ test("the rail collapses and remembers it in a cookie", async ({ page }) => {
   expect(await cookie(page, "reme-rail")).toBe("closed")
 
   await page.getByRole("button", { name: "Show sidebar" }).click()
-  await expect.poll(async () => (await rail.boundingBox())?.width ?? 0).toBe(56)
+  await expect.poll(async () => (await rail.boundingBox())?.width ?? 0).toBe(64)
   expect(await cookie(page, "reme-rail")).toBe("open")
 })
 

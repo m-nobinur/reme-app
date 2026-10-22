@@ -274,7 +274,7 @@ export function OwnerSettings({
         >
           <span
             aria-hidden
-            className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary font-semibold text-primary-foreground text-xs"
+            className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary font-semibold text-primary-foreground text-xs"
             data-slot="mark"
           >
             {initialsOf(ownerName)}

@@ -1,17 +1,9 @@
 import {
   CaretDownIcon,
-  DotsThreeIcon,
   ListIcon,
-  NotePencilIcon,
   SidebarSimpleIcon,
 } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLinkItem,
-  DropdownMenuTrigger,
-} from "@workspace/ui/components/dropdown-menu"
 import {
   Sheet,
   SheetContent,
@@ -28,7 +20,6 @@ import { cn } from "@workspace/ui/lib/utils"
 import {
   type ComponentProps,
   type MouseEvent,
-  type ReactElement,
   type ReactNode,
   useCallback,
   useEffect,
@@ -104,7 +95,7 @@ const useWide = () =>
  * The owner workspace: a compact rail of icons, the conversation, and the
  * live panel floating at the top right.
  *
- * From `md` the rail is a 56px column of icons, each named on hover, that hides
+ * From `md` the rail is a 64px column of icons, each named on hover, that hides
  * with the toggle at the top left, remembered in a cookie; below `md` it is a
  * sheet from the left, where the names show beside the icons. A rail label
  * is a `data-slot="rail-label"` span. The panel is a rounded
@@ -114,19 +105,15 @@ const useWide = () =>
  * conversation stays centred. From `lg` whether it is open is remembered;
  * below `lg` it starts minimised, since there it covers the conversation.
  * With no `panel` there is no card and no space kept for it. The rail and the
- * panel are slots, so this package still imports no router. `title` and `menu` name
- * the page in the top bar; `actions` sit at its right.
+ * panel are slots, so this package still imports no router.
  */
 function WorkspaceShell({
   rail,
   panel,
   panelLine,
-  actions,
   defaultRailOpen = true,
   defaultPanelOpen = true,
   openPanel,
-  title,
-  menu,
   children,
   className,
 }: {
@@ -138,12 +125,6 @@ function WorkspaceShell({
   panel: ReactNode
   /** One line of live activity: the panel's header, and all of it minimised. */
   panelLine: ReactNode
-  /** Plain text, never markup: a title can be the owner's or the model's words. */
-  title?: string | undefined
-  /** The page's ··· menu, drawn beside the title. */
-  menu?: ReactNode
-  /** Icon buttons at the top right. */
-  actions?: ReactNode
   defaultRailOpen?: boolean
   defaultPanelOpen?: boolean
   /**
@@ -226,14 +207,14 @@ function WorkspaceShell({
           aria-label="Workspace"
           className={cn(
             "hidden shrink-0 flex-col overflow-hidden border-border bg-rail text-rail-foreground transition-[width] duration-200 ease-out motion-reduce:transition-none md:flex",
-            railOpen ? "w-14 border-r" : "w-0",
+            railOpen ? "w-16 border-r" : "w-0",
             "[&_[data-slot=rail-label]]:sr-only"
           )}
           data-state={railOpen ? "open" : "closed"}
           id="workspace-rail"
           inert={!railOpen}
         >
-          <div className="flex min-h-0 w-14 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden px-2 py-3">
+          <div className="flex min-h-0 w-16 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden px-2.5 pb-3">
             {rail}
           </div>
         </aside>
@@ -276,20 +257,6 @@ function WorkspaceShell({
           >
             <SidebarSimpleIcon aria-hidden />
           </Button>
-
-          <div className="flex min-w-0 flex-1 items-center gap-0.5 ps-1">
-            {title ? (
-              <p
-                className="truncate font-medium text-sm"
-                data-slot="workspace-title"
-              >
-                {title}
-              </p>
-            ) : null}
-            {menu}
-          </div>
-
-          {actions}
         </header>
 
         <main
@@ -312,7 +279,7 @@ function WorkspaceShell({
         {hasPanel ? (
           <aside
             aria-label="Panel"
-            className="absolute top-13 right-2 z-20 flex max-h-[calc(50svh+3rem)] w-[min(22rem,calc(100%-1rem))] flex-col overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-lg"
+            className="absolute top-13 right-2 z-20 flex max-h-[calc(50svh+3rem)] w-[min(22rem,calc(100%-1rem))] flex-col overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-lg lg:top-2"
             data-state={expanded ? "open" : "closed"}
             id="workspace-panel"
           >
@@ -382,34 +349,4 @@ function WorkspacePage({ className, ...props }: ComponentProps<"div">) {
   )
 }
 
-/**
- * The conversation's ··· menu, for the shell's `menu` slot. `newChat` is the
- * link element to render the entry as, so the app passes its router's link
- * and this package still imports no router.
- */
-function ConversationMenu({ newChat }: { newChat: ReactElement }) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <Button
-            aria-label="Conversation actions"
-            data-slot="conversation-actions"
-            size="icon-sm"
-            variant="ghost"
-          />
-        }
-      >
-        <DotsThreeIcon aria-hidden weight="bold" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent>
-        <DropdownMenuLinkItem render={newChat}>
-          <NotePencilIcon aria-hidden />
-          New conversation
-        </DropdownMenuLinkItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-
-export { ConversationMenu, closeOnLink, WorkspacePage, WorkspaceShell }
+export { closeOnLink, WorkspacePage, WorkspaceShell }

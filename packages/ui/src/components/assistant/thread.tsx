@@ -477,7 +477,7 @@ const ThreadRoot: FC<{
               <ThreadScrollToBottom />
               <div className="flex flex-col gap-2">
                 <div className="empty:hidden" ref={setTray} />
-                <Composer autoFocus={autoFocus} />
+                <Composer autoFocus={autoFocus} expanded={isEmpty} />
               </div>
               <AuiIf condition={(s) => isEmpty && s.composer.isEmpty}>
                 <ThreadSuggestions />
@@ -626,7 +626,14 @@ const ThreadSuggestionItem: FC = () => {
   )
 }
 
-const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
+/**
+ * The composer. `expanded` is the new chat's: the field above, and the plus and
+ * send under it. Once there is a conversation it is one compact row.
+ */
+const Composer: FC<{ autoFocus: boolean; expanded: boolean }> = ({
+  autoFocus,
+  expanded,
+}) => {
   const {
     placeholder = "Send a message",
     placeholderIdeas,
@@ -655,11 +662,14 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
   }, [mode, input])
   return (
     <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
-      {/* A one-pixel ring on top of the border: the composer holds focus
-          whenever the page is open, so a heavy ring would never go away. */}
+      {/* No ring, only a lighter edge: the composer holds focus whenever the
+          page is open, so anything heavier would never go away. */}
       <div
         data-slot="aui_composer-shell"
-        className="flex w-full cursor-text items-end gap-2 rounded-(--composer-radius) border border-border bg-(--composer-bg) p-(--composer-padding) transition-colors focus-within:border-ring focus-within:ring-1 focus-within:ring-ring"
+        className={cn(
+          "flex w-full cursor-text gap-2 rounded-(--composer-radius) border border-border bg-(--composer-bg) p-(--composer-padding) transition-colors focus-within:border-field-focus",
+          expanded ? "flex-wrap items-center" : "items-end"
+        )}
       >
         <QuickActions input={input} />
         <ComposerMode input={input} />
@@ -675,14 +685,17 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
                   ? questionPlaceholder
                   : idea)
           }
-          className="aui-composer-input max-h-48 min-h-9 min-w-0 flex-1 resize-none bg-transparent px-1.5 py-1.25 text-chat text-chat-foreground caret-primary outline-none placeholder:text-muted-foreground/60"
+          className={cn(
+            "aui-composer-input max-h-48 min-w-0 resize-none bg-transparent px-1.5 py-1.25 text-chat text-chat-foreground caret-primary outline-none placeholder:text-muted-foreground/60",
+            expanded ? "order-first min-h-16 basis-full" : "min-h-9 flex-1"
+          )}
           rows={1}
           autoFocus={autoFocus}
           disabled={!sendable}
           enterKeyHint="send"
           aria-label="Message input"
         />
-        <ComposerSend />
+        <ComposerSend expanded={expanded} />
       </div>
     </ComposerPrimitive.Root>
   )
@@ -710,14 +723,14 @@ const QuickActions: FC<{ input: RefObject<HTMLTextAreaElement | null> }> = ({
         render={
           <Button
             aria-label="Quick actions"
-            className="aui-composer-quick-actions text-muted-foreground hover:text-foreground"
+            className="aui-composer-quick-actions border-foreground/10 text-muted-foreground hover:text-foreground"
             size="icon"
             type="button"
             variant="outline"
           />
         }
       >
-        <PlusIcon aria-hidden weight="bold" />
+        <PlusIcon aria-hidden className="size-4" />
       </DropdownMenuTrigger>
       <DropdownMenuContent finalFocus={() => after.current ?? true} side="top">
         {quickActions.map((action) => (
@@ -770,10 +783,11 @@ const ComposerMode: FC<{ input: RefObject<HTMLTextAreaElement | null> }> = ({
   )
 }
 
-const ComposerSend: FC = () => {
+const ComposerSend: FC<{ expanded: boolean }> = ({ expanded }) => {
   const sendable = useSendable()
   return (
-    <>
+    // In the expanded composer the buttons sit under the field, send at the right.
+    <div className={cn("flex", expanded && "ms-auto")}>
       <AuiIf condition={(s) => !s.thread.isRunning}>
         <ComposerPrimitive.Send
           disabled={!sendable}
@@ -813,7 +827,7 @@ const ComposerSend: FC = () => {
           />
         </ComposerPrimitive.Cancel>
       </AuiIf>
-    </>
+    </div>
   )
 }
 

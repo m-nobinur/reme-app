@@ -62,10 +62,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@workspace/ui/components/tooltip"
-import {
-  ConversationMenu,
-  WorkspaceShell,
-} from "@workspace/ui/components/workspace-shell"
+import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 import { FACT_INPUTS } from "@workspace/ui/lib/answer"
 import { BROKEN } from "@workspace/ui/lib/tool-state"
 import { type ReactNode, useState } from "react"
@@ -2010,15 +2007,14 @@ function SendingThread({ streamed }: { streamed: boolean }) {
 }
 
 /**
- * The conversation in its frame, as `/app` renders it: the title and ··· in
- * the top bar, the empty thread in the middle. `?entry=Conversation` loads it
+ * The conversation in its frame, as `/app` renders it: the empty thread in
+ * the middle. `?entry=Conversation` loads it
  * alone at phone and desktop widths.
  */
 function ConversationSample({ stored }: { stored?: string }) {
   return (
     <WorkspaceShell
       className="h-192 border border-border"
-      menu={<ConversationMenu newChat={<a href="#new" />} />}
       panel={
         <p className="text-muted-foreground text-sm">
           Nothing right now. Questions and approvals from your team land here.
@@ -2028,7 +2024,6 @@ function ConversationSample({ stored }: { stored?: string }) {
         <span className="text-muted-foreground text-sm">Nothing right now</span>
       }
       rail={<p className="text-sm">Brightclean</p>}
-      title={stored ? "Getting started" : "New conversation"}
     >
       <OwnerThread
         bare
@@ -2531,10 +2526,6 @@ const assistantCatalog = [
   {
     name: "Conversation stored and empty",
     render: () => <ConversationSample stored="stored-1" />,
-  },
-  {
-    name: "ConversationMenu",
-    render: () => <ConversationMenu newChat={<a href="#new" />} />,
   },
   {
     name: "ThreadError",
