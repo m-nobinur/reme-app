@@ -1,3 +1,4 @@
+export * from "./activity.ts"
 export * from "./assignment.ts"
 export * from "./chat.ts"
 export * from "./common.ts"

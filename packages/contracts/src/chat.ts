@@ -48,6 +48,13 @@ export const TOOL_CALL_CANCELLED =
 export const CARD_ANSWERED = "data-card_answered"
 
 /**
+ * The transient chunk the onboarding planner's stream carries while the plan
+ * is still being written: an `OnboardingStatus`. It is never stored, and it
+ * goes when the first word of the reply arrives.
+ */
+export const ONBOARDING_STATUS = "data-onboarding_status"
+
+/**
  * How a Chief of Staff tool's error text begins (ADR-034). `TOOL_FAILED`
  * means the call did nothing: the builder answered in a shape the api does
  * not accept. `TOOL_UNKNOWN` means nobody can vouch for the outcome: it may

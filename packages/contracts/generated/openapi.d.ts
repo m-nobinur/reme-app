@@ -7,6 +7,203 @@ export type paths = Record<string, never>
 export type webhooks = Record<string, never>
 export interface components {
   schemas: {
+    Activity: {
+      journey: {
+        id: string
+        /** @enum {string} */
+        kind:
+          | "onboarding"
+          | "website"
+          | "golive"
+          | "change"
+          | "domain"
+          | "purchase"
+          | "google"
+          | "reminder"
+          | "review"
+          | "question"
+          | "checkin"
+          | "turn"
+        /** @enum {string} */
+        state: "upcoming" | "now" | "waiting" | "done" | "failed"
+        steps: {
+          id: string
+          /** @enum {string} */
+          state: "done" | "now" | "waiting" | "next" | "skipped"
+          value?: string
+          count?: {
+            done: number
+            total: number
+          }
+        }[]
+        /** Format: date-time */
+        at: string
+        /** Format: date-time */
+        deadline?: string
+        names?: {
+          business?: string
+          host?: string
+          domain?: string
+        }
+        step?: string
+      }[]
+      now: {
+        id: string
+        /** @enum {string} */
+        kind:
+          | "onboarding"
+          | "website"
+          | "golive"
+          | "change"
+          | "domain"
+          | "purchase"
+          | "google"
+          | "reminder"
+          | "review"
+          | "question"
+          | "checkin"
+          | "turn"
+        /** @enum {string} */
+        state: "upcoming" | "now" | "waiting" | "done" | "failed"
+        steps: {
+          id: string
+          /** @enum {string} */
+          state: "done" | "now" | "waiting" | "next" | "skipped"
+          value?: string
+          count?: {
+            done: number
+            total: number
+          }
+        }[]
+        /** Format: date-time */
+        at: string
+        /** Format: date-time */
+        deadline?: string
+        names?: {
+          business?: string
+          host?: string
+          domain?: string
+        }
+        step?: string
+      }[]
+      waiting: {
+        id: string
+        /** @enum {string} */
+        kind:
+          | "onboarding"
+          | "website"
+          | "golive"
+          | "change"
+          | "domain"
+          | "purchase"
+          | "google"
+          | "reminder"
+          | "review"
+          | "question"
+          | "checkin"
+          | "turn"
+        /** @enum {string} */
+        state: "upcoming" | "now" | "waiting" | "done" | "failed"
+        steps: {
+          id: string
+          /** @enum {string} */
+          state: "done" | "now" | "waiting" | "next" | "skipped"
+          value?: string
+          count?: {
+            done: number
+            total: number
+          }
+        }[]
+        /** Format: date-time */
+        at: string
+        /** Format: date-time */
+        deadline?: string
+        names?: {
+          business?: string
+          host?: string
+          domain?: string
+        }
+        step?: string
+      }[]
+      upcoming: {
+        id: string
+        /** @enum {string} */
+        kind:
+          | "onboarding"
+          | "website"
+          | "golive"
+          | "change"
+          | "domain"
+          | "purchase"
+          | "google"
+          | "reminder"
+          | "review"
+          | "question"
+          | "checkin"
+          | "turn"
+        /** @enum {string} */
+        state: "upcoming" | "now" | "waiting" | "done" | "failed"
+        steps: {
+          id: string
+          /** @enum {string} */
+          state: "done" | "now" | "waiting" | "next" | "skipped"
+          value?: string
+          count?: {
+            done: number
+            total: number
+          }
+        }[]
+        /** Format: date-time */
+        at: string
+        /** Format: date-time */
+        deadline?: string
+        names?: {
+          business?: string
+          host?: string
+          domain?: string
+        }
+        step?: string
+      }[]
+      done: {
+        id: string
+        /** @enum {string} */
+        kind:
+          | "onboarding"
+          | "website"
+          | "golive"
+          | "change"
+          | "domain"
+          | "purchase"
+          | "google"
+          | "reminder"
+          | "review"
+          | "question"
+          | "checkin"
+          | "turn"
+        /** @enum {string} */
+        state: "upcoming" | "now" | "waiting" | "done" | "failed"
+        steps: {
+          id: string
+          /** @enum {string} */
+          state: "done" | "now" | "waiting" | "next" | "skipped"
+          value?: string
+          count?: {
+            done: number
+            total: number
+          }
+        }[]
+        /** Format: date-time */
+        at: string
+        /** Format: date-time */
+        deadline?: string
+        names?: {
+          business?: string
+          host?: string
+          domain?: string
+        }
+        step?: string
+      }[]
+    }
     ActivityFeed: {
       items: (
         | {
@@ -2745,6 +2942,8 @@ export interface components {
         total: number
         /** @constant */
         now?: true
+        /** @constant */
+        skipped?: true
         items?: {
           label: string
           done: boolean
@@ -5347,6 +5546,8 @@ export interface components {
                     total: number
                     /** @constant */
                     now?: true
+                    /** @constant */
+                    skipped?: true
                     items?: {
                       label: string
                       done: boolean
@@ -7989,6 +8190,78 @@ export interface components {
       /** @enum {string} */
       rating: "up" | "down"
     }
+    OnboardingStatus: {
+      on:
+        | {
+            /** @constant */
+            kind: "fact"
+            /** @enum {string} */
+            key:
+              | "business.name"
+              | "business.phone"
+              | "business.email"
+              | "hours.weekday"
+              | "service_area.radius"
+              | "business.tagline"
+              | "business.industry"
+              | "business.offerings"
+              | "business.audience"
+              | "business.overview"
+              | "business.proof"
+              | "business.disclaimer"
+              | "service_area.text"
+              | "assistant.name"
+              | "assistant.pronouns"
+              | "assistant.tone"
+              | "owner.preferred_name"
+              | "site.build_mode"
+              | "site.template"
+              | "site.palette"
+              | "site.font"
+              | "site.direction"
+              | "site.pages"
+          }
+        | {
+            /** @constant */
+            kind: "next"
+            /** @enum {string} */
+            next:
+              | "ask_open"
+              | "ask_choice"
+              | "ask_design"
+              | "ask_fact"
+              | "ask_details"
+              | "ask_upload"
+              | "review_quote_form"
+              | "start_build"
+              | "answer_only"
+          }
+      facts: (
+        | "business.name"
+        | "business.phone"
+        | "business.email"
+        | "hours.weekday"
+        | "service_area.radius"
+        | "business.tagline"
+        | "business.industry"
+        | "business.offerings"
+        | "business.audience"
+        | "business.overview"
+        | "business.proof"
+        | "business.disclaimer"
+        | "service_area.text"
+        | "assistant.name"
+        | "assistant.pronouns"
+        | "assistant.tone"
+        | "owner.preferred_name"
+        | "site.build_mode"
+        | "site.template"
+        | "site.palette"
+        | "site.font"
+        | "site.direction"
+        | "site.pages"
+      )[]
+    }
     Org: {
       /** Format: uuid */
       org_id: string
@@ -8311,6 +8584,8 @@ export interface components {
               total: number
               /** @constant */
               now?: true
+              /** @constant */
+              skipped?: true
               items?: {
                 label: string
                 done: boolean
@@ -9590,6 +9865,8 @@ export interface components {
           total: number
           /** @constant */
           now?: true
+          /** @constant */
+          skipped?: true
           items?: {
             label: string
             done: boolean
@@ -10394,6 +10671,203 @@ export interface components {
               )[]
             }
         )[]
+      }
+      activity?: {
+        journey: {
+          id: string
+          /** @enum {string} */
+          kind:
+            | "onboarding"
+            | "website"
+            | "golive"
+            | "change"
+            | "domain"
+            | "purchase"
+            | "google"
+            | "reminder"
+            | "review"
+            | "question"
+            | "checkin"
+            | "turn"
+          /** @enum {string} */
+          state: "upcoming" | "now" | "waiting" | "done" | "failed"
+          steps: {
+            id: string
+            /** @enum {string} */
+            state: "done" | "now" | "waiting" | "next" | "skipped"
+            value?: string
+            count?: {
+              done: number
+              total: number
+            }
+          }[]
+          /** Format: date-time */
+          at: string
+          /** Format: date-time */
+          deadline?: string
+          names?: {
+            business?: string
+            host?: string
+            domain?: string
+          }
+          step?: string
+        }[]
+        now: {
+          id: string
+          /** @enum {string} */
+          kind:
+            | "onboarding"
+            | "website"
+            | "golive"
+            | "change"
+            | "domain"
+            | "purchase"
+            | "google"
+            | "reminder"
+            | "review"
+            | "question"
+            | "checkin"
+            | "turn"
+          /** @enum {string} */
+          state: "upcoming" | "now" | "waiting" | "done" | "failed"
+          steps: {
+            id: string
+            /** @enum {string} */
+            state: "done" | "now" | "waiting" | "next" | "skipped"
+            value?: string
+            count?: {
+              done: number
+              total: number
+            }
+          }[]
+          /** Format: date-time */
+          at: string
+          /** Format: date-time */
+          deadline?: string
+          names?: {
+            business?: string
+            host?: string
+            domain?: string
+          }
+          step?: string
+        }[]
+        waiting: {
+          id: string
+          /** @enum {string} */
+          kind:
+            | "onboarding"
+            | "website"
+            | "golive"
+            | "change"
+            | "domain"
+            | "purchase"
+            | "google"
+            | "reminder"
+            | "review"
+            | "question"
+            | "checkin"
+            | "turn"
+          /** @enum {string} */
+          state: "upcoming" | "now" | "waiting" | "done" | "failed"
+          steps: {
+            id: string
+            /** @enum {string} */
+            state: "done" | "now" | "waiting" | "next" | "skipped"
+            value?: string
+            count?: {
+              done: number
+              total: number
+            }
+          }[]
+          /** Format: date-time */
+          at: string
+          /** Format: date-time */
+          deadline?: string
+          names?: {
+            business?: string
+            host?: string
+            domain?: string
+          }
+          step?: string
+        }[]
+        upcoming: {
+          id: string
+          /** @enum {string} */
+          kind:
+            | "onboarding"
+            | "website"
+            | "golive"
+            | "change"
+            | "domain"
+            | "purchase"
+            | "google"
+            | "reminder"
+            | "review"
+            | "question"
+            | "checkin"
+            | "turn"
+          /** @enum {string} */
+          state: "upcoming" | "now" | "waiting" | "done" | "failed"
+          steps: {
+            id: string
+            /** @enum {string} */
+            state: "done" | "now" | "waiting" | "next" | "skipped"
+            value?: string
+            count?: {
+              done: number
+              total: number
+            }
+          }[]
+          /** Format: date-time */
+          at: string
+          /** Format: date-time */
+          deadline?: string
+          names?: {
+            business?: string
+            host?: string
+            domain?: string
+          }
+          step?: string
+        }[]
+        done: {
+          id: string
+          /** @enum {string} */
+          kind:
+            | "onboarding"
+            | "website"
+            | "golive"
+            | "change"
+            | "domain"
+            | "purchase"
+            | "google"
+            | "reminder"
+            | "review"
+            | "question"
+            | "checkin"
+            | "turn"
+          /** @enum {string} */
+          state: "upcoming" | "now" | "waiting" | "done" | "failed"
+          steps: {
+            id: string
+            /** @enum {string} */
+            state: "done" | "now" | "waiting" | "next" | "skipped"
+            value?: string
+            count?: {
+              done: number
+              total: number
+            }
+          }[]
+          /** Format: date-time */
+          at: string
+          /** Format: date-time */
+          deadline?: string
+          names?: {
+            business?: string
+            host?: string
+            domain?: string
+          }
+          step?: string
+        }[]
       }
     }
   }

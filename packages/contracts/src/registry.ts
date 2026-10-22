@@ -1,3 +1,4 @@
+import { Activity } from "./activity.ts"
 import {
   ApprovalDecision,
   ApprovalRequest,
@@ -102,6 +103,7 @@ import {
   RememberOutput,
 } from "./memory.ts"
 import { Asset, QuoteField, UploadedAssets } from "./onboarding.ts"
+import { OnboardingStatus } from "./onboarding-plan.ts"
 import { CreateOrgRequest, Org, StaffDirectory, StaffMember } from "./org.ts"
 import {
   ActivityFeed,
@@ -162,6 +164,7 @@ import {
  * Schema, gets no OpenAPI component, and no test.
  */
 export const contracts = {
+  Activity,
   ActivityFeed,
   AnswerQuestionInput,
   AnswerQuestionOutput,
@@ -267,6 +270,7 @@ export const contracts = {
   ProfileLine,
   RememberInput,
   RememberOutput,
+  OnboardingStatus,
   Org,
   OrgSchedule,
   OwnerChangeRequest,
