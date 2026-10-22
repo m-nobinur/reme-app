@@ -7,7 +7,6 @@ import {
 import { CopyIcon } from "@phosphor-icons/react"
 import {
   type AskChoiceInput,
-  type Blueprint,
   type DomainPurchaseStatus,
   FONTS,
   INDUSTRIES,
@@ -27,7 +26,6 @@ import { UploadPhotosProvider } from "@workspace/ui/components/assistant/ask-upl
 import {
   BlueprintCard,
   type BlueprintCardProps,
-  SiteNameProvider,
 } from "@workspace/ui/components/assistant/blueprint-card"
 import {
   type DomainPurchase,
@@ -65,6 +63,7 @@ import {
 } from "@workspace/ui/components/tooltip"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 import { FACT_INPUTS } from "@workspace/ui/lib/answer"
+import { SiteNameProvider } from "@workspace/ui/lib/site-name"
 import { BROKEN } from "@workspace/ui/lib/tool-state"
 import { type ReactNode, useState } from "react"
 import { BLUEPRINT, REPLAN } from "./blueprint-fixtures"
@@ -889,79 +888,13 @@ const LIMOUSINE_QUESTIONS = [
   quoteField("notes", "Anything else", "textarea", { required: false }),
 ]
 
-/** A `review_blueprint` call in one of its states. */
-const reviewBlueprint = (
-  label: string,
-  plan: Blueprint,
-  extra: { result?: unknown; isError?: boolean } = {}
-) => ({
-  args: { blueprint: plan },
-  isError: extra.isError,
-  result: extra.result,
-  toolCallId: `blueprint_${label}`,
-  toolName: "review_blueprint",
-  type: "tool-call" as const,
-})
-
-const PLANNED =
-  "Here is the plan for your site. Read it, then build it or change it."
-
-const REVIEW_BLUEPRINT_STATES: ThreadMessageLike[] = [
-  ...answeredStep(
-    PLANNED,
-    reviewBlueprint("built", BLUEPRINT, { result: { decision: "build" } }),
-    "Build it"
-  ),
-  {
-    content: [
-      reviewBlueprint("cancelled", BLUEPRINT, {
-        isError: true,
-        result: { error: TOOL_CALL_CANCELLED },
-      }),
-      reviewBlueprint("error", BLUEPRINT, {
-        isError: true,
-        result: { error: BROKEN },
-      }),
-    ],
-    role: "assistant",
-    status: DONE,
-  },
-  // A re-plan: the first plan was changed, so the second marks what differs.
-  {
-    content: [
-      question(PLANNED),
-      reviewBlueprint("first", BLUEPRINT, {
-        result: {
-          decision: "change",
-          note: "Add a gallery page and make the colours warmer",
-        },
-      }),
-    ],
-    role: "assistant",
-    status: DONE,
-  },
-  reply("Add a gallery page and make the colours warmer"),
-  {
-    content: [
-      question("Updated. The changed lines are marked."),
-      reviewBlueprint("replan", REPLAN),
-    ],
-    role: "assistant",
-    status: WAITING,
-  },
-]
-
 /** The plan card by itself: title, props, and an optional width. */
 const BLUEPRINT_CARDS: [string, BlueprintCardProps, string?][] = [
-  ["Feature plan", { blueprint: BLUEPRINT, onBuild: noop }],
-  ["Collapsed", { blueprint: BLUEPRINT, defaultOpen: false, onBuild: noop }],
+  ["Feature plan", { blueprint: BLUEPRINT }],
+  ["Collapsed", { blueprint: BLUEPRINT, defaultOpen: false }],
   [
-    "After a re-plan, changed rows marked",
-    { blueprint: REPLAN, previous: BLUEPRINT, onBuild: noop },
-  ],
-  [
-    "Read-only, as the panel keeps it",
-    { blueprint: BLUEPRINT, readOnly: true },
+    "Against an earlier plan, changed rows marked",
+    { blueprint: REPLAN, previous: BLUEPRINT },
   ],
   [
     "Your own colour, photos written in",
@@ -971,10 +904,9 @@ const BLUEPRINT_CARDS: [string, BlueprintCardProps, string?][] = [
         palette: { kind: "brand", brand: PALETTES[3]?.brand ?? "" },
       },
       photoDirection: "Daylight, tidy rooms, hands at work, never faces.",
-      onBuild: noop,
     },
   ],
-  ["Phone width", { blueprint: BLUEPRINT, onBuild: noop }, "max-w-[22.5rem]"],
+  ["Phone width", { blueprint: BLUEPRINT }, "max-w-[22.5rem]"],
 ]
 
 /** A `review_quote_form` call in one of its states. */
@@ -2310,12 +2242,6 @@ const assistantCatalog = [
           </section>
         ))}
       </div>
-    ),
-  },
-  {
-    name: "ReviewBlueprint",
-    render: () => (
-      <FixtureThread height="h-[60rem]" messages={REVIEW_BLUEPRINT_STATES} />
     ),
   },
   // The plan card on its own, in the states a card can be in.

@@ -14,7 +14,6 @@ import { AskDetails } from "@workspace/ui/components/assistant/ask-details"
 import { AskFact } from "@workspace/ui/components/assistant/ask-fact"
 import { AskOpen } from "@workspace/ui/components/assistant/ask-open"
 import { AskUpload } from "@workspace/ui/components/assistant/ask-upload"
-import { ReviewBlueprint } from "@workspace/ui/components/assistant/blueprint-card"
 import {
   COS_CARDS,
   COS_QUIET,
@@ -155,7 +154,6 @@ export const OWNER_CARDS: Record<string, ToolCallMessagePartComponent> = {
   ask_design: AskDesign,
   ask_upload: AskUpload,
   review_quote_form: ReviewQuoteForm,
-  review_blueprint: ReviewBlueprint,
   request_change: RequestChange,
   ...COS_CARDS,
 }

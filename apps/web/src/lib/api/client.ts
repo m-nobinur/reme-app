@@ -2,7 +2,6 @@ import {
   ActivityFeed,
   ApprovalDecision,
   type AttentionItem as Attention,
-  type BlueprintReviewOutput,
   CHAT_TURN_MS,
   type ChangeKind,
   Conversation,
@@ -506,16 +505,6 @@ async function answer(
   return await outcome(response, path)
 }
 
-async function decideBlueprint(
-  assignmentId: string,
-  decision: BlueprintReviewOutput,
-  key: string
-): Promise<WriteOutcome> {
-  const path = `/builds/${segment(assignmentId)}/blueprint`
-  // The same decision again is a retry and gets its receipt.
-  return await outcome(await post(path, decision, key), path)
-}
-
 async function cancelBuild(assignmentId: string): Promise<WriteOutcome> {
   const path = `/builds/${segment(assignmentId)}/cancel`
   // One build is stopped once: a second press is the same request.
@@ -805,7 +794,6 @@ export const apiSource: OwnerDataSource = {
   },
   pollWorkspace,
   answer,
-  decideBlueprint,
   cancelBuild,
   deleteAccount,
   preview,

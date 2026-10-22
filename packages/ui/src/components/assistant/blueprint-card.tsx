@@ -1,8 +1,4 @@
 import {
-  type ToolCallMessagePartComponent,
-  useAuiState,
-} from "@assistant-ui/react"
-import {
   BlueprintIcon,
   CaretDownIcon,
   CaretLeftIcon,
@@ -16,10 +12,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@workspace/ui/components/collapsible"
-import { useComposeWith } from "@workspace/ui/hooks/use-composer-input"
-import { useRevealWaiting } from "@workspace/ui/hooks/use-reveal-waiting"
 import {
-  CHANGE_PREFIX,
   changedRows,
   directionLabel,
   generatedLine,
@@ -31,22 +24,16 @@ import {
 import { CARD_SURFACE } from "@workspace/ui/lib/card"
 import { faceCss, faceStack, previewFaces } from "@workspace/ui/lib/font-faces"
 import { useSiteName } from "@workspace/ui/lib/site-name"
-import { blueprintReviewView } from "@workspace/ui/lib/tool-state"
 import { cn } from "@workspace/ui/lib/utils"
 import { type ReactNode, useId, useState } from "react"
 
 /**
- * The plan the owner reads before anything is built: an icon, "Blueprint" and
- * the site's name, always shown, over a "Review feature plan" collapsible of
- * two pages, the feature plan and the design. "Build it" starts the build; "Change something" puts the owner
- * in the composer with a prefix to finish, and the message they send is the
- * answer (`change`), which re-plans. A re-plan draws the same card with the
- * rows that differ from the plan before marked "Changed". Read-only, with no
- * actions, it is the copy the panel keeps of what the site was built from.
- * The pair is set in its own faces, loaded only while the design page shows.
+ * The plan a site was built from, read-only: an icon, "Blueprint" and the
+ * site's name, always shown, over a "Review feature plan" collapsible of two
+ * pages, the feature plan and the design. Given the plan it replaced, it marks
+ * the rows that differ "Changed". The pair is set in its own faces, loaded
+ * only while the design page shows.
  */
-
-export { SiteNameProvider } from "@workspace/ui/lib/site-name"
 
 const PAGE_TITLES = ["Feature plan", "Design"] as const
 
@@ -211,13 +198,8 @@ export type BlueprintCardProps = {
   name?: string
   /** One line on the photo style, from the direction. */
   photoDirection?: string
-  /** No actions: the panel's copy of what the site was built from. */
-  readOnly?: boolean
   defaultOpen?: boolean
   className?: string
-  onBuild?: () => void
-  /** Called after the owner is handed to the composer. */
-  onChange?: () => void
 }
 
 export function BlueprintCard({
@@ -225,19 +207,14 @@ export function BlueprintCard({
   previous,
   name,
   photoDirection,
-  readOnly = false,
   defaultOpen = true,
   className,
-  onBuild,
-  onChange,
 }: BlueprintCardProps) {
   const provided = useSiteName()
   const site = name ?? provided ?? "Your website"
-  const compose = useComposeWith()
   const id = useId()
   const [open, setOpen] = useState(defaultOpen)
   const [page, setPage] = useState(0)
-  const [writing, setWriting] = useState(false)
   const changed = changedRows(previous, blueprint)
   const last = PAGE_TITLES.length - 1
   const go = (to: number) => setPage(Math.min(last, Math.max(0, to)))
@@ -322,90 +299,6 @@ export function BlueprintCard({
           </div>
         </CollapsibleContent>
       </Collapsible>
-      {readOnly ? null : (
-        <>
-          {/* Always in reach: the owner can build without opening the plan. */}
-          <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
-            <Button
-              onClick={() => {
-                setWriting(true)
-                compose(CHANGE_PREFIX)
-                onChange?.()
-              }}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              Change something
-            </Button>
-            <Button onClick={onBuild} size="sm" type="button">
-              Build it
-            </Button>
-          </div>
-          <p
-            className={cn(
-              "mt-3 text-muted-foreground text-xs",
-              writing ? null : "sr-only"
-            )}
-            role="status"
-          >
-            {writing
-              ? "Write what to change in the message box below and send it. Your message updates this plan."
-              : ""}
-          </p>
-        </>
-      )}
     </section>
   )
 }
-
-/** The plan before the one at `toolCallId`, in the thread, for the "Changed" marks. */
-function usePreviousPlan(toolCallId: string): Blueprint | null {
-  return useAuiState((s) => {
-    type Call = { toolCallId: string; args: { blueprint?: Blueprint } }
-    const plans = s.thread.messages
-      .flatMap((m) => m.content as readonly { type: string }[])
-      .filter(
-        (p): p is { type: "tool-call" } & Call =>
-          p.type === "tool-call" &&
-          (p as { toolName?: string }).toolName === "review_blueprint"
-      )
-    const at = plans.findIndex((p) => p.toolCallId === toolCallId)
-    return at > 0 ? (plans[at - 1]?.args.blueprint ?? null) : null
-  })
-}
-
-const ReviewBlueprint: ToolCallMessagePartComponent = (props) => {
-  const view = blueprintReviewView(props)
-  useRevealWaiting(view.state === "pending")
-  const previous = usePreviousPlan(props.toolCallId)
-  if (view.state === "answered") return null
-  if (view.state !== "pending") {
-    return (
-      <div className="my-3 max-w-2xl" data-slot="blueprint-card">
-        <p
-          className={cn(
-            "text-sm",
-            view.state === "error"
-              ? "text-destructive"
-              : "text-muted-foreground"
-          )}
-        >
-          {view.state === "error"
-            ? view.message
-            : "You replied in the chat instead."}
-        </p>
-      </div>
-    )
-  }
-  return (
-    <BlueprintCard
-      blueprint={view.input.blueprint}
-      onBuild={() => props.addResult({ decision: "build" })}
-      previous={previous}
-    />
-  )
-}
-ReviewBlueprint.displayName = "ReviewBlueprint"
-
-export { ReviewBlueprint }

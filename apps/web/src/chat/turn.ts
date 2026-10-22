@@ -1,13 +1,11 @@
 import {
   ANSWER_TEXT_MAX,
-  BlueprintReviewOutput,
   type ChatRequest,
   type ChatResult,
   ErrorEnvelope,
   ReviewQuoteFormOutput,
   TOOL_CALL_CANCELLED,
 } from "@workspace/contracts"
-import { CHANGE_PREFIX } from "@workspace/ui/lib/blueprint"
 import { factText } from "@workspace/ui/lib/facts"
 import {
   choiceText,
@@ -110,8 +108,7 @@ function ownerResults(last: ChatMessage | undefined): ChatResult[] {
         part.type === "tool-ask_choice" ||
         part.type === "tool-ask_design" ||
         part.type === "tool-ask_upload" ||
-        part.type === "tool-review_quote_form" ||
-        part.type === "tool-review_blueprint") &&
+        part.type === "tool-review_quote_form") &&
       part.state === "output-available"
     ) {
       return [
@@ -234,42 +231,6 @@ export function quoteChanges(
 }
 
 /**
- * A typed message while a plan waits is the owner's change to it, as
- * `quoteChanges` is to a quote form: the call it answers, as
- * `{ decision: "change", note }`, with the prefix "Change something" left in
- * the composer taken off. Null when no plan waits, when the message carries a
- * mode of its own, or when nothing is left after the prefix; such a message
- * goes out as itself and overtakes the card.
- */
-export function blueprintChanges(
-  messages: ChatMessage[],
-  text: string,
-  intent?: ChatRequest["intent"]
-): {
-  tool: "review_blueprint"
-  toolCallId: string
-  output: BlueprintReviewOutput
-} | null {
-  const last = messages.at(-1)
-  if (intent || last?.role !== "assistant") return null
-  const waiting = last.parts.find(
-    (part) =>
-      part.type === "tool-review_blueprint" && part.state === "input-available"
-  )
-  const typed = text.trim()
-  const note = typed.startsWith(CHANGE_PREFIX.trim())
-    ? typed.slice(CHANGE_PREFIX.trim().length).trim()
-    : typed
-  const output = BlueprintReviewOutput.safeParse({ decision: "change", note })
-  if (!waiting || !isToolUIPart(waiting) || !output.success) return null
-  return {
-    tool: "review_blueprint",
-    toolCallId: waiting.toolCallId,
-    output: output.data,
-  }
-}
-
-/**
  * Sends once the owner has decided every call in the last step that waits
  * on them, all in one turn. A step whose calls the server finished itself,
  * such as a read at the step limit, sends nothing, and neither does an
@@ -293,7 +254,6 @@ const CARDS = [
   "tool-ask_design",
   "tool-ask_upload",
   "tool-review_quote_form",
-  "tool-review_blueprint",
 ]
 
 /**
@@ -335,9 +295,6 @@ export function replyText(part: ChatMessage["parts"][number]): string | null {
     return part.output.answer === "confirmed"
       ? "Use this form"
       : part.output.text
-  }
-  if (part.type === "tool-review_blueprint") {
-    return part.output.decision === "build" ? "Build it" : part.output.note
   }
   return null
 }
@@ -381,14 +338,11 @@ export function replyTo(
     return null
   }
   const text = step.flatMap((part) => replyText(part) ?? []).join("\n")
-  // Changes to a proposed quote form or a plan are words the owner typed.
+  // Changes to a proposed quote form are words the owner typed.
   const typed =
-    (answered.type === "tool-review_quote_form" &&
-      answered.state === "output-available" &&
-      answered.output.answer === "changes") ||
-    (answered.type === "tool-review_blueprint" &&
-      answered.state === "output-available" &&
-      answered.output.decision === "change")
+    answered.type === "tool-review_quote_form" &&
+    answered.state === "output-available" &&
+    answered.output.answer === "changes"
   return {
     role: "user",
     parts: [{ type: "text", text }],
