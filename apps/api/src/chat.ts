@@ -1772,7 +1772,9 @@ async function ownerThenStep(
 }
 
 /** The card the tail's last step waits on, if it waits on one. */
-function waitingCard(tail: Tail | null): ToolPart | undefined {
+export function waitingCard(
+  tail: { content: Content } | null
+): ToolPart | undefined {
   if (tail?.content.role !== "assistant") return undefined
   const { parts } = tail.content
   const last = parts.slice(parts.map((p) => p.type).lastIndexOf("step-start"))

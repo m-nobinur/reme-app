@@ -7,15 +7,15 @@ import {
   PRONOUNS,
   TONES,
 } from "@workspace/contracts"
-import { Button } from "@workspace/ui/components/button"
+import {
+  Docked,
+  TrayFrame,
+  TrayNote,
+  useTabDraft,
+} from "@workspace/ui/components/assistant/question-tray"
 import { AnswerInputs } from "@workspace/ui/components/live-panel"
+import { answerValue, FACT_INPUTS } from "@workspace/ui/lib/answer"
 import {
-  useFocusWhenIdle,
-  useRevealWaiting,
-} from "@workspace/ui/hooks/use-reveal-waiting"
-import { answerValue, askable, FACT_INPUTS } from "@workspace/ui/lib/answer"
-import {
-  CARD_SURFACE,
   FIELD_ERROR,
   OPTION,
   OPTION_PILL,
@@ -27,29 +27,62 @@ import { cn } from "@workspace/ui/lib/utils"
 import { type FormEvent, useId, useRef, useState } from "react"
 
 /**
- * A few related facts onboarding asks for on one card: the phone and email
- * together, or the assistant's name, pronouns and tone. The question is the
- * text part above; the inputs are the web's, by key, the same ones
- * `ask_fact` uses, so a phone is typed the way the owner writes it and sent
- * as E.164. Every field is needed, checked in place when the owner presses
- * Continue, and nothing is sent until each one reads. Once answered or
- * skipped it shows nothing: the owner's reply after it says what they gave.
+ * A few related facts onboarding asks for in the question tray, one field
+ * per page: the phone and then the email, or the assistant's name, pronouns
+ * and tone. The inputs are the web's, by key, the same ones `ask_fact` uses,
+ * so a phone is typed the way the owner writes it and sent as E.164. Every
+ * field is needed and checked as the owner leaves its page; nothing is sent
+ * until the last one reads. Every page stays in the form, hidden, so going
+ * back finds what was typed, and a reload resumes on the page reached. Once
+ * answered or skipped it shows nothing: the owner's reply after it says what
+ * they gave.
  */
 
 type Answer = { answer: "stated"; facts: FactValue[] } | { answer: "skipped" }
 
 const PICKS = {
-  "assistant.pronouns": { legend: "Pronouns", options: PRONOUNS },
-  "assistant.tone": { legend: "Tone", options: TONES },
+  "assistant.pronouns": {
+    legend: "Pronouns",
+    ask: "Which pronouns should your assistant use?",
+    options: PRONOUNS,
+  },
+  "assistant.tone": {
+    legend: "Tone",
+    ask: "How should your assistant sound?",
+    options: TONES,
+  },
 } as const
 
 type PickKey = keyof typeof PICKS
 
+/** A key a details tray asks for. */
+type DetailsKey = (typeof DETAILS_KEYS)[keyof typeof DETAILS_KEYS][number]
+
 const isPick = (key: string): key is PickKey => key in PICKS
 
-/** The value `prefill` gives a key, if any. */
-const prefilled = (input: AskDetailsInput, key: string) =>
-  input.prefill.find((fact) => fact.key === key)?.value ?? null
+/**
+ * A line under a field that says where the answer ends up. The sign-in email
+ * is prefilled here, so the owner needs to know it is public.
+ */
+const HINT: Partial<Record<string, string>> = {
+  "business.email":
+    "Shown on your website. Use a business address if you have one.",
+}
+
+/** The page's question: the web's copy for the key. */
+const askOf = (key: DetailsKey) =>
+  isPick(key) ? PICKS[key].ask : FACT_INPUTS[key].ask
+
+/** The value `prefill` gives a key, if any, by field name. */
+const prefilled = (input: AskDetailsInput, key: DetailsKey) =>
+  (input.prefill.find((fact) => fact.key === key)?.value ?? null) as Record<
+    string,
+    unknown
+  > | null
+
+/** The input a key's page focuses: its first field. */
+const fieldOf = (key: DetailsKey) =>
+  isPick(key) ? key : (FACT_INPUTS[key].fields[0]?.name ?? "")
 
 /** Pills, or tiles when the options carry a hint, as one native radio group. */
 function Picks({
@@ -70,7 +103,7 @@ function Picks({
       aria-describedby={invalid ? `${id}-error` : undefined}
       className="flex flex-col gap-2"
     >
-      <legend className="mb-2 font-medium text-sm">{legend}</legend>
+      <legend className="sr-only">{legend}</legend>
       <div
         className={cn(
           tiles
@@ -123,145 +156,194 @@ function Picks({
   )
 }
 
-/** The open card. `onAnswer` gets the answer `AskDetailsOutput` takes. */
-function DetailsForm({
+type Draft = { page: number; values: Record<string, string> }
+
+/** The tray's pages, one key each. `onAnswer` gets the answer `AskDetailsOutput` takes. */
+function DetailsTray({
   input,
+  draftId,
   onAnswer,
 }: {
   input: AskDetailsInput
+  /** Where the answers so far are kept for this tab: the call's id. */
+  draftId: string
   onAnswer: (answer: Answer) => void
 }) {
   const id = useId()
-  const [problems, setProblems] = useState<Record<string, string>>({})
-  const keys = DETAILS_KEYS[input.step]
+  const keys: readonly DetailsKey[] = DETAILS_KEYS[input.step]
+  const { draft, keep, clear } = useTabDraft<Draft>(draftId, {
+    page: 0,
+    values: {},
+  })
+  const [page, setPage] = useState(Math.min(draft.page, keys.length - 1))
+  const [collapsed, setCollapsed] = useState(false)
+  const [problem, setProblem] = useState<string | null>(null)
+  const formRef = useRef<HTMLFormElement>(null)
+  const key = keys[page] ?? keys[0]
+  const last = page === keys.length - 1
+  const several = keys.length > 1
+
+  /** What every field holds now, by name. */
+  const values = () =>
+    Object.fromEntries(
+      [...new FormData(formRef.current ?? undefined)].map(([name, value]) => [
+        name,
+        String(value),
+      ])
+    )
+  /** A key's fact, or what is wrong with it. */
+  const read = (
+    each: DetailsKey,
+    held: Record<string, string>
+  ): { fact: FactValue } | { error: string } => {
+    if (isPick(each)) {
+      const picked = held[each]
+      return picked
+        ? { fact: { key: each, value: { id: picked } } as FactValue }
+        : { error: `Pick the ${PICKS[each].legend.toLowerCase()}.` }
+    }
+    const parsed = answerValue(
+      { kind: "fact", key: each },
+      (name) => held[name] ?? ""
+    )
+    return "error" in parsed
+      ? parsed
+      : { fact: { key: each, value: parsed.value } as FactValue }
+  }
+  const show = (to: number, why: string | null) => {
+    setProblem(why)
+    if (to !== page) setPage(to)
+    if (why) {
+      formRef.current
+        ?.querySelector<HTMLInputElement>(
+          `[name="${fieldOf(keys[to] ?? key)}"]`
+        )
+        ?.focus()
+    }
+  }
+  const forward = () => {
+    const held = values()
+    const result = read(key, held)
+    if ("error" in result) return show(page, result.error)
+    keep({ page: page + 1, values: held })
+    show(page + 1, null)
+  }
+  const back = () => {
+    keep({ page: page - 1, values: values() })
+    show(page - 1, null)
+  }
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const form = new FormData(event.currentTarget)
-    const read = (name: string) => String(form.get(name) ?? "")
+    if (!last) return forward()
+    const held = values()
     const facts: FactValue[] = []
-    const found: Record<string, string> = {}
-    for (const key of keys) {
-      if (isPick(key)) {
-        const picked = read(key)
-        if (picked) facts.push({ key, value: { id: picked } } as FactValue)
-        else found[key] = `Pick the ${PICKS[key].legend.toLowerCase()}.`
-      } else if (askable(key)) {
-        const parsed = answerValue({ kind: "fact", key }, read)
-        if ("error" in parsed) found[key] = parsed.error
-        else facts.push({ key, value: parsed.value } as FactValue)
-      }
+    for (const [at, each] of keys.entries()) {
+      const result = read(each, held)
+      if ("error" in result) return show(at, result.error)
+      facts.push(result.fact)
     }
-    setProblems(found)
-    const first = keys.find((key) => found[key])
-    if (first) {
-      // The first field to fix takes the focus, so a keyboard lands on it.
-      const name = isPick(first)
-        ? first
-        : (FACT_INPUTS[first as keyof typeof FACT_INPUTS].fields[0]?.name ?? "")
-      event.currentTarget
-        .querySelector<HTMLInputElement>(`[name="${name}"]`)
-        ?.focus()
-      return
-    }
+    clear()
     onAnswer({ answer: "stated", facts })
   }
 
-  // Text fields side by side from the small breakpoint, the picks under them.
-  const typed = keys.filter((key) => !isPick(key) && askable(key))
+  // A value typed on an earlier visit, else the call's own prefill.
+  const startOf = (each: DetailsKey, name: string) =>
+    draft.values[name] ?? prefilled(input, each)?.[name]
+
   return (
-    <form
-      aria-label={`Your ${input.step === "contact" ? "contact details" : "assistant"}`}
-      className={cn(CARD_SURFACE, "flex flex-col gap-4")}
-      noValidate
-      onSubmit={submit}
+    <TrayFrame
+      collapsed={collapsed}
+      onBack={page > 0 ? back : undefined}
+      onCollapsedChange={setCollapsed}
+      onForward={last ? undefined : forward}
+      page={{ index: page, total: keys.length }}
+      question={askOf(key)}
+      skip={
+        input.skippable
+          ? {
+              label: several ? "Skip all" : "Skip",
+              onSkip: () => {
+                clear()
+                onAnswer({ answer: "skipped" })
+              },
+            }
+          : undefined
+      }
+      submit={{ label: last ? "Submit" : "Next", form: `${id}-form` }}
     >
-      <div
-        className={cn(
-          "grid gap-4",
-          typed.length > 1 ? "sm:grid-cols-2" : "max-w-sm"
-        )}
-      >
-        {typed.map((key) =>
-          askable(key) ? (
-            <div className="flex min-w-0 flex-col gap-1.5" key={key}>
-              <AnswerInputs
-                id={`${id}-${key}`}
-                invalid={key in problems}
-                prefill={prefilled(input, key)}
-                spec={{ kind: "fact", key }}
-                title={factLabel(key)}
-              />
-              {problems[key] ? (
-                <p className={FIELD_ERROR} role="alert">
-                  {problems[key]}
-                </p>
-              ) : null}
+      <form id={`${id}-form`} noValidate onSubmit={submit} ref={formRef}>
+        {keys.map((each, at) => {
+          const invalid = at === page ? (problem ?? undefined) : undefined
+          return (
+            <div
+              className="flex flex-col gap-1.5"
+              hidden={at !== page}
+              key={each}
+            >
+              {isPick(each) ? (
+                <Picks
+                  invalid={invalid}
+                  name={each}
+                  // A pick's value is its id, kept under the key's own name.
+                  start={
+                    draft.values[each] ??
+                    (String(prefilled(input, each)?.id ?? "") || null)
+                  }
+                />
+              ) : (
+                <>
+                  <AnswerInputs
+                    id={`${id}-${each}`}
+                    invalid={invalid !== undefined}
+                    prefill={Object.fromEntries(
+                      FACT_INPUTS[each].fields.map((field) => [
+                        field.name,
+                        startOf(each, field.name),
+                      ])
+                    )}
+                    spec={{ kind: "fact", key: each }}
+                    title={factLabel(each)}
+                  />
+                  {HINT[each] ? (
+                    <p className="text-muted-foreground text-xs">
+                      {HINT[each]}
+                    </p>
+                  ) : null}
+                  {invalid ? (
+                    <p className={FIELD_ERROR} role="alert">
+                      {invalid}
+                    </p>
+                  ) : null}
+                </>
+              )}
             </div>
-          ) : null
-        )}
-      </div>
-      {keys.filter(isPick).map((key) => {
-        const start = prefilled(input, key)
-        return (
-          <Picks
-            invalid={problems[key]}
-            key={key}
-            name={key}
-            start={start && "id" in start ? String(start.id) : null}
-          />
-        )
-      })}
-      <div className="flex flex-wrap gap-2">
-        <Button size="sm" type="submit">
-          Continue
-        </Button>
-        {input.skippable ? (
-          <Button
-            onClick={() => onAnswer({ answer: "skipped" })}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            Skip for now
-          </Button>
-        ) : null}
-      </div>
-    </form>
+          )
+        })}
+      </form>
+    </TrayFrame>
   )
 }
 
 const AskDetails: ToolCallMessagePartComponent = (props) => {
   const view = askDetailsView(props)
-  const waiting = view.state === "pending"
-  const running = useRevealWaiting(waiting)
-  const cardRef = useRef<HTMLDivElement>(null)
-  useFocusWhenIdle(waiting, running, cardRef)
-
   if (view.state === "answered" || view.state === "skipped") return null
   if (view.state !== "pending") {
     return (
-      <div className="my-3 max-w-md" data-slot="ask-details">
-        <p
-          className={cn(
-            "text-sm",
-            view.state === "error"
-              ? "text-destructive"
-              : "text-muted-foreground"
-          )}
-        >
-          {view.state === "cancelled"
-            ? "You replied in the chat instead."
-            : view.message}
-        </p>
-      </div>
+      <TrayNote
+        error={view.state === "error" ? view.message : null}
+        name="ask-details"
+      />
     )
   }
-
   return (
-    <div className="my-3 max-w-2xl" data-slot="ask-details" ref={cardRef}>
-      <DetailsForm input={view.input} onAnswer={props.addResult} />
-    </div>
+    <Docked name="ask-details">
+      <DetailsTray
+        draftId={props.toolCallId}
+        input={view.input}
+        onAnswer={props.addResult}
+      />
+    </Docked>
   )
 }
 AskDetails.displayName = "AskDetails"

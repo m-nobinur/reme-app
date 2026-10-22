@@ -9,6 +9,7 @@ import type {
   WorkspaceStatus,
 } from "@workspace/contracts"
 import { type OrgScopedDb, sql } from "@workspace/db"
+import { STAGES } from "./workspace.ts"
 
 /**
  * The owner's activity view (AV2): every job as a segment with fixed steps,
@@ -130,17 +131,10 @@ export async function readActivityRows(
 }
 
 // ---------------------------------------------------------------------------
-// The fixed steps of each kind, in order. Never added or removed.
+// The fixed steps of each kind, in order. Never added or removed. The
+// website's are AV3's `STAGES`, read only inside functions, since
+// workspace.ts imports this file.
 
-/** AV3's six stages, named as the web's `BuildStage`. */
-export const WEBSITE_STEPS = [
-  "plan",
-  "photos",
-  "pages",
-  "polish",
-  "check",
-  "ready",
-] as const
 export const GOLIVE_STEPS = ["approval", "publishing", "loads"] as const
 export const CHANGE_STEPS = [
   "understanding",
@@ -156,16 +150,6 @@ export const PURCHASE_STEPS = [
   "connecting",
 ] as const
 export const GOOGLE_STEPS = ["sign_in", "verify", "sitemap"] as const
-
-/** `activityFor`'s stage ids, by the web's. */
-const STAGE_STEP: Record<string, (typeof WEBSITE_STEPS)[number]> = {
-  planning: "plan",
-  photos: "photos",
-  writing: "pages",
-  polishing: "polish",
-  checking: "check",
-  ready: "ready",
-}
 
 /** Where a change stands, by the build stage it is on. */
 const CHANGE_OF_STAGE: Record<string, number> = {
@@ -231,10 +215,10 @@ const groupOf = (state: AssignmentState): Segment["state"] =>
 /** The first build's stages from its `activity` rows, with their counts. */
 export function websiteSteps(build: BuildSummary): Step[] {
   const rows = build.activity ?? []
-  if (rows.length === 0) return along(WEBSITE_STEPS, -1)
+  if (rows.length === 0) return along(STAGES, -1)
   const held = OWNER_HOLDS.includes(build.state)
   return rows.map((r) => ({
-    id: STAGE_STEP[r.id] ?? r.id,
+    id: r.id,
     state: r.skipped
       ? "skipped"
       : r.now
@@ -453,11 +437,10 @@ export type ActivityInput = {
 const recent = (at: string, now: Date) => now.getTime() - Date.parse(at) < DAY
 
 /**
- * The first run's three segments until the site is first live: the
- * website (the newest build), then going live (its review and publish).
- *
- * The onboarding segment waits on ON1's checklist; until then the journey
- * starts at the website.
+ * The first run's website and going-live segments until the site is first
+ * live: the website (the newest build), then going live (its review and
+ * publish). Onboarding, the first of the three, is `withOnboarding`'s: it
+ * reads the chat, which nothing the CoS reaches may (ADR-034).
  */
 export function journeyOf(input: ActivityInput): Segment[] {
   if (input.site.live) return []
@@ -473,7 +456,7 @@ export function journeyOf(input: ActivityInput): Segment[] {
         id: "website",
         kind: "website",
         state: failed ? "failed" : "upcoming",
-        steps: along(WEBSITE_STEPS, -1),
+        steps: along(STAGES, -1),
         at: failed ? failed.at : since,
         ...(names && { names }),
       },
@@ -493,9 +476,7 @@ export function journeyOf(input: ActivityInput): Segment[] {
     kind: "website",
     state,
     steps:
-      state === "done"
-        ? along(WEBSITE_STEPS, WEBSITE_STEPS.length)
-        : websiteSteps(build),
+      state === "done" ? along(STAGES, STAGES.length) : websiteSteps(build),
     at:
       state === "done"
         ? (build.ready_at ?? build.updated_at)
@@ -691,3 +672,15 @@ export function activityOf(input: ActivityInput, now: Date): Activity {
     done: cap(done, true),
   }
 }
+
+/**
+ * The journey with onboarding first, for the `/workspace` read, which alone
+ * reads the onboarding conversation. Nothing to add once the site is live.
+ */
+export const withOnboarding = (
+  activity: Activity,
+  onboarding: Segment | null
+): Activity =>
+  onboarding && activity.journey.length > 0
+    ? { ...activity, journey: [onboarding, ...activity.journey] }
+    : activity

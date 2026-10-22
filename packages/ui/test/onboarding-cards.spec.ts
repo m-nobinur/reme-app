@@ -3,9 +3,10 @@ import { PALETTES } from "@workspace/contracts"
 import { axe, open } from "./helpers"
 
 /**
- * Onboarding's choice and photo cards: native groups the keyboard can walk,
- * the owner's own words behind Other, and photos that go nowhere until the
- * owner presses Upload. Each entry loads alone.
+ * Onboarding's choice and photo questions, in the tray: native groups the
+ * keyboard can walk, the owner's own words behind Other, and photos that go
+ * nowhere until the owner presses Upload. Each entry loads alone, and each
+ * open question docks in a thread of its own.
  */
 
 const pending = (page: Page) =>
@@ -15,10 +16,10 @@ test("a choice is a native group, with Other opening the owner's own words", asy
   page,
 }) => {
   await open(page, "AskChoice")
-  await expect(pending(page)).toHaveCount(5)
+  await expect(pending(page)).toHaveCount(6)
   const industry = pending(page).nth(0)
   await expect(industry.getByRole("radio")).toHaveCount(7)
-  await industry.getByRole("button", { name: "Continue" }).click()
+  await industry.getByRole("button", { name: "Submit" }).click()
   await expect(industry.getByRole("alert")).toHaveText("Pick one first.")
   // Arrow keys move the choice, as in any radio group.
   await industry.getByRole("radio").first().focus()
@@ -30,7 +31,7 @@ test("a choice is a native group, with Other opening the owner's own words", asy
   await industry.getByText("Something else").click()
   const words = industry.getByRole("textbox", { name: "Something else" })
   await expect(words).toHaveAttribute("placeholder", "Your industry")
-  await industry.getByRole("button", { name: "Continue" }).click()
+  await industry.getByRole("button", { name: "Submit" }).click()
   await expect(industry.getByRole("alert")).toHaveText(
     "Write your answer first."
   )
@@ -45,10 +46,12 @@ test("a choice is a native group, with Other opening the owner's own words", asy
       .nth(1)
       .getByRole("radio", { name: /Friendly/ })
   ).toBeChecked()
-  // Only the font card may be skipped.
-  await expect(page.getByRole("button", { name: "Skip for now" })).toHaveCount(
-    1
-  )
+  // Only the font question may be skipped.
+  for (const [n, skips] of [0, 0, 0, 1, 0].entries()) {
+    await expect(
+      pending(page).nth(n).getByRole("button", { name: "Skip", exact: true })
+    ).toHaveCount(skips)
+  }
 })
 
 /** The values of the options a card shows, Other left out. */
@@ -60,6 +63,17 @@ const shownIds = (card: ReturnType<typeof pending>) =>
         .map((node) => (node as HTMLInputElement).value)
         .filter((value) => value !== "__other__")
     )
+
+test("a choice of two answers on one tap, with no Submit", async ({ page }) => {
+  await open(page, "AskChoice")
+  const build = pending(page).nth(5)
+  await expect(build.getByRole("button", { name: "Submit" })).toHaveCount(0)
+  await expect(build.getByRole("radio")).toHaveCount(0)
+  await expect(
+    build.getByRole("button", { name: "Yes, build it for me" })
+  ).toBeVisible()
+  await expect(build).toHaveAccessibleName("Shall I build your website?")
+})
 
 test("a colour card shows four, brings in four others, and takes a picked colour", async ({
   page,
@@ -93,7 +107,7 @@ test("a colour card shows four, brings in four others, and takes a picked colour
   await expect(field).toHaveValue(dark)
   await expect(card.getByText(/reads well/)).toBeVisible()
   await field.fill("#12")
-  await card.getByRole("button", { name: "Continue" }).click()
+  await card.getByRole("button", { name: "Submit" }).click()
   await expect(card.getByRole("alert")).toHaveText(
     "A colour code is # and six digits or letters from a to f."
   )
@@ -118,7 +132,7 @@ test("an answered choice reads back as the owner's reply", async ({ page }) => {
   await expect(page.locator('[data-slot="aui_user-message-root"]')).toHaveText([
     /they\/them/,
     /Navy and gold/,
-    /Skip for now/,
+    /Skipped/,
   ])
   const done = page
     .locator('[data-slot="ask-choice"]')
@@ -133,7 +147,7 @@ test("a reviewed quote form gives way to the owner's reply", async ({
 }) => {
   await open(page, "ReviewQuoteForm")
   await expect(page.locator('[data-slot="aui_user-message-root"]')).toHaveText([
-    /Your quote form asks 4 questions/,
+    /Use this form/,
     /Ask about luggage too/,
   ])
   const done = page

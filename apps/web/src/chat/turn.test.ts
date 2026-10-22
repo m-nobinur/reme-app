@@ -3,7 +3,7 @@ import {
   TOOL_CALL_CANCELLED as CANCELLED,
   ChatRequest,
 } from "@workspace/contracts"
-import { SESSION_ENDED } from "@workspace/ui/lib/tool-state"
+import { SESSION_ENDED, SKIPPED } from "@workspace/ui/lib/tool-state"
 import { afterEach, expect, it, vi } from "vitest"
 import type { ChatMessage } from "./message"
 import {
@@ -13,7 +13,6 @@ import {
   NO_BUSINESS,
   replyText,
   replyTo,
-  SKIPPED,
   sendsOn,
   turnBody,
   withStoredCard,
@@ -248,7 +247,22 @@ it("an answered card reads back as the owner's words", () => {
       })
     )
   ).toBe("Uploaded 2 photos")
-  for (const card of [ask, choice, photos]) {
+  const open = (state: string, extra: object = {}) =>
+    ({
+      type: "tool-ask_open",
+      toolCallId: "call_open",
+      state,
+      input: { about: "quote.form" },
+      ...extra,
+    }) as unknown as ChatMessage["parts"][number]
+  expect(
+    replyText(
+      open("output-available", {
+        output: { answer: "stated", text: "Rooms and how often" },
+      })
+    )
+  ).toBe("Rooms and how often")
+  for (const card of [open, ask, choice, photos]) {
     expect(
       replyText(card("output-available", { output: { answer: "skipped" } }))
     ).toBe(SKIPPED)
@@ -694,7 +708,7 @@ it("a details card sends the facts it resolves, and reads back as the owner's wo
   const reply = replyTo(open, { toolCallId: "call_assistant", output: NAMED })
   expect(reply).toEqual({
     role: "user",
-    parts: [{ type: "text", text: "Ava, she/her, Friendly" }],
+    parts: [{ type: "text", text: "Ava · she/her · Friendly" }],
     metadata: { reply: true },
   })
   const sent = [
@@ -708,7 +722,7 @@ it("a details card sends the facts it resolves, and reads back as the owner's wo
     results: [
       { kind: "answer", tool_call_id: "call_assistant", output: NAMED },
     ],
-    reply: { message_id: "msg_reply", text: "Ava, she/her, Friendly" },
+    reply: { message_id: "msg_reply", text: "Ava · she/her · Friendly" },
   })
   expect(
     replyText(details("output-available", { output: { answer: "skipped" } }))
@@ -792,7 +806,7 @@ it("a finished design tray sends its answers, and reads back as the owner's word
     parts: [
       {
         type: "text",
-        text: "Which colour palette feels right for your business: Navy and gold\nWhich pages should the site have: Everything",
+        text: "Navy and gold · Everything",
       },
     ],
     metadata: { reply: true },
@@ -808,12 +822,12 @@ it("a finished design tray sends its answers, and reads back as the owner's word
     kind: "results",
     results: [{ kind: "answer", tool_call_id: "call_design", output }],
   })
-  // Skip all with nothing answered says so; an answer skipped is left out.
+  // Nothing picked reads Skipped; an answer skipped is left out.
   expect(
     replyText(
       tray("output-available", { output: { answers: {}, skip_all: true } })
     )
-  ).toBe("Skip all: you choose the look.")
+  ).toBe(SKIPPED)
   expect(
     replyText(
       tray("output-available", {
@@ -826,7 +840,7 @@ it("a finished design tray sends its answers, and reads back as the owner's word
         },
       })
     )
-  ).toBe("Which pages should the site have: The essentials")
+  ).toBe("The essentials")
   // Several ticked read as their labels, in the order given.
   expect(
     replyText(
@@ -837,7 +851,7 @@ it("a finished design tray sends its answers, and reads back as the owner's word
         },
       })
     )
-  ).toBe("Which pages should the site have: Everything, The essentials")
+  ).toBe("Everything, The essentials")
   expect(replyText(tray("input-available"))).toBeNull()
 })
 

@@ -8,6 +8,8 @@ import {
   AskDetailsOutput,
   AskFactInput,
   AskFactOutput,
+  AskOpenInput,
+  AskOpenOutput,
   AskUploadInput,
   AskUploadOutput,
   BlueprintReviewInput,
@@ -303,6 +305,14 @@ export type AskDetailsView = AskView<
 export const askDetailsView = (part: ToolPartView): AskDetailsView =>
   askView(part, AskDetailsInput, AskDetailsOutput)
 
+/** An `ask_open` question: answered in the owner's own words, or skipped. */
+export type AskOpenView = AskView<
+  AskOpenInput,
+  Extract<AskOpenOutput, { answer: "stated" }>
+>
+export const askOpenView = (part: ToolPartView): AskOpenView =>
+  askView(part, AskOpenInput, AskOpenOutput)
+
 /**
  * A UK number as it is written at home: `+447700900123` as `07700 900123`.
  * Any other number stays as it is.
@@ -322,8 +332,8 @@ export function phoneText(e164: string): string {
 }
 
 /**
- * Details as the owner gave them, in the card's order and the words it
- * showed: "07700 900123, hello@example.com" or "Ava, she/her, Friendly".
+ * Details as the owner gave them, in the tray's order and the words it
+ * showed: "07700 900123 · hello@example.com" or "Ava · she/her · Friendly".
  */
 export function detailsText(facts: readonly FactValue[]): string {
   return facts
@@ -339,7 +349,7 @@ export function detailsText(facts: readonly FactValue[]): string {
       }
       return factText(fact.key, fact.value)
     })
-    .join(", ")
+    .join(" · ")
 }
 
 /**
@@ -408,32 +418,65 @@ export function choiceText(
 }
 
 /**
- * A finished design tray as the owner's words: each answered question as
- * "Question: answer", their own words as typed. A question skipped or never
- * opened is left out, and Skip all with nothing answered says so.
+ * What a layout looks like, in words an owner would use: its hero, then how
+ * the services sit under it. The option's own label is the direction's name,
+ * which means nothing to an owner, so it is not shown. A variant not listed
+ * here has no description and the label stands in.
+ */
+const HERO_LOOK: Record<string, string> = {
+  split_frame: "Text left, photo right",
+  split_arch: "Text left, photo in an arch",
+  wash: "Big photo, heading over it",
+  dark_center: "Big photo, centred heading",
+  text_led: "Large heading, small photo",
+}
+const SERVICES_LOOK: Record<string, string> = {
+  photo_cards: "Services as photo cards",
+  numbered_rows: "Services as numbered rows",
+  alternating: "Services as photo and text rows",
+  fleet: "Services as wide cards",
+  practice_list: "Services as a numbered list",
+}
+
+type DesignOption =
+  AskDesignInput["questions"][number]["card"]["options"][number]
+
+export function layoutLook(option: DesignOption) {
+  const { visual } = option
+  if (visual?.kind !== "layout") return null
+  const hero = HERO_LOOK[visual.hero]
+  return hero ? { hero, services: SERVICES_LOOK[visual.services] } : null
+}
+
+/** A skipped question, as the owner's reply shows it, muted. */
+export const SKIPPED = "Skipped"
+
+/**
+ * A finished design tray as the owner's words: what they picked on each
+ * question, in the tray's order and the words it showed, "Ocean · Outfit and
+ * Figtree · Text left, photo right", their own words as typed. A question
+ * skipped or never opened is left out; with nothing picked it reads Skipped.
  */
 export function designText(
   input: AskDesignInput | null,
   output: AskDesignOutput
 ): string {
-  const lines = (input?.questions ?? []).flatMap((each) => {
+  const picked = (input?.questions ?? []).flatMap((each) => {
     const answer = output.answers[each.id]
     if (!answer || "skipped" in answer) return []
-    const label = (id: string) =>
-      each.card.options.find((option) => option.id === id)?.label ?? id
-    const said =
+    const label = (id: string) => {
+      const option = each.card.options.find((o) => o.id === id)
+      return option ? (layoutLook(option)?.hero ?? option.label) : id
+    }
+    return [
       "own" in answer
         ? answer.own
         : "choices" in answer
           ? answer.choices.map(label).join(", ")
-          : label(answer.choice)
-    // A question's own "?" before the colon read as "business?: Classic blue".
-    return [`${(each.question ?? each.id).replace(/\?$/, "")}: ${said}`]
+          : label(answer.choice),
+    ]
   })
-  if (lines.length > 0) return lines.join("\n")
-  return output.skip_all
-    ? "Skip all: you choose the look."
-    : "No preferences on the look."
+  return picked.length > 0 ? picked.join(" · ") : SKIPPED
 }
 
 /** The fields of a message part `isHeld` reads. */
@@ -476,8 +519,19 @@ export function isHeld(parts: readonly object[], toolCallId: string): boolean {
 export const heldText = (approved: boolean) =>
   `${approved ? "You said yes." : "You said not now."} Sent once you answer the other cards.`
 
-/** Whether these parts, a message's, hold design questions still waiting on the owner. */
-export const waitsOnDesign = (parts: readonly object[] | undefined) =>
+/** The calls the question tray answers. */
+export const TRAY_TOOLS: readonly string[] = [
+  "ask_open",
+  "ask_fact",
+  "ask_details",
+  "ask_choice",
+  "ask_upload",
+  "ask_design",
+  "review_quote_form",
+]
+
+/** Whether these parts, a message's, hold a question in the tray still waiting on the owner. */
+export const waitsOnTray = (parts: readonly object[] | undefined) =>
   (parts ?? []).some((part) => {
     const p = part as {
       type?: string
@@ -487,7 +541,7 @@ export const waitsOnDesign = (parts: readonly object[] | undefined) =>
     }
     return (
       p.type === "tool-call" &&
-      p.toolName === "ask_design" &&
+      TRAY_TOOLS.includes(p.toolName ?? "") &&
       p.result === undefined &&
       !p.isError
     )

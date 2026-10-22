@@ -13,9 +13,9 @@ import {
   type DomainRow,
   GOLIVE_STEPS,
   PURCHASE_HOLD_MS,
-  WEBSITE_STEPS,
+  withOnboarding,
 } from "../src/activity.ts"
-import { activityFor } from "../src/workspace.ts"
+import { activityFor, STAGES } from "../src/workspace.ts"
 
 const NOW = new Date("2026-10-22T12:00:00.000Z")
 const ago = (minutes: number) =>
@@ -107,19 +107,19 @@ describe("journey", () => {
       ["website", "upcoming"],
       ["golive", "upcoming"],
     ])
-    expect(journey[0]?.steps.map((s) => s.id)).toEqual([...WEBSITE_STEPS])
+    expect(journey[0]?.steps.map((s) => s.id)).toEqual([...STAGES])
     expect(journey[0]?.names).toEqual({ business: "Spark Cleaning" })
   })
 
-  it("follows the build's stages under the web's stage ids", () => {
+  it("follows the build's six stages by their ids", () => {
     const { journey, now } = view({ builds: [build("implementing")] })
     expect(journey[0]?.state).toBe("now")
     expect(states(journey[0])).toEqual([
-      "plan:done",
+      "planning:done",
       "photos:skipped",
-      "pages:now",
-      "polish:next",
-      "check:next",
+      "writing:now",
+      "polishing:next",
+      "checking:next",
       "ready:next",
     ])
     // The first build is the journey's, never a change in Now.
@@ -461,7 +461,30 @@ it("keeps the website's six stage ids from the first event to ready", () => {
     "awaiting_review",
   ] as const) {
     const { journey } = view({ builds: [build(state)] })
-    expect(journey[0]?.steps.map((s) => s.id)).toEqual([...WEBSITE_STEPS])
+    expect(journey[0]?.steps.map((s) => s.id)).toEqual([...STAGES])
     expect(journey[1]?.steps.map((s) => s.id)).toEqual([...GOLIVE_STEPS])
   }
+})
+
+describe("withOnboarding", () => {
+  const onboarding: ActivitySegment = {
+    id: "onboarding",
+    kind: "onboarding",
+    state: "now",
+    steps: [{ id: "work", state: "now" }],
+    at: ago(10),
+  }
+
+  it("puts onboarding first in the journey", () => {
+    const activity = withOnboarding(view(), onboarding)
+    expect(activity.journey.map((s) => s.kind)).toEqual([
+      "onboarding",
+      "website",
+      "golive",
+    ])
+  })
+
+  it("adds nothing once the site is live", () => {
+    expect(withOnboarding(view({ site: LIVE }), onboarding).journey).toEqual([])
+  })
 })

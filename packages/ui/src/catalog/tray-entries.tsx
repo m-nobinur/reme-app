@@ -141,36 +141,34 @@ const STATES: [string, QuestionTrayStart | undefined, string?][] = [
   ["Phone width, layout", { index: 2 }, "max-w-[22.5rem]"],
 ]
 
-const trayCatalog: CatalogEntry[] = [
-  {
-    name: "QuestionTray",
-    render: () => (
-      <div className="flex flex-col gap-10">
-        {STATES.map(([title, start, width]) => (
-          <section
-            className={`flex max-w-2xl flex-col gap-3 ${width ?? ""}`}
-            key={title}
-          >
-            <h3 className="font-medium text-muted-foreground text-xs">
-              {title}
-            </h3>
-            <div className="flex flex-col gap-2">
-              <QuestionTray
-                businessName="Mop & Pail Cleaning"
-                input={INPUT}
-                onAnswer={noop}
-                onFinish={noop}
-                start={start}
-              />
-              <div className="rounded-4xl border border-border bg-card px-5 py-4 text-muted-foreground text-sm">
-                Or tell Sam something else…
-              </div>
+const trayCatalog: CatalogEntry[] = (
+  ["QuestionTray", "TrayFrame"] as const
+).map((name) => ({
+  name,
+  render: () => (
+    <div className="flex flex-col gap-10">
+      {STATES.map(([title, start, width]) => (
+        <section
+          className={`flex max-w-2xl flex-col gap-3 ${width ?? ""}`}
+          key={title}
+        >
+          <h3 className="font-medium text-muted-foreground text-xs">{title}</h3>
+          <div className="flex flex-col gap-2">
+            <QuestionTray
+              businessName="Mop & Pail Cleaning"
+              input={INPUT}
+              onAnswer={noop}
+              onFinish={noop}
+              start={start}
+            />
+            <div className="rounded-4xl border border-border bg-card px-5 py-4 text-muted-foreground text-sm">
+              Tell Sam what to do instead…
             </div>
-          </section>
-        ))}
-      </div>
-    ),
-  },
-]
+          </div>
+        </section>
+      ))}
+    </div>
+  ),
+}))
 
 export { trayCatalog }

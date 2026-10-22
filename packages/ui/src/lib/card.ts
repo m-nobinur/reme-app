@@ -1,13 +1,13 @@
 /**
- * The surface a card that waits on the owner sits on in the transcript:
- * onboarding's questions, an approval, a proposed quote form, the site that
- * is ready. One radius, border and padding, so they read as one set; the
+ * The surface a card that waits on the owner sits on in the transcript: an
+ * approval, a plan, the site that is ready. Onboarding's questions sit in the
+ * question tray instead. One radius, border and padding, so they read as one set; the
  * width and the space around each stay with the card.
  */
 export const CARD_SURFACE =
   "rounded-3xl border border-border bg-card p-4 text-card-foreground"
 
-/** A pill or tile the owner picks inside a card, as a native radio or checkbox under it. */
+/** A pill or tile the owner picks inside a card or the tray, as a native radio or checkbox under it. */
 export const OPTION =
   "relative flex cursor-pointer border border-border bg-card text-card-foreground transition-colors duration-150 hover:border-primary/50 has-[:focus-visible]:border-ring has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring has-[:checked]:border-primary has-[:checked]:bg-primary/5"
 

@@ -15,30 +15,109 @@ import {
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { useFocusComposer } from "@workspace/ui/hooks/use-composer-input"
+import {
+  useFocusWhenIdle,
+  useRevealWaiting,
+} from "@workspace/ui/hooks/use-reveal-waiting"
 import { OPTION, OPTION_TILE } from "@workspace/ui/lib/card"
 import {
   faceStack as face,
   faceCss,
   previewFaces,
 } from "@workspace/ui/lib/font-faces"
+import { layoutLook } from "@workspace/ui/lib/tool-state"
 import { cn } from "@workspace/ui/lib/utils"
-import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react"
+import {
+  createContext,
+  type KeyboardEvent,
+  type ReactNode,
+  type RefObject,
+  useContext,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react"
+import { createPortal } from "react-dom"
 
 /**
- * The design questions of a build as one tray, a card of its own docked above
- * the composer at its width and radius, with a gap between the two. One
- * question shows at a time: the options as a native radio
- * group, or checkboxes on a card that takes several (arrow keys or Tab,
- * Space and the screen reader come with them), Write your
- * own, back and forward, Skip all and Next, which reads Build my site on the
- * last question. Collapsed it is one row, the question and "2 of 4". The
- * tray holds its own state and never touches the composer, so a message
- * typed while it is open is an ordinary turn and the tray stays where it
- * was. On a phone it is still in the flow above the composer, so the
- * composer stays reachable. Answers are code's:
- * `onAnswer` gets each one as the owner leaves its question, `onFinish` the
- * `AskDesignOutput` on Build my site or Skip all.
+ * The question tray: every question onboarding asks the owner, docked above
+ * the composer at its width and radius, with a gap between the two. The
+ * call sits in the transcript like any card and draws itself in the slot the
+ * thread keeps there (`Docked`), so it stays put while the owner scrolls or
+ * types. One page shows at a time: a header with the question and a
+ * collapse toggle, the body, and a footer with back and forward, Skip and
+ * the primary button. Collapsed it is one row, the question and "2 of 4".
+ * The tray never touches the composer, so a message typed while it is open
+ * is an ordinary turn. On a phone it stays in the flow above the composer,
+ * at most 60svh with its own scroll, so the composer stays reachable.
  */
+
+const SlotContext = createContext<HTMLElement | null>(null)
+
+/** The element above the composer the tray docks into, set by the thread. */
+export const TraySlotProvider = SlotContext.Provider
+
+/**
+ * Draws an open question in the thread's tray slot, brings it into view once
+ * no turn runs, and takes the focus then only from an empty composer.
+ */
+function Docked({ name, children }: { name: string; children: ReactNode }) {
+  const slot = useContext(SlotContext)
+  const running = useRevealWaiting(true)
+  const ref = useRef<HTMLDivElement>(null)
+  useFocusWhenIdle(true, running, ref)
+  if (!slot) return null
+  return createPortal(
+    <div data-slot={name} ref={ref}>
+      {children}
+    </div>,
+    slot
+  )
+}
+
+/**
+ * A tray's answers so far, kept in this tab by the call's id, so a reload
+ * resumes on the page the owner reached. Storage that throws or is empty
+ * starts fresh; `clear` drops it once the call is answered.
+ */
+function useTabDraft<T>(id: string, empty: T) {
+  const key = `tray:${id}`
+  // Storage can throw (private windows, blocked site data); the tray then
+  // just starts fresh after a reload.
+  const store = <R,>(use: (storage: Storage) => R) => {
+    try {
+      return use(window.sessionStorage)
+    } catch {
+      return null
+    }
+  }
+  const [draft, setDraft] = useState<T>(() => {
+    const saved = store((storage) => storage.getItem(key))
+    return saved ? (JSON.parse(saved) as T) : empty
+  })
+  const keep = (next: T) => {
+    setDraft(next)
+    store((storage) => storage.setItem(key, JSON.stringify(next)))
+  }
+  const clear = () => store((storage) => storage.removeItem(key))
+  return { draft, keep, clear }
+}
+
+/** What an ask leaves in the thread once a typed message overtook it, or why it broke. */
+function TrayNote({ name, error }: { name: string; error?: string | null }) {
+  return (
+    <p
+      className={cn(
+        "my-3 text-sm",
+        error ? "text-destructive" : "text-muted-foreground"
+      )}
+      data-slot={name}
+    >
+      {error ?? "You replied in the chat instead."}
+    </p>
+  )
+}
 
 /**
  * The tray's focus ring is the accent, as the site and the buttons around it
@@ -351,34 +430,6 @@ function siteStops(
   )
 }
 
-/**
- * What a layout looks like, in words an owner would use: its hero, then how
- * the services sit under it. The option's own label is the direction's name,
- * which means nothing to an owner, so it is not shown. A variant not listed
- * here has no description and the label stands in.
- */
-const HERO_LOOK: Record<string, string> = {
-  split_frame: "Text left, photo right",
-  split_arch: "Text left, photo in an arch",
-  wash: "Big photo, heading over it",
-  dark_center: "Big photo, centred heading",
-  text_led: "Large heading, small photo",
-}
-const SERVICES_LOOK: Record<string, string> = {
-  photo_cards: "Services as photo cards",
-  numbered_rows: "Services as numbered rows",
-  alternating: "Services as photo and text rows",
-  fleet: "Services as wide cards",
-  practice_list: "Services as a numbered list",
-}
-
-function layoutLook(option: Option) {
-  const { visual } = option
-  if (visual?.kind !== "layout") return null
-  const hero = HERO_LOOK[visual.hero]
-  return hero ? { hero, services: SERVICES_LOOK[visual.services] } : null
-}
-
 /** What an option shows above its label, from the question's visual and the option's own data. */
 function Picture({
   option,
@@ -445,6 +496,267 @@ function Picture({
   return null
 }
 
+type TrayFrameProps = {
+  /** The header, and the tray's accessible name. */
+  question: string
+  /** A muted line under the question. */
+  hint?: string | null | undefined
+  /** Where the owner is when the ask has several pages, zero based. */
+  page?: { index: number; total: number } | undefined
+  collapsed: boolean
+  onCollapsedChange: (collapsed: boolean) => void
+  /** Back and forward; without one its arrow is disabled. */
+  onBack?: (() => void) | undefined
+  onForward?: (() => void) | undefined
+  skip?: { label: string; onSkip: () => void; disabled?: boolean } | undefined
+  /**
+   * The primary button. With `form` it submits that form, so Enter in a
+   * field submits too; without, Enter in a field presses it.
+   */
+  submit?:
+    | {
+        label: ReactNode
+        onSubmit?: () => void
+        form?: string
+        disabled?: boolean
+      }
+    | undefined
+  /** A short live line beside the buttons, such as "3 of 10 chosen". */
+  status?: ReactNode
+  bodyRef?: RefObject<HTMLDivElement | null>
+  className?: string
+  children: ReactNode
+}
+
+/** The tray's frame: header, scrolling body and footer, or the one collapsed row. */
+function TrayFrame({
+  question,
+  hint,
+  page,
+  collapsed,
+  onCollapsedChange,
+  onBack,
+  onForward,
+  skip,
+  submit,
+  status,
+  bodyRef: givenBody,
+  className,
+  children,
+}: TrayFrameProps) {
+  const id = useId()
+  const ownBody = useRef<HTMLDivElement>(null)
+  const bodyRef = givenBody ?? ownBody
+  const rootRef = useRef<HTMLElement>(null)
+  const settled = useRef<boolean>(false)
+  const [more, setMore] = useState(false)
+  const focusComposer = useFocusComposer()
+  const paged = page !== undefined && page.total > 1
+  const count = paged ? `${page.index + 1} of ${page.total}` : null
+
+  // A new page takes the keyboard when it was in the tray, so Tab and the
+  // arrow keys carry on in it; focus in the composer is left alone.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only a change of page moves focus
+  useEffect(() => {
+    if (!settled.current) {
+      settled.current = true
+      return
+    }
+    if (!rootRef.current?.contains(document.activeElement)) return
+    // Pages the owner is not on stay in the form, hidden; their fields are skipped.
+    const shown = [
+      ...(bodyRef.current?.querySelectorAll<HTMLInputElement>("input") ?? []),
+    ].filter((input) => input.checkVisibility())
+    ;(shown.find((input) => input.checked) ?? shown[0])?.focus()
+  }, [page?.index])
+
+  // Whether the body hides content below its fold, so a fade can say so.
+  const measure = () => {
+    const body = bodyRef.current
+    if (body)
+      setMore(body.scrollHeight - body.scrollTop - body.clientHeight > 4)
+  }
+  // biome-ignore lint/correctness/useExhaustiveDependencies: measure again when the page or its state changes
+  useEffect(() => {
+    const body = bodyRef.current
+    if (!body) return
+    measure()
+    const watch = new ResizeObserver(measure)
+    watch.observe(body)
+    return () => watch.disconnect()
+  }, [page?.index, collapsed])
+
+  const collapse = () => {
+    onCollapsedChange(true)
+    focusComposer()
+  }
+  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key === "Escape" && !collapsed) {
+      event.preventDefault()
+      collapse()
+    } else if (
+      event.key === "Enter" &&
+      !collapsed &&
+      !submit?.form &&
+      event.target instanceof HTMLInputElement
+    ) {
+      event.preventDefault()
+      if (!submit?.disabled) submit?.onSubmit?.()
+    }
+  }
+
+  return (
+    <section
+      aria-describedby={!collapsed && hint ? `${id}-hint` : undefined}
+      aria-label={collapsed ? question : undefined}
+      aria-labelledby={collapsed ? undefined : `${id}-question`}
+      className={cn(
+        "@container flex max-h-[min(36rem,max(15rem,45dvh))] w-full flex-col rounded-[var(--composer-radius,var(--radius-4xl))] border border-border bg-card text-card-foreground max-sm:max-h-[60svh]",
+        className
+      )}
+      data-slot="question-tray"
+      onKeyDown={onKeyDown}
+      ref={rootRef}
+    >
+      {paged ? (
+        <p aria-live="polite" className="sr-only">
+          {`Question ${page.index + 1} of ${page.total}`}
+        </p>
+      ) : null}
+      {collapsed ? (
+        <button
+          aria-expanded={false}
+          className="flex w-full items-center gap-3 rounded-[var(--composer-radius,var(--radius-4xl))] px-5 py-3 text-left outline-none focus-visible:ring-3 focus-visible:ring-primary"
+          onClick={() => onCollapsedChange(false)}
+          type="button"
+        >
+          <span className="min-w-0 flex-1 truncate font-medium text-base">
+            {question}
+          </span>
+          {count ? (
+            <span className="shrink-0 text-muted-foreground text-xs tabular-nums">
+              {count}
+            </span>
+          ) : null}
+          <CaretUpIcon aria-hidden className="size-4 shrink-0" />
+        </button>
+      ) : (
+        <>
+          <div className="flex items-center gap-2 border-border border-b py-3 pr-4 pl-5">
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <h2 className="font-medium text-base" id={`${id}-question`}>
+                {question}
+              </h2>
+              {hint ? (
+                <p className="text-muted-foreground text-xs" id={`${id}-hint`}>
+                  {hint}
+                </p>
+              ) : null}
+            </div>
+            {count ? (
+              <span
+                aria-hidden
+                className="shrink-0 text-muted-foreground text-xs tabular-nums"
+              >
+                {count}
+              </span>
+            ) : null}
+            <Button
+              aria-controls={`${id}-body`}
+              aria-expanded
+              aria-label="Collapse"
+              className={ACCENT_RING}
+              onClick={collapse}
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+            >
+              <CaretDownIcon aria-hidden />
+            </Button>
+          </div>
+          <div className="relative flex min-h-0 flex-col [--body:var(--muted)] dark:[--body:var(--background)]">
+            <div
+              className="flex min-h-0 flex-col gap-3 overflow-y-auto rounded-b-3xl bg-(--body) p-3"
+              id={`${id}-body`}
+              onScroll={measure}
+              ref={bodyRef}
+            >
+              {children}
+            </div>
+            {more ? (
+              // A fade, not a decoration: it says there is more below.
+              <span
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 bottom-0 h-10 rounded-b-3xl bg-linear-to-t from-(--body) to-transparent"
+              />
+            ) : null}
+          </div>
+          <div className="flex flex-wrap items-center gap-1 p-4">
+            {paged ? (
+              <>
+                <Button
+                  aria-label="Previous question"
+                  className={ACCENT_RING}
+                  disabled={!onBack}
+                  onClick={onBack}
+                  size="icon"
+                  type="button"
+                  variant="ghost"
+                >
+                  <CaretLeftIcon aria-hidden />
+                </Button>
+                <Button
+                  aria-label="Next question"
+                  className={ACCENT_RING}
+                  disabled={!onForward}
+                  onClick={onForward}
+                  size="icon"
+                  type="button"
+                  variant="ghost"
+                >
+                  <CaretRightIcon aria-hidden />
+                </Button>
+              </>
+            ) : null}
+            <span
+              className="min-w-0 flex-1 px-1 text-muted-foreground text-xs"
+              role="status"
+            >
+              {status}
+            </span>
+            {skip ? (
+              <Button
+                className={ACCENT_RING}
+                disabled={skip.disabled}
+                onClick={skip.onSkip}
+                type="button"
+                variant="ghost"
+              >
+                {skip.label}
+              </Button>
+            ) : null}
+            {submit ? (
+              // Filled with the accent, so its ring stands off the fill.
+              <Button
+                className={cn(
+                  ACCENT_RING,
+                  "px-5 focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+                )}
+                disabled={submit.disabled}
+                form={submit.form}
+                onClick={submit.form ? undefined : submit.onSubmit}
+                type={submit.form ? "submit" : "button"}
+              >
+                {submit.label}
+              </Button>
+            ) : null}
+          </div>
+        </>
+      )}
+    </section>
+  )
+}
+
 /** Where a tray starts, when it does not start fresh. The catalog draws every state with it. */
 type Start = {
   index?: number
@@ -464,6 +776,13 @@ type QuestionTrayProps = {
   className?: string
 }
 
+/**
+ * The design questions of a build, one page each: the options as a native
+ * radio group, or checkboxes on a question that takes several, Write your
+ * own, and Next, which reads Build my site on the last. Answers are code's:
+ * `onAnswer` gets each one as the owner leaves its question, `onFinish` the
+ * `AskDesignOutput` on Build my site or Skip all.
+ */
 function QuestionTray({
   input,
   onAnswer,
@@ -492,42 +811,7 @@ function QuestionTray({
     start?.index ?? (firstOpen < 0 ? questions.length - 1 : firstOpen)
   )
   const [collapsed, setCollapsed] = useState(start?.collapsed ?? false)
-  const [more, setMore] = useState(false)
-  const bodyRef = useRef<HTMLDivElement>(null)
-  const rootRef = useRef<HTMLElement>(null)
-  const settled = useRef<boolean>(false)
   const focusComposer = useFocusComposer()
-
-  // A new question takes the keyboard when it was in the tray, so Tab and the
-  // arrow keys carry on in the options; focus in the composer is left alone.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: only a change of question moves focus
-  useEffect(() => {
-    if (!settled.current) {
-      settled.current = true
-      return
-    }
-    if (rootRef.current?.contains(document.activeElement)) {
-      bodyRef.current
-        ?.querySelector<HTMLInputElement>("input:checked, input")
-        ?.focus()
-    }
-  }, [index])
-
-  // Whether the body hides options below its fold, so a fade can say so.
-  const measure = () => {
-    const body = bodyRef.current
-    if (body)
-      setMore(body.scrollHeight - body.scrollTop - body.clientHeight > 4)
-  }
-  // biome-ignore lint/correctness/useExhaustiveDependencies: measure again when the question or its state changes
-  useEffect(() => {
-    const body = bodyRef.current
-    if (!body) return
-    measure()
-    const watch = new ResizeObserver(measure)
-    watch.observe(body)
-    return () => watch.disconnect()
-  }, [index, collapsed])
 
   const question = questions[index]
   if (!question) return null
@@ -537,7 +821,6 @@ function QuestionTray({
   const answer = answers[question.id]
   const skippable = question.card.skippable
   const ready = answer !== undefined || skippable
-  const prompt = question.question ?? "Choose one"
   const other = question.card.other
 
   /** Hands the current answer on, and returns the answers with it. */
@@ -562,23 +845,6 @@ function QuestionTray({
     if (last) finish(false)
     else go(index + 1, true)
   }
-  const collapse = () => {
-    setCollapsed(true)
-    focusComposer()
-  }
-  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.key === "Escape" && !collapsed) {
-      event.preventDefault()
-      collapse()
-    } else if (
-      event.key === "Enter" &&
-      !collapsed &&
-      event.target instanceof HTMLInputElement
-    ) {
-      event.preventDefault()
-      next()
-    }
-  }
 
   const own = answer && "own" in answer ? answer.own : ""
   const multiple = question.card.multiple
@@ -601,241 +867,131 @@ function QuestionTray({
     })
 
   return (
-    <section
-      aria-label="Design questions"
-      className={cn(
-        "@container flex max-h-[min(36rem,max(15rem,45dvh))] w-full flex-col rounded-[var(--composer-radius,var(--radius-4xl))] border border-border bg-card text-card-foreground max-sm:max-h-[max(15rem,60dvh)]",
-        className
-      )}
-      data-slot="question-tray"
-      onKeyDown={onKeyDown}
-      ref={rootRef}
+    <TrayFrame
+      className={className}
+      collapsed={collapsed}
+      hint={multiple ? "Pick any that fit" : null}
+      onBack={index === 0 ? undefined : () => go(index - 1, false)}
+      onCollapsedChange={setCollapsed}
+      onForward={last || !ready ? undefined : () => go(index + 1, true)}
+      page={{ index, total }}
+      question={question.question ?? "Choose one"}
+      skip={{ label: "Skip all", onSkip: () => finish(true) }}
+      submit={{
+        label: last ? "Build my site" : "Next",
+        onSubmit: next,
+        disabled: !ready,
+      }}
     >
-      <p aria-live="polite" className="sr-only">
-        {`Question ${index + 1} of ${total}`}
-      </p>
-      {collapsed ? (
-        <button
-          aria-expanded={false}
-          className="flex w-full items-center gap-3 rounded-[var(--composer-radius,var(--radius-4xl))] px-5 py-3 text-left outline-none focus-visible:ring-3 focus-visible:ring-primary"
-          onClick={() => setCollapsed(false)}
-          type="button"
+      {question.visual === "font_pair" && <PreviewFaces />}
+      {question.card.options.length > 0 ? (
+        // biome-ignore lint/a11y/useAriaPropsSupportedByRole: group and radiogroup both take a label; the rule cannot read a role chosen at runtime
+        <div
+          aria-label={question.question ?? "Choose one"}
+          className={cn(
+            "grid grid-cols-1 gap-3",
+            // A pair's business name is long, so they stay one to a row until
+            // two fit side by side. Up to three layouts sit in one row, so
+            // all of them show at once on a phone.
+            question.visual === "font_pair"
+              ? "@md:grid-cols-2"
+              : question.visual === "layout" &&
+                  question.card.options.length === 3
+                ? "grid-cols-3 gap-2"
+                : "min-[380px]:grid-cols-2"
+          )}
+          key={question.id}
+          role={multiple ? "group" : "radiogroup"}
         >
-          <span className="min-w-0 flex-1 truncate font-medium text-base">
-            {prompt}
-          </span>
-          <span className="shrink-0 text-muted-foreground text-xs tabular-nums">
-            {index + 1} of {total}
-          </span>
-          <CaretUpIcon aria-hidden className="size-4 shrink-0" />
-        </button>
-      ) : (
-        <>
-          <div className="flex items-center gap-2 border-border border-b py-3 pr-4 pl-5">
-            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <h2 className="font-medium text-base" id={`${id}-question`}>
-                {prompt}
-              </h2>
-              {multiple ? (
-                <p className="text-muted-foreground text-xs" id={`${id}-hint`}>
-                  Pick any that fit
-                </p>
-              ) : null}
-            </div>
-            <span
-              aria-hidden
-              className="shrink-0 text-muted-foreground text-xs tabular-nums"
-            >
-              {index + 1} of {total}
-            </span>
-            <Button
-              aria-controls={`${id}-body`}
-              aria-expanded
-              aria-label="Collapse questions"
-              className={ACCENT_RING}
-              onClick={collapse}
-              size="icon-sm"
-              type="button"
-              variant="ghost"
-            >
-              <CaretDownIcon aria-hidden />
-            </Button>
-          </div>
-          <div className="relative flex min-h-0 flex-col [--body:var(--muted)] dark:[--body:var(--background)]">
-            <div
-              className="flex min-h-0 flex-col gap-3 overflow-y-auto rounded-b-3xl bg-(--body) p-3"
-              id={`${id}-body`}
-              onScroll={measure}
-              ref={bodyRef}
-            >
-              {question.visual === "font_pair" && <PreviewFaces />}
-              {question.card.options.length > 0 ? (
-                // biome-ignore lint/a11y/useAriaPropsSupportedByRole: group and radiogroup both take a label; the rule cannot read a role chosen at runtime
-                <div
-                  aria-describedby={multiple ? `${id}-hint` : undefined}
-                  aria-labelledby={`${id}-question`}
-                  className={cn(
-                    "grid grid-cols-1 gap-3",
-                    // A pair's business name is long, so they stay one to a
-                    // row until two fit side by side. Up to three layouts
-                    // sit in one row, so all of them show at once on a phone.
-                    question.visual === "font_pair"
-                      ? "@md:grid-cols-2"
-                      : question.visual === "layout" &&
-                          question.card.options.length === 3
-                        ? "grid-cols-3 gap-2"
-                        : "min-[380px]:grid-cols-2"
-                  )}
-                  key={question.id}
-                  role={multiple ? "group" : "radiogroup"}
-                >
-                  {question.card.options.map((option) => {
-                    const checked = multiple
-                      ? ticks.includes(option.id)
-                      : answer !== undefined &&
-                        "choice" in answer &&
-                        answer.choice === option.id
-                    const look = layoutLook(option)
-                    return (
-                      <label
-                        className={cn(
-                          OPTION,
-                          OPTION_TILE,
-                          look && "p-2",
-                          "rounded-xl has-[:focus-visible]:border-primary has-[:focus-visible]:ring-primary",
-                          // Picked is a 2px line in the text colour: a border
-                          // and an inset ring of one pixel each.
-                          "has-[:checked]:inset-ring-1 has-[:checked]:inset-ring-foreground has-[:checked]:border-foreground has-[:checked]:bg-card"
-                        )}
-                        key={option.id}
-                      >
-                        <input
-                          checked={checked}
-                          className="sr-only"
-                          name={`${id}-${question.id}`}
-                          onChange={() =>
-                            multiple ? toggle(option.id) : pick(option.id)
-                          }
-                          type={multiple ? "checkbox" : "radio"}
-                          value={option.id}
-                        />
-                        <Picture
-                          name={businessName?.trim() || "Your business"}
-                          option={option}
-                          stops={stops}
-                        />
-                        <span
-                          className={cn(
-                            "flex items-center gap-1.5 font-medium text-sm",
-                            look && "text-xs"
-                          )}
-                        >
-                          {question.visual === "font_pair" ? (
-                            <span className="sr-only">{option.label}</span>
-                          ) : (
-                            (look?.hero ?? option.label)
-                          )}
-                          {/* A box, ticked or not, so a card of many reads apart from a card of one. */}
-                          {multiple ? (
-                            checked ? (
-                              <CheckSquareIcon
-                                aria-hidden
-                                className="ml-auto size-5 shrink-0"
-                                weight="fill"
-                              />
-                            ) : (
-                              <SquareIcon
-                                aria-hidden
-                                className="ml-auto size-5 shrink-0 text-muted-foreground"
-                              />
-                            )
-                          ) : null}
-                        </span>
-                        {(look?.services ?? option.hint) ? (
-                          <span className="text-muted-foreground text-xs">
-                            {look?.services ?? option.hint}
-                          </span>
-                        ) : null}
-                      </label>
-                    )
-                  })}
-                </div>
-              ) : null}
-              {other ? (
-                <Input
-                  aria-label={other.label}
-                  className={cn(
-                    "h-12 rounded-xl border-border bg-card px-3.5 md:text-sm",
-                    ACCENT_RING
-                  )}
-                  autoComplete="off"
-                  maxLength={200}
-                  onChange={(event) => write(event.currentTarget.value)}
-                  placeholder={other.placeholder}
-                  value={own}
+          {question.card.options.map((option) => {
+            const checked = multiple
+              ? ticks.includes(option.id)
+              : answer !== undefined &&
+                "choice" in answer &&
+                answer.choice === option.id
+            const look = layoutLook(option)
+            return (
+              <label
+                className={cn(
+                  OPTION,
+                  OPTION_TILE,
+                  look && "p-2",
+                  "rounded-xl has-[:focus-visible]:border-primary has-[:focus-visible]:ring-primary",
+                  // Picked is a 2px line in the text colour: a border and an
+                  // inset ring of one pixel each.
+                  "has-[:checked]:inset-ring-1 has-[:checked]:inset-ring-foreground has-[:checked]:border-foreground has-[:checked]:bg-card"
+                )}
+                key={option.id}
+              >
+                <input
+                  checked={checked}
+                  className="sr-only"
+                  name={`${id}-${question.id}`}
+                  onChange={() =>
+                    multiple ? toggle(option.id) : pick(option.id)
+                  }
+                  type={multiple ? "checkbox" : "radio"}
+                  value={option.id}
                 />
-              ) : null}
-            </div>
-            {more ? (
-              // A fade, not a decoration: it says there are more options below.
-              <span
-                aria-hidden
-                className="pointer-events-none absolute inset-x-0 bottom-0 h-10 rounded-b-3xl bg-linear-to-t from-(--body) to-transparent"
-              />
-            ) : null}
-          </div>
-          <div className="flex items-center gap-1 p-4">
-            <Button
-              aria-label="Previous question"
-              className={ACCENT_RING}
-              disabled={index === 0}
-              onClick={() => go(index - 1, false)}
-              size="icon"
-              type="button"
-              variant="ghost"
-            >
-              <CaretLeftIcon aria-hidden />
-            </Button>
-            <Button
-              aria-label="Next question"
-              className={ACCENT_RING}
-              disabled={last || !ready}
-              onClick={() => go(index + 1, true)}
-              size="icon"
-              type="button"
-              variant="ghost"
-            >
-              <CaretRightIcon aria-hidden />
-            </Button>
-            <span className="flex-1" />
-            <Button
-              className={ACCENT_RING}
-              onClick={() => finish(true)}
-              size="default"
-              type="button"
-              variant="ghost"
-            >
-              Skip all
-            </Button>
-            {/* Filled with the accent, so its ring stands off the fill. */}
-            <Button
-              className={cn(
-                ACCENT_RING,
-                "px-5 focus-visible:ring-offset-2 focus-visible:ring-offset-card"
-              )}
-              disabled={!ready}
-              onClick={next}
-              size="default"
-              type="button"
-            >
-              {last ? "Build my site" : "Next"}
-            </Button>
-          </div>
-        </>
-      )}
-    </section>
+                <Picture
+                  name={businessName?.trim() || "Your business"}
+                  option={option}
+                  stops={stops}
+                />
+                <span
+                  className={cn(
+                    "flex items-center gap-1.5 font-medium text-sm",
+                    look && "text-xs"
+                  )}
+                >
+                  {question.visual === "font_pair" ? (
+                    <span className="sr-only">{option.label}</span>
+                  ) : (
+                    (look?.hero ?? option.label)
+                  )}
+                  {/* A box, ticked or not, so a card of many reads apart from a card of one. */}
+                  {multiple ? (
+                    checked ? (
+                      <CheckSquareIcon
+                        aria-hidden
+                        className="ml-auto size-5 shrink-0"
+                        weight="fill"
+                      />
+                    ) : (
+                      <SquareIcon
+                        aria-hidden
+                        className="ml-auto size-5 shrink-0 text-muted-foreground"
+                      />
+                    )
+                  ) : null}
+                </span>
+                {(look?.services ?? option.hint) ? (
+                  <span className="text-muted-foreground text-xs">
+                    {look?.services ?? option.hint}
+                  </span>
+                ) : null}
+              </label>
+            )
+          })}
+        </div>
+      ) : null}
+      {other ? (
+        <Input
+          aria-label={other.label}
+          className={cn(
+            "h-12 rounded-xl border-border bg-card px-3.5 md:text-sm",
+            ACCENT_RING
+          )}
+          autoComplete="off"
+          maxLength={200}
+          onChange={(event) => write(event.currentTarget.value)}
+          placeholder={other.placeholder}
+          value={own}
+        />
+      ) : null}
+    </TrayFrame>
   )
 }
 
 export type { Start as QuestionTrayStart }
-export { QuestionTray }
+export { ACCENT_RING, Docked, QuestionTray, TrayFrame, TrayNote, useTabDraft }

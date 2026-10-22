@@ -102,11 +102,11 @@ describe("tool lines", () => {
 
 describe("build stage lines", () => {
   const stages: BuildStage[] = [
-    "plan",
+    "planning",
     "photos",
-    "pages",
-    "check",
-    "polish",
+    "writing",
+    "polishing",
+    "checking",
     "ready",
   ]
   const counts = [{}, { done: 3, total: 8, fixes: 2 }]
@@ -124,22 +124,30 @@ describe("build stage lines", () => {
         expect(words(working)).toBeLessThanOrEqual(6)
         plain(done)
         expect(done).toMatch(DONE)
-        expect(failed).toMatch(/^Couldn't .+, trying again$/)
+        expect(failed).toMatch(
+          /^Couldn't [^,.]+\. You can try again from here\.$/
+        )
       }
     })
   }
 
+  it("says what stopped and offers a new try", () => {
+    expect(stageLine("writing", "failed")).toBe(
+      "Couldn't finish the pages. You can try again from here."
+    )
+  })
+
   it("carries the counts the orchestrator sends", () => {
     const args = { done: 3, total: 8, fixes: 2 }
     expect(stageLine("photos", "working", args)).toBe("Making 8 photos, 3 done")
-    expect(stageLine("pages", "working", { done: 3, total: 6 })).toBe(
+    expect(stageLine("writing", "working", { done: 3, total: 6 })).toBe(
       "Writing the pages, 3 of 6"
     )
-    expect(stageLine("pages", "done", { total: 6 })).toBe("Wrote 6 pages")
-    expect(stageLine("check", "working", args)).toBe(
+    expect(stageLine("writing", "done", { total: 6 })).toBe("Wrote 6 pages")
+    expect(stageLine("checking", "working", args)).toBe(
       "Fixing 2 things the checks found"
     )
-    expect(stageLine("check", "working", { fixes: 1 })).toBe(
+    expect(stageLine("checking", "working", { fixes: 1 })).toBe(
       "Fixing 1 thing the checks found"
     )
   })

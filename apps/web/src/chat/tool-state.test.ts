@@ -12,6 +12,7 @@ import {
   askChoiceView,
   askDetailsView,
   askFactView,
+  askOpenView,
   askUploadView,
   choiceText,
   decisionView,
@@ -313,6 +314,27 @@ it("reads every ask_choice state, and the answer in the owner's words", () => {
   ).toBe("error")
 })
 
+it("reads every ask_open state", () => {
+  const args = { about: "quote.form" }
+  expect(askOpenView({ args })).toEqual({ state: "pending", input: args })
+  const stated = { answer: "stated", text: "Rooms and how often" }
+  expect(askOpenView({ args, result: stated })).toEqual({
+    state: "answered",
+    input: args,
+    output: stated,
+  })
+  expect(askOpenView({ args, result: { answer: "skipped" } }).state).toBe(
+    "skipped"
+  )
+  expect(
+    askOpenView({ args, isError: true, result: { error: CANCELLED } }).state
+  ).toBe("cancelled")
+  expect(askOpenView({ args: { about: "media.uploads" } }).state).toBe("error")
+  expect(
+    askOpenView({ args, result: { answer: "stated", text: " " } }).state
+  ).toBe("error")
+})
+
 it("reads every ask_upload state", () => {
   const input = {
     accept: ["image/png"],
@@ -392,7 +414,9 @@ it("reads every ask_details state, and the answer in the owner's words", () => {
     output: stated,
   })
   if (answered.state === "answered") {
-    expect(detailsText(answered.output.facts)).toBe("07700 900123, a@b.example")
+    expect(detailsText(answered.output.facts)).toBe(
+      "07700 900123 · a@b.example"
+    )
   }
   expect(
     detailsText([
@@ -400,7 +424,7 @@ it("reads every ask_details state, and the answer in the owner's words", () => {
       { key: "assistant.pronouns", value: { id: "she_her" } },
       { key: "assistant.tone", value: { id: "friendly" } },
     ])
-  ).toBe("Ava, she/her, Friendly")
+  ).toBe("Ava · she/her · Friendly")
   expect(
     askDetailsView({ args: contact, result: { answer: "skipped" } }).state
   ).toBe("skipped")

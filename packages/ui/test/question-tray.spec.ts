@@ -49,8 +49,8 @@ test("a card of many ticks several with Space, in order, and none is unanswered"
     name: "Which pages should the site have, besides Home and Request a quote?",
   })
   await expect(group).toHaveCount(1)
-  // Said under the question and read with the group; a card of one has no such line.
-  await expect(group).toHaveAccessibleDescription("Pick any that fit")
+  // Said under the question and read with the tray; a card of one has no such line.
+  await expect(pages).toHaveAccessibleDescription("Pick any that fit")
   await expect(pages.getByText("Pick any that fit")).toBeVisible()
   await expect(tray(page, 0).getByText("Pick any that fit")).toHaveCount(0)
   await expect(pages.getByRole("radio")).toHaveCount(0)
@@ -76,6 +76,19 @@ test("a card of many ticks several with Space, in order, and none is unanswered"
     await page.keyboard.press("Space")
   }
   await expect(build).toBeDisabled()
+})
+
+test("the tray is named by its question, and collapsed by its question too", async ({
+  page,
+}) => {
+  await open(page, "QuestionTray")
+  await expect(tray(page, 0)).toHaveAccessibleName(
+    "Which colour palette feels right for Mop & Pail Cleaning?"
+  )
+  await expect(tray(page, 6)).toHaveAccessibleName(
+    "Which lettering do you prefer?"
+  )
+  await expect(tray(page, 6).getByText("2 of 4")).toBeVisible()
 })
 
 test("the last question reads Build my site", async ({ page }) => {

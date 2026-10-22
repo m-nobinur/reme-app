@@ -9,12 +9,12 @@ import {
 } from "@workspace/contracts"
 import { CHANGE_PREFIX } from "@workspace/ui/lib/blueprint"
 import { factText } from "@workspace/ui/lib/facts"
-import { quoteSummary } from "@workspace/ui/lib/quote-form"
 import {
   choiceText,
   designText,
   detailsText,
   SESSION_ENDED,
+  SKIPPED,
 } from "@workspace/ui/lib/tool-state"
 import { browserZone } from "@workspace/ui/lib/zone"
 import {
@@ -89,7 +89,7 @@ export function chatTurn(
 
 /**
  * What the owner resolved in the last step: an answer to an onboarding card
- * (`ask_fact`, `ask_details`, `ask_choice`, `ask_design`, `ask_upload`,
+ * (`ask_open`, `ask_fact`, `ask_details`, `ask_choice`, `ask_design`, `ask_upload`,
  * `review_quote_form`), and a yes
  * or no on any call. A call the server ran itself, such as a read, is
  * not the owner's to send, even with its output in the step.
@@ -104,7 +104,8 @@ function ownerResults(last: ChatMessage | undefined): ChatResult[] {
   return step.flatMap((part): ChatResult[] => {
     if (!isToolUIPart(part)) return []
     if (
-      (part.type === "tool-ask_fact" ||
+      (part.type === "tool-ask_open" ||
+        part.type === "tool-ask_fact" ||
         part.type === "tool-ask_details" ||
         part.type === "tool-ask_choice" ||
         part.type === "tool-ask_design" ||
@@ -285,6 +286,7 @@ export const sendsOn = ({ messages }: { messages: ChatMessage[] }) => {
 }
 
 const CARDS = [
+  "tool-ask_open",
   "tool-ask_fact",
   "tool-ask_details",
   "tool-ask_choice",
@@ -294,12 +296,16 @@ const CARDS = [
   "tool-review_blueprint",
 ]
 
-/** Skipping a card, in the words of the card's own button. */
-export const SKIPPED = "Skip for now"
-
-/** An answered card as the owner's words: what they wrote, picked or sent. */
+/**
+ * An answered card as the owner's short reply: what they wrote, picked or
+ * sent, never a sentence written for them. A skip reads Skipped, which the
+ * thread shows muted.
+ */
 export function replyText(part: ChatMessage["parts"][number]): string | null {
   if (!isToolUIPart(part) || part.state !== "output-available") return null
+  if (part.type === "tool-ask_open") {
+    return part.output.answer === "stated" ? part.output.text : SKIPPED
+  }
   if (part.type === "tool-ask_fact") {
     return part.output.answer === "stated"
       ? factText(part.output.fact.key, part.output.fact.value)
@@ -327,7 +333,7 @@ export function replyText(part: ChatMessage["parts"][number]): string | null {
   }
   if (part.type === "tool-review_quote_form") {
     return part.output.answer === "confirmed"
-      ? quoteSummary(part.output.fields)
+      ? "Use this form"
       : part.output.text
   }
   if (part.type === "tool-review_blueprint") {

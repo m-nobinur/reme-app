@@ -1,9 +1,12 @@
 import type { ToolCallMessagePartComponent } from "@assistant-ui/react"
 import { ArrowCounterClockwiseIcon, TrashIcon } from "@phosphor-icons/react"
+import {
+  Docked,
+  TrayFrame,
+  TrayNote,
+} from "@workspace/ui/components/assistant/question-tray"
 import { Button } from "@workspace/ui/components/button"
 import { Switch } from "@workspace/ui/components/switch"
-import { useRevealWaiting } from "@workspace/ui/hooks/use-reveal-waiting"
-import { CARD_SURFACE } from "@workspace/ui/lib/card"
 import {
   canDrop,
   confirmedFields,
@@ -16,13 +19,12 @@ import {
   setRequired,
 } from "@workspace/ui/lib/quote-form"
 import { reviewQuoteFormView } from "@workspace/ui/lib/tool-state"
-import { cn } from "@workspace/ui/lib/utils"
 import { useId, useState } from "react"
 
 /**
  * The questions the assistant proposes for the site's quote request form,
- * from what the owner said they need to know to quote a job. One compact row
- * each: the question, which wraps, its type, a Required switch and a remove
+ * from what the owner said they need to know to quote a job, in the question
+ * tray. One compact row each: the question, which wraps, its type, a Required switch and a remove
  * button that shows on hover or focus. The owner makes a question optional or
  * drops one, and confirms with "Use this form". Any other change is typed in
  * the composer, and the message they send is the answer to this card
@@ -116,30 +118,20 @@ function Row({
 
 const ReviewQuoteForm: ToolCallMessagePartComponent = (props) => {
   const view = reviewQuoteFormView(props)
-  useRevealWaiting(view.state === "pending")
   const [draft, setDraft] = useState<QuoteDraft>(() =>
     view.state === "pending" ? draftOf(view.input.fields) : []
   )
   const [invalid, setInvalid] = useState<string | null>(null)
+  const [collapsed, setCollapsed] = useState(false)
   const id = useId()
 
   if (view.state === "answered") return null
   if (view.state !== "pending") {
     return (
-      <div className="my-3 max-w-2xl" data-slot="review-quote-form">
-        <p
-          className={cn(
-            "text-sm",
-            view.state === "error"
-              ? "text-destructive"
-              : "text-muted-foreground"
-          )}
-        >
-          {view.state === "error"
-            ? view.message
-            : "You replied in the chat instead."}
-        </p>
-      </div>
+      <TrayNote
+        error={view.state === "error" ? view.message : null}
+        name="review-quote-form"
+      />
     )
   }
 
@@ -157,60 +149,46 @@ const ReviewQuoteForm: ToolCallMessagePartComponent = (props) => {
   }
 
   return (
-    <section
-      aria-labelledby={`${id}-title`}
-      className={cn(
-        CARD_SURFACE,
-        "@container my-3 flex max-w-2xl flex-col gap-3"
-      )}
-      data-slot="review-quote-form"
-    >
-      <div className="flex flex-col gap-1">
-        <h3 className="font-medium text-sm" id={`${id}-title`}>
-          Questions for your quote form
-        </h3>
-        {view.input.note ? (
-          <p className="max-w-prose text-muted-foreground text-sm">
-            {view.input.note}
-          </p>
-        ) : null}
-        <p className="text-muted-foreground text-xs">
+    <Docked name="review-quote-form">
+      <TrayFrame
+        collapsed={collapsed}
+        hint={view.input.note}
+        onCollapsedChange={setCollapsed}
+        question="Questions for your quote form"
+        submit={{ label: "Use this form", onSubmit: confirm }}
+      >
+        <p className="px-1 text-muted-foreground text-xs">
           The form also asks for name, email and phone.
         </p>
-      </div>
-      <div className="flex min-w-0 flex-col">
-        <ol
-          aria-label="Proposed questions"
-          className="flex flex-col divide-y divide-border"
-        >
-          {draft.map((row, index) => (
-            <Row
-              draft={draft}
-              index={index}
-              key={row.field.key}
-              limitId={`${id}-limit`}
-              onChange={change}
-              row={row}
-            />
-          ))}
-        </ol>
+        <div className="flex min-w-0 flex-col rounded-xl border border-border bg-card px-3">
+          <ol
+            aria-label="Proposed questions"
+            className="flex flex-col divide-y divide-border"
+          >
+            {draft.map((row, index) => (
+              <Row
+                draft={draft}
+                index={index}
+                key={row.field.key}
+                limitId={`${id}-limit`}
+                onChange={change}
+                row={row}
+              />
+            ))}
+          </ol>
+        </div>
         {canDrop(draft) ? null : (
-          <p className="text-muted-foreground text-xs" id={`${id}-limit`}>
+          <p className="px-1 text-muted-foreground text-xs" id={`${id}-limit`}>
             {DROP_LIMIT}
           </p>
         )}
-      </div>
-      {invalid ? (
-        <p className="text-[0.8125rem] text-destructive" role="alert">
-          {invalid}
-        </p>
-      ) : null}
-      <div className="flex justify-end">
-        <Button onClick={confirm} type="button">
-          Use this form
-        </Button>
-      </div>
-    </section>
+        {invalid ? (
+          <p className="px-1 text-[0.8125rem] text-destructive" role="alert">
+            {invalid}
+          </p>
+        ) : null}
+      </TrayFrame>
+    </Docked>
   )
 }
 ReviewQuoteForm.displayName = "ReviewQuoteForm"
