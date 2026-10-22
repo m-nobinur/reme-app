@@ -2287,7 +2287,6 @@ const assistantCatalog = [
                 onApprove={noop}
                 onMakeChanges={noop}
                 onSeePreview={noop}
-                version={1}
               />
             ),
           }}
@@ -2298,21 +2297,18 @@ const assistantCatalog = [
             onMakeChanges={noop}
             onSeePreview={noop}
             pending
-            version={2}
           />
           <SiteReady
             error="A newer version replaced that one. Check the latest before you decide."
             onApprove={noop}
             onMakeChanges={noop}
             onSeePreview={noop}
-            version={2}
           />
           <SiteReady
             approved
             onApprove={noop}
             onMakeChanges={noop}
             onSeePreview={noop}
-            version={3}
           />
         </div>
       </div>
@@ -2336,7 +2332,6 @@ const assistantCatalog = [
               src: KITCHEN,
             },
           ]}
-          version={2}
         />
       </div>
     ),

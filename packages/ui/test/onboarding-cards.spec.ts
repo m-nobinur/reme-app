@@ -199,9 +199,11 @@ test("the ready card sits at the end of the thread and never claims an approval 
   await expect(
     ready.getByRole("heading", { name: "Your website is ready." })
   ).toBeVisible()
-  await expect(ready.getByRole("button", { name: "Approve" })).toBeEnabled()
   await expect(
-    ready.getByRole("button", { name: "Make changes" })
+    ready.getByRole("button", { name: "Approve and publish" })
+  ).toBeEnabled()
+  await expect(
+    ready.getByRole("button", { name: "Ask for changes" })
   ).toBeEnabled()
   await expect(
     ready.getByRole("button", { name: "See the preview" })
@@ -211,10 +213,10 @@ test("the ready card sits at the end of the thread and never claims an approval 
     page.locator('[aria-live="polite"] [data-slot="site-ready"]')
   ).toHaveCount(1)
   await expect(
-    cards.nth(1).getByRole("button", { name: "Approving" })
+    cards.nth(1).getByRole("button", { name: "Publishing" })
   ).toBeDisabled()
   await expect(cards.nth(2).getByRole("alert")).toContainText("newer version")
   await expect(cards.nth(3)).toHaveText(
-    "Approved. Version 3 is being published."
+    "Approved. Your website is being published."
   )
 })
