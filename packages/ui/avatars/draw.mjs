@@ -1,9 +1,9 @@
 /**
  * Draws each assistant portrait once through OpenRouter's images endpoint,
  * with the key from the orchestrator's .dev.vars. Then `edit.mjs` draws its
- * blink and smile, and `compose.py` turns the three into the loop the app
- * ships. Run from a scratch folder, then copy each `{id}.webp` and
- * `{id}-still.webp` into `src/assets/avatars/`:
+ * blink and smile, and `compose.py` cuts the three into the layers the app
+ * stacks. Run from a scratch folder, then copy each `{id}.webp`,
+ * `{id}-blink.webp` and `{id}-smile.webp` into `src/assets/avatars/`:
  *
  *   node packages/ui/avatars/draw.mjs apps/orchestrator/.dev.vars . [ids]
  *   node packages/ui/avatars/edit.mjs apps/orchestrator/.dev.vars . ids

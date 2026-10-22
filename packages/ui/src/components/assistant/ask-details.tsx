@@ -219,10 +219,19 @@ function AvatarPicks({
   return (
     <fieldset>
       <legend className="sr-only">{PICKS["assistant.avatar"].legend}</legend>
-      <div className="flex flex-wrap gap-2">
+      {/* Spread across the card in equal columns, five when every face shows. */}
+      <div
+        className={cn(
+          "grid gap-3",
+          options.length > 4 ? "grid-cols-5" : "grid-cols-4"
+        )}
+      >
         {options.map((avatar, at) => (
           <label
-            className={cn(OPTION, "rounded-2xl p-2")}
+            className={cn(
+              OPTION,
+              "items-center justify-center rounded-2xl p-3"
+            )}
             key={avatar.id}
             title={avatar.label}
           >
@@ -236,7 +245,7 @@ function AvatarPicks({
             />
             <span className="sr-only">{avatar.label}</span>
             <AssistantAvatar
-              className="size-14 sm:size-16"
+              className="size-14 sm:size-18"
               delay={at * 1.3}
               id={avatar.id}
             />
