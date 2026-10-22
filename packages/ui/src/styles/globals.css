@@ -127,8 +127,6 @@
   /* A status line's icon while its work runs, one small motion per kind of
      work. Transform and opacity only, and the icon holds still under reduced
      motion (the component adds motion-reduce:animate-none). */
-  --animate-status-steps: status-steps 1.6s steps(4, jump-none) infinite
-    alternate;
   --animate-status-pulse: status-pulse 1.6s ease-in-out infinite;
   --animate-status-tap: status-tap 1.2s ease-in-out infinite;
   --animate-status-fade: status-fade 2s ease-in-out infinite;
@@ -149,6 +147,7 @@
   --animate-icon-pen: icon-pen 0.8s ease-in-out infinite;
   --animate-icon-brush: icon-brush 1.4s ease-in-out infinite;
   --animate-icon-hammer: icon-hammer 1.2s ease-in-out infinite;
+  --animate-icon-breathe: icon-breathe 2.4s ease-in-out infinite;
   --animate-note-cycle: note-cycle 9s cubic-bezier(0.4, 0, 0.2, 1) infinite;
   /* The conversation's reading type, sized per viewport by `--chat-size`. A
      step line (a check the assistant ran) sits a size under the reply. */
@@ -227,15 +226,6 @@
   @keyframes flow {
     to {
       stroke-dashoffset: -10;
-    }
-  }
-  /* The lines of a list coming in one after another. */
-  @keyframes status-steps {
-    from {
-      opacity: 0.3;
-    }
-    to {
-      opacity: 1;
     }
   }
   /* The circles breathing together. */
@@ -396,6 +386,16 @@
     }
     50% {
       transform: rotate(9deg);
+    }
+  }
+  /* A quarter turn while it shrinks and grows back, so the sparkle glints. */
+  @keyframes icon-breathe {
+    0%,
+    100% {
+      transform: rotate(0deg) scale(1);
+    }
+    50% {
+      transform: rotate(90deg) scale(0.8);
     }
   }
   /* A tap, then a rest. */

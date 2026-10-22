@@ -56,9 +56,11 @@ import { ComposerInputContext } from "@workspace/ui/hooks/use-composer-input"
 import { useCycle } from "@workspace/ui/hooks/use-cycle"
 import { useOnboardingStatus } from "@workspace/ui/hooks/use-onboarding-status"
 import {
+  onboardingKind,
   onboardingLine,
   STILL_ON_IT_AFTER,
   THINKING_AFTER,
+  turnKind,
   turnMoment,
   writingBack,
 } from "@workspace/ui/lib/activity-copy"
@@ -907,7 +909,13 @@ const TypingIndicator: FC<{ immediate?: boolean }> = ({
     <span data-slot="aui_assistant-message-indicator">
       <StatusLine
         delay={immediate ? 0 : SHOW_DELAY_MS}
-        kind="thinking"
+        kind={
+          status
+            ? onboardingKind(status)
+            : immediate || toolsRan
+              ? "writing"
+              : turnKind(seconds)
+        }
         label={
           status
             ? onboardingLine(status)

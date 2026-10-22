@@ -218,3 +218,48 @@ export function BuildingIcon({ className, animated }: DrawnIconProps) {
     </Svg>
   )
 }
+
+/** Reading a message: a speech bubble whose lines light up one after another. */
+export function ReadingIcon({ className, animated }: DrawnIconProps) {
+  const lines = [
+    { y: 7.5, to: 16.5 },
+    { y: 10.5, to: 16.5 },
+    { y: 13.5, to: 12.5 },
+  ]
+  return (
+    <Svg className={className}>
+      <path d="M6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H11l-4.5 4v-4A2.5 2.5 0 0 1 4 13.5v-8A2.5 2.5 0 0 1 6.5 3z" />
+      {lines.map(({ y, to }, i) => (
+        <path
+          className={moving(animated, "animate-icon-blink")}
+          d={`M7.5 ${y}H${to}`}
+          key={y}
+          style={animated ? { animationDelay: `${i * 0.3}s` } : undefined}
+        />
+      ))}
+    </Svg>
+  )
+}
+
+/** Thinking: a sparkle that turns and breathes, a small one glinting beside it. */
+export function ThinkingIcon({ className, animated }: DrawnIconProps) {
+  return (
+    <Svg className={className}>
+      <path
+        className={cn(
+          "origin-center [transform-box:fill-box]",
+          moving(animated, "animate-icon-breathe")
+        )}
+        d="M11 4.5Q12 11 18.5 12Q12 13 11 19.5Q10 13 3.5 12Q10 11 11 4.5Z"
+      />
+      <path
+        className={cn(
+          "origin-center [transform-box:fill-box]",
+          moving(animated, "animate-icon-twinkle")
+        )}
+        d="M19 2.5v4M17 4.5h4"
+        style={animated ? { animationDelay: "0.5s" } : undefined}
+      />
+    </Svg>
+  )
+}

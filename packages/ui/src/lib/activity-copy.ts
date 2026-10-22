@@ -24,7 +24,9 @@ import type {
 
 /** What an icon is drawn for, so the status line picks its icon from the copy's own kind. */
 export type StatusKind =
+  | "reading"
   | "thinking"
+  | "still"
   | "setup"
   | "question"
   | "planning"
@@ -126,6 +128,14 @@ export const elapsedText = (seconds: number) =>
 /** Seconds into a turn at which the line moves on. The wait says something true: more time has passed. */
 export const THINKING_AFTER = 4
 export const STILL_ON_IT_AFTER = 12
+
+/** The icon for `turnMoment`'s line at the same moment, so the picture changes with the words. */
+export const turnKind = (elapsedSeconds: number): StatusKind =>
+  elapsedSeconds >= STILL_ON_IT_AFTER
+    ? "still"
+    : elapsedSeconds >= THINKING_AFTER
+      ? "thinking"
+      : "reading"
 
 /** A turn before any tool or word: reading, then thinking it through, then still on it. */
 export function turnMoment(
@@ -521,6 +531,25 @@ const NEXT_LINE: Record<
 /** The line for what the planner is on: a fact it stated or the move it chose. */
 export const onboardingLine = (on: OnboardingStatus["on"]) =>
   on.kind === "fact" ? FACT_LINE[on.key] : NEXT_LINE[on.next]
+
+const NEXT_KIND: Record<
+  Extract<OnboardingStatus["on"], { kind: "next" }>["next"],
+  StatusKind
+> = {
+  ask_open: "question",
+  ask_choice: "question",
+  ask_design: "question",
+  ask_fact: "question",
+  ask_details: "question",
+  ask_upload: "photos",
+  review_quote_form: "writing",
+  start_build: "building",
+  answer_only: "writing",
+}
+
+/** The icon for `onboardingLine`: a fact noted down, or the move being made ready. */
+export const onboardingKind = (on: OnboardingStatus["on"]): StatusKind =>
+  on.kind === "fact" ? "planning" : NEXT_KIND[on.next]
 
 // ---------------------------------------------------------------------------
 // Segments: a title, a line under it and a done title, with the business and

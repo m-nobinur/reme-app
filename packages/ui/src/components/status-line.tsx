@@ -4,7 +4,6 @@ import {
   CreditCardIcon,
   GlobeIcon,
   HourglassMediumIcon,
-  ListBulletsIcon,
   MagnifyingGlassIcon,
   MinusCircleIcon,
   type Icon as PhosphorIcon,
@@ -18,7 +17,9 @@ import {
   PlanningIcon,
   PolishingIcon,
   QuestionIcon,
+  ReadingIcon,
   SetupIcon,
+  ThinkingIcon,
   WritingIcon,
 } from "@workspace/ui/components/status-icons"
 import {
@@ -55,7 +56,9 @@ const KINDS: Record<
   StatusKind,
   { Icon: PhosphorIcon; motion: string } | { Drawn: typeof SetupIcon }
 > = {
-  thinking: { Icon: ListBulletsIcon, motion: "animate-status-steps" },
+  reading: { Drawn: ReadingIcon },
+  thinking: { Drawn: ThinkingIcon },
+  still: { Icon: HourglassMediumIcon, motion: "animate-status-turn" },
   setup: { Drawn: SetupIcon },
   question: { Drawn: QuestionIcon },
   planning: { Drawn: PlanningIcon },
