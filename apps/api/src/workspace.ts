@@ -88,9 +88,10 @@ type Step =
 /**
  * The stages every full build lists from its first event, in the order it
  * reaches them. The photos are drawn before the pages are written, and the
- * design look and its fixes come before the gates.
+ * design look and its fixes come before the gates. The activity view's
+ * website segment lists the same ids.
  */
-const STAGES = [
+export const STAGES = [
   "planning",
   "photos",
   "writing",
