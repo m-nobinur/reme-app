@@ -1,5 +1,6 @@
 import type {
   ActivitySegment,
+  ActivityStep,
   CosToolName,
   OnboardingStatus,
   PlanFactKey,
@@ -752,4 +753,146 @@ export function waitingRow(segment: ActivitySegment, until?: string) {
   if (!waitsFor) return null
   const by = cleanArg(until, "text", 40)
   return `Waiting for ${waitsFor}${by ? `, until ${by}` : ""}`
+}
+
+// ---------------------------------------------------------------------------
+// Steps: the fixed steps of each segment kind, as the panel lists them. The
+// api sends the ids; these are the words.
+
+const STEP_LABELS: Partial<
+  Record<ActivitySegment["kind"], Readonly<Record<string, string>>>
+> = {
+  onboarding: {
+    work: "What you do",
+    area: "Where you work",
+    customers: "Your customers",
+    contact: "How customers reach you",
+    assistant: "Your assistant",
+    quote_form: "Quote form",
+    photos: "Photos",
+    look: "Look and feel",
+  },
+  website: {
+    plan: "Planning",
+    photos: "Photos",
+    pages: "Pages",
+    polish: "Polishing",
+    check: "Checking",
+    ready: "Ready",
+  },
+  golive: {
+    approval: "Your approval",
+    publishing: "Publishing",
+    loads: "Checking it loads",
+  },
+  change: {
+    understanding: "Understanding the change",
+    making: "Making it",
+    checking: "Checking",
+    ready: "Ready",
+  },
+  domain: {
+    dns: "Your DNS change",
+    certificate: "Certificate",
+    loads: "Site loads on the new address",
+  },
+  purchase: {
+    details: "Your details",
+    payment: "Payment",
+    registration: "Registration",
+    connecting: "Connecting",
+  },
+  google: {
+    sign_in: "Sign in",
+    verify: "Verifying your site",
+    sitemap: "Sending your pages to Google",
+  },
+}
+
+const isStage = (id: string): id is BuildStage => Object.hasOwn(STAGES, id)
+
+/**
+ * A step's label. The website's step at work says what it is doing, with
+ * its count ("Writing the pages, 3 of 6"); every other step, and one in a
+ * segment that stopped, is its name.
+ * Null for a step the table does not know, which the panel leaves out.
+ */
+export function stepLabel(segment: ActivitySegment, step: ActivityStep) {
+  const working = segment.state === "now" && step.state === "now"
+  if (segment.kind === "website" && working && isStage(step.id)) {
+    return stageLine(step.id, "working", step.count ?? {})
+  }
+  return STEP_LABELS[segment.kind]?.[step.id] ?? null
+}
+
+/** What a waiting onboarding step says beside its label: the answer goes in the tray below. */
+export const ANSWER_BELOW = "Answer below"
+
+/** What a skipped step says beside its label. */
+export const SKIPPED = "Skipped"
+
+const SEGMENT_KIND: Record<ActivitySegment["kind"], StatusKind> = {
+  onboarding: "thinking",
+  website: "building",
+  golive: "publishing",
+  change: "building",
+  domain: "domain",
+  purchase: "payment",
+  google: "google",
+  reminder: "reminder",
+  review: "waiting",
+  question: "waiting",
+  checkin: "checking",
+  turn: "thinking",
+}
+
+/** The icon a segment's header draws. */
+export const segmentKind = (segment: ActivitySegment): StatusKind =>
+  SEGMENT_KIND[segment.kind]
+
+/** The icon a step at work moves: a website stage's own, else its segment's. */
+export const stepKind = (
+  segment: ActivitySegment,
+  step: ActivityStep
+): StatusKind =>
+  segment.kind === "website" && isStage(step.id)
+    ? stageKind(step.id)
+    : segmentKind(segment)
+
+/**
+ * A one-line row in Coming up or Done today. A reminder is its own title,
+ * which is the owner's text; a check-in says whether it needed the owner; a
+ * bought domain's renewal names the domain; a finished job is its done
+ * title. Null for a segment with nothing to say as a row.
+ */
+export function rowLine(
+  segment: ActivitySegment,
+  ctx: CopyContext,
+  title?: string | null
+): string | null {
+  const assistant = named(ctx.assistant)
+  switch (segment.kind) {
+    case "reminder":
+      return title ? tidy(title) : "A reminder"
+    case "checkin": {
+      if (segment.state === "upcoming") {
+        return assistant ? `${assistant} checks in next` : "Next check-in"
+      }
+      const wrote = segment.steps.some(
+        (s) => s.id === "message" && s.state === "done"
+      )
+      const who = assistant ?? "Your assistant"
+      return wrote
+        ? `${who} checked in and wrote to you`
+        : `${who} checked in, nothing needed you`
+    }
+    case "purchase":
+      if (segment.state === "upcoming") {
+        const name = cleanArg(segment.names?.domain, "domain")
+        return name ? `${name} is due for renewal` : "Your domain renewal"
+      }
+      return segmentTitle(segment, ctx)
+    default:
+      return segmentTitle(segment, ctx)
+  }
 }
