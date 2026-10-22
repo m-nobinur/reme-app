@@ -14,6 +14,7 @@ import {
 import { Hint, hintsShown } from "@workspace/ui/components/tooltip"
 import {
   PANEL_COOKIE,
+  type PanelAuto,
   type PanelPress,
   RAIL_COOKIE,
 } from "@workspace/ui/lib/panel"
@@ -143,6 +144,8 @@ function WorkspaceShell({
   defaultRailOpen = true,
   defaultPanelOpen = true,
   openPanel,
+  autoPanel,
+  onPanelToggle,
   children,
   className,
 }: {
@@ -161,6 +164,13 @@ function WorkspaceShell({
    * the key changes, even if they had minimised it.
    */
   openPanel?: PanelPress | undefined
+  /**
+   * The app opened or folded the panel for the owner, at `lg` and up. It is
+   * not remembered, so the next visit opens as the owner last left it.
+   */
+  autoPanel?: PanelAuto | undefined
+  /** The owner pressed the panel's header to open or close it. */
+  onPanelToggle?: ((open: boolean) => void) | undefined
   children: ReactNode
   className?: string
 }) {
@@ -192,6 +202,14 @@ function WorkspaceShell({
       setNarrowOpen(open)
     }
   }, [])
+
+  const autoKey = autoPanel?.key
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the key is the trigger; the request is read with it.
+  useEffect(() => {
+    if (autoPanel && window.matchMedia(WIDE).matches) {
+      setPanelOpen(autoPanel.open)
+    }
+  }, [autoKey])
 
   // Sent here to the panel: open it, whatever the width, then move focus to
   // what the owner came for once it shows.
@@ -301,6 +319,7 @@ function WorkspaceShell({
           )}
           // The page scrolls here, not the window: the router resets and
           // restores this element by its id.
+          data-panel={hasPanel ? (expanded ? "open" : "closed") : undefined}
           data-scroll-restoration-id="main"
           id="main"
         >
@@ -318,7 +337,10 @@ function WorkspaceShell({
               aria-controls={panelId}
               aria-expanded={expanded}
               className="flex min-h-10 w-full min-w-0 shrink-0 items-center gap-2.5 rounded-t-[inherit] px-3.5 text-start outline-none transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-inset group-data-[state=closed]/panel:rounded-b-[inherit] motion-reduce:transition-none"
-              onClick={() => setPanel(!expanded)}
+              onClick={() => {
+                setPanel(!expanded)
+                onPanelToggle?.(!expanded)
+              }}
               type="button"
             >
               <span className="min-w-0 flex-1">{panelLine}</span>
@@ -365,13 +387,19 @@ function WorkspaceShell({
 
 /**
  * The padded column a page that is not the conversation renders into, so the
- * approvals, pipeline, staff and profile screens keep the frame they had.
+ * approvals, pipeline, staff and profile screens keep the frame they had. It
+ * leaves the open panel's room free from lg, so a table never runs under it.
  */
 function WorkspacePage({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
       className={cn(
-        "mx-auto w-full max-w-5xl px-4 pt-2 pb-10 md:px-10",
+        // The panel floats over the page's right edge while open, and the page
+        // stays centred. Its content keeps clear of the part of the panel's
+        // room that the page's own side margin (the width over 64rem, the
+        // max-w-5xl below, halved) does not already cover; a percentage in
+        // padding is the width of main.
+        "mx-auto w-full max-w-5xl px-4 pt-2 pb-10 md:px-10 lg:in-data-[panel=open]:pe-[clamp(0px,calc(var(--panel-inset,0px)_-_(100%_-_64rem)_/_2),var(--panel-inset,0px))]",
         className
       )}
       data-slot="workspace-page"

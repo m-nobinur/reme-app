@@ -11,11 +11,10 @@ import { factsNeeded, questionOf } from "./reminders"
  */
 export type Briefing = {
   line: string | null
-  context: { name: string; status: string; live: boolean } | null
   suggestions: { prompt: string }[]
 }
 
-const NOTHING: Briefing = { line: null, context: null, suggestions: [] }
+const NOTHING: Briefing = { line: null, suggestions: [] }
 
 /** `15:00`, on the browser's clock. */
 const clock = (date: Date) =>
@@ -159,17 +158,6 @@ export function briefingOf(
 
   return {
     line: next ? `${site} ${next}` : site,
-    context: {
-      name: org.name,
-      status: live
-        ? `site live on v${live}`
-        : building
-          ? "first version building"
-          : open
-            ? "first version under way"
-            : "no site yet",
-      live: live !== null,
-    },
     suggestions: suggestions.slice(0, 4).map((prompt) => ({ prompt })),
   }
 }

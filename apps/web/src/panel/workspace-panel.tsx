@@ -66,6 +66,7 @@ import {
 import { anchorOf, noteOf, upcomingNotes } from "@/lib/reminders"
 import { followThumbnail } from "@/lib/thumbnail"
 import { useLiveWorkspace } from "@/lib/workspace"
+import { useFollowStep } from "./follow-step"
 import { photoActions } from "./photo-actions"
 
 /**
@@ -655,6 +656,8 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
   const thumbnail = useLiveThumbnail(workspace?.liveRevision ?? null)
   const upcoming = upcomingNotes(workspace?.reminderNotes ?? [])
   const tabList = useFocusAfterDone(upcoming)
+  const activityTab = useRef<HTMLDivElement>(null)
+  useFollowStep(activityTab)
   const stale = failed
     ? "This panel did not refresh. It tries again in a minute."
     : null
@@ -768,7 +771,7 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
       </TabsList>
       {/* Kept mounted, so a half-written answer or an open Stop question
           survives a look at another tab. */}
-      <TabsContent keepMounted value="activity">
+      <TabsContent keepMounted ref={activityTab} value="activity">
         {activity}
       </TabsContent>
       {upcoming.length ? (

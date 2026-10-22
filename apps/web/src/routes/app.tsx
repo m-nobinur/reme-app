@@ -40,6 +40,7 @@ import { lastChat } from "@/chat/history"
 import { getWorkspaceFrame, pollWorkspace } from "@/lib/api/server"
 import type { WorkspacePoll } from "@/lib/api/types"
 import { retryOrgWrite } from "@/lib/auth/actions"
+import { useAutoPanel } from "@/lib/auto-panel"
 import {
   GoogleNotice,
   type GoogleResult,
@@ -141,6 +142,7 @@ function AppLayout() {
   // What the panel says on this page; with nothing to say there is no panel.
   // A workspace that did not load still shows one, which says so.
   const panel = usePanel(live.workspace)
+  const auto = useAutoPanel(live.workspace)
   const hasPanel = panel !== null || live.workspace === null
   const orgName = active?.name ?? "No organisation"
   const notifications = notificationsOf(
@@ -247,8 +249,10 @@ function AppLayout() {
       {/* The plan card in the panel names the business. */}
       <SiteNameProvider value={active?.name ?? null}>
         <WorkspaceShell
+          autoPanel={auto.request}
           defaultPanelOpen={panelOpen}
           defaultRailOpen={railOpen}
+          onPanelToggle={auto.toggled}
           openPanel={press}
           panel={showPanel ? <WorkspacePanel panel={panel} /> : null}
           panelLine={showPanel ? <WorkspacePanelLine panel={panel} /> : null}

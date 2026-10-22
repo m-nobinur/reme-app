@@ -58,6 +58,8 @@ export type Line = {
 export type StepView = {
   id: string
   label: string
+  /** The label without its count, when it has one: what a screen reader hears once per step. */
+  said?: string
   state: ActivityStep["state"]
   /** What was settled, shown muted after the label. */
   value: string | null
@@ -251,11 +253,14 @@ export function panelFor(input: PanelInput): Panel | null {
       }),
       steps: segment.steps.flatMap((step) => {
         const label = stepLabel(segment, step)
+        const { count: _count, ...plain } = step
+        const said = stepLabel(segment, plain)
         return label
           ? [
               {
                 id: step.id,
                 label,
+                ...(said && said !== label ? { said } : {}),
                 state: step.state,
                 value: step.value ?? null,
                 kind: stepKind(segment, step),
