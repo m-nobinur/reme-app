@@ -116,6 +116,7 @@ const FACTS: Partial<Record<StepId, FactValue[]>> = {
   assistant: [
     { key: "assistant.name", value: { name: "Maya" } },
     { key: "assistant.pronouns", value: { id: "she_her" } },
+    { key: "assistant.avatar", value: { id: "she_1" } },
     { key: "assistant.tone", value: { id: "friendly" } },
   ],
 }
@@ -440,7 +441,12 @@ const ALL: FactValue[] = [
 const KEYS: Partial<Record<StepId, string[]>> = {
   industry: ["business.industry"],
   contact: ["business.phone", "business.email"],
-  assistant: ["assistant.name", "assistant.pronouns", "assistant.tone"],
+  assistant: [
+    "assistant.name",
+    "assistant.pronouns",
+    "assistant.avatar",
+    "assistant.tone",
+  ],
   build_for_me: ["site.build_mode"],
   design: ["site.direction"],
   template: ["site.template"],
@@ -943,6 +949,7 @@ describe("a reply Jev read", () => {
       kind: "facts",
       facts: [
         { key: "assistant.pronouns", value: { id: "they_them" } },
+        { key: "assistant.avatar", value: { id: "reme" } },
         { key: "assistant.tone", value: { id: "friendly" } },
       ],
       chose: expect.any(String),

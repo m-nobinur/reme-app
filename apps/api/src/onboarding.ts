@@ -890,10 +890,17 @@ const askFact = (key: Extract<StepId, FactValueKey>): Step => ({
   ask: (o, newId) => [text(question(key, voiceOf(o))), factCard(o, key, newId)],
 })
 
+/**
+ * Whether `o` holds what a details card is for. The face is offered on the
+ * assistant's card but never waited on: with no pick it stays Reme's.
+ */
+export const detailsDone = (o: Onboarding, step: DetailsStep) =>
+  DETAILS_KEYS[step].every((key) => key === "assistant.avatar" || has(o, key))
+
 /** A few related facts on one card, done once every one is held. */
 const askDetails = (step: DetailsStep): Step => ({
   id: step,
-  done: (o) => DETAILS_KEYS[step].every((key) => has(o, key)),
+  done: (o) => detailsDone(o, step),
   ask: (o, newId) => [
     text(question(step, voiceOf(o))),
     detailsCard(step, o, newId),
@@ -1530,6 +1537,7 @@ function pickFor(part: ToolPart, o: Onboarding): Answer | null {
     assistant: [
       [{ key: "assistant.name", value: { name } }, `the name ${name}`],
       [{ key: "assistant.pronouns", value: { id: "they_them" } }, "they/them"],
+      [{ key: "assistant.avatar", value: { id: "reme" } }, "Reme's own look"],
       [{ key: "assistant.tone", value: { id: "friendly" } }, "a friendly tone"],
     ],
     template: [

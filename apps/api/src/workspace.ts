@@ -3,6 +3,7 @@ import {
   ApprovalRequest,
   type AssignmentState,
   type AttentionItem,
+  type AvatarId,
   Blueprint,
   type BuildActivity,
   type BuildLane,
@@ -801,6 +802,16 @@ export function assistantName(current: FactRecord[]): string | null {
     : null
 }
 
+/** The face the owner picked for their assistant, or null for Reme's own. */
+export function assistantAvatar(current: FactRecord[]): AvatarId | null {
+  const held = current.find((fact) => fact.key === "assistant.avatar")
+  const parsed =
+    held && FactValue.safeParse({ key: held.key, value: held.value })
+  return parsed?.success && parsed.data.key === "assistant.avatar"
+    ? parsed.data.value.id
+    : null
+}
+
 /** The business name fact, when it still parses. Not `factValue`: onboarding.ts reaches chat.ts, which the CoS must not (ADR-034). */
 export function businessName(current: FactRecord[]): string | null {
   const held = current.find((fact) => fact.key === "business.name")
@@ -957,6 +968,7 @@ export async function statusWithFacts(
     attention: orderAttention(approvalItems, questions, feed, due),
     missing_facts: missing,
     assistant_name: assistantName(current),
+    assistant_avatar: assistantAvatar(current),
     reminders: {
       notes,
       derived: deriveReminders(

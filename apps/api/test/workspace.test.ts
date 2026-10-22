@@ -298,6 +298,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       attention: [],
       missing_facts: REQUIRED,
       assistant_name: null,
+      assistant_avatar: null,
       expected_seconds: EXPECTED_SECONDS,
       reminders: {
         notes: [],
@@ -736,15 +737,21 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     )
   })
 
-  it("names the assistant once the owner chose a name", async () => {
+  it("names the assistant and its face once the owner chose them", async () => {
     const set = await fresh.call(
       stubOrchestrator(),
       "/facts",
-      json({ facts: [{ key: "assistant.name", value: { name: "Ava" } }] })
+      json({
+        facts: [
+          { key: "assistant.name", value: { name: "Ava" } },
+          { key: "assistant.avatar", value: { id: "she_2" } },
+        ],
+      })
     )
     expect(set.status).toBe(200)
     const body = WorkspaceStatus.parse(await (await workspace(fresh)).json())
     expect(body.assistant_name).toBe("Ava")
+    expect(body.assistant_avatar).toBe("she_2")
   })
 
   it("changes the tag when a reminder comes due, with no row changed", async () => {

@@ -54,6 +54,7 @@ import {
   designCard,
   designDone,
   detailsCard,
+  detailsDone,
   factCard,
   factValue,
   has,
@@ -1102,7 +1103,7 @@ export function checkPlan(
       break
     }
     case "ask_details":
-      if (DETAILS_KEYS[next.step].every((key) => held(key))) {
+      if (detailsDone(after, next.step)) {
         errors.push(
           `${DETAILS_KEYS[next.step].join(", ")} are already in the facts; don't ask ${next.step} again`
         )
