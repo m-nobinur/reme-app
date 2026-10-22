@@ -627,6 +627,27 @@ describe("coming up and done today", () => {
     ])
   })
 
+  it("keeps the next check-in out until onboarding is done", () => {
+    const withJourney = (journey: ActivitySegment[]) =>
+      panelFor(
+        input({
+          route: ROUTES.home,
+          zone: ZONE,
+          workspace: live({
+            assistantName: "Ellie",
+            activity: activity({
+              journey,
+              upcoming: feed.upcoming.slice(2, 3),
+            }),
+          }),
+        })
+      )?.upcoming
+    expect(withJourney([onboarding(2)])).toEqual([])
+    expect(withJourney([onboarding(8, "done")])?.map((i) => i.text)).toEqual([
+      "Ellie checks in next",
+    ])
+  })
+
   it("says what finished today, a quiet check-in too", () => {
     const done = at(ROUTES.home)?.done.map((item) => item.text)
     expect(done?.[0]).toBe("Ellie checked in, nothing needed you")

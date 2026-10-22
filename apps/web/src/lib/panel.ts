@@ -337,10 +337,16 @@ export function panelFor(input: PanelInput): Panel | null {
     })
   // Times wait for the reader's zone, so the server's HTML and the first
   // browser render agree. The reminders page lists its own reminders.
+  // A check-in means nothing to an owner still answering setup questions.
+  const settingUp = journey.some(
+    (segment) => segment.kind === "onboarding" && segment.state !== "done"
+  )
   const upcoming = zone
     ? rows(
-        activity.upcoming.filter(
-          (segment) => segment.kind !== "reminder" || page !== "reminders"
+        activity.upcoming.filter((segment) =>
+          segment.kind === "reminder"
+            ? page !== "reminders"
+            : segment.kind !== "checkin" || !settingUp
         )
       )
     : []
