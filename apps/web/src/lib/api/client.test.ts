@@ -725,22 +725,6 @@ it("says why an answer was refused, including one already answered differently",
   ).rejects.toThrow()
 })
 
-it("sends the owner's decision on a plan with their own key, and words a stale one", async () => {
-  answers[`POST /builds/${ASSIGNMENT}/blueprint`] = {
-    assignment_id: ASSIGNMENT,
-    state: "implementing",
-  }
-  const change = { decision: "change" as const, note: "Add a gallery page" }
-  expect(await apiSource.decideBlueprint(ASSIGNMENT, change, "k1")).toEqual({
-    done: true,
-  })
-  expect(JSON.parse(String(calls[0]?.init?.body))).toEqual(change)
-  expect(headerOf(calls[0], "idempotency-key")).toBe("k1")
-  await expect(
-    apiSource.decideBlueprint("../changes", change, "k1")
-  ).rejects.toThrow()
-})
-
 it("stops a build once, however often Stop is pressed", async () => {
   answers[`POST /builds/${ASSIGNMENT}/cancel`] = {
     assignment_id: ASSIGNMENT,

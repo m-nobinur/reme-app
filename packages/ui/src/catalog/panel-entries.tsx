@@ -977,18 +977,6 @@ const panelCatalog: Entry[] = [
     ),
   },
   {
-    name: "YourWebsite with its plan",
-    render: () => (
-      <YourWebsite
-        blueprint={BLUEPRINT}
-        host="brightclean-demo.example.invalid"
-        live={3}
-        onRequestChanges={noop}
-        thumbnail={THUMBNAIL}
-      />
-    ),
-  },
-  {
     name: "YourWebsite loading",
     render: () => (
       <YourWebsite

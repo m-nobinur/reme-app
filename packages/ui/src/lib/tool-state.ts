@@ -12,8 +12,6 @@ import {
   AskOpenOutput,
   AskUploadInput,
   AskUploadOutput,
-  BlueprintReviewInput,
-  BlueprintReviewOutput,
   type FactValue,
   type FactValueKey,
   PRONOUNS,
@@ -363,44 +361,6 @@ export type ReviewQuoteFormView = AskView<
 >
 export const reviewQuoteFormView = (part: ToolPartView): ReviewQuoteFormView =>
   askView(part, ReviewQuoteFormInput, ReviewQuoteFormOutput)
-
-/**
- * A `review_blueprint` card: the plan waiting for the owner's build or change,
- * their decision, overtaken by a typed message, or broken. It has no skip: a
- * plan the owner does not want is a change.
- */
-export type BlueprintReviewView =
-  | { state: "pending"; input: BlueprintReviewInput }
-  | {
-      state: "answered"
-      input: BlueprintReviewInput | null
-      output: BlueprintReviewOutput
-    }
-  | { state: "cancelled" }
-  | { state: "error"; message: string }
-
-export function blueprintReviewView(part: ToolPartView): BlueprintReviewView {
-  const args = BlueprintReviewInput.safeParse(part.args)
-  if (part.isError) {
-    const message = errorOf(part.result)
-    return message === TOOL_CALL_CANCELLED
-      ? { state: "cancelled" }
-      : { state: "error", message: message || BROKEN }
-  }
-  if (part.result === undefined) {
-    return args.success
-      ? { state: "pending", input: args.data }
-      : { state: "error", message: BROKEN }
-  }
-  const output = BlueprintReviewOutput.safeParse(part.result)
-  return output.success
-    ? {
-        state: "answered",
-        input: args.success ? args.data : null,
-        output: output.data,
-      }
-    : { state: "error", message: BROKEN }
-}
 
 /**
  * A choice as the owner reads it back: the labels they picked, in the card's

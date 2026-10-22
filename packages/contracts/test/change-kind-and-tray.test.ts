@@ -4,8 +4,6 @@ import { z } from "zod"
 import {
   AskDesignInput,
   AskDesignOutput,
-  BlueprintReviewInput,
-  BlueprintReviewOutput,
   ChatRequest,
   RequestChangeOutput,
 } from "../src/chat.ts"
@@ -278,12 +276,11 @@ describe("lane and activity on a build", () => {
     expect(BuildSummary.safeParse(old).success).toBe(true)
   })
 
-  it("carries a plan for the Blueprint card, and refuses one that is not a Blueprint", () => {
+  it("carries a plan for the panel, and refuses one that is not a Blueprint", () => {
     const blueprint = {
       plan: sample("Blueprint"),
       round: 1,
       previous: null,
-      awaiting: true,
     }
     expect(BuildSummary.safeParse({ ...build, blueprint }).success).toBe(true)
     expect(
@@ -437,45 +434,6 @@ describe("expected seconds on the workspace", () => {
     expect(parses({ full, quick: { p50: 20.5, p95: 45 } })).toBe(false)
     expect(parses({ full, quick: { p50: 20 } })).toBe(false)
     expect(parses({ full, quick, instant: quick })).toBe(false)
-  })
-})
-
-describe("BlueprintReview", () => {
-  const input = sample<{ blueprint: Obj }>("BlueprintReviewInput")
-  const okIn = (v: unknown) => BlueprintReviewInput.safeParse(v).success
-  const okOut = (v: unknown) => BlueprintReviewOutput.safeParse(v).success
-
-  it("takes a plan with and without the assignment it revises", () => {
-    expect(okIn(input)).toBe(true)
-    expect(okIn({ blueprint: input.blueprint })).toBe(true)
-  })
-
-  it("refuses a bad plan, a bad revision id and extra keys", () => {
-    expect(okIn({ blueprint: { ...input.blueprint, pages: [] } })).toBe(false)
-    expect(okIn({ ...input, revision_of: "nope" })).toBe(false)
-    expect(okIn({ ...input, extra: 1 })).toBe(false)
-  })
-
-  it("answers build, with or without a note, and change only with one", () => {
-    expect(okOut({ decision: "build" })).toBe(true)
-    expect(okOut({ decision: "build", note: "Looks good" })).toBe(true)
-    expect(okOut({ decision: "change", note: "More photos" })).toBe(true)
-    expect(okOut({ decision: "change" })).toBe(false)
-    expect(okOut({ decision: "change", note: "   " })).toBe(false)
-    expect(okOut({ decision: "build", note: "x".repeat(501) })).toBe(false)
-    expect(okOut({ decision: "maybe" })).toBe(false)
-  })
-
-  it("is an answer a chat turn can carry", () => {
-    const request = sample<{ turn: { results: Obj[] } }>("ChatRequest")
-    request.turn.results = [
-      {
-        kind: "answer",
-        tool_call_id: "call_5Hn2Wq8E",
-        output: { decision: "build" },
-      },
-    ]
-    expect(ChatRequest.safeParse(request).success).toBe(true)
   })
 })
 

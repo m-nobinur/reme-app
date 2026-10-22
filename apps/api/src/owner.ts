@@ -2,8 +2,6 @@ import {
   AnswerRequest,
   ApprovalDecision,
   Assignment,
-  BlueprintReceipt,
-  BlueprintReviewOutput,
   DecisionRequest,
   FactList,
   InformationAnswer,
@@ -46,7 +44,7 @@ import { readTaggedWorkspace } from "./workspace-tag.ts"
 
 /** The routes `ownerRoute` answers, for `index.ts` to resolve an org before. */
 export const OWNER_PATH =
-  /^\/(workspace|facts|assets|photos\/[^/]+|changes|activity|builds\/[^/]+\/(answer|blueprint|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback))?)?|reminders(\/[^/]+)?|memory(\/(undo|review))?|push\/(config|subscriptions(\/[^/]+)?)|domains\/[^/]+(\/checkout)?|google\/(connect|disconnect)|chat)$/
+  /^\/(workspace|facts|assets|photos\/[^/]+|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback))?)?|reminders(\/[^/]+)?|memory(\/(undo|review))?|push\/(config|subscriptions(\/[^/]+)?)|domains\/[^/]+(\/checkout)?|google\/(connect|disconnect)|chat)$/
 
 async function setFacts(request: Request, kit: Tenancy, owner: Owner) {
   if (!idempotencyKey(request)) return keyMissing()
@@ -97,11 +95,9 @@ async function buildAction(
   if ((action === "preview") !== (method === "GET")) return null
   const key = idempotencyKey(request)
   if (method === "POST" && !key) return keyMissing()
-  let body: AnswerRequest | BlueprintReviewOutput | undefined
-  if (action === "answer" || action === "blueprint") {
-    const parsed = (
-      action === "answer" ? AnswerRequest : BlueprintReviewOutput
-    ).safeParse(await readBody(request))
+  let body: AnswerRequest | undefined
+  if (action === "answer") {
+    const parsed = AnswerRequest.safeParse(await readBody(request))
     if (!parsed.success) return invalid(parsed.error.issues)
     body = parsed.data
   }
@@ -118,8 +114,6 @@ async function buildAction(
   })
   if (action === "answer") return relay(result, InformationAnswer.parse)
   if (action === "preview") return relay(result, PreviewLink.parse)
-  // The plan's decision, which the orchestrator turns into `blueprint.decided`.
-  if (action === "blueprint") return relay(result, BlueprintReceipt.parse)
   // `/cancel` answers the id and the state it settled in.
   return relay(result, (b) =>
     Assignment.pick({ assignment_id: true, state: true }).parse(b)

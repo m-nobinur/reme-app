@@ -106,8 +106,6 @@ export async function creationChoices(
   lane: BuildLane
   change_kind: ChangeKind | null
   kind: string
-  /** The owner chose "Skip all" in onboarding: build from the plan without the card's wait. */
-  skip_review: boolean
 }> {
   const [row] = await db
     .select({ payload: events.payload })
@@ -128,7 +126,6 @@ export async function creationChoices(
     lane: payload.lane === "quick" ? "quick" : "full",
     change_kind: ChangeKind.safeParse(payload.change_kind).data ?? null,
     kind: typeof payload.kind === "string" ? payload.kind : "site.build",
-    skip_review: payload.review === "skip",
   }
 }
 

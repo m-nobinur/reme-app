@@ -50,7 +50,7 @@ import { postStatus, type Say, sweepDomains } from "./domain-flow.ts"
 import { SAY_RETRIES } from "./domain-workflow.ts"
 import { JOBS_QUEUES, jobsBatch } from "./jobs.ts"
 import { makePhotos } from "./photo-step.ts"
-import { PLAN_ROUNDS, planRound, readDecision } from "./planner.ts"
+import { planRound } from "./planner.ts"
 import {
   accessible,
   activate,
@@ -245,84 +245,33 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
     // The lane rides the planning step's return rather than a step of its
     // own, so a full build keeps its step list. An instance replayed from
     // before lanes existed gets the old return, with no lane: full.
-    // `plan` and `review` ride it the same way: an instance from before
-    // planning gets neither and builds as it did.
+    // `plan` rides it the same way: an instance from before planning gets
+    // none and builds as it did.
     const route: {
       lane?: BuildLane
       change_kind?: ChangeKind | null
       plan?: boolean
-      review?: boolean
     } = await step.do("planning", () =>
       run(async (kit) => {
         await advance(kit, ids, "planning")
-        const { lane, change_kind, kind, origin, skip_review } =
-          await kit.withOrg({ orgId: ids.orgId }, (db) =>
-            creationChoices(db, ids)
-          )
+        const { lane, change_kind, kind } = await kit.withOrg(
+          { orgId: ids.orgId },
+          (db) => creationChoices(db, ids)
+        )
         // ADR-038: a first build plans, and so does a creative change; the
-        // quick lane never does. Only an owner's build waits on the card,
-        // and "Skip all" in onboarding skips that wait.
+        // quick lane never does. The plan is approved as it is made: the
+        // owner is never asked to review one, and an instance that was
+        // waiting on a decision before this goes straight on to the build.
         const plan =
           lane === "full" &&
           (kind === "site.build" || change_kind === "creative")
-        return {
-          lane,
-          change_kind,
-          plan,
-          review: plan && origin === "owner" && !skip_review,
-        }
+        return { lane, change_kind, plan }
       })
     )
     if (route.plan) {
-      for (let round = 1; round <= PLAN_ROUNDS; round++) {
-        await step.do(`plan ${round}`, () =>
-          run((kit) =>
-            planRound({
-              env: this.env,
-              kit,
-              ids,
-              round,
-              review: route.review === true,
-            })
-          )
-        )
-        if (!route.review) break
-        // The owner's "Build it" or "Change something" is a row the bridge
-        // writes; the `blueprint` event only nudges a look, as an answer's
-        // does, and the six-hourly look recovers a nudge that never came.
-        const deadline = await step.do(
-          `plan deadline ${round}`,
-          async () => Date.now() + ANSWER_DEADLINE_MS
-        )
-        let decision: "build" | "change" | null = null
-        for (let look = 1; decision === null; look++) {
-          const seen = await step.do(
-            `plan look ${round}.${look}`,
-            async () => ({
-              decision: await run((kit) =>
-                kit.withOrg({ orgId: ids.orgId }, (db) =>
-                  readDecision(db, ids.assignmentId, round)
-                )
-              ),
-              left: deadline - Date.now(),
-            })
-          )
-          decision = seen.decision
-          if (decision) break
-          if (seen.left <= 0) {
-            return fail(`undecided ${round}`, "blueprint.undecided")
-          }
-          try {
-            await step.waitForEvent(`blueprint ${round}.${look}`, {
-              type: "blueprint",
-              timeout: Math.min(LOOK_EVERY_MS, seen.left),
-            })
-          } catch {
-            // No nudge in time: look anyway.
-          }
-        }
-        if (decision === "build") break
-      }
+      await step.do("plan 1", () =>
+        run((kit) => planRound({ env: this.env, kit, ids }))
+      )
     }
     // The container, after the site lock and the owner's plan decision and
     // not before: the lock is one org's, the pool is everyone's, so the

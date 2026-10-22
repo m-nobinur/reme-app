@@ -19,7 +19,6 @@ import {
 } from "@tanstack/react-router"
 import type { Conversation } from "@workspace/contracts"
 import { railItemClass } from "@workspace/ui/components/app-shell"
-import { SiteNameProvider } from "@workspace/ui/components/assistant/blueprint-card"
 import {
   ChatHistory,
   type HistoryEntry,
@@ -35,6 +34,7 @@ import {
   WorkspaceShell,
 } from "@workspace/ui/components/workspace-shell"
 import { formatDate } from "@workspace/ui/lib/format"
+import { SiteNameProvider } from "@workspace/ui/lib/site-name"
 import { useCallback, useEffect, useState } from "react"
 import { lastChat } from "@/chat/history"
 import { getWorkspaceFrame, pollWorkspace } from "@/lib/api/server"
@@ -244,7 +244,7 @@ function AppLayout() {
 
   return (
     <LiveWorkspaceProvider value={live}>
-      {/* The plan card names the business wherever it shows: chat, panel, approvals. */}
+      {/* The plan card in the panel names the business. */}
       <SiteNameProvider value={active?.name ?? null}>
         <WorkspaceShell
           defaultPanelOpen={panelOpen}

@@ -2,8 +2,8 @@
 
 Status: accepted, 2026-10-14. Applies to `apps/orchestrator`, `apps/api`, `packages/facade`,
 `packages/contracts`, `packages/db` and `packages/starter-site`. Amends ADR-036: an owner's first
-build now waits for one more approval, the Blueprint card, before any file is written. Sits beside
-ADR-039 (generated photos) and ADR-040 (the quick edit lane).
+build now plans a Blueprint before any file is written. Amended 2026-10-22: the owner no longer
+reviews the plan (see 6). Sits beside ADR-039 (generated photos) and ADR-040 (the quick edit lane).
 
 ## Context
 
@@ -48,18 +48,13 @@ dollars later.
 5. **The Blueprint is stored and shown.** It lives on the assignment (`assignments.blueprint`,
    jsonb, the latest round's), with a `blueprint.proposed` event per round carrying the round,
    whether it came from the model or the fallback, and the plan it changed. The workspace frame
-   carries it on the build (`BuildSummary.blueprint`: the plan, its round, the previous plan,
-   and whether the build waits on the owner) for the card (OI4).
-6. **The owner decides; the Workflow waits.** An owner's build waits after each round, in
-   `planning`, for "Build it" or "Change something". The decision arrives at the orchestrator
-   bridge (`POST /assignments/:id/blueprint`, body `BlueprintReviewOutput`), is stored as
-   `blueprint.decided` for that round, and nudges the Workflow with a `blueprint` event. As with
-   answers, the stored row is the truth and the nudge only makes the Workflow look now; it looks
-   every six hours regardless. "Change something" re-plans from the current Blueprint with the
-   owner's words as data, up to six plans per build; past that the bridge refuses a change, so the
-   owner builds or cancels. No decision in seven days fails the build from `planning`, which
-   releases the site lock. A console build plans and does not wait. "Skip all" on the onboarding
-   tray (`review: "skip"` on the create request) plans and does not wait either.
+   carries it on the build (`BuildSummary.blueprint`: the plan, its round and the previous plan)
+   for the panel.
+6. **The plan is approved as it is made.** An owner's build, a first one or a change request,
+   plans once and goes straight on to the build. The owner is never asked to review a Blueprint;
+   they can stop the build or type a change at any time. Publishing still asks: a version goes
+   live only when the owner approves it. (Until 2026-10-22 an owner's build waited in `planning`
+   for "Build it" or "Change something", with up to six plans and a seven-day deadline.)
 7. **A creative change re-plans.** Its first round starts from the newest Blueprint the org has,
    with the change request as the note. If that re-plan fails, the plan it was changing stands;
    the Developer still receives the owner's words as its goal.

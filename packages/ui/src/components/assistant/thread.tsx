@@ -59,10 +59,6 @@ import {
   turnMoment,
   writingBack,
 } from "@workspace/ui/lib/activity-copy"
-import {
-  PLAN_CHANGES_PLACEHOLDER,
-  waitsOnBlueprint,
-} from "@workspace/ui/lib/blueprint"
 import { SHOW_DELAY_MS } from "@workspace/ui/lib/status-line"
 import {
   SESSION_ENDED,
@@ -646,9 +642,6 @@ const Composer: FC<{ autoFocus: boolean; expanded: boolean }> = ({
   } = useContext(ThreadSettingsContext)
   const input = useContext(ComposerInputContext)
   const idea = useCycle([placeholder, ...(placeholderIdeas ?? [])])
-  const planning = useAuiState((s) =>
-    waitsOnBlueprint(s.thread.messages.at(-1)?.parts)
-  )
   // A question waits in the tray: what the owner types instead is an
   // ordinary turn, and the placeholder says so.
   const asking = useAuiState((s) =>
@@ -678,11 +671,7 @@ const Composer: FC<{ autoFocus: boolean; expanded: boolean }> = ({
           ref={input}
           placeholder={
             mode?.placeholder ??
-            (asking && questionPlaceholder
-              ? questionPlaceholder
-              : planning
-                ? PLAN_CHANGES_PLACEHOLDER
-                : idea)
+            (asking && questionPlaceholder ? questionPlaceholder : idea)
           }
           className={cn(
             "aui-composer-input max-h-48 min-w-0 resize-none bg-transparent px-1.5 py-1.25 text-chat text-chat-foreground caret-primary outline-none placeholder:text-muted-foreground/60",

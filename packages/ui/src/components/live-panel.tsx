@@ -20,7 +20,6 @@ import {
   GOAL_MAX,
 } from "@workspace/contracts"
 import { ApprovalTargetSummary } from "@workspace/ui/components/approval-target"
-import { BlueprintCard } from "@workspace/ui/components/assistant/blueprint-card"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { Field } from "@workspace/ui/components/field"
 import {
@@ -272,24 +271,18 @@ function StepDetail({
   at,
   plan,
   photos,
-  awaiting,
 }: {
   row: BuildActivity
   at: "done" | "now" | "next"
   plan?: Blueprint | undefined
   photos?: readonly BuildPhoto[] | undefined
-  awaiting: boolean
 }) {
   switch (row.id) {
     case "planning":
       return (
         <>
           {at === "now" ? (
-            <p className={META}>
-              {awaiting
-                ? "Waiting for your review. The plan is in the chat."
-                : "Choosing a look, colours and pages."}
-            </p>
+            <p className={META}>Choosing a look, colours and pages.</p>
           ) : null}
           {plan ? <Decided plan={plan} /> : null}
         </>
@@ -374,15 +367,12 @@ function StageDetail({
   activity,
   plan,
   photos,
-  awaiting = false,
 }: {
   stage: string
   state: SegmentStep["state"]
   activity: readonly BuildActivity[]
   plan?: Blueprint | undefined
   photos?: readonly BuildPhoto[] | undefined
-  /** The plan waits on the owner's review. */
-  awaiting?: boolean
 }) {
   // A website step is named by its build activity row.
   const row = activity.find((each) => each.id === stage)
@@ -390,7 +380,6 @@ function StageDetail({
   return (
     <StepDetail
       at={state === "done" ? "done" : "now"}
-      awaiting={awaiting}
       photos={photos}
       plan={plan}
       row={row}
@@ -1439,7 +1428,6 @@ function YourWebsite({
   url,
   live,
   thumbnail = null,
-  blueprint = null,
   onRequestChanges,
 }: {
   host: string | null
@@ -1447,8 +1435,6 @@ function YourWebsite({
   url?: string | null
   live: number | null
   thumbnail?: Thumbnail
-  /** The plan the live site was built from, kept under it read-only. */
-  blueprint?: Blueprint | null
   /** Starts a change to the live site in the chat. */
   onRequestChanges?: (() => void) | undefined
 }) {
@@ -1527,14 +1513,6 @@ function YourWebsite({
             </Button>
           ) : null}
         </div>
-      ) : null}
-      {blueprint ? (
-        <BlueprintCard
-          blueprint={blueprint}
-          className="my-0 rounded-2xl p-3"
-          defaultOpen={false}
-          readOnly
-        />
       ) : null}
     </div>
   )

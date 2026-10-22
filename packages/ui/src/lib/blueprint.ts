@@ -142,26 +142,3 @@ export function changedRows(
   }
   return changed
 }
-
-/** The words the composer starts with after "Change something". */
-export const CHANGE_PREFIX = "Change the plan: "
-
-/** What the composer suggests while a plan waits: a message sent then is the owner's change to it. */
-export const PLAN_CHANGES_PLACEHOLDER = "Say what to change about this plan…"
-
-/** Whether these parts, a message's, hold a plan still waiting on the owner. */
-export const waitsOnBlueprint = (parts: readonly object[] | undefined) =>
-  (parts ?? []).some((part) => {
-    const p = part as {
-      type?: string
-      toolName?: string
-      result?: unknown
-      isError?: boolean
-    }
-    return (
-      p.type === "tool-call" &&
-      p.toolName === "review_blueprint" &&
-      p.result === undefined &&
-      !p.isError
-    )
-  })

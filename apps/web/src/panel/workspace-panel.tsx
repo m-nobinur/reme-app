@@ -7,7 +7,6 @@ import {
   useRouter,
 } from "@tanstack/react-router"
 import type {
-  Blueprint,
   BuildSummary,
   DecisionRequest,
   Reminder,
@@ -310,17 +309,14 @@ function Website({
   url,
   live,
   thumbnail,
-  blueprint,
 }: {
   host: string | null
   url: string | null
   live: number | null
   thumbnail: Thumbnail
-  blueprint: Blueprint | null
 }) {
   return (
     <YourWebsite
-      blueprint={blueprint}
       host={host}
       live={live}
       onRequestChanges={useRequestChanges()}
@@ -384,7 +380,6 @@ function stepsOf({ kind, steps, build }: SegmentView): SegmentStep[] {
     detail: (
       <StageDetail
         activity={build.activity ?? []}
-        awaiting={build.blueprint?.awaiting ?? false}
         photos={build.photos}
         plan={build.blueprint?.plan}
         stage={step.id}
@@ -674,10 +669,6 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
   }
   const { live, host } = workspace
   const website = live !== null || host !== null
-  // The newest build that planned. Builds are unfinished ones only, so the
-  // plan leaves the panel once its build ends.
-  const blueprint =
-    workspace.builds.find((b) => b.blueprint)?.blueprint?.plan ?? null
   // A tab that has emptied (its last reminder done) hands back to Activity.
   const shown =
     (tab === "reminders" && upcoming.length) || (tab === "website" && website)
@@ -788,7 +779,6 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
       {website ? (
         <TabsContent value="website">
           <Website
-            blueprint={blueprint}
             host={host}
             live={live}
             thumbnail={thumbnail}
