@@ -124,6 +124,19 @@
   --animate-persona-blink: persona-blink 6.5s linear infinite;
   --animate-persona-blink-once: persona-blink-once 0.28s ease-in-out;
   --animate-flow: flow 1.4s linear infinite;
+  /* A status line's icon while its work runs, one small motion per kind of
+     work. Transform and opacity only, and the icon holds still under reduced
+     motion (the component adds motion-reduce:animate-none). */
+  --animate-status-steps: status-steps 1.6s steps(4, jump-none) infinite
+    alternate;
+  --animate-status-pulse: status-pulse 1.6s ease-in-out infinite;
+  --animate-status-tap: status-tap 1.2s ease-in-out infinite;
+  --animate-status-fade: status-fade 2s ease-in-out infinite;
+  --animate-status-sweep: status-sweep 1.6s ease-in-out infinite;
+  --animate-status-turn: status-turn 2s ease-in-out infinite;
+  --animate-status-meet: status-meet 1.6s ease-in-out infinite;
+  --animate-status-swing: status-swing 1.4s ease-in-out infinite;
+  --animate-status-lift: status-lift 1.4s ease-in-out infinite;
   --animate-note-cycle: note-cycle 9s cubic-bezier(0.4, 0, 0.2, 1) infinite;
   /* The conversation's reading type, sized per viewport by `--chat-size`. A
      step line (a check the assistant ran) sits a size under the reply. */
@@ -204,6 +217,83 @@
       stroke-dashoffset: -10;
     }
   }
+  /* The lines of a list coming in one after another. */
+  @keyframes status-steps {
+    from {
+      opacity: 0.3;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  /* The circles breathing together. */
+  @keyframes status-pulse {
+    50% {
+      transform: scale(0.86);
+    }
+  }
+  /* A short tap, then a rest. */
+  @keyframes status-tap {
+    30% {
+      transform: rotate(-20deg);
+    }
+    50%,
+    100% {
+      transform: rotate(0deg);
+    }
+  }
+  @keyframes status-fade {
+    50% {
+      opacity: 0.4;
+    }
+  }
+  /* A glass moving over what it looks at. */
+  @keyframes status-sweep {
+    0%,
+    100% {
+      transform: translate(-1.5px, -1px);
+    }
+    50% {
+      transform: translate(1.5px, 1px);
+    }
+  }
+  /* One turn after a pause, so it reads as a globe and not a spinner. */
+  @keyframes status-turn {
+    0%,
+    45% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
+  }
+  /* The two plugs closing on each other. */
+  @keyframes status-meet {
+    50% {
+      transform: scaleX(0.84);
+    }
+  }
+  /* A bell swung and left to settle. */
+  @keyframes status-swing {
+    10% {
+      transform: rotate(14deg);
+    }
+    25% {
+      transform: rotate(-12deg);
+    }
+    40% {
+      transform: rotate(8deg);
+    }
+    55%,
+    100% {
+      transform: rotate(0deg);
+    }
+  }
+  @keyframes status-lift {
+    50% {
+      transform: translateY(-2px);
+    }
+  }
   /* Base UI measures the panel and publishes the height; the Radix variable the
      registry ships alongside it is dropped, because Radix is not in this tree. */
   @keyframes collapsible-down {
@@ -221,6 +311,20 @@
     to {
       height: 0;
     }
+  }
+}
+
+/* The shimmer clips its text to a gradient, which forced colours would leave
+   blank. A status line's words keep the system text colour instead. */
+@media (forced-colors: active) {
+  [data-slot="status-line-text"] {
+    background: none;
+    animation: none;
+    -webkit-text-fill-color: currentColor;
+    -webkit-mask-image: none;
+  }
+  [data-slot="status-line-text"]::before {
+    display: none;
   }
 }
 

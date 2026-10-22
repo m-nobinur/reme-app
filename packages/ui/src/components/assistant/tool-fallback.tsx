@@ -7,19 +7,14 @@ import {
   useScrollLock,
   useToolCallElapsed,
 } from "@assistant-ui/react"
-import {
-  CaretDownIcon,
-  CheckCircleIcon,
-  SpinnerGapIcon,
-  WarningCircleIcon,
-  XCircleIcon,
-} from "@phosphor-icons/react"
+import { CaretDownIcon } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@workspace/ui/components/collapsible"
+import { StatusLine } from "@workspace/ui/components/status-line"
 import { cn } from "@workspace/ui/lib/utils"
 import { memo, useCallback, useRef, useState } from "react"
 
@@ -82,15 +77,6 @@ function ToolFallbackRoot({
   )
 }
 
-type ToolStatus = ToolCallMessagePartStatus["type"]
-
-const statusIconMap: Record<ToolStatus, React.ElementType> = {
-  running: SpinnerGapIcon,
-  complete: CheckCircleIcon,
-  incomplete: XCircleIcon,
-  "requires-action": WarningCircleIcon,
-}
-
 const formatToolDuration = (ms: number) => {
   if (ms < 1000) return "<1s"
   const seconds = ms / 1000
@@ -130,12 +116,13 @@ function ToolFallbackTrigger({
   status?: ToolCallMessagePartStatus
 }) {
   const statusType = status?.type ?? "complete"
-  const isRunning = statusType === "running"
   const isCancelled =
     status?.type === "incomplete" && status.reason === "cancelled"
-
-  const Icon = statusIconMap[statusType]
-  const label = isCancelled ? "Cancelled tool" : "Used tool"
+  const label = isCancelled
+    ? "Cancelled tool"
+    : statusType === "running"
+      ? "Using tool"
+      : "Used tool"
 
   return (
     <CollapsibleTrigger
@@ -147,24 +134,24 @@ function ToolFallbackTrigger({
       )}
       {...props}
     >
-      <Icon
-        data-slot="tool-fallback-trigger-icon"
-        className={cn(
-          "aui-tool-fallback-trigger-icon size-4 shrink-0",
-          isCancelled && "text-muted-foreground",
-          isRunning && "animate-spin [animation-duration:0.6s]"
-        )}
+      <StatusLine
+        announce={false}
+        clockAfter={null}
+        delay={0}
+        kind="thinking"
+        label={`${label}: ${toolName}`}
+        state={
+          statusType === "running"
+            ? "working"
+            : statusType === "requires-action"
+              ? "waiting"
+              : statusType === "incomplete"
+                ? isCancelled
+                  ? "stopped"
+                  : "failed"
+                : "done"
+        }
       />
-      <span
-        data-slot="tool-fallback-trigger-label"
-        className={cn(
-          "aui-tool-fallback-trigger-label-wrapper inline-block text-start leading-none",
-          isCancelled && "text-muted-foreground line-through",
-          isRunning && "shimmer motion-reduce:animate-none"
-        )}
-      >
-        {label}: <b>{toolName}</b>
-      </span>
       <ToolFallbackDuration />
       <CaretDownIcon
         data-slot="tool-fallback-trigger-chevron"
