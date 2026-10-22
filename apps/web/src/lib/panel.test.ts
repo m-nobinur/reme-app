@@ -277,14 +277,12 @@ describe("the first run", () => {
       ["Photos", "next"],
       ["Look and feel", "next"],
     ])
-    expect(setup?.steps[0]?.value).toBe("Regular cleans, end of tenancy")
 
     // The next fact lands: its step ticks, and the next one opens.
     const later = firstRun([onboarding(2)])?.journey[0]
     expect(later?.steps[1]).toMatchObject({
       label: "Where you work",
       state: "done",
-      value: "South Manchester, 10 miles",
     })
     expect(later?.steps[2]?.state).toBe("now")
     expect(later?.line).toBe("6 more to go, then Ellie starts on your website")
@@ -343,7 +341,7 @@ describe("the first run", () => {
       "Ellie is building your website",
       "Ellie is putting your website together",
     ]).toContain(website?.title)
-    expect(website?.line).toBe("4 minutes so far, usually 4 to 6 minutes")
+    expect(website?.line).toBe("4 minutes so far, usually 5 to 10 minutes")
     expect(website?.steps.map((each) => [each.label, each.state])).toEqual([
       ["Planning", "done"],
       ["Photos", "skipped"],
@@ -352,7 +350,7 @@ describe("the first run", () => {
       ["Checking", "next"],
       ["Ready", "next"],
     ])
-    expect(website?.steps[2]?.kind).toBe("building")
+    expect(website?.steps[2]?.kind).toBe("writing")
     expect(website?.build?.assignment_id).toBe("build-first")
     expect(panel?.line).toEqual({
       tone: "working",

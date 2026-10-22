@@ -30,7 +30,6 @@ const steps = (state: "now" | "waiting" | "done"): Props["steps"] => [
     id: "work",
     label: "What you do",
     state: "done",
-    value: "Regular cleans",
     kind: "thinking",
   },
   { id: "area", label: "Where you work", state, kind: "thinking" },
@@ -54,7 +53,8 @@ const caret = () => container.querySelector("button[aria-expanded]")
 it("ticks every step, holds, then folds to one line with no caret", async () => {
   await show({ line: "One more, then Ellie starts on your website" })
   expect(caret()?.getAttribute("aria-expanded")).toBe("true")
-  expect(container.textContent).toContain("What you do · Regular cleans")
+  expect(container.textContent).toContain("What you do")
+  expect(container.textContent).not.toContain("·")
 
   await show({
     state: "done",
@@ -102,4 +102,47 @@ it("points a waiting step at the tray", async () => {
   )
   await act(async () => answer?.click())
   expect(onAnswer).toHaveBeenCalledOnce()
+})
+
+it("lists what is done and the step at work, and only hints at the rest", async () => {
+  await show({
+    steps: [
+      ...steps("now"),
+      {
+        id: "customers",
+        label: "Your customers",
+        state: "next",
+        kind: "question",
+      },
+    ],
+  })
+  expect(container.textContent).toContain("Where you work")
+  expect(container.textContent).not.toContain("Your customers")
+  expect(container.querySelectorAll("ol > li")).toHaveLength(3)
+  expect(
+    container.querySelector("ol > li:last-child")?.getAttribute("aria-hidden")
+  ).toBe("true")
+})
+
+it("draws no details under a finished step", async () => {
+  await show({
+    steps: [
+      {
+        id: "work",
+        label: "Planning",
+        state: "done",
+        kind: "planning",
+        detail: "Warm editorial",
+      },
+      {
+        id: "area",
+        label: "Photos",
+        state: "now",
+        kind: "photos",
+        detail: "3 of 8",
+      },
+    ],
+  })
+  expect(container.textContent).not.toContain("Warm editorial")
+  expect(container.textContent).toContain("3 of 8")
 })

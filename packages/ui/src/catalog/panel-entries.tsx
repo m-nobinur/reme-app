@@ -273,7 +273,6 @@ const segment = (
                   id: step.id,
                   label,
                   state: step.state,
-                  value: step.value ?? null,
                   kind: stepKind(full, step),
                   detail: extra.details?.[step.id],
                 },

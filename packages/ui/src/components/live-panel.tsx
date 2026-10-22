@@ -394,8 +394,6 @@ type SegmentStep = {
   /** The label without its count: what a screen reader hears when this step becomes current. */
   said?: string
   state: "done" | "now" | "waiting" | "next" | "skipped"
-  /** What was settled, in the owner's words. */
-  value?: string | null
   /** The icon the step moves while it is at work. */
   kind: StatusKind
   /** What the step decided or made, under its row. */
@@ -425,7 +423,9 @@ function StepMark({ step, failed }: { step: SegmentStep; failed: boolean }) {
     case "now":
       return <StatusIcon className="text-primary" kind={step.kind} />
     case "waiting":
-      return (
+      return step.kind === "question" ? (
+        <StatusIcon className="text-primary" kind="question" />
+      ) : (
         <ChatCircleDotsIcon className="size-4 animate-status-fade text-primary motion-reduce:animate-none" />
       )
     case "skipped":
@@ -484,6 +484,10 @@ function PanelSegment({
   const current = steps.find(
     (step) => step.state === "now" || step.state === "waiting"
   )
+  // What is behind and what is at work; the steps to come stay out of the
+  // list, and a rail fading out below says there are more.
+  const shownSteps = steps.filter((step) => step.state !== "next")
+  const more = shownSteps.length < steps.length
   return (
     <section
       aria-labelledby={`${id}-title`}
@@ -549,7 +553,7 @@ function PanelSegment({
                   : ""}
               </p>
               <ol aria-label="Steps" className="flex flex-col">
-                {steps.map((step) => (
+                {shownSteps.map((step) => (
                   <li
                     className="group relative flex gap-2.5 pb-3 last:pb-0"
                     data-state={step.state}
@@ -581,12 +585,6 @@ function PanelSegment({
                           )}
                         >
                           {step.label}
-                          {step.state === "done" && step.value ? (
-                            <span className="text-muted-foreground">
-                              {" "}
-                              · {step.value}
-                            </span>
-                          ) : null}
                           {step.state === "skipped" ? ` · ${SKIPPED}` : null}
                           <span className="sr-only">
                             {STEP_SAID[step.state]}
@@ -604,10 +602,17 @@ function PanelSegment({
                           </button>
                         ) : null}
                       </p>
-                      {step.detail}
+                      {step.state === "done" || step.state === "skipped"
+                        ? null
+                        : step.detail}
                     </div>
                   </li>
                 ))}
+                {more ? (
+                  <li aria-hidden className="relative h-5">
+                    <span className="absolute inset-y-0 left-[7.5px] w-px bg-linear-to-b from-border to-transparent" />
+                  </li>
+                ) : null}
               </ol>
               {children}
             </div>

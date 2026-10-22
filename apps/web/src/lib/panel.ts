@@ -61,8 +61,6 @@ export type StepView = {
   /** The label without its count, when it has one: what a screen reader hears once per step. */
   said?: string
   state: ActivityStep["state"]
-  /** What was settled, shown muted after the label. */
-  value: string | null
   /** The icon the step moves while it is at work. */
   kind: StatusKind
 }
@@ -262,7 +260,6 @@ export function panelFor(input: PanelInput): Panel | null {
                 label,
                 ...(said && said !== label ? { said } : {}),
                 state: step.state,
-                value: step.value ?? null,
                 kind: stepKind(segment, step),
               },
             ]
