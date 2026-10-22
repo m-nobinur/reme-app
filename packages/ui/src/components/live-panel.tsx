@@ -498,10 +498,12 @@ function PanelSegment({
           ) : failed ? (
             <WarningCircleIcon className="size-4 text-destructive" />
           ) : (
+            // Moving while the segment is under way, a question for the
+            // owner included; still once it is upcoming.
             <StatusIcon
               className="text-primary"
               kind={icon}
-              still={state !== "now"}
+              still={state !== "now" && state !== "waiting"}
             />
           )}
         </span>

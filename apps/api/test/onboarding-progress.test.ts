@@ -52,7 +52,7 @@ const states = (o: Onboarding, asked = {}, waiting = false, asking?: string) =>
   )
 
 describe("onboardingSteps", () => {
-  it("lists the same eight steps from the first moment, in the panel's order", () => {
+  it("lists the same ten steps from the first moment, in the panel's order", () => {
     for (const o of [at([]), at([...WORK, AREA, ...CONTACT, ...ASSISTANT])]) {
       expect(onboardingSteps(o).map((s) => s.id)).toEqual([...ONBOARDING_STEPS])
     }
@@ -60,8 +60,10 @@ describe("onboardingSteps", () => {
       work: "now",
       area: "next",
       customers: "next",
+      proof: "next",
       contact: "next",
       assistant: "next",
+      website: "next",
       quote_form: "next",
       photos: "next",
       look: "next",
@@ -104,12 +106,27 @@ describe("onboardingSteps", () => {
     expect(states(o, {}, true, "assistant").assistant).toBe("waiting")
   })
 
-  it("marks no step waiting for a question about none of the eight, or a settled one", () => {
-    const o = at([...WORK, AREA, ...CONTACT])
-    const build = states(o, {}, true, "build_for_me")
-    const proof = states(o, {}, true, "business.proof")
-    expect(Object.values(build)).not.toContain("waiting")
-    expect(Object.values(proof)).not.toContain("waiting")
+  it("always shows the question being asked: its own step, else the first open one", () => {
+    // What sets them apart and the website offer each have a step.
+    expect(states(at([...WORK, AREA]), {}, true, "business.proof").proof).toBe(
+      "waiting"
+    )
+    expect(
+      states(
+        at([...WORK, AREA, ...CONTACT, ...ASSISTANT]),
+        {},
+        true,
+        "build_for_me"
+      ).website
+    ).toBe("waiting")
+    // A question the steps do not name waits on the first open step.
+    const unnamed = states(
+      at([...WORK, AREA, ...CONTACT]),
+      {},
+      true,
+      "business.tagline"
+    )
+    expect(Object.values(unnamed)).toContain("waiting")
   })
 
   it("skips what the website needs on the manual path, and finishes there", () => {

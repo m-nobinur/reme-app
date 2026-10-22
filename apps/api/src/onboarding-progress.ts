@@ -39,8 +39,10 @@ export const ONBOARDING_STEPS = [
   "work",
   "area",
   "customers",
+  "proof",
   "contact",
   "assistant",
+  "website",
   "quote_form",
   "photos",
   "look",
@@ -55,9 +57,10 @@ const STEP_OF: Record<string, StepId> = {
   "business.name": "work",
   "service_area.text": "area",
   "business.audience": "customers",
-  "business.proof": "customers",
+  "business.proof": "proof",
   contact: "contact",
   assistant: "assistant",
+  build_for_me: "website",
   quote_form: "quote_form",
   "quote.form": "quote_form",
   upload: "photos",
@@ -86,6 +89,7 @@ function settled(
   const phone = factValue(o.facts, "business.phone")?.e164
   const email = factValue(o.facts, "business.email")?.address
   const audience = factValue(o.facts, "business.audience")?.text
+  const proof = factValue(o.facts, "business.proof")?.text
   const area = factValue(o.facts, "service_area.text")?.text
   const quote = factValue(o.facts, "quote.form")?.fields
   const uploads = factValue(o.facts, "media.uploads")?.items
@@ -107,8 +111,15 @@ function settled(
   else if ((asked["business.audience"] ?? 0) >= OPTIONAL_ASKS || out.contact) {
     out.customers = skipped
   }
+  // What sets them apart is optional too, and settles the same way.
+  if (proof) out.proof = done(proof)
+  else if ((asked["business.proof"] ?? 0) >= OPTIONAL_ASKS || out.contact) {
+    out.proof = skipped
+  }
+  if (mode(o) === "assistant") out.website = done()
   if (manual) {
-    // The owner builds it themselves: nothing the build needs is asked.
+    // The owner skipped the website: nothing the build needs is asked.
+    out.website = skipped
     out.quote_form = out.photos = out.look = skipped
   } else {
     if (quote) {
@@ -152,19 +163,11 @@ export function onboardingSteps(
   const over = ended(o)
   const open = ONBOARDING_STEPS.filter((id) => !have[id])
   const scripted = STEP_OF[currentStep(o)?.id ?? ""]
-  // While a question waits, the step it asks about is the open one. A
-  // question outside the eight (the build question) or about a settled step
-  // (proof, under customers) leaves none open.
-  const about = waiting ? STEP_OF[asking ?? ""] : undefined
-  const now = over
-    ? undefined
-    : waiting
-      ? about && open.includes(about)
-        ? about
-        : undefined
-      : scripted && open.includes(scripted)
-        ? scripted
-        : open[0]
+  // While a question waits, the step it asks about is the open one; a
+  // question the steps do not name falls to the first open step, so the
+  // panel always shows something being asked.
+  const about = waiting ? STEP_OF[asking ?? ""] : scripted
+  const now = over ? undefined : about && open.includes(about) ? about : open[0]
   return ONBOARDING_STEPS.map((id): ActivityStep => {
     const was = have[id]
     if (was)
