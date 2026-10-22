@@ -130,7 +130,7 @@ describe("journey", () => {
   it("leaves the website to come once the owner stopped its build", () => {
     const { journey, now } = view({ builds: [build("cancelled")] })
     expect(journey[0]?.state).toBe("upcoming")
-    expect(states(journey[0]).every((s) => s.endsWith(":next"))).toBe(true)
+    expect(states(journey[0])?.every((s) => s.endsWith(":next"))).toBe(true)
     expect(now).toEqual([])
   })
 
