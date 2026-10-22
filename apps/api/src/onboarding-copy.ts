@@ -161,7 +161,7 @@ So tell me, what does ${b} do, and what services do you offer?`,
   )
 }
 
-type Asked = Exclude<StepId, "upload" | "build">
+type Asked = Exclude<StepId, "upload" | "build" | "manual_builder">
 
 /** "your services", or the phrase written for this business. */
 const services = (v: Voice) => v.services ?? "your services"
@@ -252,10 +252,6 @@ If ${v.business} needs a website, I can build it. It would have a Request a quot
 ${ask}`,
     ]
   },
-  manual_builder: (v) => [
-    `No problem${comma(v.owner)}. Would you like to build the website yourself with the website builder instead?`,
-    `That's fine${comma(v.owner)}. Would you rather put the website together yourself in the builder?`,
-  ],
   // Phase 5: the last questions; their answer starts the build.
   design: (v) => [
     `Last, the look of ${v.business}. Four quick questions below set the colours, the lettering, the layout and the pages. Skip any you like and I'll choose for you, then I'll start building.`,
@@ -462,19 +458,17 @@ export function notStarted(v: Voice): string {
   )
 }
 
-/** The end of the "Skip" path. No manual builder exists yet, and this says so. */
-export function manualEnd(v: Voice, builder: boolean): string {
+/**
+ * The end of the "Skip" path: no builder question, since connecting a site
+ * the owner already has is coming and nothing else is offered in its place.
+ */
+export function manualEnd(v: Voice): string {
   return say(
     v,
-    builder
-      ? pick(v, "manual_yes", [
-          "Thanks for telling me. The website builder isn't in the app yet, so there's nothing to open today. When it's ready you'll find it on the Website page. If you'd like me to build the site after all, just say so.",
-          "Good to know. The builder isn't in the app yet; it will live on the Website page when it is. If you change your mind, I can build the site for you whenever you ask.",
-        ])
-      : pick(v, "manual_no", [
-          "That's fine. Your website will be on the Website page whenever you want to come back to it, and if you'd like me to build it for you later, just ask.",
-          "No problem. The Website page is there whenever you're ready, and I can build the site for you any time you ask.",
-        ])
+    pick(v, "manual_end", [
+      `No problem${comma(v.owner)}. If you already have a website, connecting it to me is coming soon, so stay tuned. Until then I'm here for enquiries, quotes and follow-ups, and if you'd like me to build ${v.business} a site after all, just ask.`,
+      `That's fine${comma(v.owner)}. Connecting a website you already have is on its way, so stay tuned. In the meantime I can help with enquiries, quotes and anything else ${v.business} needs, and I can build a site whenever you want one.`,
+    ])
   )
 }
 

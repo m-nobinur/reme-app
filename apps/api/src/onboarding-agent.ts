@@ -173,7 +173,7 @@ Write the plan's keys in the order of the shape at the end, with say last: the o
 Onboarding, in this order (the checklist in the data says where you are; work only on its "now" phase):
 1. The business: what it does and its main services, the area it covers and the customers it serves, asked together in one natural question for whatever is still missing. Read the industry from what they say the business does; its card comes only when their words do not tell you. Then the phone number and email customers should use, on the ask_details contact card. Never ask for a slogan or how a job runs: the builder drafts those. Ask about the area as a local customer thinks of it, in your own words each time: the town or city they are based in and the nearby places they cover or how far they travel, with a short example answer such as "Leeds and anywhere within about 20 miles"; you may say it helps nearby customers find them.
 2. You: your name, pronouns and tone on the ask_details assistant card.
-3. The website: say it turns visitors into enquiries through its Request a quote page, then ask whether to build it (ask_choice build_for_me). If they skip, record site.build_mode "manual" and ask ask_choice manual_builder: would they rather build it themselves in the builder? Be honest that the builder is not in the app yet: it will live on the Website page, and you can build the site for them any time they ask. After that answer, close warmly with answer_only; onboarding is over.
+3. The website: say it turns visitors into enquiries through its Request a quote page, then ask whether to build it (ask_choice build_for_me). Some owners already have a website: say they can skip if so. If they skip, record site.build_mode "manual" and close warmly with answer_only in the same turn: connecting a website they already have is coming soon, so stay tuned; until then you help with enquiries, quotes and follow-ups, and you can build a site whenever they ask. Onboarding is over. Never offer a website builder.
 4. If you build it, the quote form: ask, in your own words and without examples, what they need to know before they can quote a job. From their answer, propose the form's questions (review_quote_form), specific to this business: for a limousine firm the pick-up, the drop-off, the date and time, the passengers and the occasion; for a family lawyer the kind of matter and its urgency; for a dog groomer the breed, the size and the coat. Never propose the customer's name, email or phone: the form asks those itself. 2 to 8 questions, keys in snake_case, required only where they cannot quote without it, select only with 2 to 12 options. If they ask for changes, propose again with them. If they want no custom questions, don't push: the site uses a default form.
 5. Photos (ask_upload): ask for photos that suit this trade, and say a logo is welcome too. They may skip. There is no image library: never promise stock or hand-picked images. If they have none, the site looks clean without them and they can add some later.
 6. The design, last, in one tray of four questions (ask_design): the colours, the lettering, the page arrangement and the pages. The owner answers it on the tray, and may skip any question or all of them; their answer starts the build.
@@ -213,7 +213,7 @@ Your next move (next.kind):
 - ask_open: a question answered in words; about is the fact you are after, or "quote.form".
 - ask_fact: a small form for one fact. Never for owner.preferred_name.
 - ask_details: one card for a few facts. Step contact asks the phone number and the email (it opens with their sign-in email); step assistant asks your name, pronouns and tone.
-- ask_choice: a card with a fixed list, for industry, build_for_me, manual_builder, template, palette, font and pages. preselected is almost always empty; it may tick this card's own option ids. For palette, initial may name the three or four palette ids that suit this business best, shown first; otherwise it is empty.
+- ask_choice: a card with a fixed list, for industry, build_for_me, template, palette, font and pages. preselected is almost always empty; it may tick this card's own option ids. For palette, initial may name the three or four palette ids that suit this business best, shown first; otherwise it is empty.
 - ask_design: the design tray, with no options to write; the api builds every question from the business's industry. Ask it once, where the order says; the owner answers on the tray, and the build starts from that answer.
 - ask_upload, review_quote_form, start_build: as above.
 - answer_only: no new question, for a side question or the close of the manual path.
@@ -570,13 +570,6 @@ function checklist(o: Onboarding, asked: Readonly<Record<string, number>>) {
     you,
     website: {
       "site.build_mode": mode(o) ?? "missing",
-      ...(mode(o) === "manual"
-        ? {
-            manual_builder: o.closed.includes("manual_builder")
-              ? "answered"
-              : "missing",
-          }
-        : {}),
       ...(building
         ? {
             "quote.form":
@@ -981,23 +974,13 @@ export function checkPlan(
         : o.closed,
   }
   const building = mode(after) === "assistant"
-  const endedNow =
-    after.closed.includes("manual_builder") && mode(after) === "manual"
+  const endedNow = mode(after) === "manual"
   const held = (key: FactValueKey) => has(after, key)
   const next = plan.next
 
-  if (
-    mode(after) === "manual" &&
-    !after.closed.includes("manual_builder") &&
-    !(next.kind === "ask_choice" && next.step === "manual_builder")
-  ) {
-    errors.push(
-      "the owner skipped the website, so ask ask_choice manual_builder now"
-    )
-  }
   if (endedNow && next.kind !== "answer_only") {
     errors.push(
-      "the owner has answered the builder question, so onboarding is over: next must be answer_only"
+      "the owner skipped the website, so onboarding is over: next must be answer_only"
     )
   }
   const asked = (key: string) => s.asked?.[key] ?? 0
@@ -1077,14 +1060,10 @@ export function checkPlan(
           `cover the business and you before the website; still missing: ${beforeWebsite(after, s.asked).join(", ")}`
         )
       }
-      if (next.step === "manual_builder" && mode(after) !== "manual") {
-        errors.push("manual_builder follows only a Skip of build_for_me")
-      }
-      if (
-        next.step === "manual_builder" &&
-        after.closed.includes("manual_builder")
-      ) {
-        errors.push("the builder question is answered already")
+      if (next.step === "manual_builder") {
+        errors.push(
+          "there is no builder question any more: close with answer_only"
+        )
       }
       if (
         ["template", "palette", "font", "pages"].includes(next.step) &&

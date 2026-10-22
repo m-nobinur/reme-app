@@ -394,7 +394,7 @@ describe("the plan's checks", () => {
     ).toContainEqual(expect.stringMatching(/already in the facts/))
   })
 
-  it("covers the business and the assistant before the website, and follows a skip with the builder question", () => {
+  it("covers the business and the assistant before the website, and closes once the website is skipped", () => {
     const website = plan({
       next: {
         kind: "ask_choice",
@@ -419,29 +419,25 @@ describe("the plan's checks", () => {
       facts: { "site.build_mode": { mode: "manual" } },
       pending_card: "answered",
     })
+    // A skip ends onboarding in the same turn, with a plain reply and no
+    // builder question.
     expect(
       errorsOf(
         skipped,
         typed("no thanks", onboarding(without("site.build_mode")), card)
       )
-    ).toContain(
-      "the owner skipped the website, so ask ask_choice manual_builder now"
-    )
-    // Once the builder question is answered, onboarding is over.
-    const closed = onboarding(
-      [
-        ...without("site.build_mode"),
-        { key: "site.build_mode", value: { mode: "manual" } },
-      ],
-      { closed: ["manual_builder"] }
-    )
+    ).toEqual([])
+    const closed = onboarding([
+      ...without("site.build_mode"),
+      { key: "site.build_mode", value: { mode: "manual" } },
+    ])
     expect(
       errorsOf(
         plan({ next: { kind: "ask_open", about: "business.tagline" } }),
         typed("ok", closed)
       )
     ).toContain(
-      "the owner has answered the builder question, so onboarding is over: next must be answer_only"
+      "the owner skipped the website, so onboarding is over: next must be answer_only"
     )
   })
 

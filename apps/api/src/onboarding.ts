@@ -101,8 +101,10 @@ export type Progress = {
   passed: readonly string[]
   /** Whether a build was started or offered and answered in this conversation. */
   offered: boolean
-  /** The answer to "use the builder yourself?", once given. */
+  /** The answer to "use the builder yourself?", in conversations that asked it. */
   builder: boolean | null
+  /** The owner skipped the website question, on its card or in words. */
+  siteSkipped?: boolean
   /**
    * Steps whose latest card is no longer waiting: answered, skipped, or
    * talked over by a typed message and not asked again. A card talked over
@@ -146,9 +148,16 @@ export type Prepared = {
   services_phrase: string
 }
 
-/** Whether the script has finished: the build is under way or the owner went their own way. */
+/**
+ * Whether the script has finished: the build is under way, or the owner
+ * skipped the website. The builder answer is for conversations that asked it
+ * before that question was dropped.
+ */
 export const ended = (p: Progress) =>
-  p.offered || p.builder !== null || p.closed.includes("manual_builder")
+  p.offered ||
+  p.siteSkipped === true ||
+  p.builder !== null ||
+  p.closed.includes("manual_builder")
 
 type Values = { [F in FactValue as F["key"]]: F["value"] }
 
@@ -884,7 +893,8 @@ const askDetails = (step: DetailsStep): Step => ({
 
 /** A choice step, done once its fact exists or while `applies` says it is not asked. */
 const askChoice = (
-  step: ChoiceStep,
+  // The builder question is no longer asked; its card stays in old conversations.
+  step: Exclude<ChoiceStep, "manual_builder">,
   key: FactValueKey,
   applies: (o: Onboarding) => boolean = () => true
 ): Step => ({
@@ -922,17 +932,6 @@ export const STEPS: readonly Step[] = [
   askDetails("contact"),
   askDetails("assistant"),
   askChoice("build_for_me", "site.build_mode"),
-  {
-    id: "manual_builder",
-    done: (o) =>
-      mode(o) !== "manual" ||
-      o.builder !== null ||
-      o.closed.includes("manual_builder"),
-    ask: (o, newId) => [
-      text(question("manual_builder", voiceOf(o))),
-      choiceCard("manual_builder", o, newId),
-    ],
-  },
   {
     // The build waits for a quote form the owner reviewed or declined. The
     // question is asked in words, answered in the tray, and the planner
@@ -989,11 +988,11 @@ const defaultQuoteForm = (o: Onboarding, newId: () => string) => [
 export const currentStep = (o: Onboarding) =>
   STEPS.find((each) => !each.done(o))
 
-/** The parts of the next step, or the manual branch's closing line once nothing is left. */
+/** The parts of the next step, or the closing line for a skipped website once nothing is left. */
 export function onboardingStep(o: Onboarding, newId: () => string): Part[] {
   const step = currentStep(o)
   if (step) return step.ask(o, newId)
-  return [text(manualEnd(voiceOf(o), o.builder === true))]
+  return [text(manualEnd(voiceOf(o)))]
 }
 
 /**
@@ -1646,6 +1645,7 @@ export function progressOf(rows: readonly ScriptRow[]): Progress {
   const closed = new Set<string>()
   let offered = false
   let builder: boolean | null = null
+  let siteSkipped = false
   let old = false
   for (const row of rows) {
     if (row.type === "tool-request_change") {
@@ -1679,8 +1679,14 @@ export function progressOf(rows: readonly ScriptRow[]): Progress {
       if (step === "manual_builder" && row.answer === "chosen") {
         builder = row.choice === "yes"
       }
+      if (step === "build_for_me" && row.answer === "chosen") {
+        siteSkipped = row.choice === "skip"
+      }
     } else if (row.state === "output-error" && row.reply !== null) {
       if (step === "manual_builder") builder = yesNo(row.reply) ?? builder
+      if (step === "build_for_me") {
+        siteSkipped = saysSkip(row.reply) || yesNo(row.reply) === false
+      }
       if (
         (step === "upload" || SKIPPABLE.includes(step as FactValueKey)) &&
         saysSkip(row.reply)
@@ -1694,6 +1700,7 @@ export function progressOf(rows: readonly ScriptRow[]): Progress {
     closed: [...closed],
     offered,
     builder,
+    ...(siteSkipped ? { siteSkipped } : {}),
     ...(old ? { oldDesign: true } : {}),
   }
 }

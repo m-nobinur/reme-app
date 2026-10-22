@@ -24,6 +24,7 @@ import {
   decided,
   designAnswer,
   designDone,
+  ended,
   factCard,
   firstPalettes,
   ONBOARDING_GOAL,
@@ -356,38 +357,29 @@ describe("the onboarding steps", () => {
     )
   })
 
-  it("takes the Skip branch: build mode manual, the builder question, then a closing line", () => {
+  it("takes the Skip branch: build mode manual, then a closing line that says connecting a site is coming", () => {
     const { asked, step } = walk(start(), (card) =>
       stepOf(card) === "build_for_me"
         ? { answer: "chosen", ids: ["skip"], other: null }
-        : stepOf(card) === "manual_builder"
-          ? { answer: "chosen", ids: ["no"], other: null }
-          : everyCard(card)
+        : everyCard(card)
     )
-    expect(asked.slice(-2)).toEqual(["build_for_me", "manual_builder"])
+    expect(asked.at(-1)).toBe("build_for_me")
+    expect(asked).not.toContain("manual_builder")
     expect(step).toEqual([
-      expect.objectContaining({ type: "text", text: expect.any(String) }),
+      expect.objectContaining({
+        type: "text",
+        text: expect.stringMatching(/stay tuned/),
+      }),
     ])
-    expect(step).toHaveLength(1)
   })
 
-  it("labels the build card's no as Skip, and the builder card's plainly", () => {
+  it("labels the build card's no as Skip", () => {
     const labels = (at: Onboarding) =>
       AskChoiceInput.parse(
         (onboardingStep(at, counter())[1] as ToolPart).input
       ).options.map((o) => o.label)
     const facts = ALL_BEFORE("build_for_me")
     expect(labels(start({ facts }))).toEqual(["Yes, build it for me", "Skip"])
-    expect(
-      labels(
-        start({
-          facts: [
-            ...facts,
-            { key: "site.build_mode", value: { mode: "manual" } },
-          ],
-        })
-      )
-    ).toEqual(["Yes", "No"])
   })
 
   it("resolves the build card, then closes in a step of its own so no client sends again", () => {
@@ -1006,6 +998,20 @@ describe("the progress a conversation's cards hold", () => {
     ).toBe(true)
   })
 
+  it("ends the script on a skipped website, clicked or typed", () => {
+    const skipped = (over: Record<string, unknown>) =>
+      progressOf([
+        row({ type: "tool-ask_choice", step: "build_for_me", ...over }),
+      ])
+    const clicked = skipped({ answer: "chosen", choice: "skip" })
+    expect(clicked.siteSkipped).toBe(true)
+    expect(ended(clicked)).toBe(true)
+    expect(ended(skipped({ state: "output-error", reply: "No thanks" }))).toBe(
+      true
+    )
+    expect(ended(skipped({ answer: "chosen", choice: "yes" }))).toBe(false)
+  })
+
   it("counts a started build, and not one talked over", () => {
     expect(
       progressOf([row({ type: "tool-request_change", state: "output-error" })])
@@ -1087,14 +1093,13 @@ const lines = (v: Voice): [string, string][] => [
   ["opener", opener(v)],
   ...(
     STEPS.map((s) => s.id).filter(
-      (id) => id !== "upload" && id !== "build"
-    ) as Exclude<StepId, "upload" | "build">[]
+      (id) => id !== "upload" && id !== "build" && id !== "manual_builder"
+    ) as Exclude<StepId, "upload" | "build" | "manual_builder">[]
   ).map((id): [string, string] => [id, question(id, v)]),
   ["upload", photos(v)],
   ["default_quote_form", quoteForm(v)],
   ["started", started(v, true)],
-  ["manual_yes", manualEnd(v, true)],
-  ["manual_no", manualEnd(v, false)],
+  ["manual_end", manualEnd(v)],
   ["chose", chose(v, "the Ocean colours")],
   ...(
     [
