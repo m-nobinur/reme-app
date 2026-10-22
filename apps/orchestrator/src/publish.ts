@@ -166,7 +166,11 @@ export function requestReview(
         actionKind: ACTION_KIND,
         target: { kind: "revision", revision_id: revision.id },
         revisionId: revision.id,
-        rationale: `Publish v${revision.version} of the site.`,
+        // The owner reads this; version numbers stay in the website history.
+        rationale:
+          revision.version === 1
+            ? "Your website is ready to go live."
+            : "Your changes are ready to go live.",
         requestedAt: new Date(now),
         expiresAt: new Date(now + REVIEW_TTL_MS),
       })

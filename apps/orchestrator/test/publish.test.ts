@@ -873,7 +873,7 @@ live("the publish workflow", () => {
           actionKind: "site.publish",
           target: { kind: "revision", revision_id: revisionId },
           revisionId,
-          rationale: "Publish v1 of the site.",
+          rationale: "Your website is ready to go live.",
           expiresAt: new Date(Date.now() + 3_600_000),
         })
         .returning()
