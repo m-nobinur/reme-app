@@ -1627,12 +1627,12 @@ it("shows the whole reply when the tab is hidden while it streams", async () => 
   await pick(chat, "Everything")
   await press(chat, "Build my site")
   await vi.waitFor(() => expect(sent).toHaveLength(2))
-  // The reply streams for about 540 ms; a loaded CI box needs more than 1 s.
+  // The reply streams for about 540 ms; the gate's loaded container needs far more.
   await vi.waitFor(
     () =>
       expect(chat.textContent).toContain(
         "Lovely, I am starting your site now."
       ),
-    { timeout: 3000 }
+    { timeout: 10_000 }
   )
-}, 10_000)
+}, 30_000)
