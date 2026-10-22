@@ -24,6 +24,7 @@ import {
   users,
 } from "@workspace/db"
 import { firstMessage } from "./chat.ts"
+import { firstName } from "./onboarding-copy.ts"
 import { readFacts } from "./workspace.ts"
 
 /**
@@ -332,18 +333,23 @@ async function writeOrg(
         ownerName: input.displayName ?? input.email,
       })
       const root = (await rootStaffId(db)) as string
-      // The name sign-up asked for is the owner's statement of it, so
-      // onboarding does not ask it again.
-      const name = FactValue.safeParse({
-        key: "business.name",
-        value: { name: input.name },
-      })
-      if (name.success) {
+      // The names sign-up asked for are the owner's statement of them, so
+      // onboarding does not ask them again. The owner is called by their
+      // first name, which the Chief of Staff reads from this fact.
+      const first = firstName(input.displayName ?? "")
+      for (const stated of [
+        { key: "business.name", value: { name: input.name } },
+        ...(first
+          ? [{ key: "owner.preferred_name", value: { name: first } }]
+          : []),
+      ]) {
+        const fact = FactValue.safeParse(stated)
+        if (!fact.success) continue
         await supersedeFact(db, {
           orgId,
-          key: name.data.key,
-          factType: "business",
-          value: name.data.value,
+          key: fact.data.key,
+          factType: fact.data.key.split(".")[0] ?? "fact",
+          value: fact.data.value,
           provenance: {
             source: "owner_stated",
             confidence: 1,
