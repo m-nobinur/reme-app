@@ -105,6 +105,8 @@ const typesOf = async (orgId: string) =>
         .select({ type: events.type })
         .from(events)
         .where(sql`${events.type} like 'search.%'`)
+        // Unordered, Postgres returned these either way round in the gate.
+        .orderBy(events.recordedAt)
     )
   ).map((e) => e.type)
 

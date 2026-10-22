@@ -344,9 +344,25 @@ async function recordContact(
   { contact, text }: CosChangeRequest
 ): Promise<Response | null> {
   if (!contact?.phone && !contact?.email) return null
-  const log = await kit.withOrg({ orgId: owner.orgId }, (db) =>
-    readSession(db, sessionId)
-  )
+  const [log, rows] = await kit.withOrg({ orgId: owner.orgId }, async (db) => [
+    await readSession(db, sessionId),
+    await readFacts(db),
+  ])
+  // A value the business already holds is no change: the model restates the
+  // current phone and email on unrelated changes (staging, 2026-10-22), and
+  // refusing those asked the owner for the same yes twice.
+  let heldPhone: string | undefined
+  let heldEmail: string | undefined
+  for (const fact of toCosFacts(rows).output.facts) {
+    if (fact.key === "business.phone") heldPhone = fact.value.e164
+    if (fact.key === "business.email") heldEmail = fact.value.address
+  }
+  const phone = contact.phone === heldPhone ? undefined : contact.phone
+  const email =
+    contact.email?.toLowerCase() === heldEmail?.toLowerCase()
+      ? undefined
+      : contact.email
+  if (!phone && !email) return null
   const said = log
     .flatMap((e) => {
       const m =
@@ -359,25 +375,15 @@ async function recordContact(
     })
     .join("\n")
   const stated: FactValue[] = []
-  if (contact.phone) {
-    if (
-      !(
-        phoneFromOwner(contact.phone, said) &&
-        phoneFromOwner(contact.phone, text)
-      )
-    )
+  if (phone) {
+    if (!(phoneFromOwner(phone, said) && phoneFromOwner(phone, text)))
       return untyped("phone number")
-    stated.push({ key: "business.phone", value: { e164: contact.phone } })
+    stated.push({ key: "business.phone", value: { e164: phone } })
   }
-  if (contact.email) {
-    if (
-      !(
-        emailFromOwner(contact.email, said) &&
-        emailFromOwner(contact.email, text)
-      )
-    )
+  if (email) {
+    if (!(emailFromOwner(email, said) && emailFromOwner(email, text)))
       return untyped("email address")
-    stated.push({ key: "business.email", value: { address: contact.email } })
+    stated.push({ key: "business.email", value: { address: email } })
   }
   try {
     await kit.withOrg(
