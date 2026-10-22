@@ -2150,6 +2150,44 @@ export interface components {
           /** @constant */
           answer: "skipped"
         }
+    AskOpenInput: {
+      /** @enum {string} */
+      about:
+        | "business.name"
+        | "business.phone"
+        | "business.email"
+        | "hours.weekday"
+        | "service_area.radius"
+        | "business.tagline"
+        | "business.industry"
+        | "business.offerings"
+        | "business.audience"
+        | "business.overview"
+        | "business.proof"
+        | "business.disclaimer"
+        | "service_area.text"
+        | "assistant.name"
+        | "assistant.pronouns"
+        | "assistant.tone"
+        | "owner.preferred_name"
+        | "site.build_mode"
+        | "site.template"
+        | "site.palette"
+        | "site.font"
+        | "site.direction"
+        | "site.pages"
+        | "quote.form"
+    }
+    AskOpenOutput:
+      | {
+          /** @constant */
+          answer: "stated"
+          text: string
+        }
+      | {
+          /** @constant */
+          answer: "skipped"
+        }
     AskUploadInput: {
       accept: ("image/jpeg" | "image/png" | "image/webp")[]
       max_files: number
@@ -3610,6 +3648,17 @@ export interface components {
                   kind: "answer"
                   tool_call_id: string
                   output:
+                    | (
+                        | {
+                            /** @constant */
+                            answer: "stated"
+                            text: string
+                          }
+                        | {
+                            /** @constant */
+                            answer: "skipped"
+                          }
+                      )
                     | (
                         | {
                             /** @constant */

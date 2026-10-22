@@ -20,12 +20,15 @@ test("a question shows its own inputs, the name filled in, Skip only where allow
     "maxlength",
     "120"
   )
-  // Only the tagline may be skipped.
-  await expect(page.getByRole("button", { name: "Skip for now" })).toHaveCount(
-    1
-  )
+  // Only the tagline may be skipped; the button sits in the tray's footer.
   await expect(
-    forms.nth(1).getByRole("button", { name: "Skip for now" })
+    page.getByRole("button", { name: "Skip", exact: true })
+  ).toHaveCount(1)
+  await expect(
+    asks(page)
+      .filter({ has: page.locator("form") })
+      .nth(1)
+      .getByRole("button", { name: "Skip", exact: true })
   ).toBeVisible()
 })
 
@@ -33,9 +36,12 @@ test("a question refuses a wrong answer in place, before anything is sent", asyn
   page,
 }) => {
   await open(page, "AskFact")
-  const form = asks(page).locator("form").first()
+  const tray = asks(page)
+    .filter({ has: page.locator("form") })
+    .first()
+  const form = tray.locator("form")
   await form.getByLabel("Business name").fill("")
-  await form.getByRole("button", { name: "Save" }).click()
+  await tray.getByRole("button", { name: "Submit" }).click()
   await expect(form.getByRole("alert")).toHaveText("Check the business name.")
   await expect(form.getByLabel("Business name")).toHaveAttribute(
     "aria-invalid",
@@ -50,12 +56,12 @@ test("an answered question gives way to the owner's reply, each step its own mes
   await expect(page.locator('[data-slot="aui_user-message-root"]')).toHaveText([
     /Brightclean/,
     /\+447700900123/,
-    /Skip for now/,
+    /Skipped/,
   ])
-  // An answered or skipped card shows nothing; one not answered says why.
+  // An answered or skipped question shows nothing; one not answered says why.
   const done = asks(page).filter({ hasNot: page.locator("form") })
   await expect(done).toHaveCount(2)
-  await expect(done.nth(0)).toContainText("Not answered")
+  await expect(done.nth(0)).toContainText("You replied in the chat instead.")
   await expect(done.nth(1)).toContainText("did not come through")
 })
 

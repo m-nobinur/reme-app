@@ -2,8 +2,10 @@ import { createContext, type RefObject, useContext } from "react"
 
 /**
  * The thread's composer input, so a card in the transcript can hand the
- * owner to it: "I'd change something" on a proposed quote form puts the
- * cursor where the change is written. Outside a thread it holds nothing.
+ * owner to it: the design tray gives the cursor back when it collapses or
+ * finishes. A proposed quote form has no button for a change; the owner
+ * types it here instead of pressing "Use this form". Outside a thread it
+ * holds nothing.
  */
 export const ComposerInputContext = createContext<
   RefObject<HTMLTextAreaElement | null>

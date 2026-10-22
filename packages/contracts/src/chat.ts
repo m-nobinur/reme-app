@@ -11,7 +11,15 @@ import {
   UPLOAD_MAX_FILES,
   UPLOAD_TYPES,
 } from "./onboarding.ts"
-import { ANSWER_TEXT_MAX, BuildSummary, FactValue, GOAL_MAX } from "./owner.ts"
+import {
+  ANSWER_TEXT_MAX,
+  BuildSummary,
+  FactValue,
+  type FactValueKey,
+  GOAL_MAX,
+  REVIEW_FACT_KEYS,
+  type ReviewFactKey,
+} from "./owner.ts"
 import { Refused } from "./refused.ts"
 import { Text } from "./text.ts"
 
@@ -118,6 +126,31 @@ export const AskFactInput = z.discriminatedUnion(
  */
 export const AskFactOutput = z.discriminatedUnion("answer", [
   z.strictObject({ answer: z.literal("stated"), fact: FactValue }),
+  z.strictObject({ answer: z.literal("skipped") }),
+])
+
+/**
+ * `ask_open`'s input: a question the owner answers in their own words, by the
+ * fact it is after or "quote.form". The assistant's message asks it; the
+ * tray's title is the web's copy for `about`.
+ */
+type OpenKey = Exclude<FactValueKey, "media.uploads" | ReviewFactKey>
+
+export const AskOpenInput = z.strictObject({
+  about: z.enum(
+    FactValue.options
+      .map((o) => o.shape.key.value)
+      .filter(
+        (key) =>
+          key !== "media.uploads" &&
+          !(REVIEW_FACT_KEYS as readonly string[]).includes(key)
+      ) as [OpenKey, ...OpenKey[]]
+  ),
+})
+
+/** `ask_open`'s output: the owner's words, or a skip. */
+export const AskOpenOutput = z.discriminatedUnion("answer", [
+  z.strictObject({ answer: z.literal("stated"), text: Text(1000) }),
   z.strictObject({ answer: z.literal("skipped") }),
 ])
 
@@ -401,8 +434,8 @@ export const RequestChangeOutput = z.discriminatedUnion("outcome", [
 ])
 
 /**
- * The owner's resolution of one pending call: an answer to `ask_fact`,
- * `ask_details`, `ask_choice`, `ask_upload` or `review_quote_form`, or a yes or no on a
+ * The owner's resolution of one pending call: an answer to `ask_open`,
+ * `ask_fact`, `ask_details`, `ask_choice`, `ask_upload` or `review_quote_form`, or a yes or no on a
  * call that needs approval.
  * The api reads `output` against the call's own tool.
  */
@@ -411,6 +444,7 @@ const ChatResult = z.discriminatedUnion("kind", [
     kind: z.literal("answer"),
     tool_call_id: ToolCallId,
     output: z.union([
+      AskOpenOutput,
       AskFactOutput,
       AskDetailsOutput,
       AskChoiceOutput,
@@ -509,6 +543,8 @@ export type DetailsStep = z.infer<typeof DetailsStep>
 export type AskDetailsInput = z.infer<typeof AskDetailsInput>
 export type AskDetailsOutput = z.infer<typeof AskDetailsOutput>
 export type AskFactOutput = z.infer<typeof AskFactOutput>
+export type AskOpenInput = z.infer<typeof AskOpenInput>
+export type AskOpenOutput = z.infer<typeof AskOpenOutput>
 export type RequestChangeOutput = z.infer<typeof RequestChangeOutput>
 export type ChatRequest = z.infer<typeof ChatRequest>
 export type ChatResult = z.infer<typeof ChatResult>

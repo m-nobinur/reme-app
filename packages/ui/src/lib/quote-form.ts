@@ -6,14 +6,11 @@ import {
 
 /**
  * The owner's edits to a proposed quote form, as plain data: each question
- * the assistant proposed, in its order, renamed, made optional or dropped.
- * A dropped question keeps its place so it can come back. Keys never change,
+ * the assistant proposed, in its order, made optional or dropped. A dropped
+ * question keeps its place so it can come back. Labels and keys never change,
  * so every question the owner keeps still has its own.
  */
 export type QuoteDraft = { field: QuoteField; dropped: boolean }[]
-
-/** The longest label the contract takes. */
-export const QUOTE_LABEL_MAX = 80
 
 export const draftOf = (fields: readonly QuoteField[]): QuoteDraft =>
   fields.map((field) => ({ field, dropped: false }))
@@ -41,16 +38,6 @@ export const dropField = (draft: QuoteDraft, key: string): QuoteDraft =>
 
 export const restoreField = (draft: QuoteDraft, key: string): QuoteDraft =>
   change(draft, key, (row) => ({ ...row, dropped: false }))
-
-export const renameField = (
-  draft: QuoteDraft,
-  key: string,
-  label: string
-): QuoteDraft =>
-  change(draft, key, (row) => ({
-    ...row,
-    field: { ...row.field, label: label.slice(0, QUOTE_LABEL_MAX) },
-  }))
 
 export const setRequired = (
   draft: QuoteDraft,
@@ -100,34 +87,3 @@ export const QUOTE_TYPE_LABEL: Record<QuoteField["type"], string> = {
   tel: "Phone",
   email: "Email",
 }
-
-/** The confirmed list read back: how many questions, and which. */
-export const quoteSummary = (fields: readonly QuoteField[]) =>
-  `Your quote form asks ${fields.length} ${fields.length === 1 ? "question" : "questions"}: ${fields.map((f) => f.label).join(", ")}.`
-
-/**
- * What the composer suggests while a proposed form waits: a message sent
- * then is the owner's change to it, not a new subject.
- */
-export const QUOTE_CHANGES_PLACEHOLDER =
-  "Say what to change about these questions…"
-
-/**
- * Whether these parts, a message's, hold a proposed form still waiting on
- * the owner. Read from the thread's own part shape.
- */
-export const waitsOnQuoteForm = (parts: readonly object[] | undefined) =>
-  (parts ?? []).some((part) => {
-    const p = part as {
-      type?: string
-      toolName?: string
-      result?: unknown
-      isError?: boolean
-    }
-    return (
-      p.type === "tool-call" &&
-      p.toolName === "review_quote_form" &&
-      p.result === undefined &&
-      !p.isError
-    )
-  })

@@ -199,7 +199,7 @@ export async function answerOnboarding(page: Page): Promise<void> {
   const assistant = page.locator('[data-slot="aui_assistant-message-root"]')
   const pending = page
     .locator(
-      '[data-slot="ask-fact"], [data-slot="ask-details"], [data-slot="ask-choice"], [data-slot="ask-design"], [data-slot="ask-upload"], [data-slot="review-quote-form"]'
+      '[data-slot="ask-open"], [data-slot="ask-fact"], [data-slot="ask-details"], [data-slot="ask-choice"], [data-slot="ask-design"], [data-slot="ask-upload"], [data-slot="review-quote-form"]'
     )
     .filter({ has: page.locator("form, input[type=file], button") })
   const started = page
@@ -257,30 +257,51 @@ export async function answerOnboarding(page: Page): Promise<void> {
     const slot = await card.getAttribute("data-slot")
     if (slot === "ask-upload") {
       await step(() =>
-        card.getByRole("button", { name: "Skip for now" }).click()
+        card.getByRole("button", { name: "Skip", exact: true }).click()
       )
     } else if (slot === "ask-design") {
       // The design tray: the assistant chooses what the owner skips.
       await step(() => card.getByRole("button", { name: "Skip all" }).click())
     } else if (slot === "review-quote-form") {
-      await step(() => card.getByRole("button", { name: "Looks good" }).click())
+      await step(() =>
+        card.getByRole("button", { name: "Use this form" }).click()
+      )
     } else if (slot === "ask-details") {
-      // Empty text fields from the sheet, by their label; a prefilled email
-      // stays. Each set of chips takes its first option.
-      for (const field of await card.getByRole("textbox").all()) {
-        if (await field.inputValue()) continue
-        const label = await field.evaluate(
-          (el) => (el as HTMLInputElement).labels?.[0]?.textContent ?? ""
-        )
-        await field.fill(reply(label))
-      }
-      for (const set of await card.locator("fieldset").all()) {
-        if (!(await set.locator("input:checked").count())) {
-          await set.locator("label").first().click()
+      // One field a page: an empty text field from the sheet, by its label,
+      // a prefilled email stays, and a set of chips takes its first option.
+      // Next until the last page, which reads Submit.
+      for (;;) {
+        for (const field of await card.getByRole("textbox").all()) {
+          if (!(await field.isVisible()) || (await field.inputValue())) continue
+          const label = await field.evaluate(
+            (el) => (el as HTMLInputElement).labels?.[0]?.textContent ?? ""
+          )
+          await field.fill(reply(label))
         }
+        for (const set of await card.locator("fieldset").all()) {
+          if (!(await set.isVisible())) continue
+          if (!(await set.locator("input:checked").count())) {
+            await set.locator("label").first().click()
+          }
+        }
+        const next = card.getByRole("button", { name: "Next", exact: true })
+        if (!(await next.count())) break
+        await next.click()
       }
-      await step(() => card.getByRole("button", { name: "Continue" }).click())
+      await step(() => card.getByRole("button", { name: "Submit" }).click())
     } else if (slot === "ask-choice") {
+      // A choice of two answers on its tap, with no Submit.
+      const submit = card.getByRole("button", { name: "Submit" })
+      if (!(await submit.count())) {
+        const options = card.locator("form button")
+        let pick = options.first()
+        for (const name of PICKS) {
+          const offered = options.filter({ hasText: name })
+          if (await offered.count()) pick = offered.first()
+        }
+        await step(() => pick.click())
+        continue
+      }
       // Pages come ticked; every other card takes one pick.
       if ((await card.getByRole("checkbox").count()) === 0) {
         const labels = card.locator("label")
@@ -291,7 +312,12 @@ export async function answerOnboarding(page: Page): Promise<void> {
         }
         await pick.click()
       }
-      await step(() => card.getByRole("button", { name: "Continue" }).click())
+      await step(() => submit.click())
+    } else if (slot === "ask-open") {
+      // Answered from the assistant's own words, as a typed reply would be.
+      const said = (await assistant.last().innerText()).replace(/\s+/g, " ")
+      await card.getByRole("textbox").fill(reply(said))
+      await step(() => card.getByRole("button", { name: "Submit" }).click())
     } else {
       const label = (
         await card.locator("form label").first().innerText()
@@ -299,7 +325,7 @@ export async function answerOnboarding(page: Page): Promise<void> {
       const field = card.getByLabel(label, { exact: true })
       // The owner's name opens with the one they signed in with.
       if (!(await field.inputValue())) await field.fill(reply(label))
-      await step(() => card.getByRole("button", { name: "Save" }).click())
+      await step(() => card.getByRole("button", { name: "Submit" }).click())
     }
   }
   await expect(started, "the build had not started after 45 turns").toHaveCount(

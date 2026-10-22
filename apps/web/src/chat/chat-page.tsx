@@ -233,7 +233,7 @@ export function ChatPage() {
                     mode={mode}
                     placeholder={`Ask ${assistant} anything…`}
                     placeholderIdeas={ideas}
-                    questionPlaceholder={`Or tell ${assistant} something else…`}
+                    questionPlaceholder={`Tell ${assistant} what to do instead…`}
                     quickActions={OWNER_QUICK_ACTIONS}
                     reveal={onboarding ? OPENING_REVEAL : undefined}
                     stored={id}
