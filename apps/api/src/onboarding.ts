@@ -20,6 +20,7 @@ import {
   FONT_PAIRS,
   FONTS,
   INDUSTRIES,
+  ONBOARDING_GOAL,
   PAGES,
   PALETTES,
   PaletteId,
@@ -80,8 +81,7 @@ export type StepId =
   | "quote_form"
   | "build"
 
-/** The first build's goal: the owner's details are in the facts. */
-export const ONBOARDING_GOAL = "Build my website from the details I gave you."
+export { ONBOARDING_GOAL }
 
 /**
  * The facts an owner may skip; every other one the site or the assistant

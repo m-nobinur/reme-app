@@ -10,6 +10,7 @@ import {
   type DomainPurchaseStatus,
   FONTS,
   INDUSTRIES,
+  ONBOARDING_GOAL,
   PALETTES,
   PRONOUNS,
   TEMPLATES,
@@ -983,7 +984,6 @@ const fakeUpload = async (files: File[]) => {
   }
 }
 
-const ONBOARDING_GOAL = "Build my website from the details I gave you."
 const BUILD_AT = "2026-09-27T10:00:00.000Z"
 
 const requestChange = (
@@ -1053,7 +1053,7 @@ const REQUEST_CHANGE_STATES: ThreadMessageLike[] = [
   requestChange("responding", "Add Saturday hours, 9 to 1.", {
     approved: true,
   }),
-  requestChange("started", ONBOARDING_GOAL, {
+  requestChange("started", "Add a page for end of tenancy cleans.", {
     approved: true,
     result: build(null),
   }),

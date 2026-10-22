@@ -109,6 +109,12 @@ export const CosWorkspace = z.strictObject({
 export const CosFacts = z.strictObject({ facts: z.array(FactValue) })
 
 /**
+ * The first build's change text, which onboarding starts on the owner's
+ * behalf: the details are in the facts. The chat draws no card for it.
+ */
+export const ONBOARDING_GOAL = "Build my website from the details I gave you."
+
+/**
  * `request_change`'s input: the owner's change, and the new phone or email
  * when the owner typed it in full. The tool records it as the owner's word
  * only if its digits or address appear in what the owner wrote. `step` is a
