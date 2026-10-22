@@ -2,7 +2,7 @@ import type { Conversation } from "@workspace/contracts"
 import { expect, it } from "vitest"
 import type { Workspace } from "./api/types"
 import { EMPTY_WORKSPACE } from "./attention"
-import { onboardingFor } from "./onboarding"
+import { onboardingFor, settingUp } from "./onboarding"
 
 const conversation = (kind: Conversation["kind"], archived = false) =>
   ({
@@ -31,4 +31,18 @@ it("an owner with a site, a build, or no onboarding row stays on /app", () => {
   // A failed read is not a reason to move the owner anywhere.
   expect(onboardingFor(null, NEW)).toBeNull()
   expect(onboardingFor(EMPTY_WORKSPACE, null)).toBeNull()
+})
+
+it("is setting up while the onboarding segment is open, and not once it is done", () => {
+  const at = (state: string) =>
+    ({
+      ...EMPTY_WORKSPACE,
+      activity: { journey: [{ kind: "onboarding", state }], now: [] },
+    }) as unknown as Workspace
+  expect(settingUp(at("now"))).toBe(true)
+  expect(settingUp(at("waiting"))).toBe(true)
+  // A skipped website ends setup with nothing built.
+  expect(settingUp(at("done"))).toBe(false)
+  expect(settingUp(EMPTY_WORKSPACE)).toBe(false)
+  expect(settingUp(null)).toBe(false)
 })

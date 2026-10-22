@@ -35,7 +35,7 @@ import {
 } from "@workspace/ui/components/workspace-shell"
 import { formatDate } from "@workspace/ui/lib/format"
 import { SiteNameProvider } from "@workspace/ui/lib/site-name"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useId, useState } from "react"
 import { lastChat } from "@/chat/history"
 import { getWorkspaceFrame, pollWorkspace } from "@/lib/api/server"
 import type { WorkspacePoll } from "@/lib/api/types"
@@ -53,7 +53,7 @@ import {
   notificationsOf,
   unreadCount,
 } from "@/lib/notifications"
-import { onboardingFor } from "@/lib/onboarding"
+import { onboardingFor, settingUp } from "@/lib/onboarding"
 import { OwnerSettings } from "@/lib/owner-settings"
 import { anchorOf } from "@/lib/reminders"
 import { requireOwner } from "@/lib/tenant"
@@ -114,6 +114,10 @@ const SECTIONS = [
   { to: "/app/reminders", label: "Reminders", icon: AlarmIcon },
   { to: "/app/tasks", label: "Tasks", icon: ListChecksIcon },
 ] as const
+
+/** Why a new conversation waits for setup, in the rail's tooltip. */
+const SETUP_FIRST =
+  "Your assistant needs to know your business before it can help with anything else."
 
 /** How many notifications the rail's bell lists before "View all". */
 const MENU_ITEMS = 6
@@ -184,6 +188,8 @@ function AppLayout() {
   const showPanel = hasPanel && !(conversation && !id)
   // Getting started stays in the help menu until the first build.
   const onboarding = onboardingFor(live.workspace, conversations)
+  const setupOpen = settingUp(live.workspace)
+  const setupFirstId = useId()
   const router = useRouter()
   // A signup whose organisation was not written: write it now, then read
   // every loader again under the session that carries it. Once per page
@@ -294,19 +300,43 @@ function AppLayout() {
                     </button>
                   </Hint>
                 )}
-                <Hint label="New conversation" side="right">
-                  {/* The new-conversation screen is home, so this is current only on
-                    the bare address, and a fresh state starts one each time. */}
-                  <Link
-                    activeOptions={{ exact: true }}
-                    className={railItemClass}
-                    state={() => ({ chat: crypto.randomUUID() })}
-                    to="/app"
+                {setupOpen ? (
+                  <Hint
+                    detail={SETUP_FIRST}
+                    label="Finish setting up first"
+                    side="right"
                   >
-                    <NotePencilIcon aria-hidden />
-                    <span data-slot="rail-label">New conversation</span>
-                  </Link>
-                </Hint>
+                    {/* Not until setup is done: the assistant needs the
+                      business first. A button that does nothing, still
+                      reachable, so a keyboard hears why. */}
+                    <button
+                      aria-describedby={setupFirstId}
+                      aria-disabled="true"
+                      className={`${railItemClass} cursor-default opacity-50`}
+                      type="button"
+                    >
+                      <NotePencilIcon aria-hidden />
+                      <span data-slot="rail-label">New conversation</span>
+                      <span className="sr-only" id={setupFirstId}>
+                        {SETUP_FIRST}
+                      </span>
+                    </button>
+                  </Hint>
+                ) : (
+                  <Hint label="New conversation" side="right">
+                    {/* The new-conversation screen is home, so this is current only on
+                      the bare address, and a fresh state starts one each time. */}
+                    <Link
+                      activeOptions={{ exact: true }}
+                      className={railItemClass}
+                      state={() => ({ chat: crypto.randomUUID() })}
+                      to="/app"
+                    >
+                      <NotePencilIcon aria-hidden />
+                      <span data-slot="rail-label">New conversation</span>
+                    </Link>
+                  </Hint>
+                )}
                 {SECTIONS.map((item) => (
                   <Hint key={item.to} label={item.label} side="right">
                     <Link className={railItemClass} to={item.to}>

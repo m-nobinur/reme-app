@@ -75,21 +75,34 @@ const hintsShown = React.createContext(true)
 
 /**
  * The name of a control that shows only an icon, on hover and on focus.
- * `children` is the control itself; it keeps its own `aria-label`.
+ * `children` is the control itself; it keeps its own `aria-label`. A
+ * `detail` adds a short second line under the name, such as why a control
+ * is not available yet.
  */
 function Hint({
   label,
+  detail,
   side = "bottom",
   children,
 }: {
   label: string
+  detail?: string
   side?: TooltipPrimitive.Positioner.Props["side"]
   children: React.ReactElement
 }) {
   return (
     <Tooltip disabled={!React.useContext(hintsShown)}>
       <TooltipTrigger render={children} />
-      <TooltipContent side={side}>{label}</TooltipContent>
+      {detail ? (
+        <TooltipContent className="max-w-60 py-2" side={side}>
+          <span className="flex flex-col gap-0.5">
+            <span className="font-medium">{label}</span>
+            <span className="text-background/75 leading-snug">{detail}</span>
+          </span>
+        </TooltipContent>
+      ) : (
+        <TooltipContent side={side}>{label}</TooltipContent>
+      )}
     </Tooltip>
   )
 }
