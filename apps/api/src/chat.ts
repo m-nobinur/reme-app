@@ -9,6 +9,7 @@ import {
   ErrorEnvelope,
   type FactRecord,
   type MemoryChip,
+  ONBOARDING_STATUS,
   OnboardingPlan,
   RequestChangeOutput,
   TOOL_CALL_CANCELLED,
@@ -2423,6 +2424,8 @@ async function plannedTurn(
   // has shown, or the planner is done, Jev is ignored.
   const stop = new AbortController()
   let planning = true
+  // Facts written before the message, as a shown word does, keep the plan.
+  let early = false
   let gate = null as Gate | null
   void p.gate?.then((found) => {
     const card = waitingCard(job.tail)
@@ -2430,6 +2433,7 @@ async function plannedTurn(
       found &&
       planning &&
       !textOpen &&
+      !early &&
       card?.toolCallId === found.callId &&
       decidedAnswer(card, found.decision, job.state.onboarding)
     ) {
@@ -2437,13 +2441,48 @@ async function plannedTurn(
       stop.abort()
     }
   })
+  const scope = {
+    orgId: p.owner.orgId,
+    workosUserId: p.owner.session.workosUserId,
+  }
   const outcome = await planTurn(
     p.model,
     p.price,
     job.state,
     PLANNER,
     say,
-    stop.signal
+    stop.signal,
+    {
+      send: (status) =>
+        write({ type: ONBOARDING_STATUS, data: status, transient: true }),
+      // Written again, as a no-op, with the turn's rows; a failure here
+      // only leaves them to that write.
+      commit: async (checked) => {
+        early = true
+        try {
+          const written = await p.kit.withOrg(scope, async (db) => {
+            const held = await read(db, p.id)
+            if (
+              held instanceof Response ||
+              JSON.stringify(held.tail) !== JSON.stringify(job.tail)
+            ) {
+              return null
+            }
+            return planFacts(db, held, job, checked.plan, p)
+          })
+          return written?.keys ?? []
+        } catch (error) {
+          console.error(
+            JSON.stringify({
+              code: "onboarding.early_facts_failed",
+              turn_id: job.turn.turnId,
+              error: error instanceof Error ? error.name : "unknown",
+            })
+          )
+          return []
+        }
+      },
+    }
   )
   planning = false
   if (textOpen) write({ type: "text-end", id: "text" })
@@ -2464,10 +2503,6 @@ async function plannedTurn(
   // reading, when it has one, is still the best reading of the reply. Waited
   // for here, outside the transaction; `gateAnswer` checks it still applies.
   if (!outcome.ok && !gate && p.gate) gate = await p.gate
-  const scope = {
-    orgId: p.owner.orgId,
-    workosUserId: p.owner.session.workosUserId,
-  }
   const steps = await callEvents(job.turn, outcome.calls)
   let logged = false
   const close = (db: OrgScopedDb, ended: PlanEnded) =>
@@ -2650,13 +2685,20 @@ async function startPlannedBuild(
  * checked again on what this transaction reads, and null (the script
  * answers) when it no longer holds.
  */
-async function commitPlan(
+/**
+ * A plan's facts and a card answer's, written as the owner's, with the
+ * state the plan was checked again against and the keys written. Null when
+ * the plan no longer fits. Its message is not checked again: `planTurn`
+ * checked it against the turn's state, and facts this function wrote
+ * earlier in the turn would make a correction read as no change.
+ */
+async function planFacts(
   db: OrgScopedDb,
   held: Read,
   job: PlanJob,
-  outcome: Extract<PlanOutcome, { ok: true }>,
+  plan: OnboardingPlan,
   p: Planning
-): Promise<Staged | null> {
+) {
   const onboarding = await onboardingOf(db, held, p.id, p.owner)
   if (!onboarding) throw new Refusal(stale())
   const { turn } = p.request
@@ -2667,7 +2709,7 @@ async function commitPlan(
     ...job.state,
     onboarding: answered ? withAnswer(onboarding, answered.meant) : onboarding,
   }
-  const rechecked = checkPlan(outcome.checked.plan, state)
+  const rechecked = checkPlan(plan, state, false)
   if (!rechecked.ok) return null
   const c = rechecked.checked
   const card = answered?.meant.kind === "facts" ? answered.meant.facts : []
@@ -2683,6 +2725,25 @@ async function commitPlan(
   if (c.chosen.length > 0) {
     await stateFacts(db, p.owner, c.chosen, undefined, "inferred")
   }
+  return {
+    answered,
+    state,
+    c,
+    keys: [...byKey.keys(), ...c.chosen.map((f) => f.key)],
+  }
+}
+
+async function commitPlan(
+  db: OrgScopedDb,
+  held: Read,
+  job: PlanJob,
+  outcome: Extract<PlanOutcome, { ok: true }>,
+  p: Planning
+): Promise<Staged | null> {
+  const facts = await planFacts(db, held, job, outcome.checked.plan, p)
+  if (!facts) return null
+  const { answered, state, c } = facts
+  const { turn } = p.request
   const parts = planParts(c, state, p.newId)
   // A build's message goes after its outcome, unless it already streamed.
   const step =

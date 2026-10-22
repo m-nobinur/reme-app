@@ -7,6 +7,7 @@ import {
   FactList,
   type FactRecord,
   type FactValue,
+  ONBOARDING_STATUS,
   StaffDirectory,
 } from "@workspace/contracts"
 import {
@@ -263,10 +264,6 @@ const FACTS: Record<string, FactValue> = {
   "service_area.text": {
     key: "service_area.text",
     value: { text: "Fictional Town and the villages around it" },
-  },
-  "owner.preferred_name": {
-    key: "owner.preferred_name",
-    value: { name: "Sam" },
   },
 }
 const PHONE: FactValue = {
@@ -762,7 +759,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         (p) =>
           p.type.startsWith("tool-ask_") || p.type === "tool-review_quote_form"
       ).length
-    expect(asked).toBeGreaterThan(10)
+    expect(asked).toBeGreaterThanOrEqual(10)
     // Every card answer and every typed answer is a message of the owner's.
     expect(roles.filter((role) => role === "user")).toHaveLength(
       asked + IN_WORDS.length
@@ -992,6 +989,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
           "owner_stated",
         ],
         ["business.proof", expect.any(Object), "owner_stated"],
+        ["owner.preferred_name", { name: "Probe" }, "owner_stated"],
         ["service_area.text", expect.any(Object), "owner_stated"],
       ])
       // The next step is the next question, in the same row: the contact
@@ -2004,10 +2002,13 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
           state: "done",
         },
       ])
+      // Sign-up wrote the business name and the owner's first name.
       const stated = await factsOf(who)
       expect(
         stated
-          .filter((f) => f.key !== "business.name")
+          .filter(
+            (f) => f.key !== "business.name" && f.key !== "owner.preferred_name"
+          )
           .map((f) => [f.key, f.provenance.source])
           .sort()
       ).toEqual([
@@ -2948,6 +2949,64 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       expect(pendingCall(site.after).input).toMatchObject({
         step: "build_for_me",
       })
+    }, 60_000)
+
+    it("says what the plan is on before its first word, once its facts are written", async () => {
+      const who = await owner(kit, url as string, "chat-status")
+      // The stream drops after the plan, so only a write made before the
+      // message streamed can hold the plan's facts.
+      const dropped = planner(
+        [
+          plan({
+            facts: {
+              "business.offerings": { items: ["Dog grooming"] },
+              "business.phone": { e164: "+447700900412" },
+            },
+            say: "Dog grooming, noted. Which areas do you cover?",
+          }),
+        ],
+        true
+      )
+      const me = talker(who, undefined, { planner: dropped.model })
+      const id = await me.onboarding()
+      const done = await me.turn(id, {
+        turn: {
+          kind: "message",
+          message_id: "u_status_1",
+          text: "Dog grooming. Call 07700 900 412.",
+        },
+      })
+      const firstWord = done.chunks.findIndex((c) => c.type === "text-delta")
+      expect(firstWord).toBeGreaterThan(0)
+      expect(
+        done.chunks
+          .slice(0, firstWord)
+          .filter((c) => c.type === ONBOARDING_STATUS)
+      ).toEqual([
+        {
+          type: ONBOARDING_STATUS,
+          data: { on: { kind: "fact", key: "business.offerings" }, facts: [] },
+          transient: true,
+        },
+        {
+          type: ONBOARDING_STATUS,
+          data: {
+            on: { kind: "next", next: "answer_only" },
+            facts: expect.arrayContaining([
+              "business.offerings",
+              "business.phone",
+            ]),
+          },
+          transient: true,
+        },
+      ])
+      expect((await logged(who, id)).at(-1)?.payload).toMatchObject({
+        outcome: "fallback",
+        reason: "provider",
+      })
+      expect(
+        (await factsOf(who)).find((f) => f.key === "business.phone")?.value
+      ).toEqual({ e164: "+447700900412" })
     }, 60_000)
 
     it("keeps what the owner read when the provider fails after it, and lets the script finish the turn", async () => {
