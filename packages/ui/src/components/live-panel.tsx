@@ -391,6 +391,8 @@ function StageDetail({
 type SegmentStep = {
   id: string
   label: string
+  /** The label without its count: what a screen reader hears when this step becomes current. */
+  said?: string
   state: "done" | "now" | "waiting" | "next" | "skipped"
   /** What was settled, in the owner's words. */
   value?: string | null
@@ -542,7 +544,9 @@ function PanelSegment({
           <div className="min-h-0 overflow-hidden">
             <div className="flex flex-col gap-3 pt-3">
               <p aria-live="polite" className="sr-only">
-                {current && !done ? `Now: ${current.label}.` : ""}
+                {current && !done
+                  ? `Now: ${current.said ?? current.label}.`
+                  : ""}
               </p>
               <ol aria-label="Steps" className="flex flex-col">
                 {steps.map((step) => (

@@ -13,3 +13,9 @@ export const RAIL_COOKIE = "reme-rail"
  * opens it twice, and the id of what to move focus to once it is open.
  */
 export type PanelPress = { key: string; focus?: string | undefined }
+
+/**
+ * The app asking the panel to open or fold by itself: a fresh `key` per
+ * request. Unlike a press, it is not remembered as the owner's choice.
+ */
+export type PanelAuto = { key: string; open: boolean }

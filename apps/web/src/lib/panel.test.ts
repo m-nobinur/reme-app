@@ -424,6 +424,22 @@ describe("the first run", () => {
     expect(panel?.line.lead).toBe("The website build stopped")
   })
 
+  it("gives a counted step a spoken form without its count", () => {
+    const steps = along(WEBSITE_STEPS, 2).map((each) =>
+      each.id === "writing" ? { ...each, count: { done: 2, total: 6 } } : each
+    )
+    const panel = firstRun([
+      onboarding(8, "done"),
+      segment("website", "now", steps, BUSINESS),
+    ])
+    const [planning, photos, writing] = panel?.journey[1]?.steps ?? []
+    expect(writing?.label).toBe("Writing the pages, 2 of 6")
+    expect(writing?.said).toBe("Writing the pages")
+    // A step with no count has nothing to leave out.
+    expect(planning?.said).toBeUndefined()
+    expect(photos?.said).toBeUndefined()
+  })
+
   it("starts from a new chat or the getting-started chat before the journey", () => {
     expect(panelFor(input())?.suggestions).toEqual([{ kind: "start-website" }])
     expect(
