@@ -1,7 +1,15 @@
-import type { TextStreamPart, ToolSet } from "ai"
+import { COS_TOOLS } from "@workspace/contracts"
+import {
+  isStepCount,
+  type TextStreamPart,
+  ToolLoopAgent,
+  type ToolSet,
+  tool,
+} from "ai"
+import { convertArrayToReadableStream, MockLanguageModelV4 } from "ai/test"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { INSTRUCTIONS } from "../src/cos/agent.ts"
-import { dashesToCommas, voiced } from "../src/cos/voice.ts"
+import { cleanedChange, INSTRUCTIONS, withoutStep } from "../src/cos/agent.ts"
+import { cleanStep, dashesToCommas, voiced } from "../src/cos/voice.ts"
 import { VOICE } from "../src/voice.ts"
 
 type Part = TextStreamPart<ToolSet>
@@ -71,5 +79,75 @@ describe("the instructions", () => {
   it("carry the voice and no plan review", () => {
     expect(INSTRUCTIONS).toContain(VOICE)
     expect(INSTRUCTIONS).not.toMatch(/blueprint/i)
+  })
+})
+
+describe("request_change's step", () => {
+  it("cleans a step to what the panel may show", () => {
+    expect(cleanStep("  Adding   the new photos\n to the home page ")).toBe(
+      "Adding the new photos to the home page"
+    )
+    expect(cleanStep("Updating the page — now")).toBe("Updating the page, now")
+    expect(cleanStep("x".repeat(90))).toHaveLength(60)
+    expect(cleanStep("Changing 3f2b9c1e-8a4d-4f6b-9c2a-1d5e7f8a9b0d")).toBe(
+      undefined
+    )
+    expect(cleanStep("Opening build ead99cb0")).toBeUndefined()
+    expect(cleanStep("   ")).toBeUndefined()
+    expect(cleanStep(undefined)).toBeUndefined()
+  })
+
+  it("is cleaned on the logged call and stripped before the body runs", async () => {
+    const seen: unknown[] = []
+    const model = new MockLanguageModelV4({
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: "stream-start", warnings: [] },
+          {
+            type: "tool-call",
+            toolCallId: "c1",
+            toolName: "request_change",
+            input: JSON.stringify({
+              text: "Add photos",
+              step: " Adding   the photos — now ",
+            }),
+          },
+          {
+            type: "finish",
+            finishReason: { unified: "tool-calls", raw: "tool_calls" },
+            usage: {
+              inputTokens: {
+                total: 1,
+                noCache: 1,
+                cacheRead: 0,
+                cacheWrite: 0,
+              },
+              outputTokens: { total: 1, text: 1, reasoning: 0 },
+            },
+          },
+        ] as never) as never,
+      }),
+    })
+    const agent = new ToolLoopAgent({
+      model,
+      tools: {
+        request_change: tool({
+          inputSchema: COS_TOOLS.request_change.input,
+          execute: async (input) => {
+            seen.push(withoutStep(input))
+            return "ok"
+          },
+        }),
+      },
+      stopWhen: isStepCount(1),
+      experimental_refineToolInput: { request_change: cleanedChange },
+    })
+    const result = await agent.stream({ prompt: "go" })
+    await result.consumeStream()
+    expect((await result.steps)[0]?.toolCalls[0]?.input).toEqual({
+      text: "Add photos",
+      step: "Adding the photos, now",
+    })
+    expect(seen).toEqual([{ text: "Add photos" }])
   })
 })
