@@ -31,6 +31,7 @@ import {
 } from "./history.ts"
 import { ToolFailed } from "./tools.ts"
 import { abandonTurn, TurnClosed, writeAsTurn } from "./turns.ts"
+import { voiced } from "./voice.ts"
 
 /**
  * One turn's model run, streamed (ADR-034, "the budget lock and the
@@ -132,6 +133,7 @@ export async function streamTurn(
     uiMessages: input.uiMessages,
     abortSignal: run.abort.signal,
     timeout: { totalMs: LIMITS.totalMs, firstChunkMs: LIMITS.firstChunkMs },
+    experimental_transform: voiced(run.turn.turnId),
     originalMessages: input.uiMessages as never,
     generateMessageId: input.newMessageId,
     onError: (error) => {

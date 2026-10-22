@@ -77,10 +77,11 @@ export type ContextPolicy = {
  * which bounds the history, so its 80 turns and 16,000 tokens only bound it
  * while the job lags or fails: 16,000 leaves a turn's own steps and the
  * fixed part of about 10,000 tokens room under the 30,000-token step
- * reservation.
+ * reservation. Version 7 puts labels and a `ref` in the workspace data in place
+ * of ids, versions and raw states.
  */
 export const CONTEXT_POLICY: ContextPolicy = {
-  version: "6",
+  version: "7",
   turns: 80,
   toolTurns: 2,
   historyTokens: 16_000,

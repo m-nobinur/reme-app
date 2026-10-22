@@ -21,6 +21,7 @@ import {
   type Tenancy,
   waitedOn,
 } from "@workspace/db"
+import { assistantName } from "./assistant.ts"
 import { deliverIn } from "./deliveries.ts"
 import {
   askGate,
@@ -399,7 +400,8 @@ async function speak(kit: Tenancy, env: Env, models: Models, beat: Beat) {
 
   let reply: Reply
   try {
-    const written = await models.write(writerPrompt(beat.level), data)
+    const name = await kit.withOrg({ orgId }, assistantName)
+    const written = await models.write(writerPrompt(beat.level, name), data)
     reply = replyOf(written.text, beat.items)
     await spend("heartbeat_writer", reply.kind, written.spent)
   } catch (error) {
@@ -418,6 +420,7 @@ async function speak(kit: Tenancy, env: Env, models: Models, beat: Beat) {
   const chip = beat.items.find((item) => item.facts.chip)?.facts.chip
   const key = `heartbeat:${orgId}:${jobId}:${slot.toISOString()}`
   const sends = await kit.withOrg({ orgId }, async (db) => {
+    const from = await assistantName(db)
     const out = [
       await deliverIn(db, env, {
         orgId,
@@ -438,7 +441,9 @@ async function speak(kit: Tenancy, env: Env, models: Models, beat: Beat) {
           orgId,
           key: `${key}:email`,
           channel: "email",
-          subject: "An update from Reme",
+          subject: from
+            ? `An update from ${from}`
+            : "An update on your business",
           text,
         })
       )
