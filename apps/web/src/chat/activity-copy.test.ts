@@ -10,14 +10,18 @@ import {
   elapsedText,
   type LineState,
   onboardingLine,
+  type PageActionKey,
+  pageAction,
   pillLine,
   planningLine,
   segmentLine,
   segmentTitle,
   stageLine,
+  standingLine,
   toolLine,
   turnMoment,
   waitingRow,
+  workLine,
   writingBack,
 } from "@workspace/ui/lib/activity-copy"
 import { describe, expect, it } from "vitest"
@@ -402,6 +406,120 @@ describe("segment copy", () => {
     }
     expect(waitingRow(segment("review", "waiting"), "11:50")).toBe(
       "Waiting for your approval, until 11:50"
+    )
+  })
+})
+
+describe("page lines", () => {
+  const STANDING = ["golive", "domain", "purchase", "google"] as const
+
+  it("writes a clean line for every standing kind, state and name", () => {
+    for (const kind of STANDING) {
+      for (const state of STATES) {
+        for (const assistant of ["Ellie", null, "Reme"]) {
+          const line = standingLine(
+            segment(kind, state),
+            { orgId: "org-1", assistant },
+            {
+              when: "today, 3:40 pm",
+              renews: "1 October 2027",
+              synced: "today, 9:30 am",
+              until: "11:50",
+            }
+          )
+          plain(line)
+          expect(line).toMatch(/^[A-Z]/)
+        }
+      }
+    }
+  })
+
+  it("says where each thing stands", () => {
+    const ctx = { orgId: "org-1", assistant: "Ellie" }
+    const at = (
+      kind: ActivitySegment["kind"],
+      state: ActivitySegment["state"]
+    ) => segment(kind, state)
+    expect(
+      standingLine(at("golive", "done"), ctx, { when: "today, 3:40 pm" })
+    ).toBe("Published today, 3:40 pm")
+    expect(standingLine(at("golive", "done"), ctx)).toBe("Published")
+    expect(standingLine(at("domain", "done"), ctx)).toBe("Live")
+    expect(standingLine(at("domain", "waiting"), ctx)).toBe(
+      "Waiting for your DNS change"
+    )
+    expect(
+      standingLine(at("purchase", "done"), ctx, { renews: "1 October 2027" })
+    ).toBe("Renews 1 October 2027")
+    expect(standingLine(at("google", "done"), ctx)).toBe(
+      "Verified, pages sent. No data yet"
+    )
+    expect(standingLine(at("domain", "failed"), ctx)).toBe(
+      "The domain connection stopped. Ellie is looking into it"
+    )
+    expect(
+      standingLine(at("domain", "failed"), { orgId: "o", assistant: null })
+    ).toBe("The domain connection stopped. Looking into it")
+  })
+
+  it("follows the domain's steps while it connects", () => {
+    const ctx = { orgId: "org-1", assistant: null }
+    const steps = (here: number) =>
+      ["dns", "certificate", "loads"].map((id, i) => ({
+        id,
+        state:
+          i < here
+            ? ("done" as const)
+            : i === here
+              ? ("now" as const)
+              : ("next" as const),
+      }))
+    expect(
+      standingLine(segment("domain", "now", { steps: steps(1) }), ctx)
+    ).toBe("The certificate is on its way")
+    expect(
+      standingLine(segment("domain", "now", { steps: steps(2) }), ctx)
+    ).toBe("Checking your website loads on it")
+  })
+
+  it("reads the build's step at work, never a count of the whole", () => {
+    const stage = (id: string, count?: { done: number; total: number }) =>
+      segment("website", "now", {
+        steps: [
+          { id: "planning", state: "done" },
+          { id, state: "now", ...(count && { count }) },
+        ],
+      })
+    expect(workLine(stage("writing", { done: 3, total: 6 }))).toBe(
+      "Writing the pages, 3 of 6"
+    )
+    expect(workLine(segment("website", "now"))).toBeNull()
+    expect(
+      workLine(segment("change", "now", { step: "Changing the opening hours" }))
+    ).toBe("Changing the opening hours")
+  })
+
+  it("writes every action as a button and a plain first-person message", () => {
+    const keys: PageActionKey[] = [
+      "own",
+      "dns",
+      "pay",
+      "google",
+      "signin",
+      "failed",
+    ]
+    for (const key of keys) {
+      for (const subject of ["sparkcleaning.co.uk", "Google", null]) {
+        const { label, ask } = pageAction(key, subject)
+        for (const text of [label, ask]) {
+          expect(text).not.toMatch(DASH)
+          expect(text).not.toMatch(/Reme/)
+          expect(text).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/)
+        }
+      }
+    }
+    expect(pageAction("dns", "sparkcleaning.co.uk").ask).toBe(
+      "What do I change at my DNS provider for sparkcleaning.co.uk?"
     )
   })
 })

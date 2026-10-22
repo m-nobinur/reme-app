@@ -897,3 +897,126 @@ export function rowLine(
       return segmentTitle(segment, ctx)
   }
 }
+
+// ---------------------------------------------------------------------------
+// The Website page: where the site stands, one line per thing. The page reads
+// the same segments as the panel, so these lines say what the panel says.
+
+/** The headings of the page's three kinds of row, and the lines that need no segment. */
+export const PAGE_WORDS = {
+  published: "Published",
+  address: "Address",
+  google: "Google",
+  notPublished: "Not published yet",
+  notConnected: "Not connected",
+  afterLive: "Connect it once your website is live",
+} as const
+
+type PageExtras = {
+  /** When it went live, formatted in the reader's zone. */
+  when?: string | undefined
+  /** A bought domain's renewal date, formatted. */
+  renews?: string | undefined
+  /** When Google's data was last read, formatted in the reader's zone. */
+  synced?: string | undefined
+  /** When a payment wait ends, formatted. */
+  until?: string | undefined
+}
+
+/** The domain steps at work, where the segment's own line says only the certificate. */
+const DOMAIN_NOW: Readonly<Record<string, string>> = {
+  certificate: "The certificate is on its way",
+  loads: "Checking your website loads on it",
+}
+
+/**
+ * The line under a standing row: a live publish, a domain, a purchase or the
+ * Google connection, by where its segment stands. A segment that stopped says
+ * so and what happens next.
+ */
+export function standingLine(
+  segment: ActivitySegment,
+  ctx: CopyContext,
+  extras: PageExtras = {}
+): string {
+  const { kind, state } = segment
+  if (state === "failed") {
+    const noun = job(segment)?.noun ?? "setup"
+    return `The ${noun} stopped. ${is(named(ctx.assistant), "looking into it")}`
+  }
+  if (state === "waiting") {
+    return waitingRow(segment, extras.until) ?? "Waiting for you"
+  }
+  if (state === "now") {
+    const step = segment.steps.find((s) => s.state === "now")
+    return (
+      (kind === "domain" && step && DOMAIN_NOW[step.id]) ||
+      segmentLine(segment, ctx) ||
+      "Working on it"
+    )
+  }
+  switch (kind) {
+    case "golive":
+      return extras.when ? `Published ${extras.when}` : "Published"
+    case "purchase":
+      return extras.renews ? `Renews ${extras.renews}` : "Registered"
+    case "google":
+      return extras.synced
+        ? `Verified, pages sent. Data read ${extras.synced}`
+        : "Verified, pages sent. No data yet"
+    default:
+      return "Live"
+  }
+}
+
+/**
+ * What a build is doing now, for the Website page: a change's own step line,
+ * else the step at work ("Writing the pages, 3 of 6"). Null when no step is.
+ */
+export function workLine(segment: ActivitySegment): string | null {
+  const step = segment.steps.find((s) => s.state === "now")
+  return (
+    (segment.kind === "change" && cleanArg(segment.step, "text", 60)) ||
+    (step && stepLabel(segment, step)) ||
+    null
+  )
+}
+
+export type PageActionKey =
+  | "own"
+  | "dns"
+  | "pay"
+  | "google"
+  | "signin"
+  | "failed"
+
+/**
+ * A row's one next action: the button, and what the owner says to the
+ * assistant when they press it. `subject` is the domain, or "Google".
+ */
+export function pageAction(key: PageActionKey, subject?: string | null) {
+  const what = cleanArg(subject, "text", 60) ?? "my domain"
+  switch (key) {
+    case "own":
+      return {
+        label: "Use your own domain",
+        ask: "I'd like to use my own domain",
+      }
+    case "dns":
+      return {
+        label: "Show the change",
+        ask: `What do I change at my DNS provider for ${what}?`,
+      }
+    case "pay":
+      return {
+        label: "Continue to payment",
+        ask: `Open the payment form for ${what}`,
+      }
+    case "google":
+      return { label: "Connect Google", ask: "Connect Google to my website" }
+    case "signin":
+      return { label: "Sign in again", ask: "Connect Google again" }
+    case "failed":
+      return { label: "Ask what happened", ask: `What happened with ${what}?` }
+  }
+}
