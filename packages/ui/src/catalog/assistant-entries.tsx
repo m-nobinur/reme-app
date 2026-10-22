@@ -770,6 +770,19 @@ const ASK_CHOICE_OPEN: ThreadMessageLike[] = [
     role: "assistant",
     status: WAITING,
   },
+  {
+    content: [
+      question(
+        "Your website turns visitors into enquiries. Shall I build it for you?"
+      ),
+      askChoice("build_for_me", [
+        { id: "yes", label: "Yes, build it for me" },
+        { id: "skip", label: "Skip" },
+      ]),
+    ],
+    role: "assistant",
+    status: WAITING,
+  },
 ]
 
 /** An `ask_upload` call in one of its states. */

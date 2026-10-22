@@ -607,6 +607,7 @@ function TrayFrame({
 
   return (
     <section
+      aria-describedby={!collapsed && hint ? `${id}-hint` : undefined}
       aria-label={collapsed ? question : undefined}
       aria-labelledby={collapsed ? undefined : `${id}-question`}
       className={cn(
@@ -647,7 +648,9 @@ function TrayFrame({
                 {question}
               </h2>
               {hint ? (
-                <p className="text-muted-foreground text-xs">{hint}</p>
+                <p className="text-muted-foreground text-xs" id={`${id}-hint`}>
+                  {hint}
+                </p>
               ) : null}
             </div>
             {count ? (
