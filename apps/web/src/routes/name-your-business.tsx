@@ -5,6 +5,7 @@ import { AuthCard, AuthForm } from "@workspace/ui/components/auth-card"
 import { Field } from "@workspace/ui/components/field"
 import { Logo } from "@workspace/ui/components/logo"
 import { SubmitButton } from "@workspace/ui/components/submit-button"
+import { hasBusiness } from "@/lib/api/server"
 import { nameBusiness } from "@/lib/auth/actions"
 import { safeReturnTo } from "@/lib/auth/redirect-target"
 import { useSubmit } from "@/lib/auth/use-submit"
@@ -22,8 +23,9 @@ export const Route = createFileRoute("/name-your-business")({
   loaderDeps: ({ search }) => ({ returnTo: safeReturnTo(search.returnTo) }),
   loader: async ({ location, deps }) => {
     const owner = await requireOwner(location.href)
-    // One already: nothing to name.
-    if (owner.orgId) throw redirect({ href: deps.returnTo })
+    // One already: nothing to name. Asked of the api, since a WorkOS
+    // organization alone is not a business we hold.
+    if (await hasBusiness()) throw redirect({ href: deps.returnTo })
     return { email: owner.email }
   },
   head: () => ({ meta: [{ title: "Name your business · Reme" }] }),

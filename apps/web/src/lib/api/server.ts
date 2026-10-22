@@ -158,6 +158,14 @@ export const getWorkspaceFrame = createServerFn({ method: "GET" }).handler(
 )
 
 /**
+ * Whether `apps/api` holds a business for this session. False also for a
+ * WorkOS organization with no row of ours, which naming the business repairs.
+ */
+export const hasBusiness = createServerFn({ method: "GET" }).handler(
+  async (): Promise<boolean> => (await source.org()) !== null
+)
+
+/**
  * The panel's poll, with the tag it last saw. One request: `apps/api`
  * resolves the org from the session, and a session with none reads as an
  * empty workspace. A failure throws, so the poller backs off rather than

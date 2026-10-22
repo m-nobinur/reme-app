@@ -74,6 +74,13 @@ export const Route = createFileRoute("/app")({
   loader: async ({ location }) => {
     const owner = await requireOwner(location.href)
     const frame = await getWorkspaceFrame()
+    // No business we hold, and no signup write to retry: name it first.
+    if (!frame.active && !frame.orgPending) {
+      throw redirect({
+        to: "/name-your-business",
+        search: { returnTo: location.href },
+      })
+    }
     // A new owner lands in onboarding. Here rather than in the index route,
     // which has no loader of its own (a second one on the same navigation
     // races on a cold dev server). Only the bare address: "New chat" carries

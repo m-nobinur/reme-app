@@ -509,9 +509,8 @@ export const nameBusiness = createServerFn({ method: "POST" })
         },
       }
     }
-    // Already has one, from another tab or a retry: nothing to make.
-    if (auth.organizationId)
-      return { status: "signed-in", redirectTo: returnTo }
+    // Even with a WorkOS organization: the api adopts it when it holds no
+    // business for it, and answers the one it holds otherwise.
     if (!data.businessName) {
       return {
         status: "failed",
