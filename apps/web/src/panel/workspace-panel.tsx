@@ -766,6 +766,7 @@ export function WorkspacePanelLine({ panel }: { panel: Panel | null }) {
   return (
     <LiveLine
       {...(panel?.line ?? { tone: "idle", lead: "This panel did not load" })}
+      lines={panel?.lines}
     />
   )
 }

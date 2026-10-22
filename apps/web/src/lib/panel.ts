@@ -87,6 +87,11 @@ type Approval = Extract<AttentionItem, { kind: "approval" }>
 export type Panel = {
   /** The collapsed pill, and the panel's header. */
   line: Line
+  /**
+   * Every job at work or waiting, then a version or question for the owner,
+   * when there are two or more: the header gives each a turn. Else `[line]`.
+   */
+  lines: Line[]
   /** The first run: up to three finished segments as one-liners, then the one under way. */
   journey: SegmentView[]
   now: SegmentView[]
@@ -378,36 +383,48 @@ export function panelFor(input: PanelInput): Panel | null {
   }
   if (!shown[page]) return null
 
-  const line = ((): Line => {
-    const tone = live ? "live" : "idle"
-    // A job at work or waiting on the owner is the news, in the assistant's
-    // own words: "Ellie is building your website".
-    const top = [current, ...activity.now, ...blocked].find(running)
-    const said = top ? pillLine(top, ctx) : null
-    if (top && said) {
-      return { tone: top.state === "now" ? "working" : tone, lead: said }
-    }
-    const [approval] = approvals
-    if (approval) {
-      return {
-        tone,
-        lead:
-          approvals.length === 1
-            ? "A new version is ready"
-            : `${approvals.length} versions are ready`,
-        detail: "for your review",
-      }
-    }
-    const [question] = questions
-    if (question) {
-      return questions.length === 1
+  const tone = live ? "live" : "idle"
+  // A job at work or waiting on the owner is the news, in the assistant's
+  // own words: "Ellie is building your website". Every one of them, so two
+  // jobs at once each get a turn in the header.
+  const jobs = [current, ...activity.now, ...blocked]
+    .filter(running)
+    .flatMap((segment): Line[] => {
+      const said = segment ? pillLine(segment, ctx) : null
+      return segment && said
+        ? [{ tone: segment.state === "now" ? "working" : tone, lead: said }]
+        : []
+    })
+  const forOwner: Line[] = []
+  if (approvals.length) {
+    forOwner.push({
+      tone,
+      lead:
+        approvals.length === 1
+          ? "A new version is ready"
+          : `${approvals.length} versions are ready`,
+      detail: "for your review",
+    })
+  }
+  const [question] = questions
+  if (question) {
+    forOwner.push(
+      questions.length === 1
         ? {
             tone,
             lead: askerOf(question, names),
             detail: "has a question for you",
           }
         : { tone, lead: `${questions.length} questions`, detail: "for you" }
-    }
+    )
+  }
+  const turns = [...jobs, ...forOwner].filter(
+    (each, i, all) => all.findIndex((other) => other.lead === each.lead) === i
+  )
+
+  const line = ((): Line => {
+    const [first] = turns
+    if (first) return first
     if (page === "reminders" && reminders) {
       return { tone, lead: reminders.replace(/\.$/, "") }
     }
@@ -445,6 +462,7 @@ export function panelFor(input: PanelInput): Panel | null {
   const shownJourney = [...kept, ...(current ? [current] : [])].map(view)
   return {
     line,
+    lines: turns.length > 1 ? turns : [line],
     journey: shownJourney,
     now: nowViews,
     blocked: blocked.map(view),

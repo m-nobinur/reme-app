@@ -53,6 +53,7 @@ import {
 import { LogoMark } from "@workspace/ui/components/logo"
 import { StatusLine } from "@workspace/ui/components/status-line"
 import { ComposerInputContext } from "@workspace/ui/hooks/use-composer-input"
+import { useCycle } from "@workspace/ui/hooks/use-cycle"
 import { useOnboardingStatus } from "@workspace/ui/hooks/use-onboarding-status"
 import {
   onboardingLine,
@@ -238,18 +239,6 @@ const useHeld = (value: boolean, ms: number) => {
     return () => clearTimeout(timer)
   }, [value, ms])
   return value || held
-}
-
-/** Steps through `items` every few seconds; one item stays put. */
-const useCycle = (items: readonly string[]) => {
-  const [at, setAt] = useState(0)
-  const count = items.length
-  useEffect(() => {
-    if (count < 2) return
-    const timer = setInterval(() => setAt((each) => each + 1), 5000)
-    return () => clearInterval(timer)
-  }, [count])
-  return items[at % count] ?? ""
 }
 
 /**
@@ -676,7 +665,8 @@ const Composer: FC<{ autoFocus: boolean; expanded: boolean }> = ({
     mode,
   } = useContext(ThreadSettingsContext)
   const input = useContext(ComposerInputContext)
-  const idea = useCycle([placeholder, ...(placeholderIdeas ?? [])])
+  const idea =
+    useCycle([placeholder, ...(placeholderIdeas ?? [])], 5000).item ?? ""
   // A question waits in the tray: what the owner types instead is an
   // ordinary turn, and the placeholder says so.
   const asking = useAuiState((s) =>

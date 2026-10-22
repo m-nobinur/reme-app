@@ -937,6 +937,23 @@ const panelCatalog: Entry[] = [
     ),
   },
   {
+    name: "LiveLine several jobs",
+    render: () => (
+      <div className="w-72">
+        <LiveLine
+          lead="Ellie is building your website"
+          lines={[
+            { lead: "Ellie is building your website" },
+            { lead: "Ellie is replying to a new enquiry" },
+            { lead: "Ellie is drafting a quote" },
+            { lead: "A new version is ready", detail: "for your review" },
+          ]}
+          tone="working"
+        />
+      </div>
+    ),
+  },
+  {
     name: "LiveLine live",
     render: () => <LiveLine lead="Your website is live" tone="live" />,
   },

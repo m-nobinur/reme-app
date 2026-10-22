@@ -530,6 +530,14 @@ describe("later jobs", () => {
     })
   })
 
+  it("gives every job at work or waiting a turn in the header", () => {
+    const leads = jobs?.lines.map((each) => each.lead) ?? []
+    expect(leads[0]).toBe("Ellie is connecting Google")
+    expect(leads.length).toBeGreaterThan(1)
+    expect(new Set(leads).size).toBe(leads.length)
+    expect(jobs?.lines[0]).toEqual(jobs?.line)
+  })
+
   it("waits on the owner for a DNS change and a payment, by when", () => {
     const [domain, purchase, ...rest] = jobs?.blocked ?? []
     // A review is answered in the panel's own list, not drawn twice.
@@ -741,6 +749,10 @@ describe("the one line", () => {
       tone: "live",
       lead: "Your website is live",
     })
+    // One thing to say: the header holds still.
+    expect(
+      panelFor(input({ workspace: workspace({ live: 1 }) }))?.lines
+    ).toHaveLength(1)
     expect(line({ open: true, builds: [build("paused")] })).toEqual({
       tone: "idle",
       lead: "Your first website",

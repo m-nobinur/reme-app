@@ -30,6 +30,7 @@ import {
 import { PersonaAvatar } from "@workspace/ui/components/persona"
 import { Skeleton } from "@workspace/ui/components/skeleton"
 import { StatusIcon } from "@workspace/ui/components/status-line"
+import { useCycle } from "@workspace/ui/hooks/use-cycle"
 import { SKIPPED, type StatusKind } from "@workspace/ui/lib/activity-copy"
 import {
   type AnswerSpec,
@@ -1521,20 +1522,36 @@ function YourWebsite({
  * the app picks what the line says. Spans only, and no live region: the
  * shell puts it inside the button that opens the panel.
  */
+/** How long each line holds the panel's header when several share it. */
+const LINE_TURN_MS = 4000
+
+/**
+ * The panel's header line. With several `lines`, such as two jobs at work,
+ * each takes a turn: the next slides in every few seconds, and a pointer
+ * resting on it holds the one showing. The persona and its halo stay put.
+ */
 function LiveLine({
   tone,
   lead,
   detail = null,
+  lines,
 }: {
   tone: "working" | "live" | "idle"
   lead: string
   detail?: string | null
+  lines?: readonly { lead: string; detail?: string | null }[] | undefined
 }) {
+  const [held, setHeld] = useState(false)
+  const turns = lines && lines.length > 1 ? lines : [{ lead, detail }]
+  const { item, at } = useCycle(turns, LINE_TURN_MS, held)
+  const shown = item ?? { lead, detail }
   return (
     <span
       className="flex min-w-0 items-center gap-2 text-sm"
       data-slot="live-line"
       data-tone={tone}
+      onPointerEnter={() => setHeld(true)}
+      onPointerLeave={() => setHeld(false)}
     >
       {/* Reme, floating and blinking as it does everywhere; while it works a
           halo pulses behind it, and when the work is live the halo holds. */}
@@ -1550,10 +1567,18 @@ function LiveLine({
         )}
         <PersonaAvatar className="size-6" sway />
       </span>
-      <span className="min-w-0 truncate">
-        <span className="font-medium">{lead}</span>
-        {detail ? (
-          <span className="text-muted-foreground"> {detail}</span>
+      <span
+        className={cn(
+          "min-w-0 truncate",
+          turns.length > 1 &&
+            "fade-in slide-in-from-bottom-1 animate-in duration-300 motion-reduce:animate-none"
+        )}
+        // A new key per turn replays the slide.
+        key={turns.length > 1 ? `${at}:${shown.lead}` : "line"}
+      >
+        <span className="font-medium">{shown.lead}</span>
+        {shown.detail ? (
+          <span className="text-muted-foreground"> {shown.detail}</span>
         ) : null}
       </span>
     </span>
