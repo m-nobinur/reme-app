@@ -9,8 +9,10 @@ import {
   FONTS,
   INDUSTRIES,
   OnboardingPlan,
+  type OnboardingStatus,
   PAGES,
   PALETTES,
+  PLAN_FACT_KEYS,
   PLANNER_TURN_MS,
   type PlanFactKey,
   PRONOUNS,
@@ -1241,6 +1243,19 @@ const describe = (move: Move) =>
 
 // --- The call --------------------------------------------------------------
 
+/**
+ * A streamed turn's status (`planTurn`): `send` writes one status part, and
+ * `commit` writes a checked plan's facts, with any card answer's, and
+ * returns the keys it wrote.
+ */
+export type PlanStatus = {
+  send: (status: OnboardingStatus) => void
+  commit: (checked: Checked) => Promise<readonly string[]>
+}
+
+const isPlanFactKey = (key: string): key is PlanFactKey =>
+  (PLAN_FACT_KEYS as readonly string[]).includes(key)
+
 /** One model call of a turn, as the log keeps it. */
 export type PlanCall = {
   /** The messages the call was sent after the instructions. */
@@ -1365,6 +1380,11 @@ const systemMessage = (content: string): SystemModelMessage => ({
  *
  * `cancel` ends the planning as a timeout does, the call counted at its
  * worst, and nothing more is shown once it fires.
+ *
+ * With `status` as well, what the plan is on goes out before its message
+ * (`OnboardingStatus`): a fact it stated once `facts` is written, then its
+ * move once `next` is, and when the plan passes its checks its facts are
+ * committed first, so that status names the keys a read already holds.
  */
 export async function planTurn(
   model: LanguageModel,
@@ -1372,7 +1392,8 @@ export async function planTurn(
   s: PlanState,
   limits: { callMs: number; totalMs: number; hedgeMs?: number } = PLANNER,
   onSay?: (text: string) => void,
-  cancel?: AbortSignal
+  cancel?: AbortSignal,
+  status?: PlanStatus
 ): Promise<PlanOutcome> {
   const instructions = await plannerInstructions()
   const system = systemMessage(instructions)
@@ -1386,6 +1407,9 @@ export async function planTurn(
     out.firstChunkMs ??= Date.now() - began
     out.shown += words
     onSay(words)
+  }
+  const tell = (part: OnboardingStatus) => {
+    if (!cancel?.aborted) status?.send(part)
   }
   for (let attempt = 0; attempt < PLANNER.attempts; attempt++) {
     const left = limits.totalMs - (Date.now() - began)
@@ -1406,23 +1430,45 @@ export async function planTurn(
     // This call's stream: shut for good once anything stops it.
     let gate: "waiting" | "open" | "shut" = onSay ? "waiting" : "shut"
     let context: SayContext = {}
+    let factsTold = false
     const follow = async () => {
       if (gate === "shut") return
       const { value } = await parsePartialJson(raw.replace(FENCES, ""))
       const partial = value as Record<string, unknown> | undefined
-      if (typeof partial?.say !== "string") return
+      if (!partial) return
+      // `facts` is written once a key after it has begun.
+      if (
+        !factsTold &&
+        ["chosen_for_owner", "next", "say"].some((key) => key in partial)
+      ) {
+        factsTold = true
+        const key = Object.keys(partial.facts ?? {}).find(isPlanFactKey)
+        if (key) tell({ on: { kind: "fact", key }, facts: [] })
+      }
+      if (typeof partial.say !== "string") return
       if (gate === "waiting") {
         const early = OnboardingPlan.safeParse({ ...partial, say: "-" })
-        if (
-          !early.success ||
-          early.data.next.kind === "start_build" ||
-          !checkPlan(early.data, s, false).ok
-        ) {
+        const checked = early.success ? checkPlan(early.data, s, false) : null
+        if (!checked?.ok) {
+          gate = "shut"
+          return
+        }
+        const { next } = checked.checked.plan
+        // A build's facts are written with it, after its message is held.
+        const written =
+          status && next.kind !== "start_build"
+            ? await status.commit(checked.checked)
+            : []
+        tell({
+          on: { kind: "next", next: next.kind },
+          facts: written.filter(isPlanFactKey),
+        })
+        if (next.kind === "start_build") {
           gate = "shut"
           return
         }
         gate = "open"
-        context = sayContext(early.data, s)
+        context = sayContext(checked.checked.plan, s)
       }
       const whole = wholeSentences(partial.say.trimStart())
       // A retry still writing what the owner has already read.
