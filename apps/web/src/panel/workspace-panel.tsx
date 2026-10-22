@@ -241,6 +241,7 @@ export function Decidable({
   const { pending, error, run } = useWrite<"approve" | "change">(refresh)
   const [preview, retryPreview] = usePreview(item.request.assignment_id)
   const [keys] = useState(attemptKeys)
+  const { id: conversationId } = useParams({ strict: false })
 
   const approve = (decision: DecisionRequest) =>
     void run("approve", async () => {
@@ -261,7 +262,7 @@ export function Decidable({
   const change = (text: string) =>
     void run("change", async () => {
       const outcome = await askForChanges({
-        data: { text, key: keys.key(text) },
+        data: { text, key: keys.key(text), chat: { conversationId } },
       })
       if (outcome.done) {
         keys.done()

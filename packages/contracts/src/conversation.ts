@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { Timestamp, Uuid } from "./common.ts"
+import { GOAL_MAX } from "./owner.ts"
 import { Text } from "./text.ts"
 
 /**
@@ -105,6 +106,16 @@ export const ServerButtonPart = z.strictObject({
 })
 
 /**
+ * A change the owner asked for in the panel, as it is stored among a message's
+ * parts: an AI SDK data part, drawn as one resolved line.
+ */
+export const ChangeAsked = z.strictObject({ text: Text(GOAL_MAX) })
+export const ChangeAskedPart = z.strictObject({
+  type: z.literal("data-change_asked"),
+  data: ChangeAsked,
+})
+
+/**
  * A message the server posts on its own, with no owner turn: the text parts,
  * then the button part if there is one. `id` is derived from what happened,
  * not generated, so posting it twice stores it once.
@@ -124,6 +135,7 @@ export const ConversationHistory = z.strictObject({
 })
 
 export type Conversation = z.infer<typeof Conversation>
+export type ChangeAsked = z.infer<typeof ChangeAsked>
 export type ConversationList = z.infer<typeof ConversationList>
 export type ConversationPatch = z.infer<typeof ConversationPatch>
 export type ConversationMessage = z.infer<typeof ConversationMessage>

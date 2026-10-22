@@ -16,6 +16,7 @@ vi.mock("@/lib/api/server", () => server)
 vi.mock("@tanstack/react-router", () => ({
   getRouteApi: () => ({ useLoaderData: () => ({}) }),
   Link: () => null,
+  useParams: () => ({}),
 }))
 
 const { Decidable } = await import("./workspace-panel")

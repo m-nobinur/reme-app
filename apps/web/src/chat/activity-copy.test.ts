@@ -6,6 +6,7 @@ import {
 } from "@workspace/contracts"
 import {
   type BuildStage,
+  changeAsked,
   cleanArg,
   elapsedText,
   type LineState,
@@ -53,6 +54,18 @@ const ARGS = [
     count: 3,
   },
 ]
+
+describe("a change asked for in the panel", () => {
+  it("keeps their words and clips a long note", () => {
+    expect(changeAsked("Bigger logo")).toBe("Asked for changes: Bigger logo")
+    const long = changeAsked(
+      "Make the hero say end of tenancy cleans. ".repeat(5)
+    )
+    expect(long.length).toBeLessThanOrEqual("Asked for changes: ".length + 100)
+    expect(long).toMatch(/…$/)
+    expect(changeAsked("Bigger logo — please")).not.toMatch(DASH)
+  })
+})
 
 describe("tool lines", () => {
   for (const tool of CosToolName.options) {

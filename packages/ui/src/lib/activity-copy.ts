@@ -146,6 +146,21 @@ export const writingBack = (ctx: CopyContext) =>
 export const planningLine = (ctx: CopyContext) =>
   is(named(ctx.assistant), "planning your website")
 
+const CHANGE_ASKED_MAX = 100
+
+/** The line a change asked for in the panel leaves in the chat: their words, clipped. */
+export function changeAsked(text: string) {
+  const words = tidy(text)
+  const clipped =
+    words.length > CHANGE_ASKED_MAX
+      ? `${words.slice(0, CHANGE_ASKED_MAX - 1).trimEnd()}…`
+      : words
+  return `Asked for changes: ${clipped}`
+}
+/** Under that line: where the result will turn up. */
+export const CHANGE_ASKED_NEXT =
+  "Your new version will show here when it's ready."
+
 /** The model's own reasoning, folded under one line. */
 export const reasoningLine = (working: boolean) =>
   working ? "Thinking it through" : "Thought it through"

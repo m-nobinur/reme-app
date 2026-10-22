@@ -267,7 +267,7 @@ it("reads attention from the workspace, in its order and the owner's words", asy
     {
       kind: "approval",
       id: APPROVAL,
-      title: "Version 4 is ready to publish",
+      title: "Your new version is ready to publish",
       raisedBy: "Alex",
       expiresAt: EXPIRES,
     },
@@ -786,6 +786,17 @@ it("sends the change kind a photo action names", async () => {
   expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
     text: "Try another photo",
     change_kind: "photo",
+  })
+})
+
+it("asks the api to post a panel note in the chat, in the conversation named", async () => {
+  answers["POST /changes"] = refusal(409, "change.question_open")
+  await apiSource.requestChange("Bigger logo", "k-5", undefined, {
+    conversation_id: REQUEST,
+  })
+  expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
+    text: "Bigger logo",
+    chat: { conversation_id: REQUEST },
   })
 })
 

@@ -4,6 +4,7 @@ import { clearOrgs } from "../fixtures/seed.ts"
 import {
   emailMessageId,
   postAssistantMessage,
+  postChangeAsked,
   postOwnerEmail,
   serverMessageId,
 } from "../src/assistant-messages.ts"
@@ -424,5 +425,73 @@ describe("postOwnerEmail", () => {
     ).toBe("busy")
     release()
     await turn
+  })
+})
+
+describe("postChangeAsked", () => {
+  it("stores the note as the owner's message, then a resolved line, once", async () => {
+    const o = await org()
+    const id = await conversation(o, "assistant", new Date(), said)
+    const post = () =>
+      postChangeAsked(kit, {
+        orgId: o.orgId,
+        conversationId: id,
+        key: "change-key-1",
+        text: "Make the hero say end of tenancy cleans.",
+      })
+    expect(await post()).toBe("posted")
+    expect(await post()).toBe("exists")
+    const stored = await rows(o.orgId, id)
+    expect(stored.map((r) => r.parent_id)).toEqual([
+      null,
+      "tail_1",
+      stored[1]?.id,
+    ])
+    expect(stored.slice(1).map((r) => r.content)).toEqual([
+      {
+        role: "user",
+        parts: [
+          { type: "text", text: "Make the hero say end of tenancy cleans." },
+        ],
+      },
+      {
+        role: "assistant",
+        parts: [
+          { type: "step-start" },
+          {
+            type: "data-change_asked",
+            data: { text: "Make the hero say end of tenancy cleans." },
+          },
+        ],
+      },
+    ])
+  })
+
+  it("goes to the newest open conversation when none is named, and writes nothing behind a card", async () => {
+    const o = await org()
+    const old = await conversation(
+      o,
+      "assistant",
+      new Date(Date.now() - 5000),
+      said
+    )
+    const asked = await conversation(
+      o,
+      "assistant",
+      new Date(),
+      card("approval-requested")
+    )
+    const post = () =>
+      postChangeAsked(kit, { orgId: o.orgId, key: "k2", text: "Change it." })
+    expect(await post()).toBe("waiting")
+    expect(await rows(o.orgId, asked)).toHaveLength(1)
+    expect(await rows(o.orgId, old)).toHaveLength(1)
+    await withOrg({ orgId: o.orgId }, (db) =>
+      db.execute(
+        sql`update ${conversations} set archived_at = now() where id = ${asked}`
+      )
+    )
+    expect(await post()).toBe("posted")
+    expect(await rows(o.orgId, old)).toHaveLength(3)
   })
 })

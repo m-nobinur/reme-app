@@ -15,6 +15,7 @@ import { Approval } from "@workspace/ui/components/assistant/approval"
 import { SaveDesignAnswerProvider } from "@workspace/ui/components/assistant/ask-design"
 import { UploadPhotosProvider } from "@workspace/ui/components/assistant/ask-upload"
 import { DomainPurchaseProvider } from "@workspace/ui/components/assistant/buy-domain"
+import { ChangeAskedUI } from "@workspace/ui/components/assistant/change-asked"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
 import { MemoryChipUI } from "@workspace/ui/components/assistant/memory-chip"
 import { ServerButtonUI } from "@workspace/ui/components/assistant/server-button"
@@ -189,6 +190,7 @@ export function ChatPage() {
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <ServerButtonUI />
+      <ChangeAskedUI />
       <MemoryChipUI />
       {/* The shell's main scrolls; the thread owns its own scroll instead. */}
       <div className="h-full">

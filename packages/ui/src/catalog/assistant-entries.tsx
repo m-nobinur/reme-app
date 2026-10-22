@@ -27,6 +27,7 @@ import {
   type DomainPurchase,
   DomainPurchaseProvider,
 } from "@workspace/ui/components/assistant/buy-domain"
+import { ChangeAskedUI } from "@workspace/ui/components/assistant/change-asked"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
 import { MemoryChipUI } from "@workspace/ui/components/assistant/memory-chip"
 import { TrayFrame } from "@workspace/ui/components/assistant/question-tray"
@@ -1637,6 +1638,22 @@ const REMEMBERED: ThreadMessageLike[] = [
   },
 ]
 
+/** A change asked for in the panel: the owner's words, then the resolved line. */
+const CHANGE_ASKED: ThreadMessageLike[] = [
+  ask("Make the hero say end of tenancy cleans."),
+  {
+    content: [
+      {
+        type: "data",
+        name: "change_asked",
+        data: { text: "Make the hero say end of tenancy cleans." },
+      },
+    ],
+    role: "assistant",
+    status: DONE,
+  },
+]
+
 /** Messages the assistant posted on its own, each with the button it can carry. */
 const POSTED: ThreadMessageLike[] = [
   ask("Is my domain connected?"),
@@ -2468,6 +2485,14 @@ const assistantCatalog = [
     render: () => (
       <FixtureThread height="h-[34rem]" messages={POSTED}>
         <ServerButtonUI />
+      </FixtureThread>
+    ),
+  },
+  {
+    name: "ChangeAskedUI",
+    render: () => (
+      <FixtureThread height="h-[20rem]" messages={CHANGE_ASKED}>
+        <ChangeAskedUI />
       </FixtureThread>
     ),
   },

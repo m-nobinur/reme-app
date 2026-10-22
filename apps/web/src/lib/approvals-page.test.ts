@@ -44,7 +44,7 @@ const APPROVAL = vi.hoisted(
     ({
       kind: "approval",
       id: "7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c0d",
-      title: "Version 4 is ready to publish",
+      title: "Your new version is ready to publish",
       version: 4,
       detail: "The hero now leads with end of tenancy cleans.",
       raisedBy: "Reme",
