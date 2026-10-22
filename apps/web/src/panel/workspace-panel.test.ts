@@ -147,9 +147,7 @@ it("opens with where things stand, and no waiting list when nothing waits", asyn
   }
   await render()
   const digest = container.querySelector('[data-slot="panel-digest"]')
-  expect(digest?.textContent).toBe(
-    "All caught up. Your site is live on version 2."
-  )
+  expect(digest?.textContent).toBe("All caught up. Your website is live.")
   expect(container.textContent).not.toContain("Waiting on you")
 })
 
@@ -247,7 +245,7 @@ it("links the live site by name, where the api says it opens, with the host as i
   expect(visit?.title).toBe("brightclean-demo.reme.localhost")
   expect(visit?.target).toBe("_blank")
   expect(visit?.rel).toBe("noreferrer")
-  expect(container.textContent).toContain("Version 3 is live")
+  expect(container.textContent).toContain("Your website is live")
 })
 
 it("Request changes puts the chat's composer into website change mode", async () => {

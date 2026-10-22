@@ -521,7 +521,6 @@ function WorkingOn({
   build: {
     goal: string
     state: AssignmentState
-    version: number | null
     startedAt: string
     /** A build with no lane is a full one. */
     lane?: BuildLane
@@ -598,10 +597,7 @@ function WorkingOn({
   return (
     <PanelSection title="Working on">
       <div className="flex flex-col gap-3" data-slot="working-on">
-        <p className="line-clamp-2 font-medium text-sm">
-          {build.version ? `Version ${build.version}: ` : null}
-          {build.goal}
-        </p>
+        <p className="line-clamp-2 font-medium text-sm">{build.goal}</p>
         {quick || steps ? null : (
           <ol aria-label="Build progress" className="grid grid-cols-4 gap-1">
             {STEPS.map((label, index) => (
@@ -1104,11 +1100,9 @@ function Shot({
  */
 function Screenshots({
   preview,
-  version,
   onRetry,
 }: {
   preview: Preview | "loading" | "error"
-  version: number
   onRetry?: (() => Promise<void>) | undefined
 }) {
   // Keyed by the preview, so a fresh read shows its own screenshots.
@@ -1117,8 +1111,7 @@ function Screenshots({
     return (
       <div className="flex flex-col gap-2">
         <p className={META}>
-          The preview for version {version} isn't available yet. Try again in a
-          moment.
+          The preview isn't available yet. Try again in a moment.
         </p>
         {onRetry ? <Retry onRetry={onRetry} /> : null}
       </div>
@@ -1127,7 +1120,7 @@ function Screenshots({
   if (preview !== "loading" && broken === preview) {
     return (
       <p className={META}>
-        The screenshots did not load. Open the preview to see version {version}.
+        The screenshots did not load. Open the preview to see the new version.
       </p>
     )
   }
@@ -1138,7 +1131,7 @@ function Screenshots({
           <Skeleton className="aspect-[3/4] rounded-md" key={where} />
         ) : (
           <Shot
-            alt={`Version ${version}, home page ${where}`}
+            alt={`Home page ${where}`}
             key={where}
             onGiveUp={() => setBroken(preview)}
             src={preview.screenshots[index]}
@@ -1151,13 +1144,11 @@ function Screenshots({
 }
 
 /**
- * A version ready to publish. The version and its short id sit directly
- * above the buttons that act on it, and Approve sends exactly that
- * revision. "Ask for changes" opens a note in place.
+ * A version ready to publish. What it is bound to sits directly above the
+ * buttons that act on it, and Approve sends exactly that revision. "Ask for changes" opens a note in place.
  */
 function ApprovalItem({
   target,
-  version,
   rationale,
   expiresAt,
   onExpiry,
@@ -1172,7 +1163,6 @@ function ApprovalItem({
   photoActions,
 }: {
   target: ApprovalTarget
-  version: number
   rationale: string
   expiresAt: string
   onExpiry: string
@@ -1216,15 +1206,11 @@ function ApprovalItem({
     >
       <div className="flex flex-col gap-1">
         <h3 className="font-medium text-sm" id={`${id}-title`}>
-          Version {version} is ready to publish
+          Your new version is ready to publish
         </h3>
         <p className={META}>{rationale}</p>
       </div>
-      <Screenshots
-        onRetry={onRetryPreview}
-        preview={preview}
-        version={version}
-      />
+      <Screenshots onRetry={onRetryPreview} preview={preview} />
       {typeof preview === "object" ? (
         <OutLink href={preview.url}>Open preview</OutLink>
       ) : null}
@@ -1239,11 +1225,7 @@ function ApprovalItem({
         />
       ) : null}
       <p className={META}>{expiryLine(expiresAt, onExpiry)}</p>
-      <ApprovalTargetSummary
-        className="bg-background"
-        target={target}
-        version={version}
-      />
+      <ApprovalTargetSummary className="bg-background" target={target} />
       <div className="flex flex-wrap gap-2">
         <Button
           disabled={!decision || busy !== null}
@@ -1252,11 +1234,7 @@ function ApprovalItem({
           }}
           size="sm"
         >
-          {pending(
-            busy === "approve",
-            `Approve and publish v${version}`,
-            `Publishing v${version}`
-          )}
+          {pending(busy === "approve", "Approve and publish", "Publishing")}
         </Button>
         <Button
           aria-expanded={asking}
@@ -1403,7 +1381,9 @@ function ReminderNote({
             {due}
           </span>
         ) : null}
-        {byAssistant ? <span className={META}>Set by Reme</span> : null}
+        {byAssistant ? (
+          <span className={META}>Set by your assistant</span>
+        ) : null}
         {error ? (
           <p className="text-[0.8125rem] text-destructive" role="alert">
             {error}
@@ -1490,7 +1470,7 @@ function YourWebsite({
         <Skeleton className="aspect-[16/10] w-full rounded-md" />
       ) : shot && shot.src !== broken ? (
         <img
-          alt={`Your website's home page on a laptop, version ${live}`}
+          alt="Your website's home page on a laptop"
           className="aspect-[16/10] w-full rounded-md border border-border bg-muted object-cover object-top"
           height={200}
           loading="lazy"
@@ -1507,7 +1487,7 @@ function YourWebsite({
             live ? "bg-primary" : "bg-muted-foreground/40"
           )}
         />
-        {live ? `Version ${live} is live` : "Nothing is published yet"}
+        {live ? "Your website is live" : "Nothing is published yet"}
       </p>
       {live && (host || change) ? (
         // Side by side, each growing to share the row; a row too narrow for

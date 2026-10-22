@@ -38,7 +38,7 @@ it("offers the first build to an owner with no site", () => {
   ])
 })
 
-it("asks a new business for the facts Reme still needs, after the build", () => {
+it("asks a new business for the facts the assistant still needs, after the build", () => {
   const briefing = briefingOf(
     ORG,
     workspace({
@@ -86,7 +86,7 @@ it("names who asked when one question waits on a live site", () => {
     workspace({ live: 3, attention: [question("The Developer")] })
   )
   expect(briefing.line).toBe(
-    "v3 is live. The Developer has one question for you."
+    "Your website is live. The Developer has one question for you."
   )
   expect(briefing.context).toEqual({
     name: "Fixture Clean",
@@ -106,7 +106,9 @@ it("counts questions when there is more than one", () => {
     ORG,
     workspace({ live: 2, attention: [question("A"), question("B")] })
   )
-  expect(briefing.line).toBe("v2 is live. 2 questions are waiting on you.")
+  expect(briefing.line).toBe(
+    "Your website is live. 2 questions are waiting on you."
+  )
 })
 
 it("puts an approval before a question, and keeps to four suggestions", () => {
@@ -120,10 +122,10 @@ it("puts an approval before a question, and keeps to four suggestions", () => {
     })
   )
   expect(briefing.line).toBe(
-    "v3 is live. Version 4 is ready for you to approve."
+    "Your website is live. A new version is ready for you to approve."
   )
   expect(prompts(briefing)).toEqual([
-    "What changed in version 4?",
+    "What changed in the new version?",
     "What do you need from me?",
     "How is the build going?",
     "What is on my website now?",
@@ -138,7 +140,7 @@ it("counts approvals when there is more than one", () => {
   expect(briefing.line).toBe(
     "Your first version is under way. 2 versions are ready for you to approve."
   )
-  expect(prompts(briefing)).toEqual(["What changed in version 1?"])
+  expect(prompts(briefing)).toEqual(["What changed in the new version?"])
 })
 
 it("says a first build is under way, and a later one is a change", () => {
@@ -151,7 +153,7 @@ it("says a first build is under way, and a later one is a change", () => {
     ORG,
     workspace({ live: 5, building: true, open: true })
   )
-  expect(later.line).toBe("v5 is live. A change is being built.")
+  expect(later.line).toBe("Your website is live. A change is being built.")
 })
 
 it("never offers a build while a first one is open but not working", () => {
@@ -191,10 +193,10 @@ it("names the day and time a review closes, in the browser's time zone", () => {
       NOW
     ).line
   expect(line(at(2, 9))).toBe(
-    "v3 is live. Your review of v4 expires tomorrow at 09:00."
+    "Your website is live. Your review of the new version expires tomorrow at 09:00."
   )
   expect(line(at(1, 15))).toBe(
-    "v3 is live. Your review of v4 expires today at 15:00."
+    "Your website is live. Your review of the new version expires today at 15:00."
   )
 })
 
@@ -221,7 +223,7 @@ it("reads the review's local day even where UTC is on another", () => {
       new Date("2026-10-01T22:30:00.000Z")
     )
     expect(briefing.line).toBe(
-      "Your first version is under way. Your review of v2 expires tomorrow at 00:30."
+      "Your first version is under way. Your review of the new version expires tomorrow at 00:30."
     )
   } finally {
     process.env.TZ = zone
@@ -244,7 +246,7 @@ it("nudges about a question that has waited, naming it, in place of the count", 
     NOW
   )
   expect(briefing.line).toBe(
-    "v3 is live. The Developer's question about weekday hours is still waiting on you."
+    "Your website is live. The Developer's question about weekday hours is still waiting on you."
   )
 })
 
@@ -264,9 +266,9 @@ it("says a finished version was never published", () => {
     NOW
   )
   expect(briefing.line).toBe(
-    "v3 is live. Version 4 is ready but not published."
+    "Your website is live. A new version is ready but not published."
   )
-  expect(prompts(briefing)[0]).toBe("Why is version 4 not live yet?")
+  expect(prompts(briefing)[0]).toBe("Why is the new version not live yet?")
 })
 
 it("puts an unpublished version after reviews and questions", () => {
@@ -286,10 +288,10 @@ it("puts an unpublished version after reviews and questions", () => {
       NOW
     ).line
   expect(lineOf({ attention: [approval(5)] })).toBe(
-    "v3 is live. Version 5 is ready for you to approve."
+    "Your website is live. A new version is ready for you to approve."
   )
   expect(lineOf({ attention: [question("The Developer")] })).toBe(
-    "v3 is live. The Developer has one question for you."
+    "Your website is live. The Developer has one question for you."
   )
   expect(
     lineOf({
@@ -303,10 +305,12 @@ it("puts an unpublished version after reviews and questions", () => {
         },
       ],
     })
-  ).toMatch(/^v3 is live\. Your review of v5 expires today at /)
+  ).toMatch(
+    /^Your website is live\. Your review of the new version expires today at /
+  )
 })
 
-it("lists the facts Reme still needs, after anything waiting on the owner", () => {
+it("lists the facts the assistant still needs, after anything waiting on the owner", () => {
   const facts = [
     {
       rule: "facts_missing" as const,
@@ -316,7 +320,7 @@ it("lists the facts Reme still needs, after anything waiting on the owner", () =
   expect(
     briefingOf(ORG, workspace({ derivedReminders: facts }), NOW).line
   ).toBe(
-    "You have no website yet. Reme still needs your phone number and weekday hours."
+    "You have no website yet. Your assistant still needs your phone number and weekday hours."
   )
   expect(
     briefingOf(
@@ -324,7 +328,7 @@ it("lists the facts Reme still needs, after anything waiting on the owner", () =
       workspace({ live: 2, attention: [approval(3)], derivedReminders: facts }),
       NOW
     ).line
-  ).toBe("v2 is live. Version 3 is ready for you to approve.")
+  ).toBe("Your website is live. A new version is ready for you to approve.")
 })
 
 const names = { "staff-sam": "Sam" }
@@ -337,20 +341,20 @@ const reminder = (title: string, due: string | null) =>
 
 it("says in one line that an owner with nothing waiting is caught up", () => {
   expect(digestOf(workspace({ live: 4 }), names, NOW)).toEqual([
-    "All caught up. Your site is live on version 4.",
+    "All caught up. Your website is live.",
   ])
   expect(digestOf(workspace({ open: true }), names, NOW)).toEqual([
     "All caught up. Your website is under way.",
   ])
   expect(digestOf(workspace(), names, NOW)).toEqual([
-    "Tell Reme about your business to start your website.",
+    "Tell your assistant about your business to start your website.",
   ])
 })
 
-it("leads with what Reme is doing, then what the owner does next", () => {
+it("leads with what the assistant is doing, then what the owner does next", () => {
   expect(
     digestOf(workspace({ building: true, open: true }), names, NOW)
-  ).toEqual(["Reme is building your website."])
+  ).toEqual(["Your assistant is building your website."])
   expect(
     digestOf(
       workspace({
@@ -362,7 +366,10 @@ it("leads with what Reme is doing, then what the owner does next", () => {
       names,
       NOW
     )
-  ).toEqual(["Reme is updating your website.", "Version 5 is ready to review."])
+  ).toEqual([
+    "Your assistant is updating your website.",
+    "A new version is ready to review.",
+  ])
   expect(
     digestOf(
       workspace({
@@ -374,7 +381,7 @@ it("leads with what Reme is doing, then what the owner does next", () => {
       names,
       NOW
     )
-  ).toEqual(["Reme is updating your website.", "3 things need you."])
+  ).toEqual(["Your assistant is updating your website.", "3 things need you."])
 })
 
 it("puts today's reminder first and keeps to two lines", () => {
@@ -429,7 +436,7 @@ it("names missing facts only when no question asks for them", () => {
   ]
   expect(
     digestOf(workspace({ open: true, derivedReminders: facts }), names, NOW)
-  ).toEqual(["Reme needs your phone number."])
+  ).toEqual(["Your assistant needs your phone number."])
   expect(
     digestOf(
       workspace({
@@ -451,10 +458,22 @@ it("says nothing about today before the browser's clock is known", () => {
     reminderNotes: [reminder("Call the supplier", "2099-10-01T15:00:00.000Z")],
   })
   // The reminder could be today, so the server claims neither way.
-  expect(digestOf(later, names, null)).toEqual([
-    "Your site is live on version 4.",
-  ])
+  expect(digestOf(later, names, null)).toEqual(["Your website is live."])
   expect(
     digestOf(workspace({ attention: [approval(2)], open: true }), names, null)
-  ).toEqual(["Version 2 is ready to review."])
+  ).toEqual(["A new version is ready to review."])
+})
+
+it("uses the name the owner gave, and never the product name", () => {
+  const named = workspace({
+    assistantName: "Ellie",
+    building: true,
+    open: true,
+  })
+  expect(digestOf(named, names, NOW)).toEqual([
+    "Ellie is building your website.",
+  ])
+  expect(
+    digestOf(workspace({ building: true, open: true }), names, NOW)
+  ).toEqual(["Your assistant is building your website."])
 })

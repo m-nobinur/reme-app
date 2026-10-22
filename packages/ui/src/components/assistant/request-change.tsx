@@ -1,7 +1,6 @@
 import type { ToolCallMessagePartComponent } from "@assistant-ui/react"
 import {
   CosChangeRequest,
-  type RequestChangeOutput,
   RequestChangeOutput as RequestChangeResult,
 } from "@workspace/contracts"
 import { Decision, Done } from "@workspace/ui/components/assistant/decision"
@@ -14,15 +13,6 @@ import { decisionView } from "@workspace/ui/lib/tool-state"
  * every state, and "started" shows only once the server says a build exists.
  */
 
-type Started = Extract<RequestChangeOutput, { outcome: "started" }>
-
-/** The build's short ids, as support and the panel match them. */
-function builtAs({ build }: Started) {
-  return build.revision
-    ? `Version ${build.revision.version}, ID ${build.revision.revision_id.slice(0, 8)}`
-    : `Build ${build.assignment_id.slice(0, 8)}`
-}
-
 const RequestChange: ToolCallMessagePartComponent = (props) => (
   <Decision
     busy="Starting"
@@ -32,18 +22,11 @@ const RequestChange: ToolCallMessagePartComponent = (props) => (
       "This starts a build. Nothing goes live until you approve a version."
     }
     done={(output) => (
-      <>
-        <Done>
-          {output?.outcome === "started" && output.build.lane === "quick"
-            ? "Updating your preview."
-            : "Started. Follow it under Working on."}
-        </Done>
-        {output?.outcome === "started" ? (
-          <p className="text-[0.8125rem] text-muted-foreground">
-            {builtAs(output)}
-          </p>
-        ) : null}
-      </>
+      <Done>
+        {output?.outcome === "started" && output.build.lane === "quick"
+          ? "Updating your preview."
+          : "Started. Follow it under Working on."}
+      </Done>
     )}
     props={props}
     slot="request-change"

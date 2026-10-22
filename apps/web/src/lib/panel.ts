@@ -3,7 +3,7 @@ import { BUILD_STAGES } from "@workspace/ui/components/live-panel"
 import { currentRow, WORKING } from "@workspace/ui/lib/build-state"
 import { factLabel } from "@workspace/ui/lib/facts"
 import type { AttentionItem, Workspace } from "./api/types"
-import { askerOf, assistantOf, digestOf } from "./briefing"
+import { askerOf, assistantOf, digestOf, leading } from "./briefing"
 import { onboardingFor } from "./onboarding"
 import { dayOf, dueLine, upcomingNotes } from "./reminders"
 import { stoppedOf } from "./stopped"
@@ -118,15 +118,9 @@ export function pageOf(
 export const currentBuild = (builds: BuildSummary[]) =>
   builds.find((build) => build.state !== "queued") ?? builds.at(-1)
 
-/** `version 4`, or what the build makes when it has no number yet. */
-const buildName = (build: BuildSummary, live: number | null) => {
-  const version = build.revision?.version
-  return version
-    ? `version ${version}`
-    : live
-      ? "a new version"
-      : "your first version"
-}
+/** What a build makes: never a number, id or hash. */
+const buildName = (live: number | null) =>
+  live ? "a new version" : "your first version"
 
 /** `9:30 am`, in `zone`: the time part of `dueLine`. */
 const timeOf = (at: string, zone: string, now: Date) =>
@@ -146,7 +140,7 @@ const expiries = (waiting: AttentionItem[]): Timed[] =>
             at: item.expiresAt,
             text:
               item.kind === "approval"
-                ? `Your review of version ${item.version} closes`
+                ? "Your review of the new version closes"
                 : `The question about ${item.title.toLowerCase()} closes`,
           },
         ]
@@ -297,17 +291,17 @@ export function panelFor(input: PanelInput): Panel | null {
       return [
         intro,
         onboarding
-          ? `${assistant} has every detail it needs. Finish getting started to build the site.`
+          ? `${leading(assistant)} has every detail it needs. Finish getting started to build the site.`
           : `Ask ${assistant} in a chat to build one for you to review.`,
       ]
     }
     if (page === "chat" || page === "onboarding") {
       if (working?.state === "release_candidate") {
-        return [`${assistant} is publishing ${buildName(working, live)} now.`]
+        return [`${leading(assistant)} is publishing ${buildName(live)} now.`]
       }
       if (working) {
         return [
-          `${assistant} is building ${buildName(working, live)} while you chat.`,
+          `${leading(assistant)} is building ${buildName(live)} while you chat.`,
           // The stepper below says the stage; this says what the owner can do.
           "Keep chatting. Nothing goes live until you approve it.",
         ]
@@ -315,7 +309,7 @@ export function panelFor(input: PanelInput): Panel | null {
       const [approval] = approvals
       if (approval) {
         return [
-          `Version ${approval.version} is ready for your review.`,
+          "A new version is ready for your review.",
           "Approve it here, or say what to change.",
         ]
       }
@@ -328,7 +322,7 @@ export function panelFor(input: PanelInput): Panel | null {
       }
       if (live) {
         return [
-          `Version ${live} of your website is live.`,
+          "Your website is live.",
           `Ask ${assistant} to change a page, check what needs you, or set a reminder.`,
         ]
       }
@@ -344,17 +338,17 @@ export function panelFor(input: PanelInput): Panel | null {
             : ""
         const [approval] = approvals
         return [
-          `Version ${live} is live${host ? ` at ${host}` : ""}.${published}`,
+          `Your website is live${host ? ` at ${host}` : ""}.${published}`,
           working
-            ? `${assistant} is building ${buildName(working, live)}. You review it before it replaces this one.`
+            ? `${leading(assistant)} is building ${buildName(live)}. You review it before it replaces this one.`
             : approval
-              ? `Version ${approval.version} is ready to replace it once you approve.`
+              ? "A new version is ready to replace it once you approve."
               : `Ask for a change and ${assistant} builds a new version for you to review.`,
         ]
       }
       if (working) {
         return [
-          `${assistant} is building your first version.`,
+          `${leading(assistant)} is building your first version.`,
           "You review it before it goes live.",
         ]
       }
@@ -364,11 +358,11 @@ export function panelFor(input: PanelInput): Panel | null {
 
   const line = ((): Line => {
     const tone = live ? "live" : "idle"
-    // An approved version is no longer being built: "Version 1, publishing".
-    if (working?.state === "release_candidate" && working.revision?.version) {
+    // An approved version is no longer being built: "Your new version, publishing".
+    if (working?.state === "release_candidate") {
       return {
         tone: "working",
-        lead: `Version ${working.revision.version},`,
+        lead: "Your new version,",
         detail: "publishing",
       }
     }
@@ -380,11 +374,7 @@ export function panelFor(input: PanelInput): Panel | null {
       const step = rows[at]
       return {
         tone: "working",
-        lead: working.revision?.version
-          ? `Building version ${working.revision.version},`
-          : live
-            ? "Building a new version,"
-            : "Building your first version,",
+        lead: live ? "Building a new version," : "Building your first version,",
         detail:
           working.state === "planning" && working.blueprint?.awaiting
             ? "waiting for your review"
@@ -400,7 +390,7 @@ export function panelFor(input: PanelInput): Panel | null {
         tone,
         lead:
           approvals.length === 1
-            ? `Version ${approval.version} is ready`
+            ? "A new version is ready"
             : `${approvals.length} versions are ready`,
         detail: "for your review",
       }
@@ -431,13 +421,11 @@ export function panelFor(input: PanelInput): Panel | null {
       }
     }
     if (live) {
-      return page === "website"
-        ? {
-            tone,
-            lead: `Version ${live} is live`,
-            ...(host ? { detail: `at ${host}` } : {}),
-          }
-        : { tone, lead: "Your website is live", detail: `on version ${live}` }
+      return {
+        tone,
+        lead: "Your website is live",
+        ...(host && page === "website" ? { detail: `at ${host}` } : {}),
+      }
     }
     return workspace.open
       ? { tone, lead: "Your first website", detail: "is under way" }

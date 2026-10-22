@@ -121,8 +121,9 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-/** The short id the row shows beside its button. */
-const shortIdOn = (text: string) => /ID ([0-9a-f]{8})/.exec(text)?.[1] ?? null
+/** The revision the row is bound to: read off the page, never printed on it. */
+const revisionOn = (container: HTMLElement) =>
+  container.querySelector("[data-revision]")?.getAttribute("data-revision")
 
 const noop = () => undefined
 
@@ -186,11 +187,9 @@ it("sends only the revision shown beside Approve, pressed in the panel", async (
           const approve = [...container.querySelectorAll("button")].find(
             (button) => button.textContent?.startsWith("Approve and publish")
           )
-          expect(approve?.textContent).toBe(
-            `Approve and publish v${item.version}`
-          )
+          expect(approve?.textContent).toBe("Approve and publish")
           expect(approve?.disabled).toBe(false)
-          const shown = shortIdOn(container.textContent ?? "")
+          const shown = revisionOn(container)
 
           posted = []
           await act(async () => {
@@ -203,7 +202,7 @@ it("sends only the revision shown beside Approve, pressed in the panel", async (
           expect(sent?.path).toBe(
             `/approvals/${item.request.approval_id}/decision`
           )
-          expect(sent?.body.revision_id.slice(0, 8)).toBe(shown)
+          expect(sent?.body.revision_id).toBe(shown)
           expect(sent?.body.revision_id).toBe(item.request.target.revision_id)
           if (live !== item.request.target.revision_id) {
             expect(sent?.body.revision_id).not.toBe(live)
@@ -224,7 +223,6 @@ it("disables Approve for anything but a revision", () => {
       const html = renderToStaticMarkup(
         createElement(ApprovalItem, {
           target: generated,
-          version: 1,
           rationale: "r",
           expiresAt: EXPIRES,
           onExpiry: "o",

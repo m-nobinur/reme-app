@@ -147,7 +147,7 @@ describe("getting started", () => {
     )
     expect(panel?.headline).toEqual([
       "Getting Fixture Clean ready for its first website.",
-      "2 details to go before Reme can build it.",
+      "2 details to go before your assistant can build it.",
     ])
     expect(panel?.steps?.map((step) => step.label)).toEqual([
       "Phone number",
@@ -178,7 +178,9 @@ describe("getting started", () => {
         }),
       })
     )
-    expect(panel?.headline[1]).toBe("4 details to go before Reme can build it.")
+    expect(panel?.headline[1]).toBe(
+      "4 details to go before your assistant can build it."
+    )
     expect(panel?.suggestions).toEqual([])
   })
 
@@ -187,7 +189,7 @@ describe("getting started", () => {
       input({ route: ROUTES.website, conversations: [onboardingChat] })
     )
     expect(panel?.headline[1]).toBe(
-      "Reme has every detail it needs. Finish getting started to build the site."
+      "Your assistant has every detail it needs. Finish getting started to build the site."
     )
     expect(panel?.line.detail).toBe("your details are in")
   })
@@ -196,7 +198,7 @@ describe("getting started", () => {
     const panel = panelFor(input())
     expect(panel?.headline).toEqual([
       "Fixture Clean has no website yet.",
-      "Ask Reme in a chat to build one for you to review.",
+      "Ask your assistant in a chat to build one for you to review.",
     ])
     expect(panel?.suggestions).toEqual([{ kind: "start-website" }])
     expect(panel?.line.lead).toBe("Let's get your website started")
@@ -205,7 +207,7 @@ describe("getting started", () => {
   it("asks an account with no business to name one", () => {
     const panel = panelFor(input({ business: null }))
     expect(panel?.headline).toEqual([
-      "Name your business and Reme can start on its website.",
+      "Name your business and your assistant can start on its website.",
     ])
     expect(panel?.steps).toBeNull()
     expect(panel?.suggestions).toEqual([{ kind: "name-business" }])
@@ -226,20 +228,22 @@ describe("in a chat", () => {
   it("says what the build is doing while the owner chats", () => {
     const panel = chat({ builds: [build("validating", 4)] })
     expect(panel?.headline).toEqual([
-      "Reme is building version 4 while you chat.",
+      "Your assistant is building a new version while you chat.",
       "Keep chatting. Nothing goes live until you approve it.",
     ])
     expect(panel?.build?.state).toBe("validating")
     expect(panel?.line).toEqual({
       tone: "working",
-      lead: "Building version 4,",
+      lead: "Building a new version,",
       detail: "checking the site",
     })
     const publishing = chat({ builds: [build("release_candidate", 4)] })
-    expect(publishing?.headline).toEqual(["Reme is publishing version 4 now."])
+    expect(publishing?.headline).toEqual([
+      "Your assistant is publishing a new version now.",
+    ])
     expect(publishing?.line).toEqual({
       tone: "working",
-      lead: "Version 4,",
+      lead: "Your new version,",
       detail: "publishing",
     })
   })
@@ -248,7 +252,7 @@ describe("in a chat", () => {
     const named = { assistantName: "Ava" }
     expect(
       chat({ ...named, builds: [build("validating", 4)] })?.headline[0]
-    ).toBe("Ava is building version 4 while you chat.")
+    ).toBe("Ava is building a new version while you chat.")
     expect(chat(named)?.headline[1]).toBe(
       "Ask Ava to change a page, check what needs you, or set a reminder."
     )
@@ -260,7 +264,7 @@ describe("in a chat", () => {
   it("puts a review first, and leaves changes to the review's own button", () => {
     const panel = chat({ attention: [approval(4)] })
     expect(panel?.headline).toEqual([
-      "Version 4 is ready for your review.",
+      "A new version is ready for your review.",
       "Approve it here, or say what to change.",
     ])
     expect(panel?.suggestions).toEqual([
@@ -291,8 +295,8 @@ describe("in a chat", () => {
   it("says what the owner can ask next once all is quiet", () => {
     const panel = chat({})
     expect(panel?.headline).toEqual([
-      "Version 3 of your website is live.",
-      "Ask Reme to change a page, check what needs you, or set a reminder.",
+      "Your website is live.",
+      "Ask your assistant to change a page, check what needs you, or set a reminder.",
     ])
     expect(panel?.suggestions).toEqual([
       { kind: "request-change" },
@@ -318,14 +322,14 @@ describe("on the Website page", () => {
       })
     )
     expect(panel?.headline).toEqual([
-      `Version 3 is live at ${HOST}. Published Wed 30 Sept, 3:30 pm.`,
-      "Ask for a change and Reme builds a new version for you to review.",
+      `Your website is live at ${HOST}. Published Wed 30 Sept, 3:30 pm.`,
+      "Ask for a change and your assistant builds a new version for you to review.",
     ])
     // The page has its own Request changes and link.
     expect(panel?.suggestions).toEqual([])
     expect(panel?.line).toEqual({
       tone: "live",
-      lead: "Version 3 is live",
+      lead: "Your website is live",
       detail: `at ${HOST}`,
     })
   })
@@ -339,7 +343,7 @@ describe("on the Website page", () => {
         zone: null,
       })
     )
-    expect(panel?.headline[0]).toBe(`Version 3 is live at ${HOST}.`)
+    expect(panel?.headline[0]).toBe(`Your website is live at ${HOST}.`)
   })
 
   it("says what is coming to replace the live version", () => {
@@ -347,10 +351,10 @@ describe("on the Website page", () => {
       panelFor(input({ route: ROUTES.website, workspace: live(over) }))
         ?.headline[1]
     expect(at({ builds: [build("implementing")] })).toBe(
-      "Reme is building a new version. You review it before it replaces this one."
+      "Your assistant is building a new version. You review it before it replaces this one."
     )
     expect(at({ attention: [approval(4)] })).toBe(
-      "Version 4 is ready to replace it once you approve."
+      "A new version is ready to replace it once you approve."
     )
   })
 
@@ -362,7 +366,7 @@ describe("on the Website page", () => {
       })
     )
     expect(panel?.headline).toEqual([
-      "Reme is building your first version.",
+      "Your assistant is building your first version.",
       "You review it before it goes live.",
     ])
   })
@@ -450,7 +454,7 @@ describe("what is coming up and what just happened", () => {
     )
     expect(panel?.upcoming.map((item) => item.text)).toEqual([
       "Call the supplier",
-      "Your review of version 4 closes",
+      "Your review of the new version closes",
     ])
     // No reminders before the reader's zone is known.
     expect(
@@ -578,7 +582,7 @@ describe("the one line", () => {
       })
     ).toEqual({
       tone: "live",
-      lead: "Version 3 is ready",
+      lead: "A new version is ready",
       detail: "for your review",
     })
     expect(line({ attention: [approval(3), approval(4)], open: true })).toEqual(
@@ -594,7 +598,6 @@ describe("the one line", () => {
     expect(line({ live: 1 })).toEqual({
       tone: "live",
       lead: "Your website is live",
-      detail: "on version 1",
     })
     expect(line({ open: true, builds: [build("paused")] })).toEqual({
       tone: "idle",
@@ -687,6 +690,89 @@ describe("suggestions", () => {
           expect(kinds.has(suggestion.kind)).toBe(true)
         }
       }
+    }
+  })
+})
+
+/** A UUID, a hex run of 7 or more with a number in it, a snake_case value or a staff code. */
+const INTERNAL =
+  /[0-9a-f]{8}-[0-9a-f]{4}-|\b(?=[0-9a-f]*\d)[0-9a-f]{7,}\b|\b[a-z]+_[a-z_]+\b|\b[A-Z]{3}-\d{3}\b/
+
+describe("what the owner reads", () => {
+  const STATES = [
+    "briefing",
+    "planning",
+    "implementing",
+    "validating",
+    "revising",
+    "release_candidate",
+    "paused",
+    "queued",
+  ]
+  const STARTING = workspace({ missingFacts: ["business.phone"] })
+
+  /** Every sentence the panel writes, across pages and states. */
+  const sentences = (named: boolean) => {
+    const found: string[] = []
+    const states = [
+      STARTING,
+      workspace({ open: true }),
+      live(),
+      live({ attention: [approval(4, "2026-10-02T09:00:00.000Z")] }),
+      live({ attention: [question("Sam")] }),
+      ...STATES.flatMap((state) => [
+        live({ builds: [build(state, 4)] }),
+        workspace({ open: true, builds: [build(state)] }),
+      ]),
+    ]
+    for (const route of Object.values(ROUTES)) {
+      for (const each of states) {
+        const panel = panelFor(
+          input({
+            route,
+            conversations: [onboardingChat],
+            workspace: named ? { ...each, assistantName: "Ellie" } : each,
+          })
+        )
+        if (!panel) continue
+        found.push(
+          ...panel.headline,
+          panel.line.lead,
+          panel.line.detail ?? "",
+          ...(panel.steps ?? []).map((step) => step.label),
+          ...panel.upcoming.map((item) => item.text)
+        )
+      }
+    }
+    return found
+  }
+
+  it("holds no id, hash, raw value or staff code", () => {
+    for (const text of [...sentences(true), ...sentences(false)]) {
+      expect(text).not.toMatch(INTERNAL)
+    }
+    // The pattern does catch what it is for.
+    for (const text of [
+      "2f41c9ab-0000-4000-8000-000000000005",
+      "Build ead99cb0",
+      "release_candidate",
+      "OPS-014",
+    ]) {
+      expect(text).toMatch(INTERNAL)
+    }
+  })
+
+  it("names no version number, and never Reme for a named assistant", () => {
+    const named = sentences(true)
+    for (const text of named) {
+      expect(text).not.toMatch(/\bReme\b|\bversion \d|\bv\d\b/i)
+    }
+    expect(named.some((text) => text.includes("Ellie"))).toBe(true)
+  })
+
+  it("does not say Reme for an assistant nobody has named", () => {
+    for (const text of sentences(false)) {
+      expect(text).not.toMatch(/\bReme\b/)
     }
   })
 })

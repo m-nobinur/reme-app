@@ -35,7 +35,6 @@ async function render(extra: object) {
         onExpiry: "Nothing is published without you.",
         rationale: "The hero now leads with end of tenancy cleans.",
         target: REVISION,
-        version: 4,
         preview: "error",
         ...extra,
       })
@@ -53,7 +52,7 @@ it("says a preview that could not be read is not available yet, and reads it aga
   const onRetryPreview = vi.fn(async () => undefined)
   const container = await render({ preview: "error", onRetryPreview })
   expect(container.textContent).toContain(
-    "The preview for version 4 isn't available yet. Try again in a moment."
+    "The preview isn't available yet. Try again in a moment."
   )
   // No link is implied where there is none.
   expect(container.textContent).not.toContain("Open the preview")
@@ -90,7 +89,7 @@ it("offers the preview link when only the screenshots fail to load", async () =>
   }
   expect(container.querySelector("img")).toBeNull()
   expect(container.textContent).toContain(
-    "The screenshots did not load. Open the preview to see version 4."
+    "The screenshots did not load. Open the preview to see the new version."
   )
   expect(
     container.querySelector('a[href^="https://preview-acme-v4"]')?.textContent

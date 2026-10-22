@@ -40,9 +40,16 @@ function due(at: string, now: Date): string {
   return `${when} at ${clock(date)}`
 }
 
-/** What the owner calls their assistant: the name they gave it, else Reme. */
+/**
+ * What the owner calls their assistant: the name they gave it, else "your
+ * assistant". Never the product name, which is not who they are talking to.
+ */
 export const assistantOf = (workspace: Workspace | null) =>
-  workspace?.assistantName?.trim() || "Reme"
+  workspace?.assistantName?.trim() || "your assistant"
+
+/** `assistantOf` opening a sentence: "Ellie", or "Your assistant". */
+export const leading = (assistant: string) =>
+  assistant.charAt(0).toUpperCase() + assistant.slice(1)
 
 export function briefingOf(
   org: OrgSummary | null,
@@ -58,7 +65,7 @@ export function briefingOf(
   const questions = attention.filter((item) => item.kind === "question")
 
   const site = live
-    ? `v${live} is live.`
+    ? "Your website is live."
     : building
       ? "Your first version is being built."
       : open
@@ -89,11 +96,11 @@ export function briefingOf(
 
   let next: string | null = null
   if (expiring) {
-    next = `Your review of v${expiring.version} expires ${due(expiring.expires_at, now)}.`
+    next = `Your review of the new version expires ${due(expiring.expires_at, now)}.`
   } else if (approval) {
     next =
       approvals === 1
-        ? `Version ${approval.version} is ready for you to approve.`
+        ? "A new version is ready for you to approve."
         : `${approvals} versions are ready for you to approve.`
   } else if (waiting) {
     next = `${waiting.raisedBy}'s question about ${waiting.title.toLowerCase()} is still waiting on you.`
@@ -102,9 +109,9 @@ export function briefingOf(
   } else if (questions.length > 1) {
     next = `${questions.length} questions are waiting on you.`
   } else if (unpublished) {
-    next = `Version ${unpublished.version} is ready but not published.`
+    next = "A new version is ready but not published."
   } else if (facts) {
-    next = `${assistantOf(workspace)} still needs ${factsNeeded(facts.keys)}.`
+    next = `${leading(assistantOf(workspace))} still needs ${factsNeeded(facts.keys)}.`
   } else if (building && live) {
     next = "A change is being built."
   }
@@ -115,13 +122,13 @@ export function briefingOf(
   const fresh = !live && !open && !approval
   const suggestions: string[] = []
   if (approval) {
-    suggestions.push(`What changed in version ${approval.version}?`)
+    suggestions.push("What changed in the new version?")
   }
   if (questions.length > 0) {
     suggestions.push("What do you need from me?")
   }
   if (unpublished && !approval) {
-    suggestions.push(`Why is version ${unpublished.version} not live yet?`)
+    suggestions.push("Why is the new version not live yet?")
   }
   if (building) {
     suggestions.push("How is the build going?")
@@ -222,7 +229,7 @@ export function digestOf(
     needs.push({
       text:
         approvals.length === 1
-          ? `Version ${approval.version} is ready to review.`
+          ? "A new version is ready to review."
           : `${approvals.length} versions are ready to review.`,
       count: approvals.length,
     })
@@ -239,15 +246,15 @@ export function digestOf(
   } else if (facts) {
     // A question is usually the build asking for the same fact.
     needs.push({
-      text: `${assistant} needs ${factsNeeded(facts.keys)}.`,
+      text: `${leading(assistant)} needs ${factsNeeded(facts.keys)}.`,
       count: 1,
     })
   }
 
   const doing = building
     ? live
-      ? `${assistant} is updating your website.`
-      : `${assistant} is building your website.`
+      ? `${leading(assistant)} is updating your website.`
+      : `${leading(assistant)} is building your website.`
     : null
   const total = needs.reduce((sum, need) => sum + need.count, 0)
   const count = (n: number, more = "") =>
@@ -267,7 +274,7 @@ export function digestOf(
   if (first) return [first.text]
 
   const site = live
-    ? `Your site is live on version ${live}.`
+    ? "Your website is live."
     : open
       ? "Your website is under way."
       : `Tell ${assistant} about your business to start your website.`

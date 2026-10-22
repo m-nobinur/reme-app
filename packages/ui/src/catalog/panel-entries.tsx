@@ -130,7 +130,6 @@ const approval = (extra = {}) => (
     preview={PREVIEW}
     rationale="The hero now leads with end of tenancy cleans."
     target={REVISION}
-    version={4}
     {...extra}
   />
 )
@@ -237,7 +236,6 @@ const building = (
       build: {
         goal: "Build my website from the details I gave you",
         state,
-        version: null,
         startedAt: STARTED,
         lane: "full",
         activity,
@@ -253,7 +251,6 @@ const working = (state: AssignmentState, extra = {}) => (
     build={{
       goal: "Lead the hero with end of tenancy cleans",
       state,
-      version: null,
       startedAt: STARTED,
     }}
     now={NOW}
@@ -332,7 +329,6 @@ function SamplePanel() {
           build: {
             goal: "Lead the hero with end of tenancy cleans",
             state: "validating",
-            version: 4,
             startedAt: STARTED,
           },
           queued: ["Add Saturday hours to the contact section"],
@@ -346,7 +342,11 @@ function SamplePanel() {
         </WaitingOnYou>
         <ComingUp
           items={[
-            { id: "a", text: "Your review of version 4 closes", at: EXPIRES },
+            {
+              id: "a",
+              text: "Your review of the new version closes",
+              at: EXPIRES,
+            },
           ]}
         />
       </TabsContent>
@@ -373,7 +373,7 @@ function SamplePanelLine() {
   return (
     <LiveLine
       detail="checking the site"
-      lead="Building version 4,"
+      lead="Building a new version,"
       tone="working"
     />
   )
@@ -407,9 +407,7 @@ const panelCatalog: Entry[] = [
     name: "Panel caught up",
     render: () => (
       <div className="flex max-w-88 flex-col gap-6">
-        <PanelDigest
-          sentences={["All caught up. Your site is live on version 3."]}
-        />
+        <PanelDigest sentences={["All caught up. Your website is live."]} />
         <ComingUp
           items={[{ id: "v3", text: "Published v3", at: STARTED }]}
           title="Latest"
@@ -426,7 +424,7 @@ const panelCatalog: Entry[] = [
         <PanelDigest
           sentences={[
             "Getting Brightclean ready for its first website.",
-            "2 details to go before Reme can build it.",
+            "2 details to go before your assistant can build it.",
           ]}
         />
         <PanelBlank
@@ -445,13 +443,13 @@ const panelCatalog: Entry[] = [
     ),
   },
   {
-    // A chat while a build runs: what Reme is doing, then the stepper.
+    // A chat while a build runs: what Ellie is doing, then the stepper.
     name: "Panel in a chat while building",
     render: () => (
       <div className="flex max-w-88 flex-col gap-6">
         <PanelDigest
           sentences={[
-            "Reme is building version 4 while you chat.",
+            "Ellie is building a new version while you chat.",
             "Keep chatting. Nothing goes live until you approve it.",
           ]}
         />
@@ -459,7 +457,6 @@ const panelCatalog: Entry[] = [
           build: {
             goal: "Lead the hero with end of tenancy cleans",
             state: "validating",
-            version: 4,
             startedAt: STARTED,
           },
         })}
@@ -486,7 +483,6 @@ const panelCatalog: Entry[] = [
         build: {
           goal: "Lead the hero with end of tenancy cleans",
           state: "implementing",
-          version: null,
           startedAt: STARTED,
           lane: "full",
           activity: [
@@ -587,7 +583,6 @@ const panelCatalog: Entry[] = [
     name: "WorkingOn ready",
     render: () =>
       building("awaiting_review", [], {
-        version: 2,
         reviewMs: 95_000,
         endedAt: new Date(Date.parse(STARTED) + 400_000).toISOString(),
       }),
@@ -599,7 +594,6 @@ const panelCatalog: Entry[] = [
         build: {
           goal: "Change the hero title",
           state: "revising",
-          version: null,
           startedAt: STARTED,
           lane: "quick",
         },
@@ -765,7 +759,11 @@ const panelCatalog: Entry[] = [
     render: () => (
       <ComingUp
         items={[
-          { id: "a", text: "Your review of version 4 closes", at: EXPIRES },
+          {
+            id: "a",
+            text: "Your review of the new version closes",
+            at: EXPIRES,
+          },
           {
             id: "b",
             text: "The question about weekday hours closes",
@@ -795,7 +793,7 @@ const panelCatalog: Entry[] = [
   },
   { name: "ReminderNote", render: () => reminderNote(NOTES.owner) },
   {
-    name: "ReminderNote set by Reme",
+    name: "ReminderNote set by the assistant",
     render: () => reminderNote(NOTES.assistant),
   },
   { name: "ReminderNote undated", render: () => reminderNote(NOTES.undated) },
@@ -822,7 +820,7 @@ const panelCatalog: Entry[] = [
     render: () => (
       <LiveLine
         detail="for your review"
-        lead="Version 4 is ready"
+        lead="A new version is ready"
         tone="live"
       />
     ),
@@ -843,9 +841,7 @@ const panelCatalog: Entry[] = [
   },
   {
     name: "LiveLine live",
-    render: () => (
-      <LiveLine detail="on version 3" lead="Your website is live" tone="live" />
-    ),
+    render: () => <LiveLine lead="Your website is live" tone="live" />,
   },
   {
     name: "LiveLine idle",
@@ -871,8 +867,8 @@ const panelCatalog: Entry[] = [
     render: () => (
       <PanelDigest
         sentences={[
-          "Reme is updating your website.",
-          "Version 4 is ready to review.",
+          "Ellie is updating your website.",
+          "A new version is ready to review.",
         ]}
       />
     ),
@@ -880,9 +876,7 @@ const panelCatalog: Entry[] = [
   {
     name: "PanelDigest caught up",
     render: () => (
-      <PanelDigest
-        sentences={["All caught up. Your site is live on version 3."]}
-      />
+      <PanelDigest sentences={["All caught up. Your website is live."]} />
     ),
   },
   {
@@ -940,7 +934,7 @@ const panelCatalog: Entry[] = [
     render: () => (
       <PanelBlank
         action={nextStep("#getting-started", "Continue getting started")}
-        description="Reme builds your website from what you tell it about your business. Share the details below in the chat to get started."
+        description="Ellie builds your website from what you tell her about your business. Share the details below in the chat to get started."
         steps={[
           { label: "Business name", done: true },
           { label: "Phone number", done: false },
@@ -967,7 +961,7 @@ const panelCatalog: Entry[] = [
     render: () => (
       <PanelBlank
         action={nextStep("#new-chat", "Start your website")}
-        description="Reme builds your website from a conversation with you. Ask for it in the chat, and you review every version before it goes live."
+        description="Ellie builds your website from a conversation with you. Ask for it in the chat, and you review every version before it goes live."
         steps={[{ label: "Build your first version", done: false }]}
       />
     ),

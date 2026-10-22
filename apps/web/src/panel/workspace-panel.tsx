@@ -235,7 +235,7 @@ export function Decidable({
       if (!outcome.recorded) {
         return { done: false, reason: DECISION_REFUSED[outcome.reason] }
       }
-      announce(`Approved v${item.version}. It is being published.`)
+      announce("Approved. Your website is being published.")
       return { done: true }
     })
 
@@ -246,7 +246,7 @@ export function Decidable({
       })
       if (outcome.done) {
         keys.done()
-        announce(`Sent. A new version replaces v${item.version}.`)
+        announce("Sent. A new version replaces this one.")
       }
       return outcome
     })
@@ -277,7 +277,6 @@ export function Decidable({
       preview={preview}
       rationale={item.detail}
       target={item.request.target}
-      version={item.version}
     />
   )
 }
@@ -352,7 +351,6 @@ function Stoppable({
       build={{
         goal: build.goal,
         state: build.state,
-        version: build.revision?.version ?? null,
         startedAt: build.created_at,
         lane: build.lane ?? "full",
         fellThrough: build.fell_through,

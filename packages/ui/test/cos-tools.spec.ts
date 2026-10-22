@@ -25,11 +25,11 @@ test("reads say what they looked at, and open onto what they found", async ({
 
   await entry.getByRole("button", { name: "Checked your workspace" }).click()
   const workspace = entry.locator('[data-slot="cos-read-workspace"] dl')
-  await expect(workspace).toContainText("Version 3 is live")
+  await expect(workspace).toContainText("Live")
   await expect(workspace).toContainText("Add Saturday hours, 9 to 1.")
   await expect(workspace).toContainText("Building")
   await expect(workspace).toContainText("A question about service area")
-  await expect(workspace).toContainText("Version 4 to review by")
+  await expect(workspace).toContainText("A new version to review by")
   await expect(workspace).toContainText("Tagline")
 
   await entry
@@ -39,7 +39,7 @@ test("reads say what they looked at, and open onto what they found", async ({
     "Weekday hours08:00 to 18:00"
   )
   await entry
-    .getByRole("button", { name: "Checked the preview of version 4" })
+    .getByRole("button", { name: "Checked the preview of the new version" })
     .click()
   await expect(entry).toContainText("It shows under Your website.")
   await entry.getByRole("button", { name: "Checked for a preview" }).click()
