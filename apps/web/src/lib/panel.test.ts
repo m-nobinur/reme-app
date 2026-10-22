@@ -861,8 +861,12 @@ describe("what the owner reads", () => {
   })
 
   it("does not say Reme, or a name, for an assistant nobody has named", () => {
-    for (const text of [...sentences(null), ...sentences("Reme")]) {
+    for (const text of sentences(null)) {
       expect(text).not.toMatch(/\bReme\b/)
     }
+  })
+
+  it("says Reme when the owner chose it as the assistant's name", () => {
+    expect(sentences("Reme").some((text) => /\bReme\b/.test(text))).toBe(true)
   })
 })

@@ -24,6 +24,7 @@ import {
   decided,
   designAnswer,
   designDone,
+  detailsCard,
   ended,
   factCard,
   firstPalettes,
@@ -1687,5 +1688,23 @@ describe("the design tray", () => {
       progressOf([row("tool-ask_choice", "output-available", "industry")])
         .oldDesign
     ).toBeUndefined()
+  })
+})
+
+describe("the assistant card's name ideas", () => {
+  const ideas = (o: Onboarding) =>
+    AskDetailsInput.parse(detailsCard("assistant", o, counter()).input).ideas
+
+  it("offers Reme first, then plain names until some are written for the business", () => {
+    expect(ideas(start())).toEqual(["Reme", "Ava", "Ellie", "Marcus"])
+  })
+
+  it("offers the written names after Reme once they are ready", () => {
+    const prepared = {
+      photo_question: "Do you have photos?",
+      services_phrase: "your cleans",
+      assistant_names: ["Poppy", "Theo"],
+    }
+    expect(ideas(start({ prepared }))).toEqual(["Reme", "Poppy", "Theo"])
   })
 })

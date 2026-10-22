@@ -18,8 +18,8 @@ import type {
  * carries the result when there is one. A failed line starts "Couldn't" and
  * ends on the next step. A line holds one argument at most, cleaned by
  * `cleanArg`. The words are the owner's: "your website", "your DNS", never
- * "assignment", "revision" or "blueprint". The assistant's name is the
- * persona's and never "Reme": without one a line is written bare.
+ * "assignment", "revision" or "blueprint". The assistant's name is the one
+ * the owner chose, Reme included: without one a line is written bare.
  */
 
 /** What an icon is drawn for, so the status line picks its icon from the copy's own kind. */
@@ -60,10 +60,10 @@ const uncap = (text: string) => text.charAt(0).toLowerCase() + text.slice(1)
 const plural = (n: number, one: string, many = `${one}s`) =>
   `${n} ${n === 1 ? one : many}`
 
-/** The persona's name, or null before the owner has named one. "Reme" is never a persona. */
+/** The name the owner gave the assistant, or null before they have given one. */
 const named = (assistant?: string | null) => {
   const name = assistant ? tidy(assistant) : ""
-  return name && name.toLowerCase() !== "reme" ? name : null
+  return name || null
 }
 
 /** "Ellie is building your website", or "Building your website" when there is no name. */

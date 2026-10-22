@@ -792,6 +792,9 @@ function echoes(say: string, typed: string): boolean {
 /** What `sayProblems` needs to know of a plan's turn. */
 function sayContext(plan: OnboardingPlan, s: PlanState): SayContext {
   const held = s.onboarding.facts
+  const name = (
+    plan.facts["assistant.name"] ?? factValue(held, "assistant.name")
+  )?.name
   return {
     ...(s.input.kind === "message" ? { typed: s.input.text } : {}),
     corrected: Object.entries(plan.facts).some(([key, value]) => {
@@ -803,9 +806,8 @@ function sayContext(plan: OnboardingPlan, s: PlanState): SayContext {
       )
     }),
     upload: plan.next.kind === "ask_upload",
-    assistantNamed:
-      held.some((f) => f.key === "assistant.name") ||
-      plan.facts["assistant.name"] !== undefined,
+    // An assistant the owner called Reme may say its own name.
+    assistantNamed: Boolean(name) && name?.toLowerCase() !== "reme",
   }
 }
 

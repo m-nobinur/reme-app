@@ -213,8 +213,8 @@ describe("the assistant's moments", () => {
     expect(planningLine(ellie)).toBe("Ellie is planning your website")
   })
 
-  it("is written bare before the assistant has a name, and never says Reme", () => {
-    for (const assistant of [undefined, null, "", "  ", "Reme", "reme"]) {
+  it("is written bare before the assistant has a name", () => {
+    for (const assistant of [undefined, null, "", "  "]) {
       const ctx = { orgId: "org-1", assistant }
       expect(turnMoment(0, ctx)).toBe("Reading your message")
       expect(turnMoment(5, ctx)).toBe("Thinking it through")
@@ -222,6 +222,11 @@ describe("the assistant's moments", () => {
       expect(writingBack(ctx)).toBe("Writing back")
       expect(planningLine(ctx)).toBe("Planning your website")
     }
+  })
+
+  it("uses Reme when the owner chose it as the assistant's name", () => {
+    const ctx = { orgId: "org-1", assistant: "Reme" }
+    expect(turnMoment(0, ctx)).toBe("Reme is reading your message")
   })
 })
 
@@ -259,7 +264,7 @@ describe("segment copy", () => {
   it("writes clean titles, lines and pills for every job, state, org and name", () => {
     for (const kind of JOBS) {
       for (const state of STATES) {
-        for (const assistant of ["Ellie", null, "Reme"]) {
+        for (const assistant of ["Ellie", null, "Maya"]) {
           for (const orgId of ORGS) {
             const ctx = { orgId, assistant }
             const s = segment(kind, state)
@@ -431,7 +436,7 @@ describe("page lines", () => {
   it("writes a clean line for every standing kind, state and name", () => {
     for (const kind of STANDING) {
       for (const state of STATES) {
-        for (const assistant of ["Ellie", null, "Reme"]) {
+        for (const assistant of ["Ellie", null, "Maya"]) {
           const line = standingLine(
             segment(kind, state),
             { orgId: "org-1", assistant },
