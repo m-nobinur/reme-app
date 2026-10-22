@@ -397,7 +397,7 @@ it("every message keeps the time it was sent, as a reload shows it", async () =>
         ),
       })()
     )
-    await press(chat, "Save")
+    await press(chat, "Submit")
     await vi.waitFor(() =>
       expect(transcript(chat).at(-1)).toContain(
         "What number should customers ring?"
@@ -463,7 +463,7 @@ it("a stored conversation loading shows a skeleton, never the welcome or a sugge
   await act(async () => release.open?.())
   await vi.waitFor(() =>
     expect(transcript(container)).toEqual([
-      "What is your business called?Business nameSave",
+      "What is your business called?Business nameSubmit",
     ])
   )
 })
@@ -542,7 +542,7 @@ it("a stored conversation sends nothing until it is the thread on screen, then s
   await act(async () => release.open?.())
   await vi.waitFor(() =>
     expect(transcript(container)).toEqual([
-      "What is your business called?Business nameSave",
+      "What is your business called?Business nameSubmit",
     ])
   )
   expect(input?.disabled).toBe(false)
@@ -562,14 +562,14 @@ it("renders a recorded answer turn the way a reload of the stored row does", asy
   // A question overtaken by a typed message, the message, and the question
   // asked again with the business name filled in.
   expect(transcript(chat)).toEqual([
-    "What is your business called?Not answered. You sent a message instead.",
+    "You replied in the chat instead.",
     "Hello",
-    "What is your business called?Business nameSave",
+    "What is your business called?Business nameSubmit",
   ])
   expect(chat.querySelector("input")?.value).toBe("Fixture Cleaning Co")
 
   turns.push(sse(FIXTURE.streams.name))
-  await press(chat, "Save")
+  await press(chat, "Submit")
   await vi.waitFor(() =>
     expect(transcript(chat).at(-1)).toContain(
       "What number should customers ring?"
@@ -594,7 +594,7 @@ it("renders a recorded answer turn the way a reload of the stored row does", asy
   // message of its own, with its own time.
   expect(transcript(chat).slice(-2)).toEqual([
     "Fixture Cleaning Co",
-    "What number should customers ring?Phone numberSave",
+    "What number should customers ring?Phone numberSubmit",
   ])
   expect(
     chat.querySelectorAll('[data-slot="aui_assistant-message-root"]')
@@ -608,17 +608,17 @@ it("offers the build, keeps a not now, and a typed change after it", async () =>
   // overtaken question, the owner's message, five replies and the open
   // tagline question.
   expect(transcript(chat)).toEqual([
-    "What is your business called?Not answered. You sent a message instead.",
+    "You replied in the chat instead.",
     "Hello",
     "Fixture Cleaning Co",
     "+447700900123",
     "hello@example.net",
     "08:00 to 18:00",
     "Leeds, within 15 km",
-    "How would you sum up your business in one line?TaglineSaveSkip for now",
+    "How would you sum up your business in one line?TaglineSkipSubmit",
   ])
   turns.push(sse(FIXTURE.streams.skip))
-  await press(chat, "Skip for now")
+  await press(chat, "Skip")
   await vi.waitFor(() =>
     expect(transcript(chat).at(-1)).toContain("Build my website")
   )
@@ -673,7 +673,7 @@ for (const [failure, answer] of Object.entries(FAILURES)) {
     const chat = await open(FIXTURE.histories.start)
     const before = transcript(chat)
     turns.push(answer)
-    await press(chat, "Save")
+    await press(chat, "Submit")
     // Back to the stored row: the question open again, the error inline.
     await vi.waitFor(() => expect(transcript(chat)).toEqual(before))
     await vi.waitFor(() =>
@@ -681,7 +681,10 @@ for (const [failure, answer] of Object.entries(FAILURES)) {
         chat.querySelector(".aui-message-error-message")?.textContent
       ).toBeTruthy()
     )
-    expect(chat.querySelector("form button")?.textContent).toBe("Save")
+    expect(
+      chat.querySelector('[data-slot="ask-fact"] button[type="submit"]')
+        ?.textContent
+    ).toBe("Submit")
     // The answer goes back to the card, never into the composer.
     expect(chat.querySelector("textarea")?.value).toBe("")
 
@@ -1574,7 +1577,7 @@ it("the design tray's last answer is saved before Build my site is sent, and a r
   const turn = (n: number) => (sent[n] as { turn: object }).turn
   expect(turn(3)).toMatchObject({
     results: (turn(1) as { results: object }).results,
-    reply: { text: "Which pages should the site have: Everything" },
+    reply: { text: "Everything" },
   })
 })
 

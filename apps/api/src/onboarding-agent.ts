@@ -63,6 +63,11 @@ import {
   uploadCard,
 } from "./onboarding.ts"
 import { firstName } from "./onboarding-copy.ts"
+import {
+  DESIGN,
+  OPTIONAL_ASKS,
+  onboardingSteps,
+} from "./onboarding-progress.ts"
 import { VOICE, voiceProblems } from "./voice.ts"
 
 /**
@@ -344,18 +349,9 @@ const OPTIONAL: readonly FactValueKey[] = [
   "business.audience",
   "business.proof",
 ]
-const OPTIONAL_ASKS = 1
 
 /** Facts the builder drafts itself, never asked in onboarding. */
 const NEVER_ASKED: readonly string[] = ["business.tagline", "business.overview"]
-
-/** The design choices a build needs once the assistant builds the site. */
-export const DESIGN: readonly FactValueKey[] = [
-  "site.template",
-  "site.palette",
-  "site.font",
-  "site.pages",
-]
 
 /** The facts the design tray's four questions state. */
 const TRAY: readonly FactValueKey[] = [
@@ -538,6 +534,9 @@ function checklist(o: Onboarding, asked: Readonly<Record<string, number>>) {
   }
   const you = Object.fromEntries(PERSONA.map((k) => [k, status(k)]))
   const building = mode(o) === "assistant"
+  // The panel's steps come from the same function, so the two never disagree.
+  const step = (id: string) =>
+    onboardingSteps(o, asked).find((each) => each.id === id)?.state
   const before = beforeWebsite(o, asked)
   // Only the phase in reach is listed as missing, so a model that fills
   // gaps is never shown the website's before it may ask about them.
@@ -570,13 +569,20 @@ function checklist(o: Onboarding, asked: Readonly<Record<string, number>>) {
         ? {
             ...(oldDesign(o)
               ? Object.fromEntries(DESIGN.map((k) => [k, status(k)]))
-              : { design: designDone(o) ? "done" : "missing: ask_design" }),
-            photos: o.closed.includes("upload") ? "done" : "missing",
-            "quote.form": has(o, "quote.form")
-              ? "have"
-              : o.closed.includes("quote_form")
-                ? "declined: the default form is used"
+              : {
+                  design:
+                    step("look") === "done" ? "done" : "missing: ask_design",
+                }),
+            photos:
+              step("photos") === "done" || step("photos") === "skipped"
+                ? "done"
                 : "missing",
+            "quote.form":
+              step("quote_form") === "done"
+                ? "have"
+                : step("quote_form") === "skipped"
+                  ? "declined: the default form is used"
+                  : "missing",
           }
         : {}),
     },

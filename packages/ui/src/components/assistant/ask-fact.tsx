@@ -1,19 +1,18 @@
 import type { ToolCallMessagePartComponent } from "@assistant-ui/react"
 import type { AskableFactKey, AskFactOutput } from "@workspace/contracts"
-import { Button } from "@workspace/ui/components/button"
-import { AnswerInputs } from "@workspace/ui/components/live-panel"
 import {
-  useFocusWhenIdle,
-  useRevealWaiting,
-} from "@workspace/ui/hooks/use-reveal-waiting"
+  Docked,
+  TrayFrame,
+  TrayNote,
+} from "@workspace/ui/components/assistant/question-tray"
+import { AnswerInputs } from "@workspace/ui/components/live-panel"
 import { answerValue, askable, FACT_INPUTS } from "@workspace/ui/lib/answer"
-import { CARD_SURFACE, FIELD_ERROR } from "@workspace/ui/lib/card"
+import { FIELD_ERROR } from "@workspace/ui/lib/card"
 import { askFactView } from "@workspace/ui/lib/tool-state"
-import { cn } from "@workspace/ui/lib/utils"
-import { type FormEvent, useId, useRef, useState } from "react"
+import { type FormEvent, useId, useState } from "react"
 
 /**
- * One fact onboarding asks for, answered in the transcript with the key's
+ * One fact onboarding asks for, answered in the question tray with the key's
  * own native inputs. The question is the web's copy for the key; the call
  * carries only the key, whether it may be skipped, and a starting value.
  * Once answered or skipped it shows nothing: the owner's reply after it
@@ -22,19 +21,22 @@ import { type FormEvent, useId, useRef, useState } from "react"
 const AskFact: ToolCallMessagePartComponent = (props) => {
   const view = askFactView(props)
   const id = useId()
-  const waiting = view.state === "pending"
-  const running = useRevealWaiting(waiting)
-  const formRef = useRef<HTMLFormElement>(null)
-  useFocusWhenIdle(waiting, running, formRef)
   const [invalid, setInvalid] = useState<string | null>(null)
+  const [collapsed, setCollapsed] = useState(false)
   if (view.state === "answered" || view.state === "skipped") return null
-  const question =
-    view.key && askable(view.key) ? FACT_INPUTS[view.key].ask : "A question"
+  if (view.state !== "pending") {
+    return (
+      <TrayNote
+        error={view.state === "error" ? view.message : null}
+        name="ask-fact"
+      />
+    )
+  }
+  const { key, skippable, prefill } = view.input
+  const question = askable(key) ? FACT_INPUTS[key].ask : "A question"
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (view.state !== "pending") return
-    const { key } = view.input
     if (!askable(key)) return
     const form = new FormData(event.currentTarget)
     const parsed = answerValue({ kind: "fact", key }, (name) =>
@@ -45,33 +47,39 @@ const AskFact: ToolCallMessagePartComponent = (props) => {
       return
     }
     setInvalid(null)
-    const output = {
+    props.addResult({
       answer: "stated",
       fact: { key, value: parsed.value },
-    } as AskFactOutput
-    props.addResult(output)
+    } as AskFactOutput)
   }
 
   return (
-    <div className="my-3 flex max-w-md flex-col gap-2" data-slot="ask-fact">
-      {/* The assistant's line above the card asks the question. This one names
-          the form for assistive tech and is not shown twice. */}
-      <p className="sr-only" id={`${id}-question`}>
-        {question}
-      </p>
-      {view.state === "pending" ? (
+    <Docked name="ask-fact">
+      <TrayFrame
+        collapsed={collapsed}
+        onCollapsedChange={setCollapsed}
+        question={question}
+        skip={
+          skippable
+            ? {
+                label: "Skip",
+                onSkip: () => props.addResult({ answer: "skipped" }),
+              }
+            : undefined
+        }
+        submit={{ label: "Submit", form: `${id}-form` }}
+      >
         <form
-          aria-labelledby={`${id}-question`}
-          className={cn(CARD_SURFACE, "flex flex-col gap-3")}
+          className="flex flex-col gap-2"
+          id={`${id}-form`}
           noValidate
           onSubmit={submit}
-          ref={formRef}
         >
           <AnswerInputs
             id={id}
             invalid={invalid !== null}
-            prefill={view.input.prefill}
-            spec={{ kind: "fact", key: view.input.key as AskableFactKey }}
+            prefill={prefill}
+            spec={{ kind: "fact", key: key as AskableFactKey }}
             title={question}
           />
           {invalid ? (
@@ -79,36 +87,9 @@ const AskFact: ToolCallMessagePartComponent = (props) => {
               {invalid}
             </p>
           ) : null}
-          <div className="flex flex-wrap gap-2">
-            <Button size="sm" type="submit">
-              Save
-            </Button>
-            {view.input.skippable ? (
-              <Button
-                onClick={() => props.addResult({ answer: "skipped" })}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                Skip for now
-              </Button>
-            ) : null}
-          </div>
         </form>
-      ) : (
-        <p
-          className={
-            view.state === "error"
-              ? "text-destructive text-sm"
-              : "text-muted-foreground text-sm"
-          }
-        >
-          {view.state === "cancelled"
-            ? "Not answered. You sent a message instead."
-            : view.message}
-        </p>
-      )}
-    </div>
+      </TrayFrame>
+    </Docked>
   )
 }
 AskFact.displayName = "AskFact"

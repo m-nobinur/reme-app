@@ -17,6 +17,8 @@ describe("voiceProblems", () => {
     "Great question! I'd be happy to help.",
     "All done. Let me know if you need anything else.",
     "As your assistant, I can do that.",
+    "Thank you for picking me to be the business assistant.",
+    "Good to be officially on the team.",
   ]
   const AFTER = [
     "I'm Ellie. Now a few questions about the website.",

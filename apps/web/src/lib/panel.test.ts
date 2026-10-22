@@ -125,7 +125,14 @@ const ONBOARDING_STEPS = [
   "photos",
   "look",
 ]
-const WEBSITE_STEPS = ["plan", "photos", "pages", "polish", "check", "ready"]
+const WEBSITE_STEPS = [
+  "planning",
+  "photos",
+  "writing",
+  "polishing",
+  "checking",
+  "ready",
+]
 const GOLIVE_STEPS = ["approval", "publishing", "loads"]
 
 const segment = (
@@ -304,9 +311,9 @@ describe("the first run", () => {
           "website",
           "now",
           [
-            step("plan", "done"),
+            step("planning", "done"),
             step("photos", "skipped"),
-            step("pages", "now", { count: { done: 3, total: 6 } }),
+            step("writing", "now", { count: { done: 3, total: 6 } }),
             ...along(WEBSITE_STEPS, 0).slice(3),
           ],
           BUSINESS

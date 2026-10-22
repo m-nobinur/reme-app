@@ -325,7 +325,7 @@ const ANY_TOOL: ToolCopy = {
 }
 
 const FAIL_TOOL = "try again in a moment"
-const FAIL_STAGE = "trying again"
+const FAIL_STAGE = "You can try again from here."
 
 const clean = (a: ToolArgs): Cleaned => ({
   domain: cleanArg(a.domain, "domain"),
@@ -365,11 +365,11 @@ export const toolKind = (tool: string): StatusKind => toolCopy(tool).kind
 // Build stages: the six every full build lists, from its first event.
 
 export type BuildStage =
-  | "plan"
+  | "planning"
   | "photos"
-  | "pages"
-  | "check"
-  | "polish"
+  | "writing"
+  | "polishing"
+  | "checking"
   | "ready"
 
 type StageArgs = {
@@ -387,8 +387,9 @@ type StageCopy = {
   fail: string
 }
 
+/** Keyed and ordered as the api's stage ids (`apps/api/src/workspace.ts`). */
 const STAGES: Record<BuildStage, StageCopy> = {
-  plan: {
+  planning: {
     kind: "planning",
     working: () => "Planning your website",
     done: () => "Planned your website",
@@ -404,7 +405,7 @@ const STAGES: Record<BuildStage, StageCopy> = {
       a.total ? `Made ${plural(a.total, "photo")}` : "Made your photos",
     fail: "make your photos",
   },
-  pages: {
+  writing: {
     kind: "building",
     working: (a) =>
       a.total
@@ -412,9 +413,15 @@ const STAGES: Record<BuildStage, StageCopy> = {
         : "Writing the pages",
     done: (a) =>
       a.total ? `Wrote ${plural(a.total, "page")}` : "Wrote the pages",
-    fail: "write the pages",
+    fail: "finish the pages",
   },
-  check: {
+  polishing: {
+    kind: "building",
+    working: () => "Polishing the details",
+    done: () => "Polished the details",
+    fail: "finish polishing",
+  },
+  checking: {
     kind: "checking",
     working: (a) =>
       a.fixes
@@ -422,12 +429,6 @@ const STAGES: Record<BuildStage, StageCopy> = {
         : "Checking the pages",
     done: () => "Checked the pages",
     fail: "finish the checks",
-  },
-  polish: {
-    kind: "building",
-    working: () => "Polishing the details",
-    done: () => "Polished the details",
-    fail: "finish polishing",
   },
   ready: {
     kind: "publishing",
@@ -437,7 +438,7 @@ const STAGES: Record<BuildStage, StageCopy> = {
   },
 }
 
-/** A build stage's line in one of its three forms. */
+/** A build stage's line in one of its three forms. A failed build stops, so its line offers a new try, never a retry. */
 export function stageLine(
   stage: BuildStage,
   state: LineState,
@@ -448,7 +449,7 @@ export function stageLine(
     ? copy.working(args)
     : state === "done"
       ? copy.done(args)
-      : `Couldn't ${copy.fail}, ${FAIL_STAGE}`
+      : `Couldn't ${copy.fail}. ${FAIL_STAGE}`
 }
 
 export const stageKind = (stage: BuildStage): StatusKind => STAGES[stage].kind
@@ -773,11 +774,11 @@ const STEP_LABELS: Partial<
     look: "Look and feel",
   },
   website: {
-    plan: "Planning",
+    planning: "Planning",
     photos: "Photos",
-    pages: "Pages",
-    polish: "Polishing",
-    check: "Checking",
+    writing: "Pages",
+    polishing: "Polishing",
+    checking: "Checking",
     ready: "Ready",
   },
   golive: {

@@ -1062,7 +1062,7 @@
             "parts": [
               {
                 "type": "text",
-                "text": "Skip for now"
+                "text": "Skipped"
               }
             ],
             "metadata": {
@@ -1494,7 +1494,7 @@
             "parts": [
               {
                 "type": "text",
-                "text": "Skip for now"
+                "text": "Skipped"
               }
             ],
             "metadata": {
@@ -1930,7 +1930,7 @@
             "parts": [
               {
                 "type": "text",
-                "text": "Skip for now"
+                "text": "Skipped"
               }
             ],
             "metadata": {
@@ -2089,7 +2089,7 @@
           ],
           "reply": {
             "message_id": "reply-sent-here",
-            "text": "Skip for now"
+            "text": "Skipped"
           }
         }
       },

@@ -317,6 +317,8 @@ export const samples: Record<ContractName, unknown> = {
       },
     ],
   },
+  AskOpenInput: { about: "service_area.text" },
+  AskOpenOutput: { answer: "stated", text: "Leeds and about ten miles round" },
   AskUploadOutput: {
     answer: "uploaded",
     assets: [

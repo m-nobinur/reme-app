@@ -40,6 +40,7 @@ import {
 } from "@workspace/db"
 import { factsToAsk } from "@workspace/gates/fields"
 import { fields } from "@workspace/starter-site/site-config"
+import { activityOf, readActivityRows } from "./activity.ts"
 import { sha256Hex } from "./http.ts"
 import { readReminderNotes } from "./reminders.ts"
 
@@ -87,9 +88,10 @@ type Step =
 /**
  * The stages every full build lists from its first event, in the order it
  * reaches them. The photos are drawn before the pages are written, and the
- * design look and its fixes come before the gates.
+ * design look and its fixes come before the gates. The activity view's
+ * website segment lists the same ids.
  */
-const STAGES = [
+export const STAGES = [
   "planning",
   "photos",
   "writing",
@@ -813,6 +815,16 @@ export function assistantName(current: FactRecord[]): string | null {
     : null
 }
 
+/** The business name fact, when it still parses. Not `factValue`: onboarding.ts reaches chat.ts, which the CoS must not (ADR-034). */
+export function businessName(current: FactRecord[]): string | null {
+  const held = current.find((fact) => fact.key === "business.name")
+  const parsed =
+    held && FactValue.safeParse({ key: held.key, value: held.value })
+  return parsed?.success && parsed.data.key === "business.name"
+    ? parsed.data.value.name
+    : null
+}
+
 /** §7.3's order: approvals, questions, due reminders, then alerts and reports, each list as read. */
 export function orderAttention(
   approvalItems: AttentionItem[],
@@ -930,17 +942,27 @@ export async function statusWithFacts(
 ): Promise<{ status: WorkspaceStatus; facts: FactRecord[] }> {
   // Issued together, so postgres.js pipelines them on the transaction's one
   // connection instead of paying a round trip each.
-  const [builds, approvalItems, questions, feed, current, site, notes, due] =
-    await Promise.all([
-      readBuilds(db),
-      readApprovals(db),
-      readQuestions(db),
-      readFeed(db, PANEL_HOURS, 10),
-      readFacts(db),
-      readSite(db, config),
-      readReminderNotes(db),
-      readDueReminders(db, now),
-    ])
+  const [
+    builds,
+    approvalItems,
+    questions,
+    feed,
+    current,
+    site,
+    notes,
+    due,
+    rows,
+  ] = await Promise.all([
+    readBuilds(db),
+    readApprovals(db),
+    readQuestions(db),
+    readFeed(db, PANEL_HOURS, 10),
+    readFacts(db),
+    readSite(db, config),
+    readReminderNotes(db),
+    readDueReminders(db, now),
+    readActivityRows(db, now),
+  ])
   const missing = missingFacts(current)
   const status = WorkspaceStatus.parse({
     site,
@@ -956,6 +978,20 @@ export async function statusWithFacts(
         now
       ),
     },
+    activity: activityOf(
+      {
+        site,
+        business: businessName(current),
+        builds,
+        approvals: approvalItems,
+        questions,
+        feed,
+        due,
+        notes,
+        rows,
+      },
+      now
+    ),
   })
   return { status, facts: current }
 }

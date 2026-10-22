@@ -239,7 +239,14 @@ const along = (
     stepAt(id, i < here ? "done" : i === here ? state : "next")
   )
 
-const WEBSITE = ["plan", "photos", "pages", "polish", "check", "ready"]
+const WEBSITE = [
+  "planning",
+  "photos",
+  "writing",
+  "polishing",
+  "checking",
+  "ready",
+]
 
 /** A segment as `apps/web` draws it, worded by the copy table, at the panel's width. */
 const segment = (
@@ -484,7 +491,7 @@ const panelCatalog: Entry[] = [
               state: "now",
               steps: [
                 ...along(WEBSITE, 2).slice(0, 2),
-                stepAt("pages", "now", { count: { done: 3, total: 6 } }),
+                stepAt("writing", "now", { count: { done: 3, total: 6 } }),
                 ...along(WEBSITE, 2).slice(3),
               ],
             },
@@ -580,7 +587,7 @@ const panelCatalog: Entry[] = [
           kind: "website",
           state: "now",
           steps: [
-            stepAt("plan", "done"),
+            stepAt("planning", "done"),
             stepAt("photos", "now", { count: { done: 2, total: 4 } }),
             ...along(WEBSITE, 2).slice(2),
           ],
@@ -605,11 +612,11 @@ const panelCatalog: Entry[] = [
         kind: "website",
         state: "now",
         steps: [
-          stepAt("plan", "done"),
+          stepAt("planning", "done"),
           stepAt("photos", "skipped"),
-          stepAt("pages", "done"),
-          stepAt("polish", "skipped"),
-          stepAt("check", "now"),
+          stepAt("writing", "done"),
+          stepAt("polishing", "skipped"),
+          stepAt("checking", "now"),
           stepAt("ready", "next"),
         ],
       }),

@@ -41,14 +41,17 @@ import {
   withChoice,
 } from "../src/onboarding.ts"
 import {
+  chose,
   manualEnd,
   opener,
   photos,
   question,
   quoteForm,
+  retry,
   started,
   type Voice,
 } from "../src/onboarding-copy.ts"
+import { voiceProblems } from "../src/voice.ts"
 
 const counter = () => {
   let n = 0
@@ -1094,6 +1097,19 @@ const lines = (v: Voice): [string, string][] => [
   ["started", started(v, true)],
   ["manual_yes", manualEnd(v, true)],
   ["manual_no", manualEnd(v, false)],
+  ["chose", chose(v, "the Ocean colours")],
+  ...(
+    [
+      "phone",
+      "email",
+      "long",
+      "unclear",
+      "choice",
+      "yes_no",
+      "upload",
+      "details",
+    ] as const
+  ).map((reason): [string, string] => [`retry ${reason}`, retry(reason, v)]),
 ]
 
 /** The lines that name the business in every wording. */
@@ -1126,6 +1142,10 @@ describe("the onboarding copy", () => {
       expect(text, name).not.toMatch(/\bReme\b/)
       if (NAMED.includes(name)) expect(text, name).toContain(BUSINESS)
       if (tone === "professional") expect(text, name).not.toContain("!")
+      expect(voiceProblems(text, { assistantNamed: true }), name).toEqual({
+        hard: [],
+        soft: [],
+      })
     }
   })
 
@@ -1223,7 +1243,7 @@ describe("the onboarding copy", () => {
     expect(at("casual")).toMatch(/\bWant me to build\b/)
   })
 
-  it("opens with text only: thanks by first name, the plan, and what the business does", () => {
+  it("opens with text only: a greeting by first name, the plan, and what the business does", () => {
     const seen = new Set<string>()
     for (const org of ORGS) {
       const parts = opening(start({ orgId: org }))

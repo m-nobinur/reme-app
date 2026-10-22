@@ -364,16 +364,6 @@ function StepDetail({
   }
 }
 
-/** The build activity row a website stage reads its detail from. */
-const STAGE_ROW: Readonly<Record<string, string>> = {
-  plan: "planning",
-  photos: "photos",
-  pages: "writing",
-  polish: "polishing",
-  check: "checking",
-  ready: "ready",
-}
-
 /**
  * What a website stage decided or made, under its step: the plan, the
  * photos, the pages. Nothing for a stage not reached yet.
@@ -394,7 +384,8 @@ function StageDetail({
   /** The plan waits on the owner's review. */
   awaiting?: boolean
 }) {
-  const row = activity.find((each) => each.id === STAGE_ROW[stage])
+  // A website step is named by its build activity row.
+  const row = activity.find((each) => each.id === stage)
   if (!row || state === "next" || state === "skipped") return null
   return (
     <StepDetail
