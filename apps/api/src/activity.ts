@@ -453,11 +453,10 @@ export type ActivityInput = {
 const recent = (at: string, now: Date) => now.getTime() - Date.parse(at) < DAY
 
 /**
- * The first run's three segments until the site is first live: the
- * website (the newest build), then going live (its review and publish).
- *
- * The onboarding segment waits on ON1's checklist; until then the journey
- * starts at the website.
+ * The first run's website and going-live segments until the site is first
+ * live: the website (the newest build), then going live (its review and
+ * publish). Onboarding, the first of the three, is `withOnboarding`'s: it
+ * reads the chat, which nothing the CoS reaches may (ADR-034).
  */
 export function journeyOf(input: ActivityInput): Segment[] {
   if (input.site.live) return []
@@ -691,3 +690,15 @@ export function activityOf(input: ActivityInput, now: Date): Activity {
     done: cap(done, true),
   }
 }
+
+/**
+ * The journey with onboarding first, for the `/workspace` read, which alone
+ * reads the onboarding conversation. Nothing to add once the site is live.
+ */
+export const withOnboarding = (
+  activity: Activity,
+  onboarding: Segment | null
+): Activity =>
+  onboarding && activity.journey.length > 0
+    ? { ...activity, journey: [onboarding, ...activity.journey] }
+    : activity

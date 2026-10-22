@@ -14,6 +14,7 @@ import {
   GOLIVE_STEPS,
   PURCHASE_HOLD_MS,
   WEBSITE_STEPS,
+  withOnboarding,
 } from "../src/activity.ts"
 import { activityFor } from "../src/workspace.ts"
 
@@ -464,4 +465,27 @@ it("keeps the website's six stage ids from the first event to ready", () => {
     expect(journey[0]?.steps.map((s) => s.id)).toEqual([...WEBSITE_STEPS])
     expect(journey[1]?.steps.map((s) => s.id)).toEqual([...GOLIVE_STEPS])
   }
+})
+
+describe("withOnboarding", () => {
+  const onboarding: ActivitySegment = {
+    id: "onboarding",
+    kind: "onboarding",
+    state: "now",
+    steps: [{ id: "work", state: "now" }],
+    at: ago(10),
+  }
+
+  it("puts onboarding first in the journey", () => {
+    const activity = withOnboarding(view(), onboarding)
+    expect(activity.journey.map((s) => s.kind)).toEqual([
+      "onboarding",
+      "website",
+      "golive",
+    ])
+  })
+
+  it("adds nothing once the site is live", () => {
+    expect(withOnboarding(view({ site: LIVE }), onboarding).journey).toEqual([])
+  })
 })

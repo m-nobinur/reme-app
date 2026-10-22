@@ -42,7 +42,6 @@ import { factsToAsk } from "@workspace/gates/fields"
 import { fields } from "@workspace/starter-site/site-config"
 import { activityOf, readActivityRows } from "./activity.ts"
 import { sha256Hex } from "./http.ts"
-import { factValue } from "./onboarding.ts"
 import { readReminderNotes } from "./reminders.ts"
 
 /**
@@ -815,6 +814,16 @@ export function assistantName(current: FactRecord[]): string | null {
     : null
 }
 
+/** The business name fact, when it still parses. Not `factValue`: onboarding.ts reaches chat.ts, which the CoS must not (ADR-034). */
+export function businessName(current: FactRecord[]): string | null {
+  const held = current.find((fact) => fact.key === "business.name")
+  const parsed =
+    held && FactValue.safeParse({ key: held.key, value: held.value })
+  return parsed?.success && parsed.data.key === "business.name"
+    ? parsed.data.value.name
+    : null
+}
+
 /** §7.3's order: approvals, questions, due reminders, then alerts and reports, each list as read. */
 export function orderAttention(
   approvalItems: AttentionItem[],
@@ -971,7 +980,7 @@ export async function statusWithFacts(
     activity: activityOf(
       {
         site,
-        business: factValue(current, "business.name")?.name ?? null,
+        business: businessName(current),
         builds,
         approvals: approvalItems,
         questions,
