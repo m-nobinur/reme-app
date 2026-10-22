@@ -80,6 +80,30 @@ costs about $0.07.
     node --env-file=.env.local --experimental-transform-types \
       evals/tier-2/onboarding-planner.eval.mjs
 
+`ONBOARDING_EVAL_PERSONAS=conversations` runs the twelve recorded conversations
+(three tones, one owner who skips everything, one who corrects twice). Every
+question the planner can ask is answered: the design tray (picked or skipped),
+an open question (stated or skipped), a fact, details, a choice, the photo
+upload (skipped) and the quote form (accepted). Each conversation also asserts
+that no fact is asked twice, no line the owner reads trips `voiceProblems`, no
+question is about a fact already held, and the build starts within one turn of
+the design tray's last answer. `ONBOARDING_EVAL_RECORD=<path>` writes the lines
+the owner read, per conversation, for the voice eval.
+
+`voice.mjs` is the voice eval. It checks samples against `voiceProblems` (a hard
+hit is a dash, an id, a hash, a raw value or a wrong "Reme"; a soft hit is
+ceremony, praise, a chatbot opener or a sign-off) and passes with no hard hit
+and at most two soft hits. Its samples are the recorded conversations
+(`--onboarding`, default `voice/onboarding-says.json`), every line of
+`onboarding-copy.ts`, the panel's status lines, and CoS replies in
+`voice/cos-replies.json` (`[{ "id": "...", "text": "..." }]`). `--judge` adds a
+model score from 1 to 5 for "reads as a person at work, not a chatbot" and
+needs 4 or more on 90% of samples. `rubric/score.mjs` grades a build's HTML, so
+it cannot grade chat text.
+
+    node --import ./evals/json-imports.mjs --experimental-transform-types \
+      evals/voice.mjs [--judge]
+
 Tier 3 has none yet; an absent tier reads as zero rather than as an error.
 
 | Tier | What it covers |
