@@ -225,7 +225,7 @@ describe("domain", () => {
       "certificate:next",
       "loads:next",
     ])
-    expect(at({}).state).toBe("waiting")
+    expect(at({})?.state).toBe("waiting")
     expect(
       states(at({ state: "verifying", check: "pending_certificate" }))
     ).toEqual(["dns:done", "certificate:now", "loads:next"])
