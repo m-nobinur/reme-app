@@ -24,7 +24,6 @@ import {
   ChatHistory,
   type HistoryEntry,
 } from "@workspace/ui/components/history-menu"
-import { LogoMark } from "@workspace/ui/components/logo"
 import {
   type NotificationEntry,
   NotificationMenu,
@@ -255,9 +254,6 @@ function AppLayout() {
           panelLine={showPanel ? <WorkspacePanelLine panel={panel} /> : null}
           rail={
             <>
-              <span className="mb-4 flex h-12 shrink-0 items-center px-2.5 text-foreground">
-                <LogoMark />
-              </span>
               <nav aria-label="Main" className="flex flex-col gap-2">
                 {last ? (
                   // Hovering the link lists every conversation beside it.

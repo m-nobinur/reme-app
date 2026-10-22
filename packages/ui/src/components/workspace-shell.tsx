@@ -4,13 +4,14 @@ import {
   SidebarSimpleIcon,
 } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
+import { LogoMark } from "@workspace/ui/components/logo"
 import {
   Sheet,
   SheetContent,
   SheetTitle,
   SheetTrigger,
 } from "@workspace/ui/components/sheet"
-import { hintsShown } from "@workspace/ui/components/tooltip"
+import { Hint, hintsShown } from "@workspace/ui/components/tooltip"
 import {
   PANEL_COOKIE,
   type PanelPress,
@@ -90,6 +91,34 @@ const useWide = () =>
     () => window.matchMedia(WIDE).matches,
     () => true
   )
+
+/**
+ * The rail's top: the mark, which shows the sidebar icon under the pointer or
+ * keyboard focus and hides or shows the rail when pressed. It sits at the head
+ * of the rail while that is open and at the top left of the page once it is
+ * not, in the same place.
+ */
+function RailToggle({ open, onClick }: { open: boolean; onClick: () => void }) {
+  const label = open ? "Hide sidebar" : "Show sidebar"
+  return (
+    <Hint label={label} side={open ? "right" : "bottom"}>
+      <button
+        aria-controls="workspace-rail"
+        aria-expanded={open}
+        aria-label={label}
+        className="group/toggle relative flex size-10 shrink-0 items-center justify-center rounded-xl text-foreground outline-none transition-colors duration-150 hover:bg-foreground/5 focus-visible:ring-3 focus-visible:ring-ring motion-reduce:transition-none"
+        onClick={onClick}
+        type="button"
+      >
+        <LogoMark className="transition-opacity duration-150 group-hover/toggle:opacity-0 group-focus-visible/toggle:opacity-0 motion-reduce:transition-none" />
+        <SidebarSimpleIcon
+          aria-hidden
+          className="absolute size-6 text-muted-foreground opacity-0 transition-opacity duration-150 group-hover/toggle:opacity-100 group-focus-visible/toggle:opacity-100 motion-reduce:transition-none"
+        />
+      </button>
+    </Hint>
+  )
+}
 
 /**
  * The owner workspace: a compact rail of icons, the conversation, and the
@@ -214,14 +243,17 @@ function WorkspaceShell({
           id="workspace-rail"
           inert={!railOpen}
         >
-          <div className="flex min-h-0 w-16 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden px-2.5 pb-3">
+          <div className="flex h-14 w-16 shrink-0 items-center px-3">
+            <RailToggle onClick={toggleRail} open />
+          </div>
+          <div className="flex min-h-0 w-16 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden px-2.5 pt-2 pb-3">
             {rail}
           </div>
         </aside>
       )}
 
       <div className="relative flex min-w-0 flex-1 flex-col">
-        <header className="flex h-12 shrink-0 items-center gap-1 px-2">
+        <header className="flex h-14 shrink-0 items-center gap-1 px-3">
           <Sheet onOpenChange={setRailSheet} open={railSheet}>
             <SheetTrigger
               render={
@@ -246,17 +278,11 @@ function WorkspaceShell({
             </SheetContent>
           </Sheet>
 
-          <Button
-            aria-controls="workspace-rail"
-            aria-expanded={railOpen}
-            aria-label={railOpen ? "Hide sidebar" : "Show sidebar"}
-            className="hidden md:inline-flex"
-            onClick={toggleRail}
-            size="icon"
-            variant="ghost"
-          >
-            <SidebarSimpleIcon aria-hidden />
-          </Button>
+          {railOpen ? null : (
+            <span className="max-md:hidden">
+              <RailToggle onClick={toggleRail} open={false} />
+            </span>
+          )}
         </header>
 
         <main
@@ -266,7 +292,7 @@ function WorkspaceShell({
           // so the page starts below it.
           className={cn(
             "min-h-0 flex-1 overflow-y-auto",
-            hasPanel && "max-lg:pt-13 lg:[--panel-inset:23.5rem]"
+            hasPanel && "max-lg:pt-14 lg:[--panel-inset:23.5rem]"
           )}
           // The page scrolls here, not the window: the router resets and
           // restores this element by its id.
@@ -279,14 +305,14 @@ function WorkspaceShell({
         {hasPanel ? (
           <aside
             aria-label="Panel"
-            className="absolute top-13 right-2 z-20 flex max-h-[calc(50svh+3rem)] w-[min(22rem,calc(100%-1rem))] flex-col overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-lg lg:top-2"
+            className="absolute top-15 right-3 z-20 flex max-h-[calc(50svh+3rem)] w-[min(22rem,calc(100%-1.5rem))] flex-col overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-lg lg:top-1.25"
             data-state={expanded ? "open" : "closed"}
             id="workspace-panel"
           >
             <button
               aria-controls={panelId}
               aria-expanded={expanded}
-              className="flex min-h-11 w-full min-w-0 shrink-0 items-center gap-2 px-4 text-start outline-none transition-colors hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-inset motion-reduce:transition-none"
+              className="flex min-h-11 w-full min-w-0 shrink-0 items-center gap-2.5 px-3.5 text-start outline-none transition-colors hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-inset motion-reduce:transition-none"
               onClick={() => setPanel(!expanded)}
               type="button"
             >
