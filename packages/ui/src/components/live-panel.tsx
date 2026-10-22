@@ -508,7 +508,16 @@ function PanelSegment({
           )}
         </span>
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <h3 className="font-medium text-sm" id={`${id}-title`}>
+          {/* The segment's title takes the brand sweep while it is under way;
+              its step at work takes a neutral one, as its icon is neutral. */}
+          <h3
+            className={cn(
+              "font-medium text-sm",
+              (state === "now" || state === "waiting") &&
+                "shimmer shimmer-color-primary motion-reduce:animate-none"
+            )}
+            id={`${id}-title`}
+          >
             {done && !folded ? working : title}
           </h3>
           {line && !done ? <p className={META}>{line}</p> : null}
@@ -574,10 +583,10 @@ function PanelSegment({
                         <span
                           className={cn(
                             "min-w-0 truncate",
-                            step.state === "now" &&
+                            (step.state === "now" ||
+                              step.state === "waiting") &&
                               !failed &&
-                              "shimmer shimmer-color-primary motion-reduce:animate-none",
-                            step.state === "waiting" && "font-medium",
+                              "shimmer shimmer-color-foreground text-muted-foreground motion-reduce:animate-none",
                             (step.state === "next" ||
                               step.state === "skipped") &&
                               "text-muted-foreground"
