@@ -154,7 +154,7 @@ export const FACT_INPUTS = {
     fields: line("text", "How you work", 800),
   },
   "business.proof": {
-    ask: "What sets you apart from others in your trade?",
+    ask: "What helps new customers trust you?",
     fields: line("text", "Years trading, accreditations, guarantees", 600),
   },
   "business.disclaimer": {
