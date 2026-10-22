@@ -1548,6 +1548,44 @@
                     "properties": {
                       "key": {
                         "type": "string",
+                        "const": "assistant.avatar"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "enum": [
+                              "reme",
+                              "she_1",
+                              "she_2",
+                              "she_3",
+                              "he_1",
+                              "he_2",
+                              "he_3",
+                              "they_1",
+                              "they_2",
+                              "they_3"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
                         "const": "assistant.tone"
                       },
                       "value": {
@@ -3370,7 +3408,7 @@
             ]
           },
           "prefill": {
-            "maxItems": 3,
+            "maxItems": 4,
             "type": "array",
             "items": {
               "oneOf": [
@@ -3833,6 +3871,44 @@
                             "he_him",
                             "she_her",
                             "they_them"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "assistant.avatar"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "enum": [
+                            "reme",
+                            "she_1",
+                            "she_2",
+                            "she_3",
+                            "he_1",
+                            "he_2",
+                            "he_3",
+                            "they_1",
+                            "they_2",
+                            "they_3"
                           ]
                         }
                       },
@@ -4441,6 +4517,15 @@
           },
           "skippable": {
             "type": "boolean"
+          },
+          "ideas": {
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40
+            }
           }
         },
         "required": [
@@ -4462,7 +4547,7 @@
               },
               "facts": {
                 "minItems": 1,
-                "maxItems": 3,
+                "maxItems": 4,
                 "type": "array",
                 "items": {
                   "oneOf": [
@@ -4925,6 +5010,44 @@
                                 "he_him",
                                 "she_her",
                                 "they_them"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "const": "assistant.avatar"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "enum": [
+                                "reme",
+                                "she_1",
+                                "she_2",
+                                "she_3",
+                                "he_1",
+                                "he_2",
+                                "he_3",
+                                "they_1",
+                                "they_2",
+                                "they_3"
                               ]
                             }
                           },
@@ -6200,6 +6323,55 @@
             "properties": {
               "key": {
                 "type": "string",
+                "const": "assistant.avatar"
+              },
+              "skippable": {
+                "type": "boolean"
+              },
+              "prefill": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "enum": [
+                          "reme",
+                          "she_1",
+                          "she_2",
+                          "she_3",
+                          "he_1",
+                          "he_2",
+                          "he_3",
+                          "they_1",
+                          "they_2",
+                          "they_3"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "id"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "key",
+              "skippable",
+              "prefill"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
                 "const": "assistant.tone"
               },
               "skippable": {
@@ -7408,6 +7580,44 @@
                     "properties": {
                       "key": {
                         "type": "string",
+                        "const": "assistant.avatar"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "enum": [
+                              "reme",
+                              "she_1",
+                              "she_2",
+                              "she_3",
+                              "he_1",
+                              "he_2",
+                              "he_3",
+                              "they_1",
+                              "they_2",
+                              "they_3"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
                         "const": "assistant.tone"
                       },
                       "value": {
@@ -8037,6 +8247,7 @@
               "service_area.text",
               "assistant.name",
               "assistant.pronouns",
+              "assistant.avatar",
               "assistant.tone",
               "owner.preferred_name",
               "site.build_mode",
@@ -12808,6 +13019,44 @@
                                               "properties": {
                                                 "key": {
                                                   "type": "string",
+                                                  "const": "assistant.avatar"
+                                                },
+                                                "value": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "id": {
+                                                      "type": "string",
+                                                      "enum": [
+                                                        "reme",
+                                                        "she_1",
+                                                        "she_2",
+                                                        "she_3",
+                                                        "he_1",
+                                                        "he_2",
+                                                        "he_3",
+                                                        "they_1",
+                                                        "they_2",
+                                                        "they_3"
+                                                      ]
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "id"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              },
+                                              "required": [
+                                                "key",
+                                                "value"
+                                              ],
+                                              "additionalProperties": false
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "key": {
+                                                  "type": "string",
                                                   "const": "assistant.tone"
                                                 },
                                                 "value": {
@@ -13426,7 +13675,7 @@
                                         },
                                         "facts": {
                                           "minItems": 1,
-                                          "maxItems": 3,
+                                          "maxItems": 4,
                                           "type": "array",
                                           "items": {
                                             "oneOf": [
@@ -13889,6 +14138,44 @@
                                                           "he_him",
                                                           "she_her",
                                                           "they_them"
+                                                        ]
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "id"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "key",
+                                                  "value"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
+                                                    "const": "assistant.avatar"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "id": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                          "reme",
+                                                          "she_1",
+                                                          "she_2",
+                                                          "she_3",
+                                                          "he_1",
+                                                          "he_2",
+                                                          "he_3",
+                                                          "they_1",
+                                                          "they_2",
+                                                          "they_3"
                                                         ]
                                                       }
                                                     },
@@ -16697,6 +16984,44 @@
                   "properties": {
                     "key": {
                       "type": "string",
+                      "const": "assistant.avatar"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "enum": [
+                            "reme",
+                            "she_1",
+                            "she_2",
+                            "she_3",
+                            "he_1",
+                            "he_2",
+                            "he_3",
+                            "they_1",
+                            "they_2",
+                            "they_3"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
                       "const": "assistant.tone"
                     },
                     "value": {
@@ -17728,6 +18053,7 @@
                         "service_area.text",
                         "assistant.name",
                         "assistant.pronouns",
+                        "assistant.avatar",
                         "assistant.tone",
                         "owner.preferred_name",
                         "site.build_mode",
@@ -18465,6 +18791,44 @@
                                     "he_him",
                                     "she_her",
                                     "they_them"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "id"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "key",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string",
+                              "const": "assistant.avatar"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "enum": [
+                                    "reme",
+                                    "she_1",
+                                    "she_2",
+                                    "she_3",
+                                    "he_1",
+                                    "he_2",
+                                    "he_3",
+                                    "they_1",
+                                    "they_2",
+                                    "they_3"
                                   ]
                                 }
                               },
@@ -23966,6 +24330,7 @@
                 "service_area.text",
                 "assistant.name",
                 "assistant.pronouns",
+                "assistant.avatar",
                 "assistant.tone",
                 "owner.preferred_name",
                 "site.build_mode",
@@ -24634,6 +24999,7 @@
                     "service_area.text",
                     "assistant.name",
                     "assistant.pronouns",
+                    "assistant.avatar",
                     "assistant.tone",
                     "owner.preferred_name",
                     "site.build_mode",
@@ -26551,6 +26917,44 @@
                       "he_him",
                       "she_her",
                       "they_them"
+                    ]
+                  }
+                },
+                "required": [
+                  "id"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "key",
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "const": "assistant.avatar"
+              },
+              "value": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "enum": [
+                      "reme",
+                      "she_1",
+                      "she_2",
+                      "she_3",
+                      "he_1",
+                      "he_2",
+                      "he_3",
+                      "they_1",
+                      "they_2",
+                      "they_3"
                     ]
                   }
                 },
@@ -33248,7 +33652,7 @@
         "properties": {
           "facts": {
             "minItems": 1,
-            "maxItems": 27,
+            "maxItems": 28,
             "type": "array",
             "items": {
               "oneOf": [
@@ -33711,6 +34115,44 @@
                             "he_him",
                             "she_her",
                             "they_them"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "assistant.avatar"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "enum": [
+                            "reme",
+                            "she_1",
+                            "she_2",
+                            "she_3",
+                            "he_1",
+                            "he_2",
+                            "he_3",
+                            "they_1",
+                            "they_2",
+                            "they_3"
                           ]
                         }
                       },
@@ -37755,6 +38197,7 @@
                 "service_area.text",
                 "assistant.name",
                 "assistant.pronouns",
+                "assistant.avatar",
                 "assistant.tone",
                 "owner.preferred_name",
                 "site.build_mode",
@@ -37777,6 +38220,28 @@
                 "minLength": 1,
                 "maxLength": 40,
                 "pattern": "\\S"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "assistant_avatar": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "reme",
+                  "she_1",
+                  "she_2",
+                  "she_3",
+                  "he_1",
+                  "he_2",
+                  "he_3",
+                  "they_1",
+                  "they_2",
+                  "they_3"
+                ]
               },
               {
                 "type": "null"
@@ -37977,6 +38442,7 @@
                               "service_area.text",
                               "assistant.name",
                               "assistant.pronouns",
+                              "assistant.avatar",
                               "assistant.tone",
                               "owner.preferred_name",
                               "site.build_mode",
@@ -38923,6 +39389,7 @@
           "attention",
           "missing_facts",
           "assistant_name",
+          "assistant_avatar",
           "reminders"
         ],
         "additionalProperties": false

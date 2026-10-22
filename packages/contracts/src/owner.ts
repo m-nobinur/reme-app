@@ -9,7 +9,7 @@ import {
 import { Timestamp, Ulid, Uuid } from "./common.ts"
 import { Blueprint, DirectionId, FontPairId } from "./design.ts"
 import { FactRecord } from "./fact.ts"
-import { choiceFacts } from "./onboarding.ts"
+import { AvatarId, choiceFacts } from "./onboarding.ts"
 import { SiteLink } from "./site.ts"
 import { Text } from "./text.ts"
 
@@ -102,6 +102,7 @@ export const FactValue = z.discriminatedUnion("key", [
   fact("service_area.text", { text: Text(200) }),
   fact("assistant.name", { name: Text(40) }),
   fact("assistant.pronouns", choiceFacts.pronouns),
+  fact("assistant.avatar", choiceFacts.avatar),
   fact("assistant.tone", choiceFacts.tone),
   fact("owner.preferred_name", { name: Text(60) }),
   fact("site.build_mode", choiceFacts.buildMode),
@@ -149,6 +150,7 @@ export const FactValueKey = z.enum(
 export const CHOICE_FACT_KEYS = [
   "business.industry",
   "assistant.pronouns",
+  "assistant.avatar",
   "assistant.tone",
   "site.build_mode",
   "site.template",
@@ -560,6 +562,8 @@ export const WorkspaceStatus = z.strictObject({
   missing_facts: z.array(FactValueKey),
   /** The name the owner gave their assistant, or null before they chose one. */
   assistant_name: Text(40).nullable(),
+  /** The face the owner picked for their assistant, or null for Reme's own. */
+  assistant_avatar: AvatarId.nullable(),
   reminders: z.strictObject({
     /** Open ones only: soonest due first, undated after, then newest first. */
     notes: z.array(Reminder).max(REMINDER_NOTES_MAX),

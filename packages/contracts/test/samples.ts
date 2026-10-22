@@ -1312,6 +1312,7 @@ export const samples: Record<ContractName, unknown> = {
     ],
     missing_facts: ["business.email"],
     assistant_name: "Ava",
+    assistant_avatar: "she_1",
     reminders: {
       notes: [
         {

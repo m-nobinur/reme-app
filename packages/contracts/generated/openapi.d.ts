@@ -427,6 +427,24 @@ export interface components {
               }
             | {
                 /** @constant */
+                key: "assistant.avatar"
+                value: {
+                  /** @enum {string} */
+                  id:
+                    | "reme"
+                    | "she_1"
+                    | "she_2"
+                    | "she_3"
+                    | "he_1"
+                    | "he_2"
+                    | "he_3"
+                    | "they_1"
+                    | "they_2"
+                    | "they_3"
+                }
+              }
+            | {
+                /** @constant */
                 key: "assistant.tone"
                 value: {
                   /** @enum {string} */
@@ -1098,6 +1116,24 @@ export interface components {
           }
         | {
             /** @constant */
+            key: "assistant.avatar"
+            value: {
+              /** @enum {string} */
+              id:
+                | "reme"
+                | "she_1"
+                | "she_2"
+                | "she_3"
+                | "he_1"
+                | "he_2"
+                | "he_3"
+                | "they_1"
+                | "they_2"
+                | "they_3"
+            }
+          }
+        | {
+            /** @constant */
             key: "assistant.tone"
             value: {
               /** @enum {string} */
@@ -1266,6 +1302,7 @@ export interface components {
           }
       )[]
       skippable: boolean
+      ideas?: string[]
     }
     AskDetailsOutput:
       | {
@@ -1395,6 +1432,24 @@ export interface components {
                 value: {
                   /** @enum {string} */
                   id: "he_him" | "she_her" | "they_them"
+                }
+              }
+            | {
+                /** @constant */
+                key: "assistant.avatar"
+                value: {
+                  /** @enum {string} */
+                  id:
+                    | "reme"
+                    | "she_1"
+                    | "she_2"
+                    | "she_3"
+                    | "he_1"
+                    | "he_2"
+                    | "he_3"
+                    | "they_1"
+                    | "they_2"
+                    | "they_3"
                 }
               }
             | {
@@ -1717,6 +1772,25 @@ export interface components {
         }
       | {
           /** @constant */
+          key: "assistant.avatar"
+          skippable: boolean
+          prefill: {
+            /** @enum {string} */
+            id:
+              | "reme"
+              | "she_1"
+              | "she_2"
+              | "she_3"
+              | "he_1"
+              | "he_2"
+              | "he_3"
+              | "they_1"
+              | "they_2"
+              | "they_3"
+          } | null
+        }
+      | {
+          /** @constant */
           key: "assistant.tone"
           skippable: boolean
           prefill: {
@@ -2027,6 +2101,24 @@ export interface components {
               }
             | {
                 /** @constant */
+                key: "assistant.avatar"
+                value: {
+                  /** @enum {string} */
+                  id:
+                    | "reme"
+                    | "she_1"
+                    | "she_2"
+                    | "she_3"
+                    | "he_1"
+                    | "he_2"
+                    | "he_3"
+                    | "they_1"
+                    | "they_2"
+                    | "they_3"
+                }
+              }
+            | {
+                /** @constant */
                 key: "assistant.tone"
                 value: {
                   /** @enum {string} */
@@ -2219,6 +2311,7 @@ export interface components {
         | "service_area.text"
         | "assistant.name"
         | "assistant.pronouns"
+        | "assistant.avatar"
         | "assistant.tone"
         | "owner.preferred_name"
         | "site.build_mode"
@@ -3552,6 +3645,24 @@ export interface components {
                                 }
                               | {
                                   /** @constant */
+                                  key: "assistant.avatar"
+                                  value: {
+                                    /** @enum {string} */
+                                    id:
+                                      | "reme"
+                                      | "she_1"
+                                      | "she_2"
+                                      | "she_3"
+                                      | "he_1"
+                                      | "he_2"
+                                      | "he_3"
+                                      | "they_1"
+                                      | "they_2"
+                                      | "they_3"
+                                  }
+                                }
+                              | {
+                                  /** @constant */
                                   key: "assistant.tone"
                                   value: {
                                     /** @enum {string} */
@@ -3862,6 +3973,24 @@ export interface components {
                                   value: {
                                     /** @enum {string} */
                                     id: "he_him" | "she_her" | "they_them"
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "assistant.avatar"
+                                  value: {
+                                    /** @enum {string} */
+                                    id:
+                                      | "reme"
+                                      | "she_1"
+                                      | "she_2"
+                                      | "she_3"
+                                      | "he_1"
+                                      | "he_2"
+                                      | "he_3"
+                                      | "they_1"
+                                      | "they_2"
+                                      | "they_3"
                                   }
                                 }
                               | {
@@ -4588,6 +4717,24 @@ export interface components {
           }
         | {
             /** @constant */
+            key: "assistant.avatar"
+            value: {
+              /** @enum {string} */
+              id:
+                | "reme"
+                | "she_1"
+                | "she_2"
+                | "she_3"
+                | "he_1"
+                | "he_2"
+                | "he_3"
+                | "they_1"
+                | "they_2"
+                | "they_3"
+            }
+          }
+        | {
+            /** @constant */
             key: "assistant.tone"
             value: {
               /** @enum {string} */
@@ -4886,6 +5033,7 @@ export interface components {
               | "service_area.text"
               | "assistant.name"
               | "assistant.pronouns"
+              | "assistant.avatar"
               | "assistant.tone"
               | "owner.preferred_name"
               | "site.build_mode"
@@ -5091,6 +5239,24 @@ export interface components {
                   value: {
                     /** @enum {string} */
                     id: "he_him" | "she_her" | "they_them"
+                  }
+                }
+              | {
+                  /** @constant */
+                  key: "assistant.avatar"
+                  value: {
+                    /** @enum {string} */
+                    id:
+                      | "reme"
+                      | "she_1"
+                      | "she_2"
+                      | "she_3"
+                      | "he_1"
+                      | "he_2"
+                      | "he_3"
+                      | "they_1"
+                      | "they_2"
+                      | "they_3"
                   }
                 }
               | {
@@ -6673,6 +6839,7 @@ export interface components {
         | "service_area.text"
         | "assistant.name"
         | "assistant.pronouns"
+        | "assistant.avatar"
         | "assistant.tone"
         | "owner.preferred_name"
         | "site.build_mode"
@@ -6867,6 +7034,7 @@ export interface components {
             | "service_area.text"
             | "assistant.name"
             | "assistant.pronouns"
+            | "assistant.avatar"
             | "assistant.tone"
             | "owner.preferred_name"
             | "site.build_mode"
@@ -7377,6 +7545,24 @@ export interface components {
           value: {
             /** @enum {string} */
             id: "he_him" | "she_her" | "they_them"
+          }
+        }
+      | {
+          /** @constant */
+          key: "assistant.avatar"
+          value: {
+            /** @enum {string} */
+            id:
+              | "reme"
+              | "she_1"
+              | "she_2"
+              | "she_3"
+              | "he_1"
+              | "he_2"
+              | "he_3"
+              | "they_1"
+              | "they_2"
+              | "they_3"
           }
         }
       | {
@@ -9291,6 +9477,24 @@ export interface components {
           }
         | {
             /** @constant */
+            key: "assistant.avatar"
+            value: {
+              /** @enum {string} */
+              id:
+                | "reme"
+                | "she_1"
+                | "she_2"
+                | "she_3"
+                | "he_1"
+                | "he_2"
+                | "he_3"
+                | "they_1"
+                | "they_2"
+                | "they_3"
+            }
+          }
+        | {
+            /** @constant */
             key: "assistant.tone"
             value: {
               /** @enum {string} */
@@ -10385,6 +10589,7 @@ export interface components {
         | "service_area.text"
         | "assistant.name"
         | "assistant.pronouns"
+        | "assistant.avatar"
         | "assistant.tone"
         | "owner.preferred_name"
         | "site.build_mode"
@@ -10399,6 +10604,20 @@ export interface components {
         | "testimonials.review_2"
       )[]
       assistant_name: string | null
+      assistant_avatar:
+        | (
+            | "reme"
+            | "she_1"
+            | "she_2"
+            | "she_3"
+            | "he_1"
+            | "he_2"
+            | "he_3"
+            | "they_1"
+            | "they_2"
+            | "they_3"
+          )
+        | null
       reminders: {
         notes: {
           /** Format: uuid */
@@ -10456,6 +10675,7 @@ export interface components {
                 | "service_area.text"
                 | "assistant.name"
                 | "assistant.pronouns"
+                | "assistant.avatar"
                 | "assistant.tone"
                 | "owner.preferred_name"
                 | "site.build_mode"

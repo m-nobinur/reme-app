@@ -340,7 +340,12 @@ export const DetailsStep = z.enum(["contact", "assistant"])
 /** The facts each details card asks for, in the order the card shows them. */
 export const DETAILS_KEYS = {
   contact: ["business.phone", "business.email"],
-  assistant: ["assistant.name", "assistant.pronouns", "assistant.tone"],
+  assistant: [
+    "assistant.name",
+    "assistant.pronouns",
+    "assistant.avatar",
+    "assistant.tone",
+  ],
 } as const satisfies Record<z.infer<typeof DetailsStep>, readonly string[]>
 
 /**
@@ -352,7 +357,7 @@ export const DETAILS_KEYS = {
 export const AskDetailsInput = z
   .strictObject({
     step: DetailsStep,
-    prefill: z.array(FactValue).max(3),
+    prefill: z.array(FactValue).max(4),
     skippable: z.boolean(),
     /** Names written for this business's assistant, offered after Reme. The assistant step only. */
     ideas: z.array(z.string().trim().min(1).max(40)).max(3).optional(),
@@ -373,7 +378,7 @@ export const AskDetailsInput = z
 export const AskDetailsOutput = z.discriminatedUnion("answer", [
   z.strictObject({
     answer: z.literal("stated"),
-    facts: z.array(FactValue).min(1).max(3),
+    facts: z.array(FactValue).min(1).max(4),
   }),
   z.strictObject({ answer: z.literal("skipped") }),
 ])

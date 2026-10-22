@@ -21,7 +21,8 @@ import { Text } from "./text.ts"
  * The facts the planner may state from the owner's words. Photos arrive
  * only through `POST /assets`, the quote form only through the owner's
  * confirmation of a proposal, and a review only through `record_review`'s
- * card, so none of them is here.
+ * card, so none of them is here. Nor is the assistant's face, which is
+ * only ever picked on its card.
  */
 export const PLAN_FACT_KEYS = FactValue.options
   .map((o) => o.shape.key.value)
@@ -29,8 +30,12 @@ export const PLAN_FACT_KEYS = FactValue.options
     (key) =>
       key !== "media.uploads" &&
       key !== "quote.form" &&
+      key !== "assistant.avatar" &&
       !(REVIEW_FACT_KEYS as readonly string[]).includes(key)
-  ) as Exclude<FactValueKey, "media.uploads" | "quote.form" | ReviewFactKey>[]
+  ) as Exclude<
+  FactValueKey,
+  "media.uploads" | "quote.form" | "assistant.avatar" | ReviewFactKey
+>[]
 export type PlanFactKey = (typeof PLAN_FACT_KEYS)[number]
 
 /**
@@ -102,7 +107,7 @@ export const PlanNext = z.discriminatedUnion("kind", [
     kind: z.literal("ask_fact"),
     key: z.enum(PLAN_FACT_KEYS as [PlanFactKey, ...PlanFactKey[]]),
   }),
-  /** One card for a few related facts: phone and email, or the assistant's name, pronouns and tone. */
+  /** One card for a few related facts: phone and email, or the assistant's name, pronouns, face and tone. */
   z.strictObject({ kind: z.literal("ask_details"), step: DetailsStep }),
   /** The photo drop zone. */
   z.strictObject({ kind: z.literal("ask_upload") }),

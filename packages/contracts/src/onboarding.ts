@@ -48,6 +48,46 @@ export const PRONOUNS = [
 ] as const satisfies readonly Preset<string>[]
 export const PronounId = z.enum(ids(PRONOUNS))
 
+/**
+ * The assistant's face: Reme's own first, then three for each pronoun. Each
+ * has a drawn idle loop in `packages/ui`; the label is its alt text.
+ */
+export const AVATARS = [
+  { id: "reme", label: "Reme, a robot in a headset", pronouns: null },
+  {
+    id: "she_1",
+    label: "Wavy copper hair and round glasses",
+    pronouns: "she_her",
+  },
+  { id: "she_2", label: "Curly updo and a navy blazer", pronouns: "she_her" },
+  { id: "she_3", label: "Black bob and a sage jacket", pronouns: "she_her" },
+  {
+    id: "he_1",
+    label: "Brown hair, glasses and a knit vest",
+    pronouns: "he_him",
+  },
+  { id: "he_2", label: "Short beard and an olive jacket", pronouns: "he_him" },
+  { id: "he_3", label: "Blond curls and a red jumper", pronouns: "he_him" },
+  {
+    id: "they_1",
+    label: "Lilac undercut and a grey hoodie",
+    pronouns: "they_them",
+  },
+  {
+    id: "they_2",
+    label: "Dark curls and round glasses",
+    pronouns: "they_them",
+  },
+  {
+    id: "they_3",
+    label: "Teal hair and a lavender jumper",
+    pronouns: "they_them",
+  },
+] as const satisfies readonly (Preset<string> & {
+  pronouns: (typeof PRONOUNS)[number]["id"] | null
+})[]
+export const AvatarId = z.enum(ids(AVATARS))
+
 export const TONES = [
   { id: "friendly", label: "Friendly", hint: "Warm and approachable" },
   { id: "professional", label: "Professional", hint: "Polished and precise" },
@@ -270,6 +310,7 @@ const orCustom = <T extends z.ZodEnum>(id: T) =>
 export const choiceFacts = {
   industry: { name: Text(80), category: IndustryId.nullable() },
   pronouns: { id: PronounId },
+  avatar: { id: AvatarId },
   tone: { id: ToneId },
   buildMode: { mode: z.enum(["assistant", "manual"]) },
   template: { id: TemplateId, custom: Text(200).optional() },
@@ -296,6 +337,7 @@ export const choiceFacts = {
 
 export type IndustryId = z.infer<typeof IndustryId>
 export type PronounId = z.infer<typeof PronounId>
+export type AvatarId = z.infer<typeof AvatarId>
 export type ToneId = z.infer<typeof ToneId>
 export type TemplateId = z.infer<typeof TemplateId>
 export type PaletteId = z.infer<typeof PaletteId>
