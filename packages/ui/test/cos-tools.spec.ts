@@ -110,7 +110,7 @@ for (const [entry, slot, yes, busy, target, detail, done, refused] of [
     await expect(cards.nth(7)).toContainText(done)
     await expect(cards.nth(8)).toContainText(refused)
     await expect(cards.nth(9)).toContainText("You said not now.")
-    await expect(cards.nth(10)).toContainText("You sent a message instead.")
+    await expect(cards.nth(10)).not.toContainText("You sent a message instead.")
     await expect(cards.nth(11)).toContainText(
       "We could not confirm this went through."
     )

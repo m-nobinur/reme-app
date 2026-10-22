@@ -28,7 +28,7 @@ const RequestChange: ToolCallMessagePartComponent = (props) => {
   return (
     <Decision
       busy="Starting"
-      cancelled="Not started. You sent a message instead."
+      cancelled="Not started."
       refused="The build could not be started."
       detail={() =>
         "This starts a build. Nothing goes live until you approve a version."

@@ -137,9 +137,9 @@ test("an answered choice reads back as the owner's reply", async ({ page }) => {
   const done = page
     .locator('[data-slot="ask-choice"]')
     .filter({ hasNot: page.locator("form") })
-  await expect(done).toHaveCount(2)
-  await expect(done.nth(0)).toContainText("You replied in the chat instead.")
-  await expect(done.nth(1)).toContainText("did not come through")
+  // One overtaken by a typed message leaves nothing; a broken one says so.
+  await expect(done).toHaveCount(1)
+  await expect(done.nth(0)).toContainText("did not come through")
 })
 
 test("a reviewed quote form gives way to the owner's reply", async ({
@@ -153,9 +153,9 @@ test("a reviewed quote form gives way to the owner's reply", async ({
   const done = page
     .locator('[data-slot="review-quote-form"]')
     .filter({ hasNot: page.getByRole("button", { name: "Use this form" }) })
-  await expect(done).toHaveCount(2)
-  await expect(done.nth(0)).toContainText("You replied in the chat instead.")
-  await expect(done.nth(1)).toContainText("did not come through")
+  // One overtaken by a typed message leaves nothing; a broken one says so.
+  await expect(done).toHaveCount(1)
+  await expect(done.nth(0)).toContainText("did not come through")
 })
 
 const PNG = {

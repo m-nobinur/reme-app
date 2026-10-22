@@ -21,7 +21,9 @@ test("only the open asks show a tray; answered and skipped ones give way", async
   await expect(
     page.getByText("07700 900123 · sam@brightclean.example")
   ).toBeVisible()
-  await expect(page.getByText("You replied in the chat instead.")).toBeVisible()
+  await expect(page.getByText("You replied in the chat instead.")).toHaveCount(
+    0
+  )
 })
 
 test("the contact tray checks the phone, then starts the email from the sign-in", async ({

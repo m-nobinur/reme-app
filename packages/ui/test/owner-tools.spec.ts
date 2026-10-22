@@ -64,9 +64,9 @@ test("an answered question gives way to the owner's reply, each step its own mes
   ])
   // An answered or skipped question shows nothing; one not answered says why.
   const done = asks(page).filter({ hasNot: page.locator("form") })
-  await expect(done).toHaveCount(2)
-  await expect(done.nth(0)).toContainText("You replied in the chat instead.")
-  await expect(done.nth(1)).toContainText("did not come through")
+  // One overtaken by a typed message leaves nothing; a broken one says so.
+  await expect(done).toHaveCount(1)
+  await expect(done.nth(0)).toContainText("did not come through")
 })
 
 test("the change card is one tap either way, and waits for the server", async ({

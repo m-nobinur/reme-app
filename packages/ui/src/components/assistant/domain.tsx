@@ -169,7 +169,7 @@ function Records({
 export const ConnectDomain: ToolCallMessagePartComponent = (props) => (
   <Decision
     busy="Connecting"
-    cancelled="Not connected. You sent a message instead."
+    cancelled="Not connected."
     refused="The domain could not be connected."
     detail={() =>
       "Only your website's address changes. I'll show you what to change where your domain is managed."
@@ -203,7 +203,7 @@ ConnectDomain.displayName = "ConnectDomain"
 export const RemoveDomain: ToolCallMessagePartComponent = (props) => (
   <Decision
     busy="Removing"
-    cancelled="Not removed. You sent a message instead."
+    cancelled="Not removed."
     refused="The domain could not be removed."
     detail={() =>
       "Your website goes back to its own address. Nothing is deleted at your domain's provider."

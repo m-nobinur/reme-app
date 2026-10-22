@@ -583,16 +583,15 @@ it("a stored conversation sends nothing until it is the thread on screen, then s
   turns.push(sse(FIXTURE.streams.typed))
   await type(container, "Hello")
   await vi.waitFor(() => expect(sent).toHaveLength(1))
-  await vi.waitFor(() => expect(transcript(container)).toHaveLength(3))
+  await vi.waitFor(() => expect(transcript(container)).toHaveLength(2))
   await matches(container, FIXTURE.histories.typed)
 })
 
 it("renders a recorded answer turn the way a reload of the stored row does", async () => {
   const chat = await open(FIXTURE.histories.typed)
-  // A question overtaken by a typed message, the message, and the question
-  // asked again with the phone number filled in.
+  // A question overtaken by a typed message leaves nothing; the message, and
+  // the question asked again with the phone number filled in.
   expect(transcript(chat)).toEqual([
-    "You replied in the chat instead.",
     "Hello",
     "What number should customers ring?Phone numberSubmit",
   ])
@@ -635,10 +634,8 @@ it("renders a recorded answer turn the way a reload of the stored row does", asy
 it("offers the build, keeps a not now, and a typed change after it", async () => {
   const chat = await open(FIXTURE.histories.radius)
   // Every answer stays on screen in its place, as the owner's reply: the
-  // overtaken question, the owner's message, three replies and the open
-  // service area question.
+  // owner's message, three replies and the open service area question.
   expect(transcript(chat)).toEqual([
-    "You replied in the chat instead.",
     "Hello",
     "+447700900123",
     "hello@example.net",
@@ -719,7 +716,7 @@ for (const [failure, answer] of Object.entries(FAILURES)) {
     // A typed message after the failure lands as the api stores it.
     turns.push(sse(FIXTURE.streams.typed))
     await type(chat, "Hello")
-    await vi.waitFor(() => expect(transcript(chat)).toHaveLength(3))
+    await vi.waitFor(() => expect(transcript(chat)).toHaveLength(2))
     await matches(chat, FIXTURE.histories.typed)
   })
 }

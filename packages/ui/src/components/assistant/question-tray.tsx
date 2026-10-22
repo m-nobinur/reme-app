@@ -104,17 +104,15 @@ function useTabDraft<T>(id: string, empty: T) {
   return { draft, keep, clear }
 }
 
-/** What an ask leaves in the thread once a typed message overtook it, or why it broke. */
+/**
+ * Why an ask broke, where it stood in the thread. One a typed message
+ * overtook leaves nothing: the owner's own message is right after it.
+ */
 function TrayNote({ name, error }: { name: string; error?: string | null }) {
+  if (!error) return null
   return (
-    <p
-      className={cn(
-        "my-3 text-sm",
-        error ? "text-destructive" : "text-muted-foreground"
-      )}
-      data-slot={name}
-    >
-      {error ?? "You replied in the chat instead."}
+    <p className="my-3 text-destructive text-sm" data-slot={name}>
+      {error}
     </p>
   )
 }

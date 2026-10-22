@@ -308,7 +308,7 @@ const AnswerQuestion: ToolCallMessagePartComponent = (props) => {
           : "This answers a question that is no longer open, so it cannot be sent."
       }
       busy="Sending"
-      cancelled="Not sent. You sent a message instead."
+      cancelled="Not sent."
       refused="The answer could not be sent."
       detail={(input) => {
         const asked = question(input.request_id)
@@ -335,7 +335,7 @@ const CreateReminder: ToolCallMessagePartComponent = (props) => {
   return (
     <Decision
       busy="Adding"
-      cancelled="Not added. You sent a message instead."
+      cancelled="Not added."
       refused="The reminder could not be added."
       detail={(input) =>
         `${due(input.due_at ? wallText(input.due_at) : null)}. It shows under Reminders.`
@@ -363,7 +363,7 @@ const CreateReminder: ToolCallMessagePartComponent = (props) => {
 const RecordReview: ToolCallMessagePartComponent = (props) => (
   <Decision
     busy="Saving"
-    cancelled="Not saved. You sent a message instead."
+    cancelled="Not saved."
     refused="The review could not be saved."
     detail={(input) =>
       // A name that ends in a dot (an initial) already closes the sentence.
