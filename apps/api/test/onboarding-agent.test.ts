@@ -1217,6 +1217,16 @@ describe("a planned turn", () => {
       }
     )
     expect(again.ok).toBe(true)
+    // The planner sees the whole form it is changing, not only its labels.
+    const data = turnData({
+      onboarding: o,
+      pending: null,
+      input: { kind: "card", card, output: changes },
+      rows: [],
+    })
+    expect(data).toContain(
+      `"form_to_change":${JSON.stringify((card.input as { fields: unknown }).fields)}`
+    )
 
     // Confirmed on the card: the fact is the owner's list, then the build may start.
     const confirmed = { answer: "confirmed", fields: dated }
