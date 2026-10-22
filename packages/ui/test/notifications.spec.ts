@@ -62,7 +62,7 @@ test("the list shows one row of each kind the contract has, in its order", async
     page.getByRole("link", { name: "Answer in the panel" })
   ).toBeVisible()
   await expect(
-    page.getByRole("link", { name: "Review version 4" })
+    page.getByRole("link", { name: "Review the new version" })
   ).toBeVisible()
   await expect(page.getByRole("link", { name: "Open reminders" })).toBeVisible()
 })

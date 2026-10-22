@@ -6,6 +6,7 @@ import {
   CollapsibleTrigger,
 } from "@workspace/ui/components/collapsible"
 import { StatusLine } from "@workspace/ui/components/status-line"
+import { groupLine } from "@workspace/ui/lib/activity-copy"
 import { cn } from "@workspace/ui/lib/utils"
 import {
   type FC,
@@ -85,10 +86,6 @@ function ToolGroupTrigger({
   count: number
   active?: boolean
 }) {
-  // The owner's words: the assistant checks things, it does not "call
-  // tools". Present tense while it still is, past once it has.
-  const label = `${active ? "Checking" : "Checked"} ${count} ${count === 1 ? "thing" : "things"}`
-
   return (
     <CollapsibleTrigger
       data-slot="tool-group-trigger"
@@ -107,8 +104,8 @@ function ToolGroupTrigger({
         <StatusLine
           announce={false}
           delay={0}
-          kind="check"
-          label={label}
+          kind="checking"
+          label={groupLine(count, active)}
           state={active ? "working" : "done"}
         />
       </span>

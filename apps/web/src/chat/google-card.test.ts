@@ -95,6 +95,6 @@ it("shows a refusal as a line, not the api's words", async () => {
 it("keeps a call that has no result quiet, and an unreadable one honest", async () => {
   expect((await draw({})).links).toEqual([])
   const bad = await draw({ result: { url: "http://insecure.test" } })
-  expect(bad.text).toContain("Google was not connected.")
+  expect(bad.text).toContain("Couldn't connect Google")
   expect(bad.links).toEqual([])
 })

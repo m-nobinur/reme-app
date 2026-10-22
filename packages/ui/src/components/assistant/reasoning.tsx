@@ -3,13 +3,15 @@ import {
   type ReasoningMessagePartComponent,
   useScrollLock,
 } from "@assistant-ui/react"
-import { BrainIcon, CaretDownIcon } from "@phosphor-icons/react"
+import { CaretDownIcon } from "@phosphor-icons/react"
 import { MarkdownText } from "@workspace/ui/components/assistant/markdown-text"
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@workspace/ui/components/collapsible"
+import { StatusLine } from "@workspace/ui/components/status-line"
+import { reasoningLine } from "@workspace/ui/lib/activity-copy"
 import { cn } from "@workspace/ui/lib/utils"
 import {
   createContext,
@@ -160,8 +162,6 @@ function ReasoningTrigger({
   active?: boolean
   duration?: number
 }) {
-  const durationText = duration ? ` (${duration}s)` : ""
-
   return (
     <CollapsibleTrigger
       data-slot="reasoning-trigger"
@@ -172,19 +172,18 @@ function ReasoningTrigger({
       )}
       {...props}
     >
-      <BrainIcon
-        data-slot="reasoning-trigger-icon"
-        className="aui-reasoning-trigger-icon size-4 shrink-0"
-      />
-      <span
+      {/* A trigger is a control, so it is there from the first paint. */}
+      <StatusLine
+        announce={false}
         data-slot="reasoning-trigger-label"
-        className={cn(
-          "aui-reasoning-trigger-label-wrapper inline-block tabular-nums leading-none",
-          active && "shimmer motion-reduce:animate-none"
-        )}
-      >
-        Reasoning{durationText}
-      </span>
+        delay={0}
+        kind="thinking"
+        label={reasoningLine(Boolean(active))}
+        state={active ? "working" : "done"}
+        {...(duration
+          ? { clockAfter: 0, elapsed: duration * 1000 }
+          : { clockAfter: null })}
+      />
       <CaretDownIcon
         data-slot="reasoning-trigger-chevron"
         className={cn(

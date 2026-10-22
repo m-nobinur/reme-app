@@ -6,6 +6,7 @@ import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { EmptyState } from "@workspace/ui/components/empty-state"
 import { YourWebsite } from "@workspace/ui/components/live-panel"
 import { cn } from "@workspace/ui/lib/utils"
+import { assistantOf, leading } from "@/lib/briefing"
 import { currentBuild } from "@/lib/panel"
 import { anchorOf } from "@/lib/reminders"
 import { useLiveWorkspace } from "@/lib/workspace"
@@ -72,7 +73,7 @@ function Website() {
         {build ? (
           <EmptyState
             action={<BuildLink build={build} />}
-            description="Reme is building the first version. You review it before it goes live."
+            description={`${leading(assistantOf(workspace))} is building the first version. You review it before it goes live.`}
             icon={<GlobeIcon />}
             title="Your website is under way"
           />
@@ -96,7 +97,7 @@ function Website() {
                 </Link>
               )
             }
-            description="Reme builds a website for your business from what you tell it in the chat. You review every version before it goes live."
+            description={`${leading(assistantOf(workspace))} builds a website for your business from what you share in the chat. You review every version before it goes live.`}
             icon={<GlobeIcon />}
             title={
               active ? `${active.name} has no website yet` : "No website yet"

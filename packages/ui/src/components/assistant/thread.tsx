@@ -54,6 +54,12 @@ import { LogoMark } from "@workspace/ui/components/logo"
 import { StatusLine } from "@workspace/ui/components/status-line"
 import { ComposerInputContext } from "@workspace/ui/hooks/use-composer-input"
 import {
+  STILL_ON_IT_AFTER,
+  THINKING_AFTER,
+  turnMoment,
+  writingBack,
+} from "@workspace/ui/lib/activity-copy"
+import {
   PLAN_CHANGES_PLACEHOLDER,
   waitsOnBlueprint,
 } from "@workspace/ui/lib/blueprint"
@@ -148,6 +154,8 @@ export type ThreadProps = {
   questionPlaceholder?: string | undefined
   /** One line under the welcome heading, built from state rather than a model. */
   briefing?: string | null | undefined
+  /** What the owner named their assistant, for "Ellie is reading your message". */
+  assistant?: string | null | undefined
   quickActions?: readonly ThreadQuickAction[] | undefined
   /** A new mode object focuses the composer, so each press lands there. */
   mode?: ThreadMode | undefined
@@ -860,6 +868,7 @@ const MessageError: FC = () => {
 const TypingIndicator: FC<{ immediate?: boolean }> = ({
   immediate = false,
 }) => {
+  const { assistant } = useContext(ThreadSettingsContext)
   const answered = useAuiState((s) =>
     s.message.parts.some(
       (part) =>
@@ -868,13 +877,30 @@ const TypingIndicator: FC<{ immediate?: boolean }> = ({
         part.approval?.approved !== undefined
     )
   )
+  const toolsRan = useAuiState((s) =>
+    s.message.parts.some((part) => part.type === "tool-call")
+  )
+  // The line moves on at fixed times, so what it says stays true: more
+  // time has passed.
+  const [seconds, setSeconds] = useState(0)
+  useEffect(() => {
+    const timers = [THINKING_AFTER, STILL_ON_IT_AFTER].map((at) =>
+      setTimeout(() => setSeconds(at), at * 1000)
+    )
+    return () => {
+      for (const timer of timers) clearTimeout(timer)
+    }
+  }, [])
   if (answered) return null
+  const ctx = { orgId: "", assistant }
   return (
     <span data-slot="aui_assistant-message-indicator">
       <StatusLine
         delay={immediate ? 0 : SHOW_DELAY_MS}
         kind="thinking"
-        label="Working"
+        label={
+          immediate || toolsRan ? writingBack(ctx) : turnMoment(seconds, ctx)
+        }
       />
     </span>
   )

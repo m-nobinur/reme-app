@@ -191,7 +191,7 @@ function FixtureThread({
 
 /** The composer's surroundings as the owner app sets them: the "+" starters. */
 const SUGGESTIONS: ThreadSuggestion[] = [
-  { prompt: "What changed in version 4?" },
+  { prompt: "What changed in the new version?" },
   { prompt: "What do you need from me?" },
   { prompt: "What is on my website now?" },
 ]
@@ -202,8 +202,9 @@ function OwnerThread(props: Parameters<typeof FixtureThread>[0]) {
     <FixtureThread
       {...props}
       settings={{
-        placeholder: "Ask Reme anything…",
-        questionPlaceholder: "Or tell Reme something else…",
+        assistant: "Ellie",
+        placeholder: "Ask Ellie anything…",
+        questionPlaceholder: "Or tell Ellie something else…",
         quickActions: OWNER_QUICK_ACTIONS,
         ...(props.stored ? { stored: props.stored } : {}),
         ...props.settings,
@@ -1873,7 +1874,7 @@ const CONVERSATION: ThreadMessageLike[] = [
 const RUNNING: ThreadMessageLike[] = [
   ask("What is waiting on me?"),
   {
-    content: [{ text: "Version 4 is ready for you to", type: "text" }],
+    content: [{ text: "A new version is ready for you to", type: "text" }],
     role: "assistant",
     status: { type: "running" },
   },
@@ -2032,7 +2033,8 @@ function ConversationSample({ stored }: { stored?: string }) {
         messages={[]}
         {...(stored ? { stored } : {})}
         settings={{
-          briefing: "v3 is live. Version 4 is ready for you to approve.",
+          briefing:
+            "Your website is live. A new version is ready for you to approve.",
         }}
         suggestions={SUGGESTIONS}
       />
@@ -2459,7 +2461,8 @@ const assistantCatalog = [
         isDisabled={false}
         messages={[]}
         settings={{
-          briefing: "v3 is live. Version 4 is ready for you to approve.",
+          briefing:
+            "Your website is live. A new version is ready for you to approve.",
         }}
         suggestions={SUGGESTIONS}
       />

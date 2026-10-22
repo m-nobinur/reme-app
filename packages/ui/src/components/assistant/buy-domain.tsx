@@ -13,6 +13,7 @@ import {
   BuyDomainOutput,
   type DomainOffer,
   type DomainPurchaseStatus,
+  FindDomainInput,
   FindDomainOutput,
   RegistrantDetails,
   type RegistrantType,
@@ -21,7 +22,8 @@ import {
 import { Problem } from "@workspace/ui/components/assistant/decision"
 import { Button } from "@workspace/ui/components/button"
 import { Field } from "@workspace/ui/components/field"
-import { StatusLine } from "@workspace/ui/components/status-line"
+import { ToolStatus } from "@workspace/ui/components/status-line"
+import type { ToolArgs } from "@workspace/ui/lib/activity-copy"
 import { toE164 } from "@workspace/ui/lib/answer"
 import { CARD_SURFACE, FIELD_ERROR } from "@workspace/ui/lib/card"
 import { refusalText } from "@workspace/ui/lib/refusal"
@@ -186,29 +188,23 @@ function Line({ text }: { text: string }) {
 
 /** A tool's line while it works, and when it failed or was stopped. */
 function ToolLine({
-  kind,
+  tool,
+  args,
   state,
   streaming,
-  labels,
 }: {
-  kind: "domain" | "payment"
+  tool: "find_domain" | "buy_domain"
+  args: ToolArgs
   state: "working" | Failure
   streaming: boolean
-  labels: { working: string; failed: string; stopped: string }
 }) {
   const working = state === "working" && streaming
   return (
-    <StatusLine
+    <ToolStatus
+      args={args}
       className="flex px-1 py-1.5 text-sm"
-      kind={kind}
-      label={
-        working
-          ? labels.working
-          : state === "failed"
-            ? labels.failed
-            : labels.stopped
-      }
       state={working ? "working" : state === "failed" ? "failed" : "stopped"}
+      tool={tool}
     />
   )
 }
@@ -225,13 +221,9 @@ export const FindDomain: ToolCallMessagePartComponent = (props) => {
     return (
       <div data-slot="find-domain">
         <ToolLine
-          kind="domain"
-          labels={{
-            working: "Looking for a free name",
-            failed: "Could not look for a name",
-            stopped: "Stopped looking for a name",
-          }}
+          args={{ query: FindDomainInput.safeParse(props.args).data?.query }}
           state={view.state}
+          tool="find_domain"
           streaming={streaming}
         />
       </div>
@@ -881,13 +873,9 @@ export const BuyDomain: ToolCallMessagePartComponent = (props) => {
     return (
       <div data-slot="buy-domain">
         <ToolLine
-          kind="payment"
-          labels={{
-            working: "Getting the purchase ready",
-            failed: "Could not get the purchase ready",
-            stopped: "Stopped getting the purchase ready",
-          }}
+          args={{ domain: input?.name }}
           state={view.state}
+          tool="buy_domain"
           streaming={streaming}
         />
       </div>

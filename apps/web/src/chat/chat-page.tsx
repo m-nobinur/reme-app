@@ -228,6 +228,7 @@ export function ChatPage() {
                         <BuildStopped />
                       </>
                     }
+                    assistant={live.workspace?.assistantName}
                     briefing={briefing.line}
                     components={{ ToolFallback: Approval }}
                     mode={mode}

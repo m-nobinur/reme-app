@@ -114,7 +114,7 @@ test("the change card is one tap either way, and waits for the server", async ({
   await expect(sent.getByRole("status")).toHaveCount(0)
   await expect(sent.locator('[aria-busy="true"]')).toHaveCount(1)
   // Nothing to approve while the model is still writing the change.
-  await expect(cards.nth(13)).toHaveText("Writing this out")
+  await expect(cards.nth(13)).toHaveText("Passing on your change")
   await expect(cards.nth(13).getByRole("button")).toHaveCount(0)
   // A no on its way to the server claims nothing is starting.
   const declining = cards.nth(14)

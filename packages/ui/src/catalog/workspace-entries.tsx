@@ -153,7 +153,7 @@ const SETTINGS: SettingsSection[] = [
     id: "help",
     label: "Help & support",
     icon: <QuestionIcon aria-hidden />,
-    content: <p className="text-muted-foreground">Ask Reme in the chat.</p>,
+    content: <p className="text-muted-foreground">Ask Ellie in the chat.</p>,
   },
   {
     id: "legal",

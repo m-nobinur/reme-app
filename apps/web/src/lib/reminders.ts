@@ -130,10 +130,10 @@ const neededOf = (
         : "Closes within a day."
       return {
         key: `approval-${reminder.approval_id}`,
-        title: `Version ${reminder.version} is waiting for your review`,
+        title: "The new version is waiting for your review",
         detail: closes,
         action: {
-          label: `Review version ${reminder.version}`,
+          label: "Review the new version",
           focus: anchorOf.approval(reminder.approval_id),
         },
       }
@@ -155,7 +155,7 @@ const neededOf = (
     case "preview_unpublished":
       return {
         key: `build-${reminder.assignment_id}`,
-        title: `Version ${reminder.version} is ready but not published`,
+        title: "The new version is ready but not published",
         detail: "Its preview has been ready for more than 12 hours.",
         action: {
           label: "Open in the panel",

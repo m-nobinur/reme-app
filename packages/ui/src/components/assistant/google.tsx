@@ -6,6 +6,7 @@ import { CheckCircleIcon } from "@phosphor-icons/react"
 import { ConnectGoogleOutput } from "@workspace/contracts"
 import { Problem } from "@workspace/ui/components/assistant/decision"
 import { buttonVariants } from "@workspace/ui/components/button"
+import { ToolStatus } from "@workspace/ui/components/status-line"
 import { CARD_SURFACE } from "@workspace/ui/lib/card"
 import { refusalText } from "@workspace/ui/lib/refusal"
 import { NOT_DONE, readView } from "@workspace/ui/lib/tool-state"
@@ -25,16 +26,14 @@ export const ConnectGoogle: ToolCallMessagePartComponent = (props) => {
   if (view.state !== "done") {
     const working = view.state === "working" && running
     return (
-      <p
-        className={cn(
-          "px-1 py-1.5 text-muted-foreground text-sm",
-          working && "shimmer motion-reduce:animate-none"
-        )}
+      <ToolStatus
+        className="flex px-1 py-1.5 text-sm"
         data-slot="connect-google"
-        role={working ? "status" : undefined}
-      >
-        {working ? "Getting the Google link" : "Google was not connected."}
-      </p>
+        state={
+          working ? "working" : view.state === "failed" ? "failed" : "stopped"
+        }
+        tool="connect_google"
+      />
     )
   }
   const { output } = view
