@@ -19,7 +19,7 @@ const prompts = (value: ReturnType<typeof briefingOf>) =>
   value.suggestions.map((suggestion) => suggestion.prompt)
 
 it("says nothing without an organisation or a workspace to read", () => {
-  const nothing = { line: null, context: null, suggestions: [] }
+  const nothing = { line: null, suggestions: [] }
   expect(briefingOf(null, workspace())).toEqual(nothing)
   expect(briefingOf(ORG, null)).toEqual(nothing)
 })
@@ -27,11 +27,6 @@ it("says nothing without an organisation or a workspace to read", () => {
 it("offers the first build to an owner with no site", () => {
   const briefing = briefingOf(ORG, workspace())
   expect(briefing.line).toBe("You have no website yet.")
-  expect(briefing.context).toEqual({
-    name: "Fixture Clean",
-    status: "no site yet",
-    live: false,
-  })
   expect(prompts(briefing)).toEqual([
     "Build my website",
     "Let me tell you about my business",
@@ -88,11 +83,6 @@ it("names who asked when one question waits on a live site", () => {
   expect(briefing.line).toBe(
     "Your website is live. The Developer has one question for you."
   )
-  expect(briefing.context).toEqual({
-    name: "Fixture Clean",
-    status: "site live on v3",
-    live: true,
-  })
   expect(prompts(briefing)).toEqual([
     "What do you need from me?",
     "What is on my website now?",
@@ -146,7 +136,6 @@ it("counts approvals when there is more than one", () => {
 it("says a first build is under way, and a later one is a change", () => {
   const first = briefingOf(ORG, workspace({ building: true, open: true }))
   expect(first.line).toBe("Your first version is being built.")
-  expect(first.context?.status).toBe("first version building")
   expect(prompts(first)).toEqual(["How is the build going?"])
 
   const later = briefingOf(
@@ -161,7 +150,6 @@ it("never offers a build while a first one is open but not working", () => {
   // owner has a site on the way, and "Build my website" would start another.
   const briefing = briefingOf(ORG, workspace({ open: true }))
   expect(briefing.line).toBe("Your first version is under way.")
-  expect(briefing.context?.status).toBe("first version under way")
   expect(prompts(briefing)).not.toContain("Build my website")
 })
 
