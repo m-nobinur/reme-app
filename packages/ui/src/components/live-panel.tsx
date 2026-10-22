@@ -27,6 +27,7 @@ import {
   GeneratedPhotos,
   type PhotoActions,
 } from "@workspace/ui/components/generated-photos"
+import { PersonaAvatar } from "@workspace/ui/components/persona"
 import { Skeleton } from "@workspace/ui/components/skeleton"
 import {
   type AnswerSpec,
@@ -778,7 +779,7 @@ function WaitingOnYou({
 
 /** A change note's text box, for a review and for the live site alike. */
 const NOTE =
-  "min-h-20 w-full rounded-2xl border border-transparent bg-input/50 px-3 py-2 text-base outline-none transition-[color,box-shadow] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring disabled:opacity-50 md:text-sm"
+  "min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base outline-none transition-[color,box-shadow] placeholder:text-muted-foreground focus-visible:border-field-focus disabled:opacity-50 md:text-sm"
 
 const pending = (busy: boolean, idle: string, working: string) =>
   busy ? working : idle
@@ -1607,14 +1608,20 @@ function LiveLine({
       data-slot="live-line"
       data-tone={tone}
     >
-      <span
-        aria-hidden
-        className={cn(
-          "size-2 shrink-0 rounded-full",
-          tone === "idle" ? "bg-muted-foreground/40" : "bg-primary",
-          tone === "working" && "animate-pulse motion-reduce:animate-none"
+      {/* Reme, floating and blinking as it does everywhere; while it works a
+          halo pulses behind it, and when the work is live the halo holds. */}
+      <span aria-hidden className="relative flex size-6 shrink-0">
+        {tone === "idle" ? null : (
+          <span
+            className={cn(
+              "absolute -inset-1 rounded-full bg-primary/30",
+              tone === "working" && "animate-pulse motion-reduce:animate-none"
+            )}
+            data-slot="live-line-halo"
+          />
         )}
-      />
+        <PersonaAvatar className="size-6" sway />
+      </span>
       {progress ? (
         // A build's step is the news, so the lead gives way first.
         <span className="flex min-w-0 items-baseline gap-1">

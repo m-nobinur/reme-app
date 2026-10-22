@@ -1,7 +1,6 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router"
 import { Alert } from "@workspace/ui/components/alert"
 import { AuthCard, AuthForm } from "@workspace/ui/components/auth-card"
-import { Button } from "@workspace/ui/components/button"
 import { CodeInput } from "@workspace/ui/components/code-input"
 import { Field } from "@workspace/ui/components/field"
 import { Logo } from "@workspace/ui/components/logo"
@@ -13,6 +12,7 @@ import {
   verifyEmail,
 } from "@/lib/auth/actions"
 import { CODE_LENGTH, codeProblem } from "@/lib/auth/code"
+import { useCooldown } from "@/lib/auth/use-cooldown"
 import { useSubmit } from "@/lib/auth/use-submit"
 
 export const Route = createFileRoute("/verify-email")({
@@ -34,6 +34,7 @@ function VerifyEmail() {
   const [localProblem, setLocalProblem] = useState<string | undefined>()
   const verify = useSubmit(verifyEmail)
   const resend = useSubmit(resendVerification)
+  const cooldown = useCooldown("verify-email-resend-until")
 
   const failure =
     verify.result?.status === "failed" ? verify.result.failure : undefined
@@ -90,7 +91,7 @@ function VerifyEmail() {
           <Alert variant="error">{resendFailure.message}</Alert>
         ) : null}
 
-        <Field error={codeError} id="code" label={`${CODE_LENGTH}-digit code`}>
+        <Field error={codeError} id="code" label="Verification code">
           {(wiring) => (
             <CodeInput
               {...wiring}
@@ -105,19 +106,28 @@ function VerifyEmail() {
           Verify email
         </SubmitButton>
 
-        <Button
-          aria-busy={resend.pending || undefined}
-          disabled={resend.pending}
-          onClick={() => resend.run(undefined)}
-          type="button"
-          variant="ghost"
-        >
-          {resend.pending ? "Sending…" : "Send a new code"}
-        </Button>
-
-        <p className="text-balance text-center text-muted-foreground text-xs leading-relaxed">
-          Once this is verified you go straight into your workspace. Nothing is
-          sent to any of your customers.
+        <p className="text-center text-muted-foreground text-sm">
+          {cooldown.secondsLeft > 0 ? (
+            <>
+              Didn't receive the code? Resend in{" "}
+              <span className="tabular-nums">{cooldown.secondsLeft}s</span>
+            </>
+          ) : (
+            <>
+              Didn't receive the code?{" "}
+              <button
+                className="font-medium text-primary hover:underline disabled:opacity-50"
+                disabled={resend.pending}
+                onClick={async () => {
+                  await resend.run(undefined)
+                  cooldown.start()
+                }}
+                type="button"
+              >
+                {resend.pending ? "Sending…" : "Resend code"}
+              </button>
+            </>
+          )}
         </p>
       </AuthForm>
     </AuthCard>

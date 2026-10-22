@@ -201,14 +201,23 @@ test("Escape from quick actions hands focus back to the button", async ({
   await expect(input(page)).toHaveValue("")
 })
 
-test("the composer's focus ring is one pixel, not a halo", async ({ page }) => {
+test("the composer's focus is a lighter edge, with no ring", async ({
+  page,
+}) => {
   await open(page, "ThreadEmpty")
+  const shell = page.locator('[data-slot="aui_composer-shell"]')
+  const style = () =>
+    shell.evaluate((each) => {
+      const { boxShadow, borderTopColor } = getComputedStyle(each)
+      return { boxShadow, borderTopColor }
+    })
+  await input(page).blur()
+  const before = await style()
   await input(page).focus()
-  const shadow = await page
-    .locator('[data-slot="aui_composer-shell"]')
-    .evaluate((shell) => getComputedStyle(shell).boxShadow)
-  expect(shadow).toMatch(/0px 0px 0px 1px/)
-  expect(shadow).not.toMatch(/0px 0px 0px 3px/)
+  await expect
+    .poll(async () => (await style()).borderTopColor)
+    .not.toBe(before.borderTopColor)
+  expect((await style()).boxShadow).toBe("none")
 })
 
 test.describe("in London in summer time", () => {
@@ -290,14 +299,16 @@ test("a running reply offers Stop, and a failed one says why", async ({
   ).toBeVisible()
 })
 
-test("the top bar names the conversation on a phone", async ({ page }) => {
-  await open(page, "Conversation", WIDTHS.phone)
-  await expect(page.locator('[data-slot="workspace-title"]')).toHaveText(
-    "New chat"
-  )
-  await expect(
-    page.getByRole("button", { name: "Conversation actions" })
-  ).toBeVisible()
+test("a new chat's composer is the tall one, with its buttons under the field", async ({
+  page,
+}) => {
+  await open(page, "ThreadEmpty")
+  const field = await input(page).boundingBox()
+  const plus = await page
+    .getByRole("button", { name: "Quick actions" })
+    .boundingBox()
+  if (!field || !plus) throw new Error("not laid out")
+  expect(plus.y).toBeGreaterThanOrEqual(field.y + field.height)
 })
 
 for (const theme of ["light", "dark"] as const) {
@@ -311,9 +322,6 @@ for (const theme of ["light", "dark"] as const) {
       await openMenu(page, "Quick actions")
       await axe(page, `${name} ${theme} quick actions`)
       await closeMenu(page)
-
-      await openMenu(page, "Conversation actions")
-      await axe(page, `${name} ${theme} conversation actions`)
     })
   }
 }

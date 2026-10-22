@@ -1,6 +1,8 @@
 import {
   ArrowUpRightIcon,
   BellIcon,
+  BrainIcon,
+  BuildingsIcon,
   GearSixIcon,
   GlobeIcon,
   GoogleLogoIcon,
@@ -8,6 +10,7 @@ import {
   QuestionIcon,
   ShieldCheckIcon,
   SunIcon,
+  UsersThreeIcon,
 } from "@phosphor-icons/react"
 import { Link } from "@tanstack/react-router"
 import { railItemClass } from "@workspace/ui/components/app-shell"
@@ -119,6 +122,52 @@ export function OwnerSettings({
             Account and deletion
           </Link>
         </div>
+      ),
+    },
+    {
+      id: "business",
+      label: "Business",
+      icon: <BuildingsIcon aria-hidden />,
+      content: (
+        <>
+          <Lead>
+            What Reme knows about {orgName}, and where each fact came from.
+          </Lead>
+          <Link className={LINK} to="/app/profile">
+            Open the business page
+          </Link>
+        </>
+      ),
+    },
+    {
+      id: "staff",
+      label: "Staff",
+      icon: <UsersThreeIcon aria-hidden />,
+      content: (
+        <>
+          <Lead>
+            The people and the AI roles that make up your organisation.
+          </Lead>
+          <Link className={LINK} to="/app/staff">
+            Open the staff page
+          </Link>
+        </>
+      ),
+    },
+    {
+      id: "memory",
+      label: "Memory",
+      icon: <BrainIcon aria-hidden />,
+      content: (
+        <>
+          <Lead>
+            What Reme remembers about you and how you like to work. It reads
+            these lines at the start of every conversation.
+          </Lead>
+          <Link className={LINK} to="/app/memory">
+            Open memory
+          </Link>
+        </>
       ),
     },
     {

@@ -51,7 +51,6 @@ import {
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu"
 import { LogoMark } from "@workspace/ui/components/logo"
-import { PersonaAvatar } from "@workspace/ui/components/persona"
 import { ComposerInputContext } from "@workspace/ui/hooks/use-composer-input"
 import {
   PLAN_CHANGES_PLACEHOLDER,
@@ -141,6 +140,8 @@ export type ThreadProps = {
   stored?: string | undefined
   autoFocus?: boolean | undefined
   placeholder?: string | undefined
+  /** Other things to ask, which the placeholder rotates through after `placeholder`. */
+  placeholderIdeas?: readonly string[] | undefined
   /** The composer's placeholder while design questions are open above it. */
   questionPlaceholder?: string | undefined
   /** One line under the welcome heading, built from state rather than a model. */
@@ -160,8 +161,6 @@ export type ThreadProps = {
    * `seen` records that it now has.
    */
   reveal?: ThreadReveal | undefined
-  /** What the owner calls the assistant, named above each reply. */
-  assistantName?: string | undefined
 }
 
 export type ThreadReveal = {
@@ -233,6 +232,18 @@ const useHeld = (value: boolean, ms: number) => {
   return value || held
 }
 
+/** Steps through `items` every few seconds; one item stays put. */
+const useCycle = (items: readonly string[]) => {
+  const [at, setAt] = useState(0)
+  const count = items.length
+  useEffect(() => {
+    if (count < 2) return
+    const timer = setInterval(() => setAt((each) => each + 1), 5000)
+    return () => clearInterval(timer)
+  }, [count])
+  return items[at % count] ?? ""
+}
+
 /**
  * Whether the composer can send. A stored conversation opens on a placeholder
  * thread and swaps to the stored one once it is fetched; a send before then
@@ -263,13 +274,13 @@ export const Thread: FC<ThreadProps> = ({
   autoFocus = true,
   stored,
   placeholder,
+  placeholderIdeas,
   questionPlaceholder,
   briefing,
   quickActions,
   mode,
   after,
   reveal,
-  assistantName,
 }) => {
   // A stored conversation with nothing in it is as empty as a new chat, once
   // its history is in: the same welcome and suggestions, with the composer in
@@ -290,22 +301,22 @@ export const Thread: FC<ThreadProps> = ({
     () => ({
       stored,
       placeholder,
+      placeholderIdeas,
       questionPlaceholder,
       briefing,
       quickActions,
       mode,
       reveal,
-      assistantName,
     }),
     [
       stored,
       placeholder,
+      placeholderIdeas,
       questionPlaceholder,
       briefing,
       quickActions,
       mode,
       reveal,
-      assistantName,
     ]
   )
   // The composer's input, which a card can hand the owner to.
@@ -412,7 +423,7 @@ const ThreadRoot: FC<{
         style={{
           ["--thread-max-width" as string]: "44rem",
           ["--composer-bg" as string]: "var(--color-card)",
-          ["--composer-radius" as string]: "var(--radius-4xl)",
+          ["--composer-radius" as string]: "var(--radius-2xl)",
           ["--composer-padding" as string]: "8px",
         }}
       >
@@ -460,7 +471,7 @@ const ThreadRoot: FC<{
               <ThreadScrollToBottom />
               <div className="flex flex-col gap-2">
                 <div className="empty:hidden" ref={setTray} />
-                <Composer autoFocus={autoFocus} />
+                <Composer autoFocus={autoFocus} expanded={isEmpty} />
               </div>
               <AuiIf condition={(s) => isEmpty && s.composer.isEmpty}>
                 <ThreadSuggestions />
@@ -609,13 +620,22 @@ const ThreadSuggestionItem: FC = () => {
   )
 }
 
-const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
+/**
+ * The composer. `expanded` is the new chat's: the field above, and the plus and
+ * send under it. Once there is a conversation it is one compact row.
+ */
+const Composer: FC<{ autoFocus: boolean; expanded: boolean }> = ({
+  autoFocus,
+  expanded,
+}) => {
   const {
     placeholder = "Send a message",
+    placeholderIdeas,
     questionPlaceholder,
     mode,
   } = useContext(ThreadSettingsContext)
   const input = useContext(ComposerInputContext)
+  const idea = useCycle([placeholder, ...(placeholderIdeas ?? [])])
   // A proposed quote form waits on the owner: what they type next is their
   // change to it, and the placeholder says so.
   const reviewing = useAuiState((s) =>
@@ -636,12 +656,17 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
   }, [mode, input])
   return (
     <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
-      {/* A one-pixel ring on top of the border: the composer holds focus
-          whenever the page is open, so a heavy ring would never go away. */}
+      {/* No ring, only a lighter edge: the composer holds focus whenever the
+          page is open, so anything heavier would never go away. */}
       <div
         data-slot="aui_composer-shell"
-        className="flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border border-border bg-(--composer-bg) p-(--composer-padding) transition-colors focus-within:border-ring focus-within:ring-1 focus-within:ring-ring"
+        className={cn(
+          "flex w-full cursor-text gap-2 rounded-(--composer-radius) border border-border bg-(--composer-bg) p-(--composer-padding) transition-colors focus-within:border-field-focus",
+          expanded ? "flex-wrap items-center" : "items-end"
+        )}
       >
+        <QuickActions input={input} />
+        <ComposerMode input={input} />
         <ComposerPrimitive.Input
           ref={input}
           placeholder={
@@ -652,16 +677,19 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
                 ? PLAN_CHANGES_PLACEHOLDER
                 : asking && questionPlaceholder
                   ? questionPlaceholder
-                  : placeholder)
+                  : idea)
           }
-          className="aui-composer-input max-h-48 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-chat text-chat-foreground caret-primary outline-none placeholder:text-muted-foreground/60"
+          className={cn(
+            "aui-composer-input max-h-48 min-w-0 resize-none bg-transparent px-1.5 py-1.25 text-chat text-chat-foreground caret-primary outline-none placeholder:text-muted-foreground/60",
+            expanded ? "order-first min-h-16 basis-full" : "min-h-9 flex-1"
+          )}
           rows={1}
           autoFocus={autoFocus}
           disabled={!sendable}
           enterKeyHint="send"
           aria-label="Message input"
         />
-        <ComposerAction input={input} />
+        <ComposerSend expanded={expanded} />
       </div>
     </ComposerPrimitive.Root>
   )
@@ -689,14 +717,14 @@ const QuickActions: FC<{ input: RefObject<HTMLTextAreaElement | null> }> = ({
         render={
           <Button
             aria-label="Quick actions"
-            className="aui-composer-quick-actions rounded-full text-muted-foreground hover:text-foreground"
-            size="icon-sm"
+            className="aui-composer-quick-actions m-0.5 size-8 border-foreground/10 text-muted-foreground/80 hover:text-foreground"
+            size="icon"
             type="button"
-            variant="ghost"
+            variant="outline"
           />
         }
       >
-        <PlusIcon aria-hidden />
+        <PlusIcon aria-hidden className="size-3.5" />
       </DropdownMenuTrigger>
       <DropdownMenuContent finalFocus={() => after.current ?? true} side="top">
         {quickActions.map((action) => (
@@ -749,54 +777,50 @@ const ComposerMode: FC<{ input: RefObject<HTMLTextAreaElement | null> }> = ({
   )
 }
 
-const ComposerAction: FC<{ input: RefObject<HTMLTextAreaElement | null> }> = ({
-  input,
-}) => {
+const ComposerSend: FC<{ expanded: boolean }> = ({ expanded }) => {
   const sendable = useSendable()
   return (
-    <div className="aui-composer-action-wrapper relative flex items-center justify-between gap-2">
-      <div className="flex min-w-0 items-center gap-1">
-        <QuickActions input={input} />
-        <ComposerMode input={input} />
-      </div>
-      <div className="flex items-center gap-1.5">
-        <AuiIf condition={(s) => !s.thread.isRunning}>
-          <ComposerPrimitive.Send
-            disabled={!sendable}
-            render={
-              <TooltipIconButton
-                tooltip="Send message"
-                side="bottom"
-                type="button"
-                variant="default"
-                size="icon"
-                className="aui-composer-send size-8 rounded-full"
-                aria-label="Send message"
-              />
-            }
-          >
-            <ArrowUpIcon className="aui-composer-send-icon size-4" />
-          </ComposerPrimitive.Send>
-        </AuiIf>
-        <AuiIf condition={(s) => s.thread.isRunning}>
-          <ComposerPrimitive.Cancel
-            render={
-              <Button
-                type="button"
-                variant="default"
-                size="icon"
-                className="aui-composer-cancel size-8 rounded-full"
-                aria-label="Stop generating"
-              />
-            }
-          >
-            <SquareIcon
-              className="aui-composer-cancel-icon size-3.5"
-              weight="fill"
+    // In the expanded composer the buttons sit under the field, send at the right.
+    <div className={cn("flex", expanded && "ms-auto")}>
+      <AuiIf condition={(s) => !s.thread.isRunning}>
+        <ComposerPrimitive.Send
+          disabled={!sendable}
+          render={
+            <TooltipIconButton
+              tooltip="Send message"
+              side="bottom"
+              type="button"
+              variant="default"
+              size="icon"
+              className="aui-composer-send"
+              aria-label="Send message"
             />
-          </ComposerPrimitive.Cancel>
-        </AuiIf>
-      </div>
+          }
+        >
+          <ArrowUpIcon
+            className="aui-composer-send-icon size-4"
+            weight="bold"
+          />
+        </ComposerPrimitive.Send>
+      </AuiIf>
+      <AuiIf condition={(s) => s.thread.isRunning}>
+        <ComposerPrimitive.Cancel
+          render={
+            <Button
+              type="button"
+              variant="default"
+              size="icon"
+              className="aui-composer-cancel"
+              aria-label="Stop generating"
+            />
+          }
+        >
+          <SquareIcon
+            className="aui-composer-cancel-icon size-3.5"
+            weight="fill"
+          />
+        </ComposerPrimitive.Cancel>
+      </AuiIf>
     </div>
   )
 }
@@ -929,8 +953,6 @@ const AssistantMessage: FC = () => {
     ToolGroup = DefaultToolGroup,
     ReasoningGroup = DefaultReasoningGroup,
   } = useContext(ThreadComponentsContext)
-  const { assistantName = "Reme" } = useContext(ThreadSettingsContext)
-
   const ACTION_BAR_PT = "pt-1.5"
   // Keep the action bar inside the contained root's paint box, then cancel its reserved space in flow.
   const ACTION_BAR_HEIGHT = `min-h-7.5 ${ACTION_BAR_PT}`
@@ -944,15 +966,6 @@ const AssistantMessage: FC = () => {
       data-role="assistant"
       className="group/message relative -mb-7.5 ps-2 pb-7.5 [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
     >
-      <div
-        data-slot="aui_assistant-message-header"
-        className="mb-1.5 flex items-center gap-2"
-      >
-        <PersonaAvatar className="size-6" />
-        <span className="font-semibold text-foreground text-sm">
-          {assistantName}
-        </span>
-      </div>
       <div className="min-w-0">
         <div
           data-slot="aui_assistant-message-content"

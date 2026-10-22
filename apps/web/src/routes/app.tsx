@@ -1,13 +1,9 @@
 import {
   AlarmIcon,
-  BellIcon,
-  BrainIcon,
-  BuildingsIcon,
   ChatCircleTextIcon,
-  FlowArrowIcon,
   GlobeIcon,
+  ListChecksIcon,
   NotePencilIcon,
-  UsersThreeIcon,
 } from "@phosphor-icons/react"
 import {
   createFileRoute,
@@ -24,38 +20,26 @@ import {
 import type { Conversation } from "@workspace/contracts"
 import { railItemClass } from "@workspace/ui/components/app-shell"
 import { SiteNameProvider } from "@workspace/ui/components/assistant/blueprint-card"
-import { buttonVariants } from "@workspace/ui/components/button"
 import {
+  ChatHistory,
   type HistoryEntry,
-  HistoryMenu,
 } from "@workspace/ui/components/history-menu"
-import { LogoMark } from "@workspace/ui/components/logo"
 import {
   type NotificationEntry,
   NotificationMenu,
 } from "@workspace/ui/components/notification-list"
+import { PipelineIcon } from "@workspace/ui/components/pipeline-icon"
 import { Hint } from "@workspace/ui/components/tooltip"
 import {
-  ConversationMenu,
   WorkspacePage,
   WorkspaceShell,
 } from "@workspace/ui/components/workspace-shell"
 import { formatDate } from "@workspace/ui/lib/format"
 import { useCallback, useEffect, useState } from "react"
 import { lastChat } from "@/chat/history"
-import {
-  getWorkspaceFrame,
-  pollWorkspace,
-  updateConversation,
-} from "@/lib/api/server"
+import { getWorkspaceFrame, pollWorkspace } from "@/lib/api/server"
 import type { WorkspacePoll } from "@/lib/api/types"
 import { retryOrgWrite } from "@/lib/auth/actions"
-import {
-  archiveConversation,
-  saveTitle,
-  titleToEdit,
-  useMenuState,
-} from "@/lib/conversation-actions"
 import {
   GoogleNotice,
   type GoogleResult,
@@ -117,18 +101,15 @@ export const Route = createFileRoute("/app")({
   component: AppLayout,
 })
 
-/**
- * The rail's sections after the chat. The business is named for the
- * organisation, so its label is filled in where the name is known.
- */
+/** The rail's sections after the chat. */
 const SECTIONS = [
   { to: "/app/website", label: "Website", icon: GlobeIcon },
-  { to: "/app/profile", label: null, icon: BuildingsIcon },
-  { to: "/app/staff", label: "Staff", icon: UsersThreeIcon },
-  { to: "/app/pipeline", label: "Pipeline", icon: FlowArrowIcon },
+  { to: "/app/pipeline", label: "Pipeline", icon: PipelineIcon },
+  { to: "/app/reminders", label: "Reminders", icon: AlarmIcon },
+  { to: "/app/tasks", label: "Tasks", icon: ListChecksIcon },
 ] as const
 
-/** How many notifications the bell's menu lists before "View all". */
+/** How many notifications the rail's bell lists before "View all". */
 const MENU_ITEMS = 6
 
 /** The panel's poll, through the server, with the tag it last saw. */
@@ -191,7 +172,9 @@ function AppLayout() {
         .conversation,
   })
   const { id } = useParams({ strict: false })
-  const stored = conversations?.find((each) => each.id === id)
+  // A new conversation has no activity to show beside it yet: the composer
+  // takes the page, and the panel appears once the first message stores it.
+  const showPanel = hasPanel && !(conversation && !id)
   // Getting started stays in the help menu until the first build.
   const onboarding = onboardingFor(live.workspace, conversations)
   const router = useRouter()
@@ -258,24 +241,6 @@ function AppLayout() {
     )
   // The rail's Chat icon: current only inside this conversation.
   const last = lastChat(conversations)
-  const { renaming, setRenaming, failed, setFailed } = useMenuState(id)
-  const archive = async (target: Conversation) => {
-    setFailed(null)
-    const archived = await archiveConversation(target.id, {
-      // One key per press: a retry of this press replays it, a later press
-      // is its own request.
-      update: (each) =>
-        updateConversation({
-          data: { id: each, archived: true, key: crypto.randomUUID() },
-        }),
-      stillOn: (each) => router.state.location.pathname === `/app/c/${each}`,
-      leave: async () => {
-        await navigate({ to: "/app", state: { chat: crypto.randomUUID() } })
-      },
-    })
-    if (archived) await router.invalidate()
-    else setFailed(target.id)
-  }
 
   return (
     <LiveWorkspaceProvider value={live}>
@@ -285,112 +250,27 @@ function AppLayout() {
           defaultPanelOpen={panelOpen}
           defaultRailOpen={railOpen}
           openPanel={press}
-          menu={
-            conversation ? (
-              <ConversationMenu
-                newChat={
-                  <Link
-                    state={() => ({ chat: crypto.randomUUID() })}
-                    to="/app"
-                  />
-                }
-                onArchive={stored ? () => archive(stored) : undefined}
-                onRename={
-                  stored
-                    ? () => {
-                        setFailed(null)
-                        setRenaming(stored.id)
-                      }
-                    : undefined
-                }
-              />
-            ) : undefined
-          }
-          actions={
-            <>
-              <Hint label="New chat">
-                <Link
-                  aria-label="New chat"
-                  className={buttonVariants({ variant: "ghost", size: "icon" })}
-                  // A fresh state on every click: on /app already, the address
-                  // does not change, and the state is what says "start again".
-                  state={() => ({ chat: crypto.randomUUID() })}
-                  to="/app"
-                >
-                  <NotePencilIcon aria-hidden />
-                </Link>
-              </Hint>
-              <HistoryMenu current={id} items={history} />
-            </>
-          }
-          notifications={
-            <NotificationMenu
-              items={entries}
-              onOpenChange={markMenuSeen}
-              unread={unread}
-              viewAll={<Link to="/app/notifications" />}
-              zone={zone}
-            />
-          }
-          panel={hasPanel ? <WorkspacePanel panel={panel} /> : null}
-          panelLine={hasPanel ? <WorkspacePanelLine panel={panel} /> : null}
-          title={stored ? conversationTitle(stored) : conversation}
-          titleError={
-            stored && failed === stored.id
-              ? "That did not archive. Try again."
-              : undefined
-          }
-          renaming={
-            stored && renaming === stored.id
-              ? {
-                  value: titleToEdit(stored),
-                  onSave: async (title) => {
-                    await saveTitle(stored, title, (each, next) =>
-                      updateConversation({
-                        data: {
-                          id: each,
-                          title: next,
-                          key: crypto.randomUUID(),
-                        },
-                      })
-                    )
-                    await router.invalidate()
-                    setRenaming(null)
-                  },
-                  onCancel: () => setRenaming(null),
-                }
-              : undefined
-          }
+          panel={showPanel ? <WorkspacePanel panel={panel} /> : null}
+          panelLine={showPanel ? <WorkspacePanelLine panel={panel} /> : null}
           rail={
             <>
-              <span className="flex h-11 shrink-0 items-center px-2.5 text-foreground">
-                <LogoMark />
-              </span>
-              <nav aria-label="Main" className="flex flex-col gap-1">
-                <Hint label="New chat" side="right">
-                  {/* The new-chat screen is home, so this is current only on
-                    the bare address, and a fresh state starts one each time. */}
-                  <Link
-                    activeOptions={{ exact: true }}
-                    className={railItemClass}
-                    state={() => ({ chat: crypto.randomUUID() })}
-                    to="/app"
-                  >
-                    <NotePencilIcon aria-hidden />
-                    <span data-slot="rail-label">New chat</span>
-                  </Link>
-                </Hint>
+              <nav aria-label="Main" className="flex flex-col gap-2">
                 {last ? (
-                  <Hint label="Chat" side="right">
-                    <Link
-                      className={railItemClass}
-                      params={{ id: last.id }}
-                      to="/app/c/$id"
-                    >
-                      <ChatCircleTextIcon aria-hidden />
-                      <span data-slot="rail-label">Chat</span>
-                    </Link>
-                  </Hint>
+                  // Hovering the link lists every conversation beside it.
+                  <ChatHistory
+                    current={id}
+                    items={history}
+                    trigger={
+                      <Link
+                        className={railItemClass}
+                        params={{ id: last.id }}
+                        to="/app/c/$id"
+                      >
+                        <ChatCircleTextIcon aria-hidden />
+                        <span data-slot="rail-label">Chat</span>
+                      </Link>
+                    }
+                  />
                 ) : (
                   <Hint label="No chats yet" side="right">
                     {/* Nowhere to go yet, so no link: a button that does
@@ -405,56 +285,38 @@ function AppLayout() {
                     </button>
                   </Hint>
                 )}
-                {SECTIONS.map((item) => (
-                  <Hint
-                    key={item.to}
-                    label={item.label ?? orgName}
-                    side="right"
+                <Hint label="New conversation" side="right">
+                  {/* The new-conversation screen is home, so this is current only on
+                    the bare address, and a fresh state starts one each time. */}
+                  <Link
+                    activeOptions={{ exact: true }}
+                    className={railItemClass}
+                    state={() => ({ chat: crypto.randomUUID() })}
+                    to="/app"
                   >
+                    <NotePencilIcon aria-hidden />
+                    <span data-slot="rail-label">New conversation</span>
+                  </Link>
+                </Hint>
+                {SECTIONS.map((item) => (
+                  <Hint key={item.to} label={item.label} side="right">
                     <Link className={railItemClass} to={item.to}>
                       <item.icon aria-hidden />
                       <span className="truncate" data-slot="rail-label">
-                        {item.label ?? orgName}
+                        {item.label}
                       </span>
                     </Link>
                   </Hint>
                 ))}
-                <hr className="mx-2 my-2 border-border" />
-                <Hint label="Reminders" side="right">
-                  <Link className={railItemClass} to="/app/reminders">
-                    <AlarmIcon aria-hidden />
-                    <span data-slot="rail-label">Reminders</span>
-                  </Link>
-                </Hint>
-                <Hint label="Memory" side="right">
-                  <Link className={railItemClass} to="/app/memory">
-                    <BrainIcon aria-hidden />
-                    <span data-slot="rail-label">Memory</span>
-                  </Link>
-                </Hint>
               </nav>
-              <div className="mt-auto flex flex-col gap-1">
-                <Hint label="Notifications" side="right">
-                  <Link
-                    aria-label={
-                      unread > 0
-                        ? `Notifications, ${unread} unread`
-                        : "Notifications"
-                    }
-                    className={railItemClass}
-                    to="/app/notifications"
-                  >
-                    <BellIcon aria-hidden />
-                    {unread > 0 ? (
-                      <span
-                        aria-hidden
-                        className="absolute start-7 top-2 size-2 rounded-full bg-destructive ring-2 ring-rail"
-                        data-slot="unread-dot"
-                      />
-                    ) : null}
-                    <span data-slot="rail-label">Notifications</span>
-                  </Link>
-                </Hint>
+              <div className="mt-auto flex flex-col gap-2">
+                <NotificationMenu
+                  items={entries}
+                  onOpenChange={markMenuSeen}
+                  unread={unread}
+                  viewAll={<Link to="/app/notifications" />}
+                  zone={zone}
+                />
                 <OwnerSettings
                   onboarding={onboarding}
                   orgName={orgName}

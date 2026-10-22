@@ -35,6 +35,7 @@ import { Route as AppPipelineRouteImport } from './routes/app/pipeline'
 import { Route as AppProfileRouteImport } from './routes/app/profile'
 import { Route as AppRemindersRouteImport } from './routes/app/reminders'
 import { Route as AppStaffRouteImport } from './routes/app/staff'
+import { Route as AppTasksRouteImport } from './routes/app/tasks'
 import { Route as AppWebsiteRouteImport } from './routes/app/website'
 import { Route as ApiAuthCallbackRouteImport } from './routes/api.auth.callback'
 import { Route as ApiAuthSocialRouteImport } from './routes/api.auth.social'
@@ -174,6 +175,11 @@ const AppStaffRoute = AppStaffRouteImport.update({
   path: '/staff',
   getParentRoute: () => AppRoute,
 } as any)
+const AppTasksRoute = AppTasksRouteImport.update({
+  id: '/tasks',
+  path: '/tasks',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppWebsiteRoute = AppWebsiteRouteImport.update({
   id: '/website',
   path: '/website',
@@ -246,6 +252,7 @@ export interface FileRoutesByFullPath {
   '/app/profile': typeof AppProfileRoute
   '/app/reminders': typeof AppRemindersRoute
   '/app/staff': typeof AppStaffRoute
+  '/app/tasks': typeof AppTasksRoute
   '/app/website': typeof AppWebsiteRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/social': typeof ApiAuthSocialRoute
@@ -282,6 +289,7 @@ export interface FileRoutesByTo {
   '/app/profile': typeof AppProfileRoute
   '/app/reminders': typeof AppRemindersRoute
   '/app/staff': typeof AppStaffRoute
+  '/app/tasks': typeof AppTasksRoute
   '/app/website': typeof AppWebsiteRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/social': typeof ApiAuthSocialRoute
@@ -319,6 +327,7 @@ export interface FileRoutesById {
   '/app/profile': typeof AppProfileRoute
   '/app/reminders': typeof AppRemindersRoute
   '/app/staff': typeof AppStaffRoute
+  '/app/tasks': typeof AppTasksRoute
   '/app/website': typeof AppWebsiteRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/social': typeof ApiAuthSocialRoute
@@ -357,6 +366,7 @@ export interface FileRouteTypes {
     | '/app/profile'
     | '/app/reminders'
     | '/app/staff'
+    | '/app/tasks'
     | '/app/website'
     | '/api/auth/callback'
     | '/api/auth/social'
@@ -393,6 +403,7 @@ export interface FileRouteTypes {
     | '/app/profile'
     | '/app/reminders'
     | '/app/staff'
+    | '/app/tasks'
     | '/app/website'
     | '/api/auth/callback'
     | '/api/auth/social'
@@ -429,6 +440,7 @@ export interface FileRouteTypes {
     | '/app/profile'
     | '/app/reminders'
     | '/app/staff'
+    | '/app/tasks'
     | '/app/website'
     | '/api/auth/callback'
     | '/api/auth/social'
@@ -649,6 +661,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppStaffRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/tasks': {
+      id: '/app/tasks'
+      path: '/tasks'
+      fullPath: '/app/tasks'
+      preLoaderRoute: typeof AppTasksRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/website': {
       id: '/app/website'
       path: '/website'
@@ -739,6 +758,7 @@ interface AppRouteChildren {
   AppProfileRoute: typeof AppProfileRoute
   AppRemindersRoute: typeof AppRemindersRoute
   AppStaffRoute: typeof AppStaffRoute
+  AppTasksRoute: typeof AppTasksRoute
   AppWebsiteRoute: typeof AppWebsiteRoute
   AppDomainsReturnRoute: typeof AppDomainsReturnRoute
 }
@@ -753,6 +773,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppProfileRoute: AppProfileRoute,
   AppRemindersRoute: AppRemindersRoute,
   AppStaffRoute: AppStaffRoute,
+  AppTasksRoute: AppTasksRoute,
   AppWebsiteRoute: AppWebsiteRoute,
   AppDomainsReturnRoute: AppDomainsReturnRoute,
 }

@@ -84,6 +84,7 @@
   --color-chart-2: var(--chart-2);
   --color-chart-1: var(--chart-1);
   --color-ring: var(--ring);
+  --color-field-focus: var(--field-focus);
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
@@ -119,6 +120,7 @@
   --font-brand: "Geist Variable", var(--font-sans);
   /* The persona's idle motion: a slow float and an occasional blink. */
   --animate-persona-float: persona-float 5s ease-in-out infinite;
+  --animate-persona-sway: persona-sway 7s ease-in-out infinite;
   --animate-persona-blink: persona-blink 6.5s linear infinite;
   --animate-persona-blink-once: persona-blink-once 0.28s ease-in-out;
   --animate-flow: flow 1.4s linear infinite;
@@ -137,6 +139,23 @@
     }
     50% {
       transform: translateY(-3%) rotate(-1.2deg);
+    }
+  }
+  /* The head turning to look about: left, back, right, a small nod. */
+  @keyframes persona-sway {
+    0%,
+    40%,
+    100% {
+      transform: translate(0, 0) rotate(0deg);
+    }
+    20% {
+      transform: translate(-6%, -2%) rotate(-7deg);
+    }
+    60% {
+      transform: translate(6%, -2%) rotate(7deg);
+    }
+    80% {
+      transform: translate(0, 3%) rotate(0deg);
     }
   }
   @keyframes persona-blink {

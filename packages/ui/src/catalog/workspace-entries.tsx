@@ -1,12 +1,12 @@
 import {
   AlarmIcon,
-  BellIcon,
   BuildingsIcon,
   ChatCircleTextIcon,
   CheckCircleIcon,
   FlowArrowIcon,
   GearSixIcon,
   GlobeIcon,
+  ListChecksIcon,
   MoonIcon,
   NotePencilIcon,
   QuestionIcon,
@@ -27,10 +27,10 @@ import {
 } from "@workspace/ui/components/dropdown-menu"
 import { EmptyState } from "@workspace/ui/components/empty-state"
 import {
+  ChatHistory,
   type HistoryEntry,
-  HistoryMenu,
 } from "@workspace/ui/components/history-menu"
-import { LogoMark } from "@workspace/ui/components/logo"
+import { PipelineIcon } from "@workspace/ui/components/pipeline-icon"
 import {
   Settings,
   SettingsContent,
@@ -46,11 +46,10 @@ import {
 import { toggleTheme } from "@workspace/ui/components/theme-toggle"
 import { Hint } from "@workspace/ui/components/tooltip"
 import {
-  ConversationMenu,
   WorkspacePage,
   WorkspaceShell,
 } from "@workspace/ui/components/workspace-shell"
-import { type ReactNode, useState } from "react"
+import type { ReactNode } from "react"
 import { BellSample } from "./notification-entries"
 import { SamplePanel, SamplePanelLine } from "./panel-entries"
 
@@ -191,25 +190,22 @@ function SettingsSample() {
 }
 
 const RAIL_NAV = [
-  { href: "#new", label: "New chat", icon: NotePencilIcon },
   { href: "#chat", label: "Chat", icon: ChatCircleTextIcon, current: true },
+  { href: "#new", label: "New conversation", icon: NotePencilIcon },
   { href: "#website", label: "Website", icon: GlobeIcon },
-  { href: "#business", label: "Brightclean", icon: BuildingsIcon },
-  { href: "#staff", label: "Staff", icon: UsersThreeIcon },
-  { href: "#pipeline", label: "Pipeline", icon: FlowArrowIcon },
+  { href: "#pipeline", label: "Pipeline", icon: PipelineIcon },
+  { href: "#reminders", label: "Reminders", icon: AlarmIcon },
+  { href: "#tasks", label: "Tasks", icon: ListChecksIcon },
 ]
 
 /**
- * The rail: the mark, a new chat and the app's sections, reminders under a
- * hairline, and the notifications and the owner's avatar at the foot.
+ * The rail: the mark, a new conversation and the app's sections, and the
+ * notifications and the owner's avatar at the foot.
  */
 function Rail() {
   return (
     <>
-      <span className="flex h-11 shrink-0 items-center px-2.5 text-foreground">
-        <LogoMark />
-      </span>
-      <nav aria-label="Main" className="flex flex-col gap-1">
+      <nav aria-label="Main" className="flex flex-col gap-2">
         {RAIL_NAV.map((item) => (
           <Hint key={item.href} label={item.label} side="right">
             <a
@@ -224,30 +220,9 @@ function Rail() {
             </a>
           </Hint>
         ))}
-        <hr className="mx-2 my-2 border-border" />
-        <Hint label="Reminders" side="right">
-          <a className={railItemClass} href="#reminders">
-            <AlarmIcon aria-hidden />
-            <span data-slot="rail-label">Reminders</span>
-          </a>
-        </Hint>
       </nav>
-      <div className="mt-auto flex flex-col gap-1">
-        <Hint label="Notifications" side="right">
-          <a
-            aria-label="Notifications, 3 unread"
-            className={railItemClass}
-            href="#notifications"
-          >
-            <BellIcon aria-hidden />
-            <span
-              aria-hidden
-              className="absolute start-7 top-2 size-2 rounded-full bg-destructive ring-2 ring-rail"
-              data-slot="unread-dot"
-            />
-            <span data-slot="rail-label">Notifications</span>
-          </a>
-        </Hint>
+      <div className="mt-auto flex flex-col gap-2">
+        <BellSample unread={3} />
         <SettingsSample />
       </div>
     </>
@@ -261,35 +236,37 @@ const HISTORY: HistoryEntry[] = Array.from({ length: 30 }, (_, index) => ({
     ["Weekend prices", "New oven cleaning page", "Reply to a review"][
       index % 3
     ] + (index > 2 ? ` ${Math.floor(index / 3) + 1}` : ""),
-  at: new Date(Date.UTC(2026, 8, 30 - index)).toISOString(),
+  // The first three are recent, one under each of the first headings; the
+  // rest are fixed, so the list reads the same on any day.
+  at:
+    index < 3
+      ? new Date(
+          Date.now() - (index === 2 ? 3 : index) * 86_400_000
+        ).toISOString()
+      : new Date(Date.UTC(2026, 8, 30 - index)).toISOString(),
   // biome-ignore lint/a11y/useAnchorContent: the menu fills the link with the row.
   link: <a href={`#chat-${index}`} />,
 }))
 
-/** The top bar's icons before the bell: a new chat and the history. */
-function TopActions() {
+/** A named icon, as the rail and the top bar draw them. */
+function HintSample() {
   return (
-    <>
-      <Hint label="New chat">
-        <a
-          aria-label="New chat"
-          className={buttonVariants({ variant: "ghost", size: "icon" })}
-          href="#new"
-        >
-          <NotePencilIcon aria-hidden />
-        </a>
-      </Hint>
-      <HistoryMenu current="chat-0" items={HISTORY} />
-    </>
+    <Hint label="New conversation">
+      <a
+        aria-label="New conversation"
+        className={buttonVariants({ variant: "ghost", size: "icon" })}
+        href="#new"
+      >
+        <NotePencilIcon aria-hidden />
+      </a>
+    </Hint>
   )
 }
 
 function ShellSample() {
   return (
     <WorkspaceShell
-      actions={<TopActions />}
       className="h-[40rem] border border-border"
-      notifications={<BellSample unread={3} />}
       panel={<SamplePanel />}
       panelLine={<SamplePanelLine />}
       rail={<Rail />}
@@ -301,55 +278,6 @@ function ShellSample() {
           icon={<CheckCircleIcon />}
           title="Nothing waiting on you"
         />
-      </WorkspacePage>
-    </WorkspaceShell>
-  )
-}
-
-/**
- * A stored conversation's top bar: the ··· menu renames it in place and
- * archives it. Saving "Will not save" fails, to show the form's error, and
- * the archive always fails here, to show the title bar's.
- */
-function ConversationSample() {
-  const [title, setTitle] = useState("Weekend prices")
-  const [renaming, setRenaming] = useState(false)
-  const [error, setError] = useState<string | undefined>(undefined)
-  return (
-    <WorkspaceShell
-      className="h-[24rem] border border-border"
-      menu={
-        <ConversationMenu
-          newChat={<a href="#new" />}
-          onArchive={() => setError("That did not archive. Try again.")}
-          onRename={() => {
-            setError(undefined)
-            setRenaming(true)
-          }}
-        />
-      }
-      panel={<SamplePanel />}
-      panelLine={<SamplePanelLine />}
-      rail={<Rail />}
-      renaming={
-        renaming
-          ? {
-              value: title,
-              onSave: async (next) => {
-                await new Promise((resolve) => setTimeout(resolve, 150))
-                if (next === "Will not save") throw new Error("refused")
-                setTitle(next)
-                setRenaming(false)
-              },
-              onCancel: () => setRenaming(false),
-            }
-          : undefined
-      }
-      title={title}
-      titleError={error}
-    >
-      <WorkspacePage>
-        <p className="text-muted-foreground text-sm">The conversation.</p>
       </WorkspacePage>
     </WorkspaceShell>
   )
@@ -402,9 +330,7 @@ const workspaceCatalog: Entry[] = [
     name: "WorkspaceShell without a panel",
     render: () => (
       <WorkspaceShell
-        actions={<TopActions />}
         className="h-[24rem] border border-border"
-        notifications={<BellSample unread={0} />}
         panel={null}
         panelLine={null}
         rail={<Rail />}
@@ -419,23 +345,28 @@ const workspaceCatalog: Entry[] = [
     ),
   },
   {
-    name: "HistoryMenu",
+    // Opens on hover, beside the rail's link to the latest chat.
+    name: "ChatHistory",
     render: () => (
-      <div className="flex justify-end">
-        <HistoryMenu current="chat-0" items={HISTORY} />
+      <div className="flex h-72 w-16 flex-col rounded-lg bg-rail p-2.5 text-rail-foreground">
+        <ChatHistory
+          current="chat-0"
+          items={HISTORY}
+          trigger={
+            <a className={railItemClass} href="#chat-0">
+              <ChatCircleTextIcon aria-hidden />
+              <span data-slot="rail-label">Chat</span>
+            </a>
+          }
+        />
       </div>
     ),
   },
   {
-    name: "HistoryMenu empty",
-    render: () => (
-      <div className="flex justify-end">
-        <HistoryMenu items={[]} />
-      </div>
-    ),
+    name: "PipelineIcon",
+    render: () => <PipelineIcon className="size-8 text-foreground" />,
   },
-  { name: "Hint", render: () => <TopActions /> },
-  { name: "ConversationRename", render: () => <ConversationSample /> },
+  { name: "Hint", render: () => <HintSample /> },
   {
     name: "WorkspacePage",
     render: () => (

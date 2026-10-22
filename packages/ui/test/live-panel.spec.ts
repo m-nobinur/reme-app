@@ -158,11 +158,11 @@ test("the approve button shows a visible focus ring from the keyboard", async ({
 test.describe("with reduced motion", () => {
   test.use({ contextOptions: { reducedMotion: "reduce" } })
 
-  test("the working line's dot does not pulse", async ({ page }) => {
+  test("the working line's halo does not pulse", async ({ page }) => {
     await open(page, "LiveLine", 400)
-    const dot = page.locator('[data-slot="live-line"] > span').first()
+    const halo = page.locator('[data-slot="live-line-halo"]')
     expect(
-      await dot.evaluate((node) => getComputedStyle(node).animationName)
+      await halo.evaluate((node) => getComputedStyle(node).animationName)
     ).toBe("none")
   })
 

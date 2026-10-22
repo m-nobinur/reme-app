@@ -1,41 +1,26 @@
 import {
-  ArchiveIcon,
   CaretDownIcon,
-  DotsThreeIcon,
   ListIcon,
-  NotePencilIcon,
-  PencilSimpleIcon,
   SidebarSimpleIcon,
 } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLinkItem,
-  DropdownMenuTrigger,
-} from "@workspace/ui/components/dropdown-menu"
-import { Input } from "@workspace/ui/components/input"
-import { PersonaAvatar } from "@workspace/ui/components/persona"
+import { LogoMark } from "@workspace/ui/components/logo"
 import {
   Sheet,
   SheetContent,
   SheetTitle,
   SheetTrigger,
 } from "@workspace/ui/components/sheet"
-import { hintsShown } from "@workspace/ui/components/tooltip"
+import { Hint, hintsShown } from "@workspace/ui/components/tooltip"
 import {
   PANEL_COOKIE,
   type PanelPress,
   RAIL_COOKIE,
 } from "@workspace/ui/lib/panel"
-import { titleText } from "@workspace/ui/lib/title"
 import { cn } from "@workspace/ui/lib/utils"
 import {
   type ComponentProps,
-  type FormEvent,
   type MouseEvent,
-  type ReactElement,
   type ReactNode,
   useCallback,
   useEffect,
@@ -108,10 +93,38 @@ const useWide = () =>
   )
 
 /**
+ * The rail's top: the mark, which shows the sidebar icon under the pointer or
+ * keyboard focus and hides or shows the rail when pressed. It sits at the head
+ * of the rail while that is open and at the top left of the page once it is
+ * not, in the same place.
+ */
+function RailToggle({ open, onClick }: { open: boolean; onClick: () => void }) {
+  const label = open ? "Hide sidebar" : "Show sidebar"
+  return (
+    <Hint label={label} side={open ? "right" : "bottom"}>
+      <button
+        aria-controls="workspace-rail"
+        aria-expanded={open}
+        aria-label={label}
+        className="group/toggle relative flex size-10 shrink-0 items-center justify-center rounded-xl text-foreground outline-none transition-colors duration-150 hover:bg-foreground/5 focus-visible:ring-3 focus-visible:ring-ring motion-reduce:transition-none"
+        onClick={onClick}
+        type="button"
+      >
+        <LogoMark className="transition-opacity duration-150 group-hover/toggle:opacity-0 group-focus-visible/toggle:opacity-0 motion-reduce:transition-none" />
+        <SidebarSimpleIcon
+          aria-hidden
+          className="absolute size-6 text-muted-foreground opacity-0 transition-opacity duration-150 group-hover/toggle:opacity-100 group-focus-visible/toggle:opacity-100 motion-reduce:transition-none"
+        />
+      </button>
+    </Hint>
+  )
+}
+
+/**
  * The owner workspace: a compact rail of icons, the conversation, and the
- * live panel floating at the top right, under the notifications bell.
+ * live panel floating at the top right.
  *
- * From `md` the rail is a 72px column of icons, each named on hover, that hides
+ * From `md` the rail is a 64px column of icons, each named on hover, that hides
  * with the toggle at the top left, remembered in a cookie; below `md` it is a
  * sheet from the left, where the names show beside the icons. A rail label
  * is a `data-slot="rail-label"` span. The panel is a rounded
@@ -120,24 +133,16 @@ const useWide = () =>
  * that. It floats over the page rather than taking a column, so the
  * conversation stays centred. From `lg` whether it is open is remembered;
  * below `lg` it starts minimised, since there it covers the conversation.
- * With no `panel` there is no card and no space kept for it. The rail, the panel and
- * the bell are slots, so this package still imports no router. `title` and
- * `menu` name the page in the top bar; `actions` and `notifications` sit at
- * its right.
+ * With no `panel` there is no card and no space kept for it. The rail and the
+ * panel are slots, so this package still imports no router.
  */
 function WorkspaceShell({
   rail,
   panel,
   panelLine,
-  actions,
-  notifications,
   defaultRailOpen = true,
   defaultPanelOpen = true,
   openPanel,
-  title,
-  menu,
-  renaming,
-  titleError,
   children,
   className,
 }: {
@@ -149,22 +154,10 @@ function WorkspaceShell({
   panel: ReactNode
   /** One line of live activity: the panel's header, and all of it minimised. */
   panelLine: ReactNode
-  /** Plain text, never markup: a title can be the owner's or the model's words. */
-  title?: string | undefined
-  /** The page's ··· menu, drawn beside the title. */
-  menu?: ReactNode
-  /** While set, the title is a form that renames it, in place of the title and menu. */
-  renaming?: Renaming | undefined
-  /** Why the last action on the title failed, such as an archive. */
-  titleError?: string | undefined
-  /** Icon buttons at the top right, before the bell. */
-  actions?: ReactNode
-  /** The bell and its menu, at the top right. */
-  notifications?: ReactNode
   defaultRailOpen?: boolean
   defaultPanelOpen?: boolean
   /**
-   * The owner asked for the panel, by a link or from the bell: it opens when
+   * The owner asked for the panel, by a link or from the notifications: it opens when
    * the key changes, even if they had minimised it.
    */
   openPanel?: PanelPress | undefined
@@ -243,21 +236,24 @@ function WorkspaceShell({
           aria-label="Workspace"
           className={cn(
             "hidden shrink-0 flex-col overflow-hidden border-border bg-rail text-rail-foreground transition-[width] duration-200 ease-out motion-reduce:transition-none md:flex",
-            railOpen ? "w-18 border-r" : "w-0",
+            railOpen ? "w-16 border-r" : "w-0",
             "[&_[data-slot=rail-label]]:sr-only"
           )}
           data-state={railOpen ? "open" : "closed"}
           id="workspace-rail"
           inert={!railOpen}
         >
-          <div className="flex min-h-0 w-18 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden px-3.5 py-3">
+          <div className="flex h-13.5 w-16 shrink-0 items-center px-3">
+            <RailToggle onClick={toggleRail} open />
+          </div>
+          <div className="flex min-h-0 w-16 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden px-2.5 pt-2 pb-3">
             {rail}
           </div>
         </aside>
       )}
 
       <div className="relative flex min-w-0 flex-1 flex-col">
-        <header className="flex h-12 shrink-0 items-center gap-1 px-2">
+        <header className="flex h-13.5 shrink-0 items-center gap-1 px-3">
           <Sheet onOpenChange={setRailSheet} open={railSheet}>
             <SheetTrigger
               render={
@@ -282,48 +278,11 @@ function WorkspaceShell({
             </SheetContent>
           </Sheet>
 
-          <Button
-            aria-controls="workspace-rail"
-            aria-expanded={railOpen}
-            aria-label={railOpen ? "Hide sidebar" : "Show sidebar"}
-            className="hidden md:inline-flex"
-            onClick={toggleRail}
-            size="icon"
-            variant="ghost"
-          >
-            <SidebarSimpleIcon aria-hidden />
-          </Button>
-
-          <PersonaAvatar className="ms-1 size-7" />
-
-          <div className="flex min-w-0 flex-1 items-center gap-0.5 ps-1">
-            {renaming ? (
-              <TitleEditor {...renaming} />
-            ) : (
-              <>
-                {title ? (
-                  <p
-                    className="truncate font-medium text-sm"
-                    data-slot="workspace-title"
-                  >
-                    {title}
-                  </p>
-                ) : null}
-                {menu}
-                {titleError ? (
-                  <p
-                    className="ms-2 truncate text-destructive text-xs"
-                    role="alert"
-                  >
-                    {titleError}
-                  </p>
-                ) : null}
-              </>
-            )}
-          </div>
-
-          {actions}
-          {notifications}
+          {railOpen ? null : (
+            <span className="max-md:hidden">
+              <RailToggle onClick={toggleRail} open={false} />
+            </span>
+          )}
         </header>
 
         <main
@@ -333,7 +292,7 @@ function WorkspaceShell({
           // so the page starts below it.
           className={cn(
             "min-h-0 flex-1 overflow-y-auto",
-            hasPanel && "max-lg:pt-13 lg:[--panel-inset:23.5rem]"
+            hasPanel && "max-lg:pt-14 lg:[--panel-inset:23rem]"
           )}
           // The page scrolls here, not the window: the router resets and
           // restores this element by its id.
@@ -346,14 +305,14 @@ function WorkspaceShell({
         {hasPanel ? (
           <aside
             aria-label="Panel"
-            className="absolute top-13 right-2 z-20 flex max-h-[calc(50svh+3rem)] w-[min(22rem,calc(100%-1rem))] flex-col overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-lg"
+            className="absolute top-15 right-1.5 z-20 flex max-h-[calc(50svh+3rem)] w-[min(22rem,calc(100%-0.75rem))] flex-col overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-lg lg:top-1.5"
             data-state={expanded ? "open" : "closed"}
             id="workspace-panel"
           >
             <button
               aria-controls={panelId}
               aria-expanded={expanded}
-              className="flex min-h-11 w-full min-w-0 shrink-0 items-center gap-2 px-4 text-start outline-none transition-colors hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-inset motion-reduce:transition-none"
+              className="flex min-h-10 w-full min-w-0 shrink-0 items-center gap-2.5 px-3.5 text-start outline-none transition-colors hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-inset motion-reduce:transition-none"
               onClick={() => setPanel(!expanded)}
               type="button"
             >
@@ -416,168 +375,4 @@ function WorkspacePage({ className, ...props }: ComponentProps<"div">) {
   )
 }
 
-type Renaming = {
-  /** The title as it stands, to edit from. */
-  value: string
-  /** Saves the new title; a throw keeps the form open with its error. */
-  onSave: (title: string) => Promise<void>
-  onCancel: () => void
-}
-
-/**
- * The title as a one-field form: Enter or Save keeps it, Escape or Cancel
- * leaves it as it was. The words are checked here the way the api keeps
- * them, so a title of only spaces never leaves the browser.
- */
-function TitleEditor({ value, onSave, onCancel }: Renaming) {
-  const [text, setText] = useState(value)
-  const [pending, setPending] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const errorId = useId()
-  // A rename the owner saves or cancels hands focus back to the ··· button
-  // that started it, which is back in the title bar a frame after this form
-  // is gone. One that ends because they went elsewhere leaves focus alone.
-  const form = useRef<HTMLFormElement>(null)
-  const refocus = () => {
-    const bar = form.current?.parentElement
-    requestAnimationFrame(() =>
-      bar
-        ?.querySelector<HTMLElement>('[data-slot="conversation-actions"]')
-        ?.focus()
-    )
-  }
-  const cancel = () => {
-    refocus()
-    onCancel()
-  }
-  // The field takes any length; the title keeps what `titleText` keeps, and
-  // says so before the owner saves, rather than cutting what they paste.
-  const cut =
-    text.replace(/\s+/g, " ").trim().length > (titleText(text) ?? "").length
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault()
-    const title = titleText(text)
-    if (!title) {
-      setError("A title needs words.")
-      return
-    }
-    setPending(true)
-    setError(null)
-    try {
-      await onSave(title)
-      refocus()
-    } catch {
-      setError("That did not save. Try again.")
-      setPending(false)
-    }
-  }
-
-  return (
-    <form
-      aria-label="Rename conversation"
-      className="relative flex min-w-0 flex-1 items-center gap-1.5"
-      data-slot="title-editor"
-      onSubmit={submit}
-      ref={form}
-    >
-      <Input
-        aria-describedby={error ? errorId : undefined}
-        aria-invalid={error ? true : undefined}
-        aria-label="Conversation title"
-        autoFocus
-        className="h-8 min-w-0 flex-1"
-        disabled={pending}
-        onChange={(event) => setText(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") cancel()
-        }}
-        value={text}
-      />
-      <Button disabled={pending} size="sm" type="submit">
-        {pending ? "Saving" : "Save"}
-      </Button>
-      <Button
-        disabled={pending}
-        onClick={cancel}
-        size="sm"
-        type="button"
-        variant="ghost"
-      >
-        Cancel
-      </Button>
-      {cut && !error ? (
-        <p
-          className="absolute start-0 top-full z-10 mt-1 max-w-full rounded-md border border-border bg-popover px-2 py-1 text-muted-foreground text-xs shadow-sm"
-          role="status"
-        >
-          Titles keep their first 120 characters.
-        </p>
-      ) : null}
-      {error ? (
-        // Below the bar, over the page: the bar has one row, and a phone has
-        // no room in it for a second.
-        <p
-          className="absolute start-0 top-full z-10 mt-1 max-w-full rounded-md border border-border bg-popover px-2 py-1 text-destructive text-xs shadow-sm"
-          id={errorId}
-          role="alert"
-        >
-          {error}
-        </p>
-      ) : null}
-    </form>
-  )
-}
-
-/**
- * The conversation's ··· menu, for the shell's `menu` slot. `newChat` is the
- * link element to render the entry as, so the app passes its router's link
- * and this package still imports no router. Rename and archive show for a
- * stored conversation, the only kind the api can change.
- */
-function ConversationMenu({
-  newChat,
-  onRename,
-  onArchive,
-}: {
-  newChat: ReactElement
-  onRename?: (() => void) | undefined
-  onArchive?: (() => void) | undefined
-}) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <Button
-            aria-label="Conversation actions"
-            data-slot="conversation-actions"
-            size="icon-sm"
-            variant="ghost"
-          />
-        }
-      >
-        <DotsThreeIcon aria-hidden weight="bold" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent>
-        <DropdownMenuLinkItem render={newChat}>
-          <NotePencilIcon aria-hidden />
-          New chat
-        </DropdownMenuLinkItem>
-        {onRename ? (
-          <DropdownMenuItem onClick={onRename}>
-            <PencilSimpleIcon aria-hidden />
-            Rename
-          </DropdownMenuItem>
-        ) : null}
-        {onArchive ? (
-          <DropdownMenuItem onClick={onArchive}>
-            <ArchiveIcon aria-hidden />
-            Archive
-          </DropdownMenuItem>
-        ) : null}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-
-export { ConversationMenu, closeOnLink, WorkspacePage, WorkspaceShell }
+export { closeOnLink, WorkspacePage, WorkspaceShell }

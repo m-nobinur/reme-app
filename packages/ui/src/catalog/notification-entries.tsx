@@ -6,7 +6,7 @@ import {
   NotificationList,
   NotificationMenu,
 } from "@workspace/ui/components/notification-list"
-import type { ReactNode } from "react"
+import type { ComponentProps, ReactNode } from "react"
 
 /**
  * Catalog entries for the notifications page.
@@ -151,7 +151,7 @@ const MENU_ENTRIES: NotificationEntry[] = AttentionItem.options.map(
   }
 )
 
-/** The bell at the top right, with `unread` on it and its menu. */
+/** The bell with `unread` on it and its menu, which opens beside the rail. */
 function BellSample({
   unread = 2,
   items = MENU_ENTRIES,
@@ -160,12 +160,19 @@ function BellSample({
   items?: NotificationEntry[]
 }) {
   return (
-    <div className="flex justify-end">
-      <NotificationMenu
-        items={items}
-        unread={unread}
-        viewAll={<a href="#notifications" />}
-      />
+    <NotificationMenu
+      items={items}
+      unread={unread}
+      viewAll={<a href="#notifications" />}
+    />
+  )
+}
+
+/** The rail's foot, where the bell sits. */
+function RailBell(props: ComponentProps<typeof BellSample>) {
+  return (
+    <div className="flex h-[34rem] w-16 flex-col justify-end rounded-lg bg-rail p-2 text-rail-foreground">
+      <BellSample {...props} />
     </div>
   )
 }
@@ -209,10 +216,10 @@ const notificationCatalog: Entry[] = [
       />
     ),
   },
-  { name: "NotificationMenu", render: () => <BellSample /> },
+  { name: "NotificationMenu", render: () => <RailBell /> },
   {
     name: "NotificationMenu empty",
-    render: () => <BellSample items={[]} unread={0} />,
+    render: () => <RailBell items={[]} unread={0} />,
   },
 ]
 
