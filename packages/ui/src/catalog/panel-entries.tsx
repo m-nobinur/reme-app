@@ -253,7 +253,6 @@ const segment = (
   s: Omit<ActivitySegment, "at"> & { at?: string },
   extra: {
     children?: ReactNode
-    onAnswer?: () => void
     details?: Record<string, ReactNode>
   } = {}
 ) => {
@@ -263,7 +262,6 @@ const segment = (
       <PanelSegment
         icon={segmentKind(full)}
         line={segmentLine(full, CTX, { elapsedSeconds: 250, until: "11:50" })}
-        onAnswer={extra.onAnswer}
         state={full.state}
         steps={full.steps.flatMap((step) => {
           const label = stepLabel(full, step)
@@ -532,16 +530,13 @@ const panelCatalog: Entry[] = [
     // The owner's turn: the step pulses and points at the tray.
     name: "PanelSegment getting started waiting",
     render: () =>
-      segment(
-        {
-          id: "onboarding",
-          kind: "onboarding",
-          state: "waiting",
-          steps: ONBOARDING_STEPS("waiting"),
-          names: BUSINESS,
-        },
-        { onAnswer: noop }
-      ),
+      segment({
+        id: "onboarding",
+        kind: "onboarding",
+        state: "waiting",
+        steps: ONBOARDING_STEPS("waiting"),
+        names: BUSINESS,
+      }),
   },
   {
     name: "PanelSegment before a business name",

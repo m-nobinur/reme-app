@@ -56,7 +56,6 @@ import type { AttentionItem, Workspace, WriteOutcome } from "@/lib/api/types"
 import { attemptKeys } from "@/lib/attempt"
 import { askerOf } from "@/lib/briefing"
 import { DECISION_REFUSED } from "@/lib/decision"
-import { onboardingFor } from "@/lib/onboarding"
 import {
   type Panel,
   panelFor,
@@ -399,12 +398,10 @@ function stepsOf({ kind, steps, build }: SegmentView): SegmentStep[] {
 function Segment({
   segment,
   refresh,
-  onAnswer,
   children,
 }: {
   segment: SegmentView
   refresh: Refresh
-  onAnswer?: (() => void) | undefined
   children?: ReactNode
 }) {
   const { build } = segment
@@ -417,7 +414,6 @@ function Segment({
       <PanelSegment
         icon={segment.icon}
         line={segment.line}
-        onAnswer={onAnswer}
         state={segment.state}
         steps={stepsOf(segment)}
         title={segment.title}
@@ -434,36 +430,6 @@ function Segment({
       </PanelSegment>
     </div>
   )
-}
-
-/**
- * "Answer below": the question tray's first field when the chat shows it,
- * the composer for a question answered in words, else the getting-started
- * chat, where both are.
- */
-function useAnswerBelow(onboarding: string | null) {
-  const router = useRouter()
-  return () => {
-    // The composer only in the getting-started chat: another chat's is not where the answer goes.
-    const here =
-      onboarding !== null && location.pathname === `/app/c/${onboarding}`
-    const field =
-      document
-        .querySelector('[data-slot="question-tray"]')
-        ?.querySelector<HTMLElement>("input, textarea, select, button") ??
-      (here
-        ? document.querySelector<HTMLElement>(
-            ".aui-composer-input:not(:disabled)"
-          )
-        : null)
-    if (field) {
-      field.focus()
-      return
-    }
-    if (onboarding) {
-      void router.navigate({ to: "/app/c/$id", params: { id: onboarding } })
-    }
-  }
 }
 
 /** A next step, quieter than the primary action. */
@@ -657,10 +623,6 @@ export function useAnnouncement(workspace: Workspace | null) {
 
 export function WorkspacePanel({ panel }: { panel: Panel | null }) {
   const { workspace, failed, refresh } = useLiveWorkspace()
-  const { conversations } = frame.useLoaderData()
-  const answerBelow = useAnswerBelow(
-    workspace ? onboardingFor(workspace, conversations) : null
-  )
   const zone = useBrowserZone()
   const [status, setStatus] = useAnnouncement(workspace)
   const [tab, setTab] = useState<Tab>("activity")
@@ -690,12 +652,7 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
       : "activity"
 
   const segment = (each: SegmentView) => (
-    <Segment
-      key={each.id}
-      onAnswer={each.kind === "onboarding" ? answerBelow : undefined}
-      refresh={refresh}
-      segment={each}
-    >
+    <Segment key={each.id} refresh={refresh} segment={each}>
       {/* The first version's review is the going-live segment's first step. */}
       {each.kind === "golive" && panel.review ? (
         <div

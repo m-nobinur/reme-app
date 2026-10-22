@@ -142,9 +142,13 @@ test("a done segment is one line with no caret", async ({ page }) => {
   await expect(segment.locator("button[aria-expanded]")).toHaveCount(0)
 })
 
-test("a waiting step points at the tray", async ({ page }) => {
+test("a waiting step offers no link: the answer goes in the chat", async ({
+  page,
+}) => {
   await open(page, "PanelSegment getting started waiting", 400)
-  await expect(page.getByRole("button", { name: "Answer below" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Answer below" })).toHaveCount(
+    0
+  )
 })
 
 test("the approve button shows a visible focus ring from the keyboard", async ({

@@ -30,11 +30,7 @@ import {
 import { PersonaAvatar } from "@workspace/ui/components/persona"
 import { Skeleton } from "@workspace/ui/components/skeleton"
 import { StatusIcon } from "@workspace/ui/components/status-line"
-import {
-  ANSWER_BELOW,
-  SKIPPED,
-  type StatusKind,
-} from "@workspace/ui/lib/activity-copy"
+import { SKIPPED, type StatusKind } from "@workspace/ui/lib/activity-copy"
 import {
   type AnswerSpec,
   answerValue,
@@ -453,7 +449,6 @@ function PanelSegment({
   working = title,
   line = null,
   steps,
-  onAnswer,
   children,
 }: {
   icon: StatusKind
@@ -464,8 +459,6 @@ function PanelSegment({
   working?: string
   line?: string | null
   steps: readonly SegmentStep[]
-  /** Takes the owner to where a waiting step is answered. Without it the step only says it waits. */
-  onAnswer?: (() => void) | undefined
   /** What the owner can do in the segment: a review's buttons, Stop. */
   children?: ReactNode
 }) {
@@ -593,17 +586,6 @@ function PanelSegment({
                             {STEP_SAID[step.state]}
                           </span>
                         </span>
-                        {step.state === "waiting" && onAnswer && !failed ? (
-                          <button
-                            className="shrink-0 rounded-sm text-muted-foreground underline-offset-4 outline-none hover:text-foreground hover:underline focus-visible:ring-3 focus-visible:ring-ring"
-                            // It moves the owner to the tray, so the phone sheet goes.
-                            data-leaves-panel
-                            onClick={onAnswer}
-                            type="button"
-                          >
-                            {ANSWER_BELOW}
-                          </button>
-                        ) : null}
                       </p>
                       {step.state === "done" || step.state === "skipped"
                         ? null

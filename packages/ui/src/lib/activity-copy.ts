@@ -860,9 +860,6 @@ export function stepLabel(segment: ActivitySegment, step: ActivityStep) {
   return STEP_LABELS[segment.kind]?.[step.id] ?? null
 }
 
-/** What a waiting onboarding step says beside its label: the answer goes in the tray below. */
-export const ANSWER_BELOW = "Answer below"
-
 /** What a skipped step says beside its label. */
 export const SKIPPED = "Skipped"
 

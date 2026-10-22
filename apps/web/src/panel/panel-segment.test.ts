@@ -94,14 +94,9 @@ it("folds and opens its steps from the caret while it runs", async () => {
   expect(container.querySelector("[inert]")).toBeNull()
 })
 
-it("points a waiting step at the tray", async () => {
-  const onAnswer = vi.fn()
-  await show({ state: "waiting", steps: steps("waiting"), onAnswer })
-  const answer = [...container.querySelectorAll("button")].find(
-    (button) => button.textContent === "Answer below"
-  )
-  await act(async () => answer?.click())
-  expect(onAnswer).toHaveBeenCalledOnce()
+it("offers no link from a waiting step: the answer goes in the chat", async () => {
+  await show({ state: "waiting", steps: steps("waiting") })
+  expect(container.querySelectorAll("li button")).toHaveLength(0)
 })
 
 it("lists what is done and the step at work, and only hints at the rest", async () => {
