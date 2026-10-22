@@ -70,9 +70,6 @@ const TONE: Record<ToneId, [RegExp, string][]> = {
   professional: [
     [/!/g, "."],
     [/\bno worries at all\b/gi, "that is fine"],
-    [/\bgreat pick\b/gi, "a good choice"],
-    [/\blovely\b/gi, "thank you"],
-    [/\bbrilliant\b/gi, "very good"],
     [/\bI'm\b/g, "I am"],
     [/\bI'll\b/g, "I will"],
     [/\bI'd\b/g, "I would"],
@@ -96,7 +93,6 @@ const TONE: Record<ToneId, [RegExp, string][]> = {
     [/\bthank you\b/gi, "thanks"],
     [/\bcould you\b/gi, "can you"],
     [/\bperfect\b/gi, "nice"],
-    [/\bwonderful\b/gi, "nice"],
     [/\bI will\b/g, "I'll"],
     [/\bdo not\b/gi, "don't"],
   ],
@@ -118,10 +114,10 @@ export const firstName = (owner: string) => owner.trim().split(/\s+/)[0] ?? ""
 
 /**
  * The first message, six ways, written at sign-up with no model: a greeting
- * by first name when the sign-in gave one, thanks for choosing me as their
- * business assistant, a few quick questions to understand the business and
- * its goals, a website tailored to it, and the first question: what the
- * business does and its main services. Text only, so it ends on the question.
+ * by first name when the sign-in gave one, who I am, a few quick questions to
+ * understand the business and its goals, a website tailored to it, and the
+ * first question: what the business does and its main services. Text only,
+ * so it ends on the question.
  */
 export function opener(v: Voice): string {
   const name = firstName(v.owner)
@@ -130,34 +126,34 @@ export function opener(v: Voice): string {
   return say(
     v,
     pick(v, "opener", [
-      `${hi("Hi")}, and thank you for choosing me as your business assistant! I'm really glad to be working with ${b}.
+      `${hi("Hi")}. I'm the new business assistant at ${b}.
 
 I'll ask a few quick questions so I can understand your business and your goals, and then I'll build you a website tailored to ${b}.
 
 To start, tell me about the business. What does ${b} do, and what are your main services?`,
-      `${hi("Hello")}! It's lovely to meet you. Thank you for picking me to be the business assistant for ${b}.
+      `${hi("Hello")}. I'll be the business assistant for ${b}, starting with your website.
 
-Here's the plan. A few quick questions first, so I get a feel for what you do and what you want from the business, then I'll put together a website made just for you.
+A few quick questions first, so I get a feel for what you do and what you want from the business, then I'll put together a website made for it.
 
 In your own words, what does ${b} do, and which services do customers come to you for most?`,
-      `Welcome${name ? `, ${name}` : ""}. Thank you for trusting me as your business assistant.
+      `${hi("Hi")}. I'm your business assistant, and before anything gets built I'd like to understand ${b} properly.
 
-Before anything gets built, I'd like to understand ${b} properly, so I'll ask a few quick questions about the business and your goals. With that, I can shape a website around you rather than a template.
+I'll ask a few quick questions about the business and your goals. With that, I can shape a website around you rather than a template.
 
 What does ${b} do, and which services matter most to you?`,
-      `${hi("Hi")}! Thanks for choosing me to help run things at ${b}. I'm your new business assistant, and I'm excited to get started.
+      `${hi("Hi")}. I'm the business assistant for ${b}, here to help run things.
 
 A few quick questions will help me understand your business and where you want to take it. Then I'll build a website that fits ${b}.
 
 Let's begin with the heart of it: what does the business do, and what are your main services?`,
-      `Good to meet you${name ? `, ${name}` : ""}. Thank you for choosing me as the business assistant for ${b}.
+      `Good to meet you${name ? `, ${name}` : ""}. I'm the business assistant for ${b}.
 
 This won't take long. I'll ask a few quick questions so I can understand the business and your goals, and I'll use your answers to build a website tailored to you.
 
 First, the big one. What does ${b} do, and what are the main services you offer?`,
-      `${hi("Hello")}, and welcome! I'm glad you chose me as your business assistant.
+      `${hi("Hello")}. I'm your new business assistant, and my first job is getting to know ${b}.
 
-My first job is getting to know ${b}, so I'll ask a few quick questions, just enough to understand the business and your goals. Then I'll build you a website made to fit.
+I'll ask a few quick questions, just enough to understand the business and your goals. Then I'll build you a website made to fit.
 
 So tell me, what does ${b} do, and what services do you offer?`,
     ])
@@ -179,14 +175,14 @@ const QUESTIONS: Record<Asked, (v: Voice) => string[]> = {
     `First things first. Which of these comes closest to what ${v.business} does?`,
   ],
   "business.offerings": (v) => [
-    `Lovely. What are the main services ${v.business} offers? The ones customers ask for most are a good place to start.`,
-    `Thanks. Which services do people come to ${v.business} for? A short list is plenty.`,
+    `What are the main services ${v.business} offers? The ones customers ask for most are a good place to start.`,
+    `Which services do people come to ${v.business} for? A short list is plenty.`,
   ],
   "business.audience": (v) => [
     v.offering
       ? `Got it. Who are your ideal customers, the people you'd most like to see booking ${lower(v.offering)}? You can skip this one.`
       : "Got it. Who are your ideal customers, the people you'd most like to hear from? You can skip this one.",
-    "Thanks, that's useful. Who do you most enjoy working for? The site will speak to them first. It's fine to skip this.",
+    "Who do you most enjoy working for? The site will speak to them first. It's fine to skip this.",
   ],
   // Who runs the business and real proof points: the About page's person
   // and the site's credibility. Never required.
@@ -197,26 +193,26 @@ const QUESTIONS: Record<Asked, (v: Voice) => string[]> = {
   ],
   // Where the business works, asked the way a local customer would think of it.
   "service_area.text": (v) => [
-    `Lovely. Where are you based, and which nearby areas do you cover? Something like "Leeds and anywhere within about 20 miles" is perfect.`,
+    `Where are you based, and which nearby areas do you cover? Something like "Leeds and anywhere within about 20 miles" is perfect.`,
     `And where does ${v.business} work? The town or city you're in, plus the places around it you're happy to travel to, is all I need.`,
     v.offering
-      ? `Great. Which areas do you cover for ${lower(v.offering)}? Your home town and the surrounding areas you'll travel to is plenty.`
-      : "Great. Which areas do you cover? Your home town and the surrounding areas you'll travel to is plenty.",
+      ? `Which areas do you cover for ${lower(v.offering)}? Your home town and the surrounding areas you'll travel to is plenty.`
+      : "Which areas do you cover? Your home town and the surrounding areas you'll travel to is plenty.",
     `So people searching nearby can find you, which city or town are you based in, and which neighbouring areas do you serve?`,
     `Which part of the map is yours? Tell me where you're based and how far you'll go for a job, for example "Manchester, Salford and Stockport".`,
   ],
   // The business's practical side, on one card.
   contact: (v) => [
-    `Thanks, that's really helpful. Now the practical bits. Which phone number and email should customers use to reach ${v.business}? Check the details below and change anything that isn't right.`,
-    `Lovely, I'm getting a good feel for ${v.business}. How should customers get in touch? Add the phone number and the email for enquiries below.`,
-    `That's great, thank you. Just the contact details left for the business: the phone number and the email address enquiries should go to.`,
+    `Now the practical bits. Which phone number and email should customers use to reach ${v.business}? Check the details below and change anything that isn't right.`,
+    `I have a good picture of ${v.business} now. How should customers get in touch? Add the phone number and the email for enquiries below.`,
+    `Just the contact details left for the business: the phone number and the email address enquiries should go to.`,
   ],
   // Phase 1 to 2: what they told us, then the working relationship.
   assistant: (v) => [
-    `Thank you! I have a really clear picture of what ${v.business} is all about now. Since I know who you are and what you offer, let's make our partnership official.
+    `I have a clear picture of ${v.business} now: who you are and what you offer.
 
 Before we get to the design, how would you like me to introduce myself to you and your visitors? Give me a name and the personality you'd like me to have.`,
-    `That's everything I need about ${v.business} for now, thank you. I can already picture how the site should read.
+    `That's everything I need about ${v.business} for now. I can already picture how the site should read.
 
 Now a little about me. I'll be looking after your enquiries and keeping you posted, so I should have a name and a manner you like. What should we call me, and how should I come across?`,
     `Thanks${comma(v.owner)}. I have a good feel for ${v.business}, and a few ideas for the site already.
@@ -226,8 +222,8 @@ Before the website, let's settle who I am on your team. Choose the name I'll go 
   pronouns: (v) =>
     v.assistant
       ? [
-          `${v.assistant} it is, I like it! Which pronouns should I go by?`,
-          `${v.assistant}. That has a nice ring to it. Which pronouns suit me best?`,
+          `${v.assistant} it is. Which pronouns should I go by?`,
+          `${v.assistant}, noted. Which pronouns suit me best?`,
         ]
       : ["Which pronouns should I go by?"],
   tone: () => [
@@ -238,19 +234,19 @@ Before the website, let's settle who I am on your team. Choose the name I'll go 
   build_for_me: (v) => {
     const ask = "Would you like me to build your website for you?"
     return [
-      `Good to be officially on the team${comma(v.owner)}.
+      `${v.assistant ? `${v.assistant} it is!` : `Thanks${comma(v.owner)}.`}
 
 Now let's turn to your website. Every growing business needs one that turns visitors into real enquiries, so yours will have its own Request a quote page for your services.
 
 ${ask}`,
-      `Lovely to meet you properly${comma(v.owner)}.${v.assistant ? ` I'm ${v.assistant}, and` : " I'm"} glad to be on board.
+      `${v.assistant ? `I'm ${v.assistant} from now on${comma(v.owner)}.` : `Thanks${comma(v.owner)}.`}
 
 Let's talk about your website. It's often the first thing a new customer sees of ${v.business}, so getting in touch has to be easy. Every page will point visitors to Request a quote, and each enquiry will arrive with the details you need to reply.
 
 ${ask}`,
-      `Thanks${comma(v.owner)}.${v.assistant ? ` ${v.assistant}, reporting for duty!` : ""}
+      `Thanks${comma(v.owner)}.
 
-Next is the part most owners put off, the website. A good one turns visitors into real enquiries, and yours will have a Request a quote flow so customers can describe the job and you can reply with the right quote.
+Next is the part most owners put off: the website. A good one turns visitors into real enquiries, and yours will have a Request a quote flow so customers can describe the job and you can reply with the right quote.
 
 ${ask}`,
     ]
@@ -260,18 +256,18 @@ ${ask}`,
     `That's fine${comma(v.owner)}. Would you rather put the website together yourself in the builder?`,
   ],
   design: (v) => [
-    `Wonderful, let's design it together. Four quick questions below set the colours, the lettering, the layout and the pages for ${v.business}. Skip any you like and I'll choose for you.`,
-    `Brilliant. Now the look of ${v.business}. Four quick questions below cover colour, lettering, layout and pages, and you can skip them all if you'd rather I chose.`,
+    `Let's design it together. Four quick questions below set the colours, the lettering, the layout and the pages for ${v.business}. Skip any you like and I'll choose for you.`,
+    `Now the look of ${v.business}. Four quick questions below cover colour, lettering, layout and pages, and you can skip them all if you'd rather I chose.`,
   ],
   template: (v) => [
-    `Wonderful, let's design it together. First, the layout. Which of these feels most like ${v.business}?`,
-    `Brilliant. We'll start with the overall layout. Which one suits ${v.business} best?`,
+    `Let's design it together. First, the layout. Which of these feels most like ${v.business}?`,
+    `We'll start with the overall layout. Which one suits ${v.business} best?`,
   ],
   palette: (v) => [
     v.template
-      ? `${v.template} is a great choice. Which colours feel right for ${v.business}?`
+      ? `${v.template} it is. Which colours feel right for ${v.business}?`
       : `Thanks, I'll keep your notes in mind. Which colours feel right for ${v.business}?`,
-    `${v.template ? "Good pick" : "Noted"}. Now for colour. Which of these palettes fits ${v.business}?`,
+    `Noted. Now for colour. Which of these palettes fits ${v.business}?`,
   ],
   font: (v) =>
     [
@@ -286,20 +282,20 @@ ${ask}`,
   quote_form: (v) => {
     const look = lookOf(v)
     return [
-      `Great pick! I think ${look} will make ${services(v)} look sharp and inviting.
+      `Got it, ${look}.
 
 Now let's make sure every enquiry arrives with what you need. Think of things like the date, the address or the size of the job. When someone asks ${v.business} for a quote, what do you usually find out first?`,
-      `Lovely, ${look} is going to suit ${v.business} really well.
+      `I'll build the site around ${look}.
 
 Next, your Request a quote form. List whatever comes to mind and I'll turn it into a tidy form. Picture a new customer getting in touch: what do you need to know from them before you can quote properly?`,
-      `Good choices${comma(v.owner)}. I can already picture ${services(v)} in ${look}.
+      `Thanks${comma(v.owner)}. I can already picture ${services(v)} in ${look}.
 
 One practical thing before I build: I'll shape the quote form on your site around your answer. Think about the last few quotes you gave. What did you need to ask the customer before you could work them out?`,
       v.offering
-        ? `Love it, ${look} will show off ${services(v)} nicely.
+        ? `I'll show off ${services(v)} with ${look}.
 
 For ${lower(v.offering)}, the usual things are when, where and what the job involves, but you know your customers best. So customers can ask for a quote in one go, what should the form ask them?`
-        : `Love it, ${look} will show off ${services(v)} nicely.
+        : `I'll show off ${services(v)} with ${look}.
 
 The usual things are when, where and what the job involves, but you know your customers best. So customers can ask for a quote in one go, what should the form ask them?`,
     ]
@@ -434,8 +430,8 @@ export function photoQuestion(v: Voice): string {
 export function photos(v: Voice): string {
   const lead = pick(v, "to_photos", [
     "Thanks, the quote form is set. To make the site truly yours, I'd love some real photos.",
-    "Perfect, that's the quote form sorted. The one thing a template can't give you is real photos.",
-    "Great, your quote form is ready. Now, photos are what will make the site feel like yours.",
+    "That's the quote form sorted. The one thing a template can't give you is real photos.",
+    "Your quote form is ready. Now, photos are what will make the site feel like yours.",
   ])
   const close = pick(v, "photos_close", [
     "A logo is welcome too. If you have some, drop them in below. If not, no worries at all, we can skip this.",
@@ -461,9 +457,9 @@ export function started(v: Voice, uploaded: boolean): string {
   return say(
     v,
     pick(v, "started", [
-      `Everything is set! I have all the pieces I need: ${services(v)}, your style${uploaded ? " and your photos" : ""}.
+      `That's everything I need: ${services(v)}, your style${uploaded ? " and your photos" : ""}.
 
-I'm starting the website build for ${v.business} in the background right now. You'll see live progress in the activity panel, but you don't have to wait around in silence. Feel free to keep chatting with me or ask me anything while I finish up. I'll let you know as soon as the first draft is ready.`,
+I've started building the website for ${v.business} in the background. You'll see progress in the activity panel, and there's no need to wait: keep chatting or ask me anything while it runs. I'll let you know as soon as the first draft is ready.`,
       `That's everything, thank you${comma(v.owner)}. I'm starting on the website for ${v.business} now.
 
 It builds in the background, and you can follow along in the activity panel. There's no need to sit and watch. Ask me anything in the meantime, and I'll tell you the moment the first draft is ready.`,
@@ -488,12 +484,12 @@ export function manualEnd(v: Voice, builder: boolean): string {
     v,
     builder
       ? pick(v, "manual_yes", [
-          "Thanks for telling me. To be honest with you, the website builder isn't in the app yet, so there's nothing to open today. When it's ready you'll find it on the Website page. Until then I'm here for anything else, and if you'd like me to build the site after all, just say so.",
-          "Good to know. I should be straight with you, the builder isn't ready in the app yet. It will live on the Website page when it is. In the meantime, if you change your mind, I can build the site for you whenever you ask.",
+          "Thanks for telling me. The website builder isn't in the app yet, so there's nothing to open today. When it's ready you'll find it on the Website page. If you'd like me to build the site after all, just say so.",
+          "Good to know. The builder isn't in the app yet; it will live on the Website page when it is. If you change your mind, I can build the site for you whenever you ask.",
         ])
       : pick(v, "manual_no", [
-          "That's completely fine. Your website will be on the Website page whenever you want to come back to it, and if you'd like me to build it for you later, just ask. I'm here whenever you need me.",
-          "No problem at all. The Website page is there whenever you're ready, and I can build the site for you any time you ask. Until then, I'm here if you need anything.",
+          "That's fine. Your website will be on the Website page whenever you want to come back to it, and if you'd like me to build it for you later, just ask.",
+          "No problem. The Website page is there whenever you're ready, and I can build the site for you any time you ask.",
         ])
   )
 }

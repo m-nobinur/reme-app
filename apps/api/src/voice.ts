@@ -30,7 +30,7 @@ const INTERNALS: readonly [RegExp, string][] = [
 /** Ceremony, praise, chatbot openers and sign-offs: a hit is a style miss, not a fault. */
 const SOFT: readonly [RegExp, string][] = [
   [
-    /\b(reporting for duty|partnership|hono(u)?r|thank you for choosing|thanks for choosing|digital storefront|peace of mind|wonderful|fantastic|amazing|certainly|lovely (mix|choice))\b/i,
+    /\b(reporting for duty|partnership|officially|hono(u)?r|than(k you|ks) for (choosing|picking|trusting)|glad you (chose|picked)|digital storefront|peace of mind|wonderful|fantastic|amazing|certainly|lovely (mix|choice))\b/i,
     "ceremony or praise",
   ],
   [
