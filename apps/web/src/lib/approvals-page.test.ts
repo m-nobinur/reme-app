@@ -82,8 +82,8 @@ it("decides the way the panel does, and reads the workspace again", async () => 
       (each) => each.textContent === name
     )
   expect(button("Ask for changes")).toBeDefined()
-  await act(async () => button("Approve and publish v4")?.click())
-  expect(button("Publishing v4")?.disabled).toBe(true)
+  await act(async () => button("Approve and publish")?.click())
+  expect(button("Publishing")?.disabled).toBe(true)
   expect(server.decideApproval).toHaveBeenCalledWith({
     data: {
       approvalId: "7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c0d",
@@ -94,7 +94,7 @@ it("decides the way the panel does, and reads the workspace again", async () => 
   await act(async () => record({ recorded: true }))
   expect(refresh).toHaveBeenCalledOnce()
   expect(container.querySelector('[role="status"]')?.textContent).toBe(
-    "Approved v4. It is being published."
+    "Approved. Your website is being published."
   )
   await act(async () => root.unmount())
   container.remove()
