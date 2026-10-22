@@ -326,7 +326,9 @@ export type OwnerDataSource = {
   requestChange: (
     text: string,
     key: string,
-    changeKind?: ChangeKind
+    changeKind?: ChangeKind,
+    /** Also posts the words in the chat, in this conversation or the newest. */
+    chat?: { conversation_id?: string }
   ) => Promise<WriteOutcome>
   conversations: () => Promise<Conversation[]>
   conversation: (id: string) => Promise<Conversation | null>

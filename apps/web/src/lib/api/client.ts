@@ -539,10 +539,11 @@ async function preview(assignmentId: string): Promise<PreviewLinks | null> {
 async function requestChange(
   text: string,
   key: string,
-  changeKind?: ChangeKind
+  changeKind?: ChangeKind,
+  chat?: { conversation_id?: string }
 ): Promise<WriteOutcome> {
   return await outcome(
-    await post("/changes", { text, change_kind: changeKind }, key),
+    await post("/changes", { text, change_kind: changeKind, chat }, key),
     "/changes"
   )
 }

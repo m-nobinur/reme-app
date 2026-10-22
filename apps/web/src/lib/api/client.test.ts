@@ -789,6 +789,17 @@ it("sends the change kind a photo action names", async () => {
   })
 })
 
+it("asks the api to post a panel note in the chat, in the conversation named", async () => {
+  answers["POST /changes"] = refusal(409, "change.question_open")
+  await apiSource.requestChange("Bigger logo", "k-5", undefined, {
+    conversation_id: REQUEST,
+  })
+  expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
+    text: "Bigger logo",
+    chat: { conversation_id: REQUEST },
+  })
+})
+
 it("says a cancelled change was stopped, not that the page is stale", async () => {
   answers["POST /changes"] = refusal(409, "change.cancelled")
   expect(await apiSource.requestChange("Bigger logo", "k-3")).toEqual({

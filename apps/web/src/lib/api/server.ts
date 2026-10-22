@@ -239,13 +239,26 @@ export const askForChanges = createServerFn({ method: "POST" })
       text: text(data.text, GOAL_MAX),
       key: keyOf(data.key),
       changeKind: kind.success ? kind.data : undefined,
+      // The panel's note also lands in the chat; a named conversation is checked.
+      chat: data.chat
+        ? {
+            conversation_id: record(data.chat).conversationId
+              ? id(record(data.chat).conversationId)
+              : undefined,
+          }
+        : undefined,
     }
   })
   .handler(async ({ data }): Promise<WriteOutcome> => {
     if (!data.text) {
       return { done: false, reason: "Write what should change first." }
     }
-    return await source.requestChange(data.text, data.key, data.changeKind)
+    return await source.requestChange(
+      data.text,
+      data.key,
+      data.changeKind,
+      data.chat
+    )
   })
 
 /**

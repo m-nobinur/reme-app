@@ -9,6 +9,7 @@ import {
 import { ChatRequest, TOOL_CALL_CANCELLED } from "@workspace/contracts"
 import { Approval } from "@workspace/ui/components/assistant/approval"
 import { SaveDesignAnswerProvider } from "@workspace/ui/components/assistant/ask-design"
+import { ChangeAskedUI } from "@workspace/ui/components/assistant/change-asked"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
 import { ServerButtonUI } from "@workspace/ui/components/assistant/server-button"
 import { Thread } from "@workspace/ui/components/assistant/thread"
@@ -217,6 +218,7 @@ function Chat() {
     AssistantRuntimeProvider,
     { runtime },
     createElement(ServerButtonUI),
+    createElement(ChangeAskedUI),
     createElement(
       CosToolsProvider,
       { value: tools },
@@ -364,6 +366,34 @@ it("a message the assistant posted on its own is a message of its own, with its 
   const link = roots[1]?.querySelector("a")
   expect(link?.getAttribute("href")).toBe("https://dcc.godaddy.com/manage/dns")
   expect(link?.textContent).toBe("Open DNS settings (opens in a new tab)")
+})
+
+it("a change asked for in the panel reads as one resolved line", async () => {
+  const start = FIXTURE.histories.start as {
+    messages: { id: string; parent_id: string | null; content: unknown }[]
+  }
+  const [first] = start.messages
+  const asked = {
+    ...first,
+    id: "chga_0123456789abcdef",
+    parent_id: first?.id ?? null,
+    content: {
+      role: "assistant",
+      parts: [
+        { type: "step-start" },
+        {
+          type: "data-change_asked",
+          data: { text: "Make the hero say end of tenancy cleans." },
+        },
+      ],
+      metadata: { custom: { createdAt: "2026-09-26T19:45:00.000Z" } },
+    },
+  }
+  const container = await open({ messages: [first, asked] })
+  const line = container.querySelector('[data-slot="change-asked"]')
+  expect(line?.textContent).toBe(
+    "Asked for changes: Make the hero say end of tenancy cleans.Your new version will show here when it's ready."
+  )
 })
 
 it("every message keeps the time it was sent, as a reload shows it", async () => {
