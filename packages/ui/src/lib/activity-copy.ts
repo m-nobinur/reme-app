@@ -541,6 +541,8 @@ type Names = {
 
 type JobCopy = {
   title: (n: Names) => readonly string[]
+  /** The title while the job has not begun, when it differs from `title`. */
+  next?: (n: Names) => readonly string[]
   done: (n: Names) => readonly string[]
   /** What stopped, after "The" and before "stopped". */
   noun: string
@@ -570,6 +572,7 @@ const JOBS: Record<JobKind, JobCopy> = {
       is(n.assistant, "building your website"),
       is(n.assistant, "putting your website together"),
     ],
+    next: () => ["Your website comes next", "Next, your website"],
     done: () => [
       "Your website is ready to look over",
       "Your website is ready for a look",
@@ -579,6 +582,7 @@ const JOBS: Record<JobKind, JobCopy> = {
   },
   golive: {
     title: () => ["Putting your website live", "Taking your website live"],
+    next: () => ["Then it goes live", "Then your website goes live"],
     done: (n) =>
       n.host
         ? [
@@ -664,6 +668,9 @@ export function segmentTitle(segment: ActivitySegment, ctx: CopyContext) {
   if (!copy) return null
   const n = namesOf(segment, ctx)
   if (segment.state === "failed") return `The ${copy.noun} stopped`
+  if (segment.state === "upcoming" && copy.next) {
+    return pick(ctx, `${segment.kind}:next`, copy.next(n))
+  }
   const done = segment.state === "done"
   return pick(
     ctx,

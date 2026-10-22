@@ -127,6 +127,13 @@ describe("journey", () => {
     expect(now).toEqual([])
   })
 
+  it("leaves the website to come once the owner stopped its build", () => {
+    const { journey, now } = view({ builds: [build("cancelled")] })
+    expect(journey[0]?.state).toBe("upcoming")
+    expect(states(journey[0]).every((s) => s.endsWith(":next"))).toBe(true)
+    expect(now).toEqual([])
+  })
+
   it("puts the first review in going live, with its expiry, not in Waiting on you", () => {
     const expires = ago(-60 * 24)
     const { journey, waiting } = view({

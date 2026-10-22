@@ -452,7 +452,9 @@ export function journeyOf(input: ActivityInput): Segment[] {
   if (input.site.live) return []
   const names = input.business ? { business: input.business } : undefined
   const since = iso(input.rows.since)
-  const build = input.builds[0]
+  // A build the owner stopped leaves the website to come, as before one began.
+  const newest = input.builds[0]
+  const build = newest?.state === "cancelled" ? undefined : newest
   if (!build) {
     const failed = input.feed.find(
       (item) => item.kind === "alert" && item.reason === "build_failed"

@@ -311,6 +311,18 @@ describe("segment copy", () => {
     }
   })
 
+  it("says what comes next for a job not begun, never that it is under way", () => {
+    for (const orgId of ORGS) {
+      const ctx = { orgId, assistant: "Ellie" }
+      expect(segmentTitle(segment("website", "upcoming"), ctx)).toMatch(
+        /^(?:Your website comes next|Next, your website)$/
+      )
+      expect(segmentTitle(segment("golive", "upcoming"), ctx)).toMatch(
+        /^Then (?:it|your website) goes live$/
+      )
+    }
+  })
+
   it("puts the business, host and domain in the titles", () => {
     const ctx = { orgId: "org-1", assistant: "Ellie" }
     expect(segmentTitle(segment("onboarding", "now"), ctx)).toContain(
