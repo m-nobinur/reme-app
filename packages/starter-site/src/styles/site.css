@@ -2282,7 +2282,8 @@ picture {
 }
 
 /* The file input is the whole zone, so a dropped photo always lands on it,
-   and the browser's own line under the words says what was chosen. */
+   and the browser's own line under the words says what was chosen. The
+   words sit at the start, in line with the button the browser draws. */
 .quote-drop {
   position: relative;
 }
@@ -2298,7 +2299,6 @@ picture {
   color: var(--muted-foreground);
   font: inherit;
   font-size: var(--text-sm);
-  text-align: center;
   cursor: pointer;
 }
 
@@ -2324,7 +2324,6 @@ picture {
   inset-block-start: var(--space-md);
   inset-inline: var(--space-sm);
   font-weight: 500;
-  text-align: center;
   pointer-events: none;
 }
 
