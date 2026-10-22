@@ -315,15 +315,16 @@
 }
 
 /* The shimmer clips its text to a gradient, which forced colours would leave
-   blank. A status line's words keep the system text colour instead. */
+   blank. Shimmering words (a status line's, a step's) keep the system text
+   colour instead. Unlayered, so it wins over the library's utility. */
 @media (forced-colors: active) {
-  [data-slot="status-line-text"] {
+  .shimmer {
     background: none;
     animation: none;
     -webkit-text-fill-color: currentColor;
     -webkit-mask-image: none;
   }
-  [data-slot="status-line-text"]::before {
+  .shimmer::before {
     display: none;
   }
 }
