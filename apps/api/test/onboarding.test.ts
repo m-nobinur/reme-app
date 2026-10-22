@@ -191,9 +191,9 @@ describe("the onboarding steps", () => {
       "contact",
       "assistant",
       "build_for_me",
-      "design",
       "quote_form",
       "upload",
+      "design",
       "build",
     ])
     expect(step).toEqual([
@@ -232,9 +232,9 @@ describe("the onboarding steps", () => {
     }
   })
 
-  it("never starts a build before the quote form is confirmed or declined, and the photos after it", () => {
+  it("never starts a build before the quote form is confirmed or declined, then the photos and the design", () => {
     const { asked, at } = walk(start(), everyCard)
-    expect(asked.slice(-3)).toEqual(["quote_form", "upload", "build"])
+    expect(asked.slice(-4)).toEqual(["quote_form", "upload", "design", "build"])
     // Asked for changes: the question comes back before any build.
     const changed = applied(
       { ...at, facts: at.facts.filter((f) => f.key !== "quote.form") },
@@ -453,6 +453,9 @@ const KEYS: Partial<Record<StepId, string[]>> = {
   quote_form: ["quote.form"],
 }
 
+/** The photos closed: an org past them, on the design or the old cards. */
+const PHOTOS_DONE = { closed: ["upload"] } satisfies Partial<Onboarding>
+
 /** Every fact of the steps before `step`, the business name always. */
 function ALL_BEFORE(step: StepId): FactValue[] {
   const order = STEPS.map((s) => s.id)
@@ -469,8 +472,10 @@ function cardFor(step: StepId): ToolPart {
     (f) => step !== "business.name" || f.key !== "business.name"
   )
   // The four cards the tray replaced are asked to an org that was on them.
+  const order = STEPS.map((s) => s.id)
   const at = start({
     facts,
+    ...(order.indexOf(step) > order.indexOf("upload") ? PHOTOS_DONE : {}),
     ...(["template", "palette", "font", "pages"].includes(step)
       ? { oldDesign: true }
       : {}),
@@ -609,24 +614,13 @@ describe("an answer on a card", () => {
     )
   })
 
-  it("words the quote-form step from what the owner picked, never from a template that is not there", () => {
-    const none = { template: null, palette: null }
-    const said = (over: Partial<Voice>) =>
-      question("quote_form", voice({ ...none, ...over }))
-    expect(said({ direction: "Counsel", palette: "Ocean" })).toContain(
-      "the Counsel look in Ocean"
-    )
-    expect(said({ direction: "Counsel" })).toContain("the Counsel look")
-    expect(said({ palette: "Ocean" })).toContain("the Ocean colours")
-    expect(said({ ownLook: "airy and plain" })).toContain(
-      "the look you described"
-    )
-    expect(said({ ownColour: "Navy and gold" })).toContain(
-      "the look you described"
-    )
-    expect(said({})).toContain(`the look I'll choose for ${BUSINESS}`)
-    for (const over of [{}, { direction: "Counsel" }, { ownLook: "airy" }])
-      expect(said(over)).not.toContain("you've chosen")
+  it("asks what a quote needs before any look is chosen, so never names one", () => {
+    const none = { template: null, palette: null, direction: null }
+    for (const org of ORGS) {
+      expect(question("quote_form", voice({ ...none, org }))).not.toMatch(
+        /\blook\b|\bcolours?\b|\blayout\b/i
+      )
+    }
   })
 
   it("always adds the fixed pages, in the list's order", () => {
@@ -928,7 +922,7 @@ describe("a reply Jev read", () => {
   })
 
   it("picks for an owner who left it to the assistant, and says what it picked", () => {
-    const at = start({ facts: ALL_BEFORE("palette") })
+    const at = start({ facts: ALL_BEFORE("palette"), ...PHOTOS_DONE })
     const picked = decided(cardFor("palette"), { kind: "defer" }, at)
     expect(picked).toMatchObject({
       kind: "facts",
@@ -1214,7 +1208,7 @@ describe("the onboarding copy", () => {
     }
   })
 
-  it("asks what a quote needs after the design, in words", () => {
+  it("asks what a quote needs right after the website question, in words", () => {
     for (const org of ORGS) {
       const asked = question("quote_form", voice({ org }))
       expect(asked).toMatch(/quote/)
@@ -1280,7 +1274,7 @@ describe("the design tray", () => {
     AskDesignInput.parse(
       (
         onboardingStep(
-          start({ facts: heldBefore(), ...over }),
+          start({ facts: heldBefore(), ...PHOTOS_DONE, ...over }),
           counter()
         )[1] as ToolPart
       ).input
@@ -1304,9 +1298,9 @@ describe("the design tray", () => {
       "layout",
       "text",
     ])
-    expect(currentStep(start({ facts: ALL_BEFORE("design") }))?.id).toBe(
-      "design"
-    )
+    expect(
+      currentStep(start({ facts: ALL_BEFORE("design"), ...PHOTOS_DONE }))?.id
+    ).toBe("design")
   })
 
   it("draws every option from directions that list the industry", () => {
@@ -1401,7 +1395,10 @@ describe("the design tray", () => {
   })
 
   const card = () =>
-    onboardingStep(start({ facts: heldBefore() }), counter())[1] as ToolPart
+    onboardingStep(
+      start({ facts: heldBefore(), ...PHOTOS_DONE }),
+      counter()
+    )[1] as ToolPart
   const input = () => AskDesignInput.parse(card().input)
   const pick = (answers: Record<string, unknown>, skip_all = false) =>
     cardAnswer(card(), { answers, skip_all }, [], [])
@@ -1621,11 +1618,11 @@ describe("the design tray", () => {
   })
 
   it("is done once finished, or once every answer is held, and is not asked of an org on the old cards", () => {
-    const at = start({ facts: ALL_BEFORE("design") })
+    const at = start({ facts: ALL_BEFORE("design"), ...PHOTOS_DONE })
     expect(designDone(at)).toBe(false)
     const finished = applied(at, pick({}, true) as never)
     expect(designDone(finished)).toBe(true)
-    expect(currentStep(finished)?.id).toBe("quote_form")
+    expect(currentStep(finished)?.id).toBe("build")
     // Four held answers with the tray never closed: still done.
     const held = start({
       facts: [
@@ -1639,7 +1636,9 @@ describe("the design tray", () => {
     expect(designDone(held)).toBe(true)
     // Mid-way through the old cards on deploy day: they finish.
     expect(
-      currentStep(start({ facts: ALL_BEFORE("design"), oldDesign: true }))?.id
+      currentStep(
+        start({ facts: ALL_BEFORE("design"), ...PHOTOS_DONE, oldDesign: true })
+      )?.id
     ).toBe("template")
     expect(
       currentStep(
@@ -1648,6 +1647,7 @@ describe("the design tray", () => {
             ...ALL_BEFORE("design"),
             { key: "site.template", value: { id: "classic" } },
           ],
+          ...PHOTOS_DONE,
         })
       )?.id
     ).toBe("palette")

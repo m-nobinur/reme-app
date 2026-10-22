@@ -1801,15 +1801,6 @@ async function advance(
   reply: Answer | undefined,
   newId: () => string
 ): Promise<Part[]> {
-  if (reply?.kind === "facts" || reply?.kind === "design") {
-    await stateFacts(
-      db,
-      owner,
-      reply.facts,
-      onboarding.facts as FactRecord[],
-      reply.kind === "facts" && reply.chose ? "inferred" : "owner_stated"
-    )
-  }
   const next = reply ? withAnswer(onboarding, reply) : onboarding
   const step = withChoice(
     reply,
@@ -1817,6 +1808,27 @@ async function advance(
     nextStep({ onboarding: next, message: null, newId })
   )
   const build = buildCall(step)
+  if (reply?.kind === "facts" || reply?.kind === "design") {
+    const source =
+      reply.kind === "facts" && reply.chose ? "inferred" : "owner_stated"
+    // The build's orchestrator reads the facts over its own connection, so
+    // an answer that starts it is committed first, in a transaction of its
+    // own; a retry finds it held and writes nothing.
+    if (build) {
+      await kit.withOrg(
+        { orgId: owner.orgId, workosUserId: owner.session.workosUserId },
+        (own) => stateFacts(own, owner, reply.facts, undefined, source)
+      )
+    } else {
+      await stateFacts(
+        db,
+        owner,
+        reply.facts,
+        onboarding.facts as FactRecord[],
+        source
+      )
+    }
+  }
   if (!build) return step
   const output = await changed(
     env,

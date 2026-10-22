@@ -255,9 +255,10 @@ ${ask}`,
     `No problem${comma(v.owner)}. Would you like to build the website yourself with the website builder instead?`,
     `That's fine${comma(v.owner)}. Would you rather put the website together yourself in the builder?`,
   ],
+  // Phase 5: the last questions; their answer starts the build.
   design: (v) => [
-    `Let's design it together. Four quick questions below set the colours, the lettering, the layout and the pages for ${v.business}. Skip any you like and I'll choose for you.`,
-    `Now the look of ${v.business}. Four quick questions below cover colour, lettering, layout and pages, and you can skip them all if you'd rather I chose.`,
+    `Last, the look of ${v.business}. Four quick questions below set the colours, the lettering, the layout and the pages. Skip any you like and I'll choose for you, then I'll start building.`,
+    `Now the look of ${v.business}, the last step before I build. Four quick questions below cover colour, lettering, layout and pages, and you can skip them all if you'd rather I chose.`,
   ],
   template: (v) => [
     `Let's design it together. First, the layout. Which of these feels most like ${v.business}?`,
@@ -278,43 +279,25 @@ ${ask}`,
     "Nearly there. Which pages should the site have? I've ticked the ones most businesses start with.",
     "Last design question. Which pages do you want? The usual ones are already ticked.",
   ],
-  // Phase 3: the look they picked, then what a quote needs, in their words.
-  quote_form: (v) => {
-    const look = lookOf(v)
-    return [
-      `Got it, ${look}.
+  // Phase 3: right after the yes to the website, what a quote needs, in their words.
+  quote_form: (v) => [
+    `I'll build it. First, the Request a quote form, so every enquiry arrives with what you need. Think of things like the date, the address or the size of the job.
 
-Now let's make sure every enquiry arrives with what you need. Think of things like the date, the address or the size of the job. When someone asks ${v.business} for a quote, what do you usually find out first?`,
-      `I'll build the site around ${look}.
+When someone asks ${v.business} for a quote, what do you usually find out first?`,
+    `Then let's start with your Request a quote form. List whatever comes to mind and I'll turn it into a tidy form.
 
-Next, your Request a quote form. List whatever comes to mind and I'll turn it into a tidy form. Picture a new customer getting in touch: what do you need to know from them before you can quote properly?`,
-      `Thanks${comma(v.owner)}. I can already picture ${services(v)} in ${look}.
+Picture a new customer getting in touch: what do you need to know from them before you can quote properly?`,
+    `Good${comma(v.owner)}. One practical thing first: I'll shape the quote form on your site around your answer, so enquiries about ${services(v)} come with the details you need.
 
-One practical thing before I build: I'll shape the quote form on your site around your answer. Think about the last few quotes you gave. What did you need to ask the customer before you could work them out?`,
-      v.offering
-        ? `I'll show off ${services(v)} with ${look}.
+Think about the last few quotes you gave. What did you need to ask the customer before you could work them out?`,
+    v.offering
+      ? `First, the quote form. For ${lower(v.offering)}, the usual things are when, where and what the job involves, but you know your customers best.
 
-For ${lower(v.offering)}, the usual things are when, where and what the job involves, but you know your customers best. So customers can ask for a quote in one go, what should the form ask them?`
-        : `I'll show off ${services(v)} with ${look}.
+So customers can ask for a quote in one go, what should the form ask them?`
+      : `First, the quote form. The usual things are when, where and what the job involves, but you know your customers best.
 
-The usual things are when, where and what the job involves, but you know your customers best. So customers can ask for a quote in one go, what should the form ask them?`,
-    ]
-  },
-}
-
-/**
- * The look the owner has picked, as a noun phrase: the old template and
- * colours, else the tray's direction and palette, else what they wrote, and
- * only with nothing at all the builder's own choice.
- */
-function lookOf(v: Voice): string {
-  if (v.template && v.palette)
-    return `that ${v.template} layout with the ${v.palette} colours`
-  if (v.direction && v.palette) return `the ${v.direction} look in ${v.palette}`
-  if (v.direction) return `the ${v.direction} look`
-  if (v.palette) return `the ${v.palette} colours`
-  if (v.ownColour || v.ownLook) return "the look you described"
-  return `the look I'll choose for ${v.business}`
+So customers can ask for a quote in one go, what should the form ask them?`,
+  ],
 }
 
 /** The palette the owner just chose, said back before the next question. */
@@ -452,7 +435,7 @@ export function quoteForm(v: Voice): string {
   )
 }
 
-/** Phase 4 to 5: the build runs in the background and the chat stays open. */
+/** After the design: the build runs in the background and the chat stays open. */
 export function started(v: Voice, uploaded: boolean): string {
   return say(
     v,
