@@ -91,8 +91,8 @@ function packOf(industry: string | undefined) {
   return { id, ...pack, order }
 }
 
-/** How many plans one build may go through: the first and five changes. */
-export const PLAN_ROUNDS = 6
+/** A build is planned once; `blueprint.proposed` still names the round the panel and older rows read. */
+const ROUND = 1
 
 /** The most axes a Blueprint may move from its direction (VS6). */
 const AXES_MAX = 2
@@ -1051,28 +1051,24 @@ type PlannerEnv = ModelEnv & {
 }
 
 /**
- * One planning round inside a Workflow step. Reads the row, the facts, the
- * plan being changed and the owner's note; plans with no transaction open;
- * then stores the Blueprint on the row, a `runtime.turn` per call for the
- * meter, and `blueprint.proposed`. A retried step finds its round's event and
- * returns it, so a round plans once.
+ * The planning step inside a Workflow. Reads the row, the facts and the plan
+ * being changed; plans with no transaction open; then stores the Blueprint on
+ * the row, a `runtime.turn` per call for the meter, and `blueprint.proposed`.
+ * A retried step finds the event and returns it, so a build plans once.
  */
 export async function planRound(input: {
   env: PlannerEnv
   kit: Tenancy
   ids: Ids
-  round: number
-  /** Whether the owner reviews this round: the frame shows the card as waiting. */
-  review: boolean
   complete?: Complete
 }): Promise<PlanStep> {
-  const { env, kit, ids, round, review } = input
+  const { env, kit, ids } = input
   const read = await kit.withOrg({ orgId: ids.orgId }, async (db) => {
     const [done] = await db
       .select({ payload: events.payload })
       .from(events)
       .where(
-        sql`${events.assignmentId} = ${ids.assignmentId} and ${events.type} = 'blueprint.proposed' and (${events.payload}->>'round')::int = ${round}`
+        sql`${events.assignmentId} = ${ids.assignmentId} and ${events.type} = 'blueprint.proposed' and (${events.payload}->>'round')::int = ${ROUND}`
       )
       .limit(1)
     if (done) return { done: done.payload as PlanStep }
@@ -1090,7 +1086,7 @@ export async function planRound(input: {
       row,
       choices,
       facts,
-      previous: await previousPlan(db, row, round),
+      previous: await previousPlan(db, row),
     }
   })
   if (read.done) return read.done
@@ -1111,7 +1107,7 @@ export async function planRound(input: {
     previous,
   })
   const result: PlanStep = {
-    round,
+    round: ROUND,
     source: planned.source,
     attempts: planned.calls.length,
   }
@@ -1140,7 +1136,6 @@ export async function planRound(input: {
       type: "blueprint.proposed",
       payload: {
         ...result,
-        review,
         errors: planned.errors,
         previous: previous?.plan ?? null,
       },
@@ -1152,31 +1147,13 @@ export async function planRound(input: {
 type Db = Parameters<Parameters<Tenancy["withOrg"]>[1]>[0]
 
 /**
- * What this round changes, if anything: the build's own last plan and the
- * owner's note on it after round 1, or on a creative revise the plan of the
+ * What the plan changes, if anything: on a creative revise the plan of the
  * newest build that had one, with the change request as the note.
  */
 async function previousPlan(
   db: Db,
-  row: { id: string; kind: string; goal: string; blueprint: unknown },
-  round: number
+  row: { id: string; kind: string; goal: string }
 ): Promise<{ plan: Blueprint; note: string | null } | null> {
-  if (round > 1) {
-    const current = Blueprint.safeParse(row.blueprint)
-    if (!current.success) return null
-    const [decided] = await db
-      .select({ payload: events.payload })
-      .from(events)
-      .where(
-        sql`${events.assignmentId} = ${row.id} and ${events.type} = 'blueprint.decided' and (${events.payload}->>'round')::int = ${round - 1}`
-      )
-      .limit(1)
-    const note = decided?.payload.note
-    return {
-      plan: current.data,
-      note: typeof note === "string" ? note : null,
-    }
-  }
   if (row.kind !== "site.revise") return null
   const [base] = await db
     .select({ blueprint: assignments.blueprint })
@@ -1188,21 +1165,4 @@ async function previousPlan(
     .limit(1)
   const parsed = Blueprint.safeParse(base?.blueprint)
   return parsed.success ? { plan: parsed.data, note: row.goal } : null
-}
-
-/** The owner's decision on one round, once the bridge has stored it. */
-export async function readDecision(
-  db: Db,
-  assignmentId: string,
-  round: number
-): Promise<"build" | "change" | null> {
-  const [row] = await db
-    .select({ payload: events.payload })
-    .from(events)
-    .where(
-      sql`${events.assignmentId} = ${assignmentId} and ${events.type} = 'blueprint.decided' and (${events.payload}->>'round')::int = ${round}`
-    )
-    .limit(1)
-  const decision = row?.payload.decision
-  return decision === "build" || decision === "change" ? decision : null
 }
