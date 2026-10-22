@@ -7841,6 +7841,83 @@
           }
         ]
       },
+      "AskOpenInput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "about": {
+            "type": "string",
+            "enum": [
+              "business.name",
+              "business.phone",
+              "business.email",
+              "hours.weekday",
+              "service_area.radius",
+              "business.tagline",
+              "business.industry",
+              "business.offerings",
+              "business.audience",
+              "business.overview",
+              "business.proof",
+              "business.disclaimer",
+              "service_area.text",
+              "assistant.name",
+              "assistant.pronouns",
+              "assistant.tone",
+              "owner.preferred_name",
+              "site.build_mode",
+              "site.template",
+              "site.palette",
+              "site.font",
+              "site.direction",
+              "site.pages",
+              "quote.form"
+            ]
+          }
+        },
+        "required": [
+          "about"
+        ],
+        "additionalProperties": false
+      },
+      "AskOpenOutput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "answer": {
+                "type": "string",
+                "const": "stated"
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000,
+                "pattern": "\\S"
+              }
+            },
+            "required": [
+              "answer",
+              "text"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "answer": {
+                "type": "string",
+                "const": "skipped"
+              }
+            },
+            "required": [
+              "answer"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
       "AskUploadInput": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -13045,6 +13122,43 @@
                             },
                             "output": {
                               "anyOf": [
+                                {
+                                  "oneOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "answer": {
+                                          "type": "string",
+                                          "const": "stated"
+                                        },
+                                        "text": {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "maxLength": 1000,
+                                          "pattern": "\\S"
+                                        }
+                                      },
+                                      "required": [
+                                        "answer",
+                                        "text"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "answer": {
+                                          "type": "string",
+                                          "const": "skipped"
+                                        }
+                                      },
+                                      "required": [
+                                        "answer"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  ]
+                                },
                                 {
                                   "oneOf": [
                                     {
