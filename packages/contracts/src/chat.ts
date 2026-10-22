@@ -354,8 +354,8 @@ export const AskDetailsInput = z
     step: DetailsStep,
     prefill: z.array(FactValue).max(3),
     skippable: z.boolean(),
-    /** Names offered for the assistant, one tap each to fill its name. The assistant step only. */
-    ideas: z.array(z.string().trim().min(1).max(40)).max(4).optional(),
+    /** Names written for this business's assistant, offered after Reme. The assistant step only. */
+    ideas: z.array(z.string().trim().min(1).max(40)).max(3).optional(),
   })
   .refine(
     (card) =>
