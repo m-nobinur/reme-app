@@ -7,6 +7,8 @@ import {
   AskDetailsOutput,
   AskFactInput,
   AskFactOutput,
+  type AskOpenInput,
+  AskOpenOutput,
   AskUploadInput,
   AskUploadOutput,
   type ChoiceStep,
@@ -1103,6 +1105,7 @@ export function stepOf(part: ToolPart): StepId | null {
 }
 
 const CARDS: readonly ToolPart["type"][] = [
+  "tool-ask_open",
   "tool-ask_fact",
   "tool-ask_details",
   "tool-ask_choice",
@@ -1115,6 +1118,7 @@ export const isCard = (part: { type: string }) =>
 
 /** Each card's output schema, so a stored answer and a retry compare alike. */
 export const OUTPUTS = {
+  "tool-ask_open": AskOpenOutput,
   "tool-ask_fact": AskFactOutput,
   "tool-ask_details": AskDetailsOutput,
   "tool-ask_choice": AskChoiceOutput,
@@ -1263,6 +1267,17 @@ export function cardAnswer(
   /** The org's facts, for a tray's Skip all, which keeps a layout already held. */
   held: readonly Held[] = []
 ): Answer | null {
+  // The planner's question in words: what the owner wrote is theirs for the
+  // planner to read, so it states no fact here. A skip passes an optional
+  // fact, and declines any other for the planner to read.
+  if (part.type === "tool-ask_open") {
+    const answer = AskOpenOutput.safeParse(output)
+    if (!answer.success) return null
+    const { about } = part.input as AskOpenInput
+    return answer.data.answer === "skipped" && SKIPPABLE.includes(about)
+      ? { kind: "passed", step: about as StepId }
+      : { kind: "facts", facts: [] }
+  }
   const step = stepOf(part)
   if (!step) return null
   if (part.type === "tool-ask_design") {

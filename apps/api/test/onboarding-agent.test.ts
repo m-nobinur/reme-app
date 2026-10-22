@@ -1252,6 +1252,81 @@ describe("a planned turn", () => {
   })
 })
 
+describe("a question in words", () => {
+  const asking = async () => {
+    const o = onboarding(without("business.audience", "business.phone"))
+    const out = await planTurn(
+      planner([
+        plan({
+          say: "Who books you most?",
+          next: { kind: "ask_open", about: "business.audience" },
+        }),
+      ]).model,
+      PRICE,
+      typed("We do weddings", o)
+    )
+    if (!out.ok) throw new Error("no plan")
+    const [said, card] = planParts(out.checked, typed("x", o), counter())
+    return { o, said, card: card as ToolPart }
+  }
+
+  it("docks in the tray as an ask_open card after the message", async () => {
+    const { said, card } = await asking()
+    expect(said).toMatchObject({ type: "text", text: "Who books you most?" })
+    expect(card).toMatchObject({
+      type: "tool-ask_open",
+      state: "input-available",
+      input: { about: "business.audience" },
+    })
+  })
+
+  it("gives the planner the owner's words, which it may state facts from", async () => {
+    const { o, card } = await asking()
+    const output = { answer: "stated", text: "Couples. Call 07700 900412." }
+    expect(cardAnswer(card, output, [])).toEqual({ kind: "facts", facts: [] })
+    const s: PlanState = {
+      onboarding: o,
+      pending: null,
+      input: { kind: "card", card, output },
+      rows: [],
+    }
+    expect(turnData(s)).toContain(
+      "answered in their words: Couples. Call 07700 900412."
+    )
+    const stated = await planTurn(
+      planner([
+        plan({
+          facts: {
+            "business.audience": { text: "Couples" },
+            "business.phone": { e164: "+447700900412" },
+          },
+          say: "Couples, noted.",
+        }),
+      ]).model,
+      PRICE,
+      s
+    )
+    expect(stated.ok && stated.checked.stated.map((f) => f.key).sort()).toEqual(
+      ["business.audience", "business.phone"]
+    )
+  })
+
+  it("passes an optional fact on a skip, and leaves any other skip to the planner", async () => {
+    const { card } = await asking()
+    const skipped = { answer: "skipped" }
+    expect(cardAnswer(card, skipped, [])).toEqual({
+      kind: "passed",
+      step: "business.audience",
+    })
+    const required = { ...card, input: { about: "service_area.text" } }
+    expect(cardAnswer(required, skipped, [])).toEqual({
+      kind: "facts",
+      facts: [],
+    })
+    expect(cardAnswer(card, { answer: "stated" }, [])).toBeNull()
+  })
+})
+
 describe("the owner's words in say", () => {
   it("refuses the owner's sentence read back, and passes a detail picked out of it", () => {
     const owner =

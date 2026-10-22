@@ -204,6 +204,7 @@ const FORMAT = "ai-sdk/v6"
 
 export type ToolPart = {
   type:
+    | "tool-ask_open"
     | "tool-ask_fact"
     | "tool-ask_details"
     | "tool-ask_choice"
@@ -632,17 +633,19 @@ const gated = (card: ToolPart | undefined): card is ToolPart =>
   card?.type === "tool-ask_choice" || card?.type === "tool-ask_details"
 
 /**
- * Whether the planner reads this onboarding turn: a typed message, and a
- * quote form sent back with changes in the owner's words. Every other card
- * answer is the script's, with no model call.
+ * Whether the planner reads this onboarding turn: a typed message, a quote
+ * form sent back with changes in the owner's words, and an `ask_open`
+ * answered in them. Every other card answer is the script's, with no model
+ * call.
  */
 function plannerReads({ turn }: ChatRequest): boolean {
   if (turn.kind === "message") return true
   const [result, ...more] = turn.results
+  if (more.length > 0 || result?.kind !== "answer") return false
+  const output = result.output as { answer?: string; text?: unknown }
   return (
-    more.length === 0 &&
-    result?.kind === "answer" &&
-    (result.output as { answer?: string }).answer === "changes"
+    output.answer === "changes" ||
+    (output.answer === "stated" && typeof output.text === "string")
   )
 }
 

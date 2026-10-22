@@ -1986,7 +1986,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       // The owner's words reach the model only inside the data block.
       expect(calls[0]).toContain('data source=\\"onboarding\\"')
       expect(calls[0]).not.toContain(who.orgId)
-      // The opener held no card; ask_open is text only.
+      // The opener held no card; ask_open docks its question in the tray.
       const rows = await me.rows(id)
       expect(rows.map((r) => r.id)).toEqual([
         first?.id,
@@ -1994,12 +1994,17 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         done.after.id,
       ])
       expect(rows[0]?.content).toEqual(first?.content)
-      expect(done.after.parts).toEqual([
+      expect(done.after.parts).toMatchObject([
         { type: "step-start" },
         {
           type: "text",
           text: "Weddings and proms, lovely. Who books you most?",
           state: "done",
+        },
+        {
+          type: "tool-ask_open",
+          state: "input-available",
+          input: { about: "business.audience" },
         },
       ])
       // Sign-up wrote the business name and the owner's first name.
@@ -2039,9 +2044,10 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       expect(
         (log[4]?.payload as { cost_usd: number } | undefined)?.cost_usd
       ).toBeGreaterThan(0)
-      // A text-only question is answered in words; nothing waits.
+      // Typed instead of answered in the tray, it is the waiting card.
       const next = planner([
         plan({
+          pending_card: "answered",
           facts: { "business.audience": { text: "Couples" } },
           say: "Couples, got it. Where do you cover?",
           next: { kind: "ask_open", about: "service_area.text" },
@@ -2050,7 +2056,10 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       await talker(who, undefined, { planner: next.model }).turn(id, {
         turn: { kind: "message", message_id: "u_plan_2", text: "Couples" },
       })
-      expect(next.calls[0]).toContain('\\"waiting_card\\":null')
+      expect(next.calls).toHaveLength(1)
+      expect(next.calls[0]).toContain(
+        '\\"waiting_card\\":{\\"card\\":\\"ask_open\\",\\"about\\":\\"business.audience\\"}'
+      )
     }, 60_000)
 
     it("keeps the owner's message at the time it was sent, though its row is written after the planner", async () => {
@@ -2938,7 +2947,8 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         asked.id,
         typedTurn("u_au_2", "Hello")
       )
-      const next = planner([website])
+      // The question waits in the tray; words typed past it decline it.
+      const next = planner([{ ...website, pending_card: "declined" }])
       const site = await talker(asked.who, undefined, {
         planner: next.model,
       }).turn(asked.id, typedTurn("u_au_3", "Not sure, anyone really"))
@@ -2949,6 +2959,36 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       expect(pendingCall(site.after).input).toMatchObject({
         step: "build_for_me",
       })
+    }, 60_000)
+
+    it("gives the planner a tray answer to a question in words, as the owner's words", async () => {
+      const who = await owner(kit, url as string, "chat-ask-open")
+      const ask = planner([
+        plan({
+          facts: { "business.offerings": { items: ["Weddings"] } },
+          say: "Weddings, noted. Who books you most?",
+          next: { kind: "ask_open", about: "business.audience" },
+        }),
+      ])
+      const id = await talker(who).onboarding()
+      const asked = await talker(who, undefined, { planner: ask.model }).turn(
+        id,
+        { turn: { kind: "message", message_id: "u_open_1", text: "Weddings" } }
+      )
+      const read = planner([
+        plan({
+          facts: { "business.audience": { text: "Couples" } },
+          say: "Couples, noted.",
+        }),
+      ])
+      await talker(who, undefined, { planner: read.model }).turn(
+        id,
+        answer(asked.after, { answer: "stated", text: "Mostly couples" })
+      )
+      expect(read.calls[0]).toContain("answered in their words: Mostly couples")
+      expect(
+        (await factsOf(who)).find((f) => f.key === "business.audience")?.value
+      ).toEqual({ text: "Couples" })
     }, 60_000)
 
     it("says what the plan is on before its first word, once its facts are written", async () => {
