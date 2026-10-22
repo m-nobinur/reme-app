@@ -228,7 +228,6 @@ export function ChatPage() {
                         <BuildStopped />
                       </>
                     }
-                    assistantName={assistant}
                     briefing={briefing.line}
                     components={{ ToolFallback: Approval }}
                     mode={mode}

@@ -51,7 +51,6 @@ import {
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu"
 import { LogoMark } from "@workspace/ui/components/logo"
-import { PersonaAvatar } from "@workspace/ui/components/persona"
 import { ComposerInputContext } from "@workspace/ui/hooks/use-composer-input"
 import {
   PLAN_CHANGES_PLACEHOLDER,
@@ -162,8 +161,6 @@ export type ThreadProps = {
    * `seen` records that it now has.
    */
   reveal?: ThreadReveal | undefined
-  /** What the owner calls the assistant, named above each reply. */
-  assistantName?: string | undefined
 }
 
 export type ThreadReveal = {
@@ -284,7 +281,6 @@ export const Thread: FC<ThreadProps> = ({
   mode,
   after,
   reveal,
-  assistantName,
 }) => {
   // A stored conversation with nothing in it is as empty as a new chat, once
   // its history is in: the same welcome and suggestions, with the composer in
@@ -311,7 +307,6 @@ export const Thread: FC<ThreadProps> = ({
       quickActions,
       mode,
       reveal,
-      assistantName,
     }),
     [
       stored,
@@ -322,7 +317,6 @@ export const Thread: FC<ThreadProps> = ({
       quickActions,
       mode,
       reveal,
-      assistantName,
     ]
   )
   // The composer's input, which a card can hand the owner to.
@@ -959,8 +953,6 @@ const AssistantMessage: FC = () => {
     ToolGroup = DefaultToolGroup,
     ReasoningGroup = DefaultReasoningGroup,
   } = useContext(ThreadComponentsContext)
-  const { assistantName = "Reme" } = useContext(ThreadSettingsContext)
-
   const ACTION_BAR_PT = "pt-1.5"
   // Keep the action bar inside the contained root's paint box, then cancel its reserved space in flow.
   const ACTION_BAR_HEIGHT = `min-h-7.5 ${ACTION_BAR_PT}`
@@ -974,15 +966,6 @@ const AssistantMessage: FC = () => {
       data-role="assistant"
       className="group/message relative -mb-7.5 ps-2 pb-7.5 [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
     >
-      <div
-        data-slot="aui_assistant-message-header"
-        className="mb-1.5 flex items-center gap-2"
-      >
-        <PersonaAvatar className="size-6" />
-        <span className="font-semibold text-foreground text-sm">
-          {assistantName}
-        </span>
-      </div>
       <div className="min-w-0">
         <div
           data-slot="aui_assistant-message-content"
