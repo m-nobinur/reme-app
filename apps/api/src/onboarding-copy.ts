@@ -114,7 +114,7 @@ export function say(v: Pick<Voice, "tone">, text: string): string {
 }
 
 /** The first word of the owner's name, or "" when the sign-in gave none. */
-const firstName = (owner: string) => owner.trim().split(/\s+/)[0] ?? ""
+export const firstName = (owner: string) => owner.trim().split(/\s+/)[0] ?? ""
 
 /**
  * The first message, six ways, written at sign-up with no model: a greeting
@@ -234,14 +234,6 @@ Before the website, let's settle who I am on your team. Choose the name I'll go 
     "And what kind of personality would you like me to have when I talk to you and your customers?",
     "How should I come across when I talk to your customers?",
   ],
-  "owner.preferred_name": (v) =>
-    v.assistant
-      ? [
-          `${v.assistant} it is, I like it! And what should I call you?`,
-          `${v.assistant}. That has a nice ring to it. What would you like me to call you?`,
-          `Lovely, ${v.assistant} it is. Now, what should ${v.assistant} call you?`,
-        ]
-      : ["And what would you like me to call you?"],
   // Phase 2 to 3: the new identity, then the website and the quote page.
   build_for_me: (v) => {
     const ask = "Would you like me to build your website for you?"

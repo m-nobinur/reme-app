@@ -429,9 +429,6 @@ async function onboard(persona, spec) {
   }
   if (!t.name.test(factOf(sim.facts, "business.name")?.name ?? ""))
     problems.push("business name lost")
-  const callMe = factOf(sim.facts, "owner.preferred_name")?.name ?? ""
-  if (callMe.toLowerCase() !== t.callMe.toLowerCase())
-    problems.push(`owner name ${callMe} is not ${t.callMe}`)
   if (
     t.assistant &&
     !t.assistant.test(factOf(sim.facts, "assistant.name")?.name ?? "")
@@ -563,13 +560,11 @@ function cardAction(persona, card, { quoteChanged }) {
   if (card.type === "tool-ask_fact") {
     const truth = { ...persona.truth, ...(persona.truthAfter ?? {}) }
     const value =
-      input.key === "owner.preferred_name"
-        ? { name: truth.callMe }
-        : input.key === "business.phone"
-          ? { e164: truth.phone }
-          : input.key === "business.email"
-            ? { address: truth.email }
-            : null
+      input.key === "business.phone"
+        ? { e164: truth.phone }
+        : input.key === "business.email"
+          ? { address: truth.email }
+          : null
     return value
       ? {
           kind: "answer",

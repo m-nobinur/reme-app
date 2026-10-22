@@ -343,7 +343,7 @@ describe("the plan's checks", () => {
   })
 
   it("never asks again what the facts hold, and asks each kind of fact on its own card", () => {
-    const o = onboarding(without("assistant.tone", "owner.preferred_name"))
+    const o = onboarding(without("assistant.tone"))
     const open = (about: string) =>
       plan({ next: { kind: "ask_open", about } as Plan["next"] })
     expect(errorsOf(open("business.phone"), typed("hi", o))).toContainEqual(
@@ -374,7 +374,7 @@ describe("the plan's checks", () => {
     ).toContain("ask for that with the ask_details assistant card")
     expect(
       errorsOf(open("owner.preferred_name"), typed("hi", o))
-    ).toContainEqual(expect.stringMatching(/ask_fact owner\.preferred_name/))
+    ).toContainEqual(expect.stringMatching(/the next step is/))
     expect(
       errorsOf(
         plan({
@@ -843,21 +843,7 @@ describe("the plan's parts", () => {
     ])
   })
 
-  it("builds cards from the contracts: the owner's name prefilled by code, the quote form, a pending build", () => {
-    const o = onboarding(without("owner.preferred_name"), { ownerName: "" })
-    const ask = checkPlan(
-      plan({
-        say: "What should Jeeves call you?",
-        next: { kind: "ask_fact", key: "owner.preferred_name" },
-      }),
-      typed("ok", o)
-    )
-    if (!ask.ok) throw new Error(ask.errors.join("; "))
-    // No session name, so the email's local part.
-    expect(planParts(ask.checked, typed("ok", o), counter())[1]).toMatchObject({
-      type: "tool-ask_fact",
-      input: { key: "owner.preferred_name", prefill: { name: "dave" } },
-    })
+  it("builds cards from the contracts: the quote form, a pending build", () => {
     const quote = checkPlan(
       plan({
         next: {
@@ -1336,6 +1322,17 @@ describe("a streamed turn", () => {
     expect(said.length).toBeGreaterThan(1)
     expect(said.slice(0, -1).every((s) => /[.?!]$/.test(s.trim()))).toBe(true)
     expect(out.firstChunkMs).not.toBeNull()
+  })
+
+  it("retries a message with ceremony or praise, and hears it in the retry's instructions", async () => {
+    const praise = plan({ say: "Wonderful, it's an honour to be on the team." })
+    const good = plan({ say: "Noted. What area do you cover?" })
+    const run = planner([praise, good])
+    const out = await planTurn(run.model, PRICE, typed("hello"))
+    expect(out.ok).toBe(true)
+    expect(out.calls.map((c) => c.errors.length > 0)).toEqual([true, false])
+    expect(JSON.stringify(run.prompts[1])).toContain("ceremony or praise")
+    expect(await plannerInstructions()).toContain("How you sound")
   })
 
   it("shows nothing of a plan whose next move is refused, and streams the retry", async () => {
