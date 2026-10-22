@@ -111,7 +111,8 @@ export const CosFacts = z.strictObject({ facts: z.array(FactValue) })
 /**
  * `request_change`'s input: the owner's change, and the new phone or email
  * when the owner typed it in full. The tool records it as the owner's word
- * only if its digits or address appear in what the owner wrote.
+ * only if its digits or address appear in what the owner wrote. `step` is a
+ * line for the panel: the runner strips it before the tool runs.
  */
 export const CosChangeRequest = OwnerChangeRequest.extend({
   contact: z
@@ -128,6 +129,13 @@ export const CosChangeRequest = OwnerChangeRequest.extend({
         ),
     })
     .optional(),
+  step: z
+    .string()
+    .max(60)
+    .optional()
+    .describe(
+      'A few words, in the owner\'s language, of what this change does, such as "Adding the new photos to the home page". At most 60 characters. The panel shows it while the change is made; no ids, no versions.'
+    ),
 })
 
 /** `get_preview`'s input: the build whose preview to check. */
