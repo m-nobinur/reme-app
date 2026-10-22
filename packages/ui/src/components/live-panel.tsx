@@ -509,7 +509,7 @@ function PanelSegment({
         </span>
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           {/* The segment's title takes the brand sweep while it is under way;
-              its step at work takes a neutral one, as its icon is neutral. */}
+              its steps stay plain text. */}
           <h3
             className={cn(
               "font-medium text-sm",
@@ -583,10 +583,6 @@ function PanelSegment({
                         <span
                           className={cn(
                             "min-w-0 truncate",
-                            (step.state === "now" ||
-                              step.state === "waiting") &&
-                              !failed &&
-                              "shimmer shimmer-color-foreground shimmer-speed-100 text-muted-foreground motion-reduce:animate-none",
                             (step.state === "next" ||
                               step.state === "skipped") &&
                               "text-muted-foreground"
