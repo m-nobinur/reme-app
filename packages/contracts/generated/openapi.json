@@ -8,6 +8,740 @@
   "paths": {},
   "components": {
     "schemas": {
+      "Activity": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "journey": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80,
+                  "pattern": "\\S"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "onboarding",
+                    "website",
+                    "golive",
+                    "change",
+                    "domain",
+                    "purchase",
+                    "google",
+                    "reminder",
+                    "review",
+                    "question",
+                    "checkin",
+                    "turn"
+                  ]
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "upcoming",
+                    "now",
+                    "waiting",
+                    "done",
+                    "failed"
+                  ]
+                },
+                "steps": {
+                  "maxItems": 12,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]{1,29}$"
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "done",
+                          "now",
+                          "waiting",
+                          "next",
+                          "skipped"
+                        ]
+                      },
+                      "value": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 120,
+                        "pattern": "\\S"
+                      },
+                      "count": {
+                        "type": "object",
+                        "properties": {
+                          "done": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 999
+                          },
+                          "total": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 999
+                          }
+                        },
+                        "required": [
+                          "done",
+                          "total"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "state"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "at": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                },
+                "deadline": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                },
+                "names": {
+                  "type": "object",
+                  "properties": {
+                    "business": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120,
+                      "pattern": "\\S"
+                    },
+                    "host": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 253,
+                      "pattern": "\\S"
+                    },
+                    "domain": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 253,
+                      "pattern": "\\S"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "step": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 60,
+                  "pattern": "\\S"
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "state",
+                "steps",
+                "at"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "now": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80,
+                  "pattern": "\\S"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "onboarding",
+                    "website",
+                    "golive",
+                    "change",
+                    "domain",
+                    "purchase",
+                    "google",
+                    "reminder",
+                    "review",
+                    "question",
+                    "checkin",
+                    "turn"
+                  ]
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "upcoming",
+                    "now",
+                    "waiting",
+                    "done",
+                    "failed"
+                  ]
+                },
+                "steps": {
+                  "maxItems": 12,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]{1,29}$"
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "done",
+                          "now",
+                          "waiting",
+                          "next",
+                          "skipped"
+                        ]
+                      },
+                      "value": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 120,
+                        "pattern": "\\S"
+                      },
+                      "count": {
+                        "type": "object",
+                        "properties": {
+                          "done": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 999
+                          },
+                          "total": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 999
+                          }
+                        },
+                        "required": [
+                          "done",
+                          "total"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "state"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "at": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                },
+                "deadline": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                },
+                "names": {
+                  "type": "object",
+                  "properties": {
+                    "business": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120,
+                      "pattern": "\\S"
+                    },
+                    "host": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 253,
+                      "pattern": "\\S"
+                    },
+                    "domain": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 253,
+                      "pattern": "\\S"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "step": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 60,
+                  "pattern": "\\S"
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "state",
+                "steps",
+                "at"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "waiting": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80,
+                  "pattern": "\\S"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "onboarding",
+                    "website",
+                    "golive",
+                    "change",
+                    "domain",
+                    "purchase",
+                    "google",
+                    "reminder",
+                    "review",
+                    "question",
+                    "checkin",
+                    "turn"
+                  ]
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "upcoming",
+                    "now",
+                    "waiting",
+                    "done",
+                    "failed"
+                  ]
+                },
+                "steps": {
+                  "maxItems": 12,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]{1,29}$"
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "done",
+                          "now",
+                          "waiting",
+                          "next",
+                          "skipped"
+                        ]
+                      },
+                      "value": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 120,
+                        "pattern": "\\S"
+                      },
+                      "count": {
+                        "type": "object",
+                        "properties": {
+                          "done": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 999
+                          },
+                          "total": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 999
+                          }
+                        },
+                        "required": [
+                          "done",
+                          "total"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "state"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "at": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                },
+                "deadline": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                },
+                "names": {
+                  "type": "object",
+                  "properties": {
+                    "business": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120,
+                      "pattern": "\\S"
+                    },
+                    "host": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 253,
+                      "pattern": "\\S"
+                    },
+                    "domain": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 253,
+                      "pattern": "\\S"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "step": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 60,
+                  "pattern": "\\S"
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "state",
+                "steps",
+                "at"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "upcoming": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80,
+                  "pattern": "\\S"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "onboarding",
+                    "website",
+                    "golive",
+                    "change",
+                    "domain",
+                    "purchase",
+                    "google",
+                    "reminder",
+                    "review",
+                    "question",
+                    "checkin",
+                    "turn"
+                  ]
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "upcoming",
+                    "now",
+                    "waiting",
+                    "done",
+                    "failed"
+                  ]
+                },
+                "steps": {
+                  "maxItems": 12,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]{1,29}$"
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "done",
+                          "now",
+                          "waiting",
+                          "next",
+                          "skipped"
+                        ]
+                      },
+                      "value": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 120,
+                        "pattern": "\\S"
+                      },
+                      "count": {
+                        "type": "object",
+                        "properties": {
+                          "done": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 999
+                          },
+                          "total": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 999
+                          }
+                        },
+                        "required": [
+                          "done",
+                          "total"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "state"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "at": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                },
+                "deadline": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                },
+                "names": {
+                  "type": "object",
+                  "properties": {
+                    "business": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120,
+                      "pattern": "\\S"
+                    },
+                    "host": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 253,
+                      "pattern": "\\S"
+                    },
+                    "domain": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 253,
+                      "pattern": "\\S"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "step": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 60,
+                  "pattern": "\\S"
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "state",
+                "steps",
+                "at"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "done": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80,
+                  "pattern": "\\S"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "onboarding",
+                    "website",
+                    "golive",
+                    "change",
+                    "domain",
+                    "purchase",
+                    "google",
+                    "reminder",
+                    "review",
+                    "question",
+                    "checkin",
+                    "turn"
+                  ]
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "upcoming",
+                    "now",
+                    "waiting",
+                    "done",
+                    "failed"
+                  ]
+                },
+                "steps": {
+                  "maxItems": 12,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]{1,29}$"
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "done",
+                          "now",
+                          "waiting",
+                          "next",
+                          "skipped"
+                        ]
+                      },
+                      "value": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 120,
+                        "pattern": "\\S"
+                      },
+                      "count": {
+                        "type": "object",
+                        "properties": {
+                          "done": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 999
+                          },
+                          "total": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 999
+                          }
+                        },
+                        "required": [
+                          "done",
+                          "total"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "state"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "at": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                },
+                "deadline": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                },
+                "names": {
+                  "type": "object",
+                  "properties": {
+                    "business": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120,
+                      "pattern": "\\S"
+                    },
+                    "host": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 253,
+                      "pattern": "\\S"
+                    },
+                    "domain": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 253,
+                      "pattern": "\\S"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "step": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 60,
+                  "pattern": "\\S"
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "state",
+                "steps",
+                "at"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "journey",
+          "now",
+          "waiting",
+          "upcoming",
+          "done"
+        ],
+        "additionalProperties": false
+      },
       "ActivityFeed": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -9931,6 +10665,10 @@
                   "type": "boolean",
                   "const": true
                 },
+                "skipped": {
+                  "type": "boolean",
+                  "const": true
+                },
                 "items": {
                   "maxItems": 9,
                   "type": "array",
@@ -19326,6 +20064,10 @@
                                   "maximum": 999
                                 },
                                 "now": {
+                                  "type": "boolean",
+                                  "const": true
+                                },
+                                "skipped": {
                                   "type": "boolean",
                                   "const": true
                                 },
@@ -28954,6 +29696,123 @@
         ],
         "additionalProperties": false
       },
+      "OnboardingStatus": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "on": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "fact"
+                  },
+                  "key": {
+                    "type": "string",
+                    "enum": [
+                      "business.name",
+                      "business.phone",
+                      "business.email",
+                      "hours.weekday",
+                      "service_area.radius",
+                      "business.tagline",
+                      "business.industry",
+                      "business.offerings",
+                      "business.audience",
+                      "business.overview",
+                      "business.proof",
+                      "business.disclaimer",
+                      "service_area.text",
+                      "assistant.name",
+                      "assistant.pronouns",
+                      "assistant.tone",
+                      "owner.preferred_name",
+                      "site.build_mode",
+                      "site.template",
+                      "site.palette",
+                      "site.font",
+                      "site.direction",
+                      "site.pages"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "key"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "next"
+                  },
+                  "next": {
+                    "type": "string",
+                    "enum": [
+                      "ask_open",
+                      "ask_choice",
+                      "ask_design",
+                      "ask_fact",
+                      "ask_details",
+                      "ask_upload",
+                      "review_quote_form",
+                      "start_build",
+                      "answer_only"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "next"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "facts": {
+            "maxItems": 23,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "business.name",
+                "business.phone",
+                "business.email",
+                "hours.weekday",
+                "service_area.radius",
+                "business.tagline",
+                "business.industry",
+                "business.offerings",
+                "business.audience",
+                "business.overview",
+                "business.proof",
+                "business.disclaimer",
+                "service_area.text",
+                "assistant.name",
+                "assistant.pronouns",
+                "assistant.tone",
+                "owner.preferred_name",
+                "site.build_mode",
+                "site.template",
+                "site.palette",
+                "site.font",
+                "site.direction",
+                "site.pages"
+              ]
+            }
+          }
+        },
+        "required": [
+          "on",
+          "facts"
+        ],
+        "additionalProperties": false
+      },
       "Org": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -30138,6 +30997,10 @@
                           "maximum": 999
                         },
                         "now": {
+                          "type": "boolean",
+                          "const": true
+                        },
+                        "skipped": {
                           "type": "boolean",
                           "const": true
                         },
@@ -35091,6 +35954,10 @@
                         "type": "boolean",
                         "const": true
                       },
+                      "skipped": {
+                        "type": "boolean",
+                        "const": true
+                      },
                       "items": {
                         "maxItems": 9,
                         "type": "array",
@@ -37909,6 +38776,739 @@
             "required": [
               "notes",
               "derived"
+            ],
+            "additionalProperties": false
+          },
+          "activity": {
+            "type": "object",
+            "properties": {
+              "journey": {
+                "maxItems": 20,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80,
+                      "pattern": "\\S"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "onboarding",
+                        "website",
+                        "golive",
+                        "change",
+                        "domain",
+                        "purchase",
+                        "google",
+                        "reminder",
+                        "review",
+                        "question",
+                        "checkin",
+                        "turn"
+                      ]
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "upcoming",
+                        "now",
+                        "waiting",
+                        "done",
+                        "failed"
+                      ]
+                    },
+                    "steps": {
+                      "maxItems": 12,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9_]{1,29}$"
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "done",
+                              "now",
+                              "waiting",
+                              "next",
+                              "skipped"
+                            ]
+                          },
+                          "value": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 120,
+                            "pattern": "\\S"
+                          },
+                          "count": {
+                            "type": "object",
+                            "properties": {
+                              "done": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 999
+                              },
+                              "total": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 999
+                              }
+                            },
+                            "required": [
+                              "done",
+                              "total"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "state"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                    },
+                    "deadline": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                    },
+                    "names": {
+                      "type": "object",
+                      "properties": {
+                        "business": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120,
+                          "pattern": "\\S"
+                        },
+                        "host": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 253,
+                          "pattern": "\\S"
+                        },
+                        "domain": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 253,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "step": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 60,
+                      "pattern": "\\S"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "kind",
+                    "state",
+                    "steps",
+                    "at"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "now": {
+                "maxItems": 20,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80,
+                      "pattern": "\\S"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "onboarding",
+                        "website",
+                        "golive",
+                        "change",
+                        "domain",
+                        "purchase",
+                        "google",
+                        "reminder",
+                        "review",
+                        "question",
+                        "checkin",
+                        "turn"
+                      ]
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "upcoming",
+                        "now",
+                        "waiting",
+                        "done",
+                        "failed"
+                      ]
+                    },
+                    "steps": {
+                      "maxItems": 12,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9_]{1,29}$"
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "done",
+                              "now",
+                              "waiting",
+                              "next",
+                              "skipped"
+                            ]
+                          },
+                          "value": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 120,
+                            "pattern": "\\S"
+                          },
+                          "count": {
+                            "type": "object",
+                            "properties": {
+                              "done": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 999
+                              },
+                              "total": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 999
+                              }
+                            },
+                            "required": [
+                              "done",
+                              "total"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "state"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                    },
+                    "deadline": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                    },
+                    "names": {
+                      "type": "object",
+                      "properties": {
+                        "business": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120,
+                          "pattern": "\\S"
+                        },
+                        "host": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 253,
+                          "pattern": "\\S"
+                        },
+                        "domain": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 253,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "step": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 60,
+                      "pattern": "\\S"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "kind",
+                    "state",
+                    "steps",
+                    "at"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "waiting": {
+                "maxItems": 20,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80,
+                      "pattern": "\\S"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "onboarding",
+                        "website",
+                        "golive",
+                        "change",
+                        "domain",
+                        "purchase",
+                        "google",
+                        "reminder",
+                        "review",
+                        "question",
+                        "checkin",
+                        "turn"
+                      ]
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "upcoming",
+                        "now",
+                        "waiting",
+                        "done",
+                        "failed"
+                      ]
+                    },
+                    "steps": {
+                      "maxItems": 12,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9_]{1,29}$"
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "done",
+                              "now",
+                              "waiting",
+                              "next",
+                              "skipped"
+                            ]
+                          },
+                          "value": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 120,
+                            "pattern": "\\S"
+                          },
+                          "count": {
+                            "type": "object",
+                            "properties": {
+                              "done": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 999
+                              },
+                              "total": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 999
+                              }
+                            },
+                            "required": [
+                              "done",
+                              "total"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "state"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                    },
+                    "deadline": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                    },
+                    "names": {
+                      "type": "object",
+                      "properties": {
+                        "business": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120,
+                          "pattern": "\\S"
+                        },
+                        "host": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 253,
+                          "pattern": "\\S"
+                        },
+                        "domain": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 253,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "step": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 60,
+                      "pattern": "\\S"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "kind",
+                    "state",
+                    "steps",
+                    "at"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "upcoming": {
+                "maxItems": 20,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80,
+                      "pattern": "\\S"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "onboarding",
+                        "website",
+                        "golive",
+                        "change",
+                        "domain",
+                        "purchase",
+                        "google",
+                        "reminder",
+                        "review",
+                        "question",
+                        "checkin",
+                        "turn"
+                      ]
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "upcoming",
+                        "now",
+                        "waiting",
+                        "done",
+                        "failed"
+                      ]
+                    },
+                    "steps": {
+                      "maxItems": 12,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9_]{1,29}$"
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "done",
+                              "now",
+                              "waiting",
+                              "next",
+                              "skipped"
+                            ]
+                          },
+                          "value": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 120,
+                            "pattern": "\\S"
+                          },
+                          "count": {
+                            "type": "object",
+                            "properties": {
+                              "done": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 999
+                              },
+                              "total": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 999
+                              }
+                            },
+                            "required": [
+                              "done",
+                              "total"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "state"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                    },
+                    "deadline": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                    },
+                    "names": {
+                      "type": "object",
+                      "properties": {
+                        "business": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120,
+                          "pattern": "\\S"
+                        },
+                        "host": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 253,
+                          "pattern": "\\S"
+                        },
+                        "domain": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 253,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "step": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 60,
+                      "pattern": "\\S"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "kind",
+                    "state",
+                    "steps",
+                    "at"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "done": {
+                "maxItems": 20,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80,
+                      "pattern": "\\S"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "onboarding",
+                        "website",
+                        "golive",
+                        "change",
+                        "domain",
+                        "purchase",
+                        "google",
+                        "reminder",
+                        "review",
+                        "question",
+                        "checkin",
+                        "turn"
+                      ]
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "upcoming",
+                        "now",
+                        "waiting",
+                        "done",
+                        "failed"
+                      ]
+                    },
+                    "steps": {
+                      "maxItems": 12,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9_]{1,29}$"
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "done",
+                              "now",
+                              "waiting",
+                              "next",
+                              "skipped"
+                            ]
+                          },
+                          "value": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 120,
+                            "pattern": "\\S"
+                          },
+                          "count": {
+                            "type": "object",
+                            "properties": {
+                              "done": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 999
+                              },
+                              "total": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 999
+                              }
+                            },
+                            "required": [
+                              "done",
+                              "total"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "state"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                    },
+                    "deadline": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                    },
+                    "names": {
+                      "type": "object",
+                      "properties": {
+                        "business": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120,
+                          "pattern": "\\S"
+                        },
+                        "host": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 253,
+                          "pattern": "\\S"
+                        },
+                        "domain": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 253,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "step": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 60,
+                      "pattern": "\\S"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "kind",
+                    "state",
+                    "steps",
+                    "at"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "journey",
+              "now",
+              "waiting",
+              "upcoming",
+              "done"
             ],
             "additionalProperties": false
           }

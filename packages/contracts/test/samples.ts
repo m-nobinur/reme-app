@@ -99,6 +99,27 @@ const BLUEPRINT = {
  * double as the worked example of each shape. All content is fictional (R8).
  */
 export const samples: Record<ContractName, unknown> = {
+  Activity: {
+    journey: [],
+    now: [
+      {
+        id: "website",
+        kind: "website",
+        state: "now",
+        at: NOW,
+        names: { business: "Brightclean Cleaning Co. (fixture)" },
+        steps: [
+          { id: "plan", state: "done" },
+          { id: "photos", state: "skipped" },
+          { id: "pages", state: "now", count: { done: 2, total: 5 } },
+          { id: "ready", state: "next" },
+        ],
+      },
+    ],
+    waiting: [],
+    upcoming: [],
+    done: [],
+  },
   ActivityFeed: {
     items: [
       {
@@ -1008,6 +1029,10 @@ export const samples: Record<ContractName, unknown> = {
     outcome: "saved",
     note: "Saved. This update is complete; do not repeat it.",
     fullness: "2%, 23/1,500 chars",
+  },
+  OnboardingStatus: {
+    on: { kind: "fact", key: "business.phone" },
+    facts: ["business.phone"],
   },
   Org: {
     org_id: ORG,

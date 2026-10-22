@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { Activity } from "./activity.ts"
 import {
   ApprovalDecision,
   ApprovalRequest,
@@ -288,7 +289,9 @@ export const BuildActivity = z.strictObject({
    * written pages together and report.
    */
   now: z.literal(true).optional(),
-  /** What the row counts, by name, such as the plan's pages: fixed labels, never model text. */
+  /** The stage does not apply to this build (no photos to make, no polish asked); it stays in the list, never done. */
+  skipped: z.literal(true).optional(),
+  /** What the row counts, by name, such as the plan's pages, or the repair line under the checks: fixed labels, never model text. */
   items: z
     .array(z.strictObject({ label: Text(60), done: z.boolean() }))
     .max(9)
@@ -560,6 +563,8 @@ export const WorkspaceStatus = z.strictObject({
     notes: z.array(Reminder).max(REMINDER_NOTES_MAX),
     derived: z.array(DerivedReminder),
   }),
+  /** Every job as segments with fixed steps. Absent until the api fills it. */
+  activity: Activity.optional(),
 })
 
 export type FactValue = z.infer<typeof FactValue>
