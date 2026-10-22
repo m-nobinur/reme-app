@@ -47,6 +47,7 @@
     "./brand": "./src/brand.ts",
     "./copy-check": "./src/copy-check.ts",
     "./icons": "./src/icons.ts",
+    "./phone": "./src/phone.ts",
     "./manifests.json": "./manifests.json",
     "./size-budget.json": "./size-budget.json",
     "./directions.json": "./src/directions.json"

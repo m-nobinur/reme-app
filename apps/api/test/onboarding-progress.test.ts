@@ -46,9 +46,9 @@ const at = (
   ...over,
 })
 
-const states = (o: Onboarding, asked = {}, waiting = false) =>
+const states = (o: Onboarding, asked = {}, waiting = false, asking?: string) =>
   Object.fromEntries(
-    onboardingSteps(o, asked, waiting).map((s) => [s.id, s.state])
+    onboardingSteps(o, asked, waiting, asking).map((s) => [s.id, s.state])
   )
 
 describe("onboardingSteps", () => {
@@ -101,7 +101,15 @@ describe("onboardingSteps", () => {
   it("marks the open step waiting while a question is open in the chat", () => {
     const o = at([...WORK, AREA, ...CONTACT])
     expect(states(o).assistant).toBe("now")
-    expect(states(o, {}, true).assistant).toBe("waiting")
+    expect(states(o, {}, true, "assistant").assistant).toBe("waiting")
+  })
+
+  it("marks no step waiting for a question about none of the eight, or a settled one", () => {
+    const o = at([...WORK, AREA, ...CONTACT])
+    const build = states(o, {}, true, "build_for_me")
+    const proof = states(o, {}, true, "business.proof")
+    expect(Object.values(build)).not.toContain("waiting")
+    expect(Object.values(proof)).not.toContain("waiting")
   })
 
   it("skips what the website needs on the manual path, and finishes there", () => {

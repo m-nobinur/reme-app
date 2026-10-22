@@ -3,7 +3,7 @@ import type { OrgScopedDb, Tenancy } from "@workspace/db"
 import { conversationMessages, conversations, sql } from "@workspace/db"
 import { withOnboarding } from "./activity.ts"
 import { readScript, waitingCard } from "./chat.ts"
-import type { Held } from "./onboarding.ts"
+import { type Held, stepOf } from "./onboarding.ts"
 import { onboardingSegment } from "./onboarding-progress.ts"
 import { etag, type SiteConfig, statusWithFacts } from "./workspace.ts"
 
@@ -107,11 +107,16 @@ async function onboardingOf(
 ): Promise<ActivitySegment> {
   const progress = await readScript(db, open.id)
   const o = { ...progress, orgId, facts, orgName: open.org_name, ownerName: "" }
-  const waiting = Boolean(waitingCard(open.tail && { content: open.tail }))
+  const card = waitingCard(open.tail && { content: open.tail })
+  const asking =
+    card?.type === "tool-ask_open"
+      ? (card.input as { about?: string } | null)?.about
+      : card && stepOf(card)
   const segment = onboardingSegment(
     o,
     new Date(open.created_at).toISOString(),
-    waiting
+    Boolean(card),
+    asking ?? undefined
   )
   return segment.state === "done"
     ? { ...segment, at: new Date(open.updated_at).toISOString() }

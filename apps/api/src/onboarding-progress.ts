@@ -3,6 +3,7 @@ import type {
   ActivityStep,
   FactValueKey,
 } from "@workspace/contracts"
+import { phoneText } from "@workspace/starter-site/phone"
 import {
   currentStep,
   designDone,
@@ -58,6 +59,7 @@ const STEP_OF: Record<string, StepId> = {
   contact: "contact",
   assistant: "assistant",
   quote_form: "quote_form",
+  "quote.form": "quote_form",
   upload: "photos",
   design: "look",
 }
@@ -94,7 +96,7 @@ function settled(
     out.work = done(upper(offerings.join(", ")))
   }
   if (area) out.area = done(area)
-  if (phone && email) out.contact = done(`${phone}, ${email}`)
+  if (phone && email) out.contact = done(`${phoneText(phone)}, ${email}`)
   const name = factValue(o.facts, "assistant.name")?.name
   if (name && fact("assistant.pronouns") && fact("assistant.tone")) {
     out.assistant = done(name)
@@ -142,17 +144,27 @@ function settled(
 export function onboardingSteps(
   o: Onboarding,
   asked: Readonly<Record<string, number | undefined>> = o.asked ?? {},
-  waiting = false
+  waiting = false,
+  /** The script step or fact the waiting question is about. */
+  asking?: string
 ): ActivityStep[] {
   const have = settled(o, asked)
   const over = ended(o)
   const open = ONBOARDING_STEPS.filter((id) => !have[id])
   const scripted = STEP_OF[currentStep(o)?.id ?? ""]
+  // While a question waits, the step it asks about is the open one. A
+  // question outside the eight (the build question) or about a settled step
+  // (proof, under customers) leaves none open.
+  const about = waiting ? STEP_OF[asking ?? ""] : undefined
   const now = over
     ? undefined
-    : scripted && open.includes(scripted)
-      ? scripted
-      : open[0]
+    : waiting
+      ? about && open.includes(about)
+        ? about
+        : undefined
+      : scripted && open.includes(scripted)
+        ? scripted
+        : open[0]
   return ONBOARDING_STEPS.map((id): ActivityStep => {
     const was = have[id]
     if (was)
@@ -170,9 +182,10 @@ export function onboardingSteps(
 export function onboardingSegment(
   o: Onboarding,
   at: string,
-  waiting = false
+  waiting = false,
+  asking?: string
 ): ActivitySegment {
-  const steps = onboardingSteps(o, o.asked ?? {}, waiting)
+  const steps = onboardingSteps(o, o.asked ?? {}, waiting, asking)
   const finished = steps.every(
     (s) => s.state === "done" || s.state === "skipped"
   )
