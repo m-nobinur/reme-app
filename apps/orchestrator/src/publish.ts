@@ -648,7 +648,7 @@ export const LIVE_SAY: WorkflowStepConfig = {
 
 /**
  * The owner's first version is live: said once in their chat, keyed by the
- * site, with what Ava can do next and the site to open. The model words it
+ * site, with what the assistant can do next and the site to open. The model words it
  * from the host, or the template stands (heartbeat-write.ts).
  */
 export async function sayLive(
