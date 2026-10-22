@@ -24,7 +24,7 @@ import {
 import { factLabel } from "@workspace/ui/lib/facts"
 import { askDetailsView } from "@workspace/ui/lib/tool-state"
 import { cn } from "@workspace/ui/lib/utils"
-import { type FormEvent, useId, useRef, useState } from "react"
+import { type FocusEvent, type FormEvent, useId, useRef, useState } from "react"
 
 /**
  * A few related facts onboarding asks for in the question tray, one field
@@ -233,6 +233,16 @@ function DetailsTray({
     show(page - 1, null)
   }
 
+  // Leaving a filled field checks it, so a wrong number shows before Next;
+  // an empty one waits for Next or Submit, and focus stays where it went.
+  const checkOnLeave = (event: FocusEvent<HTMLFormElement>) => {
+    const field = event.target
+    if (!(field instanceof HTMLInputElement) || isPick(key)) return
+    if (!field.value.trim()) return
+    const result = read(key, values())
+    setProblem("error" in result ? result.error : null)
+  }
+
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!last) return forward()
@@ -272,7 +282,13 @@ function DetailsTray({
       }
       submit={{ label: last ? "Submit" : "Next", form: `${id}-form` }}
     >
-      <form id={`${id}-form`} noValidate onSubmit={submit} ref={formRef}>
+      <form
+        id={`${id}-form`}
+        noValidate
+        onBlur={checkOnLeave}
+        onSubmit={submit}
+        ref={formRef}
+      >
         {keys.map((each, at) => {
           const invalid = at === page ? (problem ?? undefined) : undefined
           return (

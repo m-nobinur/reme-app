@@ -809,6 +809,7 @@ function FactField({
       min={min ?? input.min}
       name={input.name}
       onChange={onChange ? (event) => onChange(event.target.value) : undefined}
+      placeholder={input.placeholder}
       required
       step={input.step}
       type={input.type}

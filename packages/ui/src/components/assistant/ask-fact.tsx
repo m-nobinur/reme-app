@@ -14,7 +14,7 @@ import {
 } from "@workspace/ui/lib/answer"
 import { FIELD_ERROR } from "@workspace/ui/lib/card"
 import { askFactView } from "@workspace/ui/lib/tool-state"
-import { type FormEvent, useId, useState } from "react"
+import { type FocusEvent, type FormEvent, useId, useState } from "react"
 
 /**
  * One fact onboarding asks for, answered in the question tray with the key's
@@ -43,6 +43,17 @@ const AskFact: ToolCallMessagePartComponent = (props) => {
   // A fact the owner just says is answered in the composer.
   if (askable(key) && saidInChat(key)) return null
   const question = askable(key) ? FACT_INPUTS[key].ask : "A question"
+
+  // Leaving a filled field checks it; an empty one waits for Submit.
+  const checkOnLeave = (event: FocusEvent<HTMLFormElement>) => {
+    if (!askable(key) || !(event.target instanceof HTMLInputElement)) return
+    if (!event.target.value.trim()) return
+    const form = new FormData(event.currentTarget)
+    const parsed = answerValue({ kind: "fact", key }, (name) =>
+      String(form.get(name) ?? "")
+    )
+    setInvalid("error" in parsed ? parsed.error : null)
+  }
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -82,6 +93,7 @@ const AskFact: ToolCallMessagePartComponent = (props) => {
           className="flex flex-col gap-2"
           id={`${id}-form`}
           noValidate
+          onBlur={checkOnLeave}
           onSubmit={submit}
         >
           <AnswerInputs

@@ -27,9 +27,21 @@ export type FactInput = {
   max?: number
   step?: string
   autoComplete?: string
+  /** An example answer, shown in the empty input. */
+  placeholder?: string
+  /** What to say when the value is wrong, in place of "Check the {label}." */
+  invalid?: string
+  /** A check of its own beyond the contract's, on the parsed value. */
+  check?: (value: unknown) => boolean
   /** The field's value from what the input holds. Trimmed text by default. */
   parse?: (raw: string) => unknown
 }
+
+/** A UK number has 9 or 10 digits after +44; any other country is left to E.164. */
+const UK_NUMBER = /^\+44\d{9,10}$/
+const ringable = (value: unknown) =>
+  typeof value === "string" &&
+  (!value.startsWith("+44") || UK_NUMBER.test(value))
 
 /**
  * A UK number as the owner types it, to E.164. Anything it does not
@@ -85,6 +97,9 @@ export const FACT_INPUTS = {
         label: "Phone number",
         type: "tel",
         autoComplete: "tel",
+        placeholder: "+44 161 496 0000",
+        invalid: "Enter a number customers can ring, like +44 161 496 0000.",
+        check: ringable,
         parse: toE164,
       },
     ],
@@ -98,6 +113,8 @@ export const FACT_INPUTS = {
         type: "email",
         maxLength: 254,
         autoComplete: "email",
+        placeholder: "hello@yourbusiness.co.uk",
+        invalid: "Enter an email address, like hello@yourbusiness.co.uk.",
       },
     ],
   },
@@ -116,6 +133,7 @@ export const FACT_INPUTS = {
         label: "Town or postcode you work from",
         type: "text",
         maxLength: 80,
+        placeholder: "Leeds, or LS1 4AP",
       },
       {
         name: "radius_km",
@@ -124,6 +142,8 @@ export const FACT_INPUTS = {
         min: 1,
         max: 200,
         step: "1",
+        placeholder: "25",
+        invalid: "Enter a distance between 1 and 200 km.",
         parse: number,
       },
     ],
@@ -245,13 +265,18 @@ export function answerValue(
     }
     return { value: text }
   }
-  const { fields } = FACT_INPUTS[spec.key]
+  const fields: readonly FactInput[] = FACT_INPUTS[spec.key].fields
   const value = Object.fromEntries(
     fields.map((input: FactInput) => {
       const raw = read(input.name)
       return [input.name, input.parse ? input.parse(raw) : raw.trim()]
     })
   )
+  // A field's own check first, so its message is the one the owner reads.
+  const failed = fields.find(
+    (input: FactInput) => input.check && !input.check(value[input.name])
+  )
+  if (failed) return { error: failed.invalid ?? "Check the answer." }
   const parsed = FactValue.safeParse({ key: spec.key, value })
   if (parsed.success) return { value }
   const issue = parsed.error.issues[0]
@@ -267,7 +292,7 @@ export function answerValue(
   const field = fields.find((each: FactInput) => each.name === name)
   return {
     error: field
-      ? `Check the ${field.label.toLowerCase()}.`
+      ? (field.invalid ?? `Check the ${field.label.toLowerCase()}.`)
       : "Check the answer.",
   }
 }
