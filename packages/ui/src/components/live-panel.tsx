@@ -420,13 +420,15 @@ function StepMark({ step, failed }: { step: SegmentStep; failed: boolean }) {
     return <WarningCircleIcon className="size-4 text-destructive" />
   }
   switch (step.state) {
+    // Neutral, so a step reads as part of its segment and the header's
+    // brand-coloured icon stays the one that leads.
     case "now":
-      return <StatusIcon className="text-primary" kind={step.kind} />
+      return <StatusIcon className="text-foreground/80" kind={step.kind} />
     case "waiting":
       return step.kind === "question" ? (
-        <StatusIcon className="text-primary" kind="question" />
+        <StatusIcon className="text-foreground/80" kind="question" />
       ) : (
-        <ChatCircleDotsIcon className="size-4 animate-status-fade text-primary motion-reduce:animate-none" />
+        <ChatCircleDotsIcon className="size-4 animate-status-fade text-foreground/80 motion-reduce:animate-none" />
       )
     case "skipped":
       return <MinusCircleIcon className="size-4 text-muted-foreground" />
@@ -546,7 +548,8 @@ function PanelSegment({
           inert={!shown}
         >
           <div className="min-h-0 overflow-hidden">
-            <div className="flex flex-col gap-3 pt-3">
+            {/* Indented under the title, so the steps read as the segment's own. */}
+            <div className="flex flex-col gap-3 ps-6.5 pt-3">
               <p aria-live="polite" className="sr-only">
                 {current && !done
                   ? `Now: ${current.said ?? current.label}.`

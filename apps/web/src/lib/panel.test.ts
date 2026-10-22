@@ -266,13 +266,13 @@ describe("the first run", () => {
       "Getting Fixture Clean ready",
       "Setting up Fixture Clean",
     ]).toContain(setup?.title)
-    expect(setup?.line).toBe("7 more to go, then Ellie starts on your website")
+    expect(setup?.line).toBeNull()
     expect(setup?.steps.map((each) => [each.label, each.state])).toEqual([
-      ["What you do", "done"],
-      ["Where you work", "now"],
-      ["Your customers", "next"],
-      ["How customers reach you", "next"],
-      ["Your assistant", "next"],
+      ["Services", "done"],
+      ["Where do you work?", "now"],
+      ["Customers", "next"],
+      ["Contact details", "next"],
+      ["Assistant's name", "next"],
       ["Quote form", "next"],
       ["Photos", "next"],
       ["Look and feel", "next"],
@@ -281,19 +281,17 @@ describe("the first run", () => {
     // The next fact lands: its step ticks, and the next one opens.
     const later = firstRun([onboarding(2)])?.journey[0]
     expect(later?.steps[1]).toMatchObject({
-      label: "Where you work",
+      label: "Service area",
       state: "done",
     })
     expect(later?.steps[2]?.state).toBe("now")
-    expect(later?.line).toBe("6 more to go, then Ellie starts on your website")
+    expect(later?.line).toBeNull()
   })
 
   it("says the owner's turn, and the pill waits on them", () => {
     const panel = firstRun([onboarding(7, "waiting")])
     expect(panel?.journey[0]?.steps.at(-1)?.state).toBe("waiting")
-    expect(panel?.journey[0]?.line).toBe(
-      "One more, then Ellie starts on your website"
-    )
+    expect(panel?.journey[0]?.line).toBeNull()
     expect(panel?.line).toEqual({
       tone: "idle",
       lead: "Ellie is waiting for your answer",

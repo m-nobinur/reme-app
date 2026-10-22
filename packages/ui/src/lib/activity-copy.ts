@@ -715,18 +715,9 @@ export function segmentLine(
       ? null
       : elapsedText(extras.elapsedSeconds)
   switch (segment.kind as JobKind) {
-    case "onboarding": {
-      if (!n.business) return "A few questions, then your website"
-      const left = segment.steps.filter(
-        (s) => s.state !== "done" && s.state !== "skipped"
-      ).length
-      const then = n.assistant
-        ? `${n.assistant} starts on your website`
-        : "work on your website starts"
-      return left <= 1
-        ? `One more, then ${then}`
-        : `${left} more to go, then ${then}`
-    }
+    // The question at work says enough; no count of what is left.
+    case "onboarding":
+      return null
     case "website":
       return elapsed
         ? `${elapsed} so far, usually 5 to 10 minutes`
@@ -790,11 +781,11 @@ const STEP_LABELS: Partial<
   Record<ActivitySegment["kind"], Readonly<Record<string, string>>>
 > = {
   onboarding: {
-    work: "What you do",
-    area: "Where you work",
-    customers: "Your customers",
-    contact: "How customers reach you",
-    assistant: "Your assistant",
+    work: "Services",
+    area: "Service area",
+    customers: "Customers",
+    contact: "Contact details",
+    assistant: "Assistant's name",
     quote_form: "Quote form",
     photos: "Photos",
     look: "Look and feel",
@@ -838,16 +829,33 @@ const STEP_LABELS: Partial<
 
 const isStage = (id: string): id is BuildStage => Object.hasOwn(STAGES, id)
 
+/** An onboarding step while it is asked: the question, not its name. */
+const ONBOARDING_ASKS: Readonly<Record<string, string>> = {
+  work: "What services do you offer?",
+  area: "Where do you work?",
+  customers: "Who are your customers?",
+  contact: "How do customers reach you?",
+  assistant: "What should your assistant be called?",
+  quote_form: "What should the quote form ask?",
+  photos: "Do you have photos to use?",
+  look: "How should your website look?",
+}
+
 /**
  * A step's label. The website's step at work says what it is doing, with
- * its count ("Writing the pages, 3 of 6"); every other step, and one in a
- * segment that stopped, is its name.
+ * its count ("Writing the pages, 3 of 6"); an onboarding step being asked is
+ * its question; every other step, and one in a segment that stopped, is its
+ * name.
  * Null for a step the table does not know, which the panel leaves out.
  */
 export function stepLabel(segment: ActivitySegment, step: ActivityStep) {
   const working = segment.state === "now" && step.state === "now"
   if (segment.kind === "website" && working && isStage(step.id)) {
     return stageLine(step.id, "working", step.count ?? {})
+  }
+  const asked = step.state === "now" || step.state === "waiting"
+  if (segment.kind === "onboarding" && asked && ONBOARDING_ASKS[step.id]) {
+    return ONBOARDING_ASKS[step.id]
   }
   return STEP_LABELS[segment.kind]?.[step.id] ?? null
 }

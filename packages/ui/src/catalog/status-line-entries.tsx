@@ -15,7 +15,7 @@ type Entry = { name: string; render: () => ReactNode }
 const KIND_LABELS: Record<StatusKind, string> = {
   thinking: "Ellie is reading your message",
   setup: "Setting up Spark Cleaning",
-  question: "Where you work",
+  question: "Where do you work?",
   planning: "Planning your website",
   building: "Ellie is putting your website together",
   photos: "Making 8 photos, 3 done",

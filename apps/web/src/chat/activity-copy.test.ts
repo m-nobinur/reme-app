@@ -342,9 +342,7 @@ describe("segment copy", () => {
     )
     const nameless = segment("onboarding", "now", { names: undefined })
     expect(segmentTitle(nameless, ctx)).toBe("Getting started")
-    expect(segmentLine(nameless, ctx)).toBe(
-      "A few questions, then your website"
-    )
+    expect(segmentLine(nameless, ctx)).toBeNull()
   })
 
   it("never changes a title between polls, and varies it between orgs", () => {
@@ -360,7 +358,7 @@ describe("segment copy", () => {
     expect(seen.size).toBeLessThanOrEqual(3)
   })
 
-  it("counts what is left in onboarding", () => {
+  it("counts nothing in onboarding: the question says enough", () => {
     const ctx = { orgId: "org-1", assistant: "Ellie" }
     const steps = (open: number) =>
       Array.from({ length: 8 }, (_, i) => ({
@@ -369,15 +367,7 @@ describe("segment copy", () => {
       }))
     expect(
       segmentLine(segment("onboarding", "now", { steps: steps(5) }), ctx)
-    ).toBe("5 more to go, then Ellie starts on your website")
-    expect(
-      segmentLine(segment("onboarding", "now", { steps: steps(1) }), ctx)
-    ).toBe("One more, then Ellie starts on your website")
-    expect(
-      segmentLine(segment("onboarding", "now", { steps: steps(1) }), {
-        orgId: "org-1",
-      })
-    ).toBe("One more, then work on your website starts")
+    ).toBeNull()
   })
 
   it("writes the lines under a running or waiting job", () => {
