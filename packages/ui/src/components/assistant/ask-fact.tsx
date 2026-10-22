@@ -6,7 +6,12 @@ import {
   TrayNote,
 } from "@workspace/ui/components/assistant/question-tray"
 import { AnswerInputs } from "@workspace/ui/components/live-panel"
-import { answerValue, askable, FACT_INPUTS } from "@workspace/ui/lib/answer"
+import {
+  answerValue,
+  askable,
+  FACT_INPUTS,
+  saidInChat,
+} from "@workspace/ui/lib/answer"
 import { FIELD_ERROR } from "@workspace/ui/lib/card"
 import { askFactView } from "@workspace/ui/lib/tool-state"
 import { type FormEvent, useId, useState } from "react"
@@ -16,7 +21,9 @@ import { type FormEvent, useId, useState } from "react"
  * own native inputs. The question is the web's copy for the key; the call
  * carries only the key, whether it may be skipped, and a starting value.
  * Once answered or skipped it shows nothing: the owner's reply after it
- * says what they said, and the next step is a message of its own.
+ * says what they said, and the next step is a message of its own. A fact
+ * that is one plain line of text has no card at all: the owner says it in
+ * the composer.
  */
 const AskFact: ToolCallMessagePartComponent = (props) => {
   const view = askFactView(props)
@@ -33,6 +40,8 @@ const AskFact: ToolCallMessagePartComponent = (props) => {
     )
   }
   const { key, skippable, prefill } = view.input
+  // A fact the owner just says is answered in the composer.
+  if (askable(key) && saidInChat(key)) return null
   const question = askable(key) ? FACT_INPUTS[key].ask : "A question"
 
   const submit = (event: FormEvent<HTMLFormElement>) => {

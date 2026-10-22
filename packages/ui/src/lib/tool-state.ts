@@ -13,7 +13,7 @@ import {
   AskUploadInput,
   AskUploadOutput,
   type FactValue,
-  type FactValueKey,
+  FactValueKey,
   PRONOUNS,
   ReviewQuoteFormInput,
   ReviewQuoteFormOutput,
@@ -21,6 +21,7 @@ import {
   TOOL_CALL_CANCELLED,
   toolErrorKind,
 } from "@workspace/contracts"
+import { askable, saidInChat } from "@workspace/ui/lib/answer"
 import { factText } from "@workspace/ui/lib/facts"
 
 /**
@@ -479,9 +480,8 @@ export function isHeld(parts: readonly object[], toolCallId: string): boolean {
 export const heldText = (approved: boolean) =>
   `${approved ? "You said yes." : "You said not now."} Sent once you answer the other cards.`
 
-/** The calls the question tray answers. */
+/** The calls the question tray answers; `ask_open` and a plain-text fact are answered in the composer. */
 export const TRAY_TOOLS: readonly string[] = [
-  "ask_open",
   "ask_fact",
   "ask_details",
   "ask_choice",
@@ -496,12 +496,20 @@ export const waitsOnTray = (parts: readonly object[] | undefined) =>
     const p = part as {
       type?: string
       toolName?: string
+      args?: { key?: unknown } | null
       result?: unknown
       isError?: boolean
     }
+    const key = FactValueKey.safeParse(p.args?.key)
+    const spoken =
+      p.toolName === "ask_fact" &&
+      key.success &&
+      askable(key.data) &&
+      saidInChat(key.data)
     return (
       p.type === "tool-call" &&
       TRAY_TOOLS.includes(p.toolName ?? "") &&
+      !spoken &&
       p.result === undefined &&
       !p.isError
     )

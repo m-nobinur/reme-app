@@ -438,14 +438,24 @@ function Segment({
 
 /**
  * "Answer below": the question tray's first field when the chat shows it,
- * else the getting-started chat, where the tray is.
+ * the composer for a question answered in words, else the getting-started
+ * chat, where both are.
  */
 function useAnswerBelow(onboarding: string | null) {
   const router = useRouter()
   return () => {
-    const field = document
-      .querySelector('[data-slot="question-tray"]')
-      ?.querySelector<HTMLElement>("input, textarea, select, button")
+    // The composer only in the getting-started chat: another chat's is not where the answer goes.
+    const here =
+      onboarding !== null && location.pathname === `/app/c/${onboarding}`
+    const field =
+      document
+        .querySelector('[data-slot="question-tray"]')
+        ?.querySelector<HTMLElement>("input, textarea, select, button") ??
+      (here
+        ? document.querySelector<HTMLElement>(
+            ".aui-composer-input:not(:disabled)"
+          )
+        : null)
     if (field) {
       field.focus()
       return

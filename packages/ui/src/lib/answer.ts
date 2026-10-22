@@ -186,6 +186,15 @@ export const FACT_INPUTS = {
 export const askable = (key: FactValueKey): key is AskableFactKey =>
   key in FACT_INPUTS
 
+/**
+ * Whether the owner simply says this fact in the chat: one plain text field,
+ * with nothing a native input checks. Those get no card.
+ */
+export const saidInChat = (key: AskableFactKey) => {
+  const fields: readonly FactInput[] = FACT_INPUTS[key].fields
+  return fields.length === 1 && fields[0]?.type === "text"
+}
+
 /** The spec for one `InformationRequest`, from its own fields. */
 export function answerSpecOf(request: {
   field: string

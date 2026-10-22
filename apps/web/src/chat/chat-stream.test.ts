@@ -83,10 +83,10 @@ const FIXTURE = JSON.parse(
   list: unknown
   conversation: { id: string }
   histories: Record<
-    "start" | "typed" | "name" | "tagline" | "offered" | "denied" | "change",
+    "start" | "typed" | "phone" | "radius" | "offered" | "denied" | "change",
     unknown
   >
-  streams: Record<"typed" | "name" | "skip" | "deny" | "change", Stream>
+  streams: Record<"typed" | "phone" | "skip" | "deny" | "change", Stream>
 }
 const ID = FIXTURE.conversation.id
 
@@ -420,9 +420,9 @@ it("every message keeps the time it was sent, as a reload shows it", async () =>
     const before = times(chat).length
     turns.push(() =>
       sse({
-        ...FIXTURE.streams.name,
+        ...FIXTURE.streams.phone,
         response: stamped(
-          FIXTURE.streams.name.response,
+          FIXTURE.streams.phone.response,
           "2026-10-16T18:33:30.000Z"
         ),
       })()
@@ -430,7 +430,7 @@ it("every message keeps the time it was sent, as a reload shows it", async () =>
     await press(chat, "Submit")
     await vi.waitFor(() =>
       expect(transcript(chat).at(-1)).toContain(
-        "What number should customers ring?"
+        "Which email address should enquiries go to?"
       )
     )
     // Minutes later the owner writes again, and the thread converts every
@@ -493,7 +493,7 @@ it("a stored conversation loading shows a skeleton, never the welcome or a sugge
   await act(async () => release.open?.())
   await vi.waitFor(() =>
     expect(transcript(container)).toEqual([
-      "What is your business called?Business nameSubmit",
+      "What number should customers ring?Phone numberSubmit",
     ])
   )
 })
@@ -572,7 +572,7 @@ it("a stored conversation sends nothing until it is the thread on screen, then s
   await act(async () => release.open?.())
   await vi.waitFor(() =>
     expect(transcript(container)).toEqual([
-      "What is your business called?Business nameSubmit",
+      "What number should customers ring?Phone numberSubmit",
     ])
   )
   expect(input?.disabled).toBe(false)
@@ -590,24 +590,24 @@ it("a stored conversation sends nothing until it is the thread on screen, then s
 it("renders a recorded answer turn the way a reload of the stored row does", async () => {
   const chat = await open(FIXTURE.histories.typed)
   // A question overtaken by a typed message, the message, and the question
-  // asked again with the business name filled in.
+  // asked again with the phone number filled in.
   expect(transcript(chat)).toEqual([
     "You replied in the chat instead.",
     "Hello",
-    "What is your business called?Business nameSubmit",
+    "What number should customers ring?Phone numberSubmit",
   ])
-  expect(chat.querySelector("input")?.value).toBe("Fixture Cleaning Co")
+  expect(chat.querySelector("input")?.value).toBe("+447700900123")
 
-  turns.push(sse(FIXTURE.streams.name))
+  turns.push(sse(FIXTURE.streams.phone))
   await press(chat, "Submit")
   await vi.waitFor(() =>
     expect(transcript(chat).at(-1)).toContain(
-      "What number should customers ring?"
+      "Which email address should enquiries go to?"
     )
   )
   // Only the turn went out, and it is the one the api was sent, with the
   // owner's reply under the id the chat gave it.
-  const request = FIXTURE.streams.name.request as {
+  const request = FIXTURE.streams.phone.request as {
     turn: { reply: object }
   }
   expect(sent).toEqual([
@@ -623,29 +623,27 @@ it("renders a recorded answer turn the way a reload of the stored row does", asy
   // The answer reads as the owner's reply, and the next question as a
   // message of its own, with its own time.
   expect(transcript(chat).slice(-2)).toEqual([
-    "Fixture Cleaning Co",
-    "What number should customers ring?Phone numberSubmit",
+    "+447700900123",
+    "Which email address should enquiries go to?Email addressSubmit",
   ])
   expect(
     chat.querySelectorAll('[data-slot="aui_assistant-message-root"]')
   ).toHaveLength(3)
-  await matches(chat, FIXTURE.histories.name)
+  await matches(chat, FIXTURE.histories.phone)
 })
 
 it("offers the build, keeps a not now, and a typed change after it", async () => {
-  const chat = await open(FIXTURE.histories.tagline)
+  const chat = await open(FIXTURE.histories.radius)
   // Every answer stays on screen in its place, as the owner's reply: the
-  // overtaken question, the owner's message, five replies and the open
-  // tagline question.
+  // overtaken question, the owner's message, three replies and the open
+  // service area question.
   expect(transcript(chat)).toEqual([
     "You replied in the chat instead.",
     "Hello",
-    "Fixture Cleaning Co",
     "+447700900123",
     "hello@example.net",
     "08:00 to 18:00",
-    "Leeds, within 15 km",
-    "How would you sum up your business in one line?TaglineSkipSubmit",
+    "Where are you based, and how far do you travel?Town or postcode you work fromDistance you travel, in kmSkipSubmit",
   ])
   turns.push(sse(FIXTURE.streams.skip))
   await press(chat, "Skip")

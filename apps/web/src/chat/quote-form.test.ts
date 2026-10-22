@@ -273,7 +273,18 @@ describe("the review card's turn", () => {
 it("tells the composer a question waits in the tray, from the thread's own parts", () => {
   const call = { type: "tool-call", toolName: "review_quote_form" }
   expect(waitsOnTray([call])).toBe(true)
-  expect(waitsOnTray([{ ...call, toolName: "ask_open" }])).toBe(true)
+  // Answered in the composer, so nothing waits in the tray.
+  expect(waitsOnTray([{ ...call, toolName: "ask_open" }])).toBe(false)
+  expect(
+    waitsOnTray([
+      { ...call, toolName: "ask_fact", args: { key: "service_area.text" } },
+    ])
+  ).toBe(false)
+  expect(
+    waitsOnTray([
+      { ...call, toolName: "ask_fact", args: { key: "business.phone" } },
+    ])
+  ).toBe(true)
   expect(waitsOnTray([{ ...call, toolName: "connect_domain" }])).toBe(false)
   expect(waitsOnTray([{ ...call, result: { answer: "changes" } }])).toBe(false)
   expect(waitsOnTray([{ ...call, isError: true }])).toBe(false)

@@ -491,12 +491,16 @@ const ASK_FACT_STATES: ThreadMessageLike[] = [
 /** The questions still open, each docked in a thread of its own. */
 const ASK_FACT_OPEN: ThreadMessageLike[] = [
   {
-    content: [askFact("business.name", { prefill: { name: "Brightclean" } })],
+    content: [
+      askFact("business.email", {
+        prefill: { address: "hello@brightclean.test" },
+      }),
+    ],
     role: "assistant",
     status: WAITING,
   },
   {
-    content: [askFact("business.tagline", { skippable: true })],
+    content: [askFact("hours.weekday", { skippable: true })],
     role: "assistant",
     status: WAITING,
   },

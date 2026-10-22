@@ -9,18 +9,20 @@ import { open, WCAG } from "./helpers"
 
 const asks = (page: Page) => page.locator('[data-slot="ask-fact"]')
 
-test("a question shows its own inputs, the name filled in, Skip only where allowed", async ({
+test("a question shows its own inputs, the email filled in, Skip only where allowed", async ({
   page,
 }) => {
   await open(page, "AskFact")
   const forms = asks(page).locator("form")
   await expect(forms).toHaveCount(2)
-  await expect(page.getByLabel("Business name")).toHaveValue("Brightclean")
-  await expect(forms.nth(1).getByLabel("Tagline")).toHaveAttribute(
-    "maxlength",
-    "120"
+  await expect(page.getByLabel("Email address")).toHaveValue(
+    "hello@brightclean.test"
   )
-  // Only the tagline may be skipped; the button sits in the tray's footer.
+  await expect(forms.nth(1).getByLabel("Opening time")).toHaveAttribute(
+    "type",
+    "time"
+  )
+  // Only the hours may be skipped; the button sits in the tray's footer.
   await expect(
     page.getByRole("button", { name: "Skip", exact: true })
   ).toHaveCount(1)
@@ -40,10 +42,10 @@ test("a question refuses a wrong answer in place, before anything is sent", asyn
     .filter({ has: page.locator("form") })
     .first()
   const form = tray.locator("form")
-  await form.getByLabel("Business name").fill("")
+  await form.getByLabel("Email address").fill("")
   await tray.getByRole("button", { name: "Submit" }).click()
-  await expect(form.getByRole("alert")).toHaveText("Check the business name.")
-  await expect(form.getByLabel("Business name")).toHaveAttribute(
+  await expect(form.getByRole("alert")).toHaveText("Check the email address.")
+  await expect(form.getByLabel("Email address")).toHaveAttribute(
     "aria-invalid",
     "true"
   )
