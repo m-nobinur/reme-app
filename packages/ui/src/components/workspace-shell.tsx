@@ -1,22 +1,17 @@
 import {
-  ArchiveIcon,
   CaretDownIcon,
   DotsThreeIcon,
   ListIcon,
   NotePencilIcon,
-  PencilSimpleIcon,
   SidebarSimpleIcon,
 } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuLinkItem,
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu"
-import { Input } from "@workspace/ui/components/input"
-import { PersonaAvatar } from "@workspace/ui/components/persona"
 import {
   Sheet,
   SheetContent,
@@ -29,11 +24,9 @@ import {
   type PanelPress,
   RAIL_COOKIE,
 } from "@workspace/ui/lib/panel"
-import { titleText } from "@workspace/ui/lib/title"
 import { cn } from "@workspace/ui/lib/utils"
 import {
   type ComponentProps,
-  type FormEvent,
   type MouseEvent,
   type ReactElement,
   type ReactNode,
@@ -109,9 +102,9 @@ const useWide = () =>
 
 /**
  * The owner workspace: a compact rail of icons, the conversation, and the
- * live panel floating at the top right, under the notifications bell.
+ * live panel floating at the top right.
  *
- * From `md` the rail is a 72px column of icons, each named on hover, that hides
+ * From `md` the rail is a 56px column of icons, each named on hover, that hides
  * with the toggle at the top left, remembered in a cookie; below `md` it is a
  * sheet from the left, where the names show beside the icons. A rail label
  * is a `data-slot="rail-label"` span. The panel is a rounded
@@ -120,24 +113,20 @@ const useWide = () =>
  * that. It floats over the page rather than taking a column, so the
  * conversation stays centred. From `lg` whether it is open is remembered;
  * below `lg` it starts minimised, since there it covers the conversation.
- * With no `panel` there is no card and no space kept for it. The rail, the panel and
- * the bell are slots, so this package still imports no router. `title` and
- * `menu` name the page in the top bar; `actions` and `notifications` sit at
- * its right.
+ * With no `panel` there is no card and no space kept for it. The rail and the
+ * panel are slots, so this package still imports no router. `title` and `menu` name
+ * the page in the top bar; `actions` sit at its right.
  */
 function WorkspaceShell({
   rail,
   panel,
   panelLine,
   actions,
-  notifications,
   defaultRailOpen = true,
   defaultPanelOpen = true,
   openPanel,
   title,
   menu,
-  renaming,
-  titleError,
   children,
   className,
 }: {
@@ -153,18 +142,12 @@ function WorkspaceShell({
   title?: string | undefined
   /** The page's ··· menu, drawn beside the title. */
   menu?: ReactNode
-  /** While set, the title is a form that renames it, in place of the title and menu. */
-  renaming?: Renaming | undefined
-  /** Why the last action on the title failed, such as an archive. */
-  titleError?: string | undefined
-  /** Icon buttons at the top right, before the bell. */
+  /** Icon buttons at the top right. */
   actions?: ReactNode
-  /** The bell and its menu, at the top right. */
-  notifications?: ReactNode
   defaultRailOpen?: boolean
   defaultPanelOpen?: boolean
   /**
-   * The owner asked for the panel, by a link or from the bell: it opens when
+   * The owner asked for the panel, by a link or from the notifications: it opens when
    * the key changes, even if they had minimised it.
    */
   openPanel?: PanelPress | undefined
@@ -243,14 +226,14 @@ function WorkspaceShell({
           aria-label="Workspace"
           className={cn(
             "hidden shrink-0 flex-col overflow-hidden border-border bg-rail text-rail-foreground transition-[width] duration-200 ease-out motion-reduce:transition-none md:flex",
-            railOpen ? "w-18 border-r" : "w-0",
+            railOpen ? "w-14 border-r" : "w-0",
             "[&_[data-slot=rail-label]]:sr-only"
           )}
           data-state={railOpen ? "open" : "closed"}
           id="workspace-rail"
           inert={!railOpen}
         >
-          <div className="flex min-h-0 w-18 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden px-3.5 py-3">
+          <div className="flex min-h-0 w-14 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden px-2 py-3">
             {rail}
           </div>
         </aside>
@@ -294,36 +277,19 @@ function WorkspaceShell({
             <SidebarSimpleIcon aria-hidden />
           </Button>
 
-          <PersonaAvatar className="ms-1 size-7" />
-
           <div className="flex min-w-0 flex-1 items-center gap-0.5 ps-1">
-            {renaming ? (
-              <TitleEditor {...renaming} />
-            ) : (
-              <>
-                {title ? (
-                  <p
-                    className="truncate font-medium text-sm"
-                    data-slot="workspace-title"
-                  >
-                    {title}
-                  </p>
-                ) : null}
-                {menu}
-                {titleError ? (
-                  <p
-                    className="ms-2 truncate text-destructive text-xs"
-                    role="alert"
-                  >
-                    {titleError}
-                  </p>
-                ) : null}
-              </>
-            )}
+            {title ? (
+              <p
+                className="truncate font-medium text-sm"
+                data-slot="workspace-title"
+              >
+                {title}
+              </p>
+            ) : null}
+            {menu}
           </div>
 
           {actions}
-          {notifications}
         </header>
 
         <main
@@ -416,134 +382,12 @@ function WorkspacePage({ className, ...props }: ComponentProps<"div">) {
   )
 }
 
-type Renaming = {
-  /** The title as it stands, to edit from. */
-  value: string
-  /** Saves the new title; a throw keeps the form open with its error. */
-  onSave: (title: string) => Promise<void>
-  onCancel: () => void
-}
-
-/**
- * The title as a one-field form: Enter or Save keeps it, Escape or Cancel
- * leaves it as it was. The words are checked here the way the api keeps
- * them, so a title of only spaces never leaves the browser.
- */
-function TitleEditor({ value, onSave, onCancel }: Renaming) {
-  const [text, setText] = useState(value)
-  const [pending, setPending] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const errorId = useId()
-  // A rename the owner saves or cancels hands focus back to the ··· button
-  // that started it, which is back in the title bar a frame after this form
-  // is gone. One that ends because they went elsewhere leaves focus alone.
-  const form = useRef<HTMLFormElement>(null)
-  const refocus = () => {
-    const bar = form.current?.parentElement
-    requestAnimationFrame(() =>
-      bar
-        ?.querySelector<HTMLElement>('[data-slot="conversation-actions"]')
-        ?.focus()
-    )
-  }
-  const cancel = () => {
-    refocus()
-    onCancel()
-  }
-  // The field takes any length; the title keeps what `titleText` keeps, and
-  // says so before the owner saves, rather than cutting what they paste.
-  const cut =
-    text.replace(/\s+/g, " ").trim().length > (titleText(text) ?? "").length
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault()
-    const title = titleText(text)
-    if (!title) {
-      setError("A title needs words.")
-      return
-    }
-    setPending(true)
-    setError(null)
-    try {
-      await onSave(title)
-      refocus()
-    } catch {
-      setError("That did not save. Try again.")
-      setPending(false)
-    }
-  }
-
-  return (
-    <form
-      aria-label="Rename conversation"
-      className="relative flex min-w-0 flex-1 items-center gap-1.5"
-      data-slot="title-editor"
-      onSubmit={submit}
-      ref={form}
-    >
-      <Input
-        aria-describedby={error ? errorId : undefined}
-        aria-invalid={error ? true : undefined}
-        aria-label="Conversation title"
-        autoFocus
-        className="h-8 min-w-0 flex-1"
-        disabled={pending}
-        onChange={(event) => setText(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") cancel()
-        }}
-        value={text}
-      />
-      <Button disabled={pending} size="sm" type="submit">
-        {pending ? "Saving" : "Save"}
-      </Button>
-      <Button
-        disabled={pending}
-        onClick={cancel}
-        size="sm"
-        type="button"
-        variant="ghost"
-      >
-        Cancel
-      </Button>
-      {cut && !error ? (
-        <p
-          className="absolute start-0 top-full z-10 mt-1 max-w-full rounded-md border border-border bg-popover px-2 py-1 text-muted-foreground text-xs shadow-sm"
-          role="status"
-        >
-          Titles keep their first 120 characters.
-        </p>
-      ) : null}
-      {error ? (
-        // Below the bar, over the page: the bar has one row, and a phone has
-        // no room in it for a second.
-        <p
-          className="absolute start-0 top-full z-10 mt-1 max-w-full rounded-md border border-border bg-popover px-2 py-1 text-destructive text-xs shadow-sm"
-          id={errorId}
-          role="alert"
-        >
-          {error}
-        </p>
-      ) : null}
-    </form>
-  )
-}
-
 /**
  * The conversation's ··· menu, for the shell's `menu` slot. `newChat` is the
  * link element to render the entry as, so the app passes its router's link
- * and this package still imports no router. Rename and archive show for a
- * stored conversation, the only kind the api can change.
+ * and this package still imports no router.
  */
-function ConversationMenu({
-  newChat,
-  onRename,
-  onArchive,
-}: {
-  newChat: ReactElement
-  onRename?: (() => void) | undefined
-  onArchive?: (() => void) | undefined
-}) {
+function ConversationMenu({ newChat }: { newChat: ReactElement }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -561,20 +405,8 @@ function ConversationMenu({
       <DropdownMenuContent>
         <DropdownMenuLinkItem render={newChat}>
           <NotePencilIcon aria-hidden />
-          New chat
+          New conversation
         </DropdownMenuLinkItem>
-        {onRename ? (
-          <DropdownMenuItem onClick={onRename}>
-            <PencilSimpleIcon aria-hidden />
-            Rename
-          </DropdownMenuItem>
-        ) : null}
-        {onArchive ? (
-          <DropdownMenuItem onClick={onArchive}>
-            <ArchiveIcon aria-hidden />
-            Archive
-          </DropdownMenuItem>
-        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   )

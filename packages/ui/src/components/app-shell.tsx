@@ -2,13 +2,13 @@ import { cn } from "@workspace/ui/lib/utils"
 import type { ComponentProps, ReactNode } from "react"
 
 /**
- * Class for a control in the compact rail: a 24px muted icon in a 44px
+ * Class for a control in the compact rail: a 22px muted icon in a 40px
  * square, with its `data-slot="rail-label"` name beside it where the rail is
- * wide enough to show it. The current page takes the accent. A 36px mark (an
+ * wide enough to show it. The current page takes the accent. A 32px mark (an
  * avatar) takes less padding.
  */
 const railItemClass = cn(
-  "relative flex h-11 w-full min-w-0 shrink-0 items-center gap-3 rounded-xl px-2.5 text-rail-foreground text-sm outline-none transition-colors duration-150 hover:bg-foreground/5 focus-visible:ring-3 focus-visible:ring-ring has-data-[slot=mark]:px-1 aria-[current=page]:bg-primary/10 aria-[current=page]:text-primary motion-reduce:transition-none [&_svg]:size-6 [&_svg]:shrink-0 [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground aria-[current=page]:[&_svg]:text-primary"
+  "relative flex h-10 w-full min-w-0 shrink-0 items-center gap-3 rounded-xl px-[9px] text-rail-foreground text-sm outline-none transition-colors duration-150 hover:bg-foreground/5 focus-visible:ring-3 focus-visible:ring-ring has-data-[slot=mark]:px-1 aria-[current=page]:bg-primary/10 aria-[current=page]:text-primary motion-reduce:transition-none [&_svg]:size-5.5 [&_svg]:shrink-0 [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground aria-[current=page]:[&_svg]:text-primary"
 )
 
 /** A count as it is drawn: past 99, "99+". */

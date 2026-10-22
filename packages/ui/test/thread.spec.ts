@@ -293,7 +293,7 @@ test("a running reply offers Stop, and a failed one says why", async ({
 test("the top bar names the conversation on a phone", async ({ page }) => {
   await open(page, "Conversation", WIDTHS.phone)
   await expect(page.locator('[data-slot="workspace-title"]')).toHaveText(
-    "New chat"
+    "New conversation"
   )
   await expect(
     page.getByRole("button", { name: "Conversation actions" })

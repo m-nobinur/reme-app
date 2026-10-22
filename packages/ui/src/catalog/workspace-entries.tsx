@@ -1,6 +1,5 @@
 import {
   AlarmIcon,
-  BellIcon,
   BuildingsIcon,
   ChatCircleTextIcon,
   CheckCircleIcon,
@@ -50,7 +49,7 @@ import {
   WorkspacePage,
   WorkspaceShell,
 } from "@workspace/ui/components/workspace-shell"
-import { type ReactNode, useState } from "react"
+import type { ReactNode } from "react"
 import { BellSample } from "./notification-entries"
 import { SamplePanel, SamplePanelLine } from "./panel-entries"
 
@@ -174,7 +173,7 @@ function SettingsSample() {
         >
           <span
             aria-hidden
-            className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary font-semibold text-primary-foreground text-xs"
+            className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary font-semibold text-primary-foreground text-xs"
             data-slot="mark"
           >
             SF
@@ -191,22 +190,20 @@ function SettingsSample() {
 }
 
 const RAIL_NAV = [
-  { href: "#new", label: "New chat", icon: NotePencilIcon },
+  { href: "#new", label: "New conversation", icon: NotePencilIcon },
   { href: "#chat", label: "Chat", icon: ChatCircleTextIcon, current: true },
   { href: "#website", label: "Website", icon: GlobeIcon },
-  { href: "#business", label: "Brightclean", icon: BuildingsIcon },
-  { href: "#staff", label: "Staff", icon: UsersThreeIcon },
   { href: "#pipeline", label: "Pipeline", icon: FlowArrowIcon },
 ]
 
 /**
- * The rail: the mark, a new chat and the app's sections, reminders under a
- * hairline, and the notifications and the owner's avatar at the foot.
+ * The rail: the mark, a new conversation and the app's sections, and the
+ * notifications and the owner's avatar at the foot.
  */
 function Rail() {
   return (
     <>
-      <span className="flex h-11 shrink-0 items-center px-2.5 text-foreground">
+      <span className="flex h-10 shrink-0 items-center px-[9px] text-foreground">
         <LogoMark />
       </span>
       <nav aria-label="Main" className="flex flex-col gap-1">
@@ -224,7 +221,6 @@ function Rail() {
             </a>
           </Hint>
         ))}
-        <hr className="mx-2 my-2 border-border" />
         <Hint label="Reminders" side="right">
           <a className={railItemClass} href="#reminders">
             <AlarmIcon aria-hidden />
@@ -233,21 +229,7 @@ function Rail() {
         </Hint>
       </nav>
       <div className="mt-auto flex flex-col gap-1">
-        <Hint label="Notifications" side="right">
-          <a
-            aria-label="Notifications, 3 unread"
-            className={railItemClass}
-            href="#notifications"
-          >
-            <BellIcon aria-hidden />
-            <span
-              aria-hidden
-              className="absolute start-7 top-2 size-2 rounded-full bg-destructive ring-2 ring-rail"
-              data-slot="unread-dot"
-            />
-            <span data-slot="rail-label">Notifications</span>
-          </a>
-        </Hint>
+        <BellSample unread={3} />
         <SettingsSample />
       </div>
     </>
@@ -266,21 +248,23 @@ const HISTORY: HistoryEntry[] = Array.from({ length: 30 }, (_, index) => ({
   link: <a href={`#chat-${index}`} />,
 }))
 
-/** The top bar's icons before the bell: a new chat and the history. */
+/** The top bar's icons: the history. */
 function TopActions() {
+  return <HistoryMenu current="chat-0" items={HISTORY} />
+}
+
+/** A named icon, as the rail and the top bar draw them. */
+function HintSample() {
   return (
-    <>
-      <Hint label="New chat">
-        <a
-          aria-label="New chat"
-          className={buttonVariants({ variant: "ghost", size: "icon" })}
-          href="#new"
-        >
-          <NotePencilIcon aria-hidden />
-        </a>
-      </Hint>
-      <HistoryMenu current="chat-0" items={HISTORY} />
-    </>
+    <Hint label="New conversation">
+      <a
+        aria-label="New conversation"
+        className={buttonVariants({ variant: "ghost", size: "icon" })}
+        href="#new"
+      >
+        <NotePencilIcon aria-hidden />
+      </a>
+    </Hint>
   )
 }
 
@@ -289,7 +273,6 @@ function ShellSample() {
     <WorkspaceShell
       actions={<TopActions />}
       className="h-[40rem] border border-border"
-      notifications={<BellSample unread={3} />}
       panel={<SamplePanel />}
       panelLine={<SamplePanelLine />}
       rail={<Rail />}
@@ -306,47 +289,16 @@ function ShellSample() {
   )
 }
 
-/**
- * A stored conversation's top bar: the ··· menu renames it in place and
- * archives it. Saving "Will not save" fails, to show the form's error, and
- * the archive always fails here, to show the title bar's.
- */
+/** A conversation's top bar: the ··· menu starts a new conversation. */
 function ConversationSample() {
-  const [title, setTitle] = useState("Weekend prices")
-  const [renaming, setRenaming] = useState(false)
-  const [error, setError] = useState<string | undefined>(undefined)
   return (
     <WorkspaceShell
       className="h-[24rem] border border-border"
-      menu={
-        <ConversationMenu
-          newChat={<a href="#new" />}
-          onArchive={() => setError("That did not archive. Try again.")}
-          onRename={() => {
-            setError(undefined)
-            setRenaming(true)
-          }}
-        />
-      }
+      menu={<ConversationMenu newChat={<a href="#new" />} />}
       panel={<SamplePanel />}
       panelLine={<SamplePanelLine />}
       rail={<Rail />}
-      renaming={
-        renaming
-          ? {
-              value: title,
-              onSave: async (next) => {
-                await new Promise((resolve) => setTimeout(resolve, 150))
-                if (next === "Will not save") throw new Error("refused")
-                setTitle(next)
-                setRenaming(false)
-              },
-              onCancel: () => setRenaming(false),
-            }
-          : undefined
-      }
-      title={title}
-      titleError={error}
+      title="Weekend prices"
     >
       <WorkspacePage>
         <p className="text-muted-foreground text-sm">The conversation.</p>
@@ -404,7 +356,6 @@ const workspaceCatalog: Entry[] = [
       <WorkspaceShell
         actions={<TopActions />}
         className="h-[24rem] border border-border"
-        notifications={<BellSample unread={0} />}
         panel={null}
         panelLine={null}
         rail={<Rail />}
@@ -434,8 +385,8 @@ const workspaceCatalog: Entry[] = [
       </div>
     ),
   },
-  { name: "Hint", render: () => <TopActions /> },
-  { name: "ConversationRename", render: () => <ConversationSample /> },
+  { name: "Hint", render: () => <HintSample /> },
+  { name: "ConversationActions", render: () => <ConversationSample /> },
   {
     name: "WorkspacePage",
     render: () => (

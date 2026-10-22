@@ -1,6 +1,8 @@
 import {
   ArrowUpRightIcon,
   BellIcon,
+  BrainIcon,
+  BuildingsIcon,
   GearSixIcon,
   GlobeIcon,
   GoogleLogoIcon,
@@ -8,6 +10,7 @@ import {
   QuestionIcon,
   ShieldCheckIcon,
   SunIcon,
+  UsersThreeIcon,
 } from "@phosphor-icons/react"
 import { Link } from "@tanstack/react-router"
 import { railItemClass } from "@workspace/ui/components/app-shell"
@@ -122,6 +125,52 @@ export function OwnerSettings({
       ),
     },
     {
+      id: "business",
+      label: "Business",
+      icon: <BuildingsIcon aria-hidden />,
+      content: (
+        <>
+          <Lead>
+            What Reme knows about {orgName}, and where each fact came from.
+          </Lead>
+          <Link className={LINK} to="/app/profile">
+            Open the business page
+          </Link>
+        </>
+      ),
+    },
+    {
+      id: "staff",
+      label: "Staff",
+      icon: <UsersThreeIcon aria-hidden />,
+      content: (
+        <>
+          <Lead>
+            The people and the AI roles that make up your organisation.
+          </Lead>
+          <Link className={LINK} to="/app/staff">
+            Open the staff page
+          </Link>
+        </>
+      ),
+    },
+    {
+      id: "memory",
+      label: "Memory",
+      icon: <BrainIcon aria-hidden />,
+      content: (
+        <>
+          <Lead>
+            What Reme remembers about you and how you like to work. It reads
+            these lines at the start of every conversation.
+          </Lead>
+          <Link className={LINK} to="/app/memory">
+            Open memory
+          </Link>
+        </>
+      ),
+    },
+    {
       id: "website",
       label: "Website and domain",
       icon: <GlobeIcon aria-hidden />,
@@ -225,7 +274,7 @@ export function OwnerSettings({
         >
           <span
             aria-hidden
-            className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary font-semibold text-primary-foreground text-xs"
+            className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary font-semibold text-primary-foreground text-xs"
             data-slot="mark"
           >
             {initialsOf(ownerName)}

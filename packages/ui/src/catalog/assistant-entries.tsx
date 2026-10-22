@@ -2028,7 +2028,7 @@ function ConversationSample({ stored }: { stored?: string }) {
         <span className="text-muted-foreground text-sm">Nothing right now</span>
       }
       rail={<p className="text-sm">Brightclean</p>}
-      title={stored ? "Getting started" : "New chat"}
+      title={stored ? "Getting started" : "New conversation"}
     >
       <OwnerThread
         bare
