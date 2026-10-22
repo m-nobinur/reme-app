@@ -1,4 +1,5 @@
 import {
+  AskOpenInput,
   CHOICE_FACT_KEYS,
   type ChoiceStep,
   type CosPrefix,
@@ -378,7 +379,12 @@ const STEP_FACT: Record<ChoiceStep, FactValueKey | null> = {
 
 /** The facts a card asks for. */
 function cardFacts(part: ToolPart): readonly string[] {
-  const input = part.input as { key?: FactValueKey; step?: string }
+  const input = part.input as {
+    key?: FactValueKey
+    step?: string
+    about?: string
+  }
+  if (part.type === "tool-ask_open") return input.about ? [input.about] : []
   if (part.type === "tool-ask_fact") return input.key ? [input.key] : []
   if (part.type === "tool-ask_details") {
     return DETAILS_KEYS[input.step as DetailsStep] ?? []
@@ -462,7 +468,9 @@ function cardLine(part: ToolPart): string {
             ? "the photo upload"
             : part.type === "tool-review_quote_form"
               ? `a quote form proposal: ${(input.fields as { label: string }[]).map((f) => f.label).join(", ")}`
-              : "the first build"
+              : part.type === "tool-ask_open"
+                ? `a question in words about ${input.about}`
+                : "the first build"
   if (part.state === "input-available") return `[${asked}, waiting]`
   if (part.state === "output-error") {
     return `[${asked}, left unanswered: the owner typed a message instead]`
@@ -472,22 +480,24 @@ function cardLine(part: ToolPart): string {
   const answer =
     output.answer === "skipped"
       ? "skipped"
-      : output.answer === "uploaded"
-        ? `${(output.assets as unknown[]).length} photos uploaded`
-        : output.answer === "stated"
-          ? `answered ${JSON.stringify(output.facts ?? (output.fact as { value: unknown }).value)}`
-          : output.answer === "chosen"
-            ? `picked ${[
-                ...(output.ids as string[]).map((id) =>
-                  labelOf(OPTIONS[step] ?? [], id)
-                ),
-                ...(output.other ? [`in their words: ${output.other}`] : []),
-              ].join(", ")}`
-            : output.answer === "confirmed"
-              ? "confirmed"
-              : output.answer === "changes"
-                ? `asked for changes: ${output.text}`
-                : "answered"
+      : part.type === "tool-ask_open" && typeof output.text === "string"
+        ? `answered in their words: ${clip(output.text)}`
+        : output.answer === "uploaded"
+          ? `${(output.assets as unknown[]).length} photos uploaded`
+          : output.answer === "stated"
+            ? `answered ${JSON.stringify(output.facts ?? (output.fact as { value: unknown }).value)}`
+            : output.answer === "chosen"
+              ? `picked ${[
+                  ...(output.ids as string[]).map((id) =>
+                    labelOf(OPTIONS[step] ?? [], id)
+                  ),
+                  ...(output.other ? [`in their words: ${output.other}`] : []),
+                ].join(", ")}`
+              : output.answer === "confirmed"
+                ? "confirmed"
+                : output.answer === "changes"
+                  ? `asked for changes: ${output.text}`
+                  : "answered"
   return `[${asked}, ${answer}]`
 }
 
@@ -623,6 +633,9 @@ function waiting(part: ToolPart | null) {
     }
   }
   if (part.type === "tool-ask_fact") return { card: "ask_fact", key: input.key }
+  if (part.type === "tool-ask_open") {
+    return { card: "ask_open", about: input.about }
+  }
   if (part.type === "tool-ask_details") {
     return { card: "ask_details", step: input.step, prefill: input.prefill }
   }
@@ -809,10 +822,12 @@ function ownerWords(s: PlanState): string {
     .filter((r) => r.role === "user")
     .flatMap((r) => r.parts.flatMap((p) => (p.type === "text" ? [p.text] : [])))
   const now = s.input.kind === "message" ? [s.input.text] : []
-  const other =
+  // A card's words: an Other, a quote form's changes, an ask_open answer.
+  const card =
     s.input.kind === "card"
-      ? [String((s.input.output as { other?: unknown }).other ?? "")]
-      : []
+      ? (s.input.output as { other?: unknown; text?: unknown })
+      : null
+  const other = card ? [String(card.other ?? card.text ?? "")] : []
   return [...typed, ...now, ...other].join("\n")
 }
 
@@ -1648,7 +1663,10 @@ export function planParts(
   const next = plan.next
   switch (next.kind) {
     case "ask_open":
-      return [said]
+      return [
+        said,
+        call("tool-ask_open", AskOpenInput.parse({ about: next.about }), newId),
+      ]
     case "answer_only":
       return s.input.kind === "message" &&
         s.pending &&
