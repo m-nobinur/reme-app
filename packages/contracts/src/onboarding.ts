@@ -260,18 +260,30 @@ export const UploadedAssets = z.strictObject({
  * assistant decide these in onboarding from what the business needs to know
  * before it can quote; the starter renders exactly this list, so a limousine
  * firm can ask for a pick-up, a drop-off and passengers while a cleaner asks
- * for rooms and access. `key` names the input; `options` belong to `select`.
+ * for rooms and access. `key` names the input; `options` belong to the
+ * choices: `select` a dropdown, `radio` one of a few shown at once,
+ * `checkbox` any of them. `photos` takes links to pictures, and files too
+ * once the site has somewhere to send them.
  */
 export const QUOTE_FIELD_TYPES = [
   "text",
   "textarea",
   "number",
   "date",
+  "datetime",
   "select",
+  "radio",
+  "checkbox",
+  "photos",
   "tel",
   "email",
 ] as const
 export const QuoteFieldType = z.enum(QUOTE_FIELD_TYPES)
+
+/** The types a question offers options for. */
+export const QUOTE_CHOICE_TYPES = ["select", "radio", "checkbox"] as const
+const isChoice = (type: QuoteFieldType) =>
+  (QUOTE_CHOICE_TYPES as readonly string[]).includes(type)
 
 export const QuoteField = z
   .strictObject({
@@ -282,9 +294,10 @@ export const QuoteField = z
     hint: Text(120).nullable(),
     options: z.array(Text(60)).min(2).max(12).nullable(),
   })
-  .refine((field) => (field.type === "select") === (field.options !== null), {
+  .refine((field) => isChoice(field.type) === (field.options !== null), {
     path: ["options"],
-    message: "options belong to a select, and a select needs them",
+    message:
+      "options belong to a select, radio or checkbox, and each of those needs them",
   })
 
 /** The most and fewest questions a request form may add. */
@@ -337,6 +350,7 @@ export const choiceFacts = {
 
 export type IndustryId = z.infer<typeof IndustryId>
 export type PronounId = z.infer<typeof PronounId>
+export type QuoteFieldType = z.infer<typeof QuoteFieldType>
 export type AvatarId = z.infer<typeof AvatarId>
 export type ToneId = z.infer<typeof ToneId>
 export type TemplateId = z.infer<typeof TemplateId>

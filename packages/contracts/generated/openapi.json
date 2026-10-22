@@ -2023,7 +2023,11 @@
                                     "textarea",
                                     "number",
                                     "date",
+                                    "datetime",
                                     "select",
+                                    "radio",
+                                    "checkbox",
+                                    "photos",
                                     "tel",
                                     "email"
                                   ]
@@ -4366,7 +4370,11 @@
                                   "textarea",
                                   "number",
                                   "date",
+                                  "datetime",
                                   "select",
+                                  "radio",
+                                  "checkbox",
+                                  "photos",
                                   "tel",
                                   "email"
                                 ]
@@ -5505,7 +5513,11 @@
                                       "textarea",
                                       "number",
                                       "date",
+                                      "datetime",
                                       "select",
+                                      "radio",
+                                      "checkbox",
+                                      "photos",
                                       "tel",
                                       "email"
                                     ]
@@ -6913,7 +6925,11 @@
                                 "textarea",
                                 "number",
                                 "date",
+                                "datetime",
                                 "select",
+                                "radio",
+                                "checkbox",
+                                "photos",
                                 "tel",
                                 "email"
                               ]
@@ -8055,7 +8071,11 @@
                                     "textarea",
                                     "number",
                                     "date",
+                                    "datetime",
                                     "select",
+                                    "radio",
+                                    "checkbox",
+                                    "photos",
                                     "tel",
                                     "email"
                                   ]
@@ -13494,7 +13514,11 @@
                                                               "textarea",
                                                               "number",
                                                               "date",
+                                                              "datetime",
                                                               "select",
+                                                              "radio",
+                                                              "checkbox",
+                                                              "photos",
                                                               "tel",
                                                               "email"
                                                             ]
@@ -14633,7 +14657,11 @@
                                                                 "textarea",
                                                                 "number",
                                                                 "date",
+                                                                "datetime",
                                                                 "select",
+                                                                "radio",
+                                                                "checkbox",
+                                                                "photos",
                                                                 "tel",
                                                                 "email"
                                                               ]
@@ -15057,7 +15085,11 @@
                                                   "textarea",
                                                   "number",
                                                   "date",
+                                                  "datetime",
                                                   "select",
+                                                  "radio",
+                                                  "checkbox",
+                                                  "photos",
                                                   "tel",
                                                   "email"
                                                 ]
@@ -17459,7 +17491,11 @@
                                   "textarea",
                                   "number",
                                   "date",
+                                  "datetime",
                                   "select",
+                                  "radio",
+                                  "checkbox",
+                                  "photos",
                                   "tel",
                                   "email"
                                 ]
@@ -19286,7 +19322,11 @@
                                           "textarea",
                                           "number",
                                           "date",
+                                          "datetime",
                                           "select",
+                                          "radio",
+                                          "checkbox",
+                                          "photos",
                                           "tel",
                                           "email"
                                         ]
@@ -27412,7 +27452,11 @@
                             "textarea",
                             "number",
                             "date",
+                            "datetime",
                             "select",
+                            "radio",
+                            "checkbox",
+                            "photos",
                             "tel",
                             "email"
                           ]
@@ -30020,7 +30064,11 @@
               "textarea",
               "number",
               "date",
+              "datetime",
               "select",
+              "radio",
+              "checkbox",
+              "photos",
               "tel",
               "email"
             ]
@@ -32753,7 +32801,11 @@
                     "textarea",
                     "number",
                     "date",
+                    "datetime",
                     "select",
+                    "radio",
+                    "checkbox",
+                    "photos",
                     "tel",
                     "email"
                   ]
@@ -32858,7 +32910,11 @@
                         "textarea",
                         "number",
                         "date",
+                        "datetime",
                         "select",
+                        "radio",
+                        "checkbox",
+                        "photos",
                         "tel",
                         "email"
                       ]
@@ -34610,7 +34666,11 @@
                                   "textarea",
                                   "number",
                                   "date",
+                                  "datetime",
                                   "select",
+                                  "radio",
+                                  "checkbox",
+                                  "photos",
                                   "tel",
                                   "email"
                                 ]
