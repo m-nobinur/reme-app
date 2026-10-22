@@ -47,6 +47,15 @@ type PickKey = keyof typeof PICKS
 
 const isPick = (key: string): key is PickKey => key in PICKS
 
+/**
+ * A line under a field that says where the answer ends up. The sign-in email
+ * is prefilled here, so the owner needs to know it is public.
+ */
+const HINT: Partial<Record<string, string>> = {
+  "business.email":
+    "Shown on your website. Use a business address if you have one.",
+}
+
 /** The value `prefill` gives a key, if any. */
 const prefilled = (input: AskDetailsInput, key: string) =>
   input.prefill.find((fact) => fact.key === key)?.value ?? null
@@ -192,6 +201,9 @@ function DetailsForm({
                 spec={{ kind: "fact", key }}
                 title={factLabel(key)}
               />
+              {HINT[key] ? (
+                <p className="text-muted-foreground text-xs">{HINT[key]}</p>
+              ) : null}
               {problems[key] ? (
                 <p className={FIELD_ERROR} role="alert">
                   {problems[key]}

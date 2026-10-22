@@ -6,14 +6,11 @@ import {
 
 /**
  * The owner's edits to a proposed quote form, as plain data: each question
- * the assistant proposed, in its order, renamed, made optional or dropped.
- * A dropped question keeps its place so it can come back. Keys never change,
+ * the assistant proposed, in its order, made optional or dropped. A dropped
+ * question keeps its place so it can come back. Labels and keys never change,
  * so every question the owner keeps still has its own.
  */
 export type QuoteDraft = { field: QuoteField; dropped: boolean }[]
-
-/** The longest label the contract takes. */
-export const QUOTE_LABEL_MAX = 80
 
 export const draftOf = (fields: readonly QuoteField[]): QuoteDraft =>
   fields.map((field) => ({ field, dropped: false }))
@@ -41,16 +38,6 @@ export const dropField = (draft: QuoteDraft, key: string): QuoteDraft =>
 
 export const restoreField = (draft: QuoteDraft, key: string): QuoteDraft =>
   change(draft, key, (row) => ({ ...row, dropped: false }))
-
-export const renameField = (
-  draft: QuoteDraft,
-  key: string,
-  label: string
-): QuoteDraft =>
-  change(draft, key, (row) => ({
-    ...row,
-    field: { ...row.field, label: label.slice(0, QUOTE_LABEL_MAX) },
-  }))
 
 export const setRequired = (
   draft: QuoteDraft,

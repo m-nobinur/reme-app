@@ -12,9 +12,7 @@ import {
   dropField,
   keptFields,
   labelProblem,
-  QUOTE_LABEL_MAX,
   quoteSummary,
-  renameField,
   restoreField,
   setRequired,
   waitsOnQuoteForm,
@@ -47,6 +45,10 @@ const LIMOUSINE = [
   }),
 ]
 
+/** The proposal with one question's label changed, as a model could write it. */
+const relabel = (fields: QuoteField[], key: string, label: string) =>
+  fields.map((each) => (each.key === key ? { ...each, label } : each))
+
 describe("editing a proposed quote form", () => {
   it("drops and restores a question in its place", () => {
     const dropped = dropField(draftOf(LIMOUSINE), "dropoff")
@@ -72,22 +74,12 @@ describe("editing a proposed quote form", () => {
     expect(canDrop(restoreField(draft, "pickup"))).toBe(true)
   })
 
-  it("renames a label, keeps its key and caps its length", () => {
-    const draft = renameField(draftOf(LIMOUSINE), "pickup", "Collection point")
-    expect(keptFields(draft)[0]).toEqual({
-      ...LIMOUSINE[0],
-      label: "Collection point",
-    })
-    const long = renameField(draft, "pickup", "x".repeat(200))
-    expect(keptFields(long)[0]?.label).toHaveLength(QUOTE_LABEL_MAX)
-  })
-
   it("refuses a blank or a repeated label, and lets a dropped one repeat", () => {
-    const blank = renameField(draftOf(LIMOUSINE), "pickup", "   ")
+    const blank = draftOf(relabel(LIMOUSINE, "pickup", "   "))
     expect(labelProblem(blank, "pickup")).toBe("Give this question a label.")
     expect(confirmedFields(blank)).toHaveProperty("problem")
 
-    const twice = renameField(draftOf(LIMOUSINE), "dropoff", "pick-up ADDRESS")
+    const twice = draftOf(relabel(LIMOUSINE, "dropoff", "pick-up ADDRESS"))
     expect(labelProblem(twice, "dropoff")).toBe(
       "Two questions have this label."
     )
@@ -97,10 +89,9 @@ describe("editing a proposed quote form", () => {
 
   it("confirms the kept list, trimmed, with unique keys the contract takes", () => {
     const draft = setRequired(
-      renameField(
-        dropField(draftOf(LIMOUSINE), "occasion"),
-        "passengers",
-        "  How many travelling  "
+      dropField(
+        draftOf(relabel(LIMOUSINE, "passengers", "  How many travelling  ")),
+        "occasion"
       ),
       "dropoff",
       false
