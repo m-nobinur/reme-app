@@ -38,8 +38,9 @@ import { type FormEvent, useId, useRef, useState } from "react"
  * show what they are, drawn from the option's own data. A long list shows
  * the call's `initial` few and brings in others on Show others; a colour
  * card's Other is a colour picker. Nothing is sent until the owner presses
- * Continue. Once answered or skipped it shows nothing: the owner's reply
- * after it says what they picked.
+ * Continue, except on a list of exactly two with no Other, where tapping an
+ * option is the answer. Once answered or skipped it shows nothing: the
+ * owner's reply after it says what they picked.
  */
 
 type Option = AskChoiceInput["options"][number]
@@ -407,6 +408,8 @@ function ChoiceForm({
         )
       : "flex flex-wrap gap-2"
   const otherPicked = picked.includes(OTHER)
+  // Two options and nothing else to type: a tap is the answer, with no Continue.
+  const oneTap = !multiple && !input.other && input.options.length === 2
 
   const toggle = (value: string, on: boolean) => {
     setInvalid(null)
@@ -467,23 +470,13 @@ function ChoiceForm({
 
   const option = (value: string, label: string, rest?: Option) => {
     const checked = picked.includes(value)
-    return (
-      <label
-        className={cn(
-          OPTION,
-          pictured || hinted ? OPTION_TILE : OPTION_PILL,
-          value === OTHER && color && "border-dashed"
-        )}
-        key={value}
-      >
-        <input
-          checked={checked}
-          className="sr-only"
-          name={`${id}-choice`}
-          onChange={(event) => toggle(value, event.currentTarget.checked)}
-          type={multiple ? "checkbox" : "radio"}
-          value={value}
-        />
+    const shape = cn(
+      OPTION,
+      pictured || hinted ? OPTION_TILE : OPTION_PILL,
+      value === OTHER && color && "border-dashed"
+    )
+    const body = (
+      <>
         {rest?.visual ? <Visual visual={rest.visual} /> : null}
         {value === OTHER && color ? (
           <EyedropperIcon
@@ -509,6 +502,38 @@ function ChoiceForm({
         {rest?.hint ? (
           <span className="text-muted-foreground text-xs">{rest.hint}</span>
         ) : null}
+      </>
+    )
+    // Buttons, not radios: the arrow keys would answer as they moved.
+    if (oneTap)
+      return (
+        <button
+          aria-pressed={checked}
+          className={cn(
+            shape,
+            "text-left outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring",
+            checked && "border-primary bg-primary/5"
+          )}
+          key={value}
+          onClick={() =>
+            onAnswer({ answer: "chosen", ids: [value], other: null })
+          }
+          type="button"
+        >
+          {body}
+        </button>
+      )
+    return (
+      <label className={shape} key={value}>
+        <input
+          checked={checked}
+          className="sr-only"
+          name={`${id}-choice`}
+          onChange={(event) => toggle(value, event.currentTarget.checked)}
+          type={multiple ? "checkbox" : "radio"}
+          value={value}
+        />
+        {body}
       </label>
     )
   }
@@ -573,9 +598,11 @@ function ChoiceForm({
         </p>
       ) : null}
       <div className="flex flex-wrap gap-2">
-        <Button size="sm" type="submit">
-          Continue
-        </Button>
+        {oneTap ? null : (
+          <Button size="sm" type="submit">
+            Continue
+          </Button>
+        )}
         {input.skippable ? (
           <Button
             onClick={() => onAnswer({ answer: "skipped" })}

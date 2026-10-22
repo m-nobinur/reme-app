@@ -30,15 +30,10 @@ import {
 } from "@workspace/ui/lib/blueprint"
 import { CARD_SURFACE } from "@workspace/ui/lib/card"
 import { faceCss, faceStack, previewFaces } from "@workspace/ui/lib/font-faces"
+import { useSiteName } from "@workspace/ui/lib/site-name"
 import { blueprintReviewView } from "@workspace/ui/lib/tool-state"
 import { cn } from "@workspace/ui/lib/utils"
-import {
-  createContext,
-  type ReactNode,
-  useContext,
-  useId,
-  useState,
-} from "react"
+import { type ReactNode, useId, useState } from "react"
 
 /**
  * The plan the owner reads before anything is built: an icon, "Blueprint" and
@@ -51,9 +46,7 @@ import {
  * The pair is set in its own faces, loaded only while the design page shows.
  */
 
-/** The site's name, which a Blueprint does not carry. The app provides it. */
-const SiteNameContext = createContext<string | null>(null)
-export const SiteNameProvider = SiteNameContext.Provider
+export { SiteNameProvider } from "@workspace/ui/lib/site-name"
 
 const PAGE_TITLES = ["Feature plan", "Design"] as const
 
@@ -238,7 +231,7 @@ export function BlueprintCard({
   onBuild,
   onChange,
 }: BlueprintCardProps) {
-  const provided = useContext(SiteNameContext)
+  const provided = useSiteName()
   const site = name ?? provided ?? "Your website"
   const compose = useComposeWith()
   const id = useId()

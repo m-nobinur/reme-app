@@ -156,6 +156,7 @@ const trayCatalog: CatalogEntry[] = [
             </h3>
             <div className="flex flex-col gap-2">
               <QuestionTray
+                businessName="Mop & Pail Cleaning"
                 input={INPUT}
                 onAnswer={noop}
                 onFinish={noop}

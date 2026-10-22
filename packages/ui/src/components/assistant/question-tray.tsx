@@ -86,7 +86,8 @@ function LayoutSketch({
   hero,
   services,
   stops: [paper, tint, primary, ink],
-}: Layout & { stops: Stops }) {
+  className,
+}: Layout & { stops: Stops; className?: string }) {
   // One fill per role; opacity does the softening so the stops stay the site's.
   const fill = (color: string, opacity = 1) => ({
     fill: color,
@@ -100,7 +101,10 @@ function LayoutSketch({
   return (
     <svg
       aria-hidden
-      className="mx-auto h-24 w-auto rounded-xl ring-1 ring-foreground/15"
+      className={cn(
+        "mx-auto h-24 w-auto rounded-xl ring-1 ring-foreground/15",
+        className
+      )}
       data-hero={hero}
       data-services={services}
       viewBox="0 0 120 84"
@@ -347,8 +351,44 @@ function siteStops(
   )
 }
 
+/**
+ * What a layout looks like, in words an owner would use: its hero, then how
+ * the services sit under it. The option's own label is the direction's name,
+ * which means nothing to an owner, so it is not shown. A variant not listed
+ * here has no description and the label stands in.
+ */
+const HERO_LOOK: Record<string, string> = {
+  split_frame: "Text left, photo right",
+  split_arch: "Text left, photo in an arch",
+  wash: "Big photo, heading over it",
+  dark_center: "Big photo, centred heading",
+  text_led: "Large heading, small photo",
+}
+const SERVICES_LOOK: Record<string, string> = {
+  photo_cards: "Services as photo cards",
+  numbered_rows: "Services as numbered rows",
+  alternating: "Services as photo and text rows",
+  fleet: "Services as wide cards",
+  practice_list: "Services as a numbered list",
+}
+
+function layoutLook(option: Option) {
+  const { visual } = option
+  if (visual?.kind !== "layout") return null
+  const hero = HERO_LOOK[visual.hero]
+  return hero ? { hero, services: SERVICES_LOOK[visual.services] } : null
+}
+
 /** What an option shows above its label, from the question's visual and the option's own data. */
-function Picture({ option, stops }: { option: Option; stops: Stops }) {
+function Picture({
+  option,
+  stops,
+  name,
+}: {
+  option: Option
+  stops: Stops
+  name: string
+}) {
   const { visual } = option
   if (visual?.kind === "swatches") {
     return (
@@ -370,21 +410,24 @@ function Picture({ option, stops }: { option: Option; stops: Stops }) {
   if (visual?.kind === "font_pair") {
     const { display, body } = visual
     return (
-      <span aria-hidden className="flex w-full flex-col gap-0.5">
+      <span aria-hidden className="flex w-full flex-col gap-1">
         <span
-          className="wrap-break-word text-lg leading-tight"
+          className="wrap-break-word text-xl leading-tight"
           style={{
             fontFamily: face(display),
             fontWeight: displayWeight(display),
           }}
         >
-          Title · {display}
+          {name}
         </span>
         <span
-          className="wrap-break-word text-muted-foreground text-sm"
+          className="wrap-break-word text-sm"
           style={{ fontFamily: face(body) }}
         >
-          Body · {body}
+          Get a clear quote and a quick reply.
+        </span>
+        <span className="text-muted-foreground text-xs">
+          {display} and {body}
         </span>
       </span>
     )
@@ -392,6 +435,7 @@ function Picture({ option, stops }: { option: Option; stops: Stops }) {
   if (visual?.kind === "layout") {
     return (
       <LayoutSketch
+        className="h-auto w-full"
         hero={visual.hero}
         services={visual.services}
         stops={stops}
@@ -415,6 +459,8 @@ type QuestionTrayProps = {
   /** Build my site or Skip all. */
   onFinish: (output: AskDesignOutput) => void
   start?: Start
+  /** The business's name, which the lettering previews are set in. */
+  businessName?: string | null
   className?: string
 }
 
@@ -423,6 +469,7 @@ function QuestionTray({
   onAnswer,
   onFinish,
   start,
+  businessName,
   className,
 }: QuestionTrayProps) {
   const { questions } = input
@@ -557,7 +604,7 @@ function QuestionTray({
     <section
       aria-label="Design questions"
       className={cn(
-        "@container flex max-h-[min(36rem,max(15rem,45dvh))] w-full flex-col rounded-[var(--composer-radius,var(--radius-4xl))] border border-border bg-card text-card-foreground",
+        "@container flex max-h-[min(36rem,max(15rem,45dvh))] w-full flex-col rounded-[var(--composer-radius,var(--radius-4xl))] border border-border bg-card text-card-foreground max-sm:max-h-[max(15rem,60dvh)]",
         className
       )}
       data-slot="question-tray"
@@ -629,11 +676,15 @@ function QuestionTray({
                   aria-labelledby={`${id}-question`}
                   className={cn(
                     "grid grid-cols-1 gap-3",
-                    // A pair's names are long, so they stay one to a row until
-                    // two fit side by side.
+                    // A pair's business name is long, so they stay one to a
+                    // row until two fit side by side. Up to three layouts
+                    // sit in one row, so all of them show at once on a phone.
                     question.visual === "font_pair"
                       ? "@md:grid-cols-2"
-                      : "min-[380px]:grid-cols-2"
+                      : question.visual === "layout" &&
+                          question.card.options.length === 3
+                        ? "grid-cols-3 gap-2"
+                        : "min-[380px]:grid-cols-2"
                   )}
                   key={question.id}
                   role={multiple ? "group" : "radiogroup"}
@@ -644,11 +695,13 @@ function QuestionTray({
                       : answer !== undefined &&
                         "choice" in answer &&
                         answer.choice === option.id
+                    const look = layoutLook(option)
                     return (
                       <label
                         className={cn(
                           OPTION,
                           OPTION_TILE,
+                          look && "p-2",
                           "rounded-xl has-[:focus-visible]:border-primary has-[:focus-visible]:ring-primary",
                           // Picked is a 2px line in the text colour: a border
                           // and an inset ring of one pixel each.
@@ -666,12 +719,21 @@ function QuestionTray({
                           type={multiple ? "checkbox" : "radio"}
                           value={option.id}
                         />
-                        <Picture option={option} stops={stops} />
-                        <span className="flex items-center gap-1.5 font-medium text-sm">
+                        <Picture
+                          name={businessName?.trim() || "Your business"}
+                          option={option}
+                          stops={stops}
+                        />
+                        <span
+                          className={cn(
+                            "flex items-center gap-1.5 font-medium text-sm",
+                            look && "text-xs"
+                          )}
+                        >
                           {question.visual === "font_pair" ? (
                             <span className="sr-only">{option.label}</span>
                           ) : (
-                            option.label
+                            (look?.hero ?? option.label)
                           )}
                           {/* A box, ticked or not, so a card of many reads apart from a card of one. */}
                           {multiple ? (
@@ -689,9 +751,9 @@ function QuestionTray({
                             )
                           ) : null}
                         </span>
-                        {option.hint ? (
+                        {(look?.services ?? option.hint) ? (
                           <span className="text-muted-foreground text-xs">
-                            {option.hint}
+                            {look?.services ?? option.hint}
                           </span>
                         ) : null}
                       </label>

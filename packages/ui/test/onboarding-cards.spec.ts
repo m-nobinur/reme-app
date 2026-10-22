@@ -138,7 +138,7 @@ test("a reviewed quote form gives way to the owner's reply", async ({
   ])
   const done = page
     .locator('[data-slot="review-quote-form"]')
-    .filter({ hasNot: page.getByRole("button", { name: "Looks good" }) })
+    .filter({ hasNot: page.getByRole("button", { name: "Use this form" }) })
   await expect(done).toHaveCount(2)
   await expect(done.nth(0)).toContainText("You replied in the chat instead.")
   await expect(done.nth(1)).toContainText("did not come through")

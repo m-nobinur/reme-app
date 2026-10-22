@@ -8,6 +8,7 @@ import {
   useFocusWhenIdle,
   useRevealWaiting,
 } from "@workspace/ui/hooks/use-reveal-waiting"
+import { useSiteName } from "@workspace/ui/lib/site-name"
 import { askDesignView } from "@workspace/ui/lib/tool-state"
 import { cn } from "@workspace/ui/lib/utils"
 import { createContext, useContext, useRef } from "react"
@@ -45,6 +46,7 @@ const AskDesign: ToolCallMessagePartComponent = (props) => {
   const view = askDesignView(props)
   const slot = useContext(SlotContext)
   const save = useContext(SaveContext)
+  const siteName = useSiteName()
   const messageId = useAuiState((s) => s.message.id)
   const conversationId = useAuiState((s) => s.threadListItem.remoteId)
   const waiting = view.state === "pending"
@@ -79,6 +81,7 @@ const AskDesign: ToolCallMessagePartComponent = (props) => {
   return createPortal(
     <div data-slot="ask-design" ref={tray}>
       <QuestionTray
+        businessName={siteName}
         input={view.input}
         key={props.toolCallId}
         onAnswer={(id, answer) => {
