@@ -200,7 +200,16 @@ function DetailsTray({
     page: 0,
     values: {},
   })
-  const [page, setPage] = useState(Math.min(draft.page, keys.length - 1))
+  // Where this tab left off, else the first page without an answer: a name
+  // the owner typed in the chat comes back filled, so the card opens past it.
+  const firstOpen = keys.findIndex((each) => prefilled(input, each) === null)
+  const [page, setPage] = useState(
+    Object.keys(draft.values).length > 0
+      ? Math.min(draft.page, keys.length - 1)
+      : firstOpen < 0
+        ? keys.length - 1
+        : firstOpen
+  )
   const [collapsed, setCollapsed] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const formRef = useRef<HTMLFormElement>(null)
