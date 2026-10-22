@@ -32,7 +32,7 @@ test("the contact tray checks the phone, then starts the email from the sign-in"
   await expect(contact.getByText("1 of 2")).toBeVisible()
   await contact.getByRole("button", { name: "Next", exact: true }).click()
   await expect(contact.getByRole("alert")).toHaveText([
-    "Enter a number customers can ring, like +44 161 496 0000.",
+    "Enter a valid number customers can ring.",
   ])
   // The field to fix takes the focus.
   const phone = contact.getByRole("textbox", { name: "Phone number" })
@@ -52,7 +52,7 @@ test("the contact tray checks the phone, then starts the email from the sign-in"
   await contact.getByRole("textbox", { name: "Email address" }).fill("nope")
   await contact.getByRole("button", { name: "Submit" }).click()
   await expect(contact.getByRole("alert")).toHaveText([
-    "Enter an email address, like hello@yourbusiness.co.uk.",
+    "Enter a valid email address.",
   ])
   // Back finds the phone as it was typed.
   await contact.getByRole("button", { name: "Previous question" }).click()

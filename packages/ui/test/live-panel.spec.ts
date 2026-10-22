@@ -52,7 +52,7 @@ test("a wrong answer is refused in place, with the reason", async ({
   await phone.getByLabel("Phone number").fill("call me")
   await phone.getByRole("button", { name: "Send answer" }).click()
   await expect(phone.getByRole("alert")).toHaveText(
-    "Enter a number customers can ring, like +44 161 496 0000."
+    "Enter a valid number customers can ring."
   )
   await expect(phone.getByLabel("Phone number")).toHaveAttribute(
     "aria-invalid",

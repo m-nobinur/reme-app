@@ -45,7 +45,7 @@ test("a question refuses a wrong answer in place, before anything is sent", asyn
   await form.getByLabel("Email address").fill("")
   await tray.getByRole("button", { name: "Submit" }).click()
   await expect(form.getByRole("alert")).toHaveText(
-    "Enter an email address, like hello@yourbusiness.co.uk."
+    "Enter a valid email address."
   )
   await expect(form.getByLabel("Email address")).toHaveAttribute(
     "aria-invalid",
