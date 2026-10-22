@@ -146,6 +146,8 @@ export type Prepared = {
   photo_question: string
   /** The business's services as a short phrase, such as "your wedding cars". */
   services_phrase: string
+  /** Up to three names that suit this business's assistant, offered on its card. */
+  assistant_names?: string[]
 }
 
 /**
@@ -437,9 +439,16 @@ export const detailsCard = (
     step === "contact" && !has(o, "business.email") && email.success
       ? [...held, email.data]
       : held
+  // Names written for this business, when the background call has them.
+  const ideas = step === "assistant" ? o.prepared?.assistant_names : undefined
   return call(
     "tool-ask_details",
-    AskDetailsInput.parse({ step, prefill, skippable: false }),
+    AskDetailsInput.parse({
+      step,
+      prefill,
+      skippable: false,
+      ...(ideas?.length ? { ideas } : {}),
+    }),
     newId
   )
 }
