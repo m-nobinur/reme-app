@@ -182,6 +182,16 @@ export function ChatPage() {
     [questions]
   )
 
+  const assistant = assistantOf(live.workspace)
+  const ideas = useMemo(
+    () => [
+      `Ask ${assistant} to draft a quote…`,
+      `Ask ${assistant} to follow up with a customer…`,
+      `Tell ${assistant} about a new service…`,
+    ],
+    [assistant]
+  )
+
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <ServerButtonUI />
@@ -218,12 +228,13 @@ export function ChatPage() {
                         <BuildStopped />
                       </>
                     }
-                    assistantName={assistantOf(live.workspace)}
+                    assistantName={assistant}
                     briefing={briefing.line}
                     components={{ ToolFallback: Approval }}
                     mode={mode}
-                    placeholder={`Ask ${assistantOf(live.workspace)} anything…`}
-                    questionPlaceholder={`Or tell ${assistantOf(live.workspace)} something else…`}
+                    placeholder={`Ask ${assistant} anything…`}
+                    placeholderIdeas={ideas}
+                    questionPlaceholder={`Or tell ${assistant} something else…`}
                     quickActions={OWNER_QUICK_ACTIONS}
                     reveal={onboarding ? OPENING_REVEAL : undefined}
                     stored={id}

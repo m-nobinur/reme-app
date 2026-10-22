@@ -141,6 +141,8 @@ export type ThreadProps = {
   stored?: string | undefined
   autoFocus?: boolean | undefined
   placeholder?: string | undefined
+  /** Other things to ask, which the placeholder rotates through after `placeholder`. */
+  placeholderIdeas?: readonly string[] | undefined
   /** The composer's placeholder while design questions are open above it. */
   questionPlaceholder?: string | undefined
   /** One line under the welcome heading, built from state rather than a model. */
@@ -233,6 +235,18 @@ const useHeld = (value: boolean, ms: number) => {
   return value || held
 }
 
+/** Steps through `items` every few seconds; one item stays put. */
+const useCycle = (items: readonly string[]) => {
+  const [at, setAt] = useState(0)
+  const count = items.length
+  useEffect(() => {
+    if (count < 2) return
+    const timer = setInterval(() => setAt((each) => each + 1), 5000)
+    return () => clearInterval(timer)
+  }, [count])
+  return items[at % count] ?? ""
+}
+
 /**
  * Whether the composer can send. A stored conversation opens on a placeholder
  * thread and swaps to the stored one once it is fetched; a send before then
@@ -263,6 +277,7 @@ export const Thread: FC<ThreadProps> = ({
   autoFocus = true,
   stored,
   placeholder,
+  placeholderIdeas,
   questionPlaceholder,
   briefing,
   quickActions,
@@ -290,6 +305,7 @@ export const Thread: FC<ThreadProps> = ({
     () => ({
       stored,
       placeholder,
+      placeholderIdeas,
       questionPlaceholder,
       briefing,
       quickActions,
@@ -300,6 +316,7 @@ export const Thread: FC<ThreadProps> = ({
     [
       stored,
       placeholder,
+      placeholderIdeas,
       questionPlaceholder,
       briefing,
       quickActions,
@@ -412,7 +429,7 @@ const ThreadRoot: FC<{
         style={{
           ["--thread-max-width" as string]: "44rem",
           ["--composer-bg" as string]: "var(--color-card)",
-          ["--composer-radius" as string]: "var(--radius-4xl)",
+          ["--composer-radius" as string]: "var(--radius-2xl)",
           ["--composer-padding" as string]: "8px",
         }}
       >
@@ -612,10 +629,12 @@ const ThreadSuggestionItem: FC = () => {
 const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
   const {
     placeholder = "Send a message",
+    placeholderIdeas,
     questionPlaceholder,
     mode,
   } = useContext(ThreadSettingsContext)
   const input = useContext(ComposerInputContext)
+  const idea = useCycle([placeholder, ...(placeholderIdeas ?? [])])
   // A proposed quote form waits on the owner: what they type next is their
   // change to it, and the placeholder says so.
   const reviewing = useAuiState((s) =>
@@ -640,8 +659,10 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
           whenever the page is open, so a heavy ring would never go away. */}
       <div
         data-slot="aui_composer-shell"
-        className="flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border border-border bg-(--composer-bg) p-(--composer-padding) transition-colors focus-within:border-ring focus-within:ring-1 focus-within:ring-ring"
+        className="flex w-full cursor-text items-end gap-2 rounded-(--composer-radius) border border-border bg-(--composer-bg) p-(--composer-padding) transition-colors focus-within:border-ring focus-within:ring-1 focus-within:ring-ring"
       >
+        <QuickActions input={input} />
+        <ComposerMode input={input} />
         <ComposerPrimitive.Input
           ref={input}
           placeholder={
@@ -652,16 +673,16 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
                 ? PLAN_CHANGES_PLACEHOLDER
                 : asking && questionPlaceholder
                   ? questionPlaceholder
-                  : placeholder)
+                  : idea)
           }
-          className="aui-composer-input max-h-48 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-chat text-chat-foreground caret-primary outline-none placeholder:text-muted-foreground/60"
+          className="aui-composer-input max-h-48 min-h-9 min-w-0 flex-1 resize-none bg-transparent px-1.5 py-1.25 text-chat text-chat-foreground caret-primary outline-none placeholder:text-muted-foreground/60"
           rows={1}
           autoFocus={autoFocus}
           disabled={!sendable}
           enterKeyHint="send"
           aria-label="Message input"
         />
-        <ComposerAction input={input} />
+        <ComposerSend />
       </div>
     </ComposerPrimitive.Root>
   )
@@ -689,14 +710,14 @@ const QuickActions: FC<{ input: RefObject<HTMLTextAreaElement | null> }> = ({
         render={
           <Button
             aria-label="Quick actions"
-            className="aui-composer-quick-actions rounded-full text-muted-foreground hover:text-foreground"
-            size="icon-sm"
+            className="aui-composer-quick-actions text-muted-foreground hover:text-foreground"
+            size="icon"
             type="button"
-            variant="ghost"
+            variant="outline"
           />
         }
       >
-        <PlusIcon aria-hidden />
+        <PlusIcon aria-hidden weight="bold" />
       </DropdownMenuTrigger>
       <DropdownMenuContent finalFocus={() => after.current ?? true} side="top">
         {quickActions.map((action) => (
@@ -749,55 +770,50 @@ const ComposerMode: FC<{ input: RefObject<HTMLTextAreaElement | null> }> = ({
   )
 }
 
-const ComposerAction: FC<{ input: RefObject<HTMLTextAreaElement | null> }> = ({
-  input,
-}) => {
+const ComposerSend: FC = () => {
   const sendable = useSendable()
   return (
-    <div className="aui-composer-action-wrapper relative flex items-center justify-between gap-2">
-      <div className="flex min-w-0 items-center gap-1">
-        <QuickActions input={input} />
-        <ComposerMode input={input} />
-      </div>
-      <div className="flex items-center gap-1.5">
-        <AuiIf condition={(s) => !s.thread.isRunning}>
-          <ComposerPrimitive.Send
-            disabled={!sendable}
-            render={
-              <TooltipIconButton
-                tooltip="Send message"
-                side="bottom"
-                type="button"
-                variant="default"
-                size="icon"
-                className="aui-composer-send size-8 rounded-full"
-                aria-label="Send message"
-              />
-            }
-          >
-            <ArrowUpIcon className="aui-composer-send-icon size-4" />
-          </ComposerPrimitive.Send>
-        </AuiIf>
-        <AuiIf condition={(s) => s.thread.isRunning}>
-          <ComposerPrimitive.Cancel
-            render={
-              <Button
-                type="button"
-                variant="default"
-                size="icon"
-                className="aui-composer-cancel size-8 rounded-full"
-                aria-label="Stop generating"
-              />
-            }
-          >
-            <SquareIcon
-              className="aui-composer-cancel-icon size-3.5"
-              weight="fill"
+    <>
+      <AuiIf condition={(s) => !s.thread.isRunning}>
+        <ComposerPrimitive.Send
+          disabled={!sendable}
+          render={
+            <TooltipIconButton
+              tooltip="Send message"
+              side="bottom"
+              type="button"
+              variant="default"
+              size="icon"
+              className="aui-composer-send"
+              aria-label="Send message"
             />
-          </ComposerPrimitive.Cancel>
-        </AuiIf>
-      </div>
-    </div>
+          }
+        >
+          <ArrowUpIcon
+            className="aui-composer-send-icon size-4"
+            weight="bold"
+          />
+        </ComposerPrimitive.Send>
+      </AuiIf>
+      <AuiIf condition={(s) => s.thread.isRunning}>
+        <ComposerPrimitive.Cancel
+          render={
+            <Button
+              type="button"
+              variant="default"
+              size="icon"
+              className="aui-composer-cancel"
+              aria-label="Stop generating"
+            />
+          }
+        >
+          <SquareIcon
+            className="aui-composer-cancel-icon size-3.5"
+            weight="fill"
+          />
+        </ComposerPrimitive.Cancel>
+      </AuiIf>
+    </>
   )
 }
 

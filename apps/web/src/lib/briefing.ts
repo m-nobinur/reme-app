@@ -42,7 +42,7 @@ function due(at: string, now: Date): string {
 
 /** What the owner calls their assistant: the name they gave it, else Reme. */
 export const assistantOf = (workspace: Workspace | null) =>
-  workspace?.assistantName ?? "Reme"
+  workspace?.assistantName?.trim() || "Reme"
 
 export function briefingOf(
   org: OrgSummary | null,

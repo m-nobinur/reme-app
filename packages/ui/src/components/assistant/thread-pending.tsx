@@ -30,8 +30,10 @@ export const ThreadHistorySkeleton: FC = () => (
 
 /**
  * The whole thread before the chat chunk has loaded: the transcript skeleton
- * above an empty composer, in the thread's own layout and variables, so the
- * composer does not move when the real one replaces it.
+ * above an empty composer, in the thread's own layout and variables, so
+ * nothing moves when the real one replaces it. The scroller keeps the
+ * thread's scrollbar and its clearance of the workspace panel, since both
+ * decide where the column sits.
  */
 export const ThreadPending: FC = () => (
   <div
@@ -39,16 +41,15 @@ export const ThreadPending: FC = () => (
     style={{
       ["--thread-max-width" as string]: "44rem",
       ["--composer-bg" as string]: "var(--color-card)",
-      ["--composer-radius" as string]: "var(--radius-4xl)",
+      ["--composer-radius" as string]: "var(--radius-2xl)",
       ["--composer-padding" as string]: "8px",
     }}
   >
-    <div className="mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4">
-      <ThreadHistorySkeleton />
-      <div className="mt-auto pb-4 md:pb-6">
-        <div className="flex w-full flex-col gap-2 rounded-(--composer-radius) border border-border bg-(--composer-bg) p-(--composer-padding)">
-          <div className="min-h-10" />
-          <div className="h-8" />
+    <div className="flex flex-1 flex-col overflow-y-scroll pe-(--panel-inset)">
+      <div className="mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4">
+        <ThreadHistorySkeleton />
+        <div className="mt-auto pb-4 md:pb-6">
+          <div className="h-[calc(2.25rem+2*var(--composer-padding)+2px)] w-full rounded-(--composer-radius) border border-border bg-(--composer-bg)" />
         </div>
       </div>
     </div>
