@@ -12,6 +12,7 @@ import { PageHeader } from "@workspace/ui/components/app-shell"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { EmptyState } from "@workspace/ui/components/empty-state"
 import { YourWebsite } from "@workspace/ui/components/live-panel"
+import { BuildingIcon } from "@workspace/ui/components/status-icons"
 import { StatusIcon, StatusLine } from "@workspace/ui/components/status-line"
 import { segmentKind, workLine } from "@workspace/ui/lib/activity-copy"
 import { cn } from "@workspace/ui/lib/utils"
@@ -180,13 +181,12 @@ function Website() {
         <PageHeader title="Website" />
         {build ? (
           <EmptyState
-            action={<BuildLink build={build} />}
             description={
               step
                 ? `${step}. You review it before it goes live.`
                 : `${leading(assistantOf(workspace))} is building the first version. You review it before it goes live.`
             }
-            icon={<GlobeIcon />}
+            icon={<BuildingIcon animated className="text-primary" />}
             title="Your website is under way"
           />
         ) : (

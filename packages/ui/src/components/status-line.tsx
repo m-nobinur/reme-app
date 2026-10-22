@@ -1,12 +1,9 @@
 import {
   BellIcon,
   CheckCircleIcon,
-  CirclesFourIcon,
   CreditCardIcon,
   GlobeIcon,
-  HammerIcon,
   HourglassMediumIcon,
-  ImageSquareIcon,
   ListBulletsIcon,
   MagnifyingGlassIcon,
   MinusCircleIcon,
@@ -15,6 +12,15 @@ import {
   RocketLaunchIcon,
   WarningCircleIcon,
 } from "@phosphor-icons/react"
+import {
+  BuildingIcon,
+  PhotosIcon,
+  PlanningIcon,
+  PolishingIcon,
+  QuestionIcon,
+  SetupIcon,
+  WritingIcon,
+} from "@workspace/ui/components/status-icons"
 import {
   type StatusKind,
   type ToolArgs,
@@ -45,14 +51,18 @@ import { type ComponentProps, useEffect, useRef, useState } from "react"
  * One icon per kind of work, each with its own small motion (globals.css),
  * keyed by the copy table's kinds so a line and its icon come from one place.
  */
-const KINDS: Record<StatusKind, { Icon: PhosphorIcon; motion: string }> = {
+const KINDS: Record<
+  StatusKind,
+  { Icon: PhosphorIcon; motion: string } | { Drawn: typeof SetupIcon }
+> = {
   thinking: { Icon: ListBulletsIcon, motion: "animate-status-steps" },
-  planning: { Icon: CirclesFourIcon, motion: "animate-status-pulse" },
-  building: {
-    Icon: HammerIcon,
-    motion: "origin-bottom-right animate-status-tap",
-  },
-  photos: { Icon: ImageSquareIcon, motion: "animate-status-fade" },
+  setup: { Drawn: SetupIcon },
+  question: { Drawn: QuestionIcon },
+  planning: { Drawn: PlanningIcon },
+  building: { Drawn: BuildingIcon },
+  photos: { Drawn: PhotosIcon },
+  writing: { Drawn: WritingIcon },
+  polishing: { Drawn: PolishingIcon },
   checking: { Icon: MagnifyingGlassIcon, motion: "animate-status-sweep" },
   domain: { Icon: GlobeIcon, motion: "animate-status-turn" },
   google: { Icon: PlugsConnectedIcon, motion: "animate-status-meet" },
@@ -75,13 +85,30 @@ export function StatusIcon({
   still?: boolean
   className?: string
 }) {
-  const { Icon, motion } = KINDS[kind]
+  return <KindIcon className={className} kind={kind} moving={!still} />
+}
+
+/** A kind's icon, drawn or from phosphor, moving while `moving`. */
+function KindIcon({
+  kind,
+  moving,
+  className,
+}: {
+  kind: StatusKind
+  moving: boolean
+  className?: string | undefined
+}) {
+  const entry = KINDS[kind]
+  if ("Drawn" in entry) {
+    return <entry.Drawn animated={moving} className={className} />
+  }
+  const { Icon, motion } = entry
   return (
     <Icon
       aria-hidden
       className={cn(
         "size-4 shrink-0 motion-reduce:animate-none",
-        !still && motion,
+        moving && motion,
         className
       )}
     />
@@ -189,7 +216,7 @@ function StatusLine({
           ? HourglassMediumIcon
           : shown.state === "stopped"
             ? MinusCircleIcon
-            : KINDS[shown.kind].Icon
+            : null
   return (
     <span
       className={cn(
@@ -200,16 +227,19 @@ function StatusLine({
       data-state={shown.state}
       {...props}
     >
-      <Icon
-        aria-hidden
-        className={cn(
-          "size-4 shrink-0 motion-reduce:animate-none",
-          working && KINDS[shown.kind].motion,
-          shown.state === "done" && "text-primary",
-          shown.state === "failed" && "text-destructive"
-        )}
-        weight={shown.state === "done" ? "fill" : "regular"}
-      />
+      {Icon ? (
+        <Icon
+          aria-hidden
+          className={cn(
+            "size-4 shrink-0",
+            shown.state === "done" && "text-primary",
+            shown.state === "failed" && "text-destructive"
+          )}
+          weight={shown.state === "done" ? "fill" : "regular"}
+        />
+      ) : (
+        <KindIcon kind={shown.kind} moving={working} />
+      )}
       {/* The words alone: the live region never reads the clock or the count. */}
       <span
         aria-live={announce ? "polite" : undefined}

@@ -25,9 +25,13 @@ import type {
 /** What an icon is drawn for, so the status line picks its icon from the copy's own kind. */
 export type StatusKind =
   | "thinking"
+  | "setup"
+  | "question"
   | "planning"
   | "building"
   | "photos"
+  | "writing"
+  | "polishing"
   | "checking"
   | "domain"
   | "google"
@@ -421,7 +425,7 @@ const STAGES: Record<BuildStage, StageCopy> = {
     fail: "make your photos",
   },
   writing: {
-    kind: "building",
+    kind: "writing",
     working: (a) =>
       a.total
         ? `Writing the pages, ${a.done ?? 0} of ${a.total}`
@@ -431,7 +435,7 @@ const STAGES: Record<BuildStage, StageCopy> = {
     fail: "finish the pages",
   },
   polishing: {
-    kind: "building",
+    kind: "polishing",
     working: () => "Polishing the details",
     done: () => "Polished the details",
     fail: "finish polishing",
@@ -725,8 +729,8 @@ export function segmentLine(
     }
     case "website":
       return elapsed
-        ? `${elapsed} so far, usually 4 to 6 minutes`
-        : "Usually 4 to 6 minutes"
+        ? `${elapsed} so far, usually 5 to 10 minutes`
+        : "Usually 5 to 10 minutes"
     case "change": {
       const step = cleanArg(segment.step, "text", 60)
       return step ?? (elapsed ? `${elapsed} so far` : null)
@@ -855,7 +859,7 @@ export const ANSWER_BELOW = "Answer below"
 export const SKIPPED = "Skipped"
 
 const SEGMENT_KIND: Record<ActivitySegment["kind"], StatusKind> = {
-  onboarding: "thinking",
+  onboarding: "setup",
   website: "building",
   golive: "publishing",
   change: "building",
@@ -873,14 +877,16 @@ const SEGMENT_KIND: Record<ActivitySegment["kind"], StatusKind> = {
 export const segmentKind = (segment: ActivitySegment): StatusKind =>
   SEGMENT_KIND[segment.kind]
 
-/** The icon a step at work moves: a website stage's own, else its segment's. */
+/** The icon a step at work moves: a website stage's own, an onboarding question's, else its segment's. */
 export const stepKind = (
   segment: ActivitySegment,
   step: ActivityStep
 ): StatusKind =>
   segment.kind === "website" && isStage(step.id)
     ? stageKind(step.id)
-    : segmentKind(segment)
+    : segment.kind === "onboarding"
+      ? "question"
+      : segmentKind(segment)
 
 /**
  * A one-line row in Coming up or Done today. A reminder is its own title,

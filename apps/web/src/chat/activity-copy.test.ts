@@ -384,7 +384,7 @@ describe("segment copy", () => {
     const ctx = { orgId: "org-1", assistant: "Ellie" }
     expect(
       segmentLine(segment("website", "now"), ctx, { elapsedSeconds: 130 })
-    ).toBe("2 minutes so far, usually 4 to 6 minutes")
+    ).toBe("2 minutes so far, usually 5 to 10 minutes")
     expect(
       segmentLine(
         segment("change", "now", { step: "Adding the new photos" }),

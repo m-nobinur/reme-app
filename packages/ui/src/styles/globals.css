@@ -137,6 +137,18 @@
   --animate-status-meet: status-meet 1.6s ease-in-out infinite;
   --animate-status-swing: status-swing 1.4s ease-in-out infinite;
   --animate-status-lift: status-lift 1.4s ease-in-out infinite;
+  /* The drawn icons' parts (status-icons.tsx). */
+  --animate-icon-spin: icon-spin 3s linear infinite;
+  --animate-icon-dash: icon-dash 1.2s linear infinite;
+  --animate-icon-rock: icon-rock 1.8s ease-in-out infinite;
+  --animate-icon-blink: icon-blink 1.8s ease-in-out infinite;
+  --animate-icon-draw: icon-draw 2.4s ease-in-out infinite both;
+  --animate-icon-rise: icon-rise 2.4s ease-in-out infinite;
+  --animate-icon-twinkle: icon-twinkle 1.6s ease-in-out infinite both;
+  --animate-icon-write-line: icon-write-line 2.4s ease-in-out infinite both;
+  --animate-icon-pen: icon-pen 0.8s ease-in-out infinite;
+  --animate-icon-brush: icon-brush 1.4s ease-in-out infinite;
+  --animate-icon-hammer: icon-hammer 1.2s ease-in-out infinite;
   --animate-note-cycle: note-cycle 9s cubic-bezier(0.4, 0, 0.2, 1) infinite;
   /* The conversation's reading type, sized per viewport by `--chat-size`. A
      step line (a check the assistant ran) sits a size under the reply. */
@@ -292,6 +304,112 @@
   @keyframes status-lift {
     50% {
       transform: translateY(-2px);
+    }
+  }
+  @keyframes icon-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  /* One dash and gap along the arc, so the loop has no seam. */
+  @keyframes icon-dash {
+    to {
+      stroke-dashoffset: -3.7;
+    }
+  }
+  @keyframes icon-rock {
+    25% {
+      transform: rotate(-10deg);
+    }
+    75% {
+      transform: rotate(10deg);
+    }
+  }
+  @keyframes icon-blink {
+    50% {
+      opacity: 0.25;
+    }
+  }
+  /* A tick drawn, held, then rubbed out for the next round. */
+  @keyframes icon-draw {
+    0%,
+    10% {
+      stroke-dashoffset: 1;
+    }
+    35%,
+    85% {
+      stroke-dashoffset: 0;
+    }
+    100% {
+      stroke-dashoffset: 1;
+    }
+  }
+  @keyframes icon-rise {
+    50% {
+      transform: translateY(-1.5px);
+    }
+  }
+  @keyframes icon-twinkle {
+    0%,
+    100% {
+      opacity: 0;
+      transform: scale(0.4);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  /* A line written left to right, held, then cleared. */
+  @keyframes icon-write-line {
+    0% {
+      stroke-dashoffset: 1;
+    }
+    30%,
+    85% {
+      stroke-dashoffset: 0;
+    }
+    100% {
+      stroke-dashoffset: 1;
+    }
+  }
+  /* The pen's small strokes as it writes. */
+  @keyframes icon-pen {
+    0%,
+    100% {
+      transform: translate(0, 0);
+    }
+    25% {
+      transform: translate(-1px, 0.6px);
+    }
+    50% {
+      transform: translate(-1.8px, 0);
+    }
+    75% {
+      transform: translate(-0.8px, -0.6px);
+    }
+  }
+  @keyframes icon-brush {
+    0%,
+    100% {
+      transform: rotate(-9deg);
+    }
+    50% {
+      transform: rotate(9deg);
+    }
+  }
+  /* A tap, then a rest. */
+  @keyframes icon-hammer {
+    0%,
+    55%,
+    100% {
+      transform: rotate(0deg);
+    }
+    25% {
+      transform: rotate(-24deg);
+    }
+    40% {
+      transform: rotate(4deg);
     }
   }
   /* Base UI measures the panel and publishes the height; the Radix variable the
