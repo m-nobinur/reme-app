@@ -1,10 +1,11 @@
 import { type MessagePrimitive, useScrollLock } from "@assistant-ui/react"
-import { CaretDownIcon, SpinnerGapIcon } from "@phosphor-icons/react"
+import { CaretDownIcon } from "@phosphor-icons/react"
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@workspace/ui/components/collapsible"
+import { StatusLine } from "@workspace/ui/components/status-line"
 import { cn } from "@workspace/ui/lib/utils"
 import {
   type FC,
@@ -98,20 +99,18 @@ function ToolGroupTrigger({
       )}
       {...props}
     >
-      {active && (
-        <SpinnerGapIcon
-          data-slot="tool-group-trigger-loader"
-          className="aui-tool-group-trigger-loader size-3 shrink-0 animate-spin [animation-duration:0.6s]"
-        />
-      )}
       <span
         data-slot="tool-group-trigger-label"
-        className={cn(
-          "aui-tool-group-trigger-label-wrapper inline-block text-start leading-none",
-          active && "shimmer motion-reduce:animate-none"
-        )}
+        className="aui-tool-group-trigger-label-wrapper inline-block text-start leading-none"
       >
-        {label}
+        {/* A trigger is a control, so it is there from the first paint. */}
+        <StatusLine
+          announce={false}
+          delay={0}
+          kind="check"
+          label={label}
+          state={active ? "working" : "done"}
+        />
       </span>
       <CaretDownIcon
         data-slot="tool-group-trigger-chevron"

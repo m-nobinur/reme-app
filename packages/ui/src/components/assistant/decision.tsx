@@ -6,6 +6,7 @@ import {
   WarningCircleIcon,
 } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
+import { StatusLine } from "@workspace/ui/components/status-line"
 import { useRevealWaiting } from "@workspace/ui/hooks/use-reveal-waiting"
 import { refusalText } from "@workspace/ui/lib/refusal"
 import {
@@ -75,16 +76,13 @@ export function Decision<I, O>({
 
   if (view.state === "drafting") {
     return (
-      <p
-        className={cn(
-          "px-1 py-1.5 text-muted-foreground text-sm",
-          running && "shimmer motion-reduce:animate-none"
-        )}
+      <StatusLine
+        className="flex px-1 py-1.5 text-sm"
         data-slot={slot}
-        role={running ? "status" : undefined}
-      >
-        {running ? "Writing this out" : UNFINISHED}
-      </p>
+        kind="thinking"
+        label={running ? "Writing this out" : UNFINISHED}
+        state={running ? "working" : "stopped"}
+      />
     )
   }
 

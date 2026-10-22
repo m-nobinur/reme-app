@@ -33,6 +33,7 @@ import {
   CollapsibleTrigger,
 } from "@workspace/ui/components/collapsible"
 import { stageWord } from "@workspace/ui/components/live-panel"
+import { StatusLine } from "@workspace/ui/components/status-line"
 import { factLabel, factText } from "@workspace/ui/lib/facts"
 import { formatDateTime } from "@workspace/ui/lib/format"
 import { refusalText } from "@workspace/ui/lib/refusal"
@@ -41,7 +42,7 @@ import {
   type ReadView,
   readView,
 } from "@workspace/ui/lib/tool-state"
-import { cn, META } from "@workspace/ui/lib/utils"
+import { META } from "@workspace/ui/lib/utils"
 import { browserZone, wallText, zoneLabel } from "@workspace/ui/lib/zone"
 import { createContext, type ReactNode, useContext } from "react"
 
@@ -79,22 +80,17 @@ function Read<O>({
   const running = useAuiState((s) => s.message.status?.type === "running")
   if (view.state !== "done") {
     const working = view.state === "working" && running
-    const text = working
-      ? labels.working
-      : view.state === "working" || view.state === "cancelled"
-        ? labels.cancelled
-        : labels.failed
+    const stopped = view.state === "working" || view.state === "cancelled"
     return (
-      <p
-        className={cn(
-          "px-1 py-1.5 text-chat-step text-muted-foreground",
-          working && "shimmer motion-reduce:animate-none"
-        )}
+      <StatusLine
+        className="flex px-1 py-1.5 text-chat-step"
         data-slot={slot}
-        role={working ? "status" : undefined}
-      >
-        {text}
-      </p>
+        kind="check"
+        label={
+          working ? labels.working : stopped ? labels.cancelled : labels.failed
+        }
+        state={working ? "working" : stopped ? "stopped" : "failed"}
+      />
     )
   }
   return (

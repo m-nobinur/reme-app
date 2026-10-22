@@ -17,7 +17,7 @@ test("reads say what they looked at, and open onto what they found", async ({
   await open(page, "CosReads")
   const entry = page.locator('[data-entry="CosReads"]')
   await expect(
-    entry.locator('[data-slot="cos-read-workspace"][role="status"]')
+    entry.locator('[data-slot="cos-read-workspace"] [role="status"]')
   ).toHaveText("Checking your workspace")
   await expect(entry).toContainText("Could not check your workspace")
   await expect(entry).toContainText("Stopped reading your business details")
