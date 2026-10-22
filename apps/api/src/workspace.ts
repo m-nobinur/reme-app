@@ -73,17 +73,73 @@ export const EXPECTED_SECONDS = {
   full: { p50: 180, p95: 330 },
 } as const
 
-/** The steps in the order a full build reaches them; the photos row travels with the pages. */
-const ORDER = [
+/** What a full build is doing, finer than the stages the owner sees. */
+type Step =
+  | "planning"
+  | "writing"
+  | "assembling"
+  | "design"
+  | "polishing"
+  | "fixing"
+  | "checking"
+  | "ready"
+
+/**
+ * The stages every full build lists from its first event, in the order it
+ * reaches them. The photos are drawn before the pages are written, and the
+ * design look and its fixes come before the gates.
+ */
+const STAGES = [
   "planning",
+  "photos",
   "writing",
-  "assembling",
-  "design",
   "polishing",
-  "fixing",
   "checking",
+  "ready",
 ] as const
-type Step = (typeof ORDER)[number]
+type Stage = (typeof STAGES)[number]
+
+/** Where each step sits: the pages include putting them together, polish includes the look, the checks include a repair. */
+const STAGE_OF: Record<Step, Stage> = {
+  planning: "planning",
+  writing: "writing",
+  assembling: "writing",
+  design: "polishing",
+  polishing: "polishing",
+  fixing: "checking",
+  checking: "checking",
+  ready: "ready",
+}
+
+const STAGE_LABEL: Record<Stage, string> = {
+  planning: "Planning the layout",
+  photos: "Making photos",
+  writing: "Writing the pages",
+  polishing: "Polishing the design",
+  checking: "Checking the site",
+  ready: "Ready to review",
+}
+
+/** What a stage reads while it is on the step that has a line of its own. */
+const STEP_LABEL: Partial<Record<Step, string>> = {
+  assembling: "Putting the site together",
+  design: "Looking over the design",
+}
+
+/** Where a build waits for a person; its stage is where the events left it. */
+const PARKED: readonly AssignmentState[] = [
+  "blocked_on_information",
+  "blocked_on_approval",
+  "paused",
+]
+
+/** The states from the preview on: every stage that applied is done. */
+const READY: readonly AssignmentState[] = [
+  "preview_ready",
+  "awaiting_review",
+  "release_candidate",
+  "published",
+]
 
 /**
  * An event that says where a build has got to, in the order they landed: the
@@ -99,8 +155,8 @@ const REPORTED = "assignment.completion_reported"
 const REPAIRED = "assignment.state_changed"
 
 /**
- * The step a build is on, or null in a state that is not one of them. After
- * the lead's first report a planned build is being looked over until the look
+ * The step a build is on, or null before it starts and in a state that ends
+ * it unfinished. After the lead's first report a planned build is being looked over until the look
  * answers; if it asked for changes the lead is polishing until it reports
  * again, and from that report on the build is being checked (the recheck, the
  * screenshots, then the gates). A move into `repairing` that no report has
@@ -114,6 +170,7 @@ function stepOf(
   if (state === "planning") return "planning"
   if (state === "validating") return "checking"
   if (state === "repairing") return "fixing"
+  if (READY.includes(state)) return "ready"
   if (!["implementing", "revising"].includes(state)) return null
   const types = marks.map((m) => m.type)
   const reported = types.lastIndexOf(REPORTED)
@@ -152,15 +209,18 @@ const toDraw = (plan: Blueprint | null | undefined) =>
   (plan?.images ?? []).filter((i) => i.source === "generated" && !i.asset_id)
 
 /**
- * Every step of the build, in order: those passed are done, the rest count
- * what they have finished so far. A planned build counts its photos, when it
- * makes any, and names its pages ("Writing the pages, 3 of 5"), then has its
- * design looked over before the checks. A build the gates sent back shows
- * "Fixing what the checks found" until the lead reports again. The step it is
- * on follows the build's own events (`marks`), not the state alone; the pages
- * tick as each is written, or all at once when the lead reports a build it
- * wrote itself. Any other step is whole, `1 of 1`. A quick build gets none;
- * the panel shows one line for it.
+ * The same six stages for every full build from its first event, so a row
+ * never appears or goes: Plan, Photos, Pages, Polish, Check, Ready. Stages
+ * passed are done, the rest count what they have finished so far. A stage
+ * that does not apply stays in the list as `skipped`: no photos to make, or a
+ * design look that asked for no changes. The pages include putting them
+ * together, polish includes the look at the design, and a repair the gates
+ * sent back shows as a line under the checks until the lead reports again.
+ * The stage it is on follows the build's own events (`marks`), not the state
+ * alone; the pages tick as each is written, or all at once when the lead
+ * reports a build it wrote itself. From the preview on every row is kept,
+ * done. Any stage but the pages and photos is whole, `1 of 1`. A quick build
+ * gets none; the panel shows one line for it.
  */
 export function activityFor(
   lane: BuildLane,
@@ -172,78 +232,101 @@ export function activityFor(
     marks = [],
   }: { plan?: Blueprint | null; settled?: Settled[]; marks?: Mark[] } = {}
 ): BuildActivity[] {
-  const reached = stepOf(state, marks, Boolean(plan))
-  if (lane === "quick" || !reached) return []
+  // A build waiting on a person is where its events left it: a plan, a report
+  // or a counted page or photo means the lead has begun, else it is planning.
+  // shortcut: an unplanned build parked before its first event reads as
+  // planning, as the state alone cannot say; add the last working state to
+  // the select if that shows.
+  const begun =
+    Boolean(plan) ||
+    marks.length > 0 ||
+    Boolean(progress.pages || progress.photos)
+  const reached = stepOf(
+    PARKED.includes(state) ? (begun ? "implementing" : "planning") : state,
+    marks,
+    Boolean(plan)
+  )
+  const queued = state === "queued" || state === "briefing"
+  if (lane === "quick" || (!reached && !queued)) return []
   // Every page written and no report yet: the lead is putting the site
   // together, which took 2 min 20 s in perf run 2 under "6 of 6".
   const written =
     progress.pages !== undefined && progress.pages.done >= progress.pages.total
-  const at: Step =
+  const at: Step | null =
     reached === "writing" && plan && written ? "assembling" : reached
-  const now = ORDER.indexOf(at)
-  const passed = (step: Step) => ORDER.indexOf(step) < now
   const photos =
     progress.photos ??
     (toDraw(plan).length > 0
       ? { done: 0, total: toDraw(plan).length }
       : undefined)
   // The photos are drawn before the pages are written, so while slots are
-  // still settling and no page has been, the photos are the step it is on.
+  // still settling and no page has been, the photos are the stage it is on.
   const drawing =
     at === "writing" &&
     photos !== undefined &&
     photos.done < photos.total &&
     !progress.pages?.done
-  const current = drawing ? "photos" : at
+  const current: Stage | null = drawing ? "photos" : at && STAGE_OF[at]
+  const here = current ? STAGES.indexOf(current) : -1
+  const passed = (stage: Stage) => STAGES.indexOf(stage) < here
+  const looked = marks.some((m) => m.type === "design.critiqued")
+  const polished = marks.some((m) => m.type === "design.critiqued" && m.fixes)
+  // shortcut: a build with no plan that starts counting photos after its
+  // pages have begun moves back from skipped; the builder draws them first.
+  const skipped: Partial<Record<Stage, boolean>> = {
+    photos: !photos && (Boolean(plan) || here >= STAGES.indexOf("writing")),
+    polishing: !polished && (looked || passed("polishing")),
+  }
   const row = (
-    id: string,
-    label: string,
-    done: boolean,
+    id: Stage,
     count?: { done: number; total: number }
   ): BuildActivity => {
+    const label =
+      (at && STAGE_OF[at] === id ? STEP_LABEL[at] : undefined) ??
+      STAGE_LABEL[id]
+    if (skipped[id]) return { id, label, done: 0, total: 1, skipped: true }
     const total = Math.min(Math.max(count?.total ?? 1, 1), COUNT_MAX)
+    // The photos keep their count while the pages are written, as the
+    // builder settles slots alongside them.
+    const done =
+      passed(id === "photos" ? "writing" : id) ||
+      (id === "ready" && at === "ready")
     return {
       id,
       label,
       done: done ? total : Math.min(count?.done ?? 0, total),
       total,
-      ...(id === current ? { now: true as const } : {}),
+      ...(id === current && at !== "ready" ? { now: true as const } : {}),
     }
   }
   const pagesDone = new Set(
     settled.filter((s) => s.stage === "pages").map((s) => s.item)
   )
+  const everyPage = passed("writing") || at === "assembling"
   const pages = plan?.pages.map(({ page }) => ({
     label: PLANNED_PAGES.find((p) => p.id === page)?.label ?? page,
-    done: passed("writing") || pagesDone.has(page),
+    done: everyPage || pagesDone.has(page),
   }))
   const repaired = marks.some((m) => m.type === REPAIRED)
-  const polished = marks.some((m) => m.type === "design.critiqued" && m.fixes)
   return [
-    row("planning", "Planning the layout", passed("planning")),
-    ...(photos
-      ? [row("photos", "Making photos", passed("writing"), photos)]
-      : []),
+    row("planning"),
+    row("photos", photos),
+    { ...row("writing", progress.pages), ...(pages ? { items: pages } : {}) },
+    row("polishing"),
     {
-      ...row("writing", "Writing the pages", passed("writing"), progress.pages),
-      ...(pages ? { items: pages } : {}),
+      ...row("checking"),
+      ...(repaired || at === "fixing"
+        ? {
+            items: [
+              {
+                label: "Fixing what the checks found",
+                done: at !== "fixing",
+              },
+            ],
+          }
+        : {}),
     },
-    // A planned build's pages are written in parallel and put together by
-    // the lead; BA5's look before the gates runs only on a planned build.
-    ...(plan
-      ? [
-          row("assembling", "Putting the site together", passed("assembling")),
-          row("design", "Looking over the design", passed("design")),
-          // Only when the look asked for changes; a short one still shows, done.
-          ...(polished || at === "polishing"
-            ? [row("polishing", "Polishing the design", passed("polishing"))]
-            : []),
-        ]
-      : []),
-    ...(repaired || at === "fixing"
-      ? [row("fixing", "Fixing what the checks found", passed("fixing"))]
-      : []),
-    row("checking", "Checking the site", passed("checking")),
+    row("ready"),
   ]
 }
 

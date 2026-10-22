@@ -333,7 +333,7 @@ export const BuildPhoto = z.strictObject({
   thumbnail: PhotoThumbnail.nullable(),
 })
 
-/** The most progress rows a build shows at once: planning, photos, pages, putting them together, design, its polish, a repair and the checks. */
+/** The most progress rows a build shows at once: its six stages (plan, photos, pages, polish, checks, ready), with room to spare. */
 export const BUILD_ACTIVITY_MAX = 8
 
 /**
