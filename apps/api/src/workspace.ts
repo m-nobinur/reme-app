@@ -71,7 +71,7 @@ const iso = (at: Date) => at.toISOString()
  */
 export const EXPECTED_SECONDS = {
   quick: { p50: 15, p95: 45 },
-  full: { p50: 180, p95: 330 },
+  full: { p50: 300, p95: 360 },
 } as const
 
 /** What a full build is doing, finer than the stages the owner sees. */
