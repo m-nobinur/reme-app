@@ -23,7 +23,6 @@ export const PERSONAS = [
       name: /regal rides/i,
       phone: "+447700900412",
       email: "bookings@regalrides.invalid",
-      callMe: "Dave",
       assistant: /jeeves/i,
     },
     turns: {
@@ -56,7 +55,6 @@ export const PERSONAS = [
       name: /hartley/i,
       phone: "+441134960555",
       email: "priya@hartleylaw.invalid",
-      callMe: "Priya",
       assistant: /clara/i,
     },
     turns: {
@@ -90,7 +88,6 @@ export const PERSONAS = [
       name: /suds on wheels/i,
       phone: "+447700900733",
       email: "jess@sudsonwheels.invalid",
-      callMe: "Jess",
     },
     turns: { 1: "mobile dog groomer" },
     cards: {
@@ -114,7 +111,6 @@ export const PERSONAS = [
       name: /whitmore/i,
       phone: "+441632960321",
       email: "care@whitmorefunerals.invalid",
-      callMe: "Mr Whitmore",
       assistant: /grace/i,
     },
     turns: {},
@@ -145,7 +141,6 @@ export const PERSONAS = [
       name: /black lotus/i,
       phone: "+447700900950",
       email: "ink@blacklotus.invalid",
-      callMe: "Kai",
       assistant: /raven/i,
     },
     turns: {
@@ -178,7 +173,6 @@ export const PERSONAS = [
       name: /sparkle/i,
       phone: "+441184960777",
       email: "hello@sparkleshine.invalid",
-      callMe: "Maria",
       assistant: /mia/i,
     },
     turns: {
@@ -207,7 +201,6 @@ export const PERSONAS = [
       name: /skyframe/i,
       phone: "+442920180123",
       email: "tom@skyframe.invalid",
-      callMe: "Tom",
       assistant: /ava/i,
     },
     turns: {
@@ -241,7 +234,6 @@ export const PERSONAS = [
       name: /little bean/i,
       phone: "+441632960222",
       email: "hello@littlebean.invalid",
-      callMe: "Soph",
       assistant: /bean/i,
     },
     turns: {},
@@ -272,7 +264,6 @@ export const PERSONAS = [
       name: /petal/i,
       phone: "+447700900616",
       email: "amara@petalandstem.invalid",
-      callMe: "Amara",
       assistant: /flora/i,
     },
     turns: {
@@ -299,7 +290,6 @@ export const PERSONAS = [
       name: /fixright/i,
       phone: "+447700900188",
       email: "steve@fixright.invalid",
-      callMe: "Steve",
     },
     turns: {
       1: "plumber. derby. boilers leaks bathrooms emergencies. 07700900188",
@@ -330,7 +320,6 @@ export const PERSONAS = [
       name: /bright minds/i,
       phone: "+14165550147",
       email: "helen@brightminds.invalid",
-      callMe: "Helen",
       assistant: /newton/i,
     },
     turns: {},
@@ -363,7 +352,6 @@ export const PERSONAS = [
       name: /jb/i,
       phone: "+447700900555",
       email: "jb@jbservices.invalid",
-      callMe: "JB",
     },
     turns: { 1: "handyman" },
     cards: {
@@ -393,7 +381,6 @@ export const MISLEADING = [
       name: /bright cleaning/i,
       phone: "+441134960812",
       email: "ola@brightcleaning.invalid",
-      callMe: "Ola",
       assistant: /spoke/i,
     },
     turns: {},
@@ -425,7 +412,6 @@ export const MISLEADING = [
       name: /hollow oak/i,
       phone: "+441392496077",
       email: "ben@hollowoak.invalid",
-      callMe: "Ben",
       assistant: /oakley/i,
     },
     turns: {},
@@ -458,7 +444,6 @@ export const SKIPPER = {
     name: /oakfield/i,
     phone: "+441632960404",
     email: "nadia@oakfield.invalid",
-    callMe: "Nadia",
     assistant: /sam/i,
   },
   turns: {},
