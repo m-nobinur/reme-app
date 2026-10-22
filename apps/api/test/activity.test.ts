@@ -57,6 +57,7 @@ const rows = (over: Partial<ActivityRows> = {}): ActivityRows => ({
   google: null,
   heartbeat: null,
   first_live: null,
+  live_at: null,
   ...over,
 })
 
@@ -342,6 +343,7 @@ describe("google", () => {
       state: "pending" as const,
       verified_at: null,
       sitemap_at: null,
+      synced_at: null,
       created_at: ago(20),
     }
     expect(google({ property }).now[0]?.steps[1]?.state).toBe("now")
@@ -358,6 +360,45 @@ describe("google", () => {
   it("has no segment before a connection or after it ended", () => {
     expect(google({ state: "revoked" }).now).toEqual([])
     expect(view().now).toEqual([])
+  })
+})
+
+describe("standing", () => {
+  const month = 60 * 24 * 30
+
+  it("keeps the latest publish, a domain and Google however old", () => {
+    const { standing } = view({
+      site: LIVE,
+      rows: rows({
+        live_at: ago(month),
+        domains: [
+          domain({ state: "active", activated_at: ago(month * 2) }),
+          domain({ id: ID(21), name: "old.co.uk", state: "abandoned" }),
+        ],
+        google: {
+          state: "active",
+          connected_at: ago(month),
+          property: {
+            state: "verified",
+            verified_at: ago(month),
+            sitemap_at: ago(month),
+            synced_at: ago(60),
+            created_at: ago(month),
+          },
+        },
+      }),
+    })
+    expect(standing?.map((s) => `${s.kind}:${s.state}`)).toEqual([
+      "golive:done",
+      "domain:done",
+      "google:done",
+    ])
+    expect(standing?.[0]).toMatchObject({ at: ago(month) })
+    expect(standing?.[2]).toMatchObject({ synced_at: ago(60) })
+  })
+
+  it("has nothing for a site that is not live and has no Google", () => {
+    expect(view({ rows: rows({ live_at: ago(5) }) }).standing).toEqual([])
   })
 })
 

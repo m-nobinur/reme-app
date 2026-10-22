@@ -46,6 +46,8 @@ export interface components {
           domain?: string
         }
         step?: string
+        /** Format: date-time */
+        synced_at?: string
       }[]
       now: {
         id: string
@@ -85,6 +87,8 @@ export interface components {
           domain?: string
         }
         step?: string
+        /** Format: date-time */
+        synced_at?: string
       }[]
       waiting: {
         id: string
@@ -124,6 +128,8 @@ export interface components {
           domain?: string
         }
         step?: string
+        /** Format: date-time */
+        synced_at?: string
       }[]
       upcoming: {
         id: string
@@ -163,6 +169,8 @@ export interface components {
           domain?: string
         }
         step?: string
+        /** Format: date-time */
+        synced_at?: string
       }[]
       done: {
         id: string
@@ -202,6 +210,49 @@ export interface components {
           domain?: string
         }
         step?: string
+        /** Format: date-time */
+        synced_at?: string
+      }[]
+      standing?: {
+        id: string
+        /** @enum {string} */
+        kind:
+          | "onboarding"
+          | "website"
+          | "golive"
+          | "change"
+          | "domain"
+          | "purchase"
+          | "google"
+          | "reminder"
+          | "review"
+          | "question"
+          | "checkin"
+          | "turn"
+        /** @enum {string} */
+        state: "upcoming" | "now" | "waiting" | "done" | "failed"
+        steps: {
+          id: string
+          /** @enum {string} */
+          state: "done" | "now" | "waiting" | "next" | "skipped"
+          value?: string
+          count?: {
+            done: number
+            total: number
+          }
+        }[]
+        /** Format: date-time */
+        at: string
+        /** Format: date-time */
+        deadline?: string
+        names?: {
+          business?: string
+          host?: string
+          domain?: string
+        }
+        step?: string
+        /** Format: date-time */
+        synced_at?: string
       }[]
     }
     ActivityFeed: {
@@ -10455,6 +10506,8 @@ export interface components {
             domain?: string
           }
           step?: string
+          /** Format: date-time */
+          synced_at?: string
         }[]
         now: {
           id: string
@@ -10494,6 +10547,8 @@ export interface components {
             domain?: string
           }
           step?: string
+          /** Format: date-time */
+          synced_at?: string
         }[]
         waiting: {
           id: string
@@ -10533,6 +10588,8 @@ export interface components {
             domain?: string
           }
           step?: string
+          /** Format: date-time */
+          synced_at?: string
         }[]
         upcoming: {
           id: string
@@ -10572,6 +10629,8 @@ export interface components {
             domain?: string
           }
           step?: string
+          /** Format: date-time */
+          synced_at?: string
         }[]
         done: {
           id: string
@@ -10611,6 +10670,49 @@ export interface components {
             domain?: string
           }
           step?: string
+          /** Format: date-time */
+          synced_at?: string
+        }[]
+        standing?: {
+          id: string
+          /** @enum {string} */
+          kind:
+            | "onboarding"
+            | "website"
+            | "golive"
+            | "change"
+            | "domain"
+            | "purchase"
+            | "google"
+            | "reminder"
+            | "review"
+            | "question"
+            | "checkin"
+            | "turn"
+          /** @enum {string} */
+          state: "upcoming" | "now" | "waiting" | "done" | "failed"
+          steps: {
+            id: string
+            /** @enum {string} */
+            state: "done" | "now" | "waiting" | "next" | "skipped"
+            value?: string
+            count?: {
+              done: number
+              total: number
+            }
+          }[]
+          /** Format: date-time */
+          at: string
+          /** Format: date-time */
+          deadline?: string
+          names?: {
+            business?: string
+            host?: string
+            domain?: string
+          }
+          step?: string
+          /** Format: date-time */
+          synced_at?: string
         }[]
       }
     }

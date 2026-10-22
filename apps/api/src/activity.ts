@@ -62,6 +62,7 @@ export type GoogleRow = {
     state: "pending" | "verified" | "failed" | "stale"
     verified_at: string | null
     sitemap_at: string | null
+    synced_at: string | null
     created_at: string
   } | null
 }
@@ -81,6 +82,8 @@ export type ActivityRows = {
   heartbeat: HeartbeatRow | null
   /** The site's first publish, and the build it published. */
   first_live: { at: string; assignment_id: string | null } | null
+  /** When the site last published, or null before the first time. */
+  live_at: string | null
 }
 
 /** A day back from `now`, as SQL: the window "Done today" reads. */
@@ -112,7 +115,7 @@ export async function readActivityRows(
       (select json_build_object('state', c.state, 'connected_at', c.connected_at,
         'property', (select json_build_object('state', p.state,
           'verified_at', p.verified_at, 'sitemap_at', p.sitemap->>'submitted_at',
-          'created_at', p.created_at)
+          'synced_at', p.last_synced_at, 'created_at', p.created_at)
           from search_properties p order by p.created_at desc limit 1))
         from search_connections c) as google,
       (select json_build_object(
@@ -124,7 +127,9 @@ export async function readActivityRows(
         order by j.created_at limit 1) as heartbeat,
       (select json_build_object('at', d.created_at, 'assignment_id', r.assignment_id)
         from deployments d join site_revisions r on r.id = d.revision_id
-        where d.site_id = o.id order by d.config_version limit 1) as first_live
+        where d.site_id = o.id order by d.config_version limit 1) as first_live,
+      (select d.created_at from deployments d
+        where d.site_id = o.id order by d.config_version desc limit 1) as live_at
     from orgs o limit 1`)
   if (!row) throw new Error("the org's own row is not visible")
   return row
@@ -414,6 +419,7 @@ export function googleSegment(row: GoogleRow | null): Segment | null {
     state: here === 3 ? "done" : "now",
     steps: along(GOOGLE_STEPS, here),
     at: here === 3 ? new Date(Math.max(...finished)).toISOString() : iso(at),
+    ...(p?.synced_at && { synced_at: iso(p.synced_at) }),
   }
 }
 
@@ -524,6 +530,41 @@ const byAt = (latest: boolean) => (a: Segment, b: Segment) =>
 /** The contract's bound on a group. */
 const SEGMENTS_MAX = 20
 
+const liveNames = (input: ActivityInput) => ({
+  ...(input.business && { business: input.business }),
+  ...(input.site.host && { host: input.site.host }),
+})
+
+/**
+ * Where the site stands whatever the age, for the Website page: the latest
+ * publish, each domain with its renewal, and the Google connection. An
+ * unpaid purchase that ran out is not a standing state, so it is left out.
+ */
+export function standingOf(input: ActivityInput): Segment[] {
+  const { domains, google, live_at } = input.rows
+  const standing: Segment[] = []
+  if (input.site.live && live_at)
+    standing.push({
+      id: "published",
+      kind: "golive",
+      state: "done",
+      steps: along(GOLIVE_STEPS, GOLIVE_STEPS.length),
+      at: iso(live_at),
+      names: liveNames(input),
+    })
+  for (const row of domains) {
+    if (row.state === "abandoned") continue
+    standing.push(
+      row.origin === "purchased" ? purchaseSegment(row) : domainSegment(row)
+    )
+    const renewal = renewalOf(row)
+    if (renewal) standing.push(renewal)
+  }
+  const segment = googleSegment(google)
+  if (segment) standing.push(segment)
+  return standing
+}
+
 /**
  * `Activity` from what the workspace read: the journey until the site is
  * first live, then each job in Now, Waiting on you, Coming up or Done
@@ -575,10 +616,7 @@ export function activityOf(input: ActivityInput, now: Date): Activity {
       state: "done",
       steps: along(GOLIVE_STEPS, GOLIVE_STEPS.length),
       at: iso(firstLive.at),
-      names: {
-        ...(input.business && { business: input.business }),
-        ...(input.site.host && { host: input.site.host }),
-      },
+      names: liveNames(input),
     })
   for (const item of input.feed) {
     if (!item.assignment_id) continue
@@ -670,6 +708,7 @@ export function activityOf(input: ActivityInput, now: Date): Activity {
     waiting: cap(segments.filter((s) => s.state === "waiting")),
     upcoming: cap(upcoming),
     done: cap(done, true),
+    standing: standingOf(input),
   }
 }
 

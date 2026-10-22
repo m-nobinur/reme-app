@@ -61,6 +61,8 @@ export const ActivitySegment = z.strictObject({
     .optional(),
   /** A model-written line for "change" and "turn", cleaned: shown as data. */
   step: Text(60).optional(),
+  /** Google only: when Search Console data was last read. */
+  synced_at: Timestamp.optional(),
 })
 
 /** The most segments one group lists. */
@@ -75,6 +77,14 @@ export const Activity = z.strictObject({
   waiting: Segments,
   upcoming: Segments,
   done: Segments,
+  /**
+   * Where the site stands whatever the age, for the Website page: the
+   * latest publish as a done `golive`, each domain and its renewal, and the
+   * Google connection (none before the owner connects). The other groups
+   * list only what runs or finished in the last day. Absent from an api
+   * older than the page.
+   */
+  standing: Segments.optional(),
 })
 
 export type ActivityStep = z.infer<typeof ActivityStep>

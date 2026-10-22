@@ -1,16 +1,34 @@
-import { ArrowSquareOutIcon, GlobeIcon } from "@phosphor-icons/react"
+import {
+  ArrowSquareOutIcon,
+  ChatCircleDotsIcon,
+  CheckCircleIcon,
+  CircleIcon,
+  GlobeIcon,
+  WarningCircleIcon,
+} from "@phosphor-icons/react"
 import { createFileRoute, getRouteApi, Link } from "@tanstack/react-router"
 import type { BuildSummary } from "@workspace/contracts"
 import { PageHeader } from "@workspace/ui/components/app-shell"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { EmptyState } from "@workspace/ui/components/empty-state"
 import { YourWebsite } from "@workspace/ui/components/live-panel"
+import { StatusIcon, StatusLine } from "@workspace/ui/components/status-line"
+import { segmentKind, workLine } from "@workspace/ui/lib/activity-copy"
 import { cn } from "@workspace/ui/lib/utils"
 import { assistantOf, leading } from "@/lib/briefing"
 import { currentBuild } from "@/lib/panel"
 import { anchorOf } from "@/lib/reminders"
+import {
+  type CheckRow,
+  checklistFor,
+  type RowAction,
+} from "@/lib/website-checklist"
 import { useLiveWorkspace } from "@/lib/workspace"
-import { useLiveThumbnail, useRequestChanges } from "@/panel/workspace-panel"
+import {
+  useBrowserZone,
+  useLiveThumbnail,
+  useRequestChanges,
+} from "@/panel/workspace-panel"
 
 export const Route = createFileRoute("/app/website")({
   component: WebsitePage,
@@ -36,16 +54,99 @@ function BuildLink({ build }: { build: BuildSummary }) {
   )
 }
 
+/** The mark the panel's steps use for the same state. */
+function RowMark({ row }: { row: CheckRow }) {
+  switch (row.mark) {
+    case "done":
+      return <CheckCircleIcon className="size-4 text-primary" weight="fill" />
+    case "now":
+      return <StatusIcon className="text-primary" kind={row.status} />
+    case "waiting":
+      return (
+        <ChatCircleDotsIcon className="size-4 animate-status-fade text-primary motion-reduce:animate-none" />
+      )
+    case "failed":
+      return <WarningCircleIcon className="size-4 text-destructive" />
+    default:
+      return <CircleIcon className="size-4 text-muted-foreground/60" />
+  }
+}
+
+function RowActionLink({ action }: { action: RowAction }) {
+  switch (action.kind) {
+    case "visit":
+      return (
+        <a className={LINK} href={action.href} rel="noreferrer" target="_blank">
+          {action.label}
+          <span className="sr-only"> (opens in a new tab)</span>
+          <ArrowSquareOutIcon aria-hidden />
+        </a>
+      )
+    case "review":
+      return (
+        <Link className={LINK} to="/app/approvals">
+          {action.label}
+        </Link>
+      )
+    case "ask":
+      return (
+        <Link
+          className={LINK}
+          state={() => ({ chat: crypto.randomUUID(), ask: action.ask })}
+          to="/app"
+        >
+          {action.label}
+        </Link>
+      )
+  }
+}
+
+/** Where the site stands: published, its address and Google, each with its next action. */
+function Checklist({ rows }: { rows: CheckRow[] }) {
+  return (
+    <section aria-labelledby="standing" className="flex flex-col gap-1">
+      <h2 className="font-medium text-sm" id="standing">
+        Where things stand
+      </h2>
+      <ul className="flex flex-col divide-y divide-border">
+        {rows.map((row) => (
+          <li className="flex items-start gap-2.5 py-3" key={row.id}>
+            <span aria-hidden className="mt-0.5 flex size-4 shrink-0">
+              <RowMark row={row} />
+            </span>
+            <div className="flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-3">
+              <div className="flex min-w-0 flex-col">
+                <span className="truncate text-sm">{row.title}</span>
+                <span
+                  className={cn(
+                    "text-[0.8125rem] text-muted-foreground",
+                    row.mark === "now" &&
+                      "shimmer shimmer-color-primary motion-reduce:animate-none"
+                  )}
+                >
+                  {row.line}
+                </span>
+              </div>
+              {row.action ? <RowActionLink action={row.action} /> : null}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
 /**
- * The owner's website, read from the frame's live workspace: the address,
- * the live version and its screenshot, and Request changes, which does what
- * the panel's does.
+ * The owner's website, read from the frame's live workspace: its screenshot,
+ * Request changes, which does what the panel's does, and the rows of where
+ * the site stands, read from the same activity as the panel.
  */
 function Website() {
   const { active } = frame.useLoaderData()
   const { workspace, refresh } = useLiveWorkspace()
   const thumbnail = useLiveThumbnail(workspace?.liveRevision ?? null)
   const requestChanges = useRequestChanges()
+  const zone = useBrowserZone()
 
   if (!workspace) {
     return (
@@ -63,8 +164,15 @@ function Website() {
     )
   }
 
-  const { live, host, url, open, builds } = workspace
+  const { live, host, open, builds } = workspace
   const build = open ? currentBuild(builds) : undefined
+  // The segment doing the work, whose step the page says: the first
+  // website's, or a change's.
+  const work = [
+    ...(workspace.activity?.journey ?? []),
+    ...(workspace.activity?.now ?? []),
+  ].find((s) => s.kind === "website" || s.kind === "change")
+  const step = work ? workLine(work) : null
 
   if (live === null && host === null) {
     return (
@@ -73,7 +181,11 @@ function Website() {
         {build ? (
           <EmptyState
             action={<BuildLink build={build} />}
-            description={`${leading(assistantOf(workspace))} is building the first version. You review it before it goes live.`}
+            description={
+              step
+                ? `${step}. You review it before it goes live.`
+                : `${leading(assistantOf(workspace))} is building the first version. You review it before it goes live.`
+            }
             icon={<GlobeIcon />}
             title="Your website is under way"
           />
@@ -120,29 +232,28 @@ function Website() {
         title="Website"
       />
       <div className="flex max-w-xl flex-col gap-4">
-        {host && url ? (
-          <a
-            className={cn(LINK, "self-start")}
-            href={url}
-            rel="noreferrer"
-            target="_blank"
-          >
-            {host}
-            <span className="sr-only"> (opens in a new tab)</span>
-            <ArrowSquareOutIcon aria-hidden />
-          </a>
-        ) : null}
         {build ? (
-          <p className="flex flex-wrap items-center gap-x-2 text-muted-foreground text-sm">
-            {live
-              ? "A change to your website is being built."
-              : "Your first version is being built."}
+          <p className="flex flex-wrap items-center gap-x-3 text-sm">
+            <StatusLine
+              announce={false}
+              clockAfter={null}
+              delay={0}
+              kind={work ? segmentKind(work) : "building"}
+              label={
+                step ??
+                (live
+                  ? "A change to your website is being built"
+                  : "Your first version is being built")
+              }
+              state={work?.state === "waiting" ? "waiting" : "working"}
+            />
             <BuildLink build={build} />
           </p>
         ) : null}
         {/* The screenshot and version line only: the address and Request
             changes sit above, where the page puts its actions. */}
         <YourWebsite host={null} live={live} thumbnail={thumbnail} />
+        <Checklist rows={checklistFor(workspace, zone, new Date())} />
       </div>
     </>
   )
