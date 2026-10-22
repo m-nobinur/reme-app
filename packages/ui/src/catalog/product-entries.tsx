@@ -250,19 +250,19 @@ const productCatalog: Entry[] = [
             id: "phone",
             term: "Phone",
             description: "+15550142",
-            meta: "You told Reme · version 1 · checked 6 Jan 2026",
+            meta: "You said this · checked 6 Jan 2026",
           },
           {
             id: "hours",
             term: "Weekday",
             description: "08:00 to 17:00",
-            meta: "You told Reme · version 1 · checked 6 Jan 2026",
+            meta: "You said this · checked 6 Jan 2026",
           },
           {
             id: "area",
             term: "Service area",
             description: "Fairhaven, within 25 km",
-            meta: "You told Reme · version 2 · checked 6 Jan 2026",
+            meta: "You said this · checked 6 Jan 2026",
           },
         ]}
       />

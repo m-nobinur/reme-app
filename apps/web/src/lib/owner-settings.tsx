@@ -32,7 +32,7 @@ import { PushControl } from "@/lib/push-control"
 import { useLiveWorkspace } from "@/lib/workspace"
 
 /**
- * What "Ask Reme for help" sends as the first message of a new chat: short,
+ * What "Ask for help" sends as the first message of a new chat: short,
  * so it reads as the owner's own question in the thread.
  */
 const HELP_PROMPT =
@@ -131,7 +131,8 @@ export function OwnerSettings({
       content: (
         <>
           <Lead>
-            What Reme knows about {orgName}, and where each fact came from.
+            What your assistant knows about {orgName}, and where each detail
+            came from.
           </Lead>
           <Link className={LINK} to="/app/profile">
             Open the business page
@@ -161,8 +162,8 @@ export function OwnerSettings({
       content: (
         <>
           <Lead>
-            What Reme remembers about you and how you like to work. It reads
-            these lines at the start of every conversation.
+            What your assistant remembers about you and how you like to work. It
+            reads these lines at the start of every conversation.
           </Lead>
           <Link className={LINK} to="/app/memory">
             Open memory
@@ -180,7 +181,7 @@ export function OwnerSettings({
             {workspace?.host
               ? `Your website is at ${workspace.host}.`
               : "Your website has no address yet."}{" "}
-            To use a domain of your own, ask Reme in the chat.
+            To use a domain of your own, ask in the chat.
           </Lead>
           <Link className={LINK} to="/app/website">
             Open the website page
@@ -237,7 +238,7 @@ export function OwnerSettings({
             state={() => ({ chat: crypto.randomUUID(), ask: HELP_PROMPT })}
             to="/app"
           >
-            Ask Reme for help
+            Ask for help
           </Link>
           {onboarding ? (
             <Link className={LINK} params={{ id: onboarding }} to="/app/c/$id">
