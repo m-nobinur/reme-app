@@ -137,7 +137,7 @@ function walk(o: Onboarding, answers: (card: ToolPart) => unknown) {
   for (let i = 0; i < 40; i++) {
     const step = onboardingStep(at, counter())
     const card = step.find((p): p is ToolPart => p.type.startsWith("tool-"))
-    if (!card && currentStep(at)?.id === "quote_form") {
+    if (currentStep(at)?.id === "quote_form") {
       asked.push("quote_form")
       at = applied(at, { kind: "facts", facts: [QUOTE] })
       continue
@@ -214,6 +214,10 @@ describe("the onboarding steps", () => {
       if (currentStep(at)?.id === "quote_form") {
         expect(step).toEqual([
           expect.objectContaining({ type: "text", state: "done" }),
+          expect.objectContaining({
+            type: "tool-ask_open",
+            input: { about: "quote.form" },
+          }),
         ])
         at = applied(at, { kind: "facts", facts: [QUOTE] })
         continue

@@ -7,7 +7,7 @@ import {
   AskDetailsOutput,
   AskFactInput,
   AskFactOutput,
-  type AskOpenInput,
+  AskOpenInput,
   AskOpenOutput,
   AskUploadInput,
   AskUploadOutput,
@@ -935,13 +935,16 @@ export const STEPS: readonly Step[] = [
   },
   {
     // The build waits for a quote form the owner reviewed or declined. The
-    // question is asked in words and the planner proposes a form from the
-    // answer; with no model, a typed answer gets the script's short form to
-    // confirm (`defaultQuoteForm`).
+    // question is asked in words, answered in the tray, and the planner
+    // proposes a form from the answer; with no model, a typed answer gets the
+    // script's short form to confirm (`defaultQuoteForm`).
     id: "quote_form",
     done: (o) =>
       !building(o) || has(o, "quote.form") || o.closed.includes("quote_form"),
-    ask: (o) => [text(question("quote_form", voiceOf(o)))],
+    ask: (o, newId) => [
+      text(question("quote_form", voiceOf(o))),
+      call("tool-ask_open", AskOpenInput.parse({ about: "quote.form" }), newId),
+    ],
   },
   {
     id: "upload",
