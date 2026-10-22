@@ -1,6 +1,7 @@
 import type {
   Activity,
   ApprovalRequest,
+  AvatarId,
   BuildStopCause,
   BuildSummary,
   ChangeKind,
@@ -130,6 +131,8 @@ export type Workspace = {
   missingFacts: FactValueKey[]
   /** The name the owner gave their assistant, or null before they chose one. */
   assistantName: string | null
+  /** The face the owner picked for their assistant, or null for Reme's own. */
+  assistantAvatar: AvatarId | null
   /** Every job as segments with fixed steps; null until the api sends it. */
   activity: Activity | null
   /** What the api derived from rows waiting on the owner, as facts. */

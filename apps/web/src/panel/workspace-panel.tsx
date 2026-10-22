@@ -7,6 +7,7 @@ import {
   useRouter,
 } from "@tanstack/react-router"
 import type {
+  AvatarId,
   BuildSummary,
   DecisionRequest,
   Reminder,
@@ -762,10 +763,17 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
 }
 
 /** The panel in one line, for its header and its minimised state. */
-export function WorkspacePanelLine({ panel }: { panel: Panel | null }) {
+export function WorkspacePanelLine({
+  panel,
+  avatar,
+}: {
+  panel: Panel | null
+  avatar: AvatarId | null
+}) {
   return (
     <LiveLine
       {...(panel?.line ?? { tone: "idle", lead: "This panel did not load" })}
+      avatar={avatar}
       lines={panel?.lines}
     />
   )

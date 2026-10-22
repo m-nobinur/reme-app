@@ -102,6 +102,11 @@ const SHAPES: [FactValue, string, string][] = [
     "she_her",
   ],
   [
+    { key: "assistant.avatar", value: { id: "she_1" } },
+    "Assistant's look",
+    "Wavy copper hair and round glasses",
+  ],
+  [
     { key: "assistant.tone", value: { id: "friendly" } },
     "Assistant's tone",
     "friendly",

@@ -266,7 +266,14 @@ function AppLayout() {
           onPanelToggle={auto.toggled}
           openPanel={press}
           panel={showPanel ? <WorkspacePanel panel={panel} /> : null}
-          panelLine={showPanel ? <WorkspacePanelLine panel={panel} /> : null}
+          panelLine={
+            showPanel ? (
+              <WorkspacePanelLine
+                avatar={live.workspace?.assistantAvatar ?? null}
+                panel={panel}
+              />
+            ) : null
+          }
           rail={
             <>
               <nav aria-label="Main" className="flex flex-col gap-2">
