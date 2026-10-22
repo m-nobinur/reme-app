@@ -340,6 +340,12 @@ const UP_TO_PHOTOS: FactValue[] = [
   { key: "site.pages", value: { ids: ["home", "quote"] } },
 ]
 
+/** Every fact before the design, which comes last: the quote form confirmed too. */
+const AT_DESIGN: FactValue[] = [
+  ...UP_TO_PHOTOS.slice(0, -4),
+  { key: "quote.form", value: { fields: [...DEFAULT_QUOTE_FIELDS] } },
+]
+
 describe.skipIf(!url)("POST /chat, on a live connection", () => {
   const kit: Tenancy = tenancy(url as string, { max: 2 })
   let realFetch: typeof fetch
@@ -498,7 +504,8 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
      * An org that was on the four design cards when the tray shipped: its
      * conversation already asked one, so it finishes on them.
      */
-    const onOldCards = async (conversationId: string) => {
+    /** A card answered earlier in the conversation, as its own row. */
+    const answeredEarlier = async (conversationId: string, card: object) => {
       const last = (await rows(conversationId)).at(-1)
       await kit.withOrg({ orgId: who.orgId }, (db) =>
         db.insert(conversationMessages).values({
@@ -509,20 +516,28 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
           parentId: last?.id ?? null,
           content: {
             role: "assistant",
-            parts: [
-              { type: "step-start" },
-              {
-                type: "tool-ask_choice",
-                toolCallId: "earlier_template",
-                state: "output-available",
-                input: { step: "template" },
-                output: { answer: "chosen", ids: ["classic"], other: null },
-              },
-            ],
+            parts: [{ type: "step-start" }, card],
           },
         })
       )
     }
+    const onOldCards = (conversationId: string) =>
+      answeredEarlier(conversationId, {
+        type: "tool-ask_choice",
+        toolCallId: "earlier_template",
+        state: "output-available",
+        input: { step: "template" },
+        output: { answer: "chosen", ids: ["classic"], other: null },
+      })
+    /** The photos skipped, so the design, which comes last, is next. */
+    const pastPhotos = (conversationId: string) =>
+      answeredEarlier(conversationId, {
+        type: "tool-ask_upload",
+        toolCallId: "earlier_photos",
+        state: "output-available",
+        input: {},
+        output: { answer: "skipped" },
+      })
     return {
       send,
       rows,
@@ -533,6 +548,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       say,
       atIndustry,
       onOldCards,
+      pastPhotos,
     }
   }
 
@@ -2102,10 +2118,11 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       await who.call(stubOrchestrator(), "/facts", {
         method: "POST",
         headers: { "idempotency-key": crypto.randomUUID() },
-        body: JSON.stringify({ facts: UP_TO_PHOTOS.slice(0, -4) }),
+        body: JSON.stringify({ facts: AT_DESIGN }),
       })
       const opened = talker(who)
       const id = await opened.onboarding()
+      await opened.pastPhotos(id)
       await opened.onOldCards(id)
       // The script's card for the layout, from a typed industry.
       const asked = await opened.turn(id, {
@@ -2159,9 +2176,10 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       await who.call(stubOrchestrator(), "/facts", {
         method: "POST",
         headers: { "idempotency-key": crypto.randomUUID() },
-        body: JSON.stringify({ facts: UP_TO_PHOTOS.slice(0, -4) }),
+        body: JSON.stringify({ facts: AT_DESIGN }),
       })
       const id = await talker(who).onboarding()
+      await talker(who).pastPhotos(id)
       await talker(who).onOldCards(id)
       const asked = await talker(who).say(id, "u_jev_0", "ok")
       const card = pendingCall(asked.after)
@@ -2275,9 +2293,10 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         await who.call(stubOrchestrator(), "/facts", {
           method: "POST",
           headers: { "idempotency-key": crypto.randomUUID() },
-          body: JSON.stringify({ facts: UP_TO_PHOTOS.slice(0, -4) }),
+          body: JSON.stringify({ facts: AT_DESIGN }),
         })
         const id = await talker(who).onboarding()
+        await talker(who).pastPhotos(id)
         const asked = await talker(who).say(id, `u_${name}_0`, "ok")
         const card = pendingCall(asked.after)
         expect(card.type).toBe("tool-ask_design")
@@ -2354,33 +2373,54 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
               : { choice: q.card.options[0]?.id },
           ])
         )
+        // The orchestrator snapshots the facts over its own connection, so
+        // the tray's answer must be committed before the build starts.
+        const seen: string[] = []
+        const build = building()
+        const orchestrator = stubOrchestrator(async (request) => {
+          const held = await kit.withOrg({ orgId: done.who.orgId }, (db) =>
+            db
+              .select({ key: facts.key })
+              .from(facts)
+              .where(sql`${facts.validTo} is null`)
+          )
+          seen.push(...held.map((f) => f.key))
+          return build.fetch(request)
+        })
         const built = await talker(done.who).turn(
           done.id,
-          answer(done.at, { answers: picks, skip_all: false })
+          answer(done.at, { answers: picks, skip_all: false }),
+          orchestrator
         )
+        expect(orchestrator.calls).toHaveLength(1)
+        expect(
+          built.after.parts.find((p) => p.type === "tool-ask_design")
+        ).toMatchObject({ state: "output-available" })
         expect(built.after.parts.slice(-3)).toMatchObject([
-          { type: "tool-ask_design", state: "output-available" },
+          {
+            type: "tool-request_change",
+            state: "output-available",
+            output: { outcome: "started" },
+          },
           { type: "step-start" },
           { type: "text", state: "done" },
         ])
-        const keys = (await factsOf(done.who)).map((f) => f.key)
         for (const key of [
           "site.palette",
           "site.font",
           "site.direction",
           "site.pages",
         ]) {
-          expect(keys).toContain(key)
+          expect(seen).toContain(key)
         }
         const skip = await atTray("chat-tray-skip")
         const skipped = await talker(skip.who).turn(
           skip.id,
           answer(skip.at, { answers: {}, skip_all: true })
         )
-        expect(skipped.after.parts.at(-3)).toMatchObject({
-          type: "tool-ask_design",
-          state: "output-available",
-        })
+        expect(
+          skipped.after.parts.find((p) => p.type === "tool-ask_design")
+        ).toMatchObject({ state: "output-available" })
         const held = await factsOf(skip.who)
         expect(held.find((f) => f.key === "site.direction")?.value).toEqual({
           id: "builder",
@@ -2396,9 +2436,10 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         await who.call(stubOrchestrator(), "/facts", {
           method: "POST",
           headers: { "idempotency-key": crypto.randomUUID() },
-          body: JSON.stringify({ facts: UP_TO_PHOTOS.slice(0, -4) }),
+          body: JSON.stringify({ facts: AT_DESIGN }),
         })
         const id = await talker(who).onboarding()
+        await talker(who).pastPhotos(id)
         await talker(who).onOldCards(id)
         const asked = await talker(who).say(id, `u_${name}_0`, "ok")
         expect(pendingCall(asked.after).input).toMatchObject({

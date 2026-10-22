@@ -134,6 +134,10 @@ const errorsOf = (p: Plan, s: PlanState) => {
 /** Ready to build: every fact, photos closed, the quote form confirmed. */
 const ready = () => onboarding([...EVERYTHING, QUOTE], { closed: ["upload"] })
 
+/** At the design, which comes last: the quote form confirmed, photos closed. */
+const atDesign = (facts: FactValue[], over: Partial<Onboarding> = {}) =>
+  onboarding([...facts, QUOTE], { closed: ["upload"], ...over })
+
 describe("the plan's checks", () => {
   it("starts a build only when every fact, the photos and the quote form are settled", () => {
     const start = plan({ say: "Starting now.", next: { kind: "start_build" } })
@@ -244,7 +248,7 @@ describe("the plan's checks", () => {
           initial: [],
         } as Plan["next"],
       })
-    const building = onboarding(without("site.template", "site.palette"), {
+    const building = atDesign(without("site.template", "site.palette"), {
       oldDesign: true,
     })
     expect(errorsOf(ask("template"), typed("ok", building))).toEqual([])
@@ -266,7 +270,7 @@ describe("the plan's checks", () => {
 
   it("asks the design tray where the order says, builds it from the industry, and not twice", () => {
     const design = plan({ next: { kind: "ask_design" } as Plan["next"] })
-    const open = onboarding(
+    const open = atDesign(
       without("site.template", "site.palette", "site.font", "site.pages")
     )
     const s = typed("ok", open)
@@ -303,7 +307,7 @@ describe("the plan's checks", () => {
   })
 
   it("lets the plan choose the palettes shown first, from the pool, three or four of them", () => {
-    const o = onboarding(without("site.palette"))
+    const o = atDesign(without("site.palette"))
     const palette = (initial: string[], step = "palette") =>
       plan({
         next: {
@@ -490,7 +494,7 @@ describe("the plan's checks", () => {
   })
 
   it("lets the assistant choose only what the card the owner typed over asks, and records it as its own", () => {
-    const o = onboarding(without("site.palette", "site.font"))
+    const o = atDesign(without("site.palette", "site.font"))
     const card = choiceCard("palette", onboarding(), counter())
     const delegated = plan({
       facts: { "site.palette": { id: "forest" } },

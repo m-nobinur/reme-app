@@ -900,17 +900,16 @@ const building = (o: Onboarding) => mode(o) === "assistant"
 
 /**
  * The script, in order. Phase 1 the business, phase 2 the assistant, phase
- * 3 the website and its quote form, phase 4 photos, phase 5 the build.
- * "Skip" on the build question takes the manual branch instead of phases 3
- * to 5. The opener asks what the business does in words, and the planner
+ * 3 the website and its quote form, phase 4 photos, phase 5 the design,
+ * whose answer starts the build. "Skip" on the build question takes the
+ * manual branch instead of phases 3 to 5. The opener asks what the business does in words, and the planner
  * reads the answers to the open questions; the script asks the rest with a
  * card, and asks the open ones with a form when the planner cannot run. The
  * industry card comes only when the owner's words did not tell the planner.
  *
- * The photo step is the one step asked even when its fact exists, so the
- * build only ever follows a turn that wrote no fact: the orchestrator
- * snapshots facts over its own connection, and cannot see this turn's
- * uncommitted writes.
+ * The build follows the design's answer in the same turn, and the
+ * orchestrator snapshots facts over its own connection, so `chat.ts`
+ * commits that answer's facts before it starts the build.
  */
 export const STEPS: readonly Step[] = [
   askFact("business.offerings"),
@@ -934,20 +933,6 @@ export const STEPS: readonly Step[] = [
       choiceCard("manual_builder", o, newId),
     ],
   },
-  // An org that reaches the design after the tray shipped is asked in one
-  // tray; one that was mid-way through the four cards finishes on them.
-  {
-    id: "design",
-    done: (o) => !building(o) || oldDesign(o) || designDone(o),
-    ask: (o, newId) => [
-      text(question("design", voiceOf(o))),
-      designCard(o, newId),
-    ],
-  },
-  askChoice("template", "site.template", (o) => building(o) && oldDesign(o)),
-  askChoice("palette", "site.palette", (o) => building(o) && oldDesign(o)),
-  askChoice("font", "site.font", (o) => building(o) && oldDesign(o)),
-  askChoice("pages", "site.pages", (o) => building(o) && oldDesign(o)),
   {
     // The build waits for a quote form the owner reviewed or declined. The
     // question is asked in words and the planner proposes a form from the
@@ -963,6 +948,20 @@ export const STEPS: readonly Step[] = [
     done: (o) => !building(o) || o.closed.includes("upload"),
     ask: (o, newId) => [text(photos(voiceOf(o))), uploadCard(newId)],
   },
+  // An org that reaches the design after the tray shipped is asked in one
+  // tray; one that was mid-way through the four cards finishes on them.
+  {
+    id: "design",
+    done: (o) => !building(o) || oldDesign(o) || designDone(o),
+    ask: (o, newId) => [
+      text(question("design", voiceOf(o))),
+      designCard(o, newId),
+    ],
+  },
+  askChoice("template", "site.template", (o) => building(o) && oldDesign(o)),
+  askChoice("palette", "site.palette", (o) => building(o) && oldDesign(o)),
+  askChoice("font", "site.font", (o) => building(o) && oldDesign(o)),
+  askChoice("pages", "site.pages", (o) => building(o) && oldDesign(o)),
   {
     id: "build",
     done: (o) => !building(o) || o.offered,
