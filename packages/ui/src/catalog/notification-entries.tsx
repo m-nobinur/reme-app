@@ -105,7 +105,7 @@ const ONE_OF_EACH: Record<Kind, NotificationItem> = {
   approval: {
     id: "approval",
     kind: "approval",
-    title: "Version 4 is ready to publish",
+    title: "Your new version is ready to publish",
     detail: "The hero now leads with end of tenancy cleans.",
     at: hoursBefore(2),
     expiresAt: "2026-10-04T09:00:00.000Z",

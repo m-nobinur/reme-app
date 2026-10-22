@@ -267,7 +267,7 @@ it("reads attention from the workspace, in its order and the owner's words", asy
     {
       kind: "approval",
       id: APPROVAL,
-      title: "Version 4 is ready to publish",
+      title: "Your new version is ready to publish",
       raisedBy: "Alex",
       expiresAt: EXPIRES,
     },

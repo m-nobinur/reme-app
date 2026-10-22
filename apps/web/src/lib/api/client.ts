@@ -263,8 +263,7 @@ function logged(item: Logged): { title: string; detail: string } {
 const APPROVAL_EXPIRY =
   "Nothing is published without you. If it expires, the build waits until you decide."
 
-const approvalTitle = (version: number) =>
-  `Version ${version} is ready to publish`
+const APPROVAL_TITLE = "Your new version is ready to publish"
 
 /**
  * `/workspace`, with the attention list trimmed. An approval whose target is
@@ -330,7 +329,7 @@ function toAttention(
             }
           : {}),
         id: item.request.approval_id,
-        title: approvalTitle(item.version),
+        title: APPROVAL_TITLE,
         detail: item.request.rationale,
         raisedBy: names.get(item.request.requested_by_staff_id) ?? SYSTEM,
         raisedById: item.request.requested_by_staff_id,
