@@ -243,7 +243,7 @@ function WorkspaceShell({
           id="workspace-rail"
           inert={!railOpen}
         >
-          <div className="flex h-14 w-16 shrink-0 items-center px-3">
+          <div className="flex h-16.5 w-16 shrink-0 items-center px-3">
             <RailToggle onClick={toggleRail} open />
           </div>
           <div className="flex min-h-0 w-16 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden px-2.5 pt-2 pb-3">
@@ -253,7 +253,7 @@ function WorkspaceShell({
       )}
 
       <div className="relative flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center gap-1 px-3">
+        <header className="flex h-16.5 shrink-0 items-center gap-1 px-3">
           <Sheet onOpenChange={setRailSheet} open={railSheet}>
             <SheetTrigger
               render={
@@ -305,14 +305,14 @@ function WorkspaceShell({
         {hasPanel ? (
           <aside
             aria-label="Panel"
-            className="absolute top-15 right-3 z-20 flex max-h-[calc(50svh+3rem)] w-[min(22rem,calc(100%-1.5rem))] flex-col overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-lg lg:top-1.25"
+            className="absolute top-18 right-3 z-20 flex max-h-[calc(50svh+3rem)] w-[min(22rem,calc(100%-1.5rem))] flex-col overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-lg lg:top-3"
             data-state={expanded ? "open" : "closed"}
             id="workspace-panel"
           >
             <button
               aria-controls={panelId}
               aria-expanded={expanded}
-              className="flex min-h-11 w-full min-w-0 shrink-0 items-center gap-2.5 px-3.5 text-start outline-none transition-colors hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-inset motion-reduce:transition-none"
+              className="flex min-h-10 w-full min-w-0 shrink-0 items-center gap-2.5 px-3.5 text-start outline-none transition-colors hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-inset motion-reduce:transition-none"
               onClick={() => setPanel(!expanded)}
               type="button"
             >

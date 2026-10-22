@@ -84,9 +84,7 @@ function AuthCard({
                 with the buttons' corners: this is the form a first-time visitor
                 has to finish. Set here, by slot, so the shared input keeps its
                 shape everywhere else. */}
-            <div className="mt-8 [&_[data-slot=input]]:h-11 [&_[data-slot=input]]:rounded-md [&_[data-slot=input]]:border-input [&_[data-slot=input]]:bg-transparent">
-              {children}
-            </div>
+            <div className="mt-8 [&_[data-slot=input]]:h-11">{children}</div>
             {footer ? (
               <footer className="mt-8 text-center text-muted-foreground text-sm">
                 {footer}
