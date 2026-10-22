@@ -5,6 +5,7 @@ import type {
 } from "@workspace/contracts"
 import { factLabel } from "@workspace/ui/lib/facts"
 import type { AttentionItem } from "./api/types"
+import { leading } from "./briefing"
 
 /**
  * Reminders in the owner's words: the derived ones for the briefing, from
@@ -101,7 +102,7 @@ export const upcomingNotes = (notes: Reminder[], now = Date.now()) =>
 
 /**
  * A derived reminder as the reminders page words it. `focus` opens the panel
- * on the item; `chat` starts a new chat, since facts are told to Reme there.
+ * on the item; `chat` starts a new chat, since facts are told to the assistant there.
  */
 export type Needed = {
   key: string
@@ -120,7 +121,8 @@ const neededOf = (
   reminder: DerivedReminder,
   attention: AttentionItem[],
   zone: string | null,
-  now: Date
+  now: Date,
+  assistant: string
 ): Needed => {
   switch (reminder.rule) {
     case "approval_expiring": {
@@ -165,9 +167,9 @@ const neededOf = (
     case "facts_missing":
       return {
         key: "facts",
-        title: `Reme still needs ${factsNeeded(reminder.keys)}`,
-        detail: "Your website is built from these. Tell Reme in a chat.",
-        action: { label: "Tell Reme", chat: true },
+        title: `${leading(assistant)} still needs ${factsNeeded(reminder.keys)}`,
+        detail: `Your website is built from these. Tell ${assistant} in a chat.`,
+        action: { label: `Tell ${assistant}`, chat: true },
       }
   }
 }
@@ -175,7 +177,8 @@ const neededOf = (
 /**
  * The reminders page, in order: what needs the owner now, then written
  * reminders overdue, due today, due later and undated, each list in the
- * api's order. Days are the reader's, in `zone`. While the zone is unknown
+ * api's order. Days are the reader's, in `zone`; `assistant` is what the owner
+ * calls theirs (`assistantOf`). While the zone is unknown
  * (the server's render) dated reminders share one group, so the server and
  * the first browser render agree. Empty groups are left out.
  */
@@ -184,6 +187,7 @@ export function groupReminders(
   derived: DerivedReminder[],
   attention: AttentionItem[],
   zone: string | null,
+  assistant: string,
   now = new Date()
 ): { needed: Needed[]; groups: ReminderGroup[] } {
   const dated = notes.filter((note) => note.due_at !== null)
@@ -217,7 +221,9 @@ export function groupReminders(
     : [{ id: "dated", title: "Scheduled", notes: dated }]
   groups.push({ id: "undated", title: "No date", notes: undated })
   return {
-    needed: derived.map((each) => neededOf(each, attention, zone, now)),
+    needed: derived.map((each) =>
+      neededOf(each, attention, zone, now, assistant)
+    ),
     groups: groups.filter((group) => group.notes.length > 0),
   }
 }

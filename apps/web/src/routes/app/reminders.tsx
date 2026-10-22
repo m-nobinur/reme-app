@@ -6,6 +6,7 @@ import { EmptyState } from "@workspace/ui/components/empty-state"
 import { ReminderList } from "@workspace/ui/components/live-panel"
 import { META } from "@workspace/ui/lib/utils"
 import { type ReactNode, useEffect, useRef, useState } from "react"
+import { assistantOf } from "@/lib/briefing"
 import { groupReminders, type Needed } from "@/lib/reminders"
 import { useLiveWorkspace } from "@/lib/workspace"
 import { Completable, useBrowserZone } from "@/panel/workspace-panel"
@@ -113,13 +114,14 @@ function Reminders() {
     workspace.reminderNotes,
     workspace.derivedReminders,
     workspace.attention,
-    zone
+    zone,
+    assistantOf(workspace)
   )
 
   return (
     <>
       <PageHeader
-        description="What needs you now, and the reminders you or Reme wrote down, by when they are due."
+        description={`What needs you now, and the reminders you or ${assistantOf(workspace)} wrote down, by when they are due.`}
         title="Reminders"
       />
 
