@@ -272,7 +272,7 @@ describe("the first run", () => {
       ["Where do you work?", "now"],
       ["Customers", "next"],
       ["Contact details", "next"],
-      ["Assistant's name", "next"],
+      ["Your assistant", "next"],
       ["Quote form", "next"],
       ["Photos", "next"],
       ["Look and feel", "next"],
