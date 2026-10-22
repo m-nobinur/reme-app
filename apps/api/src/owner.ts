@@ -11,7 +11,13 @@ import {
   PreviewLink,
   SetFactsRequest,
 } from "@workspace/contracts"
-import { approvals, assignments, type Tenancy } from "@workspace/db"
+import {
+  approvals,
+  assignments,
+  failureCode,
+  postChangeAsked,
+  type Tenancy,
+} from "@workspace/db"
 import { readPhoto, uploadAssets } from "./assets.ts"
 import {
   bridge,
@@ -79,8 +85,25 @@ async function requestChange(
   if (!key) return keyMissing()
   const parsed = OwnerChangeRequest.safeParse(await readBody(request))
   if (!parsed.success) return invalid(parsed.error.issues)
-  const { text, change_kind } = parsed.data
-  return startChange(env, kit, owner, text, key, change_kind)
+  const { text, change_kind, chat } = parsed.data
+  const response = await startChange(env, kit, owner, text, key, change_kind)
+  if (chat && response.ok) {
+    // The change has started: a note that cannot be posted must not undo it.
+    await postChangeAsked(kit, {
+      orgId: owner.orgId,
+      key,
+      text,
+      conversationId: chat.conversation_id,
+    }).catch((error: unknown) =>
+      console.error(
+        JSON.stringify({
+          code: "changes.post_failed",
+          error: failureCode(error),
+        })
+      )
+    )
+  }
+  return response
 }
 
 async function buildAction(

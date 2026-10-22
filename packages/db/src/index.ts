@@ -8,6 +8,7 @@ export {
   emailMessageId,
   type Posted,
   postAssistantMessage,
+  postChangeAsked,
   postOwnerEmail,
   serverMessageId,
 } from "./assistant-messages.ts"
