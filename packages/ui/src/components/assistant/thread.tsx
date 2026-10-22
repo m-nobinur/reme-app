@@ -32,9 +32,9 @@ import {
   XIcon,
 } from "@phosphor-icons/react"
 import { OWNER_CARDS } from "@workspace/ui/components/assistant/approval"
-import { TraySlotProvider } from "@workspace/ui/components/assistant/ask-design"
 import { COS_QUIET } from "@workspace/ui/components/assistant/cos-tools"
 import { MarkdownText } from "@workspace/ui/components/assistant/markdown-text"
+import { TraySlotProvider } from "@workspace/ui/components/assistant/question-tray"
 import {
   ReasoningGroup as DefaultReasoningGroup,
   Reasoning,
@@ -57,10 +57,10 @@ import {
   waitsOnBlueprint,
 } from "@workspace/ui/lib/blueprint"
 import {
-  QUOTE_CHANGES_PLACEHOLDER,
-  waitsOnQuoteForm,
-} from "@workspace/ui/lib/quote-form"
-import { SESSION_ENDED, waitsOnDesign } from "@workspace/ui/lib/tool-state"
+  SESSION_ENDED,
+  SKIPPED,
+  waitsOnTray,
+} from "@workspace/ui/lib/tool-state"
 import { cn } from "@workspace/ui/lib/utils"
 import { localMidnight } from "@workspace/ui/lib/zone"
 import {
@@ -142,7 +142,7 @@ export type ThreadProps = {
   placeholder?: string | undefined
   /** Other things to ask, which the placeholder rotates through after `placeholder`. */
   placeholderIdeas?: readonly string[] | undefined
-  /** The composer's placeholder while design questions are open above it. */
+  /** The composer's placeholder while a question is open in the tray above it. */
   questionPlaceholder?: string | undefined
   /** One line under the welcome heading, built from state rather than a model. */
   briefing?: string | null | undefined
@@ -412,8 +412,8 @@ const ThreadRoot: FC<{
   after: ReactNode
 }> = ({ isEmpty, autoFocus, stored, after }) => {
   const { Welcome = ThreadWelcome } = useContext(ThreadComponentsContext)
-  // Where the design tray docks, above the composer; the tray's call sits in
-  // the transcript and draws itself here.
+  // Where the question tray docks, above the composer; each question's call
+  // sits in the transcript and draws itself here.
   const [tray, setTray] = useState<HTMLElement | null>(null)
 
   return (
@@ -636,16 +636,13 @@ const Composer: FC<{ autoFocus: boolean; expanded: boolean }> = ({
   } = useContext(ThreadSettingsContext)
   const input = useContext(ComposerInputContext)
   const idea = useCycle([placeholder, ...(placeholderIdeas ?? [])])
-  // A proposed quote form waits on the owner: what they type next is their
-  // change to it, and the placeholder says so.
-  const reviewing = useAuiState((s) =>
-    waitsOnQuoteForm(s.thread.messages.at(-1)?.parts)
-  )
   const planning = useAuiState((s) =>
     waitsOnBlueprint(s.thread.messages.at(-1)?.parts)
   )
+  // A question waits in the tray: what the owner types instead is an
+  // ordinary turn, and the placeholder says so.
   const asking = useAuiState((s) =>
-    waitsOnDesign(s.thread.messages.at(-1)?.parts)
+    waitsOnTray(s.thread.messages.at(-1)?.parts)
   )
   // Disabled, not only kept from sending: words typed into the placeholder
   // thread would stay behind with it when the stored one replaces it. The
@@ -671,13 +668,11 @@ const Composer: FC<{ autoFocus: boolean; expanded: boolean }> = ({
           ref={input}
           placeholder={
             mode?.placeholder ??
-            (reviewing
-              ? QUOTE_CHANGES_PLACEHOLDER
+            (asking && questionPlaceholder
+              ? questionPlaceholder
               : planning
                 ? PLAN_CHANGES_PLACEHOLDER
-                : asking && questionPlaceholder
-                  ? questionPlaceholder
-                  : idea)
+                : idea)
           }
           className={cn(
             "aui-composer-input max-h-48 min-w-0 resize-none bg-transparent px-1.5 py-1.25 text-chat text-chat-foreground caret-primary outline-none placeholder:text-muted-foreground/60",
@@ -1170,6 +1165,11 @@ const UserText: FC = () => (
 const USER_PARTS = { Text: UserText }
 
 const UserMessage: FC = () => {
+  // A skipped question's reply is a note in the thread, not words the owner said.
+  const skipped = useAuiState((s) => {
+    const [only, ...rest] = s.message.parts
+    return rest.length === 0 && only?.type === "text" && only.text === SKIPPED
+  })
   return (
     <MessagePrimitive.Root
       data-slot="aui_user-message-root"
@@ -1177,7 +1177,12 @@ const UserMessage: FC = () => {
       data-role="user"
     >
       <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0">
-        <div className="aui-user-message-content wrap-break-word relative rounded-3xl bg-muted px-4 py-2.5 text-chat text-chat-foreground empty:hidden sm:px-5 sm:py-3">
+        <div
+          className={cn(
+            "aui-user-message-content wrap-break-word relative rounded-3xl bg-muted px-4 py-2.5 text-chat empty:hidden sm:px-5 sm:py-3",
+            skipped ? "text-muted-foreground" : "text-chat-foreground"
+          )}
+        >
           <MessagePrimitive.Parts components={USER_PARTS} />
         </div>
         <span

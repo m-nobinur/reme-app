@@ -35,6 +35,7 @@ import {
 } from "@workspace/ui/components/assistant/buy-domain"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
 import { MemoryChipUI } from "@workspace/ui/components/assistant/memory-chip"
+import { TrayFrame } from "@workspace/ui/components/assistant/question-tray"
 import { ServerButtonUI } from "@workspace/ui/components/assistant/server-button"
 import { SiteReady } from "@workspace/ui/components/assistant/site-ready"
 import {
@@ -189,6 +190,40 @@ function FixtureThread({
   )
 }
 
+/**
+ * An ask in its settled states, in one thread, then each open question in a
+ * thread of its own, so its tray docks alone above the composer as it does
+ * in the app.
+ */
+function TrayStates({
+  settled,
+  open,
+  height,
+}: {
+  settled: ThreadMessageLike[]
+  open: ThreadMessageLike[]
+  height: string
+}) {
+  return (
+    <div className="flex flex-col gap-8">
+      <FixtureThread height={height} messages={settled} />
+      {open.map((message, index) => (
+        <FixtureThread
+          height="h-[44rem]"
+          isDisabled={false}
+          // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list of fixtures
+          key={index}
+          messages={[message]}
+          settings={{
+            placeholder: "Ask Sam anything…",
+            questionPlaceholder: "Tell Sam what to do instead…",
+          }}
+        />
+      ))}
+    </div>
+  )
+}
+
 /** The composer's surroundings as the owner app sets them: the "+" starters. */
 const SUGGESTIONS: ThreadSuggestion[] = [
   { prompt: "What changed in version 4?" },
@@ -203,7 +238,7 @@ function OwnerThread(props: Parameters<typeof FixtureThread>[0]) {
       {...props}
       settings={{
         placeholder: "Ask Reme anything…",
-        questionPlaceholder: "Or tell Reme something else…",
+        questionPlaceholder: "Tell Reme what to do instead…",
         quickActions: OWNER_QUICK_ACTIONS,
         ...(props.stored ? { stored: props.stored } : {}),
         ...props.settings,
@@ -366,6 +401,57 @@ const answeredStep = (
   reply(said),
 ]
 
+/** An `ask_open` call in one of its states. */
+const askOpen = (
+  about: string,
+  extra: { result?: unknown; isError?: boolean } = {}
+) => ({
+  args: { about },
+  isError: extra.isError,
+  result: extra.result,
+  toolCallId: `open_${about}_${extra.isError ? "error" : extra.result ? "done" : "open"}`,
+  toolName: "ask_open",
+  type: "tool-call" as const,
+})
+
+const ASK_OPEN_STATES: ThreadMessageLike[] = [
+  ...answeredStep(
+    "Which areas do you cover?",
+    askOpen("service_area.text", {
+      result: { answer: "stated", text: "Leeds and about ten miles round" },
+    }),
+    "Leeds and about ten miles round"
+  ),
+  ...answeredStep(
+    "Who are your customers?",
+    askOpen("business.audience", { result: { answer: "skipped" } }),
+    "Skipped"
+  ),
+  {
+    content: [
+      askOpen("business.proof", {
+        isError: true,
+        result: { error: TOOL_CALL_CANCELLED },
+      }),
+    ],
+    role: "assistant",
+    status: DONE,
+  },
+]
+
+const ASK_OPEN_OPEN: ThreadMessageLike[] = [
+  {
+    content: [
+      question(
+        "To quote a clean, what do you need to know first? Rooms, how often, anything else."
+      ),
+      askOpen("quote.form"),
+    ],
+    role: "assistant",
+    status: WAITING,
+  },
+]
+
 const ASK_FACT_STATES: ThreadMessageLike[] = [
   ...answeredStep(
     "What is your business called?",
@@ -386,7 +472,7 @@ const ASK_FACT_STATES: ThreadMessageLike[] = [
       result: { answer: "skipped" },
       skippable: true,
     }),
-    "Skip for now"
+    "Skipped"
   ),
   {
     content: [
@@ -404,6 +490,10 @@ const ASK_FACT_STATES: ThreadMessageLike[] = [
     role: "assistant",
     status: DONE,
   },
+]
+
+/** The questions still open, each docked in a thread of its own. */
+const ASK_FACT_OPEN: ThreadMessageLike[] = [
   {
     content: [askFact("business.name", { prefill: { name: "Brightclean" } })],
     role: "assistant",
@@ -455,7 +545,7 @@ const ASK_DETAILS_STATES: ThreadMessageLike[] = [
         ],
       },
     }),
-    "07700 900123, sam@brightclean.example"
+    "07700 900123 · sam@brightclean.example"
   ),
   ...answeredStep(
     "And your assistant?",
@@ -463,7 +553,7 @@ const ASK_DETAILS_STATES: ThreadMessageLike[] = [
       result: { answer: "skipped" },
       skippable: true,
     }),
-    "Skip for now"
+    "Skipped"
   ),
   {
     content: [
@@ -476,6 +566,10 @@ const ASK_DETAILS_STATES: ThreadMessageLike[] = [
     role: "assistant",
     status: DONE,
   },
+]
+
+/** The questions still open, each docked in a thread of its own. */
+const ASK_DETAILS_OPEN: ThreadMessageLike[] = [
   {
     content: [
       question(
@@ -617,7 +711,7 @@ const ASK_CHOICE_STATES: ThreadMessageLike[] = [
       result: { answer: "skipped" },
       skippable: true,
     }),
-    "Skip for now"
+    "Skipped"
   ),
   {
     content: [
@@ -630,6 +724,10 @@ const ASK_CHOICE_STATES: ThreadMessageLike[] = [
     role: "assistant",
     status: DONE,
   },
+]
+
+/** The questions still open, each docked in a thread of its own. */
+const ASK_CHOICE_OPEN: ThreadMessageLike[] = [
   {
     content: [
       question("What kind of business is Brightclean?"),
@@ -723,7 +821,7 @@ const ASK_UPLOAD_STATES: ThreadMessageLike[] = [
   ...answeredStep(
     "And one of your team at work?",
     askUpload("skipped", { result: { answer: "skipped" } }),
-    "Skip for now"
+    "Skipped"
   ),
   {
     content: [
@@ -735,6 +833,10 @@ const ASK_UPLOAD_STATES: ThreadMessageLike[] = [
     role: "assistant",
     status: DONE,
   },
+]
+
+/** The questions still open, each docked in a thread of its own. */
+const ASK_UPLOAD_OPEN: ThreadMessageLike[] = [
   {
     content: [
       question(
@@ -894,7 +996,7 @@ const REVIEW_QUOTE_STATES: ThreadMessageLike[] = [
         fields: LIMOUSINE_QUESTIONS.slice(0, 4),
       },
     }),
-    "Your quote form asks 4 questions: Pick-up address, Drop-off address, Date of the journey, Passengers."
+    "Use this form"
   ),
   ...answeredStep(
     PROPOSED,
@@ -920,6 +1022,10 @@ const REVIEW_QUOTE_STATES: ThreadMessageLike[] = [
     role: "assistant",
     status: DONE,
   },
+]
+
+/** The questions still open, each docked in a thread of its own. */
+const REVIEW_QUOTE_OPEN: ThreadMessageLike[] = [
   {
     content: [question(PROPOSED), reviewQuote("open", LIMOUSINE_QUESTIONS)],
     role: "assistant",
@@ -2130,22 +2236,45 @@ const assistantCatalog = [
       />
     ),
   },
+  // An open question, and the tray parts every ask is drawn with.
+  ...(["AskOpen", "Docked", "TrayNote"] as const).map((name) => ({
+    name,
+    render: () => (
+      <TrayStates
+        height="h-[36rem]"
+        open={ASK_OPEN_OPEN}
+        settled={ASK_OPEN_STATES}
+      />
+    ),
+  })),
   {
     name: "AskFact",
     render: () => (
-      <FixtureThread height="h-[72rem]" messages={ASK_FACT_STATES} />
+      <TrayStates
+        height="h-[40rem]"
+        open={ASK_FACT_OPEN}
+        settled={ASK_FACT_STATES}
+      />
     ),
   },
   {
     name: "AskDetails",
     render: () => (
-      <FixtureThread height="h-[88rem]" messages={ASK_DETAILS_STATES} />
+      <TrayStates
+        height="h-[40rem]"
+        open={ASK_DETAILS_OPEN}
+        settled={ASK_DETAILS_STATES}
+      />
     ),
   },
   {
     name: "AskChoice",
     render: () => (
-      <FixtureThread height="h-[150rem]" messages={ASK_CHOICE_STATES} />
+      <TrayStates
+        height="h-[56rem]"
+        open={ASK_CHOICE_OPEN}
+        settled={ASK_CHOICE_STATES}
+      />
     ),
   },
   {
@@ -2157,7 +2286,14 @@ const assistantCatalog = [
             <h3 className="font-medium text-muted-foreground text-xs">
               {title}
             </h3>
-            <ChoiceForm input={COLOUR_INPUT} onAnswer={noop} start={start} />
+            <TrayFrame
+              collapsed={false}
+              onCollapsedChange={noop}
+              question="Which colours feel right?"
+              submit={{ label: "Submit" }}
+            >
+              <ChoiceForm input={COLOUR_INPUT} onAnswer={noop} start={start} />
+            </TrayFrame>
           </section>
         ))}
       </div>
@@ -2193,7 +2329,11 @@ const assistantCatalog = [
   {
     name: "ReviewQuoteForm",
     render: () => (
-      <FixtureThread height="h-[150rem]" messages={REVIEW_QUOTE_STATES} />
+      <TrayStates
+        height="h-[44rem]"
+        open={REVIEW_QUOTE_OPEN}
+        settled={REVIEW_QUOTE_STATES}
+      />
     ),
   },
   // The upload card and the provider that gives it the app's upload.
@@ -2201,7 +2341,11 @@ const assistantCatalog = [
     name,
     render: () => (
       <UploadPhotosProvider value={fakeUpload}>
-        <FixtureThread height="h-[60rem]" messages={ASK_UPLOAD_STATES} />
+        <TrayStates
+          height="h-[48rem]"
+          open={ASK_UPLOAD_OPEN}
+          settled={ASK_UPLOAD_STATES}
+        />
       </UploadPhotosProvider>
     ),
   })),
@@ -2217,7 +2361,7 @@ const assistantCatalog = [
           isDisabled={false}
           settings={{
             placeholder: "Ask Fern anything…",
-            questionPlaceholder: "Or tell Fern something else…",
+            questionPlaceholder: "Tell Fern what to do instead…",
           }}
           messages={[
             {

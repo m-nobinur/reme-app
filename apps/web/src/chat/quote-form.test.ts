@@ -12,12 +12,10 @@ import {
   dropField,
   keptFields,
   labelProblem,
-  quoteSummary,
   restoreField,
   setRequired,
-  waitsOnQuoteForm,
 } from "@workspace/ui/lib/quote-form"
-import { reviewQuoteFormView } from "@workspace/ui/lib/tool-state"
+import { reviewQuoteFormView, waitsOnTray } from "@workspace/ui/lib/tool-state"
 import { describe, expect, it } from "vitest"
 import { toUIMessage } from "./history"
 import type { ChatMessage } from "./message"
@@ -106,12 +104,6 @@ describe("editing a proposed quote form", () => {
     expect(QuoteFields.safeParse(result.fields).success).toBe(true)
     expect(new Set(result.fields.map((f) => f.key)).size).toBe(3)
   })
-
-  it("reads the confirmed list back with its count and labels", () => {
-    expect(quoteSummary(LIMOUSINE.slice(0, 2))).toBe(
-      "Your quote form asks 2 questions: Pick-up address, Drop-off address."
-    )
-  })
 })
 
 const INPUT = { fields: LIMOUSINE, note: "The route and the party size." }
@@ -174,7 +166,7 @@ describe("the review card's turn", () => {
     const reply = replyTo(waiting, { toolCallId: "call_quote", output })
     expect(reply).toEqual({
       role: "user",
-      parts: [{ type: "text", text: quoteSummary(LIMOUSINE) }],
+      parts: [{ type: "text", text: "Use this form" }],
       metadata: { reply: true },
     })
     // The reply sends it, never the SDK on its own.
@@ -186,7 +178,7 @@ describe("the review card's turn", () => {
         kind: "results",
         message_id: "msg_assistant",
         results: [{ kind: "answer", tool_call_id: "call_quote", output }],
-        reply: { message_id: "msg_reply", text: quoteSummary(LIMOUSINE) },
+        reply: { message_id: "msg_reply", text: "Use this form" },
       }
     )
   })
@@ -278,12 +270,12 @@ describe("the review card's turn", () => {
   })
 })
 
-it("tells the composer a proposed form waits, from the thread's own parts", () => {
+it("tells the composer a question waits in the tray, from the thread's own parts", () => {
   const call = { type: "tool-call", toolName: "review_quote_form" }
-  expect(waitsOnQuoteForm([call])).toBe(true)
-  expect(waitsOnQuoteForm([{ ...call, result: { answer: "changes" } }])).toBe(
-    false
-  )
-  expect(waitsOnQuoteForm([{ ...call, isError: true }])).toBe(false)
-  expect(waitsOnQuoteForm(undefined)).toBe(false)
+  expect(waitsOnTray([call])).toBe(true)
+  expect(waitsOnTray([{ ...call, toolName: "ask_open" }])).toBe(true)
+  expect(waitsOnTray([{ ...call, toolName: "connect_domain" }])).toBe(false)
+  expect(waitsOnTray([{ ...call, result: { answer: "changes" } }])).toBe(false)
+  expect(waitsOnTray([{ ...call, isError: true }])).toBe(false)
+  expect(waitsOnTray(undefined)).toBe(false)
 })

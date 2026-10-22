@@ -7,6 +7,8 @@ import type {
   AskDetailsOutput,
   AskFactInput,
   AskFactOutput,
+  AskOpenInput,
+  AskOpenOutput,
   AskUploadInput,
   AskUploadOutput,
   BlueprintReviewInput,
@@ -30,6 +32,7 @@ type Typed<T extends { input: z.ZodType; output: z.ZodType }> = {
 type ChatTools = {
   [Name in keyof typeof COS_TOOLS]: Typed<(typeof COS_TOOLS)[Name]>
 } & {
+  ask_open: { input: AskOpenInput; output: AskOpenOutput }
   ask_fact: { input: AskFactInput; output: AskFactOutput }
   ask_details: { input: AskDetailsInput; output: AskDetailsOutput }
   ask_choice: { input: AskChoiceInput; output: AskChoiceOutput }

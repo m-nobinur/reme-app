@@ -87,34 +87,3 @@ export const QUOTE_TYPE_LABEL: Record<QuoteField["type"], string> = {
   tel: "Phone",
   email: "Email",
 }
-
-/** The confirmed list read back: how many questions, and which. */
-export const quoteSummary = (fields: readonly QuoteField[]) =>
-  `Your quote form asks ${fields.length} ${fields.length === 1 ? "question" : "questions"}: ${fields.map((f) => f.label).join(", ")}.`
-
-/**
- * What the composer suggests while a proposed form waits: a message sent
- * then is the owner's change to it, not a new subject.
- */
-export const QUOTE_CHANGES_PLACEHOLDER =
-  "Say what to change about these questions…"
-
-/**
- * Whether these parts, a message's, hold a proposed form still waiting on
- * the owner. Read from the thread's own part shape.
- */
-export const waitsOnQuoteForm = (parts: readonly object[] | undefined) =>
-  (parts ?? []).some((part) => {
-    const p = part as {
-      type?: string
-      toolName?: string
-      result?: unknown
-      isError?: boolean
-    }
-    return (
-      p.type === "tool-call" &&
-      p.toolName === "review_quote_form" &&
-      p.result === undefined &&
-      !p.isError
-    )
-  })
