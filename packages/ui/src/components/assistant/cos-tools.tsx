@@ -151,9 +151,7 @@ const WorkspaceRead: ToolCallMessagePartComponent = (props) => {
           rows={[
             {
               label: "Your website",
-              value: workspace.site.live_version
-                ? `Version ${workspace.site.live_version} is live`
-                : "Not published yet",
+              value: workspace.site.live_version ? "Live" : "Not published yet",
             },
             {
               label: "Working on",
@@ -183,8 +181,7 @@ const WorkspaceRead: ToolCallMessagePartComponent = (props) => {
                     ))}
                     {workspace.approvals.map((approval) => (
                       <li key={approval.version}>
-                        Version {approval.version} to review by{" "}
-                        {time(approval.expires_at)}
+                        A new version to review by {time(approval.expires_at)}
                       </li>
                     ))}
                   </ul>
@@ -242,7 +239,7 @@ const PreviewRead: ToolCallMessagePartComponent = (props) => {
         working: "Checking the preview",
         done:
           view.state === "done" && view.output.outcome === "ready"
-            ? `Checked the preview of version ${view.output.version}`
+            ? "Checked the preview of the new version"
             : "Checked for a preview",
         failed: "Could not check the preview",
         cancelled: "Stopped checking the preview",

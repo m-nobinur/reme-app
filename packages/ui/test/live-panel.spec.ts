@@ -69,14 +69,12 @@ test("closing time cannot be set before opening time", async ({ page }) => {
   await expect(page.getByLabel("Closing time")).toHaveAttribute("min", "08:00")
 })
 
-test("an approval shows the version and short id beside Approve", async ({
-  page,
-}) => {
+test("an approval names no version or id beside Approve", async ({ page }) => {
   await open(page, "ApprovalItem", 400)
-  const approve = page.getByRole("button", { name: "Approve and publish v4" })
+  const approve = page.getByRole("button", { name: "Approve and publish" })
   await expect(approve).toBeEnabled()
-  await expect(page.getByText("Version 4", { exact: true })).toBeVisible()
-  await expect(page.getByText("ID 2f41c9ab")).toBeVisible()
+  await expect(page.getByText("A new version of your website")).toBeVisible()
+  await expect(page.getByText(/2f41c9ab|ID |Version \d/)).toHaveCount(0)
   await expect(page.getByRole("img")).toHaveCount(3)
   await expect(
     page.getByRole("link", { name: /Open preview/ })
@@ -88,7 +86,7 @@ test("an approval with no revision to publish cannot be approved", async ({
 }) => {
   await open(page, "ApprovalItem unbound", 400)
   await expect(
-    page.getByRole("button", { name: "Approve and publish v4" })
+    page.getByRole("button", { name: "Approve and publish" })
   ).toBeDisabled()
 })
 
@@ -145,7 +143,7 @@ test("the approve button shows a visible focus ring from the keyboard", async ({
   page,
 }) => {
   await open(page, "ApprovalItem", 400)
-  const approve = page.getByRole("button", { name: "Approve and publish v4" })
+  const approve = page.getByRole("button", { name: "Approve and publish" })
   await page.getByRole("link", { name: /Open preview/ }).focus()
   await page.keyboard.press("Tab")
   await expect(approve).toBeFocused()
@@ -212,7 +210,7 @@ test("the site thumbnail holds its space, and a broken one leaves the text", asy
   await open(page, "YourWebsite", 400)
   await expect(
     entry("YourWebsite").getByRole("img", {
-      name: "Your website's home page on a laptop, version 3",
+      name: "Your website's home page on a laptop",
     })
   ).toBeVisible()
 
@@ -224,7 +222,7 @@ test("the site thumbnail holds its space, and a broken one leaves the text", asy
   await open(page, "YourWebsite screenshot failed", 400)
   const failed = entry("YourWebsite screenshot failed")
   await expect(failed.getByRole("img")).toHaveCount(0)
-  await expect(failed.getByText("Version 3 is live")).toBeVisible()
+  await expect(failed.getByText("Your website is live")).toBeVisible()
 })
 
 test("the site is a link by name, with the host as its title", async ({
@@ -268,7 +266,7 @@ const REMINDER_ENTRIES = [
   "ReminderList",
   "ReminderList marked done",
   "ReminderNote",
-  "ReminderNote set by Reme",
+  "ReminderNote set by the assistant",
   "ReminderNote undated",
   "ReminderNote overdue",
   "ReminderNote pending",
@@ -309,7 +307,7 @@ test("each written reminder has its own Done, named for it", async ({
   await expect(
     page.getByRole("button", { name: "Done: Send the Hartley Road quote" })
   ).toBeVisible()
-  await expect(page.getByText("Set by Reme")).toHaveCount(1)
+  await expect(page.getByText("Set by your assistant")).toHaveCount(1)
   await expect(page.getByText("Due Sat 3 Oct, 9:30 am")).toBeVisible()
   // One due within the hour is marked, and only that one.
   await expect(page.locator('[data-soon="true"]')).toHaveCount(1)
@@ -376,12 +374,12 @@ test("an approval whose preview fails still says what the owner can do, and lets
   await open(page, "ApprovalItem preview unavailable", 400)
   let entry = page.locator('[data-entry="ApprovalItem preview unavailable"]')
   await expect(entry).toContainText(
-    "The preview for version 4 isn't available yet. Try again in a moment."
+    "The preview isn't available yet. Try again in a moment."
   )
   await expect(entry.getByRole("link")).toHaveCount(0)
   await expect(entry.getByRole("button", { name: "Try again" })).toBeEnabled()
   await expect(
-    entry.getByRole("button", { name: "Approve and publish v4" })
+    entry.getByRole("button", { name: "Approve and publish" })
   ).toBeEnabled()
 
   await page.clock.install()
@@ -389,12 +387,12 @@ test("an approval whose preview fails still says what the owner can do, and lets
   entry = page.locator('[data-entry="ApprovalItem screenshots failed"]')
   await giveUpShots(page, entry)
   await expect(entry).toContainText(
-    "The screenshots did not load. Open the preview to see version 4."
+    "The screenshots did not load. Open the preview to see the new version."
   )
   await expect(entry.locator("img")).toHaveCount(0)
   await expect(entry.getByRole("link", { name: /Open preview/ })).toBeVisible()
   await expect(
-    entry.getByRole("button", { name: "Approve and publish v4" })
+    entry.getByRole("button", { name: "Approve and publish" })
   ).toBeEnabled()
 })
 

@@ -186,7 +186,6 @@ function TargetSample() {
     <div className="flex max-w-md flex-col gap-2">
       <ApprovalTargetSummary
         target={{ kind: "revision", revision_id: "rev_2f41c9" }}
-        version={4}
       />
       <ApprovalTargetSummary
         target={{ kind: "domain", hostname: "brightclean.invalid" }}

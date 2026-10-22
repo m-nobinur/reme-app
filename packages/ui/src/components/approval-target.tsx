@@ -19,51 +19,40 @@ import type { ComponentProps } from "react"
  */
 function ApprovalTargetSummary({
   target,
-  version,
   className,
   ...props
 }: Omit<ComponentProps<"div">, "children"> & {
   target: ApprovalTarget
-  /** The revision's version number, which is what an owner calls it. */
-  version?: number
 }) {
-  const { label, value, id } = describe(target, version)
+  const { label, value } = describe(target)
+  const revision = target.kind === "revision"
   return (
     <div
       className={cn(
         "rounded-2xl bg-muted px-3 py-2 text-muted-foreground text-xs",
         className
       )}
+      // Support matches a report to its revision here, so no id is read aloud.
+      data-revision={revision ? target.revision_id : undefined}
       {...props}
     >
       <span>{label}</span>
       <p
         className={cn(
           "mt-0.5 break-words text-foreground text-sm",
-          id ? null : "font-mono"
+          revision ? null : "font-mono"
         )}
       >
         {value}
       </p>
-      {id ? <p className="mt-0.5">ID {id}</p> : null}
     </div>
   )
 }
 
-function describe(
-  target: ApprovalTarget,
-  version?: number
-): { label: string; value: string; id?: string } {
+function describe(target: ApprovalTarget): { label: string; value: string } {
   switch (target.kind) {
     case "revision":
-      // The version is what the owner reads; the short id is what support
-      // and the preview link match it against. The full id is never shown
-      // as though it were a version.
-      return {
-        label: "Site",
-        value: version === undefined ? "A new version" : `Version ${version}`,
-        id: target.revision_id.slice(0, 8),
-      }
+      return { label: "Site", value: "A new version of your website" }
     case "domain":
       return { label: "Domain", value: target.hostname }
     case "spend":
