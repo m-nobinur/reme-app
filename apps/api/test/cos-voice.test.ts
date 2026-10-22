@@ -15,7 +15,7 @@ import { VOICE } from "../src/voice.ts"
 type Part = TextStreamPart<ToolSet>
 
 /** Runs text through the transform in `deltas`, and returns what the owner reads. */
-async function read(deltas: string[]) {
+async function readDeltas(deltas: string[]) {
   const parts: Part[] = [
     { type: "text-start", id: "t" },
     ...deltas.map((text) => ({ type: "text-delta", id: "t", text }) as Part),
@@ -29,8 +29,10 @@ async function read(deltas: string[]) {
   }).pipeThrough(voiced("turn-1")())
   const seen: Part[] = []
   for await (const p of out) seen.push(p)
-  return seen.flatMap((p) => (p.type === "text-delta" ? [p.text] : [])).join("")
+  return seen.flatMap((p) => (p.type === "text-delta" ? [p.text] : []))
 }
+
+const read = async (deltas: string[]) => (await readDeltas(deltas)).join("")
 
 describe("voiced", () => {
   afterEach(() => vi.restoreAllMocks())
@@ -43,6 +45,15 @@ describe("voiced", () => {
         "Done, your page is up. It took 9 to 5 minutes, nearly."
       )
     }
+  })
+
+  it("passes text through at once, holding back only a trailing space or dash", async () => {
+    expect(await readDeltas(["Your website", " is live", ". Have"])).toEqual([
+      "Your website",
+      " is live",
+      ". Have",
+    ])
+    expect(await readDeltas(["Done ", "— ", "now"])).toEqual(["Done", ", now"])
   })
 
   it("keeps a reply without dashes as it was", async () => {

@@ -18,56 +18,54 @@ export function cleanStep(raw: string | undefined): string | undefined {
   return text && voiceProblems(text).hard.length === 0 ? text : undefined
 }
 
-/** The longest start of `text` that ends a sentence: its stop, any closing quote, then a space. */
-function wholeSentences(text: string): string {
-  let end = 0
-  for (const mark of text.matchAll(/[.!?]["'”’)]*(?=\s)/g)) {
-    end = mark.index + mark[0].length
-  }
-  return text.slice(0, end)
-}
+/**
+ * The end of a delta that the next one may change: trailing space, a dash
+ * with its spaces, and the digit before either (a range such as 9–5). A few
+ * characters at most.
+ */
+const UNDECIDED = /(?:\d?\s*[—–]\s*|\d?\s+|\d)$/
 
 /**
- * Holds the Chief of Staff's text to the end of each sentence, so a dash
- * is swapped before the owner reads it. The turn streams and cannot retry,
- * so any other `voiceProblems` hit is logged once per text block with the
- * turn id, by kind and never by the owner's words, for the voice eval to count.
- * Placed in the stream before the SDK builds the message, so the stored
- * message and the log hold what the owner read.
+ * Passes the Chief of Staff's text straight through, swapping a dash for a
+ * comma and holding back only the undecided end of a delta until the next
+ * one arrives. The turn streams and cannot retry, so any other
+ * `voiceProblems` hit on the finished text is logged once per text block
+ * with the turn id, by kind and never by the owner's words, for the voice
+ * eval to count. Placed in the stream before the SDK builds the message, so
+ * the stored message and the log hold what the owner read.
  */
 export const voiced =
   (turnId: string) =>
   <TOOLS extends ToolSet>() => {
-    const held = new Map<string, { waiting: string; sent: string }>()
+    const blocks = new Map<string, { held: string; sent: string }>()
     return new TransformStream<TextStreamPart<TOOLS>, TextStreamPart<TOOLS>>({
       transform(part, controller) {
-        if (part.type === "text-start")
-          held.set(part.id, { waiting: "", sent: "" })
         if (part.type === "text-delta") {
-          const text = held.get(part.id) ?? { waiting: "", sent: "" }
-          held.set(part.id, text)
-          text.waiting += part.text
-          const whole = wholeSentences(text.waiting)
-          if (!whole) return
-          text.waiting = text.waiting.slice(whole.length)
-          const out = dashesToCommas(whole)
-          text.sent += out
+          const block = blocks.get(part.id) ?? { held: "", sent: "" }
+          blocks.set(part.id, block)
+          const text = block.held + part.text
+          const tail = text.match(UNDECIDED)?.[0] ?? ""
+          block.held = tail
+          // A tail with a dash waits whole; a space or digit is only held back.
+          const dashed = /[—–]/.test(tail)
+          const done = dashesToCommas(
+            dashed ? text.slice(0, text.length - tail.length) : text
+          )
+          const out = dashed ? done : done.slice(0, done.length - tail.length)
+          if (!out) return
+          block.sent += out
           controller.enqueue({ ...part, text: out })
           return
         }
         if (part.type === "text-end") {
-          const text = held.get(part.id)
-          held.delete(part.id)
-          if (text?.waiting) {
-            const out = dashesToCommas(text.waiting)
-            text.sent += out
-            controller.enqueue({
-              type: "text-delta",
-              id: part.id,
-              text: out,
-            })
+          const block = blocks.get(part.id) ?? { held: "", sent: "" }
+          blocks.delete(part.id)
+          const out = dashesToCommas(block.held)
+          if (out) {
+            block.sent += out
+            controller.enqueue({ type: "text-delta", id: part.id, text: out })
           }
-          const { hard, soft } = voiceProblems(text?.sent ?? "")
+          const { hard, soft } = voiceProblems(block.sent)
           if (hard.length + soft.length > 0) {
             console.warn(
               JSON.stringify({
