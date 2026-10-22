@@ -114,10 +114,11 @@ export const firstName = (owner: string) => owner.trim().split(/\s+/)[0] ?? ""
 
 /**
  * The first message, six ways, written at sign-up with no model: a greeting
- * by first name when the sign-in gave one, who I am, a few quick questions to
- * understand the business and its goals, a website tailored to it, and the
- * first question: what the business does and its main services. Text only,
- * so it ends on the question.
+ * by first name when the sign-in gave one, who I am and what I take on
+ * (enquiries, quotes, follow-ups; a website only if they want one), a few
+ * quick questions to understand the business and its goals, and the first
+ * question: what the business does and its main services. Text only, so it
+ * ends on the question.
  */
 export function opener(v: Voice): string {
   const name = firstName(v.owner)
@@ -126,34 +127,34 @@ export function opener(v: Voice): string {
   return say(
     v,
     pick(v, "opener", [
-      `${hi("Hi")}. I'm the new business assistant at ${b}.
+      `${hi("Hi")}. I'm the new business assistant at ${b}. I'll help with the day-to-day: answering enquiries, preparing quotes and following up with customers.
 
-I'll ask a few quick questions so I can understand your business and your goals, and then I'll build you a website tailored to ${b}.
+First I'd like to understand the business and your goals, so I'll ask a few quick questions.
 
-To start, tell me about the business. What does ${b} do, and what are your main services?`,
-      `${hi("Hello")}. I'll be the business assistant for ${b}, starting with your website.
+To start, what does ${b} do, and what are your main services?`,
+      `${hi("Hello")}. I'll be the business assistant for ${b}, looking after enquiries, quotes and follow-ups so you can get on with the work.
 
-A few quick questions first, so I get a feel for what you do and what you want from the business, then I'll put together a website made for it.
+A few quick questions first, so I get a feel for what you do and where you want the business to go.
 
 In your own words, what does ${b} do, and which services do customers come to you for most?`,
-      `${hi("Hi")}. I'm your business assistant, and before anything gets built I'd like to understand ${b} properly.
+      `${hi("Hi")}. I'm your business assistant. Before I take anything on, I'd like to understand ${b} properly.
 
-I'll ask a few quick questions about the business and your goals. With that, I can shape a website around you rather than a template.
+I'll ask a few quick questions about the business and your goals. Your answers shape how I talk to customers and put quotes together, and your website too if you'd like one.
 
 What does ${b} do, and which services matter most to you?`,
-      `${hi("Hi")}. I'm the business assistant for ${b}, here to help run things.
+      `${hi("Hi")}. I'm the business assistant for ${b}, here to help run things: replying to enquiries, following up on quotes and keeping track of what needs doing.
 
-A few quick questions will help me understand your business and where you want to take it. Then I'll build a website that fits ${b}.
+A few quick questions will help me understand your business and where you want to take it.
 
 Let's begin with the heart of it: what does the business do, and what are your main services?`,
       `Good to meet you${name ? `, ${name}` : ""}. I'm the business assistant for ${b}.
 
-This won't take long. I'll ask a few quick questions so I can understand the business and your goals, and I'll use your answers to build a website tailored to you.
+This won't take long. I'll ask a few quick questions so I understand the business and your goals. Then I can start on enquiries and quotes, and a website if you need one.
 
 First, the big one. What does ${b} do, and what are the main services you offer?`,
       `${hi("Hello")}. I'm your new business assistant, and my first job is getting to know ${b}.
 
-I'll ask a few quick questions, just enough to understand the business and your goals. Then I'll build you a website made to fit.
+I'll ask a few quick questions about the business and your goals. After that I can take on enquiries, quotes and follow-ups, and set up a website if you need one.
 
 So tell me, what does ${b} do, and what services do you offer?`,
     ])
@@ -232,21 +233,21 @@ Before the website, let's settle who I am on your team. Choose the name I'll go 
   ],
   // Phase 2 to 3: the new identity, then the website and the quote page.
   build_for_me: (v) => {
-    const ask = "Would you like me to build your website for you?"
+    const ask = `Would you like me to build a website for ${v.business}?`
     return [
       `${v.assistant ? `${v.assistant} it is!` : `Thanks${comma(v.owner)}.`}
 
-Now let's turn to your website. Every growing business needs one that turns visitors into real enquiries, so yours will have its own Request a quote page for your services.
+I can also build ${v.business} a website, with a Request a quote page that sends each enquiry straight to me with the details you need to reply. If you already have a site, choose Skip for now.
 
 ${ask}`,
       `${v.assistant ? `I'm ${v.assistant} from now on${comma(v.owner)}.` : `Thanks${comma(v.owner)}.`}
 
-Let's talk about your website. It's often the first thing a new customer sees of ${v.business}, so getting in touch has to be easy. Every page will point visitors to Request a quote, and each enquiry will arrive with the details you need to reply.
+One more thing I can do: build a website for ${v.business}. Every page would point visitors to Request a quote, and each enquiry would reach me with what you need to quote the job. If you already have a site, just skip this.
 
 ${ask}`,
       `Thanks${comma(v.owner)}.
 
-Next is the part most owners put off: the website. A good one turns visitors into real enquiries, and yours will have a Request a quote flow so customers can describe the job and you can reply with the right quote.
+If ${v.business} needs a website, I can build it. It would have a Request a quote page, so customers describe the job and the enquiry comes to me ready for a quote. Already have one? Skip this for now.
 
 ${ask}`,
     ]

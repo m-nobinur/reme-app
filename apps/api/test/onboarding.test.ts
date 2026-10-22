@@ -1201,13 +1201,13 @@ describe("the onboarding copy", () => {
     ).toContain("your wedding cars and airport runs")
   })
 
-  it("mentions the quote page when it turns to the website", () => {
+  it("offers the website, with its quote page, as one thing it can do", () => {
     for (const org of ORGS) {
       expect(question("build_for_me", voice({ org }))).toContain(
         "Request a quote"
       )
       expect(question("build_for_me", voice({ org }))).toContain(
-        "Would you like me to build your website for you?"
+        `Would you like me to build a website for ${BUSINESS}?`
       )
     }
   })
@@ -1253,7 +1253,9 @@ describe("the onboarding copy", () => {
       expect(text).toContain(BUSINESS)
       expect(text).toMatch(/business assistant/)
       expect(text).toMatch(/quick questions/)
-      expect(text).toMatch(/website/)
+      // A business assistant first: the website is one thing it offers.
+      expect(text).toMatch(/quote/)
+      expect(text).not.toMatch(/build you a website|starting with your website/)
       expect(text.trim()).toMatch(/\?$/)
       expect(text).not.toMatch(/[—–]|\bReme\b/)
       expect(text.split("\n\n").length).toBeLessThanOrEqual(3)
