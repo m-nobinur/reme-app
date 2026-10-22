@@ -586,7 +586,7 @@ function PanelSegment({
                             (step.state === "now" ||
                               step.state === "waiting") &&
                               !failed &&
-                              "shimmer shimmer-color-foreground text-muted-foreground motion-reduce:animate-none",
+                              "shimmer shimmer-color-foreground shimmer-speed-100 text-muted-foreground motion-reduce:animate-none",
                             (step.state === "next" ||
                               step.state === "skipped") &&
                               "text-muted-foreground"
