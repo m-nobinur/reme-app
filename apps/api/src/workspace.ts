@@ -40,7 +40,9 @@ import {
 } from "@workspace/db"
 import { factsToAsk } from "@workspace/gates/fields"
 import { fields } from "@workspace/starter-site/site-config"
+import { activityOf, readActivityRows } from "./activity.ts"
 import { sha256Hex } from "./http.ts"
+import { factValue } from "./onboarding.ts"
 import { readReminderNotes } from "./reminders.ts"
 
 /**
@@ -930,17 +932,27 @@ export async function statusWithFacts(
 ): Promise<{ status: WorkspaceStatus; facts: FactRecord[] }> {
   // Issued together, so postgres.js pipelines them on the transaction's one
   // connection instead of paying a round trip each.
-  const [builds, approvalItems, questions, feed, current, site, notes, due] =
-    await Promise.all([
-      readBuilds(db),
-      readApprovals(db),
-      readQuestions(db),
-      readFeed(db, PANEL_HOURS, 10),
-      readFacts(db),
-      readSite(db, config),
-      readReminderNotes(db),
-      readDueReminders(db, now),
-    ])
+  const [
+    builds,
+    approvalItems,
+    questions,
+    feed,
+    current,
+    site,
+    notes,
+    due,
+    rows,
+  ] = await Promise.all([
+    readBuilds(db),
+    readApprovals(db),
+    readQuestions(db),
+    readFeed(db, PANEL_HOURS, 10),
+    readFacts(db),
+    readSite(db, config),
+    readReminderNotes(db),
+    readDueReminders(db, now),
+    readActivityRows(db, now),
+  ])
   const missing = missingFacts(current)
   const status = WorkspaceStatus.parse({
     site,
@@ -956,6 +968,20 @@ export async function statusWithFacts(
         now
       ),
     },
+    activity: activityOf(
+      {
+        site,
+        business: factValue(current, "business.name")?.name ?? null,
+        builds,
+        approvals: approvalItems,
+        questions,
+        feed,
+        due,
+        notes,
+        rows,
+      },
+      now
+    ),
   })
   return { status, facts: current }
 }
