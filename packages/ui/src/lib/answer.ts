@@ -187,7 +187,15 @@ export const FACT_INPUTS = {
   },
   "assistant.name": {
     ask: "What would you like to call your assistant?",
-    fields: line("name", "Assistant's name", 40),
+    fields: [
+      {
+        name: "name",
+        label: "Assistant's name",
+        type: "text",
+        maxLength: 40,
+        placeholder: "Ellie",
+      },
+    ],
   },
   "owner.preferred_name": {
     ask: "What should your assistant call you?",

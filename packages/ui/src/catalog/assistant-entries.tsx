@@ -514,12 +514,14 @@ const askDetails = (
     isError?: boolean
     skippable?: boolean
     prefill?: unknown[]
+    ideas?: string[]
   } = {}
 ) => ({
   args: {
     step,
     prefill: (extra.prefill ?? []) as [],
     skippable: extra.skippable ?? false,
+    ...(extra.ideas ? { ideas: extra.ideas } : {}),
   },
   isError: extra.isError,
   result: extra.result,
@@ -583,7 +585,10 @@ const ASK_DETAILS_OPEN: ThreadMessageLike[] = [
   {
     content: [
       question("Last thing: what should your assistant be called?"),
-      askDetails("assistant", { skippable: true }),
+      askDetails("assistant", {
+        skippable: true,
+        ideas: ["Ellie", "Marcus", "Priya"],
+      }),
     ],
     role: "assistant",
     status: WAITING,

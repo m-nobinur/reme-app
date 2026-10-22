@@ -69,6 +69,31 @@ const HINT: Partial<Record<string, string>> = {
     "Shown on your website. Use a business address if you have one.",
 }
 
+/** Names written for this business, a tap each to fill the name field. */
+function NameIdeas({
+  ideas,
+  onPick,
+}: {
+  ideas: readonly string[]
+  onPick: (name: string) => void
+}) {
+  return (
+    <ul aria-label="Name ideas" className="flex flex-wrap gap-2 pt-1">
+      {ideas.map((name) => (
+        <li key={name}>
+          <button
+            className="h-7 rounded-full border border-border bg-card px-3 text-xs transition-colors hover:border-foreground/40 hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+            onClick={() => onPick(name)}
+            type="button"
+          >
+            {name}
+          </button>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 /** The page's question: the web's copy for the key. */
 const askOf = (key: DetailsKey) =>
   isPick(key) ? PICKS[key].ask : FACT_INPUTS[key].ask
@@ -321,6 +346,21 @@ function DetailsTray({
                     spec={{ kind: "fact", key: each }}
                     title={factLabel(each)}
                   />
+                  {each === "assistant.name" && input.ideas?.length ? (
+                    <NameIdeas
+                      ideas={input.ideas}
+                      onPick={(name) => {
+                        const field =
+                          formRef.current?.querySelector<HTMLInputElement>(
+                            `[name="${fieldOf(each)}"]`
+                          )
+                        if (!field) return
+                        field.value = name
+                        setProblem(null)
+                        field.focus()
+                      }}
+                    />
+                  ) : null}
                   {HINT[each] ? (
                     <p className="text-muted-foreground text-xs">
                       {HINT[each]}
