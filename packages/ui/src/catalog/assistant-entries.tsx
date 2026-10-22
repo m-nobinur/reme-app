@@ -898,8 +898,11 @@ const quoteField = (
 const LIMOUSINE_QUESTIONS = [
   quoteField("pickup", "Pick-up address", "text", { hint: "Street and town" }),
   quoteField("dropoff", "Drop-off address", "text"),
-  quoteField("journey_date", "Date of the journey", "date"),
+  quoteField("journey_date", "Date and time of the journey", "datetime"),
   quoteField("passengers", "Passengers", "number"),
+  quoteField("vehicle", "Vehicle", "radio", {
+    options: ["Saloon", "Stretch limousine", "Minibus"],
+  }),
   quoteField("occasion", "Occasion", "select", {
     required: false,
     options: ["Wedding", "Airport transfer", "Night out", "Business"],
@@ -981,9 +984,8 @@ const REVIEW_QUOTE_OPEN: ThreadMessageLike[] = [
         "minimum",
         [
           quoteField("rooms", "How many rooms", "number"),
-          quoteField("access", "How we get in", "textarea", {
+          quoteField("photos", "Photos of the rooms", "photos", {
             required: false,
-            hint: "A key safe, a neighbour or someone at home",
           }),
         ],
         { note: null }

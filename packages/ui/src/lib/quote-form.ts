@@ -79,11 +79,15 @@ export function confirmedFields(
 
 /** A question's type as the owner reads it. */
 export const QUOTE_TYPE_LABEL: Record<QuoteField["type"], string> = {
-  text: "Text",
-  textarea: "Long text",
+  text: "Short answer",
+  textarea: "Long answer",
   number: "Number",
   date: "Date",
-  select: "Choice",
+  datetime: "Date and time",
+  select: "Dropdown",
+  radio: "Pick one",
+  checkbox: "Pick any",
+  photos: "Photos",
   tel: "Phone",
   email: "Email",
 }

@@ -1,5 +1,20 @@
-import type { ToolCallMessagePartComponent } from "@assistant-ui/react"
-import { ArrowCounterClockwiseIcon, TrashIcon } from "@phosphor-icons/react"
+import { type ToolCallMessagePartComponent, useAui } from "@assistant-ui/react"
+import {
+  ArrowCounterClockwiseIcon,
+  CalendarBlankIcon,
+  CalendarDotsIcon,
+  CaretCircleDownIcon,
+  CheckSquareIcon,
+  EnvelopeSimpleIcon,
+  HashIcon,
+  type Icon,
+  ImageIcon,
+  PhoneIcon,
+  RadioButtonIcon,
+  TextAlignLeftIcon,
+  TextTIcon,
+  TrashIcon,
+} from "@phosphor-icons/react"
 import {
   Docked,
   TrayFrame,
@@ -7,6 +22,7 @@ import {
 } from "@workspace/ui/components/assistant/question-tray"
 import { Button } from "@workspace/ui/components/button"
 import { Switch } from "@workspace/ui/components/switch"
+import { ComposerInputContext } from "@workspace/ui/hooks/use-composer-input"
 import {
   canDrop,
   confirmedFields,
@@ -19,19 +35,37 @@ import {
   setRequired,
 } from "@workspace/ui/lib/quote-form"
 import { reviewQuoteFormView } from "@workspace/ui/lib/tool-state"
-import { useId, useState } from "react"
+import { useContext, useId, useState } from "react"
 
 /**
  * The questions the assistant proposes for the site's quote request form,
  * from what the owner said they need to know to quote a job, in the question
- * tray. One compact row each: the question, which wraps, its type, a Required switch and a remove
- * button that shows on hover or focus. The owner makes a question optional or
- * drops one, and confirms with "Use this form". Any other change is typed in
- * the composer, and the message they send is the answer to this card
- * (`changes`), not a new subject. Nothing is sent until they press or send.
- * Once answered it shows nothing: the owner's reply after it says what they
- * settled on.
+ * tray. One row each: the question's type as an icon, the question, which
+ * wraps, its type and options on a muted line, a Required switch and a
+ * remove button that shows on hover or focus. The owner makes a question
+ * optional or drops one, and confirms with "Use this form". Any other change
+ * is typed in the composer, which "Make changes" starts for them, and the
+ * message they send is the answer to this card (`changes`), not a new
+ * subject. Nothing is sent until they press or send. Once answered it shows
+ * nothing: the owner's reply after it says what they settled on.
  */
+
+const TYPE_ICON: Record<QuoteDraft[number]["field"]["type"], Icon> = {
+  text: TextTIcon,
+  textarea: TextAlignLeftIcon,
+  number: HashIcon,
+  date: CalendarBlankIcon,
+  datetime: CalendarDotsIcon,
+  select: CaretCircleDownIcon,
+  radio: RadioButtonIcon,
+  checkbox: CheckSquareIcon,
+  photos: ImageIcon,
+  tel: PhoneIcon,
+  email: EnvelopeSimpleIcon,
+}
+
+/** What "Make changes" starts the owner's message with. */
+const CHANGES_START = "Change the form: "
 
 /** One proposed question, kept or dropped. */
 function Row({
@@ -69,25 +103,30 @@ function Row({
     )
   }
   const locked = !canDrop(draft)
-  // A choice's options, then any hint, on one muted line.
-  const detail = [field.options?.join(", "), field.hint]
+  const TypeIcon = TYPE_ICON[field.type]
+  // The type, then any options and hint, on one muted line.
+  const detail = [
+    QUOTE_TYPE_LABEL[field.type],
+    field.options?.join(", "),
+    field.hint,
+  ]
     .filter(Boolean)
     .join(" · ")
   return (
-    <li className="group flex items-center gap-3 py-2">
+    <li className="group flex items-center gap-3 py-2.5">
+      <span
+        aria-hidden
+        className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"
+      >
+        <TypeIcon className="size-4" />
+      </span>
       <div className="flex min-w-0 flex-1 flex-col">
         <span className="wrap-break-word font-medium text-sm">{name}</span>
-        {detail ? (
-          <span className="truncate text-muted-foreground text-xs">
-            {detail}
-          </span>
-        ) : null}
+        <span className="truncate text-muted-foreground text-xs">{detail}</span>
       </div>
-      <span className="shrink-0 text-muted-foreground text-xs">
-        {QUOTE_TYPE_LABEL[field.type]}
-      </span>
       {/* biome-ignore lint/a11y/noLabelWithoutControl: the switch is a span with a hidden input, which the rule cannot see */}
       <label className="flex shrink-0 cursor-pointer items-center gap-2 text-muted-foreground text-xs">
+        Required
         <Switch
           aria-label={`${name}, required`}
           checked={field.required}
@@ -95,7 +134,6 @@ function Row({
             onChange(setRequired(draft, field.key, required))
           }
         />
-        Required
       </label>
       {/* Hidden until the row is hovered or holds focus, unless the pointer is a finger. */}
       <Button
@@ -124,6 +162,8 @@ const ReviewQuoteForm: ToolCallMessagePartComponent = (props) => {
   const [invalid, setInvalid] = useState<string | null>(null)
   const [collapsed, setCollapsed] = useState(false)
   const id = useId()
+  const aui = useAui()
+  const composer = useContext(ComposerInputContext)
 
   if (view.state === "answered") return null
   if (view.state !== "pending") {
@@ -147,19 +187,29 @@ const ReviewQuoteForm: ToolCallMessagePartComponent = (props) => {
     }
     props.addResult({ answer: "confirmed", fields: result.fields })
   }
+  // Starts the owner's message in the composer, where the change is typed;
+  // a draft already there is theirs, so it is kept.
+  const makeChanges = () => {
+    const draftText = aui.thread().composer().getState().text
+    if (!draftText.trim()) aui.thread().composer().setText(CHANGES_START)
+    const input = composer.current
+    if (!input) return
+    input.focus()
+    requestAnimationFrame(() =>
+      input.setSelectionRange(input.value.length, input.value.length)
+    )
+  }
 
   return (
     <Docked name="review-quote-form">
       <TrayFrame
         collapsed={collapsed}
-        hint={view.input.note}
+        hint="Name, email and phone are always asked."
         onCollapsedChange={setCollapsed}
         question="Questions for your quote form"
+        skip={{ label: "Make changes", onSkip: makeChanges }}
         submit={{ label: "Use this form", onSubmit: confirm }}
       >
-        <p className="px-1 text-muted-foreground text-xs">
-          The form also asks for name, email and phone.
-        </p>
         <div className="flex min-w-0 flex-col rounded-xl border border-border bg-card px-3">
           <ol
             aria-label="Proposed questions"
