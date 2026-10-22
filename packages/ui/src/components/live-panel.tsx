@@ -42,7 +42,7 @@ import {
   paletteStops,
 } from "@workspace/ui/lib/blueprint"
 import { currentRow, WORKING } from "@workspace/ui/lib/build-state"
-import { formatDateTime } from "@workspace/ui/lib/format"
+import { duration, formatDateTime } from "@workspace/ui/lib/format"
 import { cn, META } from "@workspace/ui/lib/utils"
 import {
   Children,
@@ -154,12 +154,6 @@ function stageWord(state: AssignmentState): string {
 /** The states a Stop still means something in. */
 const STOPPABLE = (state: AssignmentState) =>
   BUILD_STAGES[state].step < 3 && state !== "failed" && state !== "cancelled"
-
-function duration(ms: number): string {
-  const seconds = Math.max(0, Math.floor(ms / 1000))
-  const minutes = Math.floor(seconds / 60)
-  return minutes ? `${minutes} min ${seconds % 60} s` : `${seconds} s`
-}
 
 /**
  * The time since `startedAt`, ticking once a second. Null on the server and

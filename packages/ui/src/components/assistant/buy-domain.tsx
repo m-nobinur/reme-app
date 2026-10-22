@@ -21,11 +21,12 @@ import {
 import { Problem } from "@workspace/ui/components/assistant/decision"
 import { Button } from "@workspace/ui/components/button"
 import { Field } from "@workspace/ui/components/field"
+import { StatusLine } from "@workspace/ui/components/status-line"
 import { toE164 } from "@workspace/ui/lib/answer"
 import { CARD_SURFACE, FIELD_ERROR } from "@workspace/ui/lib/card"
 import { refusalText } from "@workspace/ui/lib/refusal"
 import { mountCheckout } from "@workspace/ui/lib/stripe"
-import { readView } from "@workspace/ui/lib/tool-state"
+import { type Failure, readView } from "@workspace/ui/lib/tool-state"
 import { cn, META } from "@workspace/ui/lib/utils"
 import {
   type ComponentProps,
@@ -178,18 +179,37 @@ function Offer({
   )
 }
 
-/** A line while a tool works or after it ended without a card. */
-function Line({ text, working }: { text: string; working?: boolean }) {
+/** What a tool that ended without a card has to say. */
+function Line({ text }: { text: string }) {
+  return <p className="px-1 py-1.5 text-muted-foreground text-sm">{text}</p>
+}
+
+/** A tool's line while it works, and when it failed or was stopped. */
+function ToolLine({
+  kind,
+  state,
+  streaming,
+  labels,
+}: {
+  kind: "domain" | "payment"
+  state: "working" | Failure
+  streaming: boolean
+  labels: { working: string; failed: string; stopped: string }
+}) {
+  const working = state === "working" && streaming
   return (
-    <p
-      className={cn(
-        "px-1 py-1.5 text-muted-foreground text-sm",
-        working && "shimmer motion-reduce:animate-none"
-      )}
-      role={working ? "status" : undefined}
-    >
-      {text}
-    </p>
+    <StatusLine
+      className="flex px-1 py-1.5 text-sm"
+      kind={kind}
+      label={
+        working
+          ? labels.working
+          : state === "failed"
+            ? labels.failed
+            : labels.stopped
+      }
+      state={working ? "working" : state === "failed" ? "failed" : "stopped"}
+    />
   )
 }
 
@@ -204,15 +224,15 @@ export const FindDomain: ToolCallMessagePartComponent = (props) => {
   if (view.state !== "done") {
     return (
       <div data-slot="find-domain">
-        <Line
-          text={
-            view.state === "working" && streaming
-              ? "Looking for a free name"
-              : view.state === "failed"
-                ? "Could not look for a name"
-                : "Stopped looking for a name"
-          }
-          working={view.state === "working" && streaming}
+        <ToolLine
+          kind="domain"
+          labels={{
+            working: "Looking for a free name",
+            failed: "Could not look for a name",
+            stopped: "Stopped looking for a name",
+          }}
+          state={view.state}
+          streaming={streaming}
         />
       </div>
     )
@@ -860,15 +880,15 @@ export const BuyDomain: ToolCallMessagePartComponent = (props) => {
   if (view.state !== "done") {
     return (
       <div data-slot="buy-domain">
-        <Line
-          text={
-            view.state === "working" && streaming
-              ? "Getting the purchase ready"
-              : view.state === "failed"
-                ? "Could not get the purchase ready"
-                : "Stopped getting the purchase ready"
-          }
-          working={view.state === "working" && streaming}
+        <ToolLine
+          kind="payment"
+          labels={{
+            working: "Getting the purchase ready",
+            failed: "Could not get the purchase ready",
+            stopped: "Stopped getting the purchase ready",
+          }}
+          state={view.state}
+          streaming={streaming}
         />
       </div>
     )

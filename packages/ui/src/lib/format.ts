@@ -76,3 +76,10 @@ export function formatMoney(minor: number, currency: string): string {
     currencyDisplay: "narrowSymbol",
   }).format(minor / 100)
 }
+
+/** A span of time as it reads in a sentence: `42 s`, `3 min 5 s`. */
+export function duration(ms: number): string {
+  const seconds = Math.max(0, Math.floor(ms / 1000))
+  const minutes = Math.floor(seconds / 60)
+  return minutes ? `${minutes} min ${seconds % 60} s` : `${seconds} s`
+}

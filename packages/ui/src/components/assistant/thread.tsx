@@ -51,11 +51,13 @@ import {
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu"
 import { LogoMark } from "@workspace/ui/components/logo"
+import { StatusLine } from "@workspace/ui/components/status-line"
 import { ComposerInputContext } from "@workspace/ui/hooks/use-composer-input"
 import {
   PLAN_CHANGES_PLACEHOLDER,
   waitsOnBlueprint,
 } from "@workspace/ui/lib/blueprint"
+import { SHOW_DELAY_MS } from "@workspace/ui/lib/status-line"
 import {
   SESSION_ENDED,
   SKIPPED,
@@ -844,11 +846,15 @@ const MessageError: FC = () => {
 }
 
 /**
- * The dot a reply shows until its first words arrive. Quiet, and not under a
+ * The line a reply shows until its first words arrive. Quiet, and not under a
  * card that already says it is working (Saving, Stopping): the owner has
- * answered it and its own line is the progress.
+ * answered it and its own line is the progress. A played-in opening is not
+ * work, so it shows the line at once; a real turn waits out the status line's
+ * delay.
  */
-const TypingIndicator: FC = () => {
+const TypingIndicator: FC<{ immediate?: boolean }> = ({
+  immediate = false,
+}) => {
   const answered = useAuiState((s) =>
     s.message.parts.some(
       (part) =>
@@ -859,14 +865,12 @@ const TypingIndicator: FC = () => {
   )
   if (answered) return null
   return (
-    <span data-slot="aui_assistant-message-indicator" role="status">
-      <span
-        aria-hidden
-        className="animate-pulse font-sans text-muted-foreground motion-reduce:animate-none"
-      >
-        {"●"}
-      </span>
-      <span className="sr-only">Working</span>
+    <span data-slot="aui_assistant-message-indicator">
+      <StatusLine
+        delay={immediate ? 0 : SHOW_DELAY_MS}
+        kind="thinking"
+        label="Working"
+      />
     </span>
   )
 }
@@ -969,7 +973,7 @@ const AssistantMessage: FC = () => {
           aria-live={reveal.phase === "still" ? undefined : "polite"}
         >
           {reveal.phase === "typing" ? (
-            <TypingIndicator />
+            <TypingIndicator immediate />
           ) : reveal.phase === "writing" ? (
             <div aria-hidden>
               <TextMessagePartProvider isRunning text={reveal.text}>
