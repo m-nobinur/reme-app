@@ -319,6 +319,9 @@ export async function getPreview(
   })
 }
 
+/** Words or marks that put a change text near a phone or an email. */
+const ABOUT_CONTACT = /phone|number|mobile|call|e-?mail|contact|@|\d{3}/i
+
 const untyped = (what: string) =>
   failure(400, {
     class: "validation",
@@ -344,6 +347,16 @@ async function recordContact(
   { contact, text }: CosChangeRequest
 ): Promise<Response | null> {
   if (!contact?.phone && !contact?.email) return null
+  // The owner approves the change text, which is all the card shows. A text
+  // that never touches contact cannot depend on one, so a contact the model
+  // added to it was never approved: dropped, not refused. On staging the
+  // model filled `contact` on every hero change, invented or copied, and a
+  // refusal asked the owner for the same yes again.
+  // shortcut: a word test, not a parser; it errs towards "about contact", which keeps the refusal.
+  if (!ABOUT_CONTACT.test(text)) {
+    console.log(JSON.stringify({ code: "cos.contact_dropped" }))
+    return null
+  }
   const [log, rows] = await kit.withOrg({ orgId: owner.orgId }, async (db) => [
     await readSession(db, sessionId),
     await readFacts(db),
