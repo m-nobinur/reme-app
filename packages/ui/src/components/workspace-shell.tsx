@@ -216,7 +216,10 @@ function WorkspaceShell({
   return (
     <div
       className={cn(
-        "flex h-svh overflow-hidden bg-background text-foreground",
+        // --gap is the panel's margin at the top and the right, and --bar is the
+        // height that centres the panel's line (42px) in the top bar, so the
+        // logo in the rail sits level with it at every width.
+        "flex h-svh overflow-hidden bg-background text-foreground [--bar:calc(var(--gap)*2+2.625rem)] [--gap:0.375rem] md:[--gap:0.75rem] lg:[--gap:1.125rem]",
         className
       )}
       data-slot="workspace-shell"
@@ -243,7 +246,7 @@ function WorkspaceShell({
           id="workspace-rail"
           inert={!railOpen}
         >
-          <div className="flex h-13.5 w-16 shrink-0 items-center px-3">
+          <div className="flex h-(--bar) w-16 shrink-0 items-center px-3">
             <RailToggle onClick={toggleRail} open />
           </div>
           <div className="flex min-h-0 w-16 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden px-2.5 pt-2 pb-3">
@@ -253,7 +256,7 @@ function WorkspaceShell({
       )}
 
       <div className="relative flex min-w-0 flex-1 flex-col">
-        <header className="flex h-13.5 shrink-0 items-center gap-1 px-3">
+        <header className="flex h-(--bar) shrink-0 items-center gap-1 px-3">
           <Sheet onOpenChange={setRailSheet} open={railSheet}>
             <SheetTrigger
               render={
@@ -288,11 +291,13 @@ function WorkspaceShell({
         <main
           // The panel floats over the page's top right. From lg it keeps
           // `--panel-inset` free at the right, its width and a gap, which the
-          // conversation leaves clear; below lg its line sits under the bar,
-          // so the page starts below it.
+          // conversation leaves clear. From md its line sits in the top bar, which
+          // has nothing at the right; on a phone it sits under the bar, so the
+          // page starts below it.
           className={cn(
             "min-h-0 flex-1 overflow-y-auto",
-            hasPanel && "max-lg:pt-14 lg:[--panel-inset:23rem]"
+            hasPanel &&
+              "max-md:pt-14 lg:[--panel-inset:calc(22rem+var(--gap)+0.5rem)]"
           )}
           // The page scrolls here, not the window: the router resets and
           // restores this element by its id.
@@ -305,14 +310,14 @@ function WorkspaceShell({
         {hasPanel ? (
           <aside
             aria-label="Panel"
-            className="absolute top-15 right-1.5 z-20 flex max-h-[calc(50svh+3rem)] w-[min(22rem,calc(100%-0.75rem))] flex-col overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-lg lg:top-1.5"
+            className="group/panel absolute top-[calc(var(--bar)+var(--gap))] right-(--gap) z-20 flex max-h-[calc(50svh+3rem)] w-[min(22rem,calc(100%-var(--gap)*2))] flex-col overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-lg md:top-(--gap)"
             data-state={expanded ? "open" : "closed"}
             id="workspace-panel"
           >
             <button
               aria-controls={panelId}
               aria-expanded={expanded}
-              className="flex min-h-10 w-full min-w-0 shrink-0 items-center gap-2.5 px-3.5 text-start outline-none transition-colors hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-inset motion-reduce:transition-none"
+              className="flex min-h-10 w-full min-w-0 shrink-0 items-center gap-2.5 rounded-t-[inherit] px-3.5 text-start outline-none transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-inset group-data-[state=closed]/panel:rounded-b-[inherit] motion-reduce:transition-none"
               onClick={() => setPanel(!expanded)}
               type="button"
             >
@@ -335,7 +340,7 @@ function WorkspaceShell({
             {/* biome-ignore lint/a11y/useKeyWithClickEvents: as above; Enter on a link is a click. */}
             <div
               className={cn(
-                "min-h-0 flex-col gap-6 overflow-y-auto overscroll-contain border-border border-t p-4",
+                "min-h-0 flex-col gap-6 overflow-y-auto overscroll-contain border-border border-t px-4 pt-2 pb-4",
                 wide
                   ? panelOpen
                     ? "hidden lg:flex"

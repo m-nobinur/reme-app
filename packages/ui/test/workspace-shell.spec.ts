@@ -233,8 +233,8 @@ test("the panel floats at the top right, and the page centres in the full width"
   const header = await page.locator("header").boundingBox()
   if (!header) throw new Error("not laid out")
   // Level with the top bar, at the right edge: the top bar has nothing there.
-  expect(card.y - header.y).toBeLessThanOrEqual(16)
-  expect(main.x + main.width - (card.x + card.width)).toBeLessThanOrEqual(16)
+  expect(card.y - header.y).toBeLessThanOrEqual(24)
+  expect(main.x + main.width - (card.x + card.width)).toBeLessThanOrEqual(24)
   // Centred in main, open or not: the panel takes no column of its own.
   const left = page_.x - main.x
   const right = main.x + main.width - (page_.x + page_.width)

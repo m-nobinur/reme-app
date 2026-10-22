@@ -181,6 +181,8 @@ function ChatHistory({
       <PopoverPrimitive.Trigger
         closeDelay={200}
         delay={150}
+        nativeButton={false}
+        role="link"
         onClick={() => {
           pressed.current = true
           setOpen(false)
