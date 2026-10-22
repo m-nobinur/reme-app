@@ -14,7 +14,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@workspace/ui/components/collapsible"
-import { StatusLine } from "@workspace/ui/components/status-line"
+import { ToolStatus } from "@workspace/ui/components/status-line"
 import { cn } from "@workspace/ui/lib/utils"
 import { memo, useCallback, useRef, useState } from "react"
 
@@ -118,11 +118,6 @@ function ToolFallbackTrigger({
   const statusType = status?.type ?? "complete"
   const isCancelled =
     status?.type === "incomplete" && status.reason === "cancelled"
-  const label = isCancelled
-    ? "Cancelled tool"
-    : statusType === "running"
-      ? "Using tool"
-      : "Used tool"
 
   return (
     <CollapsibleTrigger
@@ -134,12 +129,11 @@ function ToolFallbackTrigger({
       )}
       {...props}
     >
-      <StatusLine
+      <ToolStatus
         announce={false}
         clockAfter={null}
         delay={0}
-        kind="thinking"
-        label={`${label}: ${toolName}`}
+        tool={toolName}
         state={
           statusType === "running"
             ? "working"

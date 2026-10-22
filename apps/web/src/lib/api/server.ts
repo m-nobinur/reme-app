@@ -2,7 +2,6 @@ import { createServerFn } from "@tanstack/react-start"
 import { getCookie } from "@tanstack/react-start/server"
 import type { Conversation } from "@workspace/contracts"
 import {
-  BlueprintReviewOutput,
   ChangeKind,
   DomainName,
   type DomainPurchaseStatus,
@@ -206,25 +205,6 @@ export const answerQuestion = createServerFn({ method: "POST" })
       data.assignmentId,
       data.requestId,
       data.value,
-      data.key
-    )
-  })
-
-export const decideBlueprint = createServerFn({ method: "POST" })
-  .validator((input: unknown) => {
-    const data = record(input)
-    const decision = BlueprintReviewOutput.safeParse(data.decision)
-    if (!decision.success) throw new Error("That is not a decision on a plan.")
-    return {
-      assignmentId: id(data.assignmentId),
-      decision: decision.data,
-      key: keyOf(data.key),
-    }
-  })
-  .handler(async ({ data }): Promise<WriteOutcome> => {
-    return await source.decideBlueprint(
-      data.assignmentId,
-      data.decision,
       data.key
     )
   })

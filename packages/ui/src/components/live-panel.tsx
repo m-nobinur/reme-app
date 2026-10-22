@@ -1,25 +1,25 @@
 import {
   ArrowSquareOutIcon,
   CaretDownIcon,
+  ChatCircleDotsIcon,
   CheckCircleIcon,
   CheckIcon,
   CircleIcon,
-  CircleNotchIcon,
   ClockIcon,
   ImageIcon,
+  MinusCircleIcon,
+  WarningCircleIcon,
 } from "@phosphor-icons/react"
 import {
   type ApprovalTarget,
   type AssignmentState,
   type Blueprint,
   type BuildActivity,
-  type BuildLane,
   type BuildPhoto,
   type DecisionRequest,
   GOAL_MAX,
 } from "@workspace/contracts"
 import { ApprovalTargetSummary } from "@workspace/ui/components/approval-target"
-import { BlueprintCard } from "@workspace/ui/components/assistant/blueprint-card"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { Field } from "@workspace/ui/components/field"
 import {
@@ -29,6 +29,12 @@ import {
 } from "@workspace/ui/components/generated-photos"
 import { PersonaAvatar } from "@workspace/ui/components/persona"
 import { Skeleton } from "@workspace/ui/components/skeleton"
+import { StatusIcon } from "@workspace/ui/components/status-line"
+import {
+  ANSWER_BELOW,
+  SKIPPED,
+  type StatusKind,
+} from "@workspace/ui/lib/activity-copy"
 import {
   type AnswerSpec,
   answerValue,
@@ -41,8 +47,7 @@ import {
   paletteName,
   paletteStops,
 } from "@workspace/ui/lib/blueprint"
-import { currentRow, WORKING } from "@workspace/ui/lib/build-state"
-import { duration, formatDateTime } from "@workspace/ui/lib/format"
+import { formatDateTime } from "@workspace/ui/lib/format"
 import { cn, META } from "@workspace/ui/lib/utils"
 import {
   Children,
@@ -107,40 +112,33 @@ const expiryLine = (expiresAt: string | null, onExpiry: string) => {
   return expires ? `Open until ${expires}. ${onExpiry}` : onExpiry
 }
 
-/* Working on ---------------------------------------------------------- */
+/* Segments ----------------------------------------------------------- */
 
 const STEPS = ["Queued", "Building", "Checking", "Ready"] as const
 
 /**
- * Where each build state sits on the stepper and what the owner is told.
- * Whether it is doing work (the bar pulses) is `WORKING`'s to say. Every
- * state has a row, so a state added to the contract fails the build until it
- * is placed.
+ * Where each build state sits among the four steps a build's state is
+ * named by. Every state has a row, so a state added to the contract fails
+ * the build until it is placed.
  */
 const BUILD_STAGES = {
-  queued: { step: 0, note: "Waiting to start." },
-  briefing: { step: 1, note: "Reading your brief." },
-  planning: { step: 1, note: "Planning the changes." },
-  implementing: { step: 1, note: "Making the changes." },
-  revising: { step: 1, note: "Making your changes." },
-  repairing: { step: 1, note: "Fixing what the checks found." },
-  blocked_on_information: {
-    step: 1,
-    note: "Waiting on you: answer the question below.",
-  },
-  paused: { step: 1, note: "Paused. It spends nothing more." },
-  validating: { step: 2, note: "Checking the site." },
-  preview_ready: { step: 3, note: "Ready for you to look at." },
-  awaiting_review: { step: 3, note: "Ready for your review." },
-  blocked_on_approval: {
-    step: 3,
-    note: "Waiting on you: approve it below.",
-  },
-  release_candidate: { step: 3, note: "Publishing." },
-  published: { step: 3, note: "Live." },
-  failed: { step: 1, note: "It stopped: the build failed." },
-  cancelled: { step: 0, note: "Stopped." },
-} satisfies Record<AssignmentState, { step: 0 | 1 | 2 | 3; note: string }>
+  queued: 0,
+  briefing: 1,
+  planning: 1,
+  implementing: 1,
+  revising: 1,
+  repairing: 1,
+  blocked_on_information: 1,
+  paused: 1,
+  validating: 2,
+  preview_ready: 3,
+  awaiting_review: 3,
+  blocked_on_approval: 3,
+  release_candidate: 3,
+  published: 3,
+  failed: 1,
+  cancelled: 0,
+} satisfies Record<AssignmentState, 0 | 1 | 2 | 3>
 
 /** A build state in one or two words: its step, or why it waits. */
 function stageWord(state: AssignmentState): string {
@@ -148,29 +146,12 @@ function stageWord(state: AssignmentState): string {
     return "Waiting on you"
   }
   if (state === "paused") return "Paused"
-  return STEPS[BUILD_STAGES[state].step]
+  return STEPS[BUILD_STAGES[state]]
 }
 
 /** The states a Stop still means something in. */
 const STOPPABLE = (state: AssignmentState) =>
-  BUILD_STAGES[state].step < 3 && state !== "failed" && state !== "cancelled"
-
-/**
- * The time since `startedAt`, ticking once a second. Null on the server and
- * on the first client render, so the markup the server sent still matches.
- * `now` pins it, for the catalog.
- */
-function useElapsed(startedAt: string, now?: number): number | null {
-  const [clock, setClock] = useState<number | null>(null)
-  useEffect(() => {
-    if (now !== undefined) return
-    setClock(Date.now())
-    const timer = setInterval(() => setClock(Date.now()), 1000)
-    return () => clearInterval(timer)
-  }, [now])
-  const at = now ?? clock
-  return at === null ? null : at - Date.parse(startedAt)
-}
+  BUILD_STAGES[state] < 3 && state !== "failed" && state !== "cancelled"
 
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`
 
@@ -290,24 +271,18 @@ function StepDetail({
   at,
   plan,
   photos,
-  awaiting,
 }: {
   row: BuildActivity
   at: "done" | "now" | "next"
   plan?: Blueprint | undefined
   photos?: readonly BuildPhoto[] | undefined
-  awaiting: boolean
 }) {
   switch (row.id) {
     case "planning":
       return (
         <>
           {at === "now" ? (
-            <p className={META}>
-              {awaiting
-                ? "Waiting for your review. The plan is in the chat."
-                : "Choosing a look, colours and pages."}
-            </p>
+            <p className={META}>Choosing a look, colours and pages.</p>
           ) : null}
           {plan ? <Decided plan={plan} /> : null}
         </>
@@ -383,189 +358,283 @@ function StepDetail({
 }
 
 /**
- * Every step of a full build, in order: done ones ticked and folded, the one
- * it is on marked, moving and open, the rest quiet. A done step's detail
- * opens on demand. A screen reader hears the step change, never the counts
- * ticking.
+ * What a website stage decided or made, under its step: the plan, the
+ * photos, the pages. Nothing for a stage not reached yet.
  */
-function BuildSteps({
-  rows,
+function StageDetail({
+  stage,
+  state,
+  activity,
   plan,
   photos,
-  awaiting,
 }: {
-  rows: readonly BuildActivity[]
+  stage: string
+  state: SegmentStep["state"]
+  activity: readonly BuildActivity[]
   plan?: Blueprint | undefined
   photos?: readonly BuildPhoto[] | undefined
-  awaiting: boolean
 }) {
-  const now = currentRow(rows)
-  const current = rows[now]
-  const waiting = awaiting && current?.id === "planning"
+  // A website step is named by its build activity row.
+  const row = activity.find((each) => each.id === stage)
+  if (!row || state === "next" || state === "skipped") return null
   return (
-    <>
-      <p aria-live="polite" className="sr-only">
-        {current
-          ? `Now: ${waiting ? "waiting for your review" : current.label.toLowerCase()}.`
-          : ""}
-      </p>
-      <ol aria-label="Build steps" className="flex flex-col">
-        {rows.map((row, index) => {
-          const at =
-            index === now ? "now" : row.done >= row.total ? "done" : "next"
-          return (
-            <li
-              className="group relative flex gap-2.5 pb-3 last:pb-0"
-              data-state={at}
-              key={row.id}
-            >
-              {/* The rail between markers, quiet, ticked off as steps finish. */}
-              <span
-                aria-hidden
-                className={cn(
-                  "absolute top-5 bottom-0.5 left-[7.5px] w-px group-last:hidden",
-                  at === "done" ? "bg-primary/45" : "bg-border"
-                )}
-              />
-              <span aria-hidden className="mt-px flex size-4 shrink-0">
-                {at === "done" ? (
-                  <CheckCircleIcon
-                    className="size-4 text-primary"
-                    weight="fill"
-                  />
-                ) : at === "next" ? (
-                  <CircleIcon className="size-4 text-muted-foreground/60" />
-                ) : waiting ? (
-                  <ClockIcon className="size-4 text-primary" />
-                ) : (
-                  <CircleNotchIcon className="size-4 animate-spin text-primary motion-reduce:animate-none" />
-                )}
-              </span>
-              {at === "done" ? (
-                // A finished step folds to its line; its detail opens on demand.
-                <details className="group/step flex min-w-0 flex-1 flex-col">
-                  <summary className="flex cursor-pointer list-none items-baseline gap-1.5 rounded-sm text-[0.8125rem] focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
-                    <span className="min-w-0 flex-1 text-foreground">
-                      {row.label}
-                      <span className="sr-only"> (done)</span>
-                    </span>
-                    {row.total > 1 ? (
-                      <span className="shrink-0 text-muted-foreground tabular-nums">
-                        {row.done} of {row.total}
-                      </span>
-                    ) : null}
-                    <CaretDownIcon
-                      aria-hidden
-                      className="size-3 shrink-0 self-center text-muted-foreground transition-transform group-open/step:rotate-180 motion-reduce:transition-none"
-                    />
-                  </summary>
-                  <div className="flex flex-col gap-2 pt-2">
-                    <StepDetail
-                      at={at}
-                      awaiting={awaiting}
-                      photos={photos}
-                      plan={plan}
-                      row={row}
-                    />
-                  </div>
-                </details>
-              ) : (
-                <div className="flex min-w-0 flex-1 flex-col gap-2">
-                  <p className="flex items-baseline justify-between gap-2 text-[0.8125rem]">
-                    <span
-                      className={cn(
-                        at === "now"
-                          ? "font-medium text-foreground"
-                          : "text-muted-foreground"
-                      )}
-                    >
-                      {row.label}
-                      <span className="sr-only">
-                        {at === "now" ? " (now)" : " (next)"}
-                      </span>
-                    </span>
-                    {row.total > 1 && at !== "next" ? (
-                      <span className="shrink-0 text-muted-foreground tabular-nums">
-                        {row.done} of {row.total}
-                      </span>
-                    ) : null}
-                  </p>
-                  <StepDetail
-                    at={at}
-                    awaiting={awaiting}
-                    photos={photos}
-                    plan={plan}
-                    row={row}
-                  />
-                </div>
+    <StepDetail
+      at={state === "done" ? "done" : "now"}
+      photos={photos}
+      plan={plan}
+      row={row}
+    />
+  )
+}
+
+/** One step of a segment, as the panel draws it. */
+type SegmentStep = {
+  id: string
+  label: string
+  state: "done" | "now" | "waiting" | "next" | "skipped"
+  /** What was settled, in the owner's words. */
+  value?: string | null
+  /** The icon the step moves while it is at work. */
+  kind: StatusKind
+  /** What the step decided or made, under its row. */
+  detail?: ReactNode
+}
+
+/** How long a segment that finished on screen shows every step ticked before it folds. */
+const FOLD_PAUSE_MS = 1200
+
+/** Where a step stands, for a screen reader; a skipped step says so on screen. */
+const STEP_SAID: Record<SegmentStep["state"], string> = {
+  done: " (done)",
+  now: " (now)",
+  waiting: " (waiting on you)",
+  next: " (next)",
+  skipped: "",
+}
+
+function StepMark({ step, failed }: { step: SegmentStep; failed: boolean }) {
+  if (step.state === "done") {
+    return <CheckCircleIcon className="size-4 text-primary" weight="fill" />
+  }
+  if (failed && (step.state === "now" || step.state === "waiting")) {
+    return <WarningCircleIcon className="size-4 text-destructive" />
+  }
+  switch (step.state) {
+    case "now":
+      return <StatusIcon className="text-primary" kind={step.kind} />
+    case "waiting":
+      return (
+        <ChatCircleDotsIcon className="size-4 animate-status-fade text-primary motion-reduce:animate-none" />
+      )
+    case "skipped":
+      return <MinusCircleIcon className="size-4 text-muted-foreground" />
+    default:
+      return <CircleIcon className="size-4 text-muted-foreground/60" />
+  }
+}
+
+/**
+ * One piece of work in the panel: a header with its icon, title and one
+ * muted line, then its fixed steps, ticked as they finish. A caret folds the
+ * steps while it runs. When it finishes on screen every step ticks, it
+ * holds a moment, then the header turns to its done title and the steps
+ * fold; a done segment is one line that does not open. A failed one keeps
+ * its steps and marks the step that stopped. A screen reader hears the step
+ * change, never a count ticking.
+ */
+function PanelSegment({
+  icon,
+  state,
+  title,
+  working = title,
+  line = null,
+  steps,
+  onAnswer,
+  children,
+}: {
+  icon: StatusKind
+  state: "upcoming" | "now" | "waiting" | "done" | "failed"
+  /** The title for where it stands: the done title once done. */
+  title: string
+  /** The working title, kept while a segment that just finished shows its steps. */
+  working?: string
+  line?: string | null
+  steps: readonly SegmentStep[]
+  /** Takes the owner to where a waiting step is answered. Without it the step only says it waits. */
+  onAnswer?: (() => void) | undefined
+  /** What the owner can do in the segment: a review's buttons, Stop. */
+  children?: ReactNode
+}) {
+  const id = useId()
+  const done = state === "done"
+  const failed = state === "failed"
+  const [folded, setFolded] = useState(done)
+  const [open, setOpen] = useState(true)
+  useEffect(() => {
+    if (!done) {
+      setFolded(false)
+      return
+    }
+    const timer = setTimeout(() => setFolded(true), FOLD_PAUSE_MS)
+    return () => clearTimeout(timer)
+  }, [done])
+  const shown = open && !folded
+  const current = steps.find(
+    (step) => step.state === "now" || step.state === "waiting"
+  )
+  return (
+    <section
+      aria-labelledby={`${id}-title`}
+      className="fade-in flex animate-in flex-col duration-200 motion-reduce:animate-none"
+      data-slot="panel-segment"
+      data-state={folded ? "folded" : state}
+    >
+      <div className="flex items-start gap-2.5">
+        <span aria-hidden className="mt-0.5 flex size-4 shrink-0">
+          {folded ? (
+            <CheckCircleIcon className="size-4 text-primary" weight="fill" />
+          ) : failed ? (
+            <WarningCircleIcon className="size-4 text-destructive" />
+          ) : (
+            <StatusIcon
+              className="text-primary"
+              kind={icon}
+              still={state !== "now"}
+            />
+          )}
+        </span>
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <h3 className="font-medium text-sm" id={`${id}-title`}>
+            {done && !folded ? working : title}
+          </h3>
+          {line && !done ? <p className={META}>{line}</p> : null}
+        </div>
+        {done || steps.length === 0 ? null : (
+          <button
+            aria-controls={`${id}-steps`}
+            aria-expanded={open}
+            aria-label={open ? "Hide the steps" : "Show the steps"}
+            className="-m-1 flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring"
+            onClick={() => setOpen((was) => !was)}
+            type="button"
+          >
+            <CaretDownIcon
+              aria-hidden
+              className={cn(
+                "size-3.5 transition-transform duration-150 motion-reduce:transition-none",
+                !open && "-rotate-90"
               )}
-            </li>
-          )
-        })}
-      </ol>
-    </>
+            />
+          </button>
+        )}
+      </div>
+      {steps.length || children ? (
+        // Folds by its row's height, so the motion is the same for any list.
+        <div
+          aria-hidden={!shown}
+          className={cn(
+            "grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none",
+            shown ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+          )}
+          id={`${id}-steps`}
+          inert={!shown}
+        >
+          <div className="min-h-0 overflow-hidden">
+            <div className="flex flex-col gap-3 pt-3">
+              <p aria-live="polite" className="sr-only">
+                {current && !done ? `Now: ${current.label}.` : ""}
+              </p>
+              <ol aria-label="Steps" className="flex flex-col">
+                {steps.map((step) => (
+                  <li
+                    className="group relative flex gap-2.5 pb-3 last:pb-0"
+                    data-state={step.state}
+                    key={step.id}
+                  >
+                    {/* The rail between markers, quiet, ticked off as steps finish. */}
+                    <span
+                      aria-hidden
+                      className={cn(
+                        "absolute top-5 bottom-0.5 left-[7.5px] w-px group-last:hidden",
+                        step.state === "done" ? "bg-primary/45" : "bg-border"
+                      )}
+                    />
+                    <span aria-hidden className="mt-px flex size-4 shrink-0">
+                      <StepMark failed={failed} step={step} />
+                    </span>
+                    <div className="flex min-w-0 flex-1 flex-col gap-2">
+                      <p className="flex min-w-0 items-baseline gap-1.5 text-[0.8125rem]">
+                        <span
+                          className={cn(
+                            "min-w-0 truncate",
+                            step.state === "now" &&
+                              !failed &&
+                              "shimmer shimmer-color-primary motion-reduce:animate-none",
+                            step.state === "waiting" && "font-medium",
+                            (step.state === "next" ||
+                              step.state === "skipped") &&
+                              "text-muted-foreground"
+                          )}
+                        >
+                          {step.label}
+                          {step.state === "done" && step.value ? (
+                            <span className="text-muted-foreground">
+                              {" "}
+                              · {step.value}
+                            </span>
+                          ) : null}
+                          {step.state === "skipped" ? ` · ${SKIPPED}` : null}
+                          <span className="sr-only">
+                            {STEP_SAID[step.state]}
+                          </span>
+                        </span>
+                        {step.state === "waiting" && onAnswer && !failed ? (
+                          <button
+                            className="shrink-0 rounded-sm text-muted-foreground underline-offset-4 outline-none hover:text-foreground hover:underline focus-visible:ring-3 focus-visible:ring-ring"
+                            // It moves the owner to the tray, so the phone sheet goes.
+                            data-leaves-panel
+                            onClick={onAnswer}
+                            type="button"
+                          >
+                            {ANSWER_BELOW}
+                          </button>
+                        ) : null}
+                      </p>
+                      {step.detail}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+              {children}
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </section>
   )
 }
 
 /**
- * The live stepper: the build the team is on, tied to its real state, with
- * the time it has taken against the measured typical, a Stop, and what is
- * queued behind it. The one bold thing in the panel.
+ * Stop, for a build that can still be stopped: one press asks, and the
+ * question stays on screen, its buttons disabled, while the Stop is in
+ * flight. A quick edit that moved to a fuller lane says so once.
  */
-function WorkingOn({
-  build,
-  queued = [],
-  expectedSeconds,
-  now,
+function StopBuild({
+  state,
+  fellThrough = false,
   onStop,
   stopping = false,
   error = null,
   defaultConfirming = false,
 }: {
-  build: {
-    goal: string
-    state: AssignmentState
-    startedAt: string
-    /** A build with no lane is a full one. */
-    lane?: BuildLane
-    /** A quick edit that moved to a fuller lane, which the panel says once. */
-    fellThrough?: boolean
-    /** Fixed-string progress rows from the orchestrator; none shows only the stepper. */
-    activity?: BuildActivity[]
-    /** The plan, once one is made: what it decided shows under its step. */
-    plan?: Blueprint | undefined
-    /** The plan waits on the owner's review, which the clock leaves out. */
-    awaitingReview?: boolean
-    /** The photos it is making, as each settles. */
-    photos?: readonly BuildPhoto[] | undefined
-    /** Time spent on decided plan reviews, left out of the clock. */
-    reviewMs?: number | undefined
-    /** When the build last changed state: the clock stops there once it is ready. */
-    endedAt?: string | undefined
-  }
-  /** What the owner asked for in each build waiting behind this one. */
-  queued?: string[]
-  /** How long this build's lane usually takes, in seconds; absent says nothing about time. */
-  expectedSeconds?: { p50: number; p95: number }
-  now?: number
-  onStop?: () => void
+  state: AssignmentState
+  fellThrough?: boolean | undefined
+  onStop?: (() => void) | undefined
   stopping?: boolean
   error?: string | null
   /** Open on the Stop question, for the catalog. */
   defaultConfirming?: boolean
 }) {
-  const stage = BUILD_STAGES[build.state]
-  // A ready build's clock stops where it got ready.
-  const ended =
-    stage.step === 3 && build.endedAt ? Date.parse(build.endedAt) : undefined
-  const ran = useElapsed(build.startedAt, ended ?? now)
-  // "Built in" is the build's own time: claim to preview_ready less the wait
-  // on the owner's plan review. Perf run 2: 6 min 05 s less 16.6 s of review
-  // shows 5 min 48 s, which is right.
-  const elapsed = ran === null ? null : ran - (build.reviewMs ?? 0)
-  // "asking" once Stop is pressed, "kept" once the owner keeps building.
-  // A Stop in flight keeps the question on screen, with its buttons
-  // disabled, until the build is read again.
   const [asked, setAsked] = useState(defaultConfirming)
   const confirming = asked || stopping
   const keep = useRef<HTMLButtonElement>(null)
@@ -579,153 +648,59 @@ function WorkingOn({
     moveFocus.current = null
   }, [asked])
 
-  const quick = build.lane === "quick"
-  const long =
-    elapsed !== null &&
-    expectedSeconds !== undefined &&
-    elapsed > expectedSeconds.p95 * 1000
-  const usually = expectedSeconds
-    ? quick
-      ? `Usually about ${expectedSeconds.p50} seconds.`
-      : `Builds usually take ${Math.round(expectedSeconds.p50 / 60)} to ${Math.round(expectedSeconds.p95 / 60)} minutes.`
-    : null
-  // A quick edit has no stages to walk: one line while it works, the usual note when it waits.
-  const note =
-    quick && WORKING.has(build.state) ? "Updating your preview." : stage.note
-  // A full build walks its steps; one with none, or waiting, shows the stepper and its note.
-  const rows = quick ? [] : (build.activity ?? [])
-  const steps = rows.length > 0
-  const awaiting = build.awaitingReview === true && build.state === "planning"
-  const waiting = awaiting && steps
-
   return (
-    <PanelSection title="Working on">
-      <div className="flex flex-col gap-3" data-slot="working-on">
-        <p className="line-clamp-2 font-medium text-sm">{build.goal}</p>
-        {quick || steps ? null : (
-          <ol aria-label="Build progress" className="grid grid-cols-4 gap-1">
-            {STEPS.map((label, index) => (
-              <li
-                aria-current={index === stage.step ? "step" : undefined}
-                className="flex flex-col gap-1.5"
-                key={label}
-              >
-                <span
-                  aria-hidden
-                  className={cn(
-                    "h-1 rounded-full transition-colors duration-200 motion-reduce:transition-none",
-                    index < stage.step && "bg-primary/45",
-                    index === stage.step && "bg-primary",
-                    index === stage.step &&
-                      WORKING.has(build.state) &&
-                      "animate-pulse motion-reduce:animate-none",
-                    index > stage.step && "bg-border"
-                  )}
-                  data-slot="step-bar"
-                />
-                <span
-                  className={cn(
-                    "text-[0.8125rem]",
-                    index === stage.step
-                      ? "font-medium text-foreground"
-                      : "text-muted-foreground"
-                  )}
-                >
-                  {label}
-                </span>
-              </li>
-            ))}
-          </ol>
-        )}
-        {steps ? (
-          <BuildSteps
-            awaiting={awaiting}
-            photos={build.photos}
-            plan={build.plan}
-            rows={rows}
-          />
-        ) : (
-          <p aria-live="polite" className="text-sm">
-            {note}
-          </p>
-        )}
-        {build.fellThrough ? (
-          <p className="text-sm" data-slot="fell-through">
-            This change needs more than a quick edit, so it will take a few
-            minutes.
-          </p>
-        ) : null}
-        <p className={cn(META, "tabular-nums")}>
-          {waiting
-            ? "The clock waits while you review the plan."
-            : ended !== undefined
-              ? elapsed === null
-                ? null
-                : `Built in ${duration(elapsed)}.`
-              : [
-                  elapsed === null ? null : `${duration(elapsed)} so far.`,
-                  long ? "This one is taking longer than usual." : usually,
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
+    <div className="flex flex-col gap-2" data-slot="stop-build">
+      {fellThrough ? (
+        <p className="text-sm" data-slot="fell-through">
+          This change needs more than a quick edit, so it will take a few
+          minutes.
         </p>
-        {onStop && STOPPABLE(build.state) ? (
-          confirming ? (
-            <div className="flex flex-wrap gap-2">
-              <Button
-                disabled={stopping}
-                onClick={onStop}
-                size="sm"
-                variant="destructive"
-              >
-                {stopping ? "Stopping" : "Stop this build"}
-              </Button>
-              <Button
-                disabled={stopping}
-                onClick={() => {
-                  moveFocus.current = "stop"
-                  setAsked(false)
-                }}
-                ref={keep}
-                size="sm"
-                variant="ghost"
-              >
-                Keep building
-              </Button>
-            </div>
-          ) : (
+      ) : null}
+      {onStop && STOPPABLE(state) ? (
+        confirming ? (
+          <div className="flex flex-wrap gap-2">
             <Button
-              className="self-start"
-              onClick={() => {
-                moveFocus.current = "keep"
-                setAsked(true)
-              }}
-              ref={stop}
+              disabled={stopping}
+              onClick={onStop}
               size="sm"
-              variant="outline"
+              variant="destructive"
             >
-              Stop
+              {stopping ? "Stopping" : "Stop this build"}
             </Button>
-          )
-        ) : null}
-        {error ? (
-          <p className="text-[0.8125rem] text-destructive" role="alert">
-            {error}
-          </p>
-        ) : null}
-        {queued.length ? (
-          <ul className="flex flex-col gap-1 border-border border-t pt-2">
-            {queued.map((goal, index) => (
-              // Goals repeat, so the position is the identity.
-              // biome-ignore lint/suspicious/noArrayIndexKey: the list is only ever replaced whole.
-              <li className={cn(META, "line-clamp-1")} key={index}>
-                Next: {goal}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </div>
-    </PanelSection>
+            <Button
+              disabled={stopping}
+              onClick={() => {
+                moveFocus.current = "stop"
+                setAsked(false)
+              }}
+              ref={keep}
+              size="sm"
+              variant="ghost"
+            >
+              Keep building
+            </Button>
+          </div>
+        ) : (
+          <Button
+            className="self-start"
+            onClick={() => {
+              moveFocus.current = "keep"
+              setAsked(true)
+            }}
+            ref={stop}
+            size="sm"
+            variant="outline"
+          >
+            Stop
+          </Button>
+        )
+      ) : null}
+      {error ? (
+        <p className="text-[0.8125rem] text-destructive" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </div>
   )
 }
 
@@ -1287,7 +1262,7 @@ function ApprovalItem({
   )
 }
 
-/* Coming up, your website, first steps -------------------------------- */
+/* Coming up, done today, your website ---------------------------------- */
 
 /**
  * Things with a time, in the order given: what closes or is due next under
@@ -1453,7 +1428,6 @@ function YourWebsite({
   url,
   live,
   thumbnail = null,
-  blueprint = null,
   onRequestChanges,
 }: {
   host: string | null
@@ -1461,8 +1435,6 @@ function YourWebsite({
   url?: string | null
   live: number | null
   thumbnail?: Thumbnail
-  /** The plan the live site was built from, kept under it read-only. */
-  blueprint?: Blueprint | null
   /** Starts a change to the live site in the chat. */
   onRequestChanges?: (() => void) | undefined
 }) {
@@ -1542,37 +1514,6 @@ function YourWebsite({
           ) : null}
         </div>
       ) : null}
-      {blueprint ? (
-        <BlueprintCard
-          blueprint={blueprint}
-          className="my-0 rounded-2xl p-3"
-          defaultOpen={false}
-          readOnly
-        />
-      ) : null}
-    </div>
-  )
-}
-
-/* Today ---------------------------------------------------------------- */
-
-/**
- * The panel's opening lines, written by the app from the workspace: one or
- * two short sentences, the first leading and the second quieter. No live
- * region: it changes with every read, and the sections below announce what
- * the owner did.
- */
-function PanelDigest({ sentences }: { sentences: string[] }) {
-  const [lead, ...rest] = sentences
-  if (!lead) return null
-  return (
-    <div className="flex flex-col gap-0.5" data-slot="panel-digest">
-      <p className="text-sm">{lead}</p>
-      {rest.map((sentence) => (
-        <p className={META} key={sentence}>
-          {sentence}
-        </p>
-      ))}
     </div>
   )
 }
@@ -1590,13 +1531,10 @@ function LiveLine({
   tone,
   lead,
   detail = null,
-  progress = null,
 }: {
   tone: "working" | "live" | "idle"
   lead: string
   detail?: string | null
-  /** How far a build is through its steps, kept in view when the words truncate. */
-  progress?: { done: number; total: number } | null
 }) {
   return (
     <span
@@ -1618,76 +1556,13 @@ function LiveLine({
         )}
         <PersonaAvatar className="size-6" sway />
       </span>
-      {progress ? (
-        // A build's step is the news, so the lead gives way first.
-        <span className="flex min-w-0 items-baseline gap-1">
-          <span className="min-w-0 truncate font-medium">{lead}</span>
-          <span className="shrink-0 text-muted-foreground">{detail}</span>
-          <span
-            className="shrink-0 text-muted-foreground tabular-nums"
-            data-slot="live-line-progress"
-          >
-            <span aria-hidden>
-              {progress.done}/{progress.total}
-            </span>
-            <span className="sr-only">
-              , step {progress.done} of {progress.total}
-            </span>
-          </span>
-        </span>
-      ) : (
-        <span className="min-w-0 truncate">
-          <span className="font-medium">{lead}</span>
-          {detail ? (
-            <span className="text-muted-foreground"> {detail}</span>
-          ) : null}
-        </span>
-      )}
+      <span className="min-w-0 truncate">
+        <span className="font-medium">{lead}</span>
+        {detail ? (
+          <span className="text-muted-foreground"> {detail}</span>
+        ) : null}
+      </span>
     </span>
-  )
-}
-
-/**
- * The panel before there is anything to show: what the team still needs,
- * and the build it leads to. Each step is ticked from the workspace, never
- * from what the owner has clicked.
- */
-function PanelBlank({
-  steps,
-  description = null,
-  action = null,
-}: {
-  steps: { label: string; done: boolean }[]
-  /** What to do next, in the words of the steps below it. */
-  description?: string | null
-  /** Where the next step is taken: a link, from the app. */
-  action?: ReactNode
-}) {
-  return (
-    <PanelSection title="First steps">
-      {description ? <p className={META}>{description}</p> : null}
-      <ul className="flex flex-col gap-1">
-        {steps.map((step) => (
-          <li className="flex items-center gap-2 text-sm" key={step.label}>
-            {step.done ? (
-              <CheckCircleIcon
-                aria-hidden
-                className="size-4 shrink-0 text-primary"
-                weight="fill"
-              />
-            ) : (
-              <CircleIcon
-                aria-hidden
-                className="size-4 shrink-0 text-muted-foreground"
-              />
-            )}
-            <span className="sr-only">{step.done ? "Done: " : "To do: "}</span>
-            {step.label}
-          </li>
-        ))}
-      </ul>
-      {action}
-    </PanelSection>
   )
 }
 
@@ -1713,22 +1588,22 @@ function NextSteps({ children }: { children?: ReactNode }) {
   )
 }
 
-export type { Preview, Thumbnail }
+export type { Preview, SegmentStep, Thumbnail }
 export {
   AnswerInputs,
   ApprovalItem,
   approvalDecision,
-  BUILD_STAGES,
   ComingUp,
   LiveLine,
   NextSteps,
-  PanelBlank,
-  PanelDigest,
+  PanelSection,
+  PanelSegment,
   QuestionItem,
   ReminderList,
   ReminderNote,
+  StageDetail,
+  StopBuild,
   stageWord,
   WaitingOnYou,
-  WorkingOn,
   YourWebsite,
 }

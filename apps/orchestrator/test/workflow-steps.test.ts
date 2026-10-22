@@ -132,7 +132,6 @@ vi.mock("../src/brief.ts", () => ({
     model: "A",
     origin: script.origin,
     kind: "site.build",
-    skip_review: script.skipReview,
     ...script.lane,
   }),
   takeSnapshot: async () => ({}),
@@ -155,11 +154,6 @@ const script = {
   lane: {} as { lane?: string; change_kind?: string | null },
   /** Whether the one-call quick edit gets to a report. */
   quickDone: true as boolean,
-  /** What each look at the plan's decision finds; none left is "build". */
-  decisions: [] as ("build" | "change" | null)[],
-  /** The owner chose "Skip all": the plan is built without the card's wait. */
-  skipReview: false as boolean,
-  planned: [] as number[],
   /** The axe run each `validateRevision` call was handed. */
   gated: [] as unknown[],
   /** The fixes each look of the design critic finds; none left is none. */
@@ -275,15 +269,9 @@ vi.mock("../src/quick.ts", () => ({
         }
       : { done: false, reason: "apply: no match", model_ms: 1 },
 }))
-// The planner's bodies are driven in planner.test.ts; here only its rounds.
+// The planner's bodies are driven in planner.test.ts; here only its step.
 vi.mock("../src/planner.ts", () => ({
-  PLAN_ROUNDS: 6,
-  planRound: async ({ round }: { round: number }) => {
-    script.planned.push(round)
-    return { round, source: "model", attempts: 1 }
-  },
-  readDecision: async () =>
-    script.decisions.length > 0 ? script.decisions.shift() : "build",
+  planRound: async () => ({ round: 1, source: "model", attempts: 1 }),
 }))
 // BA4's photos: one generated file, drawn over a few milliseconds, so the
 // Developer is seen to start before they settle.
@@ -423,7 +411,7 @@ function drive(wakes: Wake[], answers: Answer[] = []) {
       opts: { type: string; timeout?: unknown }
     ) => {
       names.push(name)
-      if (opts.type === "answer" || opts.type === "blueprint") {
+      if (opts.type === "answer") {
         waits.push(opts.timeout)
         const answer = answers.shift() ?? {}
         if (answer.after) vi.setSystemTime(Date.now() + answer.after)
@@ -482,8 +470,6 @@ type Setup = {
   origin?: "owner"
   lane?: typeof script.lane
   quickDone?: boolean
-  decisions?: typeof script.decisions
-  skipReview?: boolean
   critic?: typeof script.critic
   quiet?: number[]
   photosFail?: boolean
@@ -651,36 +637,12 @@ const paths: [string, Wake[], Setup, { outcome: string }][] = [
     { lane: full, critic: [[FIX, FIX], []] },
     { outcome: "preview_ready" },
   ],
-  // An owner's waits on the card: the first look finds no decision, the
-  // nudge sends it to look again and finds "Build it".
+  // An owner's build plans and builds with no stop for a review.
   [
-    "owner reviews the plan",
+    "owner's planned build",
     [completion],
-    { origin: "owner", lane: full, decisions: [null, "build"] },
+    { origin: "owner", lane: full },
     { outcome: "preview_ready" },
-  ],
-  [
-    "owner changes the plan",
-    [completion],
-    { origin: "owner", lane: full, decisions: ["change", "build"] },
-    { outcome: "preview_ready" },
-  ],
-  [
-    "owner skipped the review",
-    [completion],
-    { origin: "owner", lane: full, skipReview: true },
-    { outcome: "preview_ready" },
-  ],
-  [
-    "nobody decided on the plan",
-    [],
-    {
-      origin: "owner",
-      lane: full,
-      decisions: Array(29).fill(null),
-      answers: Array(28).fill({ timeout: true, after: 6 * HOUR }),
-    },
-    { outcome: "failed" },
   ],
   [
     "nobody answered",
@@ -717,9 +679,6 @@ describe("the assignment Workflow's step names", () => {
     script.origin = setup.origin ?? "console"
     script.lane = setup.lane ?? {}
     script.quickDone = setup.quickDone ?? true
-    script.decisions = [...(setup.decisions ?? [])]
-    script.skipReview = setup.skipReview ?? false
-    script.planned = []
     script.critic = [...(setup.critic ?? [])]
     script.quiet = [...(setup.quiet ?? [])]
     photoStep.fail = setup.photosFail ?? false
@@ -961,10 +920,7 @@ describe("the assignment Workflow's step names", () => {
         "planned build",
         "photos failed",
         "design critique repaired",
-        "owner reviews the plan",
-        "owner changes the plan",
-        "owner skipped the review",
-        "nobody decided on the plan",
+        "owner's planned build",
       ].sort()
     )
   })

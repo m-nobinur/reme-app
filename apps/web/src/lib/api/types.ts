@@ -1,6 +1,6 @@
 import type {
+  Activity,
   ApprovalRequest,
-  BlueprintReviewOutput,
   BuildStopCause,
   BuildSummary,
   ChangeKind,
@@ -130,6 +130,8 @@ export type Workspace = {
   missingFacts: FactValueKey[]
   /** The name the owner gave their assistant, or null before they chose one. */
   assistantName: string | null
+  /** Every job as segments with fixed steps; null until the api sends it. */
+  activity: Activity | null
   /** What the api derived from rows waiting on the owner, as facts. */
   derivedReminders: DerivedReminder[]
   /** Open reminders someone wrote down, soonest due first, undated after. */
@@ -282,12 +284,6 @@ export type OwnerDataSource = {
     assignmentId: string,
     requestId: string,
     value: unknown,
-    key: string
-  ) => Promise<WriteOutcome>
-  /** The owner's decision on a plan: build it, or change it in their words. Idempotent on `key`. */
-  decideBlueprint: (
-    assignmentId: string,
-    decision: BlueprintReviewOutput,
     key: string
   ) => Promise<WriteOutcome>
   cancelBuild: (assignmentId: string) => Promise<WriteOutcome>

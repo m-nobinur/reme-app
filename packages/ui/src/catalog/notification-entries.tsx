@@ -113,7 +113,7 @@ const ONE_OF_EACH: Record<Kind, NotificationItem> = {
       "Nothing is published without you. If it expires, the build waits until you decide.",
     action: (
       <a className={ACTION} href="#approvals">
-        Review version 4
+        Review the new version
       </a>
     ),
   },

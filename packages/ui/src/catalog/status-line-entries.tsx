@@ -13,16 +13,17 @@ import type { ReactNode } from "react"
 type Entry = { name: string; render: () => ReactNode }
 
 const KIND_LABELS: Record<StatusKind, string> = {
-  thinking: "Working through your message",
+  thinking: "Ellie is reading your message",
   planning: "Planning your website",
-  build: "Writing the services page",
+  building: "Writing the services page",
   photos: "Making 8 photos, 3 done",
-  check: "Checking your DNS",
+  checking: "Checking your DNS",
   domain: "Connecting spark.example.net",
-  connect: "Connecting Google",
+  google: "Connecting Google",
   reminder: "Setting a reminder",
   payment: "Getting the purchase ready",
-  publish: "Putting your website live",
+  publishing: "Putting your website live",
+  waiting: "Waiting for your answer",
 }
 
 const Stack = ({ children }: { children: ReactNode }) => (
@@ -53,7 +54,7 @@ const statusLineCatalog: Entry[] = [
         <StatusLine
           announce={false}
           delay={0}
-          kind="check"
+          kind="checking"
           label="Checked your DNS"
           state="done"
         />
@@ -75,7 +76,7 @@ const statusLineCatalog: Entry[] = [
           announce={false}
           delay={0}
           kind="domain"
-          label="Stopped looking for a name"
+          label="Stopped searching for a domain"
           state="stopped"
         />
       </Stack>
@@ -89,14 +90,14 @@ const statusLineCatalog: Entry[] = [
           announce={false}
           count={3}
           delay={0}
-          kind="check"
+          kind="checking"
           label="Checking your DNS"
         />
         <StatusLine
           announce={false}
           delay={0}
           elapsed={42_000}
-          kind="build"
+          kind="building"
           label="Writing the pages"
         />
         <StatusLine

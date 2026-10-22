@@ -7,7 +7,6 @@ import {
 import { CopyIcon } from "@phosphor-icons/react"
 import {
   type AskChoiceInput,
-  type Blueprint,
   type DomainPurchaseStatus,
   FONTS,
   INDUSTRIES,
@@ -24,11 +23,6 @@ import { Approval } from "@workspace/ui/components/assistant/approval"
 import { ChoiceForm } from "@workspace/ui/components/assistant/ask-choice"
 import { SaveDesignAnswerProvider } from "@workspace/ui/components/assistant/ask-design"
 import { UploadPhotosProvider } from "@workspace/ui/components/assistant/ask-upload"
-import {
-  BlueprintCard,
-  type BlueprintCardProps,
-  SiteNameProvider,
-} from "@workspace/ui/components/assistant/blueprint-card"
 import {
   type DomainPurchase,
   DomainPurchaseProvider,
@@ -67,7 +61,6 @@ import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 import { FACT_INPUTS } from "@workspace/ui/lib/answer"
 import { BROKEN } from "@workspace/ui/lib/tool-state"
 import { type ReactNode, useState } from "react"
-import { BLUEPRINT, REPLAN } from "./blueprint-fixtures"
 import { INPUT as ASK_DESIGN_INPUT } from "./tray-entries"
 
 /**
@@ -226,7 +219,7 @@ function TrayStates({
 
 /** The composer's surroundings as the owner app sets them: the "+" starters. */
 const SUGGESTIONS: ThreadSuggestion[] = [
-  { prompt: "What changed in version 4?" },
+  { prompt: "What changed in the new version?" },
   { prompt: "What do you need from me?" },
   { prompt: "What is on my website now?" },
 ]
@@ -237,8 +230,9 @@ function OwnerThread(props: Parameters<typeof FixtureThread>[0]) {
     <FixtureThread
       {...props}
       settings={{
-        placeholder: "Ask Reme anything…",
-        questionPlaceholder: "Tell Reme what to do instead…",
+        assistant: "Ellie",
+        placeholder: "Ask Ellie anything…",
+        questionPlaceholder: "Tell Ellie what to do instead…",
         quickActions: OWNER_QUICK_ACTIONS,
         ...(props.stored ? { stored: props.stored } : {}),
         ...props.settings,
@@ -887,94 +881,6 @@ const LIMOUSINE_QUESTIONS = [
     options: ["Wedding", "Airport transfer", "Night out", "Business"],
   }),
   quoteField("notes", "Anything else", "textarea", { required: false }),
-]
-
-/** A `review_blueprint` call in one of its states. */
-const reviewBlueprint = (
-  label: string,
-  plan: Blueprint,
-  extra: { result?: unknown; isError?: boolean } = {}
-) => ({
-  args: { blueprint: plan },
-  isError: extra.isError,
-  result: extra.result,
-  toolCallId: `blueprint_${label}`,
-  toolName: "review_blueprint",
-  type: "tool-call" as const,
-})
-
-const PLANNED =
-  "Here is the plan for your site. Read it, then build it or change it."
-
-const REVIEW_BLUEPRINT_STATES: ThreadMessageLike[] = [
-  ...answeredStep(
-    PLANNED,
-    reviewBlueprint("built", BLUEPRINT, { result: { decision: "build" } }),
-    "Build it"
-  ),
-  {
-    content: [
-      reviewBlueprint("cancelled", BLUEPRINT, {
-        isError: true,
-        result: { error: TOOL_CALL_CANCELLED },
-      }),
-      reviewBlueprint("error", BLUEPRINT, {
-        isError: true,
-        result: { error: BROKEN },
-      }),
-    ],
-    role: "assistant",
-    status: DONE,
-  },
-  // A re-plan: the first plan was changed, so the second marks what differs.
-  {
-    content: [
-      question(PLANNED),
-      reviewBlueprint("first", BLUEPRINT, {
-        result: {
-          decision: "change",
-          note: "Add a gallery page and make the colours warmer",
-        },
-      }),
-    ],
-    role: "assistant",
-    status: DONE,
-  },
-  reply("Add a gallery page and make the colours warmer"),
-  {
-    content: [
-      question("Updated. The changed lines are marked."),
-      reviewBlueprint("replan", REPLAN),
-    ],
-    role: "assistant",
-    status: WAITING,
-  },
-]
-
-/** The plan card by itself: title, props, and an optional width. */
-const BLUEPRINT_CARDS: [string, BlueprintCardProps, string?][] = [
-  ["Feature plan", { blueprint: BLUEPRINT, onBuild: noop }],
-  ["Collapsed", { blueprint: BLUEPRINT, defaultOpen: false, onBuild: noop }],
-  [
-    "After a re-plan, changed rows marked",
-    { blueprint: REPLAN, previous: BLUEPRINT, onBuild: noop },
-  ],
-  [
-    "Read-only, as the panel keeps it",
-    { blueprint: BLUEPRINT, readOnly: true },
-  ],
-  [
-    "Your own colour, photos written in",
-    {
-      blueprint: {
-        ...BLUEPRINT,
-        palette: { kind: "brand", brand: PALETTES[3]?.brand ?? "" },
-      },
-      photoDirection: "Daylight, tidy rooms, hands at work, never faces.",
-      onBuild: noop,
-    },
-  ],
-  ["Phone width", { blueprint: BLUEPRINT, onBuild: noop }, "max-w-[22.5rem]"],
 ]
 
 /** A `review_quote_form` call in one of its states. */
@@ -1992,7 +1898,7 @@ const CONVERSATION: ThreadMessageLike[] = [
 const RUNNING: ThreadMessageLike[] = [
   ask("What is waiting on me?"),
   {
-    content: [{ text: "Version 4 is ready for you to", type: "text" }],
+    content: [{ text: "A new version is ready for you to", type: "text" }],
     role: "assistant",
     status: { type: "running" },
   },
@@ -2151,7 +2057,8 @@ function ConversationSample({ stored }: { stored?: string }) {
         messages={[]}
         {...(stored ? { stored } : {})}
         settings={{
-          briefing: "v3 is live. Version 4 is ready for you to approve.",
+          briefing:
+            "Your website is live. A new version is ready for you to approve.",
         }}
         suggestions={SUGGESTIONS}
       />
@@ -2312,33 +2219,6 @@ const assistantCatalog = [
       </div>
     ),
   },
-  {
-    name: "ReviewBlueprint",
-    render: () => (
-      <FixtureThread height="h-[60rem]" messages={REVIEW_BLUEPRINT_STATES} />
-    ),
-  },
-  // The plan card on its own, in the states a card can be in.
-  ...(["BlueprintCard", "SiteNameProvider"] as const).map((name) => ({
-    name,
-    render: () => (
-      <SiteNameProvider value="Mop & Pail Cleaning">
-        <div className="flex max-w-2xl flex-col gap-8">
-          {BLUEPRINT_CARDS.map(([title, props, width]) => (
-            <section
-              className={`flex flex-col gap-3 ${width ?? ""}`}
-              key={title}
-            >
-              <h3 className="font-medium text-muted-foreground text-xs">
-                {title}
-              </h3>
-              <BlueprintCard {...props} />
-            </section>
-          ))}
-        </div>
-      </SiteNameProvider>
-    ),
-  })),
   {
     name: "ReviewQuoteForm",
     render: () => (
@@ -2616,7 +2496,8 @@ const assistantCatalog = [
         isDisabled={false}
         messages={[]}
         settings={{
-          briefing: "v3 is live. Version 4 is ready for you to approve.",
+          briefing:
+            "Your website is live. A new version is ready for you to approve.",
         }}
         suggestions={SUGGESTIONS}
       />

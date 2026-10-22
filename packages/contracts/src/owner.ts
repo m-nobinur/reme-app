@@ -337,18 +337,14 @@ export const BuildPhoto = z.strictObject({
 export const BUILD_ACTIVITY_MAX = 8
 
 /**
- * The plan a build was given (ADR-038), for the Blueprint card. `round`
- * counts plans within the build: a "Change something" re-plans and adds one.
- * `previous` is the plan this one changed, a re-plan's last round or, for a
- * creative change, the plan the live site was built from; the card marks the
- * rows that differ. `awaiting` says the build waits on the owner's "Build it"
- * or "Change something" for this round.
+ * The plan a build was given (ADR-038), for the panel. `round` counts plans
+ * within the build and is 1 today. `previous` is the plan this one changed:
+ * for a creative change, the plan the live site was built from.
  */
 export const BuildBlueprint = z.strictObject({
   plan: Blueprint,
   round: z.int().positive(),
   previous: Blueprint.nullable(),
-  awaiting: z.boolean(),
 })
 
 /**

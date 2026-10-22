@@ -54,11 +54,13 @@ import { LogoMark } from "@workspace/ui/components/logo"
 import { StatusLine } from "@workspace/ui/components/status-line"
 import { ComposerInputContext } from "@workspace/ui/hooks/use-composer-input"
 import { useOnboardingStatus } from "@workspace/ui/hooks/use-onboarding-status"
-import { onboardingLine } from "@workspace/ui/lib/activity-copy"
 import {
-  PLAN_CHANGES_PLACEHOLDER,
-  waitsOnBlueprint,
-} from "@workspace/ui/lib/blueprint"
+  onboardingLine,
+  STILL_ON_IT_AFTER,
+  THINKING_AFTER,
+  turnMoment,
+  writingBack,
+} from "@workspace/ui/lib/activity-copy"
 import { SHOW_DELAY_MS } from "@workspace/ui/lib/status-line"
 import {
   SESSION_ENDED,
@@ -150,6 +152,8 @@ export type ThreadProps = {
   questionPlaceholder?: string | undefined
   /** One line under the welcome heading, built from state rather than a model. */
   briefing?: string | null | undefined
+  /** What the owner named their assistant, for "Ellie is reading your message". */
+  assistant?: string | null | undefined
   quickActions?: readonly ThreadQuickAction[] | undefined
   /** A new mode object focuses the composer, so each press lands there. */
   mode?: ThreadMode | undefined
@@ -640,9 +644,6 @@ const Composer: FC<{ autoFocus: boolean; expanded: boolean }> = ({
   } = useContext(ThreadSettingsContext)
   const input = useContext(ComposerInputContext)
   const idea = useCycle([placeholder, ...(placeholderIdeas ?? [])])
-  const planning = useAuiState((s) =>
-    waitsOnBlueprint(s.thread.messages.at(-1)?.parts)
-  )
   // A question waits in the tray: what the owner types instead is an
   // ordinary turn, and the placeholder says so.
   const asking = useAuiState((s) =>
@@ -672,11 +673,7 @@ const Composer: FC<{ autoFocus: boolean; expanded: boolean }> = ({
           ref={input}
           placeholder={
             mode?.placeholder ??
-            (asking && questionPlaceholder
-              ? questionPlaceholder
-              : planning
-                ? PLAN_CHANGES_PLACEHOLDER
-                : idea)
+            (asking && questionPlaceholder ? questionPlaceholder : idea)
           }
           className={cn(
             "aui-composer-input max-h-48 min-w-0 resize-none bg-transparent px-1.5 py-1.25 text-chat text-chat-foreground caret-primary outline-none placeholder:text-muted-foreground/60",
@@ -857,6 +854,7 @@ const MessageError: FC = () => {
 const TypingIndicator: FC<{ immediate?: boolean }> = ({
   immediate = false,
 }) => {
+  const { assistant } = useContext(ThreadSettingsContext)
   const answered = useAuiState((s) =>
     s.message.parts.some(
       (part) =>
@@ -866,13 +864,34 @@ const TypingIndicator: FC<{ immediate?: boolean }> = ({
     )
   )
   const status = useOnboardingStatus()
+  const toolsRan = useAuiState((s) =>
+    s.message.parts.some((part) => part.type === "tool-call")
+  )
+  // The line moves on at fixed times, so what it says stays true: more
+  // time has passed.
+  const [seconds, setSeconds] = useState(0)
+  useEffect(() => {
+    const timers = [THINKING_AFTER, STILL_ON_IT_AFTER].map((at) =>
+      setTimeout(() => setSeconds(at), at * 1000)
+    )
+    return () => {
+      for (const timer of timers) clearTimeout(timer)
+    }
+  }, [])
   if (answered) return null
+  const ctx = { orgId: "", assistant }
   return (
     <span data-slot="aui_assistant-message-indicator">
       <StatusLine
         delay={immediate ? 0 : SHOW_DELAY_MS}
         kind="thinking"
-        label={status ? onboardingLine(status) : "Working"}
+        label={
+          status
+            ? onboardingLine(status)
+            : immediate || toolsRan
+              ? writingBack(ctx)
+              : turnMoment(seconds, ctx)
+        }
       />
     </span>
   )

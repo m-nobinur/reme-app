@@ -36,7 +36,6 @@ import {
 import { assistantOf, briefingOf } from "@/lib/briefing"
 import { OPENING_REVEAL } from "@/lib/reveal"
 import { useLiveWorkspace } from "@/lib/workspace"
-import { usePlanCard } from "./blueprint-plan"
 import { BuildStopped } from "./build-stopped"
 import { conversationList, unstored } from "./conversations"
 import { saveDesignAnswer } from "./design"
@@ -93,11 +92,6 @@ export function ChatPage() {
   )
   const intent = useRef<"site_change" | undefined>(undefined)
   intent.current = siteChange ? "site_change" : undefined
-  // A Blueprint waiting on the owner, from the polled workspace like the
-  // ready card; a typed "Change the plan: …" goes to it.
-  const plan = usePlanCard(live)
-  const planChange = useRef(plan.change)
-  planChange.current = plan.change
   // A message the assistant posted on its own, named by the polled tag. Set
   // here, where the workspace re-renders, for the runtime hook to follow.
   const tail = useRef<{ current: string | null; moved?: () => void }>({
@@ -125,7 +119,6 @@ export function ChatPage() {
       suggestions: briefing.suggestions,
       intent,
       onIntentSent: () => setSiteChange(null),
-      planChange,
       tail,
       refresh: live.refresh,
     })
@@ -224,11 +217,11 @@ export function ChatPage() {
                   <Thread
                     after={
                       <>
-                        {plan.card}
                         <SiteReadyCard />
                         <BuildStopped />
                       </>
                     }
+                    assistant={live.workspace?.assistantName}
                     briefing={briefing.line}
                     components={{ ToolFallback: Approval }}
                     mode={mode}

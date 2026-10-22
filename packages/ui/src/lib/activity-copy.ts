@@ -1,5 +1,6 @@
 import type {
   ActivitySegment,
+  ActivityStep,
   CosToolName,
   OnboardingStatus,
   PlanFactKey,
@@ -48,6 +49,7 @@ const tidy = (text: string) =>
     .trim()
 
 const cap = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
+const uncap = (text: string) => text.charAt(0).toLowerCase() + text.slice(1)
 
 const plural = (n: number, one: string, many = `${one}s`) =>
   `${n} ${n === 1 ? one : many}`
@@ -144,11 +146,19 @@ export const writingBack = (ctx: CopyContext) =>
 export const planningLine = (ctx: CopyContext) =>
   is(named(ctx.assistant), "planning your website")
 
+/** The model's own reasoning, folded under one line. */
+export const reasoningLine = (working: boolean) =>
+  working ? "Thinking it through" : "Thought it through"
+
+/** Several quiet reads folded into one line. */
+export const groupLine = (count: number, working: boolean) =>
+  `${working ? "Checking" : "Checked"} ${plural(count, "thing")}`
+
 // ---------------------------------------------------------------------------
 // CoS tools: three forms each, from one table. The set is closed, so the
 // model writes none of these.
 
-type ToolArgs = {
+export type ToolArgs = {
   /** A domain or a URL; shown as a domain. */
   domain?: string
   /** What the owner asked to search for. */
@@ -197,9 +207,9 @@ const TOOLS: Record<CosToolName, ToolCopy> = {
   },
   get_preview: {
     kind: "checking",
-    working: () => "Opening the preview",
-    done: () => "Opened the preview",
-    fail: () => "open the preview",
+    working: () => "Checking the preview",
+    done: () => "Checked the preview",
+    fail: () => "check the preview",
   },
   request_change: {
     kind: "building",
@@ -306,6 +316,14 @@ const TOOLS: Record<CosToolName, ToolCopy> = {
   },
 }
 
+/** Any other tool: a plain line, never the tool's name. */
+const ANY_TOOL: ToolCopy = {
+  kind: "thinking",
+  working: () => "Working on it",
+  done: () => "Finished that",
+  fail: () => "finish that",
+}
+
 const FAIL_TOOL = "try again in a moment"
 const FAIL_STAGE = "You can try again from here."
 
@@ -317,23 +335,31 @@ const clean = (a: ToolArgs): Cleaned => ({
   step: cleanArg(a.step, "text", 60),
 })
 
-/** A tool's line in one of its three forms. */
+const toolCopy = (tool: string) =>
+  Object.hasOwn(TOOLS, tool) ? TOOLS[tool as CosToolName] : ANY_TOOL
+
+/**
+ * A tool's line in one of its three forms, or "Stopped ..." when the owner's
+ * message ended it first. A tool outside the table reads "Working on it".
+ */
 export function toolLine(
-  tool: CosToolName,
-  state: LineState,
+  tool: string,
+  state: LineState | "stopped",
   args: ToolArgs = {}
 ) {
-  const copy = TOOLS[tool]
+  const copy = toolCopy(tool)
   const a = clean(args)
   return state === "working"
     ? copy.working(a)
     : state === "done"
       ? copy.done(a)
-      : `Couldn't ${copy.fail(a)}, ${FAIL_TOOL}`
+      : state === "stopped"
+        ? `Stopped ${uncap(copy.working(a))}`
+        : `Couldn't ${copy.fail(a)}, ${FAIL_TOOL}`
 }
 
 /** The kind a tool's icon is drawn for. */
-export const toolKind = (tool: CosToolName): StatusKind => TOOLS[tool].kind
+export const toolKind = (tool: string): StatusKind => toolCopy(tool).kind
 
 // ---------------------------------------------------------------------------
 // Build stages: the six every full build lists, from its first event.
@@ -728,4 +754,146 @@ export function waitingRow(segment: ActivitySegment, until?: string) {
   if (!waitsFor) return null
   const by = cleanArg(until, "text", 40)
   return `Waiting for ${waitsFor}${by ? `, until ${by}` : ""}`
+}
+
+// ---------------------------------------------------------------------------
+// Steps: the fixed steps of each segment kind, as the panel lists them. The
+// api sends the ids; these are the words.
+
+const STEP_LABELS: Partial<
+  Record<ActivitySegment["kind"], Readonly<Record<string, string>>>
+> = {
+  onboarding: {
+    work: "What you do",
+    area: "Where you work",
+    customers: "Your customers",
+    contact: "How customers reach you",
+    assistant: "Your assistant",
+    quote_form: "Quote form",
+    photos: "Photos",
+    look: "Look and feel",
+  },
+  website: {
+    planning: "Planning",
+    photos: "Photos",
+    writing: "Pages",
+    polishing: "Polishing",
+    checking: "Checking",
+    ready: "Ready",
+  },
+  golive: {
+    approval: "Your approval",
+    publishing: "Publishing",
+    loads: "Checking it loads",
+  },
+  change: {
+    understanding: "Understanding the change",
+    making: "Making it",
+    checking: "Checking",
+    ready: "Ready",
+  },
+  domain: {
+    dns: "Your DNS change",
+    certificate: "Certificate",
+    loads: "Site loads on the new address",
+  },
+  purchase: {
+    details: "Your details",
+    payment: "Payment",
+    registration: "Registration",
+    connecting: "Connecting",
+  },
+  google: {
+    sign_in: "Sign in",
+    verify: "Verifying your site",
+    sitemap: "Sending your pages to Google",
+  },
+}
+
+const isStage = (id: string): id is BuildStage => Object.hasOwn(STAGES, id)
+
+/**
+ * A step's label. The website's step at work says what it is doing, with
+ * its count ("Writing the pages, 3 of 6"); every other step, and one in a
+ * segment that stopped, is its name.
+ * Null for a step the table does not know, which the panel leaves out.
+ */
+export function stepLabel(segment: ActivitySegment, step: ActivityStep) {
+  const working = segment.state === "now" && step.state === "now"
+  if (segment.kind === "website" && working && isStage(step.id)) {
+    return stageLine(step.id, "working", step.count ?? {})
+  }
+  return STEP_LABELS[segment.kind]?.[step.id] ?? null
+}
+
+/** What a waiting onboarding step says beside its label: the answer goes in the tray below. */
+export const ANSWER_BELOW = "Answer below"
+
+/** What a skipped step says beside its label. */
+export const SKIPPED = "Skipped"
+
+const SEGMENT_KIND: Record<ActivitySegment["kind"], StatusKind> = {
+  onboarding: "thinking",
+  website: "building",
+  golive: "publishing",
+  change: "building",
+  domain: "domain",
+  purchase: "payment",
+  google: "google",
+  reminder: "reminder",
+  review: "waiting",
+  question: "waiting",
+  checkin: "checking",
+  turn: "thinking",
+}
+
+/** The icon a segment's header draws. */
+export const segmentKind = (segment: ActivitySegment): StatusKind =>
+  SEGMENT_KIND[segment.kind]
+
+/** The icon a step at work moves: a website stage's own, else its segment's. */
+export const stepKind = (
+  segment: ActivitySegment,
+  step: ActivityStep
+): StatusKind =>
+  segment.kind === "website" && isStage(step.id)
+    ? stageKind(step.id)
+    : segmentKind(segment)
+
+/**
+ * A one-line row in Coming up or Done today. A reminder is its own title,
+ * which is the owner's text; a check-in says whether it needed the owner; a
+ * bought domain's renewal names the domain; a finished job is its done
+ * title. Null for a segment with nothing to say as a row.
+ */
+export function rowLine(
+  segment: ActivitySegment,
+  ctx: CopyContext,
+  title?: string | null
+): string | null {
+  const assistant = named(ctx.assistant)
+  switch (segment.kind) {
+    case "reminder":
+      return title ? tidy(title) : "A reminder"
+    case "checkin": {
+      if (segment.state === "upcoming") {
+        return assistant ? `${assistant} checks in next` : "Next check-in"
+      }
+      const wrote = segment.steps.some(
+        (s) => s.id === "message" && s.state === "done"
+      )
+      const who = assistant ?? "Your assistant"
+      return wrote
+        ? `${who} checked in and wrote to you`
+        : `${who} checked in, nothing needed you`
+    }
+    case "purchase":
+      if (segment.state === "upcoming") {
+        const name = cleanArg(segment.names?.domain, "domain")
+        return name ? `${name} is due for renewal` : "Your domain renewal"
+      }
+      return segmentTitle(segment, ctx)
+    default:
+      return segmentTitle(segment, ctx)
+  }
 }

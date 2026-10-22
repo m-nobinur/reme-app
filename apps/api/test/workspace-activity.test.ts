@@ -608,25 +608,20 @@ describe("a build's Blueprint on the frame", () => {
     features: ["One", "Two", "Three", "Four"],
   }
   const row = {
-    state: "planning" as const,
     blueprint: plan,
-    proposed: { round: 2, review: true, previous: plan },
-    decidedRound: 1,
+    proposed: { round: 2, previous: plan },
   }
 
-  it("waits on the owner until the round is decided", () => {
-    expect(planOf(row).blueprint).toMatchObject({
+  it("carries the plan, its round and the plan it changed", () => {
+    expect(planOf(row).blueprint).toEqual({
+      plan,
       round: 2,
-      awaiting: true,
       previous: plan,
     })
-    expect(planOf({ ...row, decidedRound: 2 }).blueprint?.awaiting).toBe(false)
-    expect(
-      planOf({ ...row, proposed: { round: 1, review: false } }).blueprint
-    ).toMatchObject({ awaiting: false, previous: null })
-    expect(planOf({ ...row, state: "implementing" }).blueprint?.awaiting).toBe(
-      false
-    )
+    expect(planOf({ ...row, proposed: { round: 1 } }).blueprint).toMatchObject({
+      round: 1,
+      previous: null,
+    })
   })
 
   it("leaves out a build with no plan, or one that no longer parses", () => {

@@ -7,10 +7,13 @@ import { createFileRoute } from "@tanstack/react-router"
 import { PageHeader } from "@workspace/ui/components/app-shell"
 import { Badge } from "@workspace/ui/components/badge"
 import { cn, META } from "@workspace/ui/lib/utils"
+import { assistantOf, leading } from "@/lib/briefing"
+import { useLiveWorkspace } from "@/lib/workspace"
 
 /**
- * What Reme is helping the owner set up. The tasks below are examples: nothing
- * stores or tracks a task yet, so this page reads no workspace state.
+ * What the assistant is helping the owner set up. The tasks below are
+ * examples: nothing stores or tracks a task yet, so the workspace gives this
+ * page only the assistant's name.
  */
 export const Route = createFileRoute("/app/tasks")({
   component: TasksPage,
@@ -32,14 +35,17 @@ type Task = {
   after?: string
 }
 
-const GROUPS: { id: string; title: string; tasks: Task[] }[] = [
+/** The tasks, worded with what the owner calls their assistant. */
+const groupsOf = (
+  assistant: string
+): { id: string; title: string; tasks: Task[] }[] => [
   {
     id: "getting-started",
     title: "Getting started",
     tasks: [
       {
         title: "Onboarding",
-        detail: "Tell Reme your phone number, industry, services and area.",
+        detail: `Tell ${assistant} your phone number, industry, services and area.`,
         status: "active",
       },
     ],
@@ -50,7 +56,7 @@ const GROUPS: { id: string; title: string; tasks: Task[] }[] = [
     tasks: [
       {
         title: "Website setup",
-        detail: "Reme builds your first version and you publish it.",
+        detail: `${leading(assistant)} builds your first version and you publish it.`,
         status: "waiting",
         after: "Onboarding",
       },
@@ -108,14 +114,15 @@ function TaskRow({ task }: { task: Task }) {
 }
 
 function TasksPage() {
+  const assistant = assistantOf(useLiveWorkspace().workspace)
   return (
     <>
       <PageHeader
-        description="What Reme is helping you set up, in the order it happens."
+        description={`What ${assistant} is helping you set up, in the order it happens.`}
         title="Tasks"
       />
       <div className="flex flex-col gap-8">
-        {GROUPS.map((group) => (
+        {groupsOf(assistant).map((group) => (
           <section aria-labelledby={`tasks-${group.id}`} key={group.id}>
             <h2 className="mb-3 font-semibold text-sm" id={`tasks-${group.id}`}>
               {group.title}

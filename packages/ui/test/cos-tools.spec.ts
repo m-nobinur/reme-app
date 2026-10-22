@@ -18,12 +18,15 @@ test("reads say what they looked at, and open onto what they found", async ({
   const entry = page.locator('[data-entry="CosReads"]')
   await expect(
     entry.locator('[data-slot="cos-read-workspace"] [role="status"]')
-  ).toHaveText("Checking your workspace")
-  await expect(entry).toContainText("Could not check your workspace")
-  await expect(entry).toContainText("Stopped reading your business details")
-  await expect(entry).toContainText("Checked for a preview")
+  ).toHaveText("Checking where things stand")
+  await expect(entry).toContainText(
+    "Couldn't check where things stand, try again in a moment"
+  )
+  await expect(entry).toContainText("Stopped looking up your details")
 
-  await entry.getByRole("button", { name: "Checked your workspace" }).click()
+  await entry
+    .getByRole("button", { name: "Checked where things stand" })
+    .click()
   const workspace = entry.locator('[data-slot="cos-read-workspace"] dl')
   await expect(workspace).toContainText("Live")
   await expect(workspace).toContainText("Add Saturday hours, 9 to 1.")
@@ -32,17 +35,15 @@ test("reads say what they looked at, and open onto what they found", async ({
   await expect(workspace).toContainText("A new version to review by")
   await expect(workspace).toContainText("Tagline")
 
-  await entry
-    .getByRole("button", { name: "Read your business details" })
-    .click()
+  await entry.getByRole("button", { name: "Found your details" }).click()
   await expect(entry.locator('[data-slot="cos-read-facts"] dl')).toContainText(
     "Weekday hours08:00 to 18:00"
   )
-  await entry
-    .getByRole("button", { name: "Checked the preview of the new version" })
-    .click()
+  // Two previews: one ready, one refused, under the same line.
+  const previews = entry.getByRole("button", { name: "Checked the preview" })
+  await previews.nth(0).click()
   await expect(entry).toContainText("It shows under Your website.")
-  await entry.getByRole("button", { name: "Checked for a preview" }).click()
+  await previews.nth(1).click()
   await expect(entry).toContainText("That build is not in your workspace.")
   await expect(entry).not.toContainText("No assignment with that id")
   expect(await entry.innerText()).not.toMatch(WIRE)
@@ -76,7 +77,11 @@ for (const [entry, slot, yes, busy, target, detail, done, refused] of [
     await expect(cards).toHaveCount(14)
     // Nothing to approve while the model is still writing it, and a call
     // the stream left unfinished stops rather than working forever.
-    await expect(cards.nth(0)).toHaveText("Writing this out")
+    await expect(cards.nth(0)).toHaveText(
+      entry === "AnswerQuestion"
+        ? "Passing on your answer"
+        : "Setting a reminder"
+    )
     await expect(cards.nth(0).getByRole("button")).toHaveCount(0)
     await expect(cards.nth(1)).toContainText("This was not finished.")
     await expect(cards.nth(1).getByRole("button")).toHaveCount(0)

@@ -148,34 +148,3 @@ export const BLUEPRINT: Blueprint = {
     "Colours and lettering that read as calm and clean",
   ],
 }
-
-/** The re-plan after "add a gallery page and make the colours warmer". */
-export const REPLAN: Blueprint = {
-  ...BLUEPRINT,
-  palette: { kind: "preset", id: "pebble" },
-  pages: [
-    ...BLUEPRINT.pages.slice(0, 3),
-    {
-      page: "gallery",
-      sections: [
-        {
-          kind: "hero",
-          variant: "text_led",
-          purpose: "Our work",
-          content_notes: null,
-        },
-        {
-          kind: "gallery",
-          variant: "default",
-          purpose: "Photos of finished homes",
-          content_notes: null,
-        },
-      ],
-    },
-    ...BLUEPRINT.pages.slice(3),
-  ],
-  features: [
-    ...BLUEPRINT.features.slice(0, 7),
-    "A gallery page for photos of finished homes",
-  ],
-}

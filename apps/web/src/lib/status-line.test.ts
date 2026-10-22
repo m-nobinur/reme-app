@@ -33,7 +33,7 @@ const show = (props: Props) =>
   act(async () =>
     root.render(
       createElement(StatusLine, {
-        kind: "check" as StatusKind,
+        kind: "checking" as StatusKind,
         label: "Checking your DNS",
         ...props,
       })

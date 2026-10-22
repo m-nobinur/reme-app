@@ -25,7 +25,7 @@ const RequestChange: ToolCallMessagePartComponent = (props) => (
       <Done>
         {output?.outcome === "started" && output.build.lane === "quick"
           ? "Updating your preview."
-          : "Started. Follow it under Working on."}
+          : "Started. Follow it in the panel."}
       </Done>
     )}
     props={props}

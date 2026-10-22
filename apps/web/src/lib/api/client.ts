@@ -2,7 +2,6 @@ import {
   ActivityFeed,
   ApprovalDecision,
   type AttentionItem as Attention,
-  type BlueprintReviewOutput,
   CHAT_TURN_MS,
   type ChangeKind,
   Conversation,
@@ -405,6 +404,7 @@ function workspaceOf(
     url: status.site.url,
     missingFacts: status.missing_facts,
     assistantName: status.assistant_name,
+    activity: status.activity ?? null,
     derivedReminders: status.reminders.derived,
     reminderNotes: status.reminders.notes,
     etag,
@@ -504,16 +504,6 @@ async function answer(
   // `answer.already_given` means a different answer is on record, so this
   // one was not recorded.
   return await outcome(response, path)
-}
-
-async function decideBlueprint(
-  assignmentId: string,
-  decision: BlueprintReviewOutput,
-  key: string
-): Promise<WriteOutcome> {
-  const path = `/builds/${segment(assignmentId)}/blueprint`
-  // The same decision again is a retry and gets its receipt.
-  return await outcome(await post(path, decision, key), path)
 }
 
 async function cancelBuild(assignmentId: string): Promise<WriteOutcome> {
@@ -805,7 +795,6 @@ export const apiSource: OwnerDataSource = {
   },
   pollWorkspace,
   answer,
-  decideBlueprint,
   cancelBuild,
   deleteAccount,
   preview,

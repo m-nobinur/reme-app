@@ -10,10 +10,17 @@ import {
   ListBulletsIcon,
   MagnifyingGlassIcon,
   MinusCircleIcon,
+  type Icon as PhosphorIcon,
   PlugsConnectedIcon,
   RocketLaunchIcon,
   WarningCircleIcon,
 } from "@phosphor-icons/react"
+import {
+  type StatusKind,
+  type ToolArgs,
+  toolKind,
+  toolLine,
+} from "@workspace/ui/lib/activity-copy"
 import { duration } from "@workspace/ui/lib/format"
 import {
   CLOCK_AFTER_MS,
@@ -34,24 +41,52 @@ import { type ComponentProps, useEffect, useRef, useState } from "react"
  * is `working`, and both hold still under reduced motion.
  */
 
-/** One icon per kind of work, each with its own small motion (globals.css). */
-const KINDS = {
+/**
+ * One icon per kind of work, each with its own small motion (globals.css),
+ * keyed by the copy table's kinds so a line and its icon come from one place.
+ */
+const KINDS: Record<StatusKind, { Icon: PhosphorIcon; motion: string }> = {
   thinking: { Icon: ListBulletsIcon, motion: "animate-status-steps" },
   planning: { Icon: CirclesFourIcon, motion: "animate-status-pulse" },
-  build: {
+  building: {
     Icon: HammerIcon,
     motion: "origin-bottom-right animate-status-tap",
   },
   photos: { Icon: ImageSquareIcon, motion: "animate-status-fade" },
-  check: { Icon: MagnifyingGlassIcon, motion: "animate-status-sweep" },
+  checking: { Icon: MagnifyingGlassIcon, motion: "animate-status-sweep" },
   domain: { Icon: GlobeIcon, motion: "animate-status-turn" },
-  connect: { Icon: PlugsConnectedIcon, motion: "animate-status-meet" },
+  google: { Icon: PlugsConnectedIcon, motion: "animate-status-meet" },
   reminder: { Icon: BellIcon, motion: "origin-top animate-status-swing" },
   payment: { Icon: CreditCardIcon, motion: "animate-status-fade" },
-  publish: { Icon: RocketLaunchIcon, motion: "animate-status-lift" },
-} as const
+  publishing: { Icon: RocketLaunchIcon, motion: "animate-status-lift" },
+  waiting: { Icon: HourglassMediumIcon, motion: "" },
+}
 
-export type StatusKind = keyof typeof KINDS
+/**
+ * The icon for a kind of work, for a row that draws its own words (the
+ * panel's steps and segment headers). It moves unless `still`.
+ */
+export function StatusIcon({
+  kind,
+  still = false,
+  className,
+}: {
+  kind: StatusKind
+  still?: boolean
+  className?: string
+}) {
+  const { Icon, motion } = KINDS[kind]
+  return (
+    <Icon
+      aria-hidden
+      className={cn(
+        "size-4 shrink-0 motion-reduce:animate-none",
+        !still && motion,
+        className
+      )}
+    />
+  )
+}
 
 type Line = { kind: StatusKind; state: StatusState; label: string }
 
@@ -195,4 +230,30 @@ function StatusLine({
   )
 }
 
-export { StatusLine }
+/**
+ * A tool's line in the thread, in the copy table's words and icon for that
+ * tool. A tool outside the table reads "Working on it", never its name.
+ */
+function ToolStatus({
+  tool,
+  args,
+  state,
+  ...props
+}: Omit<ComponentProps<typeof StatusLine>, "kind" | "label" | "state"> & {
+  tool: string
+  args?: ToolArgs
+  state: StatusState
+}) {
+  return (
+    <StatusLine
+      kind={toolKind(tool)}
+      // A tool waiting on the owner still says what it is doing.
+      label={toolLine(tool, state === "waiting" ? "working" : state, args)}
+      state={state}
+      {...props}
+    />
+  )
+}
+
+export type { StatusKind }
+export { StatusLine, ToolStatus }

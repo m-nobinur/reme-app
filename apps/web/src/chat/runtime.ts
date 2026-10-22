@@ -15,11 +15,9 @@ import { SESSION_ENDED } from "@workspace/ui/lib/tool-state"
 import { DefaultChatTransport } from "ai"
 import { useEffect, useRef, useState } from "react"
 import { getConversationMessages, rateMessage } from "@/lib/api/server"
-import { planNote } from "./blueprint-plan"
 import { followThread, toUIMessage } from "./history"
 import type { ChatMessage } from "./message"
 import {
-  blueprintChanges,
   cancelOvertaken,
   chatFetch,
   quoteChanges,
@@ -58,7 +56,6 @@ export function useConversationRuntime({
   suggestions,
   intent,
   onIntentSent,
-  planChange,
   tail,
   refresh,
 }: {
@@ -73,12 +70,6 @@ export function useConversationRuntime({
    */
   intent?: { current: ChatRequest["intent"] }
   onIntentSent?: () => void
-  /**
-   * Set while a Blueprint card waits (blueprint-plan.tsx): a message that
-   * finishes its "Change something" goes there as the owner's note, not to
-   * the chat. A ref for the same reason as `intent`.
-   */
-  planChange?: { current: ((note: string) => Promise<boolean>) | null }
   /**
    * The polled `/workspace` tag's tail (`tailOf`), kept by the page: this
    * hook renders apart from it and never sees the workspace change, so the
@@ -261,21 +252,10 @@ export function useConversationRuntime({
       addToolOutput,
       sendMessage: (message, options) => {
         const carried = intent?.current
-        // Typed while a proposed quote form or a plan waits: the words answer
-        // it, and go out as the owner's reply.
-        const text = typedText(message)
-        const changes =
-          quoteChanges(chat.messages, text, carried) ??
-          blueprintChanges(chat.messages, text, carried)
+        // Typed while a proposed quote form waits: the words answer it, and
+        // go out as the owner's reply.
+        const changes = quoteChanges(chat.messages, typedText(message), carried)
         if (changes) return addToolOutput(changes)
-        const note = carried ? null : planNote(text)
-        const decide = planChange?.current
-        if (note !== null && decide) {
-          // A refused note goes back into the composer, as a failed turn's words do.
-          return decide(note).then((done) => {
-            if (!done) runtime.thread.composer.setText(text)
-          })
-        }
         chat.setMessages(cancelOvertaken)
         if (!carried) return send(message, options)
         onIntentSent?.()

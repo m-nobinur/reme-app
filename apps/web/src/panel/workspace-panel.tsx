@@ -7,7 +7,6 @@ import {
   useRouter,
 } from "@tanstack/react-router"
 import type {
-  Blueprint,
   BuildSummary,
   DecisionRequest,
   Reminder,
@@ -18,15 +17,17 @@ import {
   ComingUp,
   LiveLine,
   NextSteps,
-  PanelBlank,
-  PanelDigest,
+  PanelSection,
+  PanelSegment,
   type Preview,
   QuestionItem,
   ReminderList,
   ReminderNote,
+  type SegmentStep,
+  StageDetail,
+  StopBuild,
   type Thumbnail,
   WaitingOnYou,
-  WorkingOn,
   YourWebsite,
 } from "@workspace/ui/components/live-panel"
 import {
@@ -36,7 +37,13 @@ import {
   TabsTrigger,
 } from "@workspace/ui/components/tabs"
 import { browserZone } from "@workspace/ui/lib/zone"
-import { useEffect, useRef, useState, useSyncExternalStore } from "react"
+import {
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react"
 import {
   answerQuestion,
   askForChanges,
@@ -49,7 +56,13 @@ import type { AttentionItem, Workspace, WriteOutcome } from "@/lib/api/types"
 import { attemptKeys } from "@/lib/attempt"
 import { askerOf } from "@/lib/briefing"
 import { DECISION_REFUSED } from "@/lib/decision"
-import { type Panel, panelFor, type Suggestion } from "@/lib/panel"
+import { onboardingFor } from "@/lib/onboarding"
+import {
+  type Panel,
+  panelFor,
+  type SegmentView,
+  type Suggestion,
+} from "@/lib/panel"
 import { anchorOf, noteOf, upcomingNotes } from "@/lib/reminders"
 import { followThumbnail } from "@/lib/thumbnail"
 import { useLiveWorkspace } from "@/lib/workspace"
@@ -296,17 +309,14 @@ function Website({
   url,
   live,
   thumbnail,
-  blueprint,
 }: {
   host: string | null
   url: string | null
   live: number | null
   thumbnail: Thumbnail
-  blueprint: Blueprint | null
 }) {
   return (
     <YourWebsite
-      blueprint={blueprint}
       host={host}
       live={live}
       onRequestChanges={useRequestChanges()}
@@ -336,58 +346,119 @@ export function useRequestChanges() {
 }
 
 /**
- * The build being worked on, with its own Stop state: keyed on the build, so
- * a Stop error never outlives the build it was about.
+ * A build's Stop, with its own state: keyed on the build, so a Stop error
+ * never outlives the build it was about.
  */
 function Stoppable({
   build,
-  queued,
-  expected,
   refresh,
 }: {
   build: BuildSummary
-  queued: string[]
-  expected: Workspace["expectedSeconds"]
   refresh: Refresh
 }) {
   const stop = useWrite<"stop">(refresh)
   return (
-    <WorkingOn
-      build={{
-        goal: build.goal,
-        state: build.state,
-        startedAt: build.created_at,
-        lane: build.lane ?? "full",
-        fellThrough: build.fell_through,
-        activity: build.activity ?? [],
-        plan: build.blueprint?.plan,
-        awaitingReview: build.blueprint?.awaiting ?? false,
-        photos: build.photos,
-        reviewMs: build.review_ms,
-        endedAt: build.ready_at ?? build.updated_at,
-      }}
+    <StopBuild
       error={stop.error}
-      expectedSeconds={expected?.[build.lane ?? "full"]}
+      fellThrough={build.fell_through}
       onStop={() =>
         void stop.run("stop", () =>
           cancelBuild({ data: { assignmentId: build.assignment_id } })
         )
       }
-      queued={queued}
+      state={build.state}
       stopping={stop.pending !== null}
     />
   )
 }
 
+/** A segment's steps, with what the website's stages decided and made under them. */
+function stepsOf({ kind, steps, build }: SegmentView): SegmentStep[] {
+  if (kind !== "website" || !build) return steps
+  return steps.map((step) => ({
+    ...step,
+    detail: (
+      <StageDetail
+        activity={build.activity ?? []}
+        photos={build.photos}
+        plan={build.blueprint?.plan}
+        stage={step.id}
+        state={step.state}
+      />
+    ),
+  }))
+}
+
+/**
+ * One segment, with what the owner can do in it: Stop while its build
+ * runs, and whatever the caller adds, such as a review's buttons. A build's
+ * segment is where the build's anchor points.
+ */
+function Segment({
+  segment,
+  refresh,
+  onAnswer,
+  children,
+}: {
+  segment: SegmentView
+  refresh: Refresh
+  onAnswer?: (() => void) | undefined
+  children?: ReactNode
+}) {
+  const { build } = segment
+  return (
+    <div
+      className={TARGET}
+      id={build ? anchorOf.build(build.assignment_id) : undefined}
+      tabIndex={build ? -1 : undefined}
+    >
+      <PanelSegment
+        icon={segment.icon}
+        line={segment.line}
+        onAnswer={onAnswer}
+        state={segment.state}
+        steps={stepsOf(segment)}
+        title={segment.title}
+        working={segment.working}
+      >
+        {build && segment.state !== "done" ? (
+          <Stoppable
+            build={build}
+            key={build.assignment_id}
+            refresh={refresh}
+          />
+        ) : null}
+        {children}
+      </PanelSegment>
+    </div>
+  )
+}
+
+/**
+ * "Answer below": the question tray's first field when the chat shows it,
+ * else the getting-started chat, where the tray is.
+ */
+function useAnswerBelow(onboarding: string | null) {
+  const router = useRouter()
+  return () => {
+    const field = document
+      .querySelector('[data-slot="question-tray"]')
+      ?.querySelector<HTMLElement>("input, textarea, select, button")
+    if (field) {
+      field.focus()
+      return
+    }
+    if (onboarding) {
+      void router.navigate({ to: "/app/c/$id", params: { id: onboarding } })
+    }
+  }
+}
+
 /** A next step, quieter than the primary action. */
 const NEXT_STEP = buttonVariants({ variant: "outline", size: "sm" })
 
-/** What "Set a reminder" asks in a new chat: reminders are set there. */
-const REMINDER_PROMPT = "Set a reminder for me"
-
 /** One of the model's next steps, as the link or button that takes it. */
 function Suggested({ suggestion }: { suggestion: Suggestion }) {
-  const requestChanges = useRequestChanges()
   switch (suggestion.kind) {
     case "name-business":
       return (
@@ -416,18 +487,6 @@ function Suggested({ suggestion }: { suggestion: Suggestion }) {
           Start your website
         </Link>
       )
-    case "request-change":
-      return (
-        <button
-          className={NEXT_STEP}
-          // It moves the owner to the composer, so the phone sheet goes.
-          data-leaves-panel
-          onClick={requestChanges}
-          type="button"
-        >
-          Request a change
-        </button>
-      )
     case "visit-site":
       return (
         <a
@@ -441,16 +500,6 @@ function Suggested({ suggestion }: { suggestion: Suggestion }) {
           <span className="sr-only"> (opens in a new tab)</span>
           <ArrowSquareOutIcon aria-hidden className="text-muted-foreground" />
         </a>
-      )
-    case "set-reminder":
-      return (
-        <Link
-          className={NEXT_STEP}
-          state={() => ({ chat: crypto.randomUUID(), ask: REMINDER_PROMPT })}
-          to="/app"
-        >
-          Set a reminder
-        </Link>
       )
   }
 }
@@ -551,7 +600,7 @@ type Tab = "activity" | "reminders" | "website"
  * workspace could not be read, which the panel says on its own.
  */
 export function usePanel(workspace: Workspace | null): Panel | null {
-  const { active, conversations, activity, names } = frame.useLoaderData()
+  const { active, conversations, names } = frame.useLoaderData()
   const route = useMatches({ select: (matches) => matches.at(-1)?.routeId })
   const { id } = useParams({ strict: false })
   const zone = useBrowserZone()
@@ -560,9 +609,9 @@ export function usePanel(workspace: Workspace | null): Panel | null {
     route,
     conversation: id,
     workspace,
+    orgId: active?.id ?? null,
     business: active?.name ?? null,
     conversations,
-    activity,
     names,
     now: new Date(),
     zone,
@@ -596,6 +645,10 @@ export function useAnnouncement(workspace: Workspace | null) {
 
 export function WorkspacePanel({ panel }: { panel: Panel | null }) {
   const { workspace, failed, refresh } = useLiveWorkspace()
+  const { conversations } = frame.useLoaderData()
+  const answerBelow = useAnswerBelow(
+    workspace ? onboardingFor(workspace, conversations) : null
+  )
   const zone = useBrowserZone()
   const [status, setStatus] = useAnnouncement(workspace)
   const [tab, setTab] = useState<Tab>("activity")
@@ -616,37 +669,53 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
   }
   const { live, host } = workspace
   const website = live !== null || host !== null
-  // The newest build that planned. Builds are unfinished ones only, so the
-  // plan leaves the panel once its build ends.
-  const blueprint =
-    workspace.builds.find((b) => b.blueprint)?.blueprint?.plan ?? null
   // A tab that has emptied (its last reminder done) hands back to Activity.
   const shown =
     (tab === "reminders" && upcoming.length) || (tab === "website" && website)
       ? tab
       : "activity"
 
-  const { build } = panel
-  const activity = (
-    <>
-      <PanelDigest sentences={panel.headline} />
-      {panel.steps ? <PanelBlank steps={panel.steps} /> : null}
-      {build ? (
+  const segment = (each: SegmentView) => (
+    <Segment
+      key={each.id}
+      onAnswer={each.kind === "onboarding" ? answerBelow : undefined}
+      refresh={refresh}
+      segment={each}
+    >
+      {/* The first version's review is the going-live segment's first step. */}
+      {each.kind === "golive" && panel.review ? (
         <div
           className={TARGET}
-          id={anchorOf.build(build.assignment_id)}
+          id={anchorOf.approval(panel.review.id)}
           tabIndex={-1}
         >
-          <Stoppable
-            build={build}
-            expected={workspace.expectedSeconds}
-            key={build.assignment_id}
-            queued={panel.queued}
+          <Decidable
+            announce={setStatus}
+            item={panel.review}
             refresh={refresh}
           />
         </div>
       ) : null}
+    </Segment>
+  )
+  const comingUp = <ComingUp items={panel.upcoming} zone={zone} />
+  const activity = (
+    <>
+      {panel.journey.length ? (
+        <div className="flex flex-col gap-4">{panel.journey.map(segment)}</div>
+      ) : null}
+      {panel.now.length ? (
+        <PanelSection title="Now">
+          <div className="flex flex-col gap-4">{panel.now.map(segment)}</div>
+        </PanelSection>
+      ) : null}
+      {panel.upcomingFirst ? comingUp : null}
       <WaitingOnYou error={stale} onRetry={refresh} status={status}>
+        {panel.blocked.map((each) => (
+          <div className="py-3" key={each.id}>
+            {segment(each)}
+          </div>
+        ))}
         {panel.waiting.map((item) =>
           item.kind === "approval" ? (
             <div
@@ -669,8 +738,8 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
           ) : null
         )}
       </WaitingOnYou>
-      <ComingUp items={panel.upcoming} zone={zone} />
-      <ComingUp items={panel.latest} title="Latest" zone={zone} />
+      {panel.upcomingFirst ? null : comingUp}
+      <ComingUp items={panel.done} title="Done today" zone={zone} />
       <NextSteps>
         {panel.suggestions.map((suggestion) => (
           <Suggested key={suggestion.kind} suggestion={suggestion} />
@@ -710,7 +779,6 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
       {website ? (
         <TabsContent value="website">
           <Website
-            blueprint={blueprint}
             host={host}
             live={live}
             thumbnail={thumbnail}
@@ -735,7 +803,7 @@ export function WorkspacePanelLine({ panel }: { panel: Panel | null }) {
  * Says the panel's line to a screen reader when what it says changes on the
  * same page: a build starting, a version ready, a question. Not on a
  * navigation, where the line changes because the page did, and not on a
- * build's next stage, which the stepper says while the panel is open.
+ * build's next stage, which its segment says while the panel is open.
  */
 export function PanelAnnouncer({ panel }: { panel: Panel | null }) {
   const route = useMatches({ select: (matches) => matches.at(-1)?.routeId })

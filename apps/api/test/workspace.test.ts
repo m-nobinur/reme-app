@@ -1898,21 +1898,6 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       expect(stub.calls).toHaveLength(1)
     })
 
-    it("relays the builder's receipt for a Blueprint decision", async () => {
-      // What the orchestrator's `/blueprint` answers: the round and the decision.
-      const stub = stubOrchestrator(() =>
-        Response.json({ round: 1, decision: "build" }, { status: 202 })
-      )
-      const response = await asker.call(
-        stub,
-        `/builds/${askIds.asking}/blueprint`,
-        json({ decision: "build" }, "blueprint-1")
-      )
-      expect(response.status).toBe(202)
-      expect(await response.json()).toEqual({ round: 1, decision: "build" })
-      expect(stub.calls[0]?.body).toEqual({ decision: "build" })
-    })
-
     it("relays a preview that opens on the local router", async () => {
       const host = "preview-v1-brightclean.reme.localhost:3004"
       const link = {

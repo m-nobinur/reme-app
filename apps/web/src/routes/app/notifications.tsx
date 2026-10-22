@@ -42,7 +42,7 @@ function actionOf(item: AttentionItem) {
         to="/app"
       >
         {item.kind === "approval"
-          ? `Review version ${item.version}`
+          ? "Review the new version"
           : "Answer in the panel"}
       </Link>
     )

@@ -33,7 +33,8 @@ import {
   CollapsibleTrigger,
 } from "@workspace/ui/components/collapsible"
 import { stageWord } from "@workspace/ui/components/live-panel"
-import { StatusLine } from "@workspace/ui/components/status-line"
+import { ToolStatus } from "@workspace/ui/components/status-line"
+import { type ToolArgs, toolLine } from "@workspace/ui/lib/activity-copy"
 import { factLabel, factText } from "@workspace/ui/lib/facts"
 import { formatDateTime } from "@workspace/ui/lib/format"
 import { refusalText } from "@workspace/ui/lib/refusal"
@@ -56,22 +57,18 @@ import { createContext, type ReactNode, useContext } from "react"
 
 /* Reads ----------------------------------------------------------------- */
 
-type ReadLabels = {
-  working: string
-  done: string
-  failed: string
-  cancelled: string
-}
-
 /** One read: a line while it runs, then a line that opens onto its findings. */
 function Read<O>({
   view,
-  labels,
+  tool,
+  args,
   slot,
   children,
 }: {
   view: ReadView<O>
-  labels: ReadLabels
+  /** The tool, whose lines come from the copy table. */
+  tool: string
+  args?: ToolArgs
   slot: string
   children: (output: O) => ReactNode
 }) {
@@ -82,21 +79,19 @@ function Read<O>({
     const working = view.state === "working" && running
     const stopped = view.state === "working" || view.state === "cancelled"
     return (
-      <StatusLine
+      <ToolStatus
+        args={args}
         className="flex px-1 py-1.5 text-chat-step"
         data-slot={slot}
-        kind="check"
-        label={
-          working ? labels.working : stopped ? labels.cancelled : labels.failed
-        }
         state={working ? "working" : stopped ? "stopped" : "failed"}
+        tool={tool}
       />
     )
   }
   return (
     <Collapsible data-slot={slot}>
       <CollapsibleTrigger className="group/read flex items-center gap-1.5 rounded-lg px-1 py-1.5 text-chat-step text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring">
-        {labels.done}
+        {toolLine(tool, "done", args)}
         <CaretDownIcon
           aria-hidden
           className="size-3.5 -rotate-90 transition-transform duration-150 group-data-panel-open/read:rotate-0 motion-reduce:transition-none"
@@ -133,13 +128,8 @@ const WorkspaceRead: ToolCallMessagePartComponent = (props) => {
   const time = useOwnerTime()
   return (
     <Read
-      labels={{
-        working: "Checking your workspace",
-        done: "Checked your workspace",
-        failed: "Could not check your workspace",
-        cancelled: "Stopped checking your workspace",
-      }}
       slot="cos-read-workspace"
+      tool="get_workspace"
       view={readView(props, CosWorkspace)}
     >
       {(workspace) => (
@@ -201,16 +191,7 @@ const WorkspaceRead: ToolCallMessagePartComponent = (props) => {
 }
 
 const FactsRead: ToolCallMessagePartComponent = (props) => (
-  <Read
-    labels={{
-      working: "Reading your business details",
-      done: "Read your business details",
-      failed: "Could not read your business details",
-      cancelled: "Stopped reading your business details",
-    }}
-    slot="cos-read-facts"
-    view={readView(props, CosFacts)}
-  >
+  <Read slot="cos-read-facts" tool="get_facts" view={readView(props, CosFacts)}>
     {({ facts }) =>
       facts.length ? (
         <Rows
@@ -230,19 +211,7 @@ const PreviewRead: ToolCallMessagePartComponent = (props) => {
   const time = useOwnerTime()
   const view = readView(props, GetPreviewOutput)
   return (
-    <Read
-      labels={{
-        working: "Checking the preview",
-        done:
-          view.state === "done" && view.output.outcome === "ready"
-            ? "Checked the preview of the new version"
-            : "Checked for a preview",
-        failed: "Could not check the preview",
-        cancelled: "Stopped checking the preview",
-      }}
-      slot="cos-read-preview"
-      view={view}
-    >
+    <Read slot="cos-read-preview" tool="get_preview" view={view}>
       {(output) =>
         output.outcome === "ready" ? (
           <p className="text-sm">
@@ -264,8 +233,8 @@ const PreviewRead: ToolCallMessagePartComponent = (props) => {
  */
 const DomainRead: ToolCallMessagePartComponent = (props) => {
   const view = readView(props, CheckDomainOutput)
-  const name =
-    CheckDomainInput.safeParse(props.args).data?.name ?? "Your domain"
+  const asked = CheckDomainInput.safeParse(props.args).data?.name
+  const name = asked ?? "Your domain"
   if (view.state === "done") {
     return (
       <p
@@ -283,13 +252,9 @@ const DomainRead: ToolCallMessagePartComponent = (props) => {
   }
   return (
     <Read
-      labels={{
-        working: "Checking your domain",
-        done: "",
-        failed: "Could not check your domain",
-        cancelled: "Stopped checking your domain",
-      }}
+      args={asked ? { domain: asked } : {}}
       slot="cos-read-domain"
+      tool="check_domain"
       view={view}
     >
       {() => null}

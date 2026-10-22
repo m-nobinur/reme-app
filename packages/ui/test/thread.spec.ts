@@ -107,11 +107,14 @@ test("the empty state opens on the briefing and what to ask", async ({
     page.getByRole("heading", { name: "What should we do today?" })
   ).toBeVisible()
   await expect(page.locator('[data-slot="aui_thread-briefing"]')).toHaveText(
-    "v3 is live. Version 4 is ready for you to approve."
+    "Your website is live. A new version is ready for you to approve."
   )
-  await expect(input(page)).toHaveAttribute("placeholder", "Ask Reme anything…")
+  await expect(input(page)).toHaveAttribute(
+    "placeholder",
+    "Ask Ellie anything…"
+  )
   await expect(page.locator(".aui-thread-welcome-suggestion")).toHaveText([
-    "What changed in version 4?",
+    "What changed in the new version?",
     "What do you need from me?",
     "What is on my website now?",
   ])
@@ -184,7 +187,10 @@ test("website change mode shows a chip beside +, and its × leaves the mode", as
 
   await page.getByRole("button", { name: "Leave website change mode" }).click()
   await expect(chip).toHaveCount(0)
-  await expect(input(page)).toHaveAttribute("placeholder", "Ask Reme anything…")
+  await expect(input(page)).toHaveAttribute(
+    "placeholder",
+    "Ask Ellie anything…"
+  )
   await expect(input(page)).toBeFocused()
 })
 

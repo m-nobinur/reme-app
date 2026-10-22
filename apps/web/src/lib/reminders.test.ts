@@ -152,9 +152,12 @@ it("words each rule and points it where it is acted on", () => {
   expect(needed).toEqual([
     {
       key: `approval-${APPROVAL}`,
-      title: "Version 4 is waiting for your review",
+      title: "The new version is waiting for your review",
       detail: "Closes today, 4:30 pm.",
-      action: { label: "Review version 4", focus: `approval-${APPROVAL}` },
+      action: {
+        label: "Review the new version",
+        focus: `approval-${APPROVAL}`,
+      },
     },
     {
       key: `question-${REQUEST}`,
@@ -164,7 +167,7 @@ it("words each rule and points it where it is acted on", () => {
     },
     {
       key: `build-${BUILD}`,
-      title: "Version 5 is ready but not published",
+      title: "The new version is ready but not published",
       detail: "Its preview has been ready for more than 12 hours.",
       action: { label: "Open in the panel", focus: `build-${BUILD}` },
     },
@@ -178,7 +181,7 @@ it("words each rule and points it where it is acted on", () => {
   // No time before the zone is known, and a question the panel lacks.
   const bare = groupReminders([], derived.slice(0, 2), [], null, NOW).needed
   expect(bare.map((each) => [each.title, each.detail])).toEqual([
-    ["Version 4 is waiting for your review", "Closes within a day."],
+    ["The new version is waiting for your review", "Closes within a day."],
     ["A question is waiting for your answer", "Open for more than 12 hours."],
   ])
 })

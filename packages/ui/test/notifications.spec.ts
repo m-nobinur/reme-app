@@ -20,8 +20,8 @@ const ENTRIES = [
   "NotificationList error",
   "NotificationList failed",
   "WaitingOnYou error",
-  "PanelBlank",
-  "PanelBlank ready to build",
+  "PanelSegment getting started waiting",
+  "PanelSegment done",
 ]
 
 for (const theme of ["light", "dark"] as const) {
@@ -62,7 +62,7 @@ test("the list shows one row of each kind the contract has, in its order", async
     page.getByRole("link", { name: "Answer in the panel" })
   ).toBeVisible()
   await expect(
-    page.getByRole("link", { name: "Review version 4" })
+    page.getByRole("link", { name: "Review the new version" })
   ).toBeVisible()
   await expect(page.getByRole("link", { name: "Open reminders" })).toBeVisible()
 })
@@ -81,17 +81,6 @@ test("the empty list says what lands there", async ({ page }) => {
     "Notifications did not load"
   )
 })
-
-for (const [entry, name, hash] of [
-  ["PanelBlank", "Continue getting started", "#getting-started"],
-  ["PanelBlank ready to build", "Start your website", "#new-chat"],
-] as const) {
-  test(`${entry} offers "${name}", and it goes there`, async ({ page }) => {
-    await open(page, entry)
-    await page.getByRole("link", { name }).click()
-    expect(new URL(page.url()).hash).toBe(hash)
-  })
-}
 
 test("a panel that did not load offers Try again, and it reads again", async ({
   page,
