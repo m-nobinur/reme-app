@@ -193,7 +193,7 @@ export const FACT_INPUTS = {
         label: "Assistant's name",
         type: "text",
         maxLength: 40,
-        placeholder: "Ellie",
+        placeholder: "Reme",
       },
     ],
   },

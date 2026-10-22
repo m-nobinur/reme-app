@@ -212,6 +212,15 @@ function DetailsTray({
   )
   const [collapsed, setCollapsed] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
+  // A value typed on an earlier visit, else the call's own prefill.
+  const startOf = (each: DetailsKey, name: string) =>
+    draft.values[name] ?? prefilled(input, each)?.[name]
+
+  // The name ideas show only while the name field is empty.
+  const nameField = fieldOf("assistant.name")
+  const [named, setNamed] = useState(() =>
+    Boolean(startOf("assistant.name", nameField)?.toString().trim())
+  )
   const formRef = useRef<HTMLFormElement>(null)
   const key = keys[page] ?? keys[0]
   const last = page === keys.length - 1
@@ -291,10 +300,6 @@ function DetailsTray({
     onAnswer({ answer: "stated", facts })
   }
 
-  // A value typed on an earlier visit, else the call's own prefill.
-  const startOf = (each: DetailsKey, name: string) =>
-    draft.values[name] ?? prefilled(input, each)?.[name]
-
   return (
     <TrayFrame
       collapsed={collapsed}
@@ -320,6 +325,12 @@ function DetailsTray({
         id={`${id}-form`}
         noValidate
         onBlur={checkOnLeave}
+        onInput={(event) => {
+          const field = event.target
+          if (field instanceof HTMLInputElement && field.name === nameField) {
+            setNamed(field.value.trim() !== "")
+          }
+        }}
         onSubmit={submit}
         ref={formRef}
       >
@@ -355,7 +366,9 @@ function DetailsTray({
                     spec={{ kind: "fact", key: each }}
                     title={factLabel(each)}
                   />
-                  {each === "assistant.name" && input.ideas?.length ? (
+                  {each === "assistant.name" &&
+                  input.ideas?.length &&
+                  !named ? (
                     <NameIdeas
                       ideas={input.ideas}
                       onPick={(name) => {
@@ -365,6 +378,7 @@ function DetailsTray({
                           )
                         if (!field) return
                         field.value = name
+                        setNamed(true)
                         setProblem(null)
                         field.focus()
                       }}
