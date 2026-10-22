@@ -127,6 +127,7 @@ export function ChatPage() {
       onIntentSent: () => setSiteChange(null),
       planChange,
       tail,
+      refresh: live.refresh,
     })
   const runtime = useRemoteThreadListRuntime({
     adapter: conversationList,

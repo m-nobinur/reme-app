@@ -53,6 +53,8 @@ import {
 import { LogoMark } from "@workspace/ui/components/logo"
 import { StatusLine } from "@workspace/ui/components/status-line"
 import { ComposerInputContext } from "@workspace/ui/hooks/use-composer-input"
+import { useOnboardingStatus } from "@workspace/ui/hooks/use-onboarding-status"
+import { onboardingLine } from "@workspace/ui/lib/activity-copy"
 import {
   PLAN_CHANGES_PLACEHOLDER,
   waitsOnBlueprint,
@@ -863,13 +865,14 @@ const TypingIndicator: FC<{ immediate?: boolean }> = ({
         part.approval?.approved !== undefined
     )
   )
+  const status = useOnboardingStatus()
   if (answered) return null
   return (
     <span data-slot="aui_assistant-message-indicator">
       <StatusLine
         delay={immediate ? 0 : SHOW_DELAY_MS}
         kind="thinking"
-        label="Working"
+        label={status ? onboardingLine(status) : "Working"}
       />
     </span>
   )

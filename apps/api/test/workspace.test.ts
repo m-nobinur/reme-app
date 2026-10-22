@@ -979,11 +979,12 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
           .where(eq(staff.staffCode, "OWN-001"))
       )
       const written = await facts(changes)
-      // The name is sign-up's, stated the same way.
+      // The names are sign-up's, stated the same way.
       expect(written.map((f) => f.key)).toEqual([
         "business.name",
         "business.phone",
         "hours.weekday",
+        "owner.preferred_name",
       ])
       for (const fact of written) {
         expect(fact.provenance.source).toBe("owner_stated")

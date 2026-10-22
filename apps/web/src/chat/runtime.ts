@@ -7,6 +7,10 @@ import {
 } from "@assistant-ui/react"
 import { useAISDKRuntime } from "@assistant-ui/react-ai-sdk"
 import { CARD_ANSWERED, type ChatRequest } from "@workspace/contracts"
+import {
+  clearOnboardingStatus,
+  readOnboardingStatus,
+} from "@workspace/ui/hooks/use-onboarding-status"
 import { SESSION_ENDED } from "@workspace/ui/lib/tool-state"
 import { DefaultChatTransport } from "ai"
 import { useEffect, useRef, useState } from "react"
@@ -56,8 +60,11 @@ export function useConversationRuntime({
   onIntentSent,
   planChange,
   tail,
+  refresh,
 }: {
   onFinish: () => void
+  /** Reads the panel's workspace now: a turn has written facts it shows. */
+  refresh?: () => void
   suggestions: ThreadSuggestion[]
   /**
    * The composer's mode, read when the owner sends: that send carries it
@@ -116,16 +123,21 @@ export function useConversationRuntime({
     transport,
     sendAutomaticallyWhen: sendsOn,
     onData: (part) => {
+      if (readOnboardingStatus(part, () => refresh?.())) return
       if (part.type !== CARD_ANSWERED) return
       answered.current = (part.data as { tool_call_id: string }).tool_call_id
       showAnswered.current()
     },
     onFinish: () => {
+      clearOnboardingStatus()
       showAnswered.current()
       answered.current = null
       onFinish()
     },
-    onError: (error) => restore.current(error),
+    onError: (error) => {
+      clearOnboardingStatus()
+      restore.current(error)
+    },
   })
   // The owner's message carries the time it was sent, as a stored row does:
   // without it the thread shows the converter's clock, which moves on every

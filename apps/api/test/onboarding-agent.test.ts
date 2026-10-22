@@ -1324,6 +1324,74 @@ describe("a streamed turn", () => {
     expect(out.firstChunkMs).not.toBeNull()
   })
 
+  it("says what the plan is on before its message, and names its facts once they are committed", async () => {
+    const { model } = planner([
+      plan({
+        facts: { "business.offerings": { items: ["Weddings", "Proms"] } },
+        say: "Weddings and proms. Who books you most?",
+        next: { kind: "ask_open", about: "business.audience" },
+      }),
+    ])
+    const seen: [string, unknown][] = []
+    const out = await planTurn(
+      model,
+      PRICE,
+      typed("We do weddings and proms"),
+      undefined,
+      (text) => seen.push(["say", text]),
+      undefined,
+      {
+        send: (status) => seen.push(["status", status]),
+        commit: async (checked) => {
+          const keys = checked.stated.map((f) => f.key)
+          seen.push(["commit", keys])
+          return keys
+        },
+      }
+    )
+    expect(out.ok).toBe(true)
+    expect(seen.slice(0, 3)).toEqual([
+      [
+        "status",
+        { on: { kind: "fact", key: "business.offerings" }, facts: [] },
+      ],
+      ["commit", ["business.offerings"]],
+      [
+        "status",
+        {
+          on: { kind: "next", next: "ask_open" },
+          facts: ["business.offerings"],
+        },
+      ],
+    ])
+    expect(seen.slice(3).map(([kind]) => kind)).toEqual(
+      expect.arrayContaining(["say"])
+    )
+    expect(seen.slice(3).every(([kind]) => kind === "say")).toBe(true)
+  })
+
+  it("writes no facts ahead of a build, and still says it is getting ready", async () => {
+    const seen: unknown[] = []
+    await planTurn(
+      planner([plan({ say: "Starting now.", next: { kind: "start_build" } })])
+        .model,
+      PRICE,
+      typed("go ahead", ready()),
+      undefined,
+      () => undefined,
+      undefined,
+      {
+        send: (status) => seen.push(status),
+        commit: async () => {
+          throw new Error("no early write before a build")
+        },
+      }
+    )
+    expect(seen).toEqual([
+      { on: { kind: "next", next: "start_build" }, facts: [] },
+    ])
+  })
+
   it("retries a message with ceremony or praise, and hears it in the retry's instructions", async () => {
     const praise = plan({ say: "Wonderful, it's an honour to be on the team." })
     const good = plan({ say: "Noted. What area do you cover?" })
