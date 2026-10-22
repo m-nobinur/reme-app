@@ -225,6 +225,15 @@ function Decided({ plan }: { plan: Blueprint }) {
 }
 
 /**
+ * A ref callback for an image the browser may have finished before React
+ * attached `onLoad`, as a cached one does after a hard reload.
+ */
+const loadedWhenCached =
+  (setLoaded: (loaded: boolean) => void) => (img: HTMLImageElement | null) => {
+    if (img?.complete && img.naturalWidth > 0) setLoaded(true)
+  }
+
+/**
  * One generated photo as the build makes it: a quiet shimmer while it is
  * drawn, the picture once it exists, and a plain note when no model drew it. A picture that does not load is a quiet tile, never a broken image.
  */
@@ -267,6 +276,7 @@ function PhotoTile({ photo }: { photo: BuildPhoto }) {
           height={72}
           onError={() => setBroken(true)}
           onLoad={() => setLoaded(true)}
+          ref={loadedWhenCached(setLoaded)}
           src={photo.thumbnail}
           width={96}
         />
@@ -1085,6 +1095,7 @@ function Shot({
         loading="lazy"
         onError={() => setFailed(true)}
         onLoad={() => setLoaded(true)}
+        ref={loadedWhenCached(setLoaded)}
         src={src}
         width={120}
       />
@@ -1462,6 +1473,9 @@ function YourWebsite({
   onRequestChanges?: (() => void) | undefined
 }) {
   const [broken, setBroken] = useState<string | null>(null)
+  // Once a screenshot has shown, a newer one loads behind it: the browser
+  // keeps painting the old image until the new one is ready.
+  const [loaded, setLoaded] = useState(false)
   const shot = live ? thumbnail : null
   const change = live && onRequestChanges
   return (
@@ -1469,15 +1483,23 @@ function YourWebsite({
       {shot === "loading" ? (
         <Skeleton className="aspect-[16/10] w-full rounded-md" />
       ) : shot && shot.src !== broken ? (
-        <img
-          alt="Your website's home page on a laptop"
-          className="aspect-[16/10] w-full rounded-md border border-border bg-muted object-cover object-top"
-          height={200}
-          loading="lazy"
-          onError={() => setBroken(shot.src)}
-          src={shot.src}
-          width={320}
-        />
+        <div className="relative aspect-[16/10] w-full">
+          {loaded ? null : <Skeleton className="absolute inset-0 rounded-md" />}
+          <img
+            alt="Your website's home page on a laptop"
+            className={cn(
+              "size-full rounded-md border border-border object-cover object-top",
+              !loaded && "invisible"
+            )}
+            height={200}
+            loading="lazy"
+            onError={() => setBroken(shot.src)}
+            onLoad={() => setLoaded(true)}
+            ref={loadedWhenCached(setLoaded)}
+            src={shot.src}
+            width={320}
+          />
+        </div>
       ) : null}
       <p className="flex items-center gap-2 text-sm">
         <span

@@ -5,7 +5,12 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import type { Workspace } from "@/lib/api/types"
 import { EMPTY_WORKSPACE } from "@/lib/attention"
-import { PanelAnnouncer, usePanel, WorkspacePanel } from "./workspace-panel"
+import {
+  PanelAnnouncer,
+  useAnnouncement,
+  usePanel,
+  WorkspacePanel,
+} from "./workspace-panel"
 
 /**
  * Where each blank section's next step goes, as the app wires it. The
@@ -399,4 +404,33 @@ it("says once that a quick edit moved to a longer build, and says nothing for an
   live.workspace = build({}) as Workspace
   await act(async () => root.render(createElement(Frame)))
   expect(line()).toHaveLength(0)
+})
+
+it("keeps what the owner did until the state it describes moves on", async () => {
+  let say: (text: string) => void = () => undefined
+  const Harness = ({ workspace }: { workspace: Workspace }) => {
+    const [text, announce] = useAnnouncement(workspace)
+    say = announce
+    return createElement("p", { role: "status" }, text)
+  }
+  const at = (over: Partial<Workspace>): Workspace => ({
+    ...EMPTY_WORKSPACE,
+    ...over,
+  })
+  root = createRoot(container)
+  const show = (workspace: Workspace) =>
+    act(async () => root.render(createElement(Harness, { workspace })))
+  const status = () => container.querySelector('[role="status"]')?.textContent
+  const sent = "Sent. A new version replaces this one."
+
+  await show(at({ live: 1 }))
+  await act(async () => say(sent))
+  expect(status()).toBe(sent)
+  // The read after the write shows the change under way: still said.
+  const building = [{ assignment_id: "a", state: "revising" }] as never
+  await show(at({ live: 1, builds: building }))
+  expect(status()).toBe(sent)
+  // The version goes live: the line no longer describes anything.
+  await show(at({ live: 2 }))
+  expect(status()).toBe("")
 })

@@ -202,7 +202,12 @@ export function useLiveThumbnail(live: Workspace["liveRevision"]): Thumbnail {
   const [follower] = useState(() =>
     followThumbnail({
       read: (assignmentId) => getPreview({ data: { assignmentId } }),
-      onChange: setThumbnail,
+      // A newer revision's link is read behind the last screenshot, which
+      // stays until the new one is there.
+      onChange: (next) =>
+        setThumbnail((last) =>
+          next === "loading" && last && last !== "loading" ? last : next
+        ),
     })
   )
   useEffect(() => follower.show(live), [follower, live])
@@ -564,10 +569,35 @@ export function usePanel(workspace: Workspace | null): Panel | null {
   })
 }
 
+/**
+ * What the owner last did, said until the state it describes moves on. The
+ * first read after the line is said fixes that state; the next change to it
+ * (the review leaves, the build goes live) clears the line.
+ */
+export function useAnnouncement(workspace: Workspace | null) {
+  const [said, setSaid] = useState<{ text: string; since: string } | null>(null)
+  const state = workspace
+    ? [
+        workspace.live,
+        ...workspace.attention.map((item) => item.id),
+        ...workspace.builds.map((b) => `${b.assignment_id}${b.state}`),
+      ].join(" ")
+    : ""
+  useEffect(() => {
+    setSaid((now) =>
+      !now ? now : now.since === "" ? { ...now, since: state } : null
+    )
+  }, [state])
+  return [
+    said?.text ?? null,
+    (text: string) => setSaid({ text, since: "" }),
+  ] as const
+}
+
 export function WorkspacePanel({ panel }: { panel: Panel | null }) {
   const { workspace, failed, refresh } = useLiveWorkspace()
   const zone = useBrowserZone()
-  const [status, setStatus] = useState<string | null>(null)
+  const [status, setStatus] = useAnnouncement(workspace)
   const [tab, setTab] = useState<Tab>("activity")
   const thumbnail = useLiveThumbnail(workspace?.liveRevision ?? null)
   const upcoming = upcomingNotes(workspace?.reminderNotes ?? [])

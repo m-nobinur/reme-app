@@ -14,7 +14,7 @@ const FAILED = "That did not go through. Try again."
 
 /**
  * The ready card, wired: the review comes from the polled workspace, Approve
- * is the panel's own decision bound to the revision, and Make changes is the
+ * is the panel's own decision bound to the revision, and Ask for changes is the
  * panel's Request changes, which puts the composer in website change mode.
  */
 export function SiteReadyCard() {
@@ -37,7 +37,6 @@ export function SiteReadyCard() {
         onApprove={() => undefined}
         onMakeChanges={requestChanges}
         onSeePreview={() => undefined}
-        version={card.version}
       />
     )
   }
@@ -99,7 +98,6 @@ export function SiteReadyCard() {
       pending={pending}
       photoActions={review.photos?.length ? photoActions(change) : undefined}
       photos={review.photos ?? []}
-      version={review.version}
     />
   )
 }

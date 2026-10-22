@@ -21,7 +21,6 @@ import { useId } from "react"
  * once the decision is recorded.
  */
 export function SiteReady({
-  version,
   approved = false,
   pending = false,
   error = null,
@@ -31,7 +30,6 @@ export function SiteReady({
   photos = [],
   photoActions,
 }: {
-  version: number
   /** The owner approved it here and the server recorded it. */
   approved?: boolean
   /** The approval is on its way to the server. */
@@ -54,7 +52,7 @@ export function SiteReady({
         data-slot="site-ready"
       >
         <CheckCircleIcon aria-hidden className="size-4 shrink-0 text-primary" />
-        Approved. Version {version} is being published.
+        Approved. Your website is being published.
       </p>
     )
   }
@@ -69,8 +67,7 @@ export function SiteReady({
           Your website is ready.
         </h2>
         <p className="text-muted-foreground text-sm leading-relaxed">
-          Version {version} is built. Approve it to publish, or tell me what to
-          change and I will make a new version.{" "}
+          Approve it to publish, or tell me what to change.{" "}
           <Button
             className="h-auto p-0 align-baseline"
             onClick={onSeePreview}
@@ -95,7 +92,7 @@ export function SiteReady({
           ) : (
             <CheckCircleIcon aria-hidden />
           )}
-          {pending ? "Approving" : "Approve"}
+          {pending ? "Publishing" : "Approve and publish"}
         </Button>
         <Button
           disabled={pending}
@@ -105,7 +102,7 @@ export function SiteReady({
           variant="outline"
         >
           <PaintBrushIcon aria-hidden />
-          Make changes
+          Ask for changes
         </Button>
       </div>
       {error ? (
