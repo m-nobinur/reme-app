@@ -413,6 +413,36 @@ const AfterSlot: FC<{ children: ReactNode }> = ({ children }) => {
   )
 }
 
+/**
+ * The footer docks over the end of the thread, and assistant-ui only follows
+ * the bottom by itself when the viewport is not anchored to a turn, so a
+ * tray that appears or grows under the last reply covers its last lines.
+ * When the footer grows and the reader was at the bottom, scroll down by it.
+ */
+function useKeepFooterClear(footer: HTMLElement | null) {
+  useEffect(() => {
+    const viewport = footer?.closest<HTMLElement>(
+      '[data-slot="aui_thread-viewport"]'
+    )
+    if (!footer || !viewport) return
+    let height = footer.offsetHeight
+    const observer = new ResizeObserver(() => {
+      const grew = footer.offsetHeight - height
+      height = footer.offsetHeight
+      if (grew <= 0) return
+      const gap =
+        viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop
+      // The footer's growth lengthened the page by `grew`, so a reader who
+      // was at the bottom is now `grew` short of it.
+      if (gap <= grew + 4) {
+        viewport.scrollTo({ top: viewport.scrollHeight, behavior: "instant" })
+      }
+    })
+    observer.observe(footer)
+    return () => observer.disconnect()
+  }, [footer])
+}
+
 const ThreadRoot: FC<{
   isEmpty: boolean
   autoFocus: boolean
@@ -423,6 +453,8 @@ const ThreadRoot: FC<{
   // Where the question tray docks, above the composer; each question's call
   // sits in the transcript and draws itself here.
   const [tray, setTray] = useState<HTMLElement | null>(null)
+  const [footer, setFooter] = useState<HTMLElement | null>(null)
+  useKeepFooterClear(footer)
 
   return (
     <TraySlotProvider value={tray}>
@@ -470,6 +502,7 @@ const ThreadRoot: FC<{
             <AfterSlot>{after}</AfterSlot>
 
             <ThreadPrimitive.ViewportFooter
+              ref={setFooter}
               className={cn(
                 "aui-thread-viewport-footer flex flex-col gap-4 overflow-visible bg-background pb-4 md:pb-6",
                 !isEmpty &&
