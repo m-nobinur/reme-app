@@ -71,7 +71,8 @@ function RootDocument({ children }: { children: React.ReactNode }) {
           suppressHydrationWarning
         />
       </head>
-      <body>
+      {/* Browser extensions such as Grammarly add attributes to the body before React loads. */}
+      <body suppressHydrationWarning>
         {children}
         <Scripts />
       </body>
