@@ -119,6 +119,34 @@ export const PlanNext = z.discriminatedUnion("kind", [
 ])
 
 /**
+ * The `ONBOARDING_STATUS` chunk: what the planner is on, from the plan's own
+ * keys as they close in the stream, so no word of it is the model's. `on` is
+ * a fact it stated or the move it chose; the web writes the line ("Noting
+ * your services") and `facts` lists the keys just stated, for the checklist
+ * to tick at once. Empty when only the move closed.
+ */
+export const OnboardingStatus = z.strictObject({
+  on: z.discriminatedUnion("kind", [
+    z.strictObject({
+      kind: z.literal("fact"),
+      key: z.enum(PLAN_FACT_KEYS as [PlanFactKey, ...PlanFactKey[]]),
+    }),
+    z.strictObject({
+      kind: z.literal("next"),
+      next: z.enum(
+        PlanNext.options.map((o) => o.shape.kind.value) as [
+          PlanNext["kind"],
+          ...PlanNext["kind"][],
+        ]
+      ),
+    }),
+  ]),
+  facts: z
+    .array(z.enum(PLAN_FACT_KEYS as [PlanFactKey, ...PlanFactKey[]]))
+    .max(PLAN_FACT_KEYS.length),
+})
+
+/**
  * How a typed message relates to the card it overtook: it answered it, the
  * owner declined it, or it was about something else, in which case the card
  * is shown again. Null when no card was waiting or the owner used the card.
@@ -139,4 +167,5 @@ export const OnboardingPlan = z.strictObject({
 
 export type OnboardingPlan = z.infer<typeof OnboardingPlan>
 export type PlanNext = z.infer<typeof PlanNext>
+export type OnboardingStatus = z.infer<typeof OnboardingStatus>
 export type PendingCard = z.infer<typeof PendingCard>
