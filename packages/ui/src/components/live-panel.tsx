@@ -1620,7 +1620,7 @@ function LiveLine({
             data-slot="live-line-halo"
           />
         )}
-        <PersonaAvatar className="size-6" />
+        <PersonaAvatar className="size-6" sway />
       </span>
       {progress ? (
         // A build's step is the news, so the lead gives way first.

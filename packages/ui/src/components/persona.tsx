@@ -22,7 +22,8 @@ const LAYER = "absolute inset-0 size-full select-none object-contain"
  * few seconds, and blinks once more when the pointer arrives, so it notices
  * you without making a show of it. With `greet`, a hello appears beside it as
  * well; that is for one place on a page, not every avatar.
- * Motion stops for anyone who asked for less. `delay` offsets the cycle so two
+ * With `sway` its head also turns to look about, for a place where it is
+ * working. Motion stops for anyone who asked for less. `delay` offsets the cycle so two
  * on one page do not blink in step. Always decoration: the text beside it
  * names Reme.
  *
@@ -31,11 +32,13 @@ const LAYER = "absolute inset-0 size-full select-none object-contain"
 function Persona({
   framing = "full",
   greet = false,
+  sway = false,
   delay = 0,
   className,
 }: {
   framing?: "full" | "face"
   greet?: boolean
+  sway?: boolean
   delay?: number
   className?: string
 }) {
@@ -49,7 +52,14 @@ function Persona({
       data-slot="persona"
       style={style}
     >
-      <span className="absolute inset-0 [animation-delay:var(--persona-delay)] motion-safe:animate-persona-float">
+      <span
+        className={cn(
+          "absolute inset-0 [animation-delay:var(--persona-delay)]",
+          sway
+            ? "motion-safe:animate-persona-sway"
+            : "motion-safe:animate-persona-float"
+        )}
+      >
         <img alt="" {...image} className={LAYER} src={open} />
         {/* Hover swaps the idle cycle for a single blink. The shut frame is
             hidden at both ends of either animation, so the swap never shows. */}
@@ -174,9 +184,11 @@ function Greeting() {
 function PersonaAvatar({
   className,
   delay,
+  sway,
 }: {
   className?: string
   delay?: number
+  sway?: boolean
 }) {
   return (
     <span
@@ -185,7 +197,7 @@ function PersonaAvatar({
         className
       )}
     >
-      <Persona className="size-full" delay={delay} framing="face" />
+      <Persona className="size-full" delay={delay} framing="face" sway={sway} />
     </span>
   )
 }
