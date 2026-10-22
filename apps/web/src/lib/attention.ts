@@ -12,6 +12,7 @@ export const EMPTY_WORKSPACE: Workspace = {
   url: null,
   missingFacts: [],
   assistantName: null,
+  activity: null,
   derivedReminders: [],
   reminderNotes: [],
   etag: null,

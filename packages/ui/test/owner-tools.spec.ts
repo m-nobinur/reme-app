@@ -79,7 +79,7 @@ test("the change card is one tap either way, and waits for the server", async ({
   await expect(answered.getByRole("button", { name: "Not now" })).toBeDisabled()
   // A started build names no version, id or hash.
   for (const started of [cards.nth(2), cards.nth(3)]) {
-    await expect(started).toContainText("Started. Follow it under Working on.")
+    await expect(started).toContainText("Started. Follow it in the panel.")
     await expect(started).not.toContainText(/5b0f6c1e|9c3e1f2a|ID |Build /)
   }
   await expect(cards.nth(4)).toContainText("Answer it first")

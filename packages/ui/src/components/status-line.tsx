@@ -62,6 +62,32 @@ const KINDS: Record<StatusKind, { Icon: PhosphorIcon; motion: string }> = {
   waiting: { Icon: HourglassMediumIcon, motion: "" },
 }
 
+/**
+ * The icon for a kind of work, for a row that draws its own words (the
+ * panel's steps and segment headers). It moves unless `still`.
+ */
+export function StatusIcon({
+  kind,
+  still = false,
+  className,
+}: {
+  kind: StatusKind
+  still?: boolean
+  className?: string
+}) {
+  const { Icon, motion } = KINDS[kind]
+  return (
+    <Icon
+      aria-hidden
+      className={cn(
+        "size-4 shrink-0 motion-reduce:animate-none",
+        !still && motion,
+        className
+      )}
+    />
+  )
+}
+
 type Line = { kind: StatusKind; state: StatusState; label: string }
 
 /**

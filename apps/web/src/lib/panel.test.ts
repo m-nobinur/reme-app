@@ -1,4 +1,10 @@
-import type { Conversation, Reminder } from "@workspace/contracts"
+import type {
+  Activity,
+  ActivitySegment,
+  ActivityStep,
+  Conversation,
+  Reminder,
+} from "@workspace/contracts"
 import { describe, expect, it } from "vitest"
 import type { AttentionItem, Workspace } from "./api/types"
 import { EMPTY_WORKSPACE } from "./attention"
@@ -6,11 +12,14 @@ import { type PanelInput, pageOf, panelFor } from "./panel"
 
 const ONBOARDING = "00000000-0000-4000-8000-00000000000a"
 const CHAT = "00000000-0000-4000-8000-00000000000b"
+const ORG = "00000000-0000-4000-8000-00000000000c"
 const HOST = "fixture-clean.example.invalid"
 const URL_ = `https://${HOST}`
 /** 10:00 in London. */
 const NOW = new Date("2026-10-01T09:00:00.000Z")
 const ZONE = "Europe/London"
+/** Four minutes before `NOW`. */
+const STARTED = "2026-10-01T08:56:00.000Z"
 
 const ROUTES = {
   home: "/app/_conversation/",
@@ -26,21 +35,25 @@ const workspace = (over: Partial<Workspace> = {}): Workspace => ({
   ...over,
 })
 
-const build = (state: string, version: number | null = null) =>
+const build = (state: string, id = `build-${state}`) =>
   ({
-    assignment_id: `build-${state}`,
+    assignment_id: id,
     goal: "Add Saturday hours",
     state,
-    revision: version ? { version } : null,
-    created_at: "2026-10-01T08:58:00.000Z",
+    revision: null,
+    created_at: STARTED,
   }) as unknown as Workspace["builds"][number]
 
-const approval = (version: number, expiresAt: string | null = null) =>
+const approval = (
+  assignmentId = "build-first",
+  expiresAt: string | null = null
+) =>
   ({
     kind: "approval",
-    id: `approval-${version}`,
-    version,
+    id: `approval-${assignmentId}`,
+    version: 4,
     expiresAt,
+    request: { assignment_id: assignmentId },
   }) as unknown as AttentionItem
 
 const question = (raisedBy: string, raisedById: string | null = null) =>
@@ -74,9 +87,9 @@ const input = (over: Partial<PanelInput> = {}): PanelInput => ({
   route: ROUTES.home,
   conversation: undefined,
   workspace: workspace(),
+  orgId: ORG,
   business: "Fixture Clean",
   conversations: [],
-  activity: [],
   names: {},
   now: NOW,
   zone: ZONE,
@@ -85,6 +98,95 @@ const input = (over: Partial<PanelInput> = {}): PanelInput => ({
 
 const live = (over: Partial<Workspace> = {}) =>
   workspace({ live: 3, host: HOST, url: URL_, ...over })
+
+/* Activity fixtures, as the api sends them -------------------------------- */
+
+const step = (
+  id: string,
+  state: ActivityStep["state"],
+  extra: Partial<ActivityStep> = {}
+): ActivityStep => ({ id, state, ...extra })
+
+/** Fixed steps, the one at `here` in `state`, those before it done. */
+const along = (
+  ids: readonly string[],
+  here: number,
+  state: "now" | "waiting" = "now"
+) =>
+  ids.map((id, i) => step(id, i < here ? "done" : i === here ? state : "next"))
+
+const ONBOARDING_STEPS = [
+  "work",
+  "area",
+  "customers",
+  "contact",
+  "assistant",
+  "quote_form",
+  "photos",
+  "look",
+]
+const WEBSITE_STEPS = ["plan", "photos", "pages", "polish", "check", "ready"]
+const GOLIVE_STEPS = ["approval", "publishing", "loads"]
+
+const segment = (
+  kind: ActivitySegment["kind"],
+  state: ActivitySegment["state"],
+  steps: ActivityStep[] = [],
+  extra: Partial<ActivitySegment> = {}
+): ActivitySegment => ({
+  id: kind,
+  kind,
+  state,
+  steps,
+  at: STARTED,
+  ...extra,
+})
+
+const activity = (over: Partial<Activity> = {}): Activity => ({
+  journey: [],
+  now: [],
+  waiting: [],
+  upcoming: [],
+  done: [],
+  ...over,
+})
+
+const BUSINESS = { names: { business: "Fixture Clean" } }
+
+/** Onboarding with the first `heard` steps settled, the next one open. */
+const onboarding = (
+  heard: number,
+  state: "now" | "waiting" | "done" = "now"
+): ActivitySegment => {
+  const values = [
+    "Regular cleans, end of tenancy",
+    "South Manchester, 10 miles",
+  ]
+  return segment(
+    "onboarding",
+    state,
+    ONBOARDING_STEPS.map((id, i) =>
+      state === "done" || i < heard
+        ? step(id, "done", values[i] ? { value: values[i] } : {})
+        : i === heard
+          ? step(id, state === "waiting" ? "waiting" : "now")
+          : step(id, "next")
+    ),
+    BUSINESS
+  )
+}
+
+const firstRun = (journey: ActivitySegment[], over: Partial<Workspace> = {}) =>
+  panelFor(
+    input({
+      conversations: [onboardingChat],
+      workspace: workspace({
+        assistantName: "Ellie",
+        activity: activity({ journey }),
+        ...over,
+      }),
+    })
+  )
 
 describe("pageOf", () => {
   it("names each page, and tells the getting-started chat apart", () => {
@@ -114,12 +216,24 @@ describe("when the panel hides", () => {
     ).toBeNull()
   })
 
-  it("shows elsewhere while a build runs, and on reminders while one is ahead", () => {
+  it("shows elsewhere while a job runs, and on reminders while one is ahead", () => {
     expect(
       panelFor(
         input({
           route: ROUTES.staff,
-          workspace: live({ builds: [build("implementing", 4)] }),
+          workspace: live({ builds: [build("implementing")] }),
+        })
+      )
+    ).not.toBeNull()
+    expect(
+      panelFor(
+        input({
+          route: ROUTES.staff,
+          workspace: live({
+            activity: activity({
+              now: [segment("google", "now", along(["sign_in"], 0))],
+            }),
+          }),
         })
       )
     ).not.toBeNull()
@@ -136,80 +250,196 @@ describe("when the panel hides", () => {
   })
 })
 
-describe("getting started", () => {
-  const starting = workspace({
-    missingFacts: ["business.phone", "hours.weekday"],
+describe("the first run", () => {
+  it("ticks each onboarding step as it lands, with what was heard", () => {
+    const early = firstRun([onboarding(1)])?.journey
+    expect(early).toHaveLength(1)
+    const [setup] = early ?? []
+    expect([
+      "Getting Fixture Clean ready",
+      "Setting up Fixture Clean",
+    ]).toContain(setup?.title)
+    expect(setup?.line).toBe("7 more to go, then Ellie starts on your website")
+    expect(setup?.steps.map((each) => [each.label, each.state])).toEqual([
+      ["What you do", "done"],
+      ["Where you work", "now"],
+      ["Your customers", "next"],
+      ["How customers reach you", "next"],
+      ["Your assistant", "next"],
+      ["Quote form", "next"],
+      ["Photos", "next"],
+      ["Look and feel", "next"],
+    ])
+    expect(setup?.steps[0]?.value).toBe("Regular cleans, end of tenancy")
+
+    // The next fact lands: its step ticks, and the next one opens.
+    const later = firstRun([onboarding(2)])?.journey[0]
+    expect(later?.steps[1]).toMatchObject({
+      label: "Where you work",
+      state: "done",
+      value: "South Manchester, 10 miles",
+    })
+    expect(later?.steps[2]?.state).toBe("now")
+    expect(later?.line).toBe("6 more to go, then Ellie starts on your website")
   })
 
-  it("says what is left, and points back to the getting-started chat", () => {
-    const panel = panelFor(
-      input({ workspace: starting, conversations: [onboardingChat] })
+  it("says the owner's turn, and the pill waits on them", () => {
+    const panel = firstRun([onboarding(7, "waiting")])
+    expect(panel?.journey[0]?.steps.at(-1)?.state).toBe("waiting")
+    expect(panel?.journey[0]?.line).toBe(
+      "One more, then Ellie starts on your website"
     )
-    expect(panel?.headline).toEqual([
-      "Getting Fixture Clean ready for its first website.",
-      "2 details to go before your assistant can build it.",
-    ])
-    expect(panel?.steps?.map((step) => step.label)).toEqual([
-      "Phone number",
-      "Weekday hours",
-      "Build your first version",
-    ])
-    expect(panel?.suggestions).toEqual([{ kind: "onboarding", id: ONBOARDING }])
     expect(panel?.line).toEqual({
       tone: "idle",
-      lead: "Getting started,",
-      detail: "2 details to go",
+      lead: "Ellie is waiting for your answer",
     })
+    expect(panel?.suggestions).toEqual([{ kind: "onboarding", id: ONBOARDING }])
   })
 
-  it("counts rather than lists a long list, and offers no link to the chat it is in", () => {
-    const panel = panelFor(
-      input({
-        route: ROUTES.chat,
-        conversation: ONBOARDING,
-        conversations: [onboardingChat],
-        workspace: workspace({
-          missingFacts: [
-            "business.name",
-            "business.phone",
-            "business.email",
-            "hours.weekday",
+  it("folds onboarding to one ticked line and opens the website", () => {
+    const panel = firstRun(
+      [
+        onboarding(8, "done"),
+        segment(
+          "website",
+          "now",
+          [
+            step("plan", "done"),
+            step("photos", "skipped"),
+            step("pages", "now", { count: { done: 3, total: 6 } }),
+            ...along(WEBSITE_STEPS, 0).slice(3),
           ],
+          BUSINESS
+        ),
+        segment("golive", "upcoming", along(GOLIVE_STEPS, -1), BUSINESS),
+      ],
+      { builds: [build("implementing", "build-first")] }
+    )
+    const [setup, website, ...rest] = panel?.journey ?? []
+    // Going live is not shown before the website is done.
+    expect(rest).toEqual([])
+    expect(setup?.state).toBe("done")
+    expect([
+      "Fixture Clean is set up",
+      "Fixture Clean is all set",
+      "Fixture Clean is ready to go",
+    ]).toContain(setup?.title)
+    // The working title, kept while a segment that just finished folds.
+    expect([
+      "Getting Fixture Clean ready",
+      "Setting up Fixture Clean",
+    ]).toContain(setup?.working)
+    expect(setup?.line).toBeNull()
+
+    expect(website?.state).toBe("now")
+    expect([
+      "Ellie is building your website",
+      "Ellie is putting your website together",
+    ]).toContain(website?.title)
+    expect(website?.line).toBe("4 minutes so far, usually 4 to 6 minutes")
+    expect(website?.steps.map((each) => [each.label, each.state])).toEqual([
+      ["Planning", "done"],
+      ["Photos", "skipped"],
+      ["Writing the pages, 3 of 6", "now"],
+      ["Polishing", "next"],
+      ["Checking", "next"],
+      ["Ready", "next"],
+    ])
+    expect(website?.steps[2]?.kind).toBe("building")
+    expect(website?.build?.assignment_id).toBe("build-first")
+    expect(panel?.line).toEqual({
+      tone: "working",
+      lead: "Ellie is building your website",
+    })
+    // Now holds one segment, so Coming up is kept in view above the rest.
+    expect(panel?.upcomingFirst).toBe(true)
+  })
+
+  it("puts the review in going live, not in Waiting on you", () => {
+    const review = approval("build-first")
+    const panel = firstRun(
+      [
+        onboarding(8, "done"),
+        segment("website", "done", along(WEBSITE_STEPS, 6), BUSINESS),
+        segment(
+          "golive",
+          "waiting",
+          along(GOLIVE_STEPS, 0, "waiting"),
+          BUSINESS
+        ),
+      ],
+      {
+        builds: [build("awaiting_review", "build-first")],
+        attention: [review],
+      }
+    )
+    const [, website, golive] = panel?.journey ?? []
+    expect(website?.state).toBe("done")
+    expect(golive?.title).toMatch(/^(Putting|Taking) your website live$/)
+    expect(golive?.line).toBe("Approve it and it goes live in a minute")
+    expect(golive?.steps.map((each) => [each.label, each.state])).toEqual([
+      ["Your approval", "waiting"],
+      ["Publishing", "next"],
+      ["Checking it loads", "next"],
+    ])
+    expect(panel?.review).toBe(review)
+    expect(panel?.waiting).toEqual([])
+    expect(panel?.line.lead).toBe("Ellie is waiting for your approval")
+
+    // On the approvals page the review is the page's, not the segment's.
+    const approvals = panelFor(
+      input({
+        route: ROUTES.approvals,
+        workspace: workspace({
+          assistantName: "Ellie",
+          builds: [build("awaiting_review", "build-first")],
+          attention: [review],
+          activity: activity({
+            journey: [
+              segment("golive", "waiting", along(GOLIVE_STEPS, 0, "waiting")),
+            ],
+          }),
         }),
       })
     )
-    expect(panel?.headline[1]).toBe(
-      "4 details to go before your assistant can build it."
-    )
-    expect(panel?.suggestions).toEqual([])
+    expect(approvals?.review).toBeNull()
   })
 
-  it("says when the details are in", () => {
-    const panel = panelFor(
-      input({ route: ROUTES.website, conversations: [onboardingChat] })
-    )
-    expect(panel?.headline[1]).toBe(
-      "Your assistant has every detail it needs. Finish getting started to build the site."
-    )
-    expect(panel?.line.detail).toBe("your details are in")
-  })
-
-  it("offers a new website where there is no getting-started chat", () => {
-    const panel = panelFor(input())
-    expect(panel?.headline).toEqual([
-      "Fixture Clean has no website yet.",
-      "Ask your assistant in a chat to build one for you to review.",
+  it("keeps a failed segment open and says what happens next", () => {
+    const panel = firstRun([
+      onboarding(8, "done"),
+      segment("website", "failed", along(WEBSITE_STEPS, 4), BUSINESS),
     ])
-    expect(panel?.suggestions).toEqual([{ kind: "start-website" }])
-    expect(panel?.line.lead).toBe("Let's get your website started")
+    const website = panel?.journey[1]
+    expect(website?.title).toBe("The website build stopped")
+    expect(website?.line).toBe("Ellie is looking into it")
+    expect(website?.steps[4]).toMatchObject({ label: "Checking", state: "now" })
+    expect(panel?.line.lead).toBe("The website build stopped")
+  })
+
+  it("starts from a new chat or the getting-started chat before the journey", () => {
+    expect(panelFor(input())?.suggestions).toEqual([{ kind: "start-website" }])
+    expect(
+      panelFor(input({ conversations: [onboardingChat] }))?.suggestions
+    ).toEqual([{ kind: "onboarding", id: ONBOARDING }])
+    // Nothing claims to be building before anything is.
+    expect(
+      panelFor(
+        input({
+          workspace: workspace({
+            activity: activity({
+              journey: [
+                segment("website", "upcoming", along(WEBSITE_STEPS, -1)),
+              ],
+            }),
+          }),
+        })
+      )?.journey
+    ).toEqual([])
   })
 
   it("asks an account with no business to name one", () => {
     const panel = panelFor(input({ business: null }))
-    expect(panel?.headline).toEqual([
-      "Name your business and your assistant can start on its website.",
-    ])
-    expect(panel?.steps).toBeNull()
     expect(panel?.suggestions).toEqual([{ kind: "name-business" }])
     expect(panel?.line).toEqual({
       tone: "idle",
@@ -219,201 +449,208 @@ describe("getting started", () => {
   })
 })
 
-describe("in a chat", () => {
-  const chat = (over: Partial<Workspace>) =>
-    panelFor(
-      input({ route: ROUTES.chat, conversation: CHAT, workspace: live(over) })
-    )
-
-  it("says what the build is doing while the owner chats", () => {
-    const panel = chat({ builds: [build("validating", 4)] })
-    expect(panel?.headline).toEqual([
-      "Your assistant is building a new version while you chat.",
-      "Keep chatting. Nothing goes live until you approve it.",
-    ])
-    expect(panel?.build?.state).toBe("validating")
-    expect(panel?.line).toEqual({
-      tone: "working",
-      lead: "Building a new version,",
-      detail: "checking the site",
+describe("later jobs", () => {
+  const jobs = panelFor(
+    input({
+      workspace: live({
+        assistantName: "Ellie",
+        activity: activity({
+          now: [
+            segment(
+              "google",
+              "now",
+              along(["sign_in", "verify", "sitemap"], 1)
+            ),
+          ],
+          waiting: [
+            segment(
+              "domain",
+              "waiting",
+              along(["dns", "certificate", "loads"], 0, "waiting"),
+              {
+                id: "domain:a",
+                names: { domain: "fixture.example.invalid" },
+              }
+            ),
+            segment(
+              "purchase",
+              "waiting",
+              along(
+                ["details", "payment", "registration", "connecting"],
+                1,
+                "waiting"
+              ),
+              {
+                id: "purchase:b",
+                names: { domain: "fixtureclean.example.invalid" },
+                deadline: "2026-10-01T10:50:00.000Z",
+              }
+            ),
+            segment("review", "waiting", [], { id: "review:c" }),
+          ],
+        }),
+      }),
     })
-    const publishing = chat({ builds: [build("release_candidate", 4)] })
-    expect(publishing?.headline).toEqual([
-      "Your assistant is publishing a new version now.",
+  )
+
+  it("runs Google in Now with its own steps", () => {
+    const [google] = jobs?.now ?? []
+    expect(google?.title).toMatch(
+      /^(Connecting Google|Linking your site to Google)$/
+    )
+    expect(google?.line).toBe("Checking your site with Google")
+    expect(google?.icon).toBe("google")
+    expect(google?.steps.map((each) => [each.label, each.state])).toEqual([
+      ["Sign in", "done"],
+      ["Verifying your site", "now"],
+      ["Sending your pages to Google", "next"],
     ])
-    expect(publishing?.line).toEqual({
+    expect(jobs?.line).toEqual({
       tone: "working",
-      lead: "Your new version,",
-      detail: "publishing",
+      lead: "Ellie is connecting Google",
     })
   })
 
-  it("calls the assistant by the name the owner gave it", () => {
-    const named = { assistantName: "Ava" }
-    expect(
-      chat({ ...named, builds: [build("validating", 4)] })?.headline[0]
-    ).toBe("Ava is building a new version while you chat.")
-    expect(chat(named)?.headline[1]).toBe(
-      "Ask Ava to change a page, check what needs you, or set a reminder."
-    )
-    expect(
-      panelFor(input({ workspace: workspace(named), business: null }))?.headline
-    ).toEqual(["Name your business and Ava can start on its website."])
+  it("waits on the owner for a DNS change and a payment, by when", () => {
+    const [domain, purchase, ...rest] = jobs?.blocked ?? []
+    // A review is answered in the panel's own list, not drawn twice.
+    expect(rest).toEqual([])
+    expect(domain?.title).toMatch(/fixture\.example\.invalid$/)
+    expect(domain?.line).toBe("One change to make at your DNS provider")
+    expect(domain?.steps.map((each) => [each.label, each.state])).toEqual([
+      ["Your DNS change", "waiting"],
+      ["Certificate", "next"],
+      ["Site loads on the new address", "next"],
+    ])
+    expect(purchase?.title).toMatch(/fixtureclean\.example\.invalid$/)
+    expect(purchase?.line).toBe("Pay by 11:50 am to keep the name")
+    expect(purchase?.steps.map((each) => each.label)).toEqual([
+      "Your details",
+      "Payment",
+      "Registration",
+      "Connecting",
+    ])
+    expect(purchase?.icon).toBe("payment")
   })
 
-  it("puts a review first, and leaves changes to the review's own button", () => {
-    const panel = chat({ attention: [approval(4)] })
-    expect(panel?.headline).toEqual([
-      "A new version is ready for your review.",
-      "Approve it here, or say what to change.",
-    ])
-    expect(panel?.suggestions).toEqual([
+  it("opens the site once live, and offers nothing else", () => {
+    expect(jobs?.suggestions).toEqual([
       { kind: "visit-site", host: HOST, url: URL_ },
     ])
-  })
-
-  it("names who asked a question, from the directory", () => {
-    const panel = panelFor(
-      input({
-        route: ROUTES.chat,
-        conversation: CHAT,
-        workspace: live({ attention: [question("Reme", "staff-sam")] }),
-        names: { "staff-sam": "Sam" },
-      })
-    )
-    expect(panel?.headline).toEqual([
-      "Sam asked about weekday hours.",
-      "Answer here and the build carries on.",
-    ])
-    expect(panel?.line).toEqual({
-      tone: "live",
-      lead: "Sam",
-      detail: "has a question for you",
-    })
-  })
-
-  it("says what the owner can ask next once all is quiet", () => {
-    const panel = chat({})
-    expect(panel?.headline).toEqual([
-      "Your website is live.",
-      "Ask your assistant to change a page, check what needs you, or set a reminder.",
-    ])
-    expect(panel?.suggestions).toEqual([
-      { kind: "request-change" },
-      { kind: "visit-site", host: HOST, url: URL_ },
-    ])
+    // One segment in Now: Coming up is kept above Waiting on you.
+    expect(jobs?.upcomingFirst).toBe(true)
   })
 })
 
-describe("on the Website page", () => {
-  const published = {
-    kind: "report",
-    id: "published-3",
-    title: "Published v3",
-    raisedAt: "2026-09-30T14:30:00.000Z",
-  } as unknown as AttentionItem
-
-  it("gives the address, the last publish and what to do next", () => {
-    const panel = panelFor(
+describe("coming up and done today", () => {
+  const reminders = [
+    note("a", "Call the supplier", "2026-10-01T13:00:00.000Z"),
+    note("b", "Order cloths for next week", "2026-10-08T13:00:00.000Z"),
+  ]
+  const feed = activity({
+    upcoming: [
+      segment("reminder", "upcoming", [], {
+        id: "reminder:a",
+        at: "2026-10-01T13:00:00.000Z",
+      }),
+      segment("reminder", "upcoming", [], {
+        id: "reminder:b",
+        at: "2026-10-08T13:00:00.000Z",
+      }),
+      segment("checkin", "upcoming", [], {
+        id: "checkin:next",
+        at: "2026-10-02T09:00:00.000Z",
+      }),
+      segment("purchase", "upcoming", [], {
+        id: "renewal:d",
+        at: "2027-10-01T09:00:00.000Z",
+        names: { domain: "fixture.example.invalid" },
+      }),
+    ],
+    done: [
+      segment("checkin", "done", [step("message", "skipped")], {
+        id: "checkin:last",
+      }),
+      segment("domain", "done", along(["dns", "certificate", "loads"], 3), {
+        id: "domain:a",
+        names: { domain: "fixture.example.invalid" },
+      }),
+    ],
+  })
+  const at = (route: string, zone: string | null = ZONE) =>
+    panelFor(
       input({
-        route: ROUTES.website,
-        workspace: live(),
-        activity: [published],
+        route,
+        zone,
+        workspace: live({
+          assistantName: "Ellie",
+          reminderNotes: reminders,
+          activity: feed,
+        }),
       })
     )
-    expect(panel?.headline).toEqual([
-      `Your website is live at ${HOST}. Published Wed 30 Sept, 3:30 pm.`,
-      "Ask for a change and your assistant builds a new version for you to review.",
+
+  it("lists every reminder ahead, by its own title, with renewals and the next check-in", () => {
+    expect(at(ROUTES.home)?.upcoming.map((item) => item.text)).toEqual([
+      "Call the supplier",
+      "Order cloths for next week",
+      "Ellie checks in next",
+      "fixture.example.invalid is due for renewal",
     ])
-    // The page has its own Request changes and link.
-    expect(panel?.suggestions).toEqual([])
-    expect(panel?.line).toEqual({
-      tone: "live",
-      lead: "Your website is live",
-      detail: `at ${HOST}`,
-    })
-  })
-
-  it("leaves the publish time out until the reader's zone is known", () => {
-    const panel = panelFor(
-      input({
-        route: ROUTES.website,
-        workspace: live(),
-        activity: [published],
-        zone: null,
-      })
-    )
-    expect(panel?.headline[0]).toBe(`Your website is live at ${HOST}.`)
-  })
-
-  it("says what is coming to replace the live version", () => {
-    const at = (over: Partial<Workspace>) =>
-      panelFor(input({ route: ROUTES.website, workspace: live(over) }))
-        ?.headline[1]
-    expect(at({ builds: [build("implementing")] })).toBe(
-      "Your assistant is building a new version. You review it before it replaces this one."
-    )
-    expect(at({ attention: [approval(4)] })).toBe(
-      "A new version is ready to replace it once you approve."
-    )
-  })
-
-  it("follows the first build before anything is live", () => {
-    const panel = panelFor(
-      input({
-        route: ROUTES.website,
-        workspace: workspace({ open: true, builds: [build("planning")] }),
-      })
-    )
-    expect(panel?.headline).toEqual([
-      "Your assistant is building your first version.",
-      "You review it before it goes live.",
+    // The reminders page lists its own.
+    expect(at(ROUTES.reminders)?.upcoming.map((item) => item.text)).toEqual([
+      "Ellie checks in next",
+      "fixture.example.invalid is due for renewal",
     ])
+  })
+
+  it("says what finished today, a quiet check-in too", () => {
+    const done = at(ROUTES.home)?.done.map((item) => item.text)
+    expect(done?.[0]).toBe("Ellie checked in, nothing needed you")
+    expect(done?.[1]).toMatch(/^Fixture\.example\.invalid is (live|working)$/)
+  })
+
+  it("says no time until the reader's zone is known", () => {
+    expect(at(ROUTES.home, null)?.upcoming).toEqual([])
+    expect(at(ROUTES.home, null)?.done).toEqual([])
   })
 })
 
 describe("on the Reminders page", () => {
-  const at = (notes: Reminder[], zone: string | null = ZONE) =>
+  const line = (notes: Reminder[], zone: string | null = ZONE) =>
     panelFor(
       input({
         route: ROUTES.reminders,
         workspace: live({ reminderNotes: notes }),
         zone,
       })
-    )
+    )?.line.lead
 
   it("says what is due today, or when the next one is", () => {
-    const today = at([
-      note("a", "Call the supplier", "2026-10-01T13:00:00.000Z"),
-      note("b", "Send the quote", "2026-10-01T15:30:00.000Z"),
-    ])
-    expect(today?.headline).toEqual(["2 reminders today, the next at 2:00 pm."])
-    expect(today?.line.lead).toBe("2 reminders today, the next at 2:00 pm")
-    expect(today?.suggestions).toEqual([{ kind: "set-reminder" }])
-    // What the page lists is not repeated as coming up.
-    expect(today?.upcoming).toEqual([])
-
     expect(
-      at([note("a", "Call the supplier", "2026-10-01T13:00:00.000Z")])?.headline
-    ).toEqual(["One reminder today, at 2:00 pm."])
+      line([
+        note("a", "Call the supplier", "2026-10-01T13:00:00.000Z"),
+        note("b", "Send the quote", "2026-10-01T15:30:00.000Z"),
+      ])
+    ).toBe("2 reminders today, the next at 2:00 pm")
     expect(
-      at([note("a", "Call the supplier", "2026-10-03T08:30:00.000Z")])?.headline
-    ).toEqual(["Nothing due today. The next reminder is Sat 3 Oct, 9:30 am."])
-    expect(at([note("a", "Order cloths", null)])?.headline).toEqual([
-      "One reminder, with no time set.",
-    ])
+      line([note("a", "Call the supplier", "2026-10-03T08:30:00.000Z")])
+    ).toBe("Nothing due today. The next reminder is Sat 3 Oct, 9:30 am")
+    expect(line([note("a", "Order cloths", null)])).toBe(
+      "One reminder, with no time set"
+    )
   })
 
   it("counts, without a day, until the reader's zone is known", () => {
     expect(
-      at(
+      line(
         [
           note("a", "Call the supplier", "2026-10-01T13:00:00.000Z"),
           note("b", "Order cloths", null),
         ],
         null
-      )?.headline
-    ).toEqual(["2 reminders ahead."])
+      )
+    ).toBe("2 reminders ahead")
   })
 })
 
@@ -422,7 +659,7 @@ describe("on the Approvals page", () => {
     const panel = panelFor(
       input({
         route: ROUTES.approvals,
-        workspace: live({ attention: [approval(4), question("Alex")] }),
+        workspace: live({ attention: [approval(), question("Alex")] }),
       })
     )
     expect(panel?.waiting.map((item) => item.kind)).toEqual(["question"])
@@ -431,139 +668,10 @@ describe("on the Approvals page", () => {
       panelFor(
         input({
           route: ROUTES.approvals,
-          workspace: live({ attention: [approval(4)] }),
+          workspace: live({ attention: [approval()] }),
         })
       )
     ).toBeNull()
-  })
-})
-
-describe("what is coming up and what just happened", () => {
-  it("lists closing reviews and reminders due within a day, soonest first", () => {
-    const panel = panelFor(
-      input({
-        workspace: live({
-          attention: [approval(4, "2026-10-02T08:00:00.000Z")],
-          reminderNotes: [
-            note("a", "Call the supplier", "2026-10-01T13:00:00.000Z"),
-            note("b", "Next week", "2026-10-08T13:00:00.000Z"),
-            note("c", "Order cloths", null),
-          ],
-        }),
-      })
-    )
-    expect(panel?.upcoming.map((item) => item.text)).toEqual([
-      "Call the supplier",
-      "Your review of the new version closes",
-    ])
-    // No reminders before the reader's zone is known.
-    expect(
-      panelFor(
-        input({
-          zone: null,
-          workspace: live({
-            reminderNotes: [
-              note("a", "Call the supplier", "2026-10-01T13:00:00.000Z"),
-            ],
-          }),
-        })
-      )?.upcoming
-    ).toEqual([])
-  })
-
-  it("shows the last day's publishes and alerts on Home, newest first", () => {
-    const logged = (id: string, title: string, raisedAt: string) =>
-      ({ kind: "report", id, title, raisedAt }) as unknown as AttentionItem
-    const activity = [
-      logged("old", "Published v2", "2026-09-28T09:00:00.000Z"),
-      logged("v3", "Published v3", "2026-10-01T07:00:00.000Z"),
-      logged("fail", "A build failed", "2026-10-01T08:00:00.000Z"),
-    ]
-    const home = panelFor(input({ workspace: live(), activity }))
-    expect(home?.latest.map((item) => item.text)).toEqual([
-      "A build failed",
-      "Published v3",
-    ])
-    const chat = panelFor(
-      input({
-        route: ROUTES.chat,
-        conversation: CHAT,
-        workspace: live(),
-        activity,
-      })
-    )
-    expect(chat?.latest).toEqual([])
-  })
-})
-
-it("names the step the api marks, even one whose count is full", () => {
-  const rows = [
-    { id: "planning", label: "Planning the layout", done: 1, total: 1 },
-    { id: "writing", label: "Writing the pages", done: 6, total: 6, now: true },
-    { id: "design", label: "Looking over the design", done: 0, total: 1 },
-  ]
-  const working = {
-    ...build("implementing"),
-    lane: "full",
-    activity: rows,
-  } as Workspace["builds"][number]
-  const line = panelFor(
-    input({ workspace: workspace({ builds: [working], building: true }) })
-  )?.line
-  expect(line).toMatchObject({
-    detail: "writing the pages",
-    progress: { done: 2, total: 3 },
-  })
-})
-
-describe("a build that stopped", () => {
-  const failed = {
-    kind: "alert",
-    id: "fail",
-    title: "A build failed",
-    raisedAt: "2026-10-01T08:00:00.000Z",
-    stopped: "stalled",
-  } as unknown as AttentionItem
-  const published = {
-    kind: "report",
-    id: "v3",
-    title: "Published v3",
-    raisedAt: "2026-10-01T08:30:00.000Z",
-  } as unknown as AttentionItem
-  const STOPPED = [
-    "The build stopped: it went quiet for too long.",
-    "Try again or ask for changes.",
-  ]
-
-  it("says why and what to do, with the way to ask for changes", () => {
-    const panel = panelFor(
-      input({
-        route: ROUTES.chat,
-        conversation: CHAT,
-        workspace: live({ attention: [failed] }),
-      })
-    )
-    expect(panel?.headline).toEqual(STOPPED)
-    expect(panel?.line.lead).toBe("The build stopped")
-    expect(panel?.build).toBeNull()
-    expect(panel?.suggestions.map((s) => s.kind)).toContain("request-change")
-  })
-
-  it("says nothing of it once a build is open or something newer happened", () => {
-    const open = panelFor(
-      input({
-        workspace: live({
-          attention: [failed],
-          open: true,
-          builds: [build("implementing")],
-        }),
-      })
-    )
-    expect(open?.headline).not.toEqual(STOPPED)
-    const after = panelFor(
-      input({ workspace: live({ attention: [failed, published] }) })
-    )
-    expect(after?.headline).not.toEqual(STOPPED)
   })
 })
 
@@ -572,26 +680,20 @@ describe("the one line", () => {
     panelFor(input({ workspace: workspace(over), names }))?.line
 
   it("says what is most pressing", () => {
-    // A build waiting on the owner is not being worked on, and a review
-    // comes before a question.
     expect(
-      line({
-        live: 2,
-        builds: [build("blocked_on_approval", 3)],
-        attention: [approval(3), question("Reme")],
-      })
+      line({ live: 2, attention: [approval("a"), question("Sam")] })
     ).toEqual({
       tone: "live",
       lead: "A new version is ready",
       detail: "for your review",
     })
-    expect(line({ attention: [approval(3), approval(4)], open: true })).toEqual(
-      {
-        tone: "idle",
-        lead: "2 versions are ready",
-        detail: "for your review",
-      }
-    )
+    expect(
+      line({ attention: [approval("a"), approval("b")], open: true })
+    ).toEqual({
+      tone: "idle",
+      lead: "2 versions are ready",
+      detail: "for your review",
+    })
     expect(
       line({ live: 2, attention: [question("A"), question("B")] })
     ).toEqual({ tone: "live", lead: "2 questions", detail: "for you" })
@@ -604,93 +706,17 @@ describe("the one line", () => {
       lead: "Your first website",
       detail: "is under way",
     })
-    expect(line({ builds: [build("queued")], open: true })?.lead).toBe(
-      "Your first website"
-    )
-    expect(line({ live: 2, builds: [build("briefing")] })).toEqual({
-      tone: "working",
-      lead: "Building a new version,",
-      detail: "reading your brief",
-    })
   })
 
-  it("names a full build's step and how far through its steps it is", () => {
-    const row = (id: string, label: string, done: number, total = 1) => ({
-      id,
-      label,
-      done,
-      total,
-    })
-    const activity = [
-      row("planning", "Planning the layout", 1),
-      row("photos", "Making photos", 4, 4),
-      row("writing", "Writing the pages", 3, 6),
-      row("design", "Looking over the design", 0),
-      row("checking", "Checking the site", 0),
-    ]
-    expect(line({ builds: [{ ...build("implementing"), activity }] })).toEqual({
-      tone: "working",
-      lead: "Building your first version,",
-      detail: "writing the pages",
-      progress: { done: 3, total: 5 },
-    })
-    // The gates sent it back: the pill says so, in a sixth step.
-    const repairing = [
-      ...activity.slice(0, 2).map((r) => ({ ...r, done: r.total })),
-      row("writing", "Writing the pages", 6, 6),
-      row("design", "Looking over the design", 1),
-      row("fixing", "Fixing what the checks found", 0),
-      row("checking", "Checking the site", 0),
-    ]
+  it("names who asked, from the directory", () => {
     expect(
-      line({ builds: [{ ...build("implementing"), activity: repairing }] })
-    ).toMatchObject({
-      detail: "fixing what the checks found",
-      progress: { done: 5, total: 6 },
-    })
-    // The plan waiting on the owner is not the team planning.
-    const waiting = {
-      ...build("planning"),
-      activity: [
-        row("planning", "Planning the layout", 0),
-        ...activity.slice(2),
-      ],
-      blueprint: { awaiting: true },
-    } as unknown as Workspace["builds"][number]
-    expect(line({ builds: [waiting] })).toMatchObject({
-      detail: "waiting for your review",
-      progress: { done: 1, total: 4 },
-    })
-    // A quick edit has no steps to count.
-    expect(
-      line({ builds: [{ ...build("revising"), lane: "quick", activity }] })
-    ).not.toHaveProperty("progress")
-  })
-})
-
-describe("suggestions", () => {
-  it("offers at most three, and nothing the app cannot do", () => {
-    const kinds = new Set([
-      "name-business",
-      "onboarding",
-      "start-website",
-      "request-change",
-      "visit-site",
-      "set-reminder",
-    ])
-    for (const route of Object.values(ROUTES)) {
-      for (const each of [
-        live(),
-        workspace(),
-        live({ attention: [approval(4)] }),
-      ]) {
-        const found = panelFor(input({ route, workspace: each }))?.suggestions
-        expect(found?.length ?? 0).toBeLessThanOrEqual(3)
-        for (const suggestion of found ?? []) {
-          expect(kinds.has(suggestion.kind)).toBe(true)
+      line(
+        { live: 2, attention: [question("A colleague", "staff-1")] },
+        {
+          "staff-1": "Alex",
         }
-      }
-    }
+      )
+    ).toEqual({ tone: "live", lead: "Alex", detail: "has a question for you" })
   })
 })
 
@@ -699,56 +725,68 @@ const INTERNAL =
   /[0-9a-f]{8}-[0-9a-f]{4}-|\b(?=[0-9a-f]*\d)[0-9a-f]{7,}\b|\b[a-z]+_[a-z_]+\b|\b[A-Z]{3}-\d{3}\b/
 
 describe("what the owner reads", () => {
-  const STATES = [
-    "briefing",
-    "planning",
-    "implementing",
-    "validating",
-    "revising",
-    "release_candidate",
-    "paused",
-    "queued",
+  const KINDS: [ActivitySegment["kind"], string[]][] = [
+    ["onboarding", ONBOARDING_STEPS],
+    ["website", WEBSITE_STEPS],
+    ["golive", GOLIVE_STEPS],
+    ["change", ["understanding", "making", "checking", "ready"]],
+    ["domain", ["dns", "certificate", "loads"]],
+    ["purchase", ["details", "payment", "registration", "connecting"]],
+    ["google", ["sign_in", "verify", "sitemap"]],
   ]
-  const STARTING = workspace({ missingFacts: ["business.phone"] })
+  const STATES: ActivitySegment["state"][] = [
+    "now",
+    "waiting",
+    "done",
+    "failed",
+  ]
 
-  /** Every sentence the panel writes, across pages and states. */
-  const sentences = (named: boolean) => {
+  /** Every sentence the panel writes, for every job in every state, with and without names. */
+  const sentences = (assistantName: string | null) => {
     const found: string[] = []
-    const states = [
-      STARTING,
-      workspace({ open: true }),
-      live(),
-      live({ attention: [approval(4, "2026-10-02T09:00:00.000Z")] }),
-      live({ attention: [question("Sam")] }),
-      ...STATES.flatMap((state) => [
-        live({ builds: [build(state, 4)] }),
-        workspace({ open: true, builds: [build(state)] }),
-      ]),
-    ]
-    for (const route of Object.values(ROUTES)) {
-      for (const each of states) {
+    for (const [kind, ids] of KINDS) {
+      for (const state of STATES) {
+        const each = segment(kind, state, along(ids, 1), {
+          id: `${kind}:${ORG}`,
+          names: {
+            business: "Fixture Clean",
+            domain: "fixture.example.invalid",
+          },
+          deadline: "2026-10-01T10:50:00.000Z",
+        })
         const panel = panelFor(
           input({
-            route,
             conversations: [onboardingChat],
-            workspace: named ? { ...each, assistantName: "Ellie" } : each,
+            workspace: workspace({
+              assistantName,
+              activity: activity({
+                journey: [onboarding(8, "done"), each],
+                now: [each],
+                done: [each],
+              }),
+            }),
           })
         )
-        if (!panel) continue
+        for (const view of [...(panel?.journey ?? []), ...(panel?.now ?? [])]) {
+          found.push(
+            view.title,
+            view.working,
+            view.line ?? "",
+            ...view.steps.map((s) => s.label)
+          )
+        }
         found.push(
-          ...panel.headline,
-          panel.line.lead,
-          panel.line.detail ?? "",
-          ...(panel.steps ?? []).map((step) => step.label),
-          ...panel.upcoming.map((item) => item.text)
+          panel?.line.lead ?? "",
+          panel?.line.detail ?? "",
+          ...(panel?.done ?? []).map((item) => item.text)
         )
       }
     }
-    return found
+    return found.filter(Boolean)
   }
 
   it("holds no id, hash, raw value or staff code", () => {
-    for (const text of [...sentences(true), ...sentences(false)]) {
+    for (const text of [...sentences("Ellie"), ...sentences(null)]) {
       expect(text).not.toMatch(INTERNAL)
     }
     // The pattern does catch what it is for.
@@ -763,15 +801,15 @@ describe("what the owner reads", () => {
   })
 
   it("names no version number, and never Reme for a named assistant", () => {
-    const named = sentences(true)
+    const named = sentences("Ellie")
     for (const text of named) {
       expect(text).not.toMatch(/\bReme\b|\bversion \d|\bv\d\b/i)
     }
     expect(named.some((text) => text.includes("Ellie"))).toBe(true)
   })
 
-  it("does not say Reme for an assistant nobody has named", () => {
-    for (const text of sentences(false)) {
+  it("does not say Reme, or a name, for an assistant nobody has named", () => {
+    for (const text of [...sentences(null), ...sentences("Reme")]) {
       expect(text).not.toMatch(/\bReme\b/)
     }
   })

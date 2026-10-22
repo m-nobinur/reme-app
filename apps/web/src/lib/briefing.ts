@@ -1,7 +1,7 @@
 import { factLabel } from "@workspace/ui/lib/facts"
 import { localMidnight } from "@workspace/ui/lib/zone"
 import type { AttentionItem, OrgSummary, Workspace } from "./api/types"
-import { factsNeeded, questionOf, upcomingNotes } from "./reminders"
+import { factsNeeded, questionOf } from "./reminders"
 
 /**
  * What the empty conversation opens with: one line on where things stand, the
@@ -177,108 +177,3 @@ export function briefingOf(
 /** Who raised an item: the directory's name when the reader has one. */
 export const askerOf = (item: AttentionItem, names: Record<string, string>) =>
   (item.raisedById && names[item.raisedById]) || item.raisedBy
-
-/**
- * The panel's opening lines, two at most: what the assistant is doing, then what the
- * owner should do next. With nothing to do it says so in one line. `now` is
- * null while the reader's clock is unknown (the server's render): nothing is
- * said about today then, so the server's HTML and the first browser render
- * agree.
- */
-export function digestOf(
-  workspace: Workspace,
-  names: Record<string, string>,
-  now: Date | null
-): string[] {
-  const { attention, live, building, open, derivedReminders } = workspace
-  const approvals = attention.flatMap((item) =>
-    item.kind === "approval" ? [item] : []
-  )
-  const questions = attention.flatMap((item) =>
-    item.kind === "question" ? [item] : []
-  )
-  const dated = upcomingNotes(workspace.reminderNotes, now?.getTime()).filter(
-    (note) => note.due_at !== null
-  )
-  const today = now
-    ? dated.filter(
-        (note) =>
-          localMidnight(new Date(note.due_at ?? "")) === localMidnight(now)
-      )
-    : []
-  const facts = derivedReminders.find(
-    (reminder) => reminder.rule === "facts_missing"
-  )
-  const assistant = assistantOf(workspace)
-
-  // What waits on the owner, most pressing first, with how many items each covers.
-  const needs: { text: string; count: number }[] = []
-  const [soonest] = today
-  if (soonest?.due_at) {
-    const at = clock(new Date(soonest.due_at))
-    needs.push({
-      text:
-        today.length === 1
-          ? `${soonest.title.replace(/[.?!]+$/, "")} at ${at}.`
-          : `${today.length} reminders today, the next at ${at}.`,
-      count: today.length,
-    })
-  }
-  const [approval] = approvals
-  if (approval) {
-    needs.push({
-      text:
-        approvals.length === 1
-          ? "A new version is ready to review."
-          : `${approvals.length} versions are ready to review.`,
-      count: approvals.length,
-    })
-  }
-  const [question] = questions
-  if (question) {
-    needs.push({
-      text:
-        questions.length === 1
-          ? `${askerOf(question, names)} asked about ${question.title.toLowerCase()}.`
-          : `${questions.length} questions are waiting for you.`,
-      count: questions.length,
-    })
-  } else if (facts) {
-    // A question is usually the build asking for the same fact.
-    needs.push({
-      text: `${leading(assistant)} needs ${factsNeeded(facts.keys)}.`,
-      count: 1,
-    })
-  }
-
-  const doing = building
-    ? live
-      ? `${leading(assistant)} is updating your website.`
-      : `${leading(assistant)} is building your website.`
-    : null
-  const total = needs.reduce((sum, need) => sum + need.count, 0)
-  const count = (n: number, more = "") =>
-    `${n} ${more}${n === 1 ? "thing needs" : "things need"} you.`
-
-  if (doing) {
-    const [only] = needs
-    if (!only) return [doing]
-    return [doing, needs.length === 1 ? only.text : count(total)]
-  }
-  const [first, second] = needs
-  if (first && second) {
-    return needs.length === 2
-      ? [first.text, second.text]
-      : [first.text, count(total - first.count, "more ")]
-  }
-  if (first) return [first.text]
-
-  const site = live
-    ? "Your website is live."
-    : open
-      ? "Your website is under way."
-      : `Tell ${assistant} about your business to start your website.`
-  if (!live && !open) return [site]
-  // A dated reminder may fall today, which only the browser can say.
-  return !now && dated.length ? [site] : [`All caught up. ${site}`]
-}

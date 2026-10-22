@@ -405,6 +405,7 @@ function workspaceOf(
     url: status.site.url,
     missingFacts: status.missing_facts,
     assistantName: status.assistant_name,
+    activity: status.activity ?? null,
     derivedReminders: status.reminders.derived,
     reminderNotes: status.reminders.notes,
     etag,

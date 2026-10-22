@@ -108,7 +108,7 @@ test("Ask for changes opens a note in place, focused", async ({ page }) => {
 test("Stop asks once, in place, and offers to keep building", async ({
   page,
 }) => {
-  await open(page, "WorkingOn", 400)
+  await open(page, "StopBuild", 400)
   await page.getByRole("button", { name: "Stop", exact: true }).click()
   await expect(
     page.getByRole("button", { name: "Keep building" })
@@ -122,21 +122,29 @@ test("Stop asks once, in place, and offers to keep building", async ({
   ).toBeFocused()
 })
 
-test("the stepper marks the step the build is on", async ({ page }) => {
-  await open(page, "WorkingOn", 400)
-  const current = page.locator('[aria-current="step"]')
-  await expect(current).toHaveCount(1)
-  await expect(current).toHaveText("Building")
-  await expect(page.getByText("4 min 10 s so far.")).toBeVisible()
+test("a segment marks the step at work, and ticks the ones done", async ({
+  page,
+}) => {
+  await open(page, "PanelSegment website photos", 400)
+  const segment = page.locator('[data-slot="panel-segment"]')
+  await expect(segment.locator('li[data-state="now"]')).toHaveCount(1)
+  await expect(segment.locator('li[data-state="now"]')).toContainText(
+    "Making 4 photos, 2 done"
+  )
+  await expect(segment.locator('li[data-state="done"]')).toHaveCount(1)
+  await expect(segment.getByText("4 minutes so far")).toBeVisible()
 })
 
-test("a ready build offers no Stop", async ({ page }) => {
-  await open(page, "WorkingOn states")
-  // Every state is placed, and only the ones still building can be stopped.
-  await expect(page.locator('[data-slot="working-on"]')).toHaveCount(16)
-  await expect(
-    page.getByRole("button", { name: "Stop", exact: true })
-  ).toHaveCount(9)
+test("a done segment is one line with no caret", async ({ page }) => {
+  await open(page, "PanelSegment done", 400)
+  const segment = page.locator('[data-slot="panel-segment"]')
+  await expect(segment).toHaveAttribute("data-state", "folded")
+  await expect(segment.locator("button[aria-expanded]")).toHaveCount(0)
+})
+
+test("a waiting step points at the tray", async ({ page }) => {
+  await open(page, "PanelSegment getting started waiting", 400)
+  await expect(page.getByRole("button", { name: "Answer below" })).toBeVisible()
 })
 
 test("the approve button shows a visible focus ring from the keyboard", async ({
@@ -164,11 +172,11 @@ test.describe("with reduced motion", () => {
     ).toBe("none")
   })
 
-  test("the running step does not pulse", async ({ page }) => {
-    await open(page, "WorkingOn", 400)
-    const bar = page.locator('[aria-current="step"] [data-slot="step-bar"]')
+  test("the step at work holds still", async ({ page }) => {
+    await open(page, "PanelSegment website photos", 400)
+    const icon = page.locator('li[data-state="now"] svg').first()
     expect(
-      await bar.evaluate((node) => getComputedStyle(node).animationName)
+      await icon.evaluate((node) => getComputedStyle(node).animationName)
     ).toBe("none")
   })
 })
@@ -188,7 +196,7 @@ test("hours that close before they open are refused in place", async ({
 test("a Stop in flight keeps the question up, with its buttons disabled", async ({
   page,
 }) => {
-  await open(page, "WorkingOn stopping", 400)
+  await open(page, "StopBuild stopping", 400)
   await expect(page.getByRole("button", { name: "Stopping" })).toBeDisabled()
   await expect(
     page.getByRole("button", { name: "Keep building" })
@@ -345,11 +353,11 @@ test("the panel's line stays on one line, however long the name", async ({
   ).toBe(true)
 })
 
-test("a blank section's next step looks like a button, with a visible border", async ({
+test("a next step looks like a button, with a visible border", async ({
   page,
 }) => {
   for (const theme of ["light", "dark"] as const) {
-    await page.goto(`/?entry=PanelBlank&theme=${theme}`)
+    await page.goto(`/?entry=NextSteps getting started&theme=${theme}`)
     const link = page.getByRole("link", { name: "Continue getting started" })
     await expect(link).toBeVisible()
     const border = await link.evaluate(

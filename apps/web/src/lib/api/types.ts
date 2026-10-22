@@ -1,4 +1,5 @@
 import type {
+  Activity,
   ApprovalRequest,
   BlueprintReviewOutput,
   BuildStopCause,
@@ -130,6 +131,8 @@ export type Workspace = {
   missingFacts: FactValueKey[]
   /** The name the owner gave their assistant, or null before they chose one. */
   assistantName: string | null
+  /** Every job as segments with fixed steps; null until the api sends it. */
+  activity: Activity | null
   /** What the api derived from rows waiting on the owner, as facts. */
   derivedReminders: DerivedReminder[]
   /** Open reminders someone wrote down, soonest due first, undated after. */
