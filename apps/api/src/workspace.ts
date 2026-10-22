@@ -396,16 +396,12 @@ export async function readBuilds(
       // drops the table name, and a bare `id` here would mean the revision's.
       revision: sql<RevisionRef | null>`(select json_build_object('revision_id', r.id, 'version', r.version) from site_revisions r where r.assignment_id = assignments.id and r.version is not null order by r.version desc limit 1)`,
       // ADR-038: the plan on the row, the round it is and the plan it
-      // changed from the newest `blueprint.proposed`, and the newest round
-      // the owner decided on, all by `events_assignment_type_idx`.
+      // changed from the newest `blueprint.proposed`, by `events_assignment_type_idx`.
       blueprint: assignments.blueprint,
       proposed: sql<Record<
         string,
         unknown
       > | null>`(select e.payload from events e where e.assignment_id = assignments.id and e.type = 'blueprint.proposed' order by e.event_id desc limit 1)`,
-      decidedRound: sql<
-        number | null
-      >`(select max((e.payload->>'round')::int) from events e where e.assignment_id = assignments.id and e.type = 'blueprint.decided')`,
       // BA4's counts: distinct pages or photos finished per stage, and the
       // stage's total, so a repeated event never counts twice.
       progress: sql<Progress | null>`(select json_object_agg(p.stage, json_build_object('done', p.done, 'total', p.total)) from (select e.payload->>'stage' as stage, count(distinct e.payload->>'item')::int as done, max((e.payload->>'total')::int) as total from events e where e.assignment_id = assignments.id and e.type = 'build.progress' group by 1) p)`,
@@ -465,16 +461,10 @@ export async function readBuilds(
   })
 }
 
-/**
- * The build's Blueprint for the card, when it planned one that still parses.
- * It waits on the owner while the build is planning, its round asked for a
- * review, and no decision on that round is stored.
- */
+/** The build's Blueprint for the panel, when it planned one that still parses. */
 export function planOf(row: {
-  state: AssignmentState
   blueprint: unknown
   proposed: Record<string, unknown> | null
-  decidedRound: number | null
 }): Pick<BuildSummary, "blueprint"> {
   const plan = Blueprint.safeParse(row.blueprint)
   const round = Number(row.proposed?.round)
@@ -484,10 +474,6 @@ export function planOf(row: {
       plan: plan.data,
       round,
       previous: Blueprint.safeParse(row.proposed?.previous).data ?? null,
-      awaiting:
-        row.state === "planning" &&
-        row.proposed?.review === true &&
-        row.decidedRound !== round,
     },
   }
 }
