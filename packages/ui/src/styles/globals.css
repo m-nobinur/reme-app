@@ -123,6 +123,8 @@
   --animate-persona-sway: persona-sway 7s ease-in-out infinite;
   --animate-persona-blink: persona-blink 6.5s linear infinite;
   --animate-persona-blink-once: persona-blink-once 0.28s ease-in-out;
+  /* A portrait's head: a slow, uneven tilt and a small nod. */
+  --animate-avatar-sway: avatar-sway 9s ease-in-out infinite;
   --animate-flow: flow 1.4s linear infinite;
   /* A status line's icon while its work runs, one small motion per kind of
      work. Transform and opacity only, and the icon holds still under reduced
@@ -180,6 +182,21 @@
     }
     80% {
       transform: translate(0, 3%) rotate(0deg);
+    }
+  }
+  @keyframes avatar-sway {
+    0%,
+    100% {
+      transform: rotate(0deg);
+    }
+    22% {
+      transform: rotate(-2deg) translateY(-1%);
+    }
+    48% {
+      transform: rotate(0.6deg) translateY(0.5%);
+    }
+    74% {
+      transform: rotate(1.6deg) translateY(-0.5%);
     }
   }
   @keyframes persona-blink {

@@ -333,9 +333,11 @@ export function phoneText(e164: string): string {
 /**
  * Details as the owner gave them, in the tray's order and the words it
  * showed: "07700 900123 · hello@example.com" or "Ava · she/her · Friendly".
+ * The face is a picture, so it has no words here.
  */
 export function detailsText(facts: readonly FactValue[]): string {
   return facts
+    .filter((fact) => fact.key !== "assistant.avatar")
     .map((fact) => {
       if (fact.key === "business.phone") return phoneText(fact.value.e164)
       if (fact.key === "assistant.pronouns" || fact.key === "assistant.tone") {

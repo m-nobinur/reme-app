@@ -1,3 +1,5 @@
+import { AVATARS } from "@workspace/contracts"
+import { AssistantAvatar } from "@workspace/ui/components/assistant-avatar"
 import { AuthAside } from "@workspace/ui/components/auth-aside"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -44,6 +46,25 @@ const landingCatalog: CatalogEntry[] = [
   },
   { name: "Persona", render: () => <Persona className="size-48" /> },
   { name: "PersonaAvatar", render: () => <PersonaAvatar /> },
+  {
+    name: "AssistantAvatar",
+    render: () => (
+      <div className="flex flex-col gap-4">
+        {["size-20", "size-10", "size-6"].map((size) => (
+          <div className="flex flex-wrap gap-3" key={size}>
+            {AVATARS.map((avatar, at) => (
+              <AssistantAvatar
+                className={size}
+                delay={at * 0.9}
+                id={avatar.id}
+                key={avatar.id}
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+    ),
+  },
   {
     name: "SpeechBubble",
     render: () => (

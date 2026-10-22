@@ -593,6 +593,19 @@ const ASK_DETAILS_OPEN: ThreadMessageLike[] = [
     role: "assistant",
     status: WAITING,
   },
+  {
+    content: [
+      question("Ava it is. How should she look?"),
+      askDetails("assistant", {
+        prefill: [
+          { key: "assistant.name", value: { name: "Ava" } },
+          { key: "assistant.pronouns", value: { id: "she_her" } },
+        ],
+      }),
+    ],
+    role: "assistant",
+    status: WAITING,
+  },
 ]
 
 type Choice = {

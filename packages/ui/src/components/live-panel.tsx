@@ -13,6 +13,7 @@ import {
 import {
   type ApprovalTarget,
   type AssignmentState,
+  type AvatarId,
   type Blueprint,
   type BuildActivity,
   type BuildPhoto,
@@ -20,6 +21,7 @@ import {
   GOAL_MAX,
 } from "@workspace/contracts"
 import { ApprovalTargetSummary } from "@workspace/ui/components/approval-target"
+import { AssistantAvatar } from "@workspace/ui/components/assistant-avatar"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { Field } from "@workspace/ui/components/field"
 import {
@@ -27,7 +29,6 @@ import {
   GeneratedPhotos,
   type PhotoActions,
 } from "@workspace/ui/components/generated-photos"
-import { PersonaAvatar } from "@workspace/ui/components/persona"
 import { Skeleton } from "@workspace/ui/components/skeleton"
 import { StatusIcon } from "@workspace/ui/components/status-line"
 import { useCycle } from "@workspace/ui/hooks/use-cycle"
@@ -1543,11 +1544,14 @@ function LiveLine({
   lead,
   detail = null,
   lines,
+  avatar = null,
 }: {
   tone: "working" | "live" | "idle"
   lead: string
   detail?: string | null
   lines?: readonly { lead: string; detail?: string | null }[] | undefined
+  /** The assistant's face, Reme's own when null. */
+  avatar?: AvatarId | null
 }) {
   const [held, setHeld] = useState(false)
   const turns = lines && lines.length > 1 ? lines : [{ lead, detail }]
@@ -1561,8 +1565,8 @@ function LiveLine({
       onPointerEnter={() => setHeld(true)}
       onPointerLeave={() => setHeld(false)}
     >
-      {/* Reme, floating and blinking as it does everywhere; while it works a
-          halo pulses behind it, and when the work is live the halo holds. */}
+      {/* The assistant, moving as it does everywhere; while it works a halo
+          pulses behind it, and when the work is live the halo holds. */}
       <span aria-hidden className="relative flex size-6 shrink-0">
         {tone === "idle" ? null : (
           <span
@@ -1573,7 +1577,7 @@ function LiveLine({
             data-slot="live-line-halo"
           />
         )}
-        <PersonaAvatar className="size-6" sway />
+        <AssistantAvatar className="size-6" id={avatar} sway />
       </span>
       <span
         className={cn(

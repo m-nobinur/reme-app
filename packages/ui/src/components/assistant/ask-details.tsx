@@ -2,9 +2,11 @@ import type { ToolCallMessagePartComponent } from "@assistant-ui/react"
 import { CheckCircleIcon } from "@phosphor-icons/react"
 import {
   type AskDetailsInput,
+  AVATARS,
   DETAILS_KEYS,
   type FactValue,
   PRONOUNS,
+  type PronounId,
   TONES,
 } from "@workspace/contracts"
 import {
@@ -13,6 +15,7 @@ import {
   TrayNote,
   useTabDraft,
 } from "@workspace/ui/components/assistant/question-tray"
+import { AssistantAvatar } from "@workspace/ui/components/assistant-avatar"
 import { AnswerInputs } from "@workspace/ui/components/live-panel"
 import { answerValue, FACT_INPUTS } from "@workspace/ui/lib/answer"
 import {
@@ -28,8 +31,8 @@ import { type FocusEvent, type FormEvent, useId, useRef, useState } from "react"
 
 /**
  * A few related facts onboarding asks for in the question tray, one field
- * per page: the phone and then the email, or the assistant's name, pronouns
- * and tone. The inputs are the web's, by key, the same ones `ask_fact` uses,
+ * per page: the phone and then the email, or the assistant's name, pronouns,
+ * face and tone. The inputs are the web's, by key, the same ones `ask_fact` uses,
  * so a phone is typed the way the owner writes it and sent as E.164. Every
  * field is needed and checked as the owner leaves its page; nothing is sent
  * until the last one reads. Every page stays in the form, hidden, so going
@@ -45,6 +48,11 @@ const PICKS = {
     legend: "Pronouns",
     ask: "Which pronouns should your assistant use?",
     options: PRONOUNS,
+  },
+  "assistant.avatar": {
+    legend: "Look",
+    ask: "How should your assistant look?",
+    options: AVATARS,
   },
   "assistant.tone": {
     legend: "Tone",
@@ -190,6 +198,62 @@ function Picks({
   )
 }
 
+/**
+ * The faces for the pronouns picked a page before: Reme's own first and
+ * ticked until the owner picks another. A face the new pronouns leave out
+ * falls back to Reme's.
+ */
+function AvatarPicks({
+  pronouns,
+  start,
+}: {
+  pronouns: PronounId | null
+  start: string | null
+}) {
+  const [picked, setPicked] = useState(start ?? "reme")
+  const options = AVATARS.filter(
+    (avatar) =>
+      avatar.pronouns === null || !pronouns || avatar.pronouns === pronouns
+  )
+  const shown = options.some((avatar) => avatar.id === picked) ? picked : "reme"
+  return (
+    <fieldset>
+      <legend className="sr-only">{PICKS["assistant.avatar"].legend}</legend>
+      <div className="flex flex-wrap gap-2">
+        {options.map((avatar, at) => (
+          <label
+            className={cn(OPTION, "rounded-2xl p-2")}
+            key={avatar.id}
+            title={avatar.label}
+          >
+            <input
+              checked={shown === avatar.id}
+              className="sr-only"
+              name="assistant.avatar"
+              onChange={() => setPicked(avatar.id)}
+              type="radio"
+              value={avatar.id}
+            />
+            <span className="sr-only">{avatar.label}</span>
+            <AssistantAvatar
+              className="size-14 sm:size-16"
+              delay={at * 1.3}
+              id={avatar.id}
+            />
+            {shown === avatar.id ? (
+              <CheckCircleIcon
+                aria-hidden
+                className="absolute top-1 right-1 size-4 rounded-full bg-card text-primary"
+                weight="fill"
+              />
+            ) : null}
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  )
+}
+
 type Draft = { page: number; values: Record<string, string> }
 
 /** The tray's pages, one key each. `onAnswer` gets the answer `AskDetailsOutput` takes. */
@@ -229,6 +293,13 @@ function DetailsTray({
   const nameField = fieldOf("assistant.name")
   const [named, setNamed] = useState(() =>
     Boolean(startOf("assistant.name", nameField)?.toString().trim())
+  )
+  // The faces on offer follow the pronouns picked a page before.
+  const [pronouns, setPronouns] = useState(
+    () =>
+      (draft.values["assistant.pronouns"] ||
+        String(prefilled(input, "assistant.pronouns")?.id ?? "") ||
+        null) as PronounId | null
   )
   const formRef = useRef<HTMLFormElement>(null)
   const key = keys[page] ?? keys[0]
@@ -334,6 +405,15 @@ function DetailsTray({
         id={`${id}-form`}
         noValidate
         onBlur={checkOnLeave}
+        onChange={(event) => {
+          const field = event.target
+          if (
+            field instanceof HTMLInputElement &&
+            field.name === "assistant.pronouns"
+          ) {
+            setPronouns(field.value as PronounId)
+          }
+        }}
         onInput={(event) => {
           const field = event.target
           if (field instanceof HTMLInputElement && field.name === nameField) {
@@ -351,7 +431,15 @@ function DetailsTray({
               hidden={at !== page}
               key={each}
             >
-              {isPick(each) ? (
+              {each === "assistant.avatar" ? (
+                <AvatarPicks
+                  pronouns={pronouns}
+                  start={
+                    draft.values[each] ??
+                    (String(prefilled(input, each)?.id ?? "") || null)
+                  }
+                />
+              ) : isPick(each) ? (
                 <Picks
                   invalid={invalid}
                   name={each}
