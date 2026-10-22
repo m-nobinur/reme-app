@@ -1161,12 +1161,12 @@ it("shows every Chief of Staff tool in the owner's words, and nothing of its wir
     ],
   })
   await press(chat, "Checked 3 things")
-  await press(chat, "Checked for a preview")
+  await press(chat, "Checked the preview")
   const shown = chat.textContent ?? ""
   for (const text of [
-    "Checked your workspace",
-    "Read your business details",
-    "Checked for a preview",
+    "Checked where things stand",
+    "Found your details",
+    "Checked the preview",
     "That build is not in your workspace.",
     "You have started as many builds as a day allows. Try again tomorrow.",
     "We could not confirm this went through.",
@@ -1337,7 +1337,7 @@ it("a call the stream left unfinished stops, rather than working forever", async
   await vi.waitFor(() =>
     expect(chat.textContent).toContain("This was not finished.")
   )
-  expect(chat.textContent).toContain("Stopped checking your workspace")
+  expect(chat.textContent).toContain("Stopped checking where things stand")
   expect(chat.querySelector(".shimmer")).toBeNull()
   // The turn is over: the composer offers Send again, not Stop.
   expect(chat.querySelector('button[aria-label="Send message"]')).not.toBeNull()
@@ -1400,8 +1400,8 @@ it("renders every piece of model or owner text on a card as text, never as marku
     ],
   })
   await press(chat, "Checked 2 things")
-  await press(chat, "Checked your workspace")
-  await press(chat, "Read your business details")
+  await press(chat, "Checked where things stand")
+  await press(chat, "Found your details")
   // Five places the text lands: the build goal, the fact, the change, the
   // answer and the reminder, each as the characters it is.
   expect(chat.textContent?.split(INJECTED)).toHaveLength(6)
