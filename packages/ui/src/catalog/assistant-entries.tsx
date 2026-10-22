@@ -587,7 +587,7 @@ const ASK_DETAILS_OPEN: ThreadMessageLike[] = [
       question("Last thing: what should your assistant be called?"),
       askDetails("assistant", {
         skippable: true,
-        ideas: ["Reme", "Marcus", "Priya"],
+        ideas: ["Marcus", "Priya"],
       }),
     ],
     role: "assistant",

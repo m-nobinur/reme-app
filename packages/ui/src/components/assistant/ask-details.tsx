@@ -69,7 +69,16 @@ const HINT: Partial<Record<string, string>> = {
     "Shown on your website. Use a business address if you have one.",
 }
 
-/** Names written for this business, a tap each to fill the name field. */
+/**
+ * Reme first, so an owner can take the product's own name in one tap, then
+ * the names written for this business, or a few plain ones without them.
+ */
+const nameIdeas = (written: readonly string[] | undefined) => [
+  "Reme",
+  ...(written?.length ? written : ["Ava", "Ellie", "Marcus"]),
+]
+
+/** Name ideas, a tap each to fill the name field. */
 function NameIdeas({
   ideas,
   onPick,
@@ -366,11 +375,9 @@ function DetailsTray({
                     spec={{ kind: "fact", key: each }}
                     title={factLabel(each)}
                   />
-                  {each === "assistant.name" &&
-                  input.ideas?.length &&
-                  !named ? (
+                  {each === "assistant.name" && !named ? (
                     <NameIdeas
-                      ideas={input.ideas}
+                      ideas={nameIdeas(input.ideas)}
                       onPick={(name) => {
                         const field =
                           formRef.current?.querySelector<HTMLInputElement>(

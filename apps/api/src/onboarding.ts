@@ -83,11 +83,6 @@ export type StepId =
 
 export { ONBOARDING_GOAL }
 
-/** The assistant's name an owner can take as it is: the product's own. */
-const ASSISTANT_DEFAULT = "Reme"
-/** The names offered after Reme when none were written for the business. */
-const NAME_FALLBACK = ["Ava", "Ellie", "Marcus"]
-
 /**
  * The facts an owner may skip; every other one the site or the assistant
  * needs. The slogan and how a job runs are never asked: the builder drafts
@@ -444,14 +439,8 @@ export const detailsCard = (
     step === "contact" && !has(o, "business.email") && email.success
       ? [...held, email.data]
       : held
-  // Reme first, so an owner can take the product's own name in one tap, then
-  // the names written for this business, or a few plain ones until the
-  // background call has written them.
-  const written = o.prepared?.assistant_names ?? []
-  const ideas =
-    step === "assistant"
-      ? [ASSISTANT_DEFAULT, ...(written.length ? written : NAME_FALLBACK)]
-      : undefined
+  // Names written for this business, when the background call has them.
+  const ideas = step === "assistant" ? o.prepared?.assistant_names : undefined
   return call(
     "tool-ask_details",
     AskDetailsInput.parse({
