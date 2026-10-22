@@ -285,7 +285,13 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
   it("shows a new org nothing running and the five facts to ask for", async () => {
     const response = await workspace(fresh)
     expect(response.status).toBe(200)
-    const body = WorkspaceStatus.parse(await response.json())
+    const { activity, ...body } = WorkspaceStatus.parse(await response.json())
+    // The journey is AV2's: workspace-activity.test.ts holds its content.
+    expect(activity?.journey.map((segment) => segment.id)).toEqual([
+      "onboarding",
+      "website",
+      "golive",
+    ])
     expect(body).toEqual({
       site: { host: null, url: null, live: null },
       builds: [],
@@ -477,7 +483,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     expect(Math.round((shown?.review_ms ?? 0) / 60_000)).toBe(15)
 
     // The lead reports, though no page builder said so: the pages tick, and
-    // the design look is the step it is on until it answers.
+    // the design look, a step of polishing, is where it is until it answers.
     const stepsNow = async () => {
       const now = WorkspaceStatus.parse(await (await workspace(who)).json())
       const rows = now.builds[0]?.activity ?? []
@@ -485,7 +491,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     }
     await s.event(build, "assignment.completion_reported", { risks: [] })
     const looking = await stepsNow()
-    expect(looking.at).toBe("design")
+    expect(looking.at).toBe("polishing")
     expect(
       looking.rows.find((r) => r.id === "writing")?.items?.map((i) => i.done)
     ).toEqual([true, true])
@@ -498,22 +504,21 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     await s.event(build, "assignment.completion_reported", { risks: [] })
     expect((await stepsNow()).at).toBe("checking")
 
-    // The gates send it back: a repair of its own, until the lead reports again.
+    // The gates send it back: the repair is part of checking, which stays the
+    // stage it is on, and the six stages stay listed.
     await s.event(build, "assignment.state_changed", {
       from: "validating",
       to: "repairing",
     })
     const fixing = await stepsNow()
-    expect(fixing.at).toBe("fixing")
+    expect(fixing.at).toBe("checking")
     expect(fixing.rows.map((r) => r.id)).toEqual([
       "planning",
       "photos",
       "writing",
-      "assembling",
-      "design",
       "polishing",
-      "fixing",
       "checking",
+      "ready",
     ])
     await s.event(build, "assignment.completion_reported", { risks: [] })
     expect((await stepsNow()).at).toBe("checking")
@@ -850,7 +855,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     })
   })
 
-  it("reads the workspace in one transaction of ten statements", async () => {
+  it("reads the workspace in one transaction of eleven statements", async () => {
     let transactions = 0
     let statements = 0
     const counted: Tenancy = {
@@ -872,8 +877,10 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     await readWorkspace(counted, busy.orgId, { SITE_HOST_SUFFIX: SUFFIX })
     expect(transactions).toBe(1)
     // The tenth reads the generated photos of the waiting approval; the
-    // reminders that came due and the paused jobs are one each.
-    expect(statements).toBe(10)
+    // reminders that came due and the paused jobs are one each, and the
+    // eleventh is the activity view's domain, Google, heartbeat and first
+    // publish rows.
+    expect(statements).toBe(11)
   })
 
   it("lists a reminder once it is due and until it is done, after the questions and before the alerts", async () => {
@@ -979,11 +986,12 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
           .where(eq(staff.staffCode, "OWN-001"))
       )
       const written = await facts(changes)
-      // The name is sign-up's, stated the same way.
+      // The business name and the owner's first name are sign-up's, stated the same way.
       expect(written.map((f) => f.key)).toEqual([
         "business.name",
         "business.phone",
         "hours.weekday",
+        "owner.preferred_name",
       ])
       for (const fact of written) {
         expect(fact.provenance.source).toBe("owner_stated")
