@@ -77,13 +77,42 @@ describe("the quote form checks", () => {
   }
 })
 
+/** A cleaner's list: the choices and photos the limousine firm does not ask. */
+const CLEANER_FORM = {
+  fields: [
+    {
+      key: "extras",
+      label: "Extras",
+      type: "checkbox",
+      required: false,
+      hint: null,
+      options: ["Oven", "Windows", "Fridge"],
+    },
+    {
+      key: "photos",
+      label: "Photos of the rooms",
+      type: "photos",
+      required: false,
+      hint: "Helps us quote without a visit",
+      options: null,
+    },
+  ],
+}
+
 let limousine: Built | undefined
+let cleaner: Built | undefined
 
 beforeAll(async () => {
-  limousine = await build({ site: FILLED, quoteForm: LIMOUSINE_FORM })
+  ;[limousine, cleaner] = await Promise.all([
+    build({ site: FILLED, quoteForm: LIMOUSINE_FORM }),
+    build({ site: FILLED, quoteForm: CLEANER_FORM }),
+  ])
 }, 120_000)
 
-afterAll(() => clean(limousine))
+afterAll(() => {
+  clean(limousine)
+  clean(cleaner)
+})
 
 const quotePage = (built: Built | undefined): Page => {
   if (!built) throw new Error("the build did not run")
@@ -100,22 +129,38 @@ describe("a site built with the owner's own questions", () => {
         (el) => el.attrs.name && (el.attrs.id ?? "").startsWith("quote-q-")
       )
       .map((el) => el.attrs.name)
-    expect(asked).toEqual(LIMOUSINE_FORM.fields.map((f) => f.key))
+    expect([...new Set(asked)]).toEqual(LIMOUSINE_FORM.fields.map((f) => f.key))
+    const labelled = (id: string) =>
+      elements.some((el) => el.tag === "label" && el.attrs.for === id)
     for (const field of LIMOUSINE_FORM.fields) {
       const id = `quote-q-${field.key}`
+      expect(texts, id).toContain(field.label)
+      if (field.type === "radio") {
+        // One labelled radio per option, each required.
+        field.options?.forEach((option, i) => {
+          const radio = elements.find((el) => el.attrs.id === `${id}-${i}`)
+          expect(radio?.attrs, id).toMatchObject({
+            type: "radio",
+            value: option,
+          })
+          expect("required" in (radio?.attrs ?? {}), id).toBe(field.required)
+          expect(labelled(`${id}-${i}`), id).toBe(true)
+        })
+        continue
+      }
       const control = elements.find((el) => el.attrs.id === id)
       const tag =
         field.type === "select" || field.type === "textarea"
           ? field.type
           : "input"
       expect(control?.tag, id).toBe(tag)
-      if (tag === "input") expect(control?.attrs.type, id).toBe(field.type)
+      if (tag === "input") {
+        expect(control?.attrs.type, id).toBe(
+          field.type === "datetime" ? "datetime-local" : field.type
+        )
+      }
       expect("required" in (control?.attrs ?? {}), id).toBe(field.required)
-      expect(
-        elements.some((el) => el.tag === "label" && el.attrs.for === id),
-        id
-      ).toBe(true)
-      expect(texts, id).toContain(field.label)
+      expect(labelled(id), id).toBe(true)
       if (field.hint) {
         expect(control?.attrs["aria-describedby"], id).toBe(`${id}-hint`)
         expect(texts, id).toContain(field.hint)
@@ -129,6 +174,26 @@ describe("a site built with the owner's own questions", () => {
         "Business",
       ])
     )
+  })
+
+  test("asks for photos as links when the form goes by email", () => {
+    const { elements, texts } = quotePage(cleaner)
+    const form = elements.find((el) => el.tag === "form")
+    expect(form?.attrs.enctype).toBe("text/plain")
+    expect(elements.some((el) => el.attrs.type === "file")).toBe(false)
+    const photos = elements.find((el) => el.attrs.id === "quote-q-photos")
+    expect(photos?.tag).toBe("textarea")
+    expect(photos?.attrs["aria-describedby"]).toBe(
+      "quote-q-photos-hint quote-q-photos-links"
+    )
+    expect(texts).toContain(FILLED.quotePhotoLinks)
+    // A checkbox group lets the visitor tick any of its options.
+    const extras = elements.filter((el) => el.attrs.name === "extras")
+    expect(extras.map((el) => el.attrs.type)).toEqual([
+      "checkbox",
+      "checkbox",
+      "checkbox",
+    ])
   })
 
   test("drops the starter's questions", () => {

@@ -230,8 +230,8 @@ export const LIMOUSINE_FORM = {
     },
     {
       key: "pickup_date",
-      label: "Date of the journey",
-      type: "date",
+      label: "Date and time of the journey",
+      type: "datetime",
       required: true,
       hint: null,
       options: null,
@@ -243,6 +243,14 @@ export const LIMOUSINE_FORM = {
       required: true,
       hint: null,
       options: null,
+    },
+    {
+      key: "vehicle",
+      label: "Vehicle",
+      type: "radio",
+      required: true,
+      hint: null,
+      options: ["Saloon", "Stretch limousine", "Minibus"],
     },
     {
       key: "occasion",

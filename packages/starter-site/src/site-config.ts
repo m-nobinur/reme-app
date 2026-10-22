@@ -705,6 +705,9 @@ const values = {
   quoteEmailLabel: "Email address",
   quotePhoneLabel: "Phone number",
   quoteChoose: "Choose one",
+  /** In the photo question's drop zone, once the form has an endpoint. */
+  quotePhotoDrop: "Drop photos here, or choose them",
+  quotePhotoLinks: "Links to photos, one per line",
   quoteOptional: "optional",
   quoteSubmit: "Send quote request",
   quoteNextSteps: "Your request comes straight to us.",

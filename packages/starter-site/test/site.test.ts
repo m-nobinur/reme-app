@@ -2,7 +2,11 @@ import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { SiteFields } from "@workspace/contracts"
 import { afterAll, beforeAll, describe, expect, test } from "vitest"
-import { QUOTE_FIELD_TYPES, quoteFields } from "../src/quote-form"
+import {
+  QUOTE_CHOICE_TYPES,
+  QUOTE_FIELD_TYPES,
+  quoteFields,
+} from "../src/quote-form"
 import { fields, layout, site } from "../src/site-config"
 import {
   type Built,
@@ -44,14 +48,19 @@ const MARKED = Object.fromEntries(
 // The quote form's own questions are data too, the file the platform writes
 // from the owner's approved list: marked the same way, one question of every
 // type, so a word the form's template adds around them is caught as well.
+// A form holds eight, so text, number and tel, inputs like email, sit out.
 const MARKED_FORM = {
-  fields: QUOTE_FIELD_TYPES.map((type, i) => ({
+  fields: QUOTE_FIELD_TYPES.filter(
+    (type) => !["text", "number", "tel"].includes(type)
+  ).map((type, i) => ({
     key: `q_${type}`,
     label: `«q${i}label»`,
     type,
     required: i % 2 === 0,
     hint: `«q${i}hint»`,
-    options: type === "select" ? [`«q${i}a»`, `«q${i}b»`] : null,
+    options: QUOTE_CHOICE_TYPES.includes(type)
+      ? [`«q${i}a»`, `«q${i}b»`]
+      : null,
   })),
 }
 
