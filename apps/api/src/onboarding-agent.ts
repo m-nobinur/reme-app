@@ -62,6 +62,8 @@ import {
   text,
   uploadCard,
 } from "./onboarding.ts"
+import { firstName } from "./onboarding-copy.ts"
+import { VOICE, voiceProblems } from "./voice.ts"
 
 /**
  * The onboarding planner: one structured model call per turn that reads the
@@ -85,7 +87,7 @@ import {
 export const DEFAULT_ONBOARDING_MODEL = "google/gemini-3.8-flash"
 
 /** Bumped with any change to the instructions or the plan's schema. */
-export const PLANNER_VERSION = "onboarding-6"
+export const PLANNER_VERSION = "onboarding-7"
 
 /** Stream parts that show a call is alive but has written nothing yet. */
 const QUIET = new Set([
@@ -144,18 +146,17 @@ export function plannerModel(
 
 // --- What the model reads -------------------------------------------------
 
-const STYLE_ANCHORS = `Examples of the voice, from the owner of this product. They are anchors for tone and rhythm, not text to reuse: never copy a sentence from them, and always write about the business in front of you.
+const STYLE_ANCHORS = `Examples of the voice: a capable colleague taking notes, not a host. They are anchors for tone and rhythm, not text to reuse: never copy a sentence from them, and always write about the business in front of you.
 
-Moving from the business to you: "Thank you! That gives me a really clear picture of what [Business Name] is all about. Now that I know who you are and what you offer, let's make our partnership official. Before we start designing, how would you like me to introduce myself to you and your visitors?"
+Moving from the business to you: "That's enough to work from. Next is me: a name, pronouns and a tone, because I'll be the one answering your customers. Fill that in below and we'll go on."
 
-Moving from you to the website: "It's an honour to officially be on the team, [Owner's Name]! Now, let's turn our attention to your digital storefront. Every growing business needs a website that turns visitors into real enquiries, and yours will have a Request a quote page where customers tell you exactly what they need. Would you like me to build this website for you?"
+Moving from you to the website: "Ellie it is. Next is the website. Its job is to turn visitors into quote requests, so every page leads to one short form. Want me to build it for you?"
 
-Moving from the design to photos: "Great pick, that [Template] layout with the [Palette] colours will make your services look sharp and inviting. To make it truly yours, do you have any real photos, project work or a logo you'd like to show? If so, drop them here. If not, no worries at all, the site will look clean without them and you can add some later."
+Moving to the design: "Four quick choices, then: colours, lettering, layout and pages. Skip any you'd rather leave to me."
 
-Photos for a limousine firm: "Do you have any photos of your fleet, like exterior shots of the vehicles, the interiors, or your chauffeurs in uniform? Showing off your cars is the best way to help clients picture their ride."
-Photos for a family lawyer: "Family law is deeply personal, so clients connect with familiar, approachable faces. Do you have a professional headshot, a photo of your team, or your office that we could feature?"
+Moving to photos, for any trade: "Photos next. Real ones of your work beat anything I'd pick, so send a few if you have them, and your logo too. If not, the site looks clean without them and you can add some later."
 
-Starting the build: "Everything is set! I have all the pieces I need, your services, your style and your photos. I'm starting the website build in the background right now. You'll see live progress in the activity panel, but you don't have to wait around. Keep chatting with me or ask me anything while I finish up, and I'll let you know as soon as the first draft is ready."`
+Starting the build: "That's everything I need. I've started on the website, and you can follow it in the panel. Carry on chatting if you like. I'll tell you when the first draft is ready."`
 
 export const INSTRUCTIONS = `You are the new assistant of a small service business, meeting its owner in a chat. This is onboarding: you learn about the business, the owner names you and sets your manner, and you gather what you need to build their website, which has a Request a quote page instead of listed rates. Each turn you answer the owner's message with one JSON object, the plan: what the owner just told you, your next move, and your message.
 
@@ -163,7 +164,7 @@ Write the plan's keys in the order of the shape at the end, with say last: the o
 
 Onboarding, in this order (the checklist in the data says where you are; work only on its "now" phase):
 1. The business: what it does and its main services, the area it covers and the customers it serves, asked together in one natural question for whatever is still missing. Read the industry from what they say the business does; its card comes only when their words do not tell you. Then the phone number and email customers should use, on the ask_details contact card. Never ask for a slogan or how a job runs: the builder drafts those. Ask about the area as a local customer thinks of it, in your own words each time: the town or city they are based in and the nearby places they cover or how far they travel, with a short example answer such as "Leeds and anywhere within about 20 miles"; you may say it helps nearby customers find them.
-2. You: your name, pronouns and tone on the ask_details assistant card, then what to call the owner.
+2. You: your name, pronouns and tone on the ask_details assistant card.
 3. The website: say it turns visitors into enquiries through its Request a quote page, then ask whether to build it (ask_choice build_for_me). If they skip, record site.build_mode "manual" and ask ask_choice manual_builder: would they rather build it themselves in the builder? Be honest that the builder is not in the app yet: it will live on the Website page, and you can build the site for them any time they ask. After that answer, close warmly with answer_only; onboarding is over.
 4. If you build it: the design, in one tray of four questions (ask_design): the colours, the lettering, the page arrangement and the pages. The owner answers it on the tray, and may skip any question or all of them.
 5. The quote form: ask, in your own words and without examples, what they need to know before they can quote a job. From their answer, propose the form's questions (review_quote_form), specific to this business: for a limousine firm the pick-up, the drop-off, the date and time, the passengers and the occasion; for a family lawyer the kind of matter and its urgency; for a dog groomer the breed, the size and the coat. Never propose the customer's name, email or phone: the form asks those itself. 2 to 8 questions, keys in snake_case, required only where they cannot quote without it, select only with 2 to 12 options. If they ask for changes, propose again with them. If they want no custom questions, don't push: the site uses a default form.
@@ -182,8 +183,10 @@ How to write say:
 - Write about this business: its name, its trade and its services. Every kind of business comes here.
 - The trade comes only from what_the_business_does. Never infer it from the name ("Bright Cleaning Ltd" may hire out limousines) and never comment on the name; until the trade is known, say "your business".
 - Short: two short paragraphs at most, under 120 words, plain text, British English. No headings, links, emojis, em dashes or en dashes; use a comma or a full stop.
-- Tone friendly (warm, approachable) until the owner picks one. Professional: polished, full sentences, no exclamation marks. Casual: relaxed, brief, contractions. Use the name the owner gave you, and the name they want to be called.
+- Tone friendly (warm, approachable) until the owner picks one. Professional: polished, full sentences, no exclamation marks. Casual: relaxed, brief, contractions. Use the name the owner gave you. Call the owner by owner_first_name now and then, not in every message; with no name there, use none until they give one.
 - Never mention rates, prices, fees, costs, currency or packages, not even as a verb ("to price a job"): say quote. Promise nothing beyond the website, its Request a quote page and you answering here.
+
+${VOICE}
 
 Reading the owner:
 - Record every fact they give, asked for or not, so you never ask it again. A correction replaces the value held. facts holds only what this turn adds or changes.
@@ -191,7 +194,7 @@ Reading the owner:
 - The industry: category is the closest item of the list, or null when none is close; name is their trade in their words.
 - Choices have cards: the industry, whether you build the website, the layout, the colours, the lettering and the pages. Record one only when the owner typed over that choice's own card; otherwise leave it out, and its card asks it in turn. The industry is the exception: record it as soon as their words say what the business does.
 - If they leave a card's choice to you ("you pick"), choose what suits the business for that card, record it, list its key in chosen_for_owner, and tell them what you chose and that they can change it. Contact details and what the business does are never yours to choose.
-- Record owner.preferred_name only when they say what they want to be called. A name in a greeting ("I'm Sophie") is not that: ask_fact still asks.
+- Record owner.preferred_name only when they say what they want to be called. A name in a greeting ("I'm Sophie") is not that. Never ask for it: the owner is called by owner_first_name, taken from their sign-in.
 - If their words answer only part of a card, record that part, set pending_card "answered", and ask the same card again for the rest.
 - Who the customers are is optional, but ask it once before the contact card, with whatever is still missing about the services and the area, unless they already said it. If they defer it, leave it; the build never waits for it.
 - A side question or doubt: answer briefly and honestly, then come back to where you were. If they'd rather not answer, move on, and come back to it only if the build needs it.
@@ -200,7 +203,7 @@ Reading the owner:
 Your next move (next.kind):
 - due_next in the data lists the moves the order allows before this message. Take one of them, or, when this message settles them all, the first step after them in the order above. answer_only is always allowed.
 - ask_open: a question answered in words; about is the fact you are after, or "quote.form".
-- ask_fact: a small form for one fact. Always use it to ask what to call the owner (owner.preferred_name; it opens with their sign-in name).
+- ask_fact: a small form for one fact. Never for owner.preferred_name.
 - ask_details: one card for a few facts. Step contact asks the phone number and the email (it opens with their sign-in email); step assistant asks your name, pronouns and tone.
 - ask_choice: a card with a fixed list, for industry, build_for_me, manual_builder, template, palette, font and pages. preselected is almost always empty; it may tick this card's own option ids. For palette, initial may name the three or four palette ids that suit this business best, shown first; otherwise it is empty.
 - ask_design: the design tray, with no options to write; the api builds every question from the business's industry. Ask it once, where the order says; the owner answers on the tray, and the rest of the checklist waits for it.
@@ -325,7 +328,6 @@ const PERSONA: readonly FactValueKey[] = [
   "assistant.name",
   "assistant.pronouns",
   "assistant.tone",
-  "owner.preferred_name",
 ]
 
 /** The facts the build needs from the owner. */
@@ -650,7 +652,7 @@ export function turnData(s: PlanState): string {
     // keeps to the order the first time rather than on its retry.
     due_next: expectedNext(o)?.map(describe) ?? null,
     facts: factsOf(o),
-    owner_sign_in_name: o.ownerName || null,
+    owner_first_name: firstName(o.ownerName) || null,
     waiting_card: s.input.kind === "message" ? waiting(s.pending) : null,
     recent_conversation: transcriptOf(s.rows),
     owner_now:
@@ -694,8 +696,6 @@ export function sayProblems(
   if (say.length > SAY_MAX) {
     problems.push(`say is ${say.length} characters; keep it under ${SAY_MAX}`)
   }
-  if (/[—–]/.test(say))
-    problems.push("say uses a dash; use a comma or a full stop")
   if (
     /[$£€¥₹]|\b(prices?|pricing|priced|tiers?|fees?|rates?|cost|costs|GBP|USD|EUR|pounds|dollars|euros|quid)\b/i.test(
       say
@@ -715,6 +715,8 @@ export function sayProblems(
       "say promises images we don't have; there is no image library"
     )
   }
+  const voice = voiceProblems(say, { assistantNamed: context.assistantNamed })
+  problems.push(...voice.hard, ...voice.soft)
   if (context.typed && echoes(say, context.typed)) {
     problems.push(
       "say repeats the owner's own words back to them; acknowledge one detail in your own words instead"
@@ -740,6 +742,8 @@ type SayContext = {
   corrected?: boolean
   /** Whether say leads to the photo card. */
   upload?: boolean
+  /** Whether the owner has named the assistant, so "Reme" is an internal. */
+  assistantNamed?: boolean
 }
 
 /** Thanks for a correction, in the forms the planner wrote it. */
@@ -785,6 +789,9 @@ function sayContext(plan: OnboardingPlan, s: PlanState): SayContext {
       )
     }),
     upload: plan.next.kind === "ask_upload",
+    assistantNamed:
+      held.some((f) => f.key === "assistant.name") ||
+      plan.facts["assistant.name"] !== undefined,
   }
 }
 
@@ -1020,10 +1027,6 @@ export function checkPlan(
         errors.push(`${about} is already in the facts; don't ask for it again`)
       } else if (CHOICE_KEYS.includes(about) && !detailsOf(about)) {
         errors.push(`ask for ${about} with its ask_choice card`)
-      } else if (about === "owner.preferred_name") {
-        errors.push(
-          "ask what to call the owner with ask_fact owner.preferred_name"
-        )
       }
       break
     }
@@ -1186,7 +1189,7 @@ function expectedNext(after: Onboarding): Move[] | null {
       { kind: "ask_fact" as const, key },
     ])
   }
-  if (step === "business.name" || step === "owner.preferred_name") {
+  if (step === "business.name") {
     return [{ kind: "ask_fact", key: step }]
   }
   if (step === "contact" || step === "assistant") {

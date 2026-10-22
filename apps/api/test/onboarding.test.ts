@@ -113,9 +113,6 @@ const FACTS: Partial<Record<StepId, FactValue[]>> = {
     { key: "assistant.pronouns", value: { id: "she_her" } },
     { key: "assistant.tone", value: { id: "friendly" } },
   ],
-  "owner.preferred_name": [
-    { key: "owner.preferred_name", value: { name: "Sam" } },
-  ],
 }
 const CHOSEN: Partial<Record<StepId, string[]>> = {
   industry: ["cleaning"],
@@ -190,7 +187,6 @@ describe("the onboarding steps", () => {
       "industry",
       "contact",
       "assistant",
-      "owner.preferred_name",
       "build_for_me",
       "design",
       "quote_form",
@@ -315,12 +311,11 @@ describe("the onboarding steps", () => {
     })
   })
 
-  it("fills in what the assistant calls the owner from the session", () => {
-    expect(cardFor("owner.preferred_name").input).toEqual({
-      key: "owner.preferred_name",
-      skippable: false,
-      prefill: { name: "Probe Owner" },
-    })
+  it("calls the owner by the sign-in first name, or by the name they gave in passing", () => {
+    expect(voiceOf(start()).owner).toBe("Probe")
+    expect(voiceOf(start({ ownerName: "" })).owner).toBe("")
+    const said = [{ key: "owner.preferred_name", value: { name: "Sam" } }]
+    expect(voiceOf(start({ facts: said })).owner).toBe("Sam")
   })
 
   it("asks who the customers are once, whoever asked it", () => {
@@ -433,7 +428,6 @@ const ALL: FactValue[] = [
   { key: "business.industry", value: { name: "x", category: null } },
   ...(FACTS.contact as FactValue[]),
   ...(FACTS.assistant as FactValue[]),
-  ...(FACTS["owner.preferred_name"] as FactValue[]),
   { key: "site.build_mode", value: { mode: "assistant" } },
   { key: "site.template", value: { id: "classic" } },
   { key: "site.palette", value: { id: "ocean" } },
@@ -1142,7 +1136,6 @@ describe("the onboarding copy", () => {
       "opener",
       "assistant",
       "contact",
-      "owner.preferred_name",
       "build_for_me",
       "quote_form",
       "upload",

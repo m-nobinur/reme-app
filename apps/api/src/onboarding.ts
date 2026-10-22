@@ -38,6 +38,7 @@ import type { Part, ToolPart } from "./chat.ts"
 import type { JevDecision } from "./jev.ts"
 import {
   chose,
+  firstName,
   hash,
   manualEnd,
   notStarted,
@@ -70,7 +71,6 @@ export type StepId =
   | "service_area.text"
   | "business.audience"
   | "business.proof"
-  | "owner.preferred_name"
   | ChoiceStep
   | DetailsStep
   | "design"
@@ -125,7 +125,7 @@ export type Onboarding = Progress & {
   orgName: string
   /** The session's name for the owner, or "". */
   ownerName: string
-  /** The session's email: the contact card's starting email, and a stand-in for a missing name. */
+  /** The session's email: the contact card's starting email. */
   ownerEmail?: string
   /**
    * How often each fact has been asked here, by a card or a planned question
@@ -177,7 +177,9 @@ export function voiceOf(o: Onboarding): Voice {
   return {
     org: o.orgId,
     business: factValue(o.facts, "business.name")?.name ?? o.orgName,
-    owner: factValue(o.facts, "owner.preferred_name")?.name ?? o.ownerName,
+    owner:
+      factValue(o.facts, "owner.preferred_name")?.name ??
+      firstName(o.ownerName),
     assistant: factValue(o.facts, "assistant.name")?.name ?? "",
     pronouns: factValue(o.facts, "assistant.pronouns")?.id ?? "they_them",
     tone: factValue(o.facts, "assistant.tone")?.id ?? "friendly",
@@ -390,14 +392,7 @@ export const factCard = (
   newId: () => string
 ) => {
   const prefill =
-    key === "business.name"
-      ? { key, value: { name: o.orgName } }
-      : key === "owner.preferred_name"
-        ? {
-            key,
-            value: { name: o.ownerName || (o.ownerEmail?.split("@")[0] ?? "") },
-          }
-        : null
+    key === "business.name" ? { key, value: { name: o.orgName } } : null
   const parsed = prefill && FactValue.safeParse(prefill)
   return call(
     "tool-ask_fact",
@@ -925,7 +920,6 @@ export const STEPS: readonly Step[] = [
   askFact("business.name"),
   askDetails("contact"),
   askDetails("assistant"),
-  askFact("owner.preferred_name"),
   askChoice("build_for_me", "site.build_mode"),
   {
     id: "manual_builder",
@@ -1356,7 +1350,6 @@ const FIELD: Partial<Record<FactValueKey, string>> = {
   "business.proof": "text",
   "service_area.text": "text",
   "assistant.name": "name",
-  "owner.preferred_name": "name",
   "business.email": "address",
 }
 
