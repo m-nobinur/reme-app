@@ -717,14 +717,14 @@ const QuickActions: FC<{ input: RefObject<HTMLTextAreaElement | null> }> = ({
         render={
           <Button
             aria-label="Quick actions"
-            className="aui-composer-quick-actions border-foreground/10 text-muted-foreground hover:text-foreground"
+            className="aui-composer-quick-actions m-0.5 size-8 border-foreground/10 text-muted-foreground/80 hover:text-foreground"
             size="icon"
             type="button"
             variant="outline"
           />
         }
       >
-        <PlusIcon aria-hidden className="size-4" />
+        <PlusIcon aria-hidden className="size-3.5" />
       </DropdownMenuTrigger>
       <DropdownMenuContent finalFocus={() => after.current ?? true} side="top">
         {quickActions.map((action) => (
