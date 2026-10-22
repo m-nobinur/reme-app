@@ -8030,6 +8030,11 @@ export interface components {
        * @enum {string}
        */
       change_kind?: "copy" | "style" | "section" | "photo" | "creative"
+      /** @description Set when the owner wrote the words in the panel: once the change starts they are also posted in this conversation, or in the newest one when none is named. */
+      chat?: {
+        /** Format: uuid */
+        conversation_id?: string
+      }
     }
     OwnerMemoryReview: {
       ask_first: boolean

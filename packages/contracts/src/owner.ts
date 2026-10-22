@@ -232,6 +232,12 @@ export const OwnerChangeRequest = z.strictObject({
   change_kind: ChangeKind.optional().describe(
     "How big the change is. copy: words only, such as a headline, a phone number or a button label. style: colours, fonts or spacing across the site. section: add, remove or rework one section or page. photo: replace, add or remove a picture. creative: a new look, new pages or anything unclear. Omit it when unsure."
   ),
+  chat: z
+    .strictObject({ conversation_id: Uuid.optional() })
+    .optional()
+    .describe(
+      "Set when the owner wrote the words in the panel: once the change starts they are also posted in this conversation, or in the newest one when none is named."
+    ),
 })
 
 /**
