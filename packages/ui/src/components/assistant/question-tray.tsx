@@ -1048,20 +1048,37 @@ function QuestionTray({
       return first ? [[each.id, { choice: first }]] : []
     })
   )
-  const [answers, setAnswers] = useState(start?.answers ?? ticked)
+  // Where the owner was in this tab, so a reload loses no pick, page or
+  // picture, saved or not.
+  // shortcut: the key outlives the call; one small entry per tray a tab saw.
+  const { draft: saved, keep: save } = useTabDraft<{
+    answers: Record<string, Answer>
+    index: number
+    picture: PaletteFromImage | null
+  } | null>(`design:${toolCallId}`, null)
+  const [answers, setAnswers] = useState(
+    start?.answers ?? { ...ticked, ...saved?.answers }
+  )
   const firstOpen = questions.findIndex((each) => !(each.id in answers))
   const [index, setIndex] = useState(
-    start?.index ?? (firstOpen < 0 ? questions.length - 1 : firstOpen)
+    start?.index ??
+      saved?.index ??
+      (firstOpen < 0 ? questions.length - 1 : firstOpen)
   )
   const [collapsed, setCollapsed] = useState(start?.collapsed ?? false)
   const [finishing, setFinishing] = useState(false)
   // A palette read from a picture stays offered when another is picked.
-  const [picture, setPicture] = useState(
-    () =>
-      Object.values(answers).flatMap((each) =>
-        "palette" in each ? [each.palette] : []
-      )[0] ?? null
+  const [picture, setPicture] = useState(() =>
+    saved
+      ? saved.picture
+      : (Object.values(answers).flatMap((each) =>
+          "palette" in each ? [each.palette] : []
+        )[0] ?? null)
   )
+  // biome-ignore lint/correctness/useExhaustiveDependencies: saved on change only
+  useEffect(() => {
+    save({ answers, index, picture })
+  }, [answers, index, picture])
   const logoQuestion = questions.find((each) => each.visual === "logo")
   const logoAnswer = logoQuestion && answers[logoQuestion.id]
   const fromLogo = useLogoPalettes(
@@ -1132,11 +1149,15 @@ function QuestionTray({
   const next = () => {
     if (ready) onward()
   }
-  const set = (given: Answer | undefined) =>
+  const set = (given: Answer | undefined) => {
     setAnswers((now) => {
       const { [question.id]: _, ...rest } = now
       return given ? { ...now, [question.id]: given } : rest
     })
+    // A kept logo or reviewed photos are stored already: saved at once, so
+    // another tab or a reload opens with them.
+    if (given && ownPage) onAnswer?.(question.id, given)
+  }
   const page = { question, toolCallId, stops, businessName: name }
   const shown = shownOptions(question, answer)
   // Any palette but the one picked, from every one offered, not only those shown.

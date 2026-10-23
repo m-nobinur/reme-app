@@ -278,7 +278,7 @@ function DetailsTray({
 }) {
   const id = useId()
   const keys: readonly DetailsKey[] = DETAILS_KEYS[input.step]
-  const { draft, keep, clear } = useTabDraft<Draft>(draftId, {
+  const { draft, keep } = useTabDraft<Draft>(draftId, {
     page: 0,
     values: {},
   })
@@ -380,7 +380,7 @@ function DetailsTray({
       if ("error" in result) return show(at, result.error)
       facts.push(result.fact)
     }
-    clear()
+    // The draft stays: a refused answer reopens the card with it.
     onAnswer({ answer: "stated", facts })
   }
 
@@ -396,10 +396,7 @@ function DetailsTray({
         input.skippable
           ? {
               label: several ? "Skip all" : "Skip",
-              onSkip: () => {
-                clear()
-                onAnswer({ answer: "skipped" })
-              },
+              onSkip: () => onAnswer({ answer: "skipped" }),
             }
           : undefined
       }
@@ -410,6 +407,8 @@ function DetailsTray({
         noValidate
         onBlur={checkOnLeave}
         onChange={(event) => {
+          // Every keystroke is kept, so a reload resumes mid-page.
+          keep({ page, values: values() })
           const field = event.target
           if (
             field instanceof HTMLInputElement &&

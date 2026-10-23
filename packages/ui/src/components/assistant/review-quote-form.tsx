@@ -14,7 +14,10 @@ import {
   TextTIcon,
   XIcon,
 } from "@phosphor-icons/react"
-import { TrayNote } from "@workspace/ui/components/assistant/question-tray"
+import {
+  TrayNote,
+  useTabDraft,
+} from "@workspace/ui/components/assistant/question-tray"
 import { Button } from "@workspace/ui/components/button"
 import { Hint } from "@workspace/ui/components/tooltip"
 import { useRevealWaiting } from "@workspace/ui/hooks/use-reveal-waiting"
@@ -134,13 +137,15 @@ function Pill({
 
 const ReviewQuoteForm: ToolCallMessagePartComponent = (props) => {
   const view = reviewQuoteFormView(props)
-  const [draft, setDraft] = useState<QuoteDraft>(() =>
+  const { toolCallId } = props
+  // Kept in this tab, so a reload keeps what the owner dropped or switched.
+  const { draft, keep: setDraft } = useTabDraft<QuoteDraft>(
+    `quote:${toolCallId}`,
     view.state === "pending" ? draftOf(view.input.fields) : []
   )
   const [invalid, setInvalid] = useState<string | null>(null)
   const pending = view.state === "pending"
   const running = useRevealWaiting(pending)
-  const { toolCallId } = props
 
   // Words typed over the pills carry them as the owner left them.
   useEffect(() => {
