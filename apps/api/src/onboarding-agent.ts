@@ -13,6 +13,7 @@ import {
   type OnboardingStatus,
   PAGES,
   PALETTES,
+  PLAN_DOING_MAX,
   PLAN_FACT_KEYS,
   PLANNER_TURN_MS,
   type PlanFactKey,
@@ -97,7 +98,7 @@ import { VOICE, voiceProblems } from "./voice.ts"
 export const DEFAULT_ONBOARDING_MODEL = "google/gemini-3.8-flash"
 
 /** Bumped with any change to the instructions or the plan's schema. */
-export const PLANNER_VERSION = "onboarding-10"
+export const PLANNER_VERSION = "onboarding-11"
 
 /** Stream parts that show a call is alive but has written nothing yet. */
 const QUIET = new Set([
@@ -183,6 +184,11 @@ Onboarding, in this order (the checklist in the data says where you are; work on
 6. The design, last, in one tray of six questions (ask_design): the logo, the colours, the lettering, the page arrangement, the photos and the pages. The owner answers it on the tray and may leave any question to you but the logo, which they upload or have you create there; photos they don't send, you create. Their answer starts the build. There is no image library: never promise stock or hand-picked images.
 7. Start the build (start_build), when the owner settled the design in words instead of on the tray. It needs no approval and runs in the background: say it has started, that progress shows in the activity panel, that they can keep chatting, and that you'll tell them when the first draft is ready.
 
+How to write doing:
+- A few words the owner sees while you work, specific to this turn and this business: "Drafting quote questions for a window cleaner", "Setting up your contact card", "Looking at what you skipped". Sentence case, no full stop, under 50 characters.
+- Empty ("") on a turn that only notes an answer and asks the next question: the owner then sees the typing dots alone. Write one when the turn does more: drafts something, reviews what was skipped, starts the website, or answers a question.
+- Never a fact key, a card name or a tool name, and never what the owner said, word for word.
+
 How to write say:
 - Start with one short acknowledgement of one specific thing the owner said, in your own words, then ask one thing, or the few things one card asks.
 - The acknowledgement notices a detail; it does not grade it. Never tell the owner their area, customers or guarantees are strong, solid or reassuring, and never open two turns in a row the same way: some turns go straight to the question.
@@ -254,12 +260,14 @@ function loosened(schema: unknown): unknown {
 }
 
 /**
- * The order the model writes the plan's keys in. `say` is last, so when it
+ * The order the model writes the plan's keys in. `doing` is first, so the
+ * owner sees what the turn is on within its first tokens. `say` is last, so when it
  * starts everything the checks need is written: the turn is checked before
  * the owner reads a word of it, and `say` streams with nothing left that
  * could make it wrong but its own words.
  */
 const PLAN_ORDER = [
+  "doing",
   "pending_card",
   "facts",
   "chosen_for_owner",
@@ -1441,6 +1449,7 @@ export async function planTurn(
   // The last plan read, for `salvaged` once the attempts run out.
   let last: OnboardingPlan | null = null
   let providerRetried = false
+  let doingShown = false
   for (let attempt = 0; attempt < PLANNER.attempts; attempt++) {
     const left = limits.totalMs - (Date.now() - began)
     if (left <= 1_000 || cancel?.aborted) {
@@ -1463,11 +1472,22 @@ export async function planTurn(
     let gate: "waiting" | "open" | "shut" = onSay ? "waiting" : "shut"
     let context: SayContext = {}
     let factsTold = false
+    let doingTold = false
     const follow = async () => {
       if (gate === "shut") return
       const { value } = await parsePartialJson(raw.replace(FENCES, ""))
       const partial = value as Record<string, unknown> | undefined
       if (!partial) return
+      // `doing` is written once a key after it has begun; one line a turn.
+      const keys = Object.keys(partial)
+      if (!doingTold && keys.includes("doing") && keys.at(-1) !== "doing") {
+        doingTold = true
+        const line = doingShown ? null : doingLine(partial.doing)
+        if (line) {
+          doingShown = true
+          tell({ on: { kind: "doing", text: line }, facts: [] })
+        }
+      }
       // `facts` is written once a key after it has begun.
       if (
         !factsTold &&
@@ -1675,6 +1695,23 @@ export async function planTurn(
     return { ok: true, checked: kept, calls, ...out }
   }
   return { ok: false, reason: "invalid", calls, ...out }
+}
+
+/**
+ * The plan's line for its turn, as the owner may read it: trimmed, without a
+ * closing full stop, and only when it names no key, card or tool and passes
+ * the voice checks. Null otherwise: the web then writes the line itself.
+ */
+export function doingLine(value: unknown): string | null {
+  if (typeof value !== "string") return null
+  const line = value
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/[.…]+$/, "")
+  if (!line || line.length > PLAN_DOING_MAX) return null
+  if (/[_{}<>[\]]|\b[a-z]+\.[a-z]+\b|https?:/i.test(line)) return null
+  const voice = voiceProblems(line, {})
+  return voice.hard.length + voice.soft.length > 0 ? null : line
 }
 
 /** The least time a retry needs: two slow calls measured about 6 s each. */

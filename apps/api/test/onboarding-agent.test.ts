@@ -19,6 +19,7 @@ import {
   buildMissing,
   checkPlan,
   DEFAULT_ONBOARDING_MODEL,
+  doingLine,
   type PlanState,
   plannerInstructions,
   plannerModel,
@@ -1538,6 +1539,39 @@ describe("a streamed turn", () => {
     expect(seen.slice(3).every(([kind]) => kind === "say")).toBe(true)
   })
 
+  it("shows the plan's own line for the turn first, when it reads as one", async () => {
+    const seen: unknown[] = []
+    await planTurn(
+      // Written first, as the model is told to.
+      planner([
+        JSON.stringify({
+          doing: "Looking at the services you offer.",
+          ...plan({
+            facts: { "business.offerings": { items: ["Weddings", "Proms"] } },
+            say: "Weddings and proms. Who books you most?",
+            next: { kind: "ask_open", about: "business.audience" },
+          }),
+        }),
+      ]).model,
+      PRICE,
+      typed("We do weddings and proms"),
+      undefined,
+      () => undefined,
+      undefined,
+      { send: (status) => seen.push(status), commit: async () => [] }
+    )
+    expect(seen[0]).toEqual({
+      on: { kind: "doing", text: "Looking at the services you offer" },
+      facts: [],
+    })
+    expect(doingLine("")).toBeNull()
+    expect(doingLine("Saving business.audience")).toBeNull()
+    expect(doingLine("Noting an amazing answer")).toBeNull()
+    expect(doingLine("  Drafting quote   questions ")).toBe(
+      "Drafting quote questions"
+    )
+  })
+
   it("writes no facts ahead of a build, and still says it is getting ready", async () => {
     const seen: unknown[] = []
     await planTurn(
@@ -1733,12 +1767,13 @@ describe("the planner's request", () => {
     )
   })
 
-  it("puts say last in the schema it shows the model", async () => {
+  it("puts doing first and say last in the schema it shows the model", async () => {
     const shown = await plannerInstructions()
     const schema = JSON.parse(
       shown.slice(shown.indexOf("key order:\n") + "key order:\n".length)
     ) as { properties: Record<string, unknown> }
     expect(Object.keys(schema.properties)).toEqual([
+      "doing",
       "pending_card",
       "facts",
       "chosen_for_owner",
