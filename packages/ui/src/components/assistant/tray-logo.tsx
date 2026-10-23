@@ -487,9 +487,10 @@ function TrayLogo({
     })
   }
 
-  const setColours = (next: Colours) => {
+  // Random and Custom stay open to roll again or edit; a palette folds and the type opens.
+  const setColours = (next: Colours, then: Part = "colours") => {
     setBrief({ ...brief, colours: next })
-    setFocus("colours")
+    setFocus(then)
   }
   const random = colours && "random" in colours ? colours.random : null
   // A calm palette the tiles do not already show, and not the one drawn last.
@@ -723,7 +724,7 @@ function TrayLogo({
                 className={cn(TRAY_TILE, COLOUR_TILE)}
                 key={each.label}
                 name={`${id}-colours`}
-                onPick={() => setColours({ palette: index })}
+                onPick={() => setColours({ palette: index }, "type")}
               >
                 <Swatches colors={each.stops} />
                 <span className="sr-only">{each.label}</span>
