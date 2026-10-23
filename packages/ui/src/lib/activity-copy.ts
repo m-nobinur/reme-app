@@ -1019,7 +1019,7 @@ export function standingLine(
   const { kind, state } = segment
   if (state === "failed") {
     const noun = job(segment)?.noun ?? "setup"
-    return `The ${noun} stopped. ${askAgain(named(ctx.assistant))}.`
+    return `The ${noun} stopped. ${askAgain(named(ctx.assistant))}`
   }
   if (state === "waiting") {
     return waitingRow(segment, extras.until) ?? "Waiting for you"
