@@ -307,6 +307,7 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       expect(output).toEqual({
         site: { host: null, live_version: null },
         builds: [],
+        stopped: [],
         questions: [],
         approvals: [],
         missing_facts: expect.any(Array),
