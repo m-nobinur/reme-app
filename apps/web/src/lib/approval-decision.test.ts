@@ -30,6 +30,11 @@ vi.mock("@tanstack/react-start", () => ({
     return builder
   },
 }))
+// The panel reads the open conversation, which no page here has.
+vi.mock("@tanstack/react-router", async (actual) => ({
+  ...(await actual<object>()),
+  useParams: () => ({}),
+}))
 vi.mock("@tanstack/react-start/server", () => ({
   getCookie: (name: string) => (name === "wos-session" ? "sealed" : undefined),
   setCookie: () => undefined,

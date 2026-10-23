@@ -29,6 +29,8 @@ vi.mock("@tanstack/react-router", () => ({
   }),
   getRouteApi: () => ({ useLoaderData: () => ({ names: {} }) }),
   Link: () => null,
+  // The panel reads the open conversation, which no page here has.
+  useParams: () => ({}),
 }))
 const refresh = vi.fn(async () => undefined)
 vi.mock("@/lib/workspace", () => ({
