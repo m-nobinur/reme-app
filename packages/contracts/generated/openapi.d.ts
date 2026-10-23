@@ -5547,6 +5547,23 @@ export interface components {
               lane?: "full" | "quick"
               goal: string
               version: number | null
+              progress: {
+                step: string
+                done: number
+                total: number
+                now: boolean
+              }[]
+            }[]
+            stopped: {
+              /** @enum {string} */
+              cause:
+                | "stalled"
+                | "unfinished"
+                | "unanswered"
+                | "service"
+                | "other"
+              /** Format: date-time */
+              at: string
             }[]
             questions: {
               /** Format: uuid */
@@ -7465,6 +7482,18 @@ export interface components {
         lane?: "full" | "quick"
         goal: string
         version: number | null
+        progress: {
+          step: string
+          done: number
+          total: number
+          now: boolean
+        }[]
+      }[]
+      stopped: {
+        /** @enum {string} */
+        cause: "stalled" | "unfinished" | "unanswered" | "service" | "other"
+        /** Format: date-time */
+        at: string
       }[]
       questions: {
         /** Format: uuid */

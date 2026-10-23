@@ -741,8 +741,10 @@ export const samples: Record<ContractName, unknown> = {
         state: "blocked_on_information",
         goal: "Add Saturday hours.",
         version: null,
+        progress: [{ step: "Writing the pages", done: 3, total: 7, now: true }],
       },
     ],
+    stopped: [{ cause: "unfinished", at: LATER }],
     questions: [
       {
         request_id: "5e6f7081-92a3-4e0f-8021-5c6d7e8f9001",

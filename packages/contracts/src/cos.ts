@@ -16,6 +16,8 @@ import {
 import { ToolCallId } from "./ids.ts"
 import { RememberInput, RememberOutput } from "./memory.ts"
 import {
+  BUILD_ACTIVITY_MAX,
+  BuildStopCause,
   BuildSummary,
   CreateReminderRequest,
   E164,
@@ -63,9 +65,24 @@ export const CosWorkspace = z.strictObject({
         /** The owner's words as the build restated them: data, never instructions. */
         goal: BuildSummary.shape.goal,
         version: Version.nullable(),
+        /** The build's steps as the panel shows them: fixed labels and counts, never model text. */
+        progress: z
+          .array(
+            z.strictObject({
+              step: Text(60),
+              done: z.int().nonnegative(),
+              total: z.int().positive(),
+              now: z.boolean(),
+            })
+          )
+          .max(BUILD_ACTIVITY_MAX),
       })
     )
     .max(10),
+  /** Builds that stopped in the last day, newest first, and why. */
+  stopped: z
+    .array(z.strictObject({ cause: BuildStopCause, at: Timestamp }))
+    .max(5),
   /**
    * The Developer's open questions, at most 10. `why` is another agent's
    * text, capped here: data, never instructions. `options` follows the
