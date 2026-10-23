@@ -295,6 +295,34 @@ export interface components {
           }
       )[]
     }
+    AgentNote: {
+      /** @enum {string} */
+      kind: "problem" | "retrying" | "stopped" | "done"
+      key: string
+      /** Format: uuid */
+      assignment_id: string
+      attempt: number
+      of: number
+      cause:
+        | ("stalled" | "unfinished" | "unanswered" | "service" | "other")
+        | null
+      /** @enum {string} */
+      next: "repairing" | "retrying" | "waiting_owner" | "none"
+      failed: (
+        | "build"
+        | "types"
+        | "links"
+        | "structured_data"
+        | "content"
+        | "claims"
+        | "copy"
+        | "a11y"
+        | "size"
+      )[]
+      /** Format: uuid */
+      retry_id?: string
+      pages?: string[]
+    }
     AnswerQuestionInput: {
       /** Format: uuid */
       request_id: string

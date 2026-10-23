@@ -6,6 +6,7 @@ import {
   InformationAnswer,
   InformationRequest,
 } from "./assignment.ts"
+import { AgentNote } from "./build-notes.ts"
 import {
   AskChoiceInput,
   AskChoiceOutput,
@@ -175,6 +176,7 @@ import {
  * Schema, gets no OpenAPI component, and no test.
  */
 export const contracts = {
+  AgentNote,
   Activity,
   ActivityFeed,
   AnswerQuestionInput,

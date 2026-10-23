@@ -399,6 +399,17 @@ export const samples: Record<ContractName, unknown> = {
       },
     ],
   },
+  AgentNote: {
+    kind: "retrying",
+    key: "retrying:8d9e0f10-2131-4a2b-9c3d-4e5f60718293",
+    assignment_id: "8d9e0f10-2131-4a2b-9c3d-4e5f60718293",
+    attempt: 1,
+    of: 2,
+    cause: "unfinished",
+    next: "retrying",
+    failed: ["types"],
+    retry_id: "9e0f1021-3142-4b3c-8d4e-5f6071829304",
+  },
   KeptLogo: {
     asset: {
       id: "8d9e0f10-2131-4a2b-9c3d-4e5f60718293",
