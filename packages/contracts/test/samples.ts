@@ -1290,6 +1290,24 @@ export const samples: Record<ContractName, unknown> = {
     phone: { kind: "fact", fact_key: "business.phone", required: true },
     tagline: { kind: "composed" },
   },
+  SiteMedia: {
+    logo: {
+      id: "8d9e0f10-2131-4a2b-9c3d-4e5f60718293",
+      name: "logo.png",
+      content_type: "image/png",
+      bytes: 48211,
+      use: "logo",
+    },
+    photos: [
+      {
+        slot_id: "hero_image",
+        section: "hero",
+        alt: "A bright living room after a clean",
+        generated: true,
+        thumbnail: "/api/photos/2c4e6a80-1b3d-4f5a-8c7e-9d0f1a2b3c4d",
+      },
+    ],
+  },
   SitePointer: {
     org_id: ORG,
     site_id: ORG,

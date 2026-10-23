@@ -10792,6 +10792,26 @@ export interface components {
             kind: "composed"
           }
     }
+    SiteMedia: {
+      logo: {
+        /** Format: uuid */
+        id: string
+        name: string
+        /** @enum {string} */
+        content_type: "image/jpeg" | "image/png" | "image/webp"
+        bytes: number
+        alt?: string
+        /** @enum {string} */
+        use?: "logo" | "hero" | "work" | "team"
+      } | null
+      photos: {
+        slot_id: string
+        section: string
+        alt: string
+        generated: boolean
+        thumbnail: string | null
+      }[]
+    }
     SitePointer: {
       /** Format: uuid */
       org_id: string

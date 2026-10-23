@@ -31306,7 +31306,7 @@
                   ]
                 },
                 "variants": {
-                  "maxItems": 4,
+                  "maxItems": 3,
                   "type": "array",
                   "items": {
                     "type": "object",
@@ -37771,6 +37771,118 @@
             }
           ]
         }
+      },
+      "SiteMedia": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "logo": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120,
+                    "pattern": "\\S"
+                  },
+                  "content_type": {
+                    "type": "string",
+                    "enum": [
+                      "image/jpeg",
+                      "image/png",
+                      "image/webp"
+                    ]
+                  },
+                  "bytes": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 5242880
+                  },
+                  "alt": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "pattern": "\\S"
+                  },
+                  "use": {
+                    "type": "string",
+                    "enum": [
+                      "logo",
+                      "hero",
+                      "work",
+                      "team"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "name",
+                  "content_type",
+                  "bytes"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "photos": {
+            "maxItems": 24,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "slot_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "section": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "alt": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "generated": {
+                  "type": "boolean"
+                },
+                "thumbnail": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^\\/api\\/photos\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "slot_id",
+                "section",
+                "alt",
+                "generated",
+                "thumbnail"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "logo",
+          "photos"
+        ],
+        "additionalProperties": false
       },
       "SitePointer": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",

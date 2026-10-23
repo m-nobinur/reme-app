@@ -132,6 +132,7 @@ import {
   Reminder,
   ReminderPatch,
   SetFactsRequest,
+  SiteMedia,
   TextAnswerSchema,
   WorkspaceStatus,
 } from "./owner.ts"
@@ -314,6 +315,7 @@ export const contracts = {
   SearchTotals,
   SetFactsRequest,
   SiteFields,
+  SiteMedia,
   SitePointer,
   SiteRevision,
   StaffDirectory,

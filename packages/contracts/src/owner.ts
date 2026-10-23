@@ -9,7 +9,7 @@ import {
 import { Timestamp, Ulid, Uuid } from "./common.ts"
 import { Blueprint, DirectionId, FontPairId } from "./design.ts"
 import { FactRecord } from "./fact.ts"
-import { AvatarId, choiceFacts } from "./onboarding.ts"
+import { Asset, AvatarId, choiceFacts } from "./onboarding.ts"
 import { SiteLink } from "./site.ts"
 import { Text } from "./text.ts"
 
@@ -343,6 +343,29 @@ export const BuildPhoto = z.strictObject({
   thumbnail: PhotoThumbnail.nullable(),
 })
 
+/**
+ * One picture on the site, in the section it fills: one the assistant made,
+ * or the owner's own. `thumbnail` is null when the slot names no picture the
+ * api serves.
+ */
+export const SitePhoto = z.strictObject({
+  slot_id: z.string().min(1),
+  section: z.string().min(1),
+  alt: z.string().max(200),
+  generated: z.boolean(),
+  thumbnail: PhotoThumbnail.nullable(),
+})
+
+/**
+ * `GET /site/media`: the logo the org holds, and the pictures on its newest
+ * version, the one waiting for review or else the live one. No pictures
+ * before a build has placed any.
+ */
+export const SiteMedia = z.strictObject({
+  logo: Asset.nullable(),
+  photos: z.array(SitePhoto).max(24),
+})
+
 /** The most progress rows a build shows at once: its six stages (plan, photos, pages, polish, checks, ready), with room to spare. */
 export const BUILD_ACTIVITY_MAX = 8
 
@@ -585,6 +608,8 @@ export type OwnerChangeRequest = z.infer<typeof OwnerChangeRequest>
 export type BuildLane = z.infer<typeof BuildLane>
 export type BuildActivity = z.infer<typeof BuildActivity>
 export type BuildPhoto = z.infer<typeof BuildPhoto>
+export type SitePhoto = z.infer<typeof SitePhoto>
+export type SiteMedia = z.infer<typeof SiteMedia>
 export type AnswerRequest = z.infer<typeof AnswerRequest>
 export type DecisionRequest = z.infer<typeof DecisionRequest>
 export type PreviewLink = z.infer<typeof PreviewLink>
