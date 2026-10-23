@@ -1965,6 +1965,15 @@
                                   "minLength": 1,
                                   "maxLength": 200,
                                   "pattern": "\\S"
+                                },
+                                "use": {
+                                  "type": "string",
+                                  "enum": [
+                                    "logo",
+                                    "hero",
+                                    "work",
+                                    "team"
+                                  ]
                                 }
                               },
                               "required": [
@@ -2989,7 +2998,9 @@
                     "palette",
                     "font_pair",
                     "layout",
-                    "text"
+                    "text",
+                    "logo",
+                    "photos"
                   ]
                 },
                 "card": {
@@ -3296,6 +3307,98 @@
                     "skippable"
                   ],
                   "additionalProperties": false
+                },
+                "upload": {
+                  "type": "object",
+                  "properties": {
+                    "accept": {
+                      "minItems": 1,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "image/jpeg",
+                          "image/png",
+                          "image/webp"
+                        ]
+                      }
+                    },
+                    "max_files": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 12
+                    },
+                    "max_bytes": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 5242880
+                    },
+                    "skippable": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "accept",
+                    "max_files",
+                    "max_bytes",
+                    "skippable"
+                  ],
+                  "additionalProperties": false
+                },
+                "held": {
+                  "maxItems": 12,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 120,
+                        "pattern": "\\S"
+                      },
+                      "content_type": {
+                        "type": "string",
+                        "enum": [
+                          "image/jpeg",
+                          "image/png",
+                          "image/webp"
+                        ]
+                      },
+                      "bytes": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 5242880
+                      },
+                      "alt": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "pattern": "\\S"
+                      },
+                      "use": {
+                        "type": "string",
+                        "enum": [
+                          "logo",
+                          "hero",
+                          "work",
+                          "team"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name",
+                      "content_type",
+                      "bytes"
+                    ],
+                    "additionalProperties": false
+                  }
                 }
               },
               "required": [
@@ -3384,6 +3487,187 @@
                   },
                   "required": [
                     "skipped"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "palette": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 40,
+                          "pattern": "\\S"
+                        },
+                        "stops": {
+                          "type": "object",
+                          "properties": {
+                            "paper": {
+                              "type": "string",
+                              "pattern": "^#[0-9a-f]{6}$"
+                            },
+                            "tint": {
+                              "type": "string",
+                              "pattern": "^#[0-9a-f]{6}$"
+                            },
+                            "primary": {
+                              "type": "string",
+                              "pattern": "^#[0-9a-f]{6}$"
+                            },
+                            "ink": {
+                              "type": "string",
+                              "pattern": "^#[0-9a-f]{6}$"
+                            }
+                          },
+                          "required": [
+                            "paper",
+                            "tint",
+                            "primary",
+                            "ink"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "stops"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "palette"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "logo": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120,
+                          "pattern": "\\S"
+                        },
+                        "content_type": {
+                          "type": "string",
+                          "enum": [
+                            "image/jpeg",
+                            "image/png",
+                            "image/webp"
+                          ]
+                        },
+                        "bytes": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 5242880
+                        },
+                        "alt": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "pattern": "\\S"
+                        },
+                        "use": {
+                          "type": "string",
+                          "enum": [
+                            "logo",
+                            "hero",
+                            "work",
+                            "team"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "content_type",
+                        "bytes"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "logo"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "photos": {
+                      "maxItems": 12,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 120,
+                            "pattern": "\\S"
+                          },
+                          "content_type": {
+                            "type": "string",
+                            "enum": [
+                              "image/jpeg",
+                              "image/png",
+                              "image/webp"
+                            ]
+                          },
+                          "bytes": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 5242880
+                          },
+                          "alt": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200,
+                            "pattern": "\\S"
+                          },
+                          "use": {
+                            "type": "string",
+                            "enum": [
+                              "logo",
+                              "hero",
+                              "work",
+                              "team"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "content_type",
+                          "bytes"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "create": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "photos",
+                    "create"
                   ],
                   "additionalProperties": false
                 }
@@ -4312,6 +4596,15 @@
                                 "minLength": 1,
                                 "maxLength": 200,
                                 "pattern": "\\S"
+                              },
+                              "use": {
+                                "type": "string",
+                                "enum": [
+                                  "logo",
+                                  "hero",
+                                  "work",
+                                  "team"
+                                ]
                               }
                             },
                             "required": [
@@ -5455,6 +5748,15 @@
                                     "minLength": 1,
                                     "maxLength": 200,
                                     "pattern": "\\S"
+                                  },
+                                  "use": {
+                                    "type": "string",
+                                    "enum": [
+                                      "logo",
+                                      "hero",
+                                      "work",
+                                      "team"
+                                    ]
                                   }
                                 },
                                 "required": [
@@ -6856,6 +7158,15 @@
                               "minLength": 1,
                               "maxLength": 200,
                               "pattern": "\\S"
+                            },
+                            "use": {
+                              "type": "string",
+                              "enum": [
+                                "logo",
+                                "hero",
+                                "work",
+                                "team"
+                              ]
                             }
                           },
                           "required": [
@@ -8013,6 +8324,15 @@
                                   "minLength": 1,
                                   "maxLength": 200,
                                   "pattern": "\\S"
+                                },
+                                "use": {
+                                  "type": "string",
+                                  "enum": [
+                                    "logo",
+                                    "hero",
+                                    "work",
+                                    "team"
+                                  ]
                                 }
                               },
                               "required": [
@@ -8407,6 +8727,15 @@
                       "minLength": 1,
                       "maxLength": 200,
                       "pattern": "\\S"
+                    },
+                    "use": {
+                      "type": "string",
+                      "enum": [
+                        "logo",
+                        "hero",
+                        "work",
+                        "team"
+                      ]
                     }
                   },
                   "required": [
@@ -8473,6 +8802,15 @@
             "minLength": 1,
             "maxLength": 200,
             "pattern": "\\S"
+          },
+          "use": {
+            "type": "string",
+            "enum": [
+              "logo",
+              "hero",
+              "work",
+              "team"
+            ]
           }
         },
         "required": [
@@ -13456,6 +13794,15 @@
                                                             "minLength": 1,
                                                             "maxLength": 200,
                                                             "pattern": "\\S"
+                                                          },
+                                                          "use": {
+                                                            "type": "string",
+                                                            "enum": [
+                                                              "logo",
+                                                              "hero",
+                                                              "work",
+                                                              "team"
+                                                            ]
                                                           }
                                                         },
                                                         "required": [
@@ -14599,6 +14946,15 @@
                                                               "minLength": 1,
                                                               "maxLength": 200,
                                                               "pattern": "\\S"
+                                                            },
+                                                            "use": {
+                                                              "type": "string",
+                                                              "enum": [
+                                                                "logo",
+                                                                "hero",
+                                                                "work",
+                                                                "team"
+                                                              ]
                                                             }
                                                           },
                                                           "required": [
@@ -14960,6 +15316,187 @@
                                               "skipped"
                                             ],
                                             "additionalProperties": false
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "palette": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "name": {
+                                                    "type": "string",
+                                                    "minLength": 1,
+                                                    "maxLength": 40,
+                                                    "pattern": "\\S"
+                                                  },
+                                                  "stops": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "paper": {
+                                                        "type": "string",
+                                                        "pattern": "^#[0-9a-f]{6}$"
+                                                      },
+                                                      "tint": {
+                                                        "type": "string",
+                                                        "pattern": "^#[0-9a-f]{6}$"
+                                                      },
+                                                      "primary": {
+                                                        "type": "string",
+                                                        "pattern": "^#[0-9a-f]{6}$"
+                                                      },
+                                                      "ink": {
+                                                        "type": "string",
+                                                        "pattern": "^#[0-9a-f]{6}$"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "paper",
+                                                      "tint",
+                                                      "primary",
+                                                      "ink"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "name",
+                                                  "stops"
+                                                ],
+                                                "additionalProperties": false
+                                              }
+                                            },
+                                            "required": [
+                                              "palette"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "logo": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "id": {
+                                                    "type": "string",
+                                                    "format": "uuid",
+                                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                                  },
+                                                  "name": {
+                                                    "type": "string",
+                                                    "minLength": 1,
+                                                    "maxLength": 120,
+                                                    "pattern": "\\S"
+                                                  },
+                                                  "content_type": {
+                                                    "type": "string",
+                                                    "enum": [
+                                                      "image/jpeg",
+                                                      "image/png",
+                                                      "image/webp"
+                                                    ]
+                                                  },
+                                                  "bytes": {
+                                                    "type": "integer",
+                                                    "exclusiveMinimum": 0,
+                                                    "maximum": 5242880
+                                                  },
+                                                  "alt": {
+                                                    "type": "string",
+                                                    "minLength": 1,
+                                                    "maxLength": 200,
+                                                    "pattern": "\\S"
+                                                  },
+                                                  "use": {
+                                                    "type": "string",
+                                                    "enum": [
+                                                      "logo",
+                                                      "hero",
+                                                      "work",
+                                                      "team"
+                                                    ]
+                                                  }
+                                                },
+                                                "required": [
+                                                  "id",
+                                                  "name",
+                                                  "content_type",
+                                                  "bytes"
+                                                ],
+                                                "additionalProperties": false
+                                              }
+                                            },
+                                            "required": [
+                                              "logo"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "photos": {
+                                                "maxItems": 12,
+                                                "type": "array",
+                                                "items": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "id": {
+                                                      "type": "string",
+                                                      "format": "uuid",
+                                                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                                    },
+                                                    "name": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 120,
+                                                      "pattern": "\\S"
+                                                    },
+                                                    "content_type": {
+                                                      "type": "string",
+                                                      "enum": [
+                                                        "image/jpeg",
+                                                        "image/png",
+                                                        "image/webp"
+                                                      ]
+                                                    },
+                                                    "bytes": {
+                                                      "type": "integer",
+                                                      "exclusiveMinimum": 0,
+                                                      "maximum": 5242880
+                                                    },
+                                                    "alt": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 200,
+                                                      "pattern": "\\S"
+                                                    },
+                                                    "use": {
+                                                      "type": "string",
+                                                      "enum": [
+                                                        "logo",
+                                                        "hero",
+                                                        "work",
+                                                        "team"
+                                                      ]
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "id",
+                                                    "name",
+                                                    "content_type",
+                                                    "bytes"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              },
+                                              "create": {
+                                                "type": "boolean"
+                                              }
+                                            },
+                                            "required": [
+                                              "photos",
+                                              "create"
+                                            ],
+                                            "additionalProperties": false
                                           }
                                         ]
                                       }
@@ -15019,6 +15556,15 @@
                                                 "minLength": 1,
                                                 "maxLength": 200,
                                                 "pattern": "\\S"
+                                              },
+                                              "use": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "logo",
+                                                  "hero",
+                                                  "work",
+                                                  "team"
+                                                ]
                                               }
                                             },
                                             "required": [
@@ -17433,6 +17979,15 @@
                                 "minLength": 1,
                                 "maxLength": 200,
                                 "pattern": "\\S"
+                              },
+                              "use": {
+                                "type": "string",
+                                "enum": [
+                                  "logo",
+                                  "hero",
+                                  "work",
+                                  "team"
+                                ]
                               }
                             },
                             "required": [
@@ -19264,6 +19819,15 @@
                                         "minLength": 1,
                                         "maxLength": 200,
                                         "pattern": "\\S"
+                                      },
+                                      "use": {
+                                        "type": "string",
+                                        "enum": [
+                                          "logo",
+                                          "hero",
+                                          "work",
+                                          "team"
+                                        ]
                                       }
                                     },
                                     "required": [
@@ -25899,6 +26463,79 @@
         ],
         "additionalProperties": false
       },
+      "DrawLogosRequest": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "tool_call_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "\\S"
+          },
+          "brief": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300,
+                    "pattern": "\\S"
+                  },
+                  {
+                    "type": "string",
+                    "const": ""
+                  }
+                ]
+              },
+              "colors": {
+                "minItems": 1,
+                "maxItems": 5,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^#[0-9a-f]{6}$"
+                }
+              },
+              "style": {
+                "type": "string",
+                "enum": [
+                  "clean",
+                  "classic",
+                  "friendly",
+                  "bold",
+                  "crafted",
+                  "premium"
+                ]
+              }
+            },
+            "required": [
+              "description",
+              "colors",
+              "style"
+            ],
+            "additionalProperties": false
+          },
+          "changes": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "pattern": "\\S"
+          },
+          "base": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "tool_call_id",
+          "brief"
+        ],
+        "additionalProperties": false
+      },
       "ErrorEnvelope": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -27394,6 +28031,15 @@
                           "minLength": 1,
                           "maxLength": 200,
                           "pattern": "\\S"
+                        },
+                        "use": {
+                          "type": "string",
+                          "enum": [
+                            "logo",
+                            "hero",
+                            "work",
+                            "team"
+                          ]
                         }
                       },
                       "required": [
@@ -28999,6 +29645,123 @@
         ],
         "additionalProperties": false
       },
+      "KeptLogo": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "asset": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120,
+                "pattern": "\\S"
+              },
+              "content_type": {
+                "type": "string",
+                "enum": [
+                  "image/jpeg",
+                  "image/png",
+                  "image/webp"
+                ]
+              },
+              "bytes": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 5242880
+              },
+              "alt": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "\\S"
+              },
+              "use": {
+                "type": "string",
+                "enum": [
+                  "logo",
+                  "hero",
+                  "work",
+                  "team"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "content_type",
+              "bytes"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "asset"
+        ],
+        "additionalProperties": false
+      },
+      "LogoRounds": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "rounds": {
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "round": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 5
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "drawing",
+                    "ready",
+                    "failed"
+                  ]
+                },
+                "variants": {
+                  "maxItems": 4,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    },
+                    "required": [
+                      "id"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "round",
+                "status",
+                "variants"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "rounds"
+        ],
+        "additionalProperties": false
+      },
       "MemoryChip": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -29791,6 +30554,51 @@
           "tint",
           "accent",
           "line"
+        ],
+        "additionalProperties": false
+      },
+      "PaletteFromImage": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "pattern": "\\S"
+          },
+          "stops": {
+            "type": "object",
+            "properties": {
+              "paper": {
+                "type": "string",
+                "pattern": "^#[0-9a-f]{6}$"
+              },
+              "tint": {
+                "type": "string",
+                "pattern": "^#[0-9a-f]{6}$"
+              },
+              "primary": {
+                "type": "string",
+                "pattern": "^#[0-9a-f]{6}$"
+              },
+              "ink": {
+                "type": "string",
+                "pattern": "^#[0-9a-f]{6}$"
+              }
+            },
+            "required": [
+              "paper",
+              "tint",
+              "primary",
+              "ink"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "name",
+          "stops"
         ],
         "additionalProperties": false
       },
@@ -32773,6 +33581,26 @@
           }
         ]
       },
+      "ReviewPhotosRequest": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "asset_ids": {
+            "minItems": 1,
+            "maxItems": 12,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        },
+        "required": [
+          "asset_ids"
+        ],
+        "additionalProperties": false
+      },
       "ReviewQuoteFormInput": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -32993,6 +33821,126 @@
             "additionalProperties": false
           }
         ]
+      },
+      "ReviewedPhotos": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "photos": {
+            "maxItems": 12,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "asset": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120,
+                      "pattern": "\\S"
+                    },
+                    "content_type": {
+                      "type": "string",
+                      "enum": [
+                        "image/jpeg",
+                        "image/png",
+                        "image/webp"
+                      ]
+                    },
+                    "bytes": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 5242880
+                    },
+                    "alt": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200,
+                      "pattern": "\\S"
+                    },
+                    "use": {
+                      "type": "string",
+                      "enum": [
+                        "logo",
+                        "hero",
+                        "work",
+                        "team"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "content_type",
+                    "bytes"
+                  ],
+                  "additionalProperties": false
+                },
+                "usable": {
+                  "type": "boolean"
+                },
+                "note": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120,
+                      "pattern": "\\S"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "asset",
+                "usable",
+                "note"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "missing": {
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "need": {
+                  "type": "string",
+                  "enum": [
+                    "hero",
+                    "work",
+                    "team"
+                  ]
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 6
+                }
+              },
+              "required": [
+                "need",
+                "count"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "photos",
+          "missing"
+        ],
+        "additionalProperties": false
       },
       "RuntimeSpec": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -34608,6 +35556,15 @@
                                 "minLength": 1,
                                 "maxLength": 200,
                                 "pattern": "\\S"
+                              },
+                              "use": {
+                                "type": "string",
+                                "enum": [
+                                  "logo",
+                                  "hero",
+                                  "work",
+                                  "team"
+                                ]
                               }
                             },
                             "required": [
@@ -35318,6 +36275,15 @@
                   "minLength": 1,
                   "maxLength": 200,
                   "pattern": "\\S"
+                },
+                "use": {
+                  "type": "string",
+                  "enum": [
+                    "logo",
+                    "hero",
+                    "work",
+                    "team"
+                  ]
                 }
               },
               "required": [

@@ -101,7 +101,17 @@ import {
   RememberInput,
   RememberOutput,
 } from "./memory.ts"
-import { Asset, QuoteField, UploadedAssets } from "./onboarding.ts"
+import {
+  Asset,
+  DrawLogosRequest,
+  KeptLogo,
+  LogoRounds,
+  PaletteFromImage,
+  QuoteField,
+  ReviewedPhotos,
+  ReviewPhotosRequest,
+  UploadedAssets,
+} from "./onboarding.ts"
 import { OnboardingStatus } from "./onboarding-plan.ts"
 import { CreateOrgRequest, Org, StaffDirectory, StaffMember } from "./org.ts"
 import {
@@ -306,6 +316,12 @@ export const contracts = {
   StaffMember,
   TextAnswerSchema,
   UploadedAssets,
+  DrawLogosRequest,
+  KeptLogo,
+  LogoRounds,
+  PaletteFromImage,
+  ReviewedPhotos,
+  ReviewPhotosRequest,
   UrlStatus,
   ValidationReport,
   WorkspaceStatus,

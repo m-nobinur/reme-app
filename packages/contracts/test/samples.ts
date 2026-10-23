@@ -337,6 +337,61 @@ export const samples: Record<ContractName, unknown> = {
     bytes: 482113,
     alt: "Two black saloon cars outside a hotel",
   },
+  ReviewPhotosRequest: {
+    asset_ids: ["8d9e0f10-2131-4a2b-9c3d-4e5f60718293"],
+  },
+  ReviewedPhotos: {
+    photos: [
+      {
+        asset: {
+          id: "8d9e0f10-2131-4a2b-9c3d-4e5f60718293",
+          name: "fleet-front.jpg",
+          content_type: "image/jpeg",
+          bytes: 482113,
+          alt: "Two black saloon cars outside a hotel",
+          use: "hero",
+        },
+        usable: true,
+        note: null,
+      },
+    ],
+    missing: [{ need: "work", count: 3 }],
+  },
+  PaletteFromImage: {
+    name: "Forest paper",
+    stops: {
+      paper: paletteSample.paper,
+      tint: paletteSample.tint,
+      primary: paletteSample.primary,
+      ink: paletteSample.ink,
+    },
+  },
+  DrawLogosRequest: {
+    tool_call_id: "call_design_1",
+    brief: {
+      description: "A simple car outline beside the name",
+      colors: [paletteSample.primary, paletteSample.accent],
+      style: "premium",
+    },
+  },
+  LogoRounds: {
+    rounds: [
+      {
+        round: 1,
+        status: "ready",
+        variants: [{ id: "8d9e0f10-2131-4a2b-9c3d-4e5f60718293" }],
+      },
+    ],
+  },
+  KeptLogo: {
+    asset: {
+      id: "8d9e0f10-2131-4a2b-9c3d-4e5f60718293",
+      name: "logo.png",
+      content_type: "image/png",
+      bytes: 48211,
+      use: "logo",
+    },
+  },
   UploadedAssets: {
     assets: [
       {

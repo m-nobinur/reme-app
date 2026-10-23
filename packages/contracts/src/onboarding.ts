@@ -240,19 +240,159 @@ export const UPLOAD_MAX_FILES = 12
 
 export const UploadType = z.enum(UPLOAD_TYPES)
 
-/** One stored photo. `id` names the object in the org's uploads. */
+/**
+ * The photos a site asks its owner for, in the order the guide lists them:
+ * one wide shot of a finished job for the home page's top, a few of the work
+ * for the services, and, if they like, one of them or their team for About.
+ * `generated` says whether the builder may draw one the owner did not send;
+ * a person is a claim, so the team photo never is. The guide's words are the
+ * web's.
+ */
+export const PHOTO_NEEDS = [
+  { id: "hero", count: 1, optional: false, generated: true },
+  { id: "work", count: 3, optional: false, generated: true },
+  { id: "team", count: 1, optional: true, generated: false },
+] as const
+export const PhotoNeed = z.enum(ids(PHOTO_NEEDS))
+
+/** What one stored image is for: the business's logo, or the photo need it fills. */
+export const AssetUse = z.enum(["logo", ...PhotoNeed.options])
+
+/**
+ * One stored image. `id` names the object in the org's uploads. `use` is
+ * set by the logo step and by the photo review, never by the client.
+ */
 export const Asset = z.strictObject({
   id: Uuid,
   name: Text(120),
   content_type: UploadType,
   bytes: z.int().positive().max(UPLOAD_MAX_BYTES),
   alt: Text(200).optional(),
+  use: AssetUse.optional(),
 })
 
 /** `POST /assets` (multipart, field `files`): the photos it stored. */
 export const UploadedAssets = z.strictObject({
   assets: z.array(Asset).min(1).max(UPLOAD_MAX_FILES),
 })
+
+/** `POST /assets/review`: the stored photos to read against `PHOTO_NEEDS`. */
+export const ReviewPhotosRequest = z.strictObject({
+  asset_ids: z.array(Uuid).min(1).max(UPLOAD_MAX_FILES),
+})
+
+/**
+ * `POST /assets/review`'s answer. A vision call reads each photo: the need
+ * it fills (null for one that fills none, such as a blurred shot or a
+ * screenshot), alt text, and whether it is good enough for a website. The
+ * api writes `use` and `alt` onto `media.uploads`, so `photos` are the
+ * stored assets as they now stand. `missing` is each need not yet filled,
+ * with how many more it takes; an optional need is listed too, the web
+ * decides how to say it.
+ */
+export const ReviewedPhotos = z.strictObject({
+  photos: z
+    .array(
+      z.strictObject({
+        asset: Asset,
+        usable: z.boolean(),
+        /** Why it is not usable, one short line for the owner. */
+        note: Text(120).nullable(),
+      })
+    )
+    .max(UPLOAD_MAX_FILES),
+  missing: z
+    .array(z.strictObject({ need: PhotoNeed, count: z.int().min(1).max(6) }))
+    .max(PHOTO_NEEDS.length),
+})
+
+/** The four stops a site's palette shows the owner, in `PALETTES[].swatches` order. */
+export const PaletteStops = z.strictObject({
+  paper: HexColour,
+  tint: HexColour,
+  primary: HexColour,
+  ink: HexColour,
+})
+
+/**
+ * `POST /palettes/from-image` (multipart, field `file`, one JPEG, PNG or
+ * WebP up to `UPLOAD_MAX_BYTES`, not stored): the palette a vision call reads
+ * from the owner's picture, with a two-word name. Code checks ink on paper
+ * and white or ink on primary reach WCAG AA and darkens or lightens until
+ * they do.
+ */
+export const PaletteFromImage = z.strictObject({
+  name: Text(40),
+  stops: PaletteStops,
+})
+
+/**
+ * The looks the logo maker offers, each drawn as a small illustration on
+ * its chip. The prompt words for each are the api's (`logo-style.ts`), the
+ * labels and pictures the web's.
+ */
+export const LOGO_STYLES = [
+  "clean",
+  "classic",
+  "friendly",
+  "bold",
+  "crafted",
+  "premium",
+] as const
+export const LogoStyle = z.enum(LOGO_STYLES)
+
+/** What the owner asks the logo maker for. */
+export const LogoBrief = z.strictObject({
+  /** How they want it to look, in their words; may be empty. */
+  description: Text(300).or(z.literal("")),
+  /** The colours to draw in, the brand colour first. */
+  colors: z.array(HexColour).min(1).max(5),
+  style: LogoStyle,
+})
+
+/** The variants one round draws. */
+export const LOGO_VARIANTS = 4
+/** The most rounds one logo question may draw: a first draft and changes. */
+export const LOGO_ROUNDS_MAX = 5
+
+/**
+ * `POST /logos`: draw a round of `LOGO_VARIANTS` logos for one design
+ * tray's logo question, named by its tool call. A round after the first
+ * carries the owner's `changes`, and `base` when they asked for changes to
+ * one variant, which the image model is handed as a reference. The api
+ * answers 202 with the round as it starts; the drawing runs on after the
+ * response, so a reload loses nothing.
+ */
+export const DrawLogosRequest = z.strictObject({
+  tool_call_id: Text(80),
+  brief: LogoBrief,
+  changes: Text(300).optional(),
+  base: Uuid.optional(),
+})
+
+/**
+ * One round of logos. Each variant's picture is `GET /photos/{id}`; a round
+ * still `drawing` lists the ones done so far. `failed` means no model drew
+ * any, and the owner may try again.
+ */
+export const LogoRound = z.strictObject({
+  round: z.int().min(1).max(LOGO_ROUNDS_MAX),
+  status: z.enum(["drawing", "ready", "failed"]),
+  variants: z.array(z.strictObject({ id: Uuid })).max(LOGO_VARIANTS),
+})
+
+/** `GET /logos?tool_call_id=`: every round drawn for that question, oldest first. */
+export const LogoRounds = z.strictObject({
+  rounds: z.array(LogoRound).max(LOGO_ROUNDS_MAX),
+})
+
+/**
+ * `POST /logos/{id}/keep`: the variant the owner picked, stored as their
+ * logo. It replaces any logo in `media.uploads` and comes back with `use`
+ * "logo". An uploaded logo takes `POST /assets` and then this same call
+ * with its asset id, so both paths end in one place.
+ */
+export const KeptLogo = z.strictObject({ asset: Asset })
 
 /**
  * One question the quote request form asks a customer, beyond the contact
@@ -360,3 +500,15 @@ export type PageId = z.infer<typeof PageId>
 export type QuoteField = z.infer<typeof QuoteField>
 export type Asset = z.infer<typeof Asset>
 export type UploadedAssets = z.infer<typeof UploadedAssets>
+export type PhotoNeed = z.infer<typeof PhotoNeed>
+export type AssetUse = z.infer<typeof AssetUse>
+export type ReviewPhotosRequest = z.infer<typeof ReviewPhotosRequest>
+export type ReviewedPhotos = z.infer<typeof ReviewedPhotos>
+export type PaletteStops = z.infer<typeof PaletteStops>
+export type PaletteFromImage = z.infer<typeof PaletteFromImage>
+export type LogoStyle = z.infer<typeof LogoStyle>
+export type LogoBrief = z.infer<typeof LogoBrief>
+export type DrawLogosRequest = z.infer<typeof DrawLogosRequest>
+export type LogoRound = z.infer<typeof LogoRound>
+export type LogoRounds = z.infer<typeof LogoRounds>
+export type KeptLogo = z.infer<typeof KeptLogo>

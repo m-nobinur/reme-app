@@ -569,6 +569,8 @@ export interface components {
                     content_type: "image/jpeg" | "image/png" | "image/webp"
                     bytes: number
                     alt?: string
+                    /** @enum {string} */
+                    use?: "logo" | "hero" | "work" | "team"
                   }[]
                 }
               }
@@ -862,7 +864,7 @@ export interface components {
         id: string
         question?: string
         /** @enum {string} */
-        visual: "palette" | "font_pair" | "layout" | "text"
+        visual: "palette" | "font_pair" | "layout" | "text" | "logo" | "photos"
         card: {
           /** @enum {string} */
           step:
@@ -968,6 +970,23 @@ export interface components {
           initial?: string[]
           color?: boolean
         }
+        upload?: {
+          accept: ("image/jpeg" | "image/png" | "image/webp")[]
+          max_files: number
+          max_bytes: number
+          skippable: boolean
+        }
+        held?: {
+          /** Format: uuid */
+          id: string
+          name: string
+          /** @enum {string} */
+          content_type: "image/jpeg" | "image/png" | "image/webp"
+          bytes: number
+          alt?: string
+          /** @enum {string} */
+          use?: "logo" | "hero" | "work" | "team"
+        }[]
       }[]
     }
     AskDesignOutput: {
@@ -985,6 +1004,44 @@ export interface components {
           | {
               /** @constant */
               skipped: true
+            }
+          | {
+              palette: {
+                name: string
+                stops: {
+                  paper: string
+                  tint: string
+                  primary: string
+                  ink: string
+                }
+              }
+            }
+          | {
+              logo: {
+                /** Format: uuid */
+                id: string
+                name: string
+                /** @enum {string} */
+                content_type: "image/jpeg" | "image/png" | "image/webp"
+                bytes: number
+                alt?: string
+                /** @enum {string} */
+                use?: "logo" | "hero" | "work" | "team"
+              }
+            }
+          | {
+              photos: {
+                /** Format: uuid */
+                id: string
+                name: string
+                /** @enum {string} */
+                content_type: "image/jpeg" | "image/png" | "image/webp"
+                bytes: number
+                alt?: string
+                /** @enum {string} */
+                use?: "logo" | "hero" | "work" | "team"
+              }[]
+              create: boolean
             }
       }
       skip_all: boolean
@@ -1259,6 +1316,8 @@ export interface components {
                 content_type: "image/jpeg" | "image/png" | "image/webp"
                 bytes: number
                 alt?: string
+                /** @enum {string} */
+                use?: "logo" | "hero" | "work" | "team"
               }[]
             }
           }
@@ -1586,6 +1645,8 @@ export interface components {
                     content_type: "image/jpeg" | "image/png" | "image/webp"
                     bytes: number
                     alt?: string
+                    /** @enum {string} */
+                    use?: "logo" | "hero" | "work" | "team"
                   }[]
                 }
               }
@@ -1933,6 +1994,8 @@ export interface components {
               content_type: "image/jpeg" | "image/png" | "image/webp"
               bytes: number
               alt?: string
+              /** @enum {string} */
+              use?: "logo" | "hero" | "work" | "team"
             }[]
           } | null
         }
@@ -2259,6 +2322,8 @@ export interface components {
                     content_type: "image/jpeg" | "image/png" | "image/webp"
                     bytes: number
                     alt?: string
+                    /** @enum {string} */
+                    use?: "logo" | "hero" | "work" | "team"
                   }[]
                 }
               }
@@ -2370,6 +2435,8 @@ export interface components {
             content_type: "image/jpeg" | "image/png" | "image/webp"
             bytes: number
             alt?: string
+            /** @enum {string} */
+            use?: "logo" | "hero" | "work" | "team"
           }[]
         }
       | {
@@ -2384,6 +2451,8 @@ export interface components {
       content_type: "image/jpeg" | "image/png" | "image/webp"
       bytes: number
       alt?: string
+      /** @enum {string} */
+      use?: "logo" | "hero" | "work" | "team"
     }
     Assignment: {
       /** Format: uuid */
@@ -3814,6 +3883,8 @@ export interface components {
                                         | "image/webp"
                                       bytes: number
                                       alt?: string
+                                      /** @enum {string} */
+                                      use?: "logo" | "hero" | "work" | "team"
                                     }[]
                                   }
                                 }
@@ -4150,6 +4221,8 @@ export interface components {
                                         | "image/webp"
                                       bytes: number
                                       alt?: string
+                                      /** @enum {string} */
+                                      use?: "logo" | "hero" | "work" | "team"
                                     }[]
                                   }
                                 }
@@ -4234,6 +4307,50 @@ export interface components {
                                 /** @constant */
                                 skipped: true
                               }
+                            | {
+                                palette: {
+                                  name: string
+                                  stops: {
+                                    paper: string
+                                    tint: string
+                                    primary: string
+                                    ink: string
+                                  }
+                                }
+                              }
+                            | {
+                                logo: {
+                                  /** Format: uuid */
+                                  id: string
+                                  name: string
+                                  /** @enum {string} */
+                                  content_type:
+                                    | "image/jpeg"
+                                    | "image/png"
+                                    | "image/webp"
+                                  bytes: number
+                                  alt?: string
+                                  /** @enum {string} */
+                                  use?: "logo" | "hero" | "work" | "team"
+                                }
+                              }
+                            | {
+                                photos: {
+                                  /** Format: uuid */
+                                  id: string
+                                  name: string
+                                  /** @enum {string} */
+                                  content_type:
+                                    | "image/jpeg"
+                                    | "image/png"
+                                    | "image/webp"
+                                  bytes: number
+                                  alt?: string
+                                  /** @enum {string} */
+                                  use?: "logo" | "hero" | "work" | "team"
+                                }[]
+                                create: boolean
+                              }
                         }
                         skip_all: boolean
                       }
@@ -4252,6 +4369,8 @@ export interface components {
                                 | "image/webp"
                               bytes: number
                               alt?: string
+                              /** @enum {string} */
+                              use?: "logo" | "hero" | "work" | "team"
                             }[]
                           }
                         | {
@@ -4888,6 +5007,8 @@ export interface components {
                 content_type: "image/jpeg" | "image/png" | "image/webp"
                 bytes: number
                 alt?: string
+                /** @enum {string} */
+                use?: "logo" | "hero" | "work" | "team"
               }[]
             }
           }
@@ -5421,6 +5542,8 @@ export interface components {
                       content_type: "image/jpeg" | "image/png" | "image/webp"
                       bytes: number
                       alt?: string
+                      /** @enum {string} */
+                      use?: "logo" | "hero" | "work" | "team"
                     }[]
                   }
                 }
@@ -7336,6 +7459,18 @@ export interface components {
       payment_intent?: string
       subscription?: string
     }
+    DrawLogosRequest: {
+      tool_call_id: string
+      brief: {
+        description: string | ""
+        colors: string[]
+        /** @enum {string} */
+        style: "clean" | "classic" | "friendly" | "bold" | "crafted" | "premium"
+      }
+      changes?: string
+      /** Format: uuid */
+      base?: string
+    }
     ErrorEnvelope: {
       /** @enum {string} */
       class:
@@ -7728,6 +7863,8 @@ export interface components {
               content_type: "image/jpeg" | "image/png" | "image/webp"
               bytes: number
               alt?: string
+              /** @enum {string} */
+              use?: "logo" | "hero" | "work" | "team"
             }[]
           }
         }
@@ -8135,6 +8272,30 @@ export interface components {
       outcome: "ok" | "skipped" | "failed"
       detail: string | null
     }
+    KeptLogo: {
+      asset: {
+        /** Format: uuid */
+        id: string
+        name: string
+        /** @enum {string} */
+        content_type: "image/jpeg" | "image/png" | "image/webp"
+        bytes: number
+        alt?: string
+        /** @enum {string} */
+        use?: "logo" | "hero" | "work" | "team"
+      }
+    }
+    LogoRounds: {
+      rounds: {
+        round: number
+        /** @enum {string} */
+        status: "drawing" | "ready" | "failed"
+        variants: {
+          /** Format: uuid */
+          id: string
+        }[]
+      }[]
+    }
     MemoryChip: {
       version: number
       changes: {
@@ -8374,6 +8535,15 @@ export interface components {
       tint: string
       accent: string
       line: string
+    }
+    PaletteFromImage: {
+      name: string
+      stops: {
+        paper: string
+        tint: string
+        primary: string
+        ink: string
+      }
     }
     PreviewClaim: {
       /** Format: uuid */
@@ -9214,6 +9384,9 @@ export interface components {
             message: string
           }
         }
+    ReviewPhotosRequest: {
+      asset_ids: string[]
+    }
     ReviewQuoteFormInput: {
       fields: {
         key: string
@@ -9267,6 +9440,28 @@ export interface components {
           answer: "changes"
           text: string
         }
+    ReviewedPhotos: {
+      photos: {
+        asset: {
+          /** Format: uuid */
+          id: string
+          name: string
+          /** @enum {string} */
+          content_type: "image/jpeg" | "image/png" | "image/webp"
+          bytes: number
+          alt?: string
+          /** @enum {string} */
+          use?: "logo" | "hero" | "work" | "team"
+        }
+        usable: boolean
+        note: string | null
+      }[]
+      missing: {
+        /** @enum {string} */
+        need: "hero" | "work" | "team"
+        count: number
+      }[]
+    }
     RuntimeSpec: {
       /** Format: uuid */
       spec_id: string
@@ -9679,6 +9874,8 @@ export interface components {
                 content_type: "image/jpeg" | "image/png" | "image/webp"
                 bytes: number
                 alt?: string
+                /** @enum {string} */
+                use?: "logo" | "hero" | "work" | "team"
               }[]
             }
           }
@@ -9848,6 +10045,8 @@ export interface components {
         content_type: "image/jpeg" | "image/png" | "image/webp"
         bytes: number
         alt?: string
+        /** @enum {string} */
+        use?: "logo" | "hero" | "work" | "team"
       }[]
     }
     UrlStatus: {

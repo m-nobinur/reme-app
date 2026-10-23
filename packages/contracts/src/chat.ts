@@ -6,6 +6,7 @@ import { ToolCallId } from "./ids.ts"
 import {
   Asset,
   HexColour,
+  PaletteFromImage,
   QuoteFields,
   UPLOAD_MAX_BYTES,
   UPLOAD_MAX_FILES,
@@ -256,8 +257,30 @@ export const AskChoiceOutput = z.discriminatedUnion("answer", [
   z.strictObject({ answer: z.literal("skipped") }),
 ])
 
-/** What a design question shows beside its options. */
-export const DesignVisual = z.enum(["palette", "font_pair", "layout", "text"])
+/**
+ * `ask_upload`'s input: a drop zone for the owner's photos. The limits ride
+ * on the wire so the web enforces what the api will.
+ */
+export const AskUploadInput = z.strictObject({
+  accept: z.array(z.enum(UPLOAD_TYPES)).min(1),
+  max_files: z.int().min(1).max(UPLOAD_MAX_FILES),
+  max_bytes: z.int().positive().max(UPLOAD_MAX_BYTES),
+  skippable: z.boolean(),
+})
+
+/**
+ * What a design question shows beside its options. `logo` and `photos` are
+ * pages of their own: an upload or the assistant making one, with `upload`
+ * on the question for the drop zone's limits.
+ */
+export const DesignVisual = z.enum([
+  "palette",
+  "font_pair",
+  "layout",
+  "text",
+  "logo",
+  "photos",
+])
 
 /** A question id: how an answer finds its question. */
 const QuestionId = z.string().regex(/^[a-z][a-z0-9_]{1,39}$/)
@@ -282,22 +305,64 @@ export const AskDesignInput = z.strictObject({
         /** The question the tray shows; absent only in calls written before it existed. */
         question: Text(120).optional(),
         visual: DesignVisual,
+        /**
+         * A logo or photos question's card offers `upload` and `create`, so
+         * the tray reads every question alike; its answer is a `logo` or
+         * `photos` one below, never a pick.
+         */
         card: AskChoiceInput,
+        /** The drop zone's limits, on a logo or photos question only. */
+        upload: AskUploadInput.optional(),
+        /**
+         * What the org already holds for a logo or photos question, so the
+         * tray opens with it: the logo, or the photos and their review.
+         */
+        held: z.array(Asset).max(UPLOAD_MAX_FILES).optional(),
       })
     )
     .min(1)
-    .max(DESIGN_QUESTIONS_MAX),
+    .max(DESIGN_QUESTIONS_MAX)
+    .refine(
+      (questions) =>
+        questions.every(
+          (q) =>
+            (q.visual === "logo" || q.visual === "photos") ===
+            (q.upload !== undefined)
+        ),
+      {
+        message:
+          "upload belongs to a logo or photos question, and each needs it",
+      }
+    ),
 })
 
 /**
  * One answer in the tray: an option's id, several on a `multiple` card, the
- * owner's own words, or a skip.
+ * owner's own words, a skip, or what a logo, photos or picture palette page
+ * settled.
  */
 const DesignAnswer = z.union([
   z.strictObject({ choice: Text(40) }),
   z.strictObject({ choices: z.array(Text(40)).min(1).max(16) }),
   z.strictObject({ own: Text(200) }),
   z.strictObject({ skipped: z.literal(true) }),
+  /** A palette read from the owner's picture (`POST /palettes/from-image`). */
+  z.strictObject({ palette: PaletteFromImage }),
+  /** The logo question: the logo kept by `POST /logos/{id}/keep`. */
+  z.strictObject({ logo: Asset }),
+  /**
+   * The photos question: the photos sent and reviewed, and whether the
+   * assistant makes the ones still missing. `create` with no photos is
+   * "Create them for me".
+   */
+  z
+    .strictObject({
+      photos: z.array(Asset).max(UPLOAD_MAX_FILES),
+      create: z.boolean(),
+    })
+    .refine((answer) => answer.create || answer.photos.length > 0, {
+      message: "send a photo or leave them to the assistant",
+    }),
 ])
 
 /**
@@ -309,17 +374,6 @@ const DesignAnswer = z.union([
 export const AskDesignOutput = z.strictObject({
   answers: z.record(QuestionId, DesignAnswer),
   skip_all: z.boolean(),
-})
-
-/**
- * `ask_upload`'s input: a drop zone for the owner's photos. The limits ride
- * on the wire so the web enforces what the api will.
- */
-export const AskUploadInput = z.strictObject({
-  accept: z.array(z.enum(UPLOAD_TYPES)).min(1),
-  max_files: z.int().min(1).max(UPLOAD_MAX_FILES),
-  max_bytes: z.int().positive().max(UPLOAD_MAX_BYTES),
-  skippable: z.boolean(),
 })
 
 /**
