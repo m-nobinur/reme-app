@@ -346,6 +346,19 @@ const AT_DESIGN: FactValue[] = [
   { key: "quote.form", value: { fields: [...DEFAULT_QUOTE_FIELDS] } },
 ]
 
+/** The logo the tray's logo page kept, which a finished tray needs. */
+const LOGO = {
+  id: "0d9e0f10-2131-4a2b-9c3d-4e5f60718293",
+  name: "logo.png",
+  content_type: "image/png",
+  bytes: 4821,
+  use: "logo",
+} as const
+const LOGO_HELD = {
+  key: "media.uploads",
+  value: { items: [LOGO] },
+} as FactValue
+
 describe.skipIf(!url)("POST /chat, on a live connection", () => {
   const kit: Tenancy = tenancy(url as string, { max: 2 })
   let realFetch: typeof fetch
@@ -1245,7 +1258,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       expect((await me.rows(id))[0]?.parentId).toBeNull()
     })
 
-    it("offers its own quote form for a typed answer no model read, then the photos, and builds on a typed skip", async () => {
+    it("offers its own quote form for a typed answer no model read, and builds once it is confirmed", async () => {
       const fresh = await owner(kit, url as string, "chat-photos")
       const talk = talker(fresh)
       const set = await fresh.call(stubOrchestrator(), "/facts", {
@@ -1281,22 +1294,13 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         },
         stub
       )
-      // No build yet: the photos come after the quote form.
-      expect(stub.calls).toHaveLength(0)
-      expect(pendingCall(confirmed.after).type).toBe("tool-ask_upload")
-      const skipped = await talk.turn(
-        id,
-        {
-          mode: "ask",
-          turn: { kind: "message", message_id: "u_skip", text: "No thanks" },
-        },
-        stub
-      )
+      // The look is held from the old cards and the photos are a tray
+      // question, so the confirmed form starts the build.
       expect(stub.calls).toHaveLength(1)
       expect(stub.calls[0]?.request.headers.get("idempotency-key")).toBe(
         `onboarding:${id}`
       )
-      expect(skipped.after.parts.slice(-3)).toMatchObject([
+      expect(confirmed.after.parts.slice(-3)).toMatchObject([
         {
           type: "tool-request_change",
           state: "output-available",
@@ -1306,8 +1310,8 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         { type: "text", text: expect.stringContaining("Held (fixture)") },
       ])
       expect(await progress()).toEqual({
-        passed: ["upload"],
-        closed: ["quote_form", "upload"],
+        passed: [],
+        closed: ["quote_form"],
         offered: true,
         builder: null,
       })
@@ -2293,7 +2297,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         await who.call(stubOrchestrator(), "/facts", {
           method: "POST",
           headers: { "idempotency-key": crypto.randomUUID() },
-          body: JSON.stringify({ facts: AT_DESIGN }),
+          body: JSON.stringify({ facts: [...AT_DESIGN, LOGO_HELD] }),
         })
         const id = await talker(who).onboarding()
         await talker(who).pastPhotos(id)
@@ -2368,9 +2372,13 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         const picks = Object.fromEntries(
           done.tray.questions.map((q) => [
             q.id,
-            q.card.multiple
-              ? { choices: [q.card.options[0]?.id] }
-              : { choice: q.card.options[0]?.id },
+            q.visual === "logo"
+              ? { logo: LOGO }
+              : q.visual === "photos"
+                ? { photos: [], create: true }
+                : q.card.multiple
+                  ? { choices: [q.card.options[0]?.id] }
+                  : { choice: q.card.options[0]?.id },
           ])
         )
         // The orchestrator snapshots the facts over its own connection, so
@@ -2683,7 +2691,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       }, 60_000)
     })
 
-    it("prepares business-specific copy once in the background, and the photo step uses it", async () => {
+    it("prepares business-specific copy once in the background", async () => {
       const who = await owner(kit, url as string, "chat-prepare")
       await who.call(stubOrchestrator(), "/facts", {
         method: "POST",
@@ -2725,21 +2733,18 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         copy: { photo_question: question },
         cost_usd: expect.any(Number),
       })
-      // The quote form confirmed: the photo step asks the prepared question.
+      // The quote form confirmed, which starts the build: no second call.
       const form = pendingCall(asked.after)
-      const photos = await t().turn(
+      await t().turn(
         id,
         answer(asked.after, {
           answer: "confirmed",
           fields: DEFAULT_QUOTE_FIELDS,
-        })
+        }),
+        building()
       )
       await Promise.all(later)
       expect(form.type).toBe("tool-review_quote_form")
-      expect(photos.after.parts.at(-2)).toMatchObject({
-        type: "text",
-        text: expect.stringContaining(question),
-      })
       // Once per conversation.
       expect(prep.calls).toHaveLength(1)
     }, 60_000)
@@ -2775,7 +2780,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       expect(prep.calls[0]).toContain("[redacted]")
     }, 60_000)
 
-    it("proposes the quote form, takes changes as words, states the confirmed form, then the photos and the build", async () => {
+    it("proposes the quote form, takes changes as words, states the confirmed form, then the build", async () => {
       const who = await owner(kit, url as string, "chat-quote")
       await who.call(stubOrchestrator(), "/facts", {
         method: "POST",
@@ -2851,20 +2856,33 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         false
       )
       // Confirmed: the form is stated by the script, with no model, and the
-      // photos follow; the build starts on their answer, once the form is
-      // committed.
+      // build starts on it, once the form is committed: the look is held
+      // and the photos are a tray question.
+      let seen: unknown[] = []
+      const stub = stubOrchestrator(async (request) => {
+        seen = await kit.withOrg({ orgId: who.orgId }, async (db) =>
+          (
+            await db.select().from(facts).where(eq(facts.key, "quote.form"))
+          ).map((f) => f.value)
+        )
+        return building().fetch(request)
+      })
       const unused = planner([plan({ say: "never sent" })])
       const confirmed = await talker(who, undefined, {
         planner: unused.model,
-      }).turn(id, {
-        ...answer(changed.after, { answer: "confirmed", fields: dated }),
-        turn: {
-          ...answer(changed.after, { answer: "confirmed", fields: dated }).turn,
-          reply: { message_id: "u_q_ok", text: "Bedrooms, how often, pets" },
+      }).turn(
+        id,
+        {
+          ...answer(changed.after, { answer: "confirmed", fields: dated }),
+          turn: {
+            ...answer(changed.after, { answer: "confirmed", fields: dated })
+              .turn,
+            reply: { message_id: "u_q_ok", text: "Bedrooms, how often, pets" },
+          },
         },
-      })
+        stub
+      )
       expect(unused.calls).toHaveLength(0)
-      expect(pendingCall(confirmed.after).type).toBe("tool-ask_upload")
       // The reply path: the card's row ends with the card, then the owner's
       // reply and the next step each have a row of their own.
       const rows = await talker(who).rows(id)
@@ -2881,25 +2899,12 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         type: "tool-review_quote_form",
         state: "output-available",
       })
-      let seen: unknown[] = []
-      const stub = stubOrchestrator(async (request) => {
-        seen = await kit.withOrg({ orgId: who.orgId }, async (db) =>
-          (
-            await db.select().from(facts).where(eq(facts.key, "quote.form"))
-          ).map((f) => f.value)
-        )
-        return building().fetch(request)
-      })
-      const started = await talker(who, undefined, {
-        planner: unused.model,
-      }).turn(id, answer(confirmed.after, { answer: "skipped" }), stub)
-      expect(unused.calls).toHaveLength(0)
       expect(stub.calls).toHaveLength(1)
       expect(stub.calls[0]?.request.headers.get("idempotency-key")).toBe(
         `onboarding:${id}`
       )
       expect(seen).toEqual([{ fields: dated }])
-      expect(started.after.parts.slice(-3)).toMatchObject([
+      expect(confirmed.after.parts.slice(-3)).toMatchObject([
         {
           type: "tool-request_change",
           state: "output-available",
