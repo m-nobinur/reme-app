@@ -628,13 +628,8 @@ export function designCard(o: Onboarding, newId: () => string): ToolPart {
     ...new Set(directions.flatMap((d) => d.palettes)),
   ] as PaletteId[]
   const palette = factValue(o.facts, "site.palette")
-  const shown = firstOf(
-    o,
-    "palette",
-    suited,
-    (id) => id,
-    (id) => String(family(id))
-  )
+  // The same four first for every business: a clean set the owner chose.
+  const shown: PaletteId[] = ["mint", "royal", "meadow", "pebble"]
   // A held palette the four leave out takes the last place, so it shows ticked.
   const heldPalette = PaletteId.safeParse(palette?.id)
   if (heldPalette.success && !shown.includes(heldPalette.data)) {

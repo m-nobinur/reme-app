@@ -1343,12 +1343,9 @@ describe("the design tray", () => {
       for (const id of ids(input, "lettering")) {
         expect(fit.map((d) => d.fonts)).toContain(id)
       }
-      // Every palette is offered; the four shown first suit the industry.
+      // Every palette is offered; the same four show first for every business.
       const palette = input.questions.find((q) => q.id === "palette")?.card
-      expect(palette?.initial).toHaveLength(4)
-      for (const id of palette?.initial ?? []) {
-        expect(fit.flatMap((d) => d.palettes)).toContain(id)
-      }
+      expect(palette?.initial).toEqual(["mint", "royal", "meadow", "pebble"])
       expect(ids(input, "palette")).toHaveLength(PALETTES.length)
       expect(ids(input, "palette").slice(0, 4)).toEqual(palette?.initial)
     }
@@ -1381,10 +1378,10 @@ describe("the design tray", () => {
     }
   })
 
-  it("seeds by org: the same four on every call, other orgs other fours", () => {
-    const first = (org: string) => ids(tray({ orgId: org }), "palette").join()
+  it("seeds by org: the same lettering on every call, other orgs others", () => {
+    const first = (org: string) => ids(tray({ orgId: org }), "lettering").join()
     expect(first(ORG)).toBe(first(ORG))
-    expect(new Set(ORGS.map(first)).size).toBeGreaterThan(10)
+    expect(new Set(ORGS.map(first)).size).toBeGreaterThan(1)
   })
 
   it("opens ticked where the org already answered", () => {

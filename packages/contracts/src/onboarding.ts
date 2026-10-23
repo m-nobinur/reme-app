@@ -20,6 +20,8 @@ type PaletteSpec = Omit<Preset<string>, "id"> & {
   tint: string
   accent: string
   line: string
+  /** The four the owner sees, where they are not paper, tint, primary and ink. */
+  swatches?: [string, string, string, string]
 }
 
 const ids = <T extends readonly { id: string }[]>(list: T) =>
@@ -158,7 +160,7 @@ export const PALETTES = PaletteId.options.map((id) => {
     /** The colour the site derives the rest from: the role `primary`. */
     brand: spec.primary,
     /** What the owner sees, in `PALETTE_SWATCH` order. */
-    swatches: [spec.paper, spec.tint, spec.primary, spec.ink],
+    swatches: spec.swatches ?? [spec.paper, spec.tint, spec.primary, spec.ink],
   }
 })
 

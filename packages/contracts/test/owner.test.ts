@@ -646,12 +646,12 @@ describe("the onboarding presets", () => {
     const { PaletteId } = await import("../src/onboarding.ts")
     expect(PALETTES.map((p) => p.id)).toEqual(PaletteId.options)
     for (const palette of PALETTES) {
-      expect(palette.swatches).toEqual([
-        palette.paper,
-        palette.tint,
-        palette.primary,
-        palette.ink,
-      ])
+      // Four of the palette's own roles, paper, tint, primary and ink unless it names others.
+      const roles = [palette.paper, palette.tint, palette.primary, palette.ink]
+      expect(palette.swatches).toHaveLength(4)
+      for (const colour of palette.swatches) {
+        expect([...roles, palette.accent]).toContain(colour)
+      }
       expect(palette.brand).toBe(palette.primary)
     }
     // No two presets share a brand colour.
