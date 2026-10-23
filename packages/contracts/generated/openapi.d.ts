@@ -503,6 +503,8 @@ export interface components {
                         | "pebble"
                         | "counsel"
                         | "after_dark"
+                        | "terracotta"
+                        | "ember"
                       )
                     | "custom"
                   custom?: string
@@ -1253,6 +1255,8 @@ export interface components {
                     | "pebble"
                     | "counsel"
                     | "after_dark"
+                    | "terracotta"
+                    | "ember"
                   )
                 | "custom"
               custom?: string
@@ -1579,6 +1583,8 @@ export interface components {
                         | "pebble"
                         | "counsel"
                         | "after_dark"
+                        | "terracotta"
+                        | "ember"
                       )
                     | "custom"
                   custom?: string
@@ -1927,6 +1933,8 @@ export interface components {
                   | "pebble"
                   | "counsel"
                   | "after_dark"
+                  | "terracotta"
+                  | "ember"
                 )
               | "custom"
             custom?: string
@@ -2256,6 +2264,8 @@ export interface components {
                         | "pebble"
                         | "counsel"
                         | "after_dark"
+                        | "terracotta"
+                        | "ember"
                       )
                     | "custom"
                   custom?: string
@@ -2661,6 +2671,8 @@ export interface components {
               | "pebble"
               | "counsel"
               | "after_dark"
+              | "terracotta"
+              | "ember"
           }
         | {
             /** @constant */
@@ -2977,6 +2989,8 @@ export interface components {
                   | "pebble"
                   | "counsel"
                   | "after_dark"
+                  | "terracotta"
+                  | "ember"
               }
             | {
                 /** @constant */
@@ -3247,6 +3261,8 @@ export interface components {
                   | "pebble"
                   | "counsel"
                   | "after_dark"
+                  | "terracotta"
+                  | "ember"
               }
             | {
                 /** @constant */
@@ -3810,6 +3826,8 @@ export interface components {
                                           | "pebble"
                                           | "counsel"
                                           | "after_dark"
+                                          | "terracotta"
+                                          | "ember"
                                         )
                                       | "custom"
                                     custom?: string
@@ -4148,6 +4166,8 @@ export interface components {
                                           | "pebble"
                                           | "counsel"
                                           | "after_dark"
+                                          | "terracotta"
+                                          | "ember"
                                         )
                                       | "custom"
                                     custom?: string
@@ -4944,6 +4964,8 @@ export interface components {
                     | "pebble"
                     | "counsel"
                     | "after_dark"
+                    | "terracotta"
+                    | "ember"
                   )
                 | "custom"
               custom?: string
@@ -5476,6 +5498,8 @@ export interface components {
                           | "pebble"
                           | "counsel"
                           | "after_dark"
+                          | "terracotta"
+                          | "ember"
                         )
                       | "custom"
                     custom?: string
@@ -5726,6 +5750,8 @@ export interface components {
                               | "pebble"
                               | "counsel"
                               | "after_dark"
+                              | "terracotta"
+                              | "ember"
                           }
                         | {
                             /** @constant */
@@ -5996,6 +6022,8 @@ export interface components {
                               | "pebble"
                               | "counsel"
                               | "after_dark"
+                              | "terracotta"
+                              | "ember"
                           }
                         | {
                             /** @constant */
@@ -7262,6 +7290,8 @@ export interface components {
         | "pebble"
         | "counsel"
         | "after_dark"
+        | "terracotta"
+        | "ember"
       )[]
       /** @enum {string} */
       hero: "wash" | "split_arch" | "split_frame" | "dark_center" | "text_led"
@@ -7800,6 +7830,8 @@ export interface components {
                   | "pebble"
                   | "counsel"
                   | "after_dark"
+                  | "terracotta"
+                  | "ember"
                 )
               | "custom"
             custom?: string
@@ -8528,6 +8560,8 @@ export interface components {
         | "pebble"
         | "counsel"
         | "after_dark"
+        | "terracotta"
+        | "ember"
       label: string
       paper: string
       ink: string
@@ -8850,6 +8884,8 @@ export interface components {
                         | "pebble"
                         | "counsel"
                         | "after_dark"
+                        | "terracotta"
+                        | "ember"
                     }
                   | {
                       /** @constant */
@@ -9120,6 +9156,8 @@ export interface components {
                         | "pebble"
                         | "counsel"
                         | "after_dark"
+                        | "terracotta"
+                        | "ember"
                     }
                   | {
                       /** @constant */
@@ -9811,6 +9849,8 @@ export interface components {
                     | "pebble"
                     | "counsel"
                     | "after_dark"
+                    | "terracotta"
+                    | "ember"
                   )
                 | "custom"
               custom?: string
@@ -10189,6 +10229,8 @@ export interface components {
                     | "pebble"
                     | "counsel"
                     | "after_dark"
+                    | "terracotta"
+                    | "ember"
                 }
               | {
                   /** @constant */
@@ -10459,6 +10501,8 @@ export interface components {
                     | "pebble"
                     | "counsel"
                     | "after_dark"
+                    | "terracotta"
+                    | "ember"
                 }
               | {
                   /** @constant */
