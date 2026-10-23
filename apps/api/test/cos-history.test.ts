@@ -55,6 +55,7 @@ const workspace = {
   questions: [],
   approvals: [],
   missing_facts: [],
+  stopped: [],
 }
 
 const change = (state: string, extra: Record<string, unknown> = {}) => ({

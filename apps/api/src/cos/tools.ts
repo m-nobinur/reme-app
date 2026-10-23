@@ -206,7 +206,22 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
       lane: b.lane,
       goal: b.goal,
       version: b.revision?.version ?? null,
+      progress: (b.activity ?? [])
+        .filter((step) => !step.skipped)
+        .map((step) => ({
+          step: step.label,
+          done: step.done,
+          total: step.total,
+          now: step.now === true,
+        })),
     })),
+    stopped: status.attention
+      .flatMap((item) =>
+        item.kind === "alert" && item.reason === "build_failed"
+          ? [{ cause: item.cause ?? "other", at: item.at }]
+          : []
+      )
+      .slice(0, 5),
     questions: status.attention
       .flatMap((item) => (item.kind === "question" ? [item.request] : []))
       .slice(0, 10)

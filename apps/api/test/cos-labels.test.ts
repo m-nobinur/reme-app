@@ -15,8 +15,13 @@ const WORKSPACE: CosWorkspace = {
       lane: "full",
       goal: "Add a Saturday slot.",
       version: 4,
+      progress: [
+        { step: "Planning the pages", done: 1, total: 1, now: false },
+        { step: "Writing the pages", done: 3, total: 7, now: true },
+      ],
     },
   ],
+  stopped: [{ cause: "unfinished", at: "2026-10-30T08:00:00.000Z" }],
   questions: [
     {
       request_id: ASKED,
@@ -62,6 +67,18 @@ const withoutRefs = (value: unknown): unknown => {
 }
 
 describe("the workspace the CoS reads", () => {
+  it("reads each build's steps and the builds that stopped, in plain words", () => {
+    const data = dumped(WORKSPACE) as {
+      builds: { progress: string[] }[]
+      stopped_recently: { why: string }[]
+    }
+    expect(data.builds[0]?.progress).toEqual([
+      "Planning the pages (done)",
+      "Writing the pages: 3 of 7 (now)",
+    ])
+    expect(data.stopped_recently[0]?.why).toBe("it could not pass its checks")
+  })
+
   it("holds no id or hash outside a ref", () => {
     const text = JSON.stringify(withoutRefs(dumped(WORKSPACE)))
     expect(text).not.toMatch(

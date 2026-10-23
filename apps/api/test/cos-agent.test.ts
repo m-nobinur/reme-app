@@ -332,6 +332,7 @@ describe("the CoS's change kinds", () => {
       questions: [],
       approvals: [],
       missing_facts: [],
+      stopped: [],
       builds: [
         {
           assignment_id: "3f2b9c1e-8a4d-4f6b-9c2a-1d5e7f8a9b0d",
@@ -340,6 +341,7 @@ describe("the CoS's change kinds", () => {
           lane: "quick",
           goal: "Change the headline.",
           version: null,
+          progress: [],
         },
       ],
       expected_seconds: {
@@ -450,6 +452,7 @@ describe("the CoS's model and price", () => {
     questions: [],
     approvals: [],
     missing_facts: [],
+    stopped: [],
   }
 
   it("keeps text inside the workspace data from closing its tag", () => {
@@ -484,6 +487,7 @@ describe("the CoS's model and price", () => {
       state: "queued" as const,
       goal: "Add a Saturday slot.",
       version: null,
+      progress: [],
     }
     expect(contextOf("ask", EMPTY).taint).toEqual([])
     expect(contextOf("ask", { ...EMPTY, questions: [asked] }).taint).toEqual([

@@ -1,5 +1,6 @@
 import type {
   AssignmentState,
+  BuildStopCause,
   CosWorkspace,
   DomainCheck,
   DomainState,
@@ -49,12 +50,27 @@ const CHECK: Record<DomainCheck["status"], string> = {
   valid: "working",
 }
 
+const STOPPED: Record<BuildStopCause, string> = {
+  stalled: "it went quiet for too long",
+  unfinished: "it could not pass its checks",
+  unanswered: "it waited too long for an answer from the owner",
+  service: "a service it relies on kept failing",
+  other: "something went wrong on our side",
+}
+
 /** `owner.preferred_name` as `owner preferred name`. */
 const plain = (key: string) => key.replace(/[._]/g, " ")
 
 export function workspaceLabels(workspace: CosWorkspace) {
-  const { site, builds, questions, approvals, missing_facts, domains } =
-    workspace
+  const {
+    site,
+    builds,
+    stopped,
+    questions,
+    approvals,
+    missing_facts,
+    domains,
+  } = workspace
   return {
     site: { address: site.host, live: site.live_version !== null },
     builds: builds.map((b) => ({
@@ -63,7 +79,12 @@ export function workspaceLabels(workspace: CosWorkspace) {
       state: STATE[b.state],
       lane: b.lane,
       goal: b.goal,
+      progress: b.progress.map(
+        (p) =>
+          `${p.step}${p.total > 1 ? `: ${p.done} of ${p.total}` : ""}${p.now ? " (now)" : p.done >= p.total ? " (done)" : ""}`
+      ),
     })),
+    stopped_recently: stopped.map((s) => ({ why: STOPPED[s.cause], at: s.at })),
     questions: questions.map((q) => ({
       ref: { request_id: q.request_id, field: q.field },
       about: plain(q.field),
