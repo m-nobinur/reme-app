@@ -43,8 +43,8 @@ import {
   changesPrompt,
   colourName,
   initialsOf,
+  LOGO_STYLE_WORDS,
   logoPrompt,
-  spelled,
   variantStyles,
 } from "../src/logo-style.ts"
 import { owner, stubOrchestrator } from "./owner-fixture.ts"
@@ -61,7 +61,7 @@ const brief = {
 const subject = { name: "Bright Homes", trade: "domestic cleaning" }
 
 describe("the logo prompt", () => {
-  it("quotes and spells the name, and binds each colour by name to a part", () => {
+  it("quotes the name, and binds each colour by name to a part", () => {
     const prompt = logoPrompt({
       subject,
       brief,
@@ -69,15 +69,38 @@ describe("the logo prompt", () => {
       symbol: "a droplet with a roof",
     })
     expect(prompt).toContain('"Bright Homes"')
-    expect(prompt).toContain("B-R-I-G-H-T H-O-M-E-S")
     expect(prompt).toContain(
-      `${colourName(palette.primary)} (${palette.primary}), the brand colour, for the symbol and main shapes`
+      "Flat 2D vector logo, built from solid-colour shapes with crisp, clean edges: a combination mark"
     )
-    expect(prompt).toContain(`(${palette.ink}) for all lettering`)
+    expect(prompt).toContain(LOGO_STYLE_WORDS.minimal)
+    expect(prompt).toContain("Use a clean, balanced level of detail")
+    expect(prompt).toContain(
+      'Set the company name "Bright Homes" as clean, evenly-spaced lettering with every letter clear, complete and correctly spelled.'
+    )
+    expect(prompt).toContain(
+      `the icon is ${colourName(palette.primary)} (${palette.primary}), the brand colour, and the company-name text is ${colourName(palette.ink)} (${palette.ink})`
+    )
+    expect(prompt).toContain(
+      "even where this style is conventionally drawn in other colours. Every fill is solid and flat, with no unrelated colours introduced."
+    )
     expect(prompt).toContain("Idea: a droplet with a roof")
-    expect(prompt).toContain("Style: Minimal")
     expect(prompt).toContain("fully transparent background")
-    expect(prompt).toContain("Owner's direction: Something with a home")
+    expect(prompt).toContain("scalable from favicon to signage")
+    expect(prompt).toContain("Additional direction: Something with a home")
+  })
+
+  it("lets only gradient and 3D styles shade, and draws them as polished rather than flat", () => {
+    const of = (style: "gradient" | "three_d" | "retro") =>
+      logoPrompt({ subject, brief, style, symbol: null })
+    for (const style of ["gradient", "three_d"] as const) {
+      expect(of(style)).toContain(
+        "Modern, polished logo with smooth, clean rendering"
+      )
+      expect(of(style)).toContain("Lighter and darker tones")
+      expect(of(style)).not.toContain("Flat 2D vector logo")
+    }
+    expect(of("retro")).toContain("Flat 2D vector logo")
+    expect(of("retro")).not.toContain("Lighter and darker tones")
   })
 
   it("letters in the darkest colour, adds the supporting one, and says the example is for layout and look only", () => {
@@ -89,11 +112,12 @@ describe("the logo prompt", () => {
       support: dark,
       reference: true,
     })
-    expect(prompt).toContain(`(${light}), the brand colour, for the symbol`)
-    expect(prompt).toContain(`(${dark}) for all lettering`)
-    expect(prompt).toContain("No colours outside this list.")
-    expect(prompt).toContain("Take its layout from it")
-    expect(prompt).toContain("Never copy its name, its symbol or its colours")
+    expect(prompt).toContain(`(${light}), the brand colour, and the company`)
+    expect(prompt).toContain(`text is ${colourName(dark)} (${dark})`)
+    expect(prompt).toContain(
+      "Take inspiration from the attached reference picture's composition, shapes and overall feel"
+    )
+    expect(prompt).toContain("never its name, its symbol or its colours")
     // A lighter supporting colour is the accent; the brand colour letters.
     const lighter = logoPrompt({
       subject,
@@ -102,9 +126,9 @@ describe("the logo prompt", () => {
       symbol: null,
       support: light,
     })
-    expect(lighter).toContain(`(${dark}) for all lettering, and`)
-    expect(lighter).toContain(`(${light}) for one small accent`)
-    expect(lighter).not.toContain("Reference:")
+    expect(lighter).toContain(`(${dark}), the brand colour, and the company`)
+    expect(lighter).toContain(`text is ${colourName(dark)} (${dark})`)
+    expect(lighter).not.toContain("reference picture")
   })
 
   it("takes the director's supporting colour only as a hex", () => {
@@ -123,14 +147,14 @@ describe("the logo prompt", () => {
         symbol: null,
       })
     for (const type of ["icon", "abstract"] as const) {
-      expect(of(type)).toContain("Lettering: none.")
-      expect(of(type)).not.toContain("B-R-I-G-H-T")
+      expect(of(type)).toContain("purely graphic symbol with no lettering")
+      expect(of(type)).not.toContain('company name "Bright Homes"')
     }
     const monogram = of("monogram")
     expect(monogram).toContain('only the initials "BH"')
-    expect(monogram).not.toContain("B-R-I-G-H-T")
-    expect(of("lockup")).toContain("B-R-I-G-H-T H-O-M-E-S")
-    expect(of("emblem")).toContain("B-R-I-G-H-T H-O-M-E-S")
+    expect(monogram).not.toContain('company name "Bright Homes"')
+    expect(of("lockup")).toContain('company name "Bright Homes"')
+    expect(of("emblem")).toContain('company name "Bright Homes"')
     expect(initialsOf("Smith & Sons Cleaning Co")).toBe("SSC")
   })
 
@@ -145,7 +169,6 @@ describe("the logo prompt", () => {
   })
 
   it("keeps a name's quotes from breaking out of its own", () => {
-    expect(spelled("Jo's")).toBe("J-O-'-S")
     const prompt = logoPrompt({
       subject: { name: 'The "Best" Clean', trade: "cleaning" },
       brief: { ...brief, type: "emblem" },
@@ -159,6 +182,7 @@ describe("the logo prompt", () => {
     const prompt = changesPrompt({
       subject,
       brief,
+      style: "minimal",
       changes: "Make the roof red",
     })
     expect(prompt).toContain("Make the roof red")
@@ -168,9 +192,10 @@ describe("the logo prompt", () => {
       changesPrompt({
         subject,
         brief: { ...brief, type: "icon" },
+        style: "minimal",
         changes: "Bigger",
       })
-    ).toContain("Lettering: none.")
+    ).toContain("no lettering")
   })
 
   it("takes the director's ideas that are words, at most one per variant", () => {
@@ -375,11 +400,11 @@ describe("drawing a round in the queue", () => {
     expect(typeof done.finished_at).toBe("string")
     expect(asked.filter((a) => a.model === LOGO_MODELS[1].id)).toHaveLength(1)
     expect(
-      asked.filter((a) => a.prompt.includes("horizontal lockup"))
+      asked.filter((a) => a.prompt.includes("a combination mark"))
     ).toHaveLength(asked.length)
     expect(
       asked.find((a) => a.prompt.includes("Idea: a mop"))?.prompt
-    ).toContain("Style: Minimal")
+    ).toContain(LOGO_STYLE_WORDS.minimal)
     const stored = sites.objects.get(`generated/${ORG}/${done.planned[0]}.png`)
     expect(stored?.meta).toEqual({ use: "logo" })
     expect(stored?.type).toBe("image/png")
@@ -429,7 +454,9 @@ describe("drawing a round in the queue", () => {
     const { env } = await setup({ styles })
     const asked = images()
     await drawRound(env, job, { director: null })
-    const looks = asked.map((a) => a.prompt.match(/Style: ([^:]+):/)?.[1])
+    const looks = asked.map((a) =>
+      LOGO_STYLES.find((each) => a.prompt.includes(LOGO_STYLE_WORDS[each]))
+    )
     expect(new Set(looks).size).toBe(LOGO_VARIANTS)
   })
 
@@ -448,7 +475,9 @@ describe("drawing a round in the queue", () => {
       const example = `data:image/webp;base64,${Buffer.from(logoReference("emblem", style)).toString("base64")}`
       expect(urls).toContain(example)
     }
-    expect(asked.every((a) => a.prompt.includes("Reference:"))).toBe(true)
+    expect(asked.every((a) => a.prompt.includes("reference picture"))).toBe(
+      true
+    )
   })
 
   it("gives a one-colour brief the director's supporting colour, and a many-colour one its own", async () => {
@@ -458,7 +487,9 @@ describe("drawing a round in the queue", () => {
       director: async () => ({ ideas: [], support: dark }),
     })
     expect(
-      askedOne.every((a) => a.prompt.includes(`(${dark}) for all lettering`))
+      askedOne.every((a) =>
+        a.prompt.includes(`text is ${colourName(dark)} (${dark})`)
+      )
     ).toBe(true)
     const other = (PALETTES[1] as (typeof PALETTES)[number]).primary
     const many = await setup()

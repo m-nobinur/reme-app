@@ -10,43 +10,54 @@ import colours from "./logo-colours.json" with { type: "json" }
 
 /**
  * The logo maker's words: the guideline and the prompt each variant is
- * drawn from. Built from short labelled lines, as OpenAI's image prompting
- * guide advises, after Nutlope/logocreator's prompt. Styles describe form
- * only: the colours always come from the brief, bound to the part they
- * colour, with a colour name beside each hex because image models follow
- * "blue (#2f6ff5)" far better than a bare hex.
+ * drawn from, after Nutlope/logocreator's recipe: a medium clause, the logo
+ * type, a style that describes form and never colour, a text clause, and a
+ * colour clause that binds each colour to the part it paints, with a colour
+ * name beside each hex because image models follow "blue (#2f6ff5)" far
+ * better than a bare hex. The background is always transparent.
  */
 
 export const LOGO_STYLE_WORDS: Record<LogoStyle, string> = {
   minimal:
-    "Minimal: one simple shape or very few, even thin strokes or solid fills, plenty of negative space, a light clean sans-serif, nothing decorative. Solid flat fills.",
+    "Minimal and timeless: two or three simple geometric shapes with generous negative space, clean and flat.",
   geometric:
-    "Geometric: built from circles, triangles, squares and straight lines on a clear grid, precise symmetry, a clean geometric sans-serif. Solid flat fills.",
+    "Geometric and precise: built from angular polygonal shapes, grid-aligned with sharp, clean edges; modern and structured.",
   gradient:
-    "Gradient: modern and vibrant, smooth gradients between the given colours across the mark, soft rounded forms, a clean sans-serif. The gradient is the look.",
+    "Sleek and contemporary: smooth gradient shading that flows across soft, fluid shapes for a dynamic, modern feel.",
   mascot:
-    "Mascot: a friendly character from the trade, such as a simple animal or an object with a face, bold outlines, expressive and approachable, a rounded bold name. Flat fills with simple cel shading.",
+    "A friendly mascot character: rounded, expressive and approachable, built from bold, confident shapes.",
   hand_drawn:
-    "Hand-drawn: confident ink-like linework with a slight organic wobble, hand-lettered name, looks drawn by a person, still clean and printable. Solid fills.",
+    "Hand-drawn and organic: sketchy, natural linework with imperfect strokes and a human, crafted feel.",
   luxury:
-    "Luxury: fine monoline strokes, an elegant high-contrast serif or widely letter-spaced capitals, symmetrical and restrained, a thin ornament at most, quiet and refined. Solid fills.",
+    "Elegant and luxurious: fine, thin monoline work, refined, minimal and premium.",
   retro:
-    "Retro: vintage mid-century feel, chunky rounded or slab lettering, simple badge-like shapes, clean edges. Solid flat fills, no more than the given colours.",
+    "Retro and vintage: a classic heritage badge feel with nostalgic, time-worn detailing.",
   three_d:
-    "3D: a dimensional mark with soft lighting, depth and gentle highlights and shading in tints and shades of the given colours, rounded glossy or clay-like forms, lettering with matching depth.",
+    "Modern and dimensional: soft three-dimensional depth with gentle lighting and subtle shadows, smooth and polished.",
 }
 
-/** What each logo type is made of. `initials` is "BH" for "Bright Homes". */
-const LOGO_TYPE_WORDS: Record<LogoType, (initials: string) => string> = {
-  lockup: () =>
-    "a horizontal lockup: a simple icon to the left of the name, for a website header.",
-  icon: () => "an icon: one symbol on its own, with no name beside it.",
-  monogram: (initials) =>
-    `a monogram: the initials "${initials}" built into one mark.`,
-  emblem: () =>
-    "an emblem or badge: the name inside a circle, shield or rounded-rectangle border, with a small symbol.",
-  abstract: () =>
-    "an abstract mark: a non-literal shape that stands for the business without depicting anything.",
+/** Only these two keep depth and shading; every other style is flat vector art. */
+const SHADED: readonly LogoStyle[] = ["gradient", "three_d"]
+
+const mediumLine = (style: LogoStyle) =>
+  SHADED.includes(style)
+    ? "Modern, polished logo with smooth, clean rendering"
+    : "Flat 2D vector logo, built from solid-colour shapes with crisp, clean edges"
+
+const DETAIL_LINE =
+  "Use a clean, balanced level of detail: simple enough to scale anywhere, with enough character to be memorable."
+
+/** What each logo type is made of. */
+const LOGO_TYPE_WORDS: Record<LogoType, string> = {
+  lockup:
+    "a combination mark: a distinctive icon paired with the company name in clean, legible typography",
+  icon: "an icon-only symbol: a single, standalone graphic mark",
+  monogram:
+    "a monogram / lettermark built only from the company's initials, arranged into a single geometric mark",
+  emblem:
+    "an emblem / badge: the company name enclosed within a bordered shape such as a circle, shield or seal",
+  abstract:
+    "an abstract geometric mark, non-representational, modern and clean",
 }
 
 /**
@@ -97,32 +108,53 @@ const lightness = (hex: string) =>
     .map((i) => Number.parseInt(hex.slice(i, i + 2), 16))
     .reduce((sum, c, i) => sum + c * ([0.299, 0.587, 0.114][i] as number), 0)
 
-/**
- * The colours bound to parts: the brand colour (the first) for the symbol and
- * main shapes, the darkest for the lettering, and the one left over, if any,
- * for a small accent. `support` is the director's second colour for an owner
- * who gave one. More than three crowd a logo, so the rest are left out. How
- * they are filled is the style's word.
- */
-function colourLine(colors: readonly string[], support?: string): string {
-  const pool = (support ? [...colors, support] : [...colors]).slice(0, 3)
-  const shapes = pool[0] as string
-  const lettering = pool.reduce((best, each) =>
-    lightness(each) < lightness(best) ? each : best
-  )
-  const accent = pool.find((each) => each !== shapes && each !== lettering)
-  return [
-    `Colours: use only ${named(shapes)}, the brand colour, for the symbol and main shapes, ${named(lettering)} for all lettering`,
-    accent ? `, and ${named(accent)} for one small accent` : "",
-    ". No colours outside this list.",
-  ].join("")
+/** The parts of a logo of each type, for the colours to paint. */
+const PARTS: Record<LogoType, { symbol: string; lettering?: string }> = {
+  lockup: { symbol: "the icon", lettering: "the company-name text" },
+  icon: { symbol: "the symbol" },
+  monogram: {
+    symbol: "any shape around the initials",
+    lettering: "the initials",
+  },
+  emblem: { symbol: "the symbol and the border", lettering: "the lettering" },
+  abstract: { symbol: "the mark" },
 }
 
-/** "Bright Homes" as "B-R-I-G-H-T H-O-M-E-S", so the model has each letter. */
-export const spelled = (name: string) =>
-  words(name)
-    .map((word) => word.toUpperCase().split("").join("-"))
-    .join(" ")
+/**
+ * The colour clause. The brand colour (the first) paints the symbol and main
+ * shapes and the darkest paints the lettering; for a type that letters
+ * nothing the rest are small details. `support` is the director's second
+ * colour for an owner who gave one. More than three crowd a logo, so the
+ * rest are left out. Only `gradient` and `three_d` may add tints and shades.
+ */
+function colourLine(
+  type: LogoType,
+  style: LogoStyle,
+  colors: readonly string[],
+  support?: string
+): string {
+  const pool = (support ? [...colors, support] : [...colors]).slice(0, 3)
+  const brand = pool[0] as string
+  const { symbol, lettering } = PARTS[type]
+  const darkest = pool.reduce((best, each) =>
+    lightness(each) < lightness(best) ? each : best
+  )
+  const accents = pool.filter((each) => each !== brand && each !== darkest)
+  let paint: string
+  if (pool.length === 1) {
+    paint = lettering
+      ? `${symbol} and ${lettering} are ${named(brand)}, the brand colour`
+      : `${symbol} is ${named(brand)}, the brand colour`
+  } else if (lettering) {
+    paint = `${symbol} is ${named(brand)}, the brand colour, and ${lettering} is ${named(darkest)}${accents.length ? `, with ${accents.map(named).join(" and ")} for one small accent` : ""}`
+  } else {
+    paint = `${symbol} is ${named(brand)}, the brand colour, with ${pool.slice(1).map(named).join(" and ")} for small details`
+  }
+  const depth = SHADED.includes(style)
+    ? "Lighter and darker tones of those same colours are fine for depth"
+    : "Every fill is solid and flat"
+  return `Colours: ${paint}, even where this style is conventionally drawn in other colours. ${depth}, with no unrelated colours introduced.`
+}
 
 /** What every prompt knows about the business. Inner quotes become single ones. */
 export type LogoSubject = { name: string; trade: string }
@@ -133,20 +165,22 @@ const quoted = (text: string) => text.replaceAll('"', "'").trim()
 const FORMAT_LINE =
   "Format: one centred logo with generous margin on a fully transparent background, clean alpha edges. No backdrop, scenery, mockup, checkerboard, drop shadow or watermark."
 
-/** The example picture sets structure and style, nothing of its own. */
-const REFERENCE_LINE =
-  "Reference: the attached picture is an example of the layout and the look wanted, for another business. Take its layout from it (where the parts sit and how big they are) and its look (the lettering's case, weight and spacing, the line weight, the finish). Never copy its name, its symbol or its colours: draw this business's own symbol, never the picture's, and use only the colours listed below."
+const CLOSING_LINE =
+  "Centred, balanced composition with crisp, clean edges. Professional and instantly recognisable, scalable from favicon to signage."
 
-/** What, if anything, a logo of this type letters. */
+/** The example picture sets composition and feel, nothing of its own. */
+const REFERENCE_LINE =
+  "Take inspiration from the attached reference picture's composition, shapes and overall feel, but design an original mark rather than a copy: never its name, its symbol or its colours."
+
+/** What, if anything, a logo of this type letters. Described, not forbidden: the model attends to what it is told to draw. */
 function letteringLine(type: LogoType, name: string): string {
-  if (type === "icon" || type === "abstract") {
-    return "Lettering: none. No letters, words, numbers or initials anywhere in the image."
+  if (!PARTS[type].lettering) {
+    return "Render it as a purely graphic symbol with no lettering: use clean shapes and open negative space where text would otherwise sit."
   }
   if (type === "monogram") {
-    const initials = initialsOf(name)
-    return `Lettering: only the initials "${initials}", spelled exactly ${initials.split("").join("-")}. Every letter clear and complete. No other words, tagline, slogan, phone number or placeholder text.`
+    return `Build it from only the initials "${initialsOf(name)}", each letter clean, complete and correctly formed.`
   }
-  return `Lettering: the name reads exactly "${name}", spelled exactly ${spelled(name)}. Every letter clear, complete and evenly spaced. No other words, tagline, slogan, phone number or placeholder text.`
+  return `Set the company name "${name}" as clean, evenly-spaced lettering with every letter clear, complete and correctly spelled.`
 }
 
 /**
@@ -170,17 +204,17 @@ export function logoPrompt(input: {
   const name = quoted(subject.name)
   const description = scrub(quoted(brief.description))
   return [
-    `Create an original, non-infringing logo for "${name}", a local ${quoted(subject.trade)} business.`,
-    `Logo type: ${LOGO_TYPE_WORDS[brief.type](initialsOf(name))}`,
+    `${mediumLine(style)}: ${LOGO_TYPE_WORDS[brief.type]} for "${name}", a local ${quoted(subject.trade)} business. ${LOGO_STYLE_WORDS[style]} ${DETAIL_LINE}`,
     symbol ? `Idea: ${quoted(symbol)}` : "",
-    `Style: ${LOGO_STYLE_WORDS[style]}`,
-    description ? `Owner's direction: ${description}` : "",
-    input.changes ? `Changes asked: ${scrub(quoted(input.changes))}` : "",
+    [
+      letteringLine(brief.type, name),
+      colourLine(brief.type, style, brief.colors, input.support),
+      FORMAT_LINE,
+      CLOSING_LINE,
+    ].join(" "),
     input.reference ? REFERENCE_LINE : "",
-    letteringLine(brief.type, name),
-    colourLine(brief.colors, input.support),
-    FORMAT_LINE,
-    "Quality bar: strong silhouette, balanced negative space; reads at favicon size and on a van door or a yard sign. Favour simplicity over detail.",
+    description ? `Additional direction: ${description}` : "",
+    input.changes ? `Changes asked: ${scrub(quoted(input.changes))}` : "",
   ]
     .filter(Boolean)
     .join("\n")
@@ -194,15 +228,17 @@ export function logoPrompt(input: {
 export function changesPrompt(input: {
   subject: LogoSubject
   brief: LogoBrief
+  /** The style this variant is drawn in. */
+  style: LogoStyle
   changes: string
 }): string {
-  const { subject, brief } = input
+  const { subject, brief, style } = input
   const name = quoted(subject.name)
   return [
     `Change this logo for "${name}": ${scrub(quoted(input.changes))}`,
     "Change only that. Keep the same logo identity, layout, colours and letterforms.",
     letteringLine(brief.type, name),
-    colourLine(brief.colors),
+    colourLine(brief.type, style, brief.colors),
     FORMAT_LINE,
   ].join("\n")
 }
