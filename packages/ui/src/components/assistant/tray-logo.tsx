@@ -86,16 +86,25 @@ const STYLE_LABELS: Record<LogoStyle, string> = {
 const styleLabel = (style: LogoBrief["style"]) =>
   style === "surprise" ? "Surprise me" : STYLE_LABELS[style]
 
+/** The pictures a type or style tile cycles through on hover, `<name>-<n>`, frame 0 at rest. */
+const FRAMES = import.meta.glob<string>(
+  ["../../assets/logo-types/*.webp", "../../assets/logo-styles/*.webp"],
+  { eager: true, import: "default" }
+)
+const framesOf = (dir: "logo-types" | "logo-styles", name: string) =>
+  [0, 1, 2, 3, 4].flatMap(
+    (n) => FRAMES[`../../assets/${dir}/${name}-${n}.webp`] ?? []
+  )
+
 /**
- * Example logos for a made-up brand: each type (`type-<type>`), and each
- * style drawn as each type (`<type>-<style>`).
+ * A type or style tile: a border that firms on hover and turns the accent,
+ * with a soft ring, when picked. The pictures are transparent and drawn to
+ * read on light and dark alike, so they sit on the tile itself.
  */
-const EXAMPLES = import.meta.glob<string>("../../assets/logo-examples/*.webp", {
-  eager: true,
-  import: "default",
-})
-const example = (name: string) =>
-  EXAMPLES[`../../assets/logo-examples/${name}.webp`]
+const PICK_TILE =
+  "group flex cursor-pointer rounded-2xl border border-border bg-background transition-all duration-150 hover:border-foreground/25 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-card has-[:checked]:border-primary has-[:checked]:ring-2 has-[:checked]:ring-primary/20"
+const PICK_LABEL =
+  "font-medium text-muted-foreground text-xs transition-colors group-has-[:checked]:text-foreground"
 
 /** What the status line says while a round draws, a step every few seconds. */
 const drawingLines = (name: string) => [
@@ -113,7 +122,7 @@ const COLOUR_TILE =
   "gap-0 overflow-hidden p-0 has-[:checked]:ring-2 has-[:checked]:ring-foreground"
 /** Random and Custom inside a colour tile: an icon and a name, a palette's height. */
 const NAMED_TILE =
-  "flex h-20 flex-col items-center justify-center gap-1 font-medium text-muted-foreground text-xs"
+  "flex h-10 items-center justify-center gap-1.5 font-medium text-muted-foreground text-xs"
 
 /** A colour's lightness, enough to tell the darker of two apart. */
 const lightness = (colour: string) => {
@@ -533,7 +542,6 @@ function TrayLogo({
     })
 
   const firstRound = create && rounds.length === 0
-  const exampleType = brief.type ?? "lockup"
 
   // Before the first round the tray's primary button is Design my logo; a
   // layout effect, so the tray never paints Next in its place.
@@ -782,7 +790,7 @@ function TrayLogo({
                 type="radio"
               />
               <span className={NAMED_TILE}>
-                <ShuffleIcon aria-hidden className="size-5" />
+                <ShuffleIcon aria-hidden className="size-4" />
                 Random
               </span>
             </label>
@@ -795,7 +803,7 @@ function TrayLogo({
                 type="radio"
               />
               <span className={NAMED_TILE}>
-                <EyedropperIcon aria-hidden className="size-5" />
+                <EyedropperIcon aria-hidden className="size-4" />
                 Custom
               </span>
             </label>
@@ -867,40 +875,22 @@ function TrayLogo({
       <Fold open={opened("type")}>
         <fieldset className="flex flex-col gap-2">
           <legend className="mb-1.5 font-medium text-sm">Logo type</legend>
-          <div className="grid grid-cols-3 gap-2">
-            {LOGO_TYPES.map((type) => {
-              const src = example(`type-${type}`)
-              return (
-                <label className={cn(TRAY_TILE, "gap-1.5 p-1.5")} key={type}>
-                  <input
-                    checked={type === brief.type}
-                    className="sr-only"
-                    name={`${id}-type`}
-                    onChange={() => {
-                      setBrief({ ...brief, type })
-                      setFocus("type")
-                    }}
-                    type="radio"
-                  />
-                  {/* One 3:2 box for every type: the wide lockup reads large and the square ones still fit. */}
-                  <span
-                    className="flex aspect-[3/2] items-center justify-center overflow-hidden rounded-lg"
-                    style={{ backgroundColor: paper }}
-                  >
-                    {src ? (
-                      <img
-                        alt=""
-                        className="size-full object-contain p-1.5"
-                        src={src}
-                      />
-                    ) : null}
-                  </span>
-                  <span className="font-medium text-xs">
-                    {TYPE_LABELS[type]}
-                  </span>
-                </label>
-              )
-            })}
+          <div className="grid @md:grid-cols-2 gap-2">
+            {LOGO_TYPES.map((type) => (
+              <PickTile
+                checked={type === brief.type}
+                className="flex-row items-center gap-3 px-2 py-1.5"
+                frames={framesOf("logo-types", type)}
+                key={type}
+                label={TYPE_LABELS[type]}
+                name={`${id}-type`}
+                onPick={() => {
+                  setBrief({ ...brief, type })
+                  setFocus("type")
+                }}
+                picture="h-9 w-14"
+              />
+            ))}
           </div>
         </fieldset>
       </Fold>
@@ -915,48 +905,26 @@ function TrayLogo({
       <Fold open={opened("style")}>
         <fieldset className="flex flex-col gap-2">
           <legend className="mb-1.5 font-medium text-sm">Style</legend>
-          <div className="grid grid-cols-3 gap-2">
-            {LOGO_STYLES.map((style) => {
-              const src = example(`${exampleType}-${style}`)
-              return (
-                <label className={cn(TRAY_TILE, "gap-1.5 p-1.5")} key={style}>
-                  <input
-                    checked={style === brief.style}
-                    className="sr-only"
-                    name={`${id}-style`}
-                    onChange={() => {
-                      setBrief({ ...brief, style })
-                      setFocus("style")
-                    }}
-                    type="radio"
-                  />
-                  <span
-                    className={cn(
-                      "flex items-center justify-center overflow-hidden rounded-lg",
-                      exampleType === "lockup"
-                        ? "aspect-[2/1]"
-                        : "aspect-square"
-                    )}
-                    style={{ backgroundColor: paper }}
-                  >
-                    {src ? (
-                      <img
-                        alt=""
-                        className="size-full object-contain p-1.5"
-                        src={src}
-                      />
-                    ) : null}
-                  </span>
-                  <span className="font-medium text-xs">
-                    {STYLE_LABELS[style]}
-                  </span>
-                </label>
-              )
-            })}
+          <div className="grid @md:grid-cols-4 grid-cols-3 gap-2">
+            {LOGO_STYLES.map((style) => (
+              <PickTile
+                checked={style === brief.style}
+                className="flex-col items-center gap-1.5 px-1.5 py-2"
+                frames={framesOf("logo-styles", style)}
+                key={style}
+                label={STYLE_LABELS[style]}
+                name={`${id}-style`}
+                onPick={() => {
+                  setBrief({ ...brief, style })
+                  setFocus("style")
+                }}
+                picture="size-9"
+              />
+            ))}
             <label
               className={cn(
-                TRAY_TILE,
-                "gap-1.5 border-foreground/30 border-dashed p-1.5 has-[:checked]:border-solid"
+                PICK_TILE,
+                "flex-col items-center gap-1.5 border-dashed px-1.5 py-2 hover:border-foreground/30 has-[:checked]:border-solid"
               )}
             >
               <input
@@ -969,15 +937,13 @@ function TrayLogo({
                 }}
                 type="radio"
               />
-              <span
-                className={cn(
-                  "flex items-center justify-center rounded-lg bg-muted text-muted-foreground",
-                  exampleType === "lockup" ? "aspect-[2/1]" : "aspect-square"
-                )}
-              >
-                <ShuffleIcon aria-hidden className="size-6" />
+              <span className="flex size-9 items-center justify-center">
+                <ShuffleIcon
+                  aria-hidden
+                  className="size-5 text-muted-foreground transition-colors group-has-[:checked]:text-primary"
+                />
               </span>
-              <span className="font-medium text-xs">Surprise me</span>
+              <span className={PICK_LABEL}>Surprise me</span>
             </label>
           </div>
         </fieldset>
@@ -1160,6 +1126,107 @@ function TrayLogo({
         </p>
       ) : null}
     </div>
+  )
+}
+
+/** A logo type or style to pick: its pictures, cycling while hovered, and its name. */
+function PickTile({
+  checked,
+  className,
+  frames,
+  label,
+  name,
+  onPick,
+  picture,
+}: {
+  checked: boolean
+  className: string
+  frames: string[]
+  label: string
+  name: string
+  onPick: () => void
+  /** The picture box's size. */
+  picture: string
+}) {
+  const [hovered, setHovered] = useState(false)
+  return (
+    <label
+      className={cn(PICK_TILE, className)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <input
+        checked={checked}
+        className="sr-only"
+        name={name}
+        onChange={onPick}
+        type="radio"
+      />
+      <Cycling active={hovered} className={picture} frames={frames} />
+      <span className={PICK_LABEL}>{label}</span>
+    </label>
+  )
+}
+
+/**
+ * Crossfades through the frames while active: each one dissolves in from a
+ * slight zoom and blur. Frame 0 rests; the others load on the first hover.
+ */
+function Cycling({
+  active,
+  className,
+  frames,
+}: {
+  active: boolean
+  className: string
+  frames: string[]
+}) {
+  const [at, setAt] = useState(0)
+  const [armed, setArmed] = useState(false)
+
+  useEffect(() => {
+    if (active) setArmed(true)
+  }, [active])
+
+  useEffect(() => {
+    if (
+      !active ||
+      frames.length < 2 ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      setAt(0)
+      return
+    }
+    // The first change comes quickly so the hover reads, then a calmer beat.
+    const first = setTimeout(() => setAt(1), 220)
+    const every = setInterval(
+      () => setAt((now) => (now + 1) % frames.length),
+      820
+    )
+    return () => {
+      clearTimeout(first)
+      clearInterval(every)
+    }
+  }, [active, frames.length])
+
+  const shown = active ? at : 0
+  return (
+    <span className={cn("relative block shrink-0", className)}>
+      {(armed ? frames : frames.slice(0, 1)).map((src, place) => (
+        <img
+          alt=""
+          className={cn(
+            "absolute inset-0 size-full object-contain transition-[opacity,scale,filter] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none",
+            place === shown
+              ? "scale-100 opacity-100 blur-[0px]"
+              : "scale-110 opacity-0 blur-[4px]"
+          )}
+          draggable={false}
+          key={src}
+          src={src}
+        />
+      ))}
+    </span>
   )
 }
 

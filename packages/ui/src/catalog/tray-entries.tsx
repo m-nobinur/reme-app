@@ -339,6 +339,11 @@ const STATES: State[] = [
     start: { logo: { brief: STYLED } },
   },
   {
+    title: "Logo, create: surprise me picked",
+    input: create,
+    start: { logo: { brief: { ...TYPED, style: "surprise" } } },
+  },
+  {
     title: "Logo, drawing",
     start: { logo: { brief: STYLED } },
     rounds: [{ round: 1, status: "drawing", variants: [variant(0)] }],
