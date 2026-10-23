@@ -1,25 +1,36 @@
-import { useNavigate } from "@tanstack/react-router"
+import { getRouteApi } from "@tanstack/react-router"
 import { SiteReady } from "@workspace/ui/components/assistant/site-ready"
 import { useState } from "react"
 import { decideApproval } from "@/lib/api/server"
-import type { WriteOutcome } from "@/lib/api/types"
 import { DECISION_REFUSED } from "@/lib/decision"
-import { anchorOf } from "@/lib/reminders"
-import { type ReadyReview, readyCard, readyForReview } from "@/lib/site-ready"
+import {
+  type ReadyReview,
+  readyCard,
+  readyForReview,
+  versionMeta,
+  versionTitle,
+} from "@/lib/site-ready"
 import { useLiveWorkspace } from "@/lib/workspace"
-import { photoActions } from "@/panel/photo-actions"
-import { useRequestChanges } from "@/panel/workspace-panel"
+import {
+  useBrowserZone,
+  usePreview,
+  useRequestChanges,
+} from "@/panel/workspace-panel"
 
 const FAILED = "That did not go through. Try again."
 
+const frame = getRouteApi("/app")
+
 /**
- * The ready card, wired: the review comes from the polled workspace, Approve
- * is the panel's own decision bound to the revision, and Ask for changes is the
- * panel's Request changes, which puts the composer in website change mode.
+ * The ready card, wired: the review comes from the polled workspace, Publish
+ * is the panel's own decision bound to the revision, and Request changes is
+ * the panel's, which puts the composer in website change mode. Drawn in the
+ * chat and on the Website page.
  */
-export function SiteReadyCard() {
+export function SiteReadyCard({ className }: { className?: string }) {
   const live = useLiveWorkspace()
-  const navigate = useNavigate()
+  const { active } = frame.useLoaderData()
+  const zone = useBrowserZone()
   const requestChanges = useRequestChanges()
   const [approved, setApproved] = useState<ReadyReview | null>(null)
   const [pending, setPending] = useState(false)
@@ -29,18 +40,23 @@ export function SiteReadyCard() {
     approved,
     live.workspace?.live ?? null
   )
+  const review = card?.kind === "review" ? card.review : null
+  const [preview, retryPreview] = usePreview(review?.assignmentId ?? null)
   if (!card) return null
-  if (card.kind === "approved") {
+  const title = versionTitle(active?.name)
+  if (!review) {
     return (
       <SiteReady
         approved
+        className={className}
+        meta=""
         onApprove={() => undefined}
         onMakeChanges={requestChanges}
-        onSeePreview={() => undefined}
+        preview="loading"
+        title={title}
       />
     )
   }
-  const { review } = card
 
   const approve = async () => {
     setPending(true)
@@ -66,38 +82,17 @@ export function SiteReadyCard() {
     }
   }
 
-  // A photo change is a new version: the card waits for the workspace to say so.
-  const change = (write: () => Promise<WriteOutcome>) => {
-    setPending(true)
-    setError(null)
-    write()
-      .then(async (outcome) => {
-        if (outcome.done) await live.refresh()
-        else setError(outcome.reason)
-      })
-      .catch(() => setError(FAILED))
-      .finally(() => setPending(false))
-  }
-
   return (
     <SiteReady
+      className={className}
       error={error}
+      meta={versionMeta(live.workspace?.live ?? null, review.at, zone)}
       onApprove={() => void approve()}
       onMakeChanges={requestChanges}
-      onSeePreview={() =>
-        void navigate({
-          to: ".",
-          state: {
-            panel: {
-              key: crypto.randomUUID(),
-              focus: anchorOf.approval(review.approvalId),
-            },
-          },
-        })
-      }
+      onRetryPreview={retryPreview}
       pending={pending}
-      photoActions={review.photos?.length ? photoActions(change) : undefined}
-      photos={review.photos ?? []}
+      preview={preview}
+      title={title}
     />
   )
 }

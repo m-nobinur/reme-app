@@ -40,6 +40,7 @@ import {
   TabsTrigger,
 } from "@workspace/ui/components/tabs"
 import { Hint } from "@workspace/ui/components/tooltip"
+import { useSiteName } from "@workspace/ui/lib/site-name"
 import { cn } from "@workspace/ui/lib/utils"
 import { browserZone } from "@workspace/ui/lib/zone"
 import {
@@ -68,10 +69,10 @@ import {
   type Suggestion,
 } from "@/lib/panel"
 import { anchorOf, noteOf, upcomingNotes } from "@/lib/reminders"
+import { versionMeta, versionTitle } from "@/lib/site-ready"
 import { followThumbnail } from "@/lib/thumbnail"
 import { useLiveWorkspace } from "@/lib/workspace"
 import { useFollowStep } from "./follow-step"
-import { photoActions } from "./photo-actions"
 
 /**
  * The live panel, wired: the sections come from `@workspace/ui`, the reads
@@ -180,7 +181,7 @@ function Answerable({
  * The preview of the build behind an approval, read when the row mounts,
  * and read again on request after a read that failed.
  */
-function usePreview(
+export function usePreview(
   assignmentId: string | null
 ): [Preview | "loading" | "error", (() => Promise<void>) | undefined] {
   const [preview, setPreview] = useState<Preview | "loading" | "error">(
@@ -235,15 +236,20 @@ export function useLiveThumbnail(live: Workspace["liveRevision"]): Thumbnail {
 
 export function Decidable({
   item,
+  live = null,
   refresh,
   announce,
 }: {
   item: Approval
+  /** The version live now, which says whether this one is the first. */
+  live?: number | null
   refresh: Refresh
   announce: Announce
 }) {
   const { pending, error, run } = useWrite<"approve" | "change">(refresh)
   const [preview, retryPreview] = usePreview(item.request.assignment_id)
+  const business = useSiteName()
+  const zone = useBrowserZone()
   const [keys] = useState(attemptKeys)
   const { id: conversationId } = useParams({ strict: false })
 
@@ -275,32 +281,17 @@ export function Decidable({
       return outcome
     })
 
-  const photos = (item.photos ?? []).length > 0
   return (
     <ApprovalItem
       error={error}
-      expiresAt={item.request.expires_at}
+      meta={versionMeta(live, item.raisedAt, zone)}
       onApprove={approve}
       onAskForChanges={change}
-      onExpiry={item.onExpiry}
       onRetryPreview={retryPreview}
       pending={pending}
-      photoActions={
-        photos
-          ? photoActions((write) => {
-              void run("change", async () => {
-                const outcome = await write()
-                if (outcome.done)
-                  announce("Sent. A new version replaces this one.")
-                return outcome
-              })
-            })
-          : undefined
-      }
-      photos={item.photos ?? []}
       preview={preview}
-      rationale={item.detail}
       target={item.request.target}
+      title={versionTitle(business)}
     />
   )
 }
@@ -681,6 +672,7 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
           <Decidable
             announce={setStatus}
             item={panel.review}
+            live={live}
             refresh={refresh}
           />
         </div>
@@ -713,7 +705,12 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
               key={item.id}
               tabIndex={-1}
             >
-              <Decidable announce={setStatus} item={item} refresh={refresh} />
+              <Decidable
+                announce={setStatus}
+                item={item}
+                live={live}
+                refresh={refresh}
+              />
             </div>
           ) : item.kind === "question" ? (
             <div

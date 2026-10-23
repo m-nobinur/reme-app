@@ -6,8 +6,12 @@ import {
   CheckIcon,
   CircleIcon,
   ClockIcon,
+  GlobeIcon,
   ImageIcon,
   MinusCircleIcon,
+  PencilSimpleIcon,
+  RocketLaunchIcon,
+  SpinnerGapIcon,
   WarningCircleIcon,
 } from "@phosphor-icons/react"
 import {
@@ -20,15 +24,9 @@ import {
   type DecisionRequest,
   GOAL_MAX,
 } from "@workspace/contracts"
-import { ApprovalTargetSummary } from "@workspace/ui/components/approval-target"
 import { AssistantAvatar } from "@workspace/ui/components/assistant-avatar"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { Field } from "@workspace/ui/components/field"
-import {
-  type GeneratedPhoto,
-  GeneratedPhotos,
-  type PhotoActions,
-} from "@workspace/ui/components/generated-photos"
 import { Skeleton } from "@workspace/ui/components/skeleton"
 import { StatusIcon } from "@workspace/ui/components/status-line"
 import { useCycle } from "@workspace/ui/hooks/use-cycle"
@@ -66,9 +64,6 @@ import {
  * imports no router and no client.
  */
 
-const LINK =
-  "inline-flex items-center gap-1 rounded-sm text-primary text-sm underline-offset-4 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring [&_svg]:size-3.5"
-
 function PanelSection({
   title,
   count,
@@ -95,16 +90,6 @@ function PanelSection({
 }
 
 /** A link that opens outside the app, and says so to a screen reader. */
-function OutLink({ href, children }: { href: string; children: ReactNode }) {
-  return (
-    <a className={LINK} href={href} rel="noopener noreferrer" target="_blank">
-      {children}
-      <span className="sr-only"> (opens in a new tab)</span>
-      <ArrowSquareOutIcon aria-hidden />
-    </a>
-  )
-}
-
 const expiryLine = (expiresAt: string | null, onExpiry: string) => {
   const expires = formatDateTime(expiresAt)
   return expires ? `Open until ${expires}. ${onExpiry}` : onExpiry
@@ -602,7 +587,7 @@ function PanelSegment({
                     </div>
                   </li>
                 ))}
-                {more ? (
+                {more && !Children.toArray(children).length ? (
                   <li aria-hidden className="relative h-5">
                     <span className="absolute inset-y-0 left-[7.5px] w-px bg-linear-to-b from-border to-transparent" />
                   </li>
@@ -1005,26 +990,23 @@ function approvalDecision(
 /** A signed preview: the page, and its home page at three widths. */
 type Preview = { url: string; screenshots: string[] }
 
-const SHOTS = ["on a phone", "on a tablet", "on a laptop"] as const
+/** The laptop width of a preview's screenshots, the one a card shows. */
+const LAPTOP = 2
 
 /** Screenshots land about 10 s after the preview does; look again every 5 s for half a minute. */
 const SHOT_RETRY_MS = 5000
 const SHOT_TRIES = 6
 
 /**
- * One width of the home page. Until the image exists it is a quiet block of
+ * The home page on a laptop. Until the image exists it is a quiet block of
  * the same size, never a broken image; a screenshot still missing after the
  * last look tells the caller.
  */
 function Shot({
   src,
-  alt,
-  where,
   onGiveUp,
 }: {
   src: string | undefined
-  alt: string
-  where: string
   onGiveUp: () => void
 }) {
   const [tries, setTries] = useState(0)
@@ -1045,24 +1027,15 @@ function Shot({
     return () => clearTimeout(timer)
   }, [loaded, failed, tries, onGiveUp])
   return (
-    <div className="relative aspect-[3/4]">
-      {loaded ? null : (
-        <div
-          className="absolute inset-0 rounded-md border border-border bg-muted"
-          data-slot="screenshot-pending"
-        >
-          <span className="sr-only">
-            Screenshot {where} is still being made
-          </span>
-        </div>
-      )}
+    <div className="relative aspect-[16/9] bg-muted">
+      {loaded ? null : <Skeleton className="absolute inset-0 rounded-none" />}
       <img
-        alt={alt}
+        alt="Your home page on a laptop"
         className={cn(
-          "size-full rounded-md border border-border bg-muted object-cover object-top",
+          "size-full object-cover object-top",
           !loaded && "invisible"
         )}
-        height={160}
+        height={180}
         // A fresh element per look, so the browser asks again.
         key={tries}
         loading="lazy"
@@ -1070,72 +1043,163 @@ function Shot({
         onLoad={() => setLoaded(true)}
         ref={loadedWhenCached(setLoaded)}
         src={src}
-        width={120}
+        width={320}
       />
     </div>
   )
 }
 
 /**
- * The version's home page at three widths. A preview that could not be
- * read says so and can be read again, with no link implied where there is
- * none. Screenshots that fail to load say so, and the preview link beside
- * them still opens the version.
+ * A version waiting for the owner, as one compact card: what it is, a
+ * preview, then Publish and Request changes side by side. With `shot`, the
+ * home page sits under the header and opens the preview too. A preview that
+ * could not be read says so and can be read again, with no link implied.
  */
-function Screenshots({
+function VersionCard({
+  title,
+  meta,
   preview,
-  onRetry,
+  onRetryPreview,
+  shot = false,
+  onPublish,
+  onRequestChanges,
+  requesting,
+  revision,
+  pending: busy = null,
+  error = null,
+  children,
 }: {
+  title: string
+  meta: string
   preview: Preview | "loading" | "error"
-  onRetry?: (() => Promise<void>) | undefined
+  /** Reads the preview again after it could not be read. */
+  onRetryPreview?: (() => Promise<void>) | undefined
+  /** Show the home page on a laptop under the header. */
+  shot?: boolean
+  /** Null when there is no revision this card can publish. */
+  onPublish: (() => void) | null
+  onRequestChanges: () => void
+  /** Whether a change note is open under the buttons. */
+  requesting?: boolean | undefined
+  /** The revision Publish sends, on the card for a reader to check, never printed. */
+  revision?: string | undefined
+  pending?: "approve" | "change" | null
+  error?: string | null
+  /** Under the buttons: the change note, where the card has one. */
+  children?: ReactNode
 }) {
-  // Keyed by the preview, so a fresh read shows its own screenshots.
+  const id = useId()
+  const ready = typeof preview === "object" ? preview : null
+  // Keyed by the preview, so a fresh read shows its own screenshot.
   const [broken, setBroken] = useState<Preview | null>(null)
-  if (preview === "error") {
-    return (
-      <div className="flex flex-col gap-2">
-        <p className={META}>
-          The preview isn't available yet. Try again in a moment.
-        </p>
-        {onRetry ? <Retry onRetry={onRetry} /> : null}
-      </div>
-    )
-  }
-  if (preview !== "loading" && broken === preview) {
-    return (
-      <p className={META}>
-        The screenshots did not load. Open the preview to see the new version.
-      </p>
-    )
-  }
   return (
-    <div className="grid grid-cols-3 gap-2" data-slot="screenshots">
-      {SHOTS.map((where, index) =>
-        preview === "loading" ? (
-          <Skeleton className="aspect-[3/4] rounded-md" key={where} />
-        ) : (
+    <article
+      aria-labelledby={`${id}-title`}
+      className="flex flex-col gap-3 overflow-hidden rounded-xl border border-border bg-card p-3"
+      data-revision={revision}
+      data-slot="version-card"
+    >
+      <div className="flex items-center gap-3">
+        {/* The site's mark on the wide card; the panel's narrow one keeps its width for the name. */}
+        {shot ? (
+          <span
+            aria-hidden
+            className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"
+          >
+            <GlobeIcon className="size-5" />
+          </span>
+        ) : null}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <h3 className="font-medium text-sm" id={`${id}-title`}>
+            {title}
+          </h3>
+          <p className={META}>{meta}</p>
+        </div>
+        {ready ? (
+          <a
+            className={cn(
+              buttonVariants({ variant: "ghost", size: "sm" }),
+              "shrink-0"
+            )}
+            href={ready.url}
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            Preview
+            <span className="sr-only"> (opens in a new tab)</span>
+            <ArrowSquareOutIcon aria-hidden />
+          </a>
+        ) : preview === "loading" ? (
+          <Skeleton className="h-8 w-20 rounded-md" />
+        ) : null}
+      </div>
+      {shot && ready && broken !== ready ? (
+        // The same preview as the link above, so a screen reader hears it once.
+        <a
+          className="-mx-3 block border-border border-y"
+          href={ready.url}
+          rel="noopener noreferrer"
+          tabIndex={-1}
+          target="_blank"
+        >
           <Shot
-            alt={`Home page ${where}`}
-            key={where}
-            onGiveUp={() => setBroken(preview)}
-            src={preview.screenshots[index]}
-            where={where}
+            onGiveUp={() => setBroken(ready)}
+            src={ready.screenshots[LAPTOP]}
           />
-        )
-      )}
-    </div>
+        </a>
+      ) : null}
+      {preview === "error" ? (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <p className={META}>
+            The preview isn't available yet. Try again in a moment.
+          </p>
+          {onRetryPreview ? <Retry onRetry={onRetryPreview} /> : null}
+        </div>
+      ) : null}
+      {/* Each as wide as its words, then sharing what is left, so the two stay on one line in the panel. */}
+      <div className="flex flex-wrap gap-2 *:flex-auto">
+        <Button
+          disabled={!onPublish || busy !== null}
+          onClick={() => onPublish?.()}
+          size="sm"
+        >
+          {busy === "approve" ? (
+            <SpinnerGapIcon aria-hidden className="animate-spin" />
+          ) : (
+            <RocketLaunchIcon aria-hidden />
+          )}
+          {pending(busy === "approve", "Publish", "Publishing")}
+        </Button>
+        <Button
+          aria-expanded={requesting}
+          disabled={busy !== null}
+          onClick={onRequestChanges}
+          size="sm"
+          variant="outline"
+        >
+          <PencilSimpleIcon aria-hidden />
+          Request changes
+        </Button>
+      </div>
+      {children}
+      {error ? (
+        <p className="text-[0.8125rem] text-destructive" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </article>
   )
 }
 
 /**
- * A version ready to publish. What it is bound to sits directly above the
- * buttons that act on it, and Approve sends exactly that revision. "Ask for changes" opens a note in place.
+ * A version ready to publish, in the panel: the version card, whose Publish
+ * sends exactly the revision the approval is bound to, and whose Request
+ * changes opens a note in place.
  */
 function ApprovalItem({
   target,
-  rationale,
-  expiresAt,
-  onExpiry,
+  title,
+  meta,
   preview,
   onApprove,
   onAskForChanges,
@@ -1143,13 +1207,10 @@ function ApprovalItem({
   pending: busy = null,
   error = null,
   defaultAsking = false,
-  photos = [],
-  photoActions,
 }: {
   target: ApprovalTarget
-  rationale: string
-  expiresAt: string
-  onExpiry: string
+  title: string
+  meta: string
   preview: Preview | "loading" | "error"
   onApprove: (decision: DecisionRequest) => void
   onAskForChanges: (text: string) => void
@@ -1159,9 +1220,6 @@ function ApprovalItem({
   error?: string | null
   /** Open on the change note, for the catalog. */
   defaultAsking?: boolean
-  /** The pictures the assistant made for this version, to badge and offer changes on. */
-  photos?: readonly GeneratedPhoto[]
-  photoActions?: PhotoActions | undefined
 }) {
   const id = useId()
   const decision = approvalDecision(target, "approved")
@@ -1183,56 +1241,21 @@ function ApprovalItem({
   }
 
   return (
-    <article
-      aria-labelledby={`${id}-title`}
-      className="flex flex-col gap-3 py-3"
-      data-slot="approval-item"
+    <VersionCard
+      error={error}
+      meta={meta}
+      onPublish={decision ? () => onApprove(decision) : null}
+      onRequestChanges={() => {
+        pressed.current = true
+        setOpened(!opened)
+      }}
+      onRetryPreview={onRetryPreview}
+      pending={busy}
+      preview={preview}
+      requesting={asking}
+      revision={decision?.revision_id}
+      title={title}
     >
-      <div className="flex flex-col gap-1">
-        <h3 className="font-medium text-sm" id={`${id}-title`}>
-          Your new version is ready to publish
-        </h3>
-        <p className={META}>{rationale}</p>
-      </div>
-      <Screenshots onRetry={onRetryPreview} preview={preview} />
-      {typeof preview === "object" ? (
-        <OutLink href={preview.url}>Open preview</OutLink>
-      ) : null}
-      {photoActions ? (
-        <GeneratedPhotos
-          actions={photoActions}
-          disabled={busy !== null}
-          heroShot={
-            typeof preview === "object" ? preview.screenshots[2] : undefined
-          }
-          photos={photos}
-        />
-      ) : null}
-      <p className={META}>{expiryLine(expiresAt, onExpiry)}</p>
-      <ApprovalTargetSummary className="bg-background" target={target} />
-      <div className="flex flex-wrap gap-2">
-        <Button
-          disabled={!decision || busy !== null}
-          onClick={() => {
-            if (decision) onApprove(decision)
-          }}
-          size="sm"
-        >
-          {pending(busy === "approve", "Approve and publish", "Publishing")}
-        </Button>
-        <Button
-          aria-expanded={asking}
-          disabled={busy !== null}
-          onClick={() => {
-            pressed.current = true
-            setOpened(!opened)
-          }}
-          size="sm"
-          variant="outline"
-        >
-          Ask for changes
-        </Button>
-      </div>
       {asking ? (
         <form className="flex flex-col gap-2" onSubmit={send}>
           <label className="font-medium text-sm" htmlFor={`${id}-change`}>
@@ -1257,12 +1280,7 @@ function ApprovalItem({
           </Button>
         </form>
       ) : null}
-      {error ? (
-        <p className="text-[0.8125rem] text-destructive" role="alert">
-          {error}
-        </p>
-      ) : null}
-    </article>
+    </VersionCard>
   )
 }
 
@@ -1635,6 +1653,7 @@ export {
   StageDetail,
   StopBuild,
   stageWord,
+  VersionCard,
   WaitingOnYou,
   YourWebsite,
 }

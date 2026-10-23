@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright"
-import { expect, type Locator, type Page, test } from "@playwright/test"
+import { expect, type Page, test } from "@playwright/test"
 import { open, WCAG } from "./helpers"
 
 /**
@@ -71,36 +71,37 @@ test("closing time cannot be set before opening time", async ({ page }) => {
   await expect(page.getByLabel("Closing time")).toHaveAttribute("min", "08:00")
 })
 
-test("an approval names no version or id beside Approve", async ({ page }) => {
+test("an approval names no version or id beside Publish", async ({ page }) => {
   await open(page, "ApprovalItem", 400)
-  const approve = page.getByRole("button", { name: "Approve and publish" })
+  const approve = page.getByRole("button", { name: "Publish" })
   await expect(approve).toBeEnabled()
-  await expect(page.getByText("A new version of your website")).toBeVisible()
+  await expect(page.getByText("Brightclean website")).toBeVisible()
   await expect(page.getByText(/2f41c9ab|ID |Version \d/)).toHaveCount(0)
-  await expect(page.getByRole("img")).toHaveCount(3)
-  await expect(
-    page.getByRole("link", { name: /Open preview/ })
-  ).toHaveAttribute("target", "_blank")
+  await expect(page.getByRole("img")).toHaveCount(0)
+  await expect(page.getByRole("link", { name: /Preview/ })).toHaveAttribute(
+    "target",
+    "_blank"
+  )
 })
 
 test("an approval with no revision to publish cannot be approved", async ({
   page,
 }) => {
   await open(page, "ApprovalItem unbound", 400)
-  await expect(
-    page.getByRole("button", { name: "Approve and publish" })
-  ).toBeDisabled()
+  await expect(page.getByRole("button", { name: "Publish" })).toBeDisabled()
 })
 
-test("screenshots load as a skeleton, never a spinner", async ({ page }) => {
+test("a preview still loading is a skeleton, never a spinner", async ({
+  page,
+}) => {
   await open(page, "ApprovalItem loading", 400)
-  await expect(page.locator('[data-slot="skeleton"]')).toHaveCount(3)
-  await expect(page.getByRole("img")).toHaveCount(0)
+  await expect(page.locator('[data-slot="skeleton"]')).toHaveCount(1)
+  await expect(page.getByRole("link")).toHaveCount(0)
 })
 
-test("Ask for changes opens a note in place, focused", async ({ page }) => {
+test("Request changes opens a note in place, focused", async ({ page }) => {
   await open(page, "ApprovalItem", 400)
-  const ask = page.getByRole("button", { name: "Ask for changes" })
+  const ask = page.getByRole("button", { name: "Request changes" })
   await ask.click()
   await expect(ask).toHaveAttribute("aria-expanded", "true")
   await expect(page.getByLabel("What should change?")).toBeFocused()
@@ -157,8 +158,8 @@ test("the approve button shows a visible focus ring from the keyboard", async ({
   page,
 }) => {
   await open(page, "ApprovalItem", 400)
-  const approve = page.getByRole("button", { name: "Approve and publish" })
-  await page.getByRole("link", { name: /Open preview/ }).focus()
+  const approve = page.getByRole("button", { name: "Publish" })
+  await page.getByRole("link", { name: /Preview/ }).focus()
   await page.keyboard.press("Tab")
   await expect(approve).toBeFocused()
   const ring = await approve.evaluate(
@@ -374,68 +375,38 @@ test("a next step looks like a button, with a visible border", async ({
   }
 })
 
-/** Runs the clock past every screenshot look: each waits 5 s after the last one failed. */
-async function giveUpShots(page: Page, entry: Locator) {
-  await expect(async () => {
-    await page.clock.runFor(5000)
-    await expect(entry.locator("img")).toHaveCount(0, { timeout: 250 })
-  }).toPass()
-}
-
 test("an approval whose preview fails still says what the owner can do, and lets them decide", async ({
   page,
 }) => {
   await open(page, "ApprovalItem preview unavailable", 400)
-  let entry = page.locator('[data-entry="ApprovalItem preview unavailable"]')
+  const entry = page.locator('[data-entry="ApprovalItem preview unavailable"]')
   await expect(entry).toContainText(
     "The preview isn't available yet. Try again in a moment."
   )
   await expect(entry.getByRole("link")).toHaveCount(0)
   await expect(entry.getByRole("button", { name: "Try again" })).toBeEnabled()
-  await expect(
-    entry.getByRole("button", { name: "Approve and publish" })
-  ).toBeEnabled()
-
-  await page.clock.install()
-  await open(page, "ApprovalItem screenshots failed", 400)
-  entry = page.locator('[data-entry="ApprovalItem screenshots failed"]')
-  await giveUpShots(page, entry)
-  await expect(entry).toContainText(
-    "The screenshots did not load. Open the preview to see the new version."
-  )
-  await expect(entry.locator("img")).toHaveCount(0)
-  await expect(entry.getByRole("link", { name: /Open preview/ })).toBeVisible()
-  await expect(
-    entry.getByRole("button", { name: "Approve and publish" })
-  ).toBeEnabled()
+  await expect(entry.getByRole("button", { name: "Publish" })).toBeEnabled()
 })
 
 for (const theme of ["light", "dark"] as const) {
   test(`an approval whose preview fails has no accessibility violations in ${theme}`, async ({
     page,
   }) => {
-    await page.clock.install()
+    const entry = "ApprovalItem preview unavailable"
     for (const width of [390, 768, 1440]) {
-      for (const entry of [
-        "ApprovalItem preview unavailable",
-        "ApprovalItem screenshots failed",
-      ]) {
-        await page.setViewportSize({ width, height: 900 })
-        await page.goto(`/?entry=${encodeURIComponent(entry)}&theme=${theme}`)
-        const shown = page.locator(`[data-entry="${entry}"]`)
-        await expect(shown).toBeVisible()
-        if (entry.endsWith("failed")) await giveUpShots(page, shown)
-        const results = await new AxeBuilder({ page })
-          .withTags(WCAG)
-          .include(`[data-entry="${entry}"]`)
-          .analyze()
-        expect
-          .soft(
-            results.violations.map((v) => `${entry} ${width}: ${v.id}`),
-            JSON.stringify(results.violations, null, 2)
-          )
-          .toEqual([])
-      }
+      await page.setViewportSize({ width, height: 900 })
+      await page.goto(`/?entry=${encodeURIComponent(entry)}&theme=${theme}`)
+      await expect(page.locator(`[data-entry="${entry}"]`)).toBeVisible()
+      const results = await new AxeBuilder({ page })
+        .withTags(WCAG)
+        .include(`[data-entry="${entry}"]`)
+        .analyze()
+      expect
+        .soft(
+          results.violations.map((v) => `${entry} ${width}: ${v.id}`),
+          JSON.stringify(results.violations, null, 2)
+        )
+        .toEqual([])
     }
   })
 }

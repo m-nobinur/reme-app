@@ -16,9 +16,11 @@ import { BuildingIcon } from "@workspace/ui/components/status-icons"
 import { StatusIcon, StatusLine } from "@workspace/ui/components/status-line"
 import { segmentKind, workLine } from "@workspace/ui/lib/activity-copy"
 import { cn } from "@workspace/ui/lib/utils"
+import { SiteReadyCard } from "@/chat/site-ready"
 import { assistantOf, leading } from "@/lib/briefing"
 import { currentBuild } from "@/lib/panel"
 import { anchorOf } from "@/lib/reminders"
+import { readyForReview } from "@/lib/site-ready"
 import {
   type CheckRow,
   checklistFor,
@@ -174,12 +176,16 @@ function Website() {
     ...(workspace.activity?.now ?? []),
   ].find((s) => s.kind === "website" || s.kind === "change")
   const step = work ? workLine(work) : null
+  // A version waiting on the owner, which the page shows before anything else.
+  const review = readyForReview(workspace)
 
   if (live === null && host === null) {
     return (
       <>
         <PageHeader title="Website" />
-        {build ? (
+        {review ? (
+          <SiteReadyCard />
+        ) : build ? (
           <EmptyState
             description={
               step
@@ -231,6 +237,7 @@ function Website() {
         description="What your customers see, and where to ask for a change."
         title="Website"
       />
+      {review ? <SiteReadyCard className="mb-6" /> : null}
       {/* The screenshot beside the checklist once there is room for both. */}
       <div className="grid items-start gap-4 lg:grid-cols-2 lg:gap-6">
         {build ? (

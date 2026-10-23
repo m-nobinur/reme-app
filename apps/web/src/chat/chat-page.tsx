@@ -224,7 +224,7 @@ export function ChatPage() {
                       after={
                         <>
                           <StillWorking />
-                          <SiteReadyCard />
+                          <SiteReadyCard className="mx-2" />
                           <BuildStopped />
                         </>
                       }

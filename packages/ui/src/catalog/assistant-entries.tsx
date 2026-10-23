@@ -2339,80 +2339,51 @@ const assistantCatalog = [
     ),
   },
   // At the end of an open thread, then its other states on their own:
-  // approving, refused and approved.
+  // approving, refused, preview not ready and approved.
   {
     name: "SiteReady",
-    render: () => (
-      <div className="flex flex-col gap-6">
-        <FixtureThread
-          height="h-[30rem]"
-          messages={[
-            ask("Can you add a line about pets?"),
-            {
-              content: [
-                {
-                  text: "Noted. I will add it once the first version is ready.",
-                  type: "text",
-                },
-              ],
-              role: "assistant",
-              status: DONE,
-            },
-          ]}
-          settings={{
-            after: (
-              <SiteReady
-                onApprove={noop}
-                onMakeChanges={noop}
-                onSeePreview={noop}
-              />
-            ),
-          }}
-        />
-        <div className="flex max-w-xl flex-col gap-6">
-          <SiteReady
-            onApprove={noop}
-            onMakeChanges={noop}
-            onSeePreview={noop}
-            pending
+    render: () => {
+      const ready = {
+        title: "Brightclean website",
+        meta: "Not published · Today, 4:05 pm",
+        preview: {
+          url: "https://preview.example.invalid/",
+          screenshots: [KITCHEN, KITCHEN, KITCHEN],
+        },
+        onApprove: noop,
+        onMakeChanges: noop,
+      }
+      return (
+        <div className="flex flex-col gap-6">
+          <FixtureThread
+            height="h-[34rem]"
+            messages={[
+              ask("Can you add a line about pets?"),
+              {
+                content: [
+                  {
+                    text: "Noted. I will add it once the first version is ready.",
+                    type: "text",
+                  },
+                ],
+                role: "assistant",
+                status: DONE,
+              },
+            ]}
+            settings={{ after: <SiteReady {...ready} /> }}
           />
-          <SiteReady
-            error="A newer version replaced that one. Check the latest before you decide."
-            onApprove={noop}
-            onMakeChanges={noop}
-            onSeePreview={noop}
-          />
-          <SiteReady
-            approved
-            onApprove={noop}
-            onMakeChanges={noop}
-            onSeePreview={noop}
-          />
+          <div className="flex max-w-xl flex-col gap-6">
+            <SiteReady {...ready} pending />
+            <SiteReady
+              {...ready}
+              error="A newer version replaced that one. Check the latest before you decide."
+            />
+            <SiteReady {...ready} preview="error" />
+            <SiteReady {...ready} approved />
+          </div>
         </div>
-      </div>
-    ),
-  },
-  {
-    // The photos the build made, each from its own thumbnail.
-    name: "SiteReady with photos",
-    render: () => (
-      <div className="max-w-2xl">
-        <SiteReady
-          onApprove={noop}
-          onMakeChanges={noop}
-          onSeePreview={noop}
-          photoActions={{ onRemove: noop, onTryAnother: noop, onUseOwn: noop }}
-          photos={[
-            {
-              alt: "A bright, tidy living room in morning light",
-              section: "hero",
-              slot_id: "hero",
-              src: KITCHEN,
-            },
-          ]}
-        />
-      </div>
-    ),
+      )
+    },
   },
   {
     name: "RequestChange",

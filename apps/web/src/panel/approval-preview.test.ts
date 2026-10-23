@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { ApprovalItem } from "@workspace/ui/components/live-panel"
+import { ApprovalItem, VersionCard } from "@workspace/ui/components/live-panel"
 import { act, createElement } from "react"
 import { createRoot } from "react-dom/client"
 import { afterEach, expect, it, vi } from "vitest"
@@ -23,29 +23,29 @@ afterEach(() => {
   document.body.innerHTML = ""
 })
 
-async function render(extra: object) {
+async function mount(element: ReturnType<typeof createElement>) {
   const container = document.createElement("div")
   document.body.appendChild(container)
-  await act(async () =>
-    createRoot(container).render(
-      createElement(ApprovalItem, {
-        expiresAt: "2026-10-02T09:00:00.000Z",
-        onApprove: () => undefined,
-        onAskForChanges: () => undefined,
-        onExpiry: "Nothing is published without you.",
-        rationale: "The hero now leads with end of tenancy cleans.",
-        target: REVISION,
-        preview: "error",
-        ...extra,
-      })
-    )
-  )
+  await act(async () => createRoot(container).render(element))
   return container
 }
 
+const render = (extra: object) =>
+  mount(
+    createElement(ApprovalItem, {
+      title: "Brightclean website",
+      meta: "Not published",
+      onApprove: () => undefined,
+      onAskForChanges: () => undefined,
+      target: REVISION,
+      preview: "error",
+      ...extra,
+    })
+  )
+
 const approve = (container: HTMLElement) =>
-  [...container.querySelectorAll("button")].find((b) =>
-    b.textContent?.startsWith("Approve and publish")
+  [...container.querySelectorAll("button")].find(
+    (b) => b.textContent === "Publish"
   )
 
 it("says a preview that could not be read is not available yet, and reads it again", async () => {
@@ -65,15 +65,22 @@ it("says a preview that could not be read is not available yet, and reads it aga
   expect(approve(container)?.disabled).toBe(false)
 })
 
-it("offers the preview link when only the screenshots fail to load", async () => {
-  const container = await render({
-    preview: {
-      url: "https://preview-acme-v4.example.net/open?t=x",
-      screenshots: ["a.png", "b.png", "c.png"],
-    },
-  })
+it("keeps the preview link when only the home page screenshot fails to load", async () => {
+  const container = await mount(
+    createElement(VersionCard, {
+      title: "Brightclean website",
+      meta: "Not published",
+      onPublish: () => undefined,
+      onRequestChanges: () => undefined,
+      shot: true,
+      preview: {
+        url: "https://preview-acme-v4.example.net/open?t=x",
+        screenshots: ["a.png", "b.png", "c.png"],
+      },
+    })
+  )
   // Screenshots land after the preview, so a failed one is looked at again
-  // every 5 s; only after every look fails does the card give up on them.
+  // every 5 s; only after every look fails does the card give up on it.
   vi.useFakeTimers()
   try {
     for (let look = 0; look < 6 && container.querySelector("img"); look++) {
@@ -88,11 +95,8 @@ it("offers the preview link when only the screenshots fail to load", async () =>
     vi.useRealTimers()
   }
   expect(container.querySelector("img")).toBeNull()
-  expect(container.textContent).toContain(
-    "The screenshots did not load. Open the preview to see the new version."
-  )
-  expect(
-    container.querySelector('a[href^="https://preview-acme-v4"]')?.textContent
-  ).toContain("Open preview")
+  const links = container.querySelectorAll('a[href^="https://preview-acme-v4"]')
+  expect(links).toHaveLength(1)
+  expect(links[0]?.textContent).toContain("Preview")
   expect(approve(container)?.disabled).toBe(false)
 })

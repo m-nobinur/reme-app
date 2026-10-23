@@ -294,7 +294,11 @@ function logged(item: Logged): { title: string; detail: string } {
 const APPROVAL_EXPIRY =
   "Nothing is published without you. If it expires, the build waits until you decide."
 
-const APPROVAL_TITLE = "Your new version is ready to publish"
+/** A version waiting on the owner, as they would say it: the first website, or a change to the live one. */
+const approvalTitle = (live: boolean) =>
+  live
+    ? "Your website changes are ready for you to review"
+    : "Your website is ready for you to review"
 
 /**
  * `/workspace`, with the attention list trimmed. An approval whose target is
@@ -345,7 +349,8 @@ const namesOf = (staff: StaffMember[]) =>
 
 function toAttention(
   item: Attention,
-  names: Map<string, string>
+  names: Map<string, string>,
+  live = false
 ): AttentionItem {
   switch (item.kind) {
     case "approval":
@@ -361,7 +366,7 @@ function toAttention(
             }
           : {}),
         id: item.request.approval_id,
-        title: APPROVAL_TITLE,
+        title: approvalTitle(live),
         detail: item.request.rationale,
         raisedBy: names.get(item.request.requested_by_staff_id) ?? SYSTEM,
         raisedById: item.request.requested_by_staff_id,
@@ -419,7 +424,9 @@ function workspaceOf(
   names: Map<string, string>
 ): Workspace {
   return {
-    attention: status.attention.map((item) => toAttention(item, names)),
+    attention: status.attention.map((item) =>
+      toAttention(item, names, status.site.live !== null)
+    ),
     live: status.site.live?.version ?? null,
     liveRevision: status.site.live
       ? {

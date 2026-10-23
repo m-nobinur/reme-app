@@ -100,8 +100,6 @@ const retry = () => new Promise<void>((done) => setTimeout(done, 400))
 const THUMBNAIL = { src: page(1440) }
 
 const ANSWER_EXPIRY = "The build waits on you until you answer."
-const APPROVAL_EXPIRY =
-  "Nothing is published without you. If it expires, the build waits until you decide."
 
 const question = (spec: AnswerSpec, title: string, extra = {}) => (
   <QuestionItem
@@ -118,13 +116,12 @@ const question = (spec: AnswerSpec, title: string, extra = {}) => (
 
 const approval = (extra = {}) => (
   <ApprovalItem
-    expiresAt={EXPIRES}
+    meta="Not published · Today, 4:05 pm"
     onApprove={noop}
     onAskForChanges={noop}
-    onExpiry={APPROVAL_EXPIRY}
     preview={PREVIEW}
-    rationale="The hero now leads with end of tenancy cleans."
     target={REVISION}
+    title="Brightclean website"
     {...extra}
   />
 )
@@ -803,38 +800,6 @@ const panelCatalog: Entry[] = [
   {
     name: "ApprovalItem preview unavailable",
     render: () => approval({ preview: "error", onRetryPreview: retry }),
-  },
-  // Generated photos badged in the review: the hero from the laptop shot, the
-  // other a tile until it has a thumbnail of its own.
-  {
-    name: "ApprovalItem with generated photos",
-    render: () =>
-      approval({
-        photoActions: { onRemove: noop, onTryAnother: noop, onUseOwn: noop },
-        photos: [
-          {
-            alt: "A bright kitchen after a clean",
-            section: "hero",
-            slot_id: "hero",
-          },
-          { alt: "The team at work", section: "about", slot_id: "about" },
-        ],
-      }),
-  },
-  // The preview was read but its screenshots do not load: the link stays.
-  {
-    name: "ApprovalItem screenshots failed",
-    render: () =>
-      approval({
-        preview: {
-          url: PREVIEW.url,
-          screenshots: [
-            "/no-such-shot.png",
-            "/no-such-shot.png",
-            "/no-such-shot.png",
-          ],
-        },
-      }),
   },
   {
     name: "ApprovalItem unbound",

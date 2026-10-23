@@ -441,7 +441,7 @@ function WorkspaceShell({
             {/* biome-ignore lint/a11y/useKeyWithClickEvents: as above; Enter on a link is a click. */}
             <div
               className={cn(
-                "min-h-0 flex-col gap-6 overflow-y-auto overscroll-contain border-border px-4 pt-2 pb-4",
+                "min-h-0 flex-col gap-6 overflow-y-auto overflow-x-hidden overscroll-contain border-border px-4 pt-2 pb-4",
                 floating
                   ? cn(
                       "motion-safe:fade-in motion-safe:slide-in-from-bottom-1 border-b motion-safe:animate-in",
