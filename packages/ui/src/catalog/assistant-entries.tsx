@@ -942,7 +942,7 @@ const REVIEW_QUOTE_STATES: ThreadMessageLike[] = [
         fields: LIMOUSINE_QUESTIONS.slice(0, 4),
       },
     }),
-    "Use this form"
+    "Looks good"
   ),
   ...answeredStep(
     PROPOSED,

@@ -6,8 +6,7 @@ import {
 
 /**
  * The owner's edits to a proposed quote form, as plain data: each question
- * the assistant proposed, in its order, made optional or dropped. A dropped
- * question keeps its place so it can come back. Labels and keys never change,
+ * the assistant proposed, in its order, made optional or dropped. Labels and keys never change,
  * so every question the owner keeps still has its own.
  */
 export type QuoteDraft = { field: QuoteField; dropped: boolean }[]
@@ -23,7 +22,15 @@ export const canDrop = (draft: QuoteDraft) =>
   keptFields(draft).length > QUOTE_FIELDS_MIN
 
 /** Why a question cannot go, for the control that would drop it. */
-export const DROP_LIMIT = `A quote form needs at least ${QUOTE_FIELDS_MIN} questions.`
+export const DROP_LIMIT = `Keep at least ${QUOTE_FIELDS_MIN} questions.`
+
+/**
+ * Each waiting proposal's questions as the owner has left them, by call id,
+ * so words typed over the pills carry what they dropped or switched.
+ * shortcut: module state assumes one chat per page; move it into the
+ * runtime if two threads ever share one.
+ */
+export const shownQuote = new Map<string, QuoteField[]>()
 
 const change = (
   draft: QuoteDraft,
@@ -35,9 +42,6 @@ export const dropField = (draft: QuoteDraft, key: string): QuoteDraft =>
   canDrop(draft)
     ? change(draft, key, (row) => ({ ...row, dropped: true }))
     : draft
-
-export const restoreField = (draft: QuoteDraft, key: string): QuoteDraft =>
-  change(draft, key, (row) => ({ ...row, dropped: false }))
 
 export const setRequired = (
   draft: QuoteDraft,

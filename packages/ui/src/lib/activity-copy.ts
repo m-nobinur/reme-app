@@ -523,7 +523,7 @@ const NEXT_LINE: Record<
   ask_fact: "Getting the next question ready",
   ask_details: "Getting the next question ready",
   ask_upload: "Getting the photo upload ready",
-  review_quote_form: "Drafting your quote form",
+  review_quote_form: "Drafting your quote requirements",
   start_build: "Getting ready to build",
   answer_only: "Working on your answer",
 }
@@ -817,7 +817,7 @@ const STEP_LABELS: Partial<
     contact: "Contact details",
     assistant: "Your assistant",
     website: "Website",
-    quote_form: "Quote form",
+    quote_form: "Quote requirements",
     photos: "Photos",
     look: "Look and feel",
   },
@@ -869,7 +869,7 @@ const ONBOARDING_ASKS: Readonly<Record<string, string>> = {
   contact: "How do customers reach you?",
   assistant: "What should your assistant be like?",
   website: "Would you like a website?",
-  quote_form: "What should the quote form ask?",
+  quote_form: "What do you need to know to quote?",
   photos: "Do you have photos to use?",
   look: "How should your website look?",
 }

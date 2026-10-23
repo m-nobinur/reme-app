@@ -1,6 +1,5 @@
-import { type ToolCallMessagePartComponent, useAui } from "@assistant-ui/react"
+import type { ToolCallMessagePartComponent } from "@assistant-ui/react"
 import {
-  ArrowCounterClockwiseIcon,
   CalendarBlankIcon,
   CalendarDotsIcon,
   CaretCircleDownIcon,
@@ -13,40 +12,35 @@ import {
   RadioButtonIcon,
   TextAlignLeftIcon,
   TextTIcon,
-  TrashIcon,
+  XIcon,
 } from "@phosphor-icons/react"
-import {
-  Docked,
-  TrayFrame,
-  TrayNote,
-} from "@workspace/ui/components/assistant/question-tray"
+import { TrayNote } from "@workspace/ui/components/assistant/question-tray"
 import { Button } from "@workspace/ui/components/button"
-import { Switch } from "@workspace/ui/components/switch"
-import { ComposerInputContext } from "@workspace/ui/hooks/use-composer-input"
+import { Hint } from "@workspace/ui/components/tooltip"
+import { useRevealWaiting } from "@workspace/ui/hooks/use-reveal-waiting"
 import {
   canDrop,
   confirmedFields,
   DROP_LIMIT,
   draftOf,
   dropField,
-  QUOTE_TYPE_LABEL,
+  keptFields,
   type QuoteDraft,
-  restoreField,
   setRequired,
+  shownQuote,
 } from "@workspace/ui/lib/quote-form"
 import { reviewQuoteFormView } from "@workspace/ui/lib/tool-state"
-import { useContext, useId, useState } from "react"
+import { cn } from "@workspace/ui/lib/utils"
+import { useEffect, useState } from "react"
 
 /**
- * The questions the assistant proposes for the site's quote request form,
- * from what the owner said they need to know to quote a job, in the question
- * tray. One row each: the question's type as an icon, the question, which
- * wraps, its type and options on a muted line, a Required switch and a
- * remove button that shows on hover or focus. The owner makes a question
- * optional or drops one, and confirms with "Use this form". Any other change
- * is typed in the composer, which "Make changes" starts for them, and the
- * message they send is the answer to this card (`changes`), not a new
- * subject. Nothing is sent until they press or send. Once answered it shows
+ * What the owner needs to know before a quote, as the assistant proposes it
+ * from their answer: one pill per question in the transcript, its type as an
+ * icon, then a star that is coloured when the question is required. A click
+ * on the star switches required and optional, and a pill's remove button
+ * shows on hover or focus. Anything else is said in the chat: words typed
+ * while the pills wait answer them (`quoteChanges` carries the pills as the
+ * owner left them), and "Looks good" confirms. Once answered it shows
  * nothing: the owner's reply after it says what they settled on.
  */
 
@@ -64,92 +58,76 @@ const TYPE_ICON: Record<QuoteDraft[number]["field"]["type"], Icon> = {
   email: EnvelopeSimpleIcon,
 }
 
-/** What "Make changes" starts the owner's message with. */
-const CHANGES_START = "Change the form: "
+/** The star a required question carries; muted when it is optional. */
+function Star({ required }: { required: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "font-semibold text-base leading-none",
+        required ? "text-primary" : "text-muted-foreground/50"
+      )}
+    >
+      *
+    </span>
+  )
+}
 
-/** One proposed question, kept or dropped. */
-function Row({
-  index,
+/** One proposed question. */
+function Pill({
   row,
   draft,
   onChange,
-  limitId,
 }: {
-  index: number
   row: QuoteDraft[number]
   draft: QuoteDraft
   onChange: (next: QuoteDraft) => void
-  limitId: string
 }) {
   const { field } = row
-  const name = field.label.trim() || `question ${index + 1}`
-  if (row.dropped) {
-    return (
-      <li className="flex min-h-11 items-center gap-2 py-1">
-        <span className="wrap-break-word min-w-0 flex-1 text-muted-foreground text-sm line-through">
-          {name}
-        </span>
-        <Button
-          aria-label={`Restore ${name}`}
-          onClick={() => onChange(restoreField(draft, field.key))}
-          size="sm"
-          type="button"
-          variant="ghost"
-        >
-          <ArrowCounterClockwiseIcon aria-hidden />
-          Restore
-        </Button>
-      </li>
-    )
-  }
-  const locked = !canDrop(draft)
   const TypeIcon = TYPE_ICON[field.type]
-  // The type, then any options and hint, on one muted line.
-  const detail = [
-    QUOTE_TYPE_LABEL[field.type],
-    field.options?.join(", "),
-    field.hint,
-  ]
-    .filter(Boolean)
-    .join(" · ")
+  const locked = !canDrop(draft)
   return (
-    <li className="group flex items-center gap-3 py-2.5">
-      <span
+    <li className="group inline-flex h-8 items-center gap-1.5 rounded-full border border-border bg-card ps-2.5 pe-1.5 text-sm">
+      <TypeIcon
         aria-hidden
-        className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"
+        className="size-3.5 shrink-0 text-muted-foreground"
+      />
+      <span className="max-w-56 truncate">{field.label}</span>
+      <Hint
+        detail={
+          field.required
+            ? "Customers must answer this. Click to make it optional."
+            : "Customers can leave this out. Click to make it required."
+        }
+        label={field.required ? "Required" : "Optional"}
+        side="top"
       >
-        <TypeIcon className="size-4" />
-      </span>
-      <div className="flex min-w-0 flex-1 flex-col">
-        <span className="wrap-break-word font-medium text-sm">{name}</span>
-        <span className="truncate text-muted-foreground text-xs">{detail}</span>
-      </div>
-      {/* biome-ignore lint/a11y/noLabelWithoutControl: the switch is a span with a hidden input, which the rule cannot see */}
-      <label className="flex shrink-0 cursor-pointer items-center gap-2 text-muted-foreground text-xs">
-        Required
-        <Switch
-          aria-label={`${name}, required`}
-          checked={field.required}
-          onCheckedChange={(required) =>
-            onChange(setRequired(draft, field.key, required))
+        <button
+          aria-label={`${field.label}, required`}
+          aria-pressed={field.required}
+          className="-ms-1 flex size-6 items-center justify-center rounded-full outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={() =>
+            onChange(setRequired(draft, field.key, !field.required))
           }
-        />
-      </label>
-      {/* Hidden until the row is hovered or holds focus, unless the pointer is a finger. */}
-      <Button
-        aria-describedby={locked ? limitId : undefined}
-        aria-disabled={locked || undefined}
-        aria-label={`Remove ${name}`}
-        className="pointer-fine:opacity-0 pointer-fine:focus-visible:opacity-100 pointer-fine:group-focus-within:opacity-100 pointer-fine:group-hover:opacity-100 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-        onClick={() => {
-          if (!locked) onChange(dropField(draft, field.key))
-        }}
-        size="icon-sm"
-        type="button"
-        variant="ghost"
-      >
-        <TrashIcon aria-hidden />
-      </Button>
+          type="button"
+        >
+          <Star required={field.required} />
+        </button>
+      </Hint>
+      {/* Hidden until the pill is hovered or holds focus, unless the pointer is a finger. */}
+      <Hint label={locked ? DROP_LIMIT : "Remove"} side="top">
+        <button
+          aria-disabled={locked || undefined}
+          aria-label={`Remove ${field.label}`}
+          className="-ms-1.5 flex size-5 items-center justify-center rounded-full text-muted-foreground pointer-fine:opacity-0 outline-none hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring pointer-fine:group-focus-within:opacity-100 pointer-fine:group-hover:opacity-100 aria-disabled:cursor-not-allowed aria-disabled:hover:bg-transparent"
+          onClick={() => {
+            if (!locked) onChange(dropField(draft, field.key))
+          }}
+          type="button"
+        >
+          <XIcon aria-hidden className="size-3" />
+        </button>
+      </Hint>
     </li>
   )
 }
@@ -160,13 +138,21 @@ const ReviewQuoteForm: ToolCallMessagePartComponent = (props) => {
     view.state === "pending" ? draftOf(view.input.fields) : []
   )
   const [invalid, setInvalid] = useState<string | null>(null)
-  const [collapsed, setCollapsed] = useState(false)
-  const id = useId()
-  const aui = useAui()
-  const composer = useContext(ComposerInputContext)
+  const pending = view.state === "pending"
+  const running = useRevealWaiting(pending)
+  const { toolCallId } = props
+
+  // Words typed over the pills carry them as the owner left them.
+  useEffect(() => {
+    if (!pending) return
+    shownQuote.set(toolCallId, keptFields(draft))
+    return () => {
+      shownQuote.delete(toolCallId)
+    }
+  }, [pending, toolCallId, draft])
 
   if (view.state === "answered") return null
-  if (view.state !== "pending") {
+  if (!pending) {
     return (
       <TrayNote
         error={view.state === "error" ? view.message : null}
@@ -174,6 +160,8 @@ const ReviewQuoteForm: ToolCallMessagePartComponent = (props) => {
       />
     )
   }
+  // Never mid-stream: the pills show once the message is whole.
+  if (running) return null
 
   const change = (next: QuoteDraft) => {
     setInvalid(null)
@@ -187,58 +175,50 @@ const ReviewQuoteForm: ToolCallMessagePartComponent = (props) => {
     }
     props.addResult({ answer: "confirmed", fields: result.fields })
   }
-  // Starts the owner's message in the composer, where the change is typed;
-  // a draft already there is theirs, so it is kept.
-  const makeChanges = () => {
-    const draftText = aui.thread().composer().getState().text
-    if (!draftText.trim()) aui.thread().composer().setText(CHANGES_START)
-    const input = composer.current
-    if (!input) return
-    input.focus()
-    requestAnimationFrame(() =>
-      input.setSelectionRange(input.value.length, input.value.length)
-    )
-  }
 
   return (
-    <Docked name="review-quote-form">
-      <TrayFrame
-        collapsed={collapsed}
-        hint="Name, email and phone are always asked."
-        onCollapsedChange={setCollapsed}
-        question="Questions for your quote form"
-        skip={{ label: "Make changes", onSkip: makeChanges }}
-        submit={{ label: "Use this form", onSubmit: confirm }}
+    <div
+      className="motion-safe:fade-in-0 flex flex-col gap-2.5 pt-3 duration-250 motion-safe:animate-in"
+      data-slot="review-quote-form"
+    >
+      <ul
+        aria-label="What I'll ask customers"
+        className="flex flex-wrap gap-1.5"
       >
-        <div className="flex min-w-0 flex-col rounded-xl border border-border bg-card px-3">
-          <ol
-            aria-label="Proposed questions"
-            className="flex flex-col divide-y divide-border"
-          >
-            {draft.map((row, index) => (
-              <Row
-                draft={draft}
-                index={index}
-                key={row.field.key}
-                limitId={`${id}-limit`}
-                onChange={change}
-                row={row}
-              />
-            ))}
-          </ol>
-        </div>
-        {canDrop(draft) ? null : (
-          <p className="px-1 text-muted-foreground text-xs" id={`${id}-limit`}>
-            {DROP_LIMIT}
-          </p>
-        )}
-        {invalid ? (
-          <p className="px-1 text-[0.8125rem] text-destructive" role="alert">
-            {invalid}
-          </p>
-        ) : null}
-      </TrayFrame>
-    </Docked>
+        {draft
+          .filter((row) => !row.dropped)
+          .map((row) => (
+            <Pill
+              draft={draft}
+              key={row.field.key}
+              onChange={change}
+              row={row}
+            />
+          ))}
+      </ul>
+      <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground text-xs">
+        <span className="inline-flex items-center gap-1">
+          <Star required /> Required
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <Star required={false} /> Optional
+        </span>
+        <span>Name, email and phone are always asked.</span>
+      </p>
+      {invalid ? (
+        <p className="text-[0.8125rem] text-destructive" role="alert">
+          {invalid}
+        </p>
+      ) : null}
+      <div className="flex flex-wrap items-center gap-3">
+        <Button onClick={confirm} size="sm" type="button">
+          Looks good
+        </Button>
+        <span className="text-muted-foreground text-xs">
+          or tell me what to change
+        </span>
+      </div>
+    </div>
   )
 }
 ReviewQuoteForm.displayName = "ReviewQuoteForm"
