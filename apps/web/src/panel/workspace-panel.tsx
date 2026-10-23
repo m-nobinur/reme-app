@@ -12,6 +12,7 @@ import type {
   DecisionRequest,
   Reminder,
 } from "@workspace/contracts"
+import { ShowFoldedQuestion } from "@workspace/ui/components/assistant/question-tray"
 import { buttonVariants } from "@workspace/ui/components/button"
 import {
   ApprovalItem,
@@ -374,9 +375,22 @@ function Stoppable({
   )
 }
 
-/** A segment's steps, with what the website's stages decided and made under them. */
+/**
+ * A segment's steps, with what the website's stages decided and made under
+ * them, and a way back to a question the owner folded in the chat under the
+ * step that waits on it.
+ */
 function stepsOf({ kind, steps, build }: SegmentView): SegmentStep[] {
-  if (kind !== "website" || !build) return steps
+  if (kind !== "website" || !build) {
+    return steps.map((step) =>
+      step.state === "waiting"
+        ? {
+            ...step,
+            detail: <ShowFoldedQuestion className="self-start text-xs" />,
+          }
+        : step
+    )
+  }
   return steps.map((step) => ({
     ...step,
     detail: (
