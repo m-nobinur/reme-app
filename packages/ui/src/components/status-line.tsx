@@ -39,12 +39,14 @@ import { cn } from "@workspace/ui/lib/utils"
 import { type ComponentProps, useEffect, useRef, useState } from "react"
 
 /**
- * What the assistant is doing, in one line: an icon that moves while the work
- * runs, then a few words with the brand colour sweeping across them. Chat and
+ * What the assistant is doing, in one line: a small mark that moves while
+ * the work runs, a breathing dot while it reads and three dots folding
+ * through a wave and a triangle after, then a few words with a soft light
+ * sweeping across them, wiped in from the left as they change. Chat and
  * panel draw it the same way.
  *
- * The icon sits beside the words, not in them: the shimmer masks everything
- * inside its host. Motion is on the icon and the words only while the state
+ * The mark sits beside the words, not in them: the shimmer masks everything
+ * inside its host. Motion is on the mark and the words only while the state
  * is `working`, and both hold still under reduced motion.
  */
 
@@ -115,6 +117,95 @@ function KindIcon({
         className
       )}
     />
+  )
+}
+
+/** The reading dot. */
+function BreathingDot() {
+  return (
+    <span
+      aria-hidden
+      className="flex size-4 shrink-0 items-center justify-center"
+    >
+      <span className="size-2 rounded-full bg-current motion-safe:animate-status-breathe" />
+    </span>
+  )
+}
+
+const CYCLE_MS = 3200
+const SPREAD = 4.6
+const RADIUS = 4.4
+const ease = (k: number) => (k < 0.5 ? 4 * k ** 3 : 1 - (-2 * k + 2) ** 3 / 2)
+
+/** The dots in a line, a wave running through them. */
+const wave = (ms: number) =>
+  [0, 1, 2].map((dot) => ({
+    x: (dot - 1) * SPREAD,
+    y: 2 * Math.sin((ms / 700) * 2 * Math.PI - dot * 0.9),
+  }))
+
+/** The dots as a turning triangle that draws in to its centre and out, twice. */
+const triangle = (ms: number) => {
+  const r = 1 + (RADIUS - 1) * (0.5 + 0.5 * Math.cos((ms / 600) * 2 * Math.PI))
+  return [0, 1, 2].map((dot) => {
+    const a = (ms / 2400) * 2 * Math.PI + (dot * 2 * Math.PI) / 3 + Math.PI
+    return { x: r * Math.cos(a), y: r * Math.sin(a) }
+  })
+}
+
+const between = (
+  from: { x: number; y: number }[],
+  to: { x: number; y: number }[],
+  k: number
+) =>
+  from.map((p, dot) => ({
+    x: p.x + ((to[dot]?.x ?? p.x) - p.x) * ease(k),
+    y: p.y + ((to[dot]?.y ?? p.y) - p.y) * ease(k),
+  }))
+
+/** Where the dots are `ms` into a cycle: wave, fold, triangle, unfold. */
+function dotsAt(ms: number) {
+  if (ms < 1400) return wave(ms)
+  if (ms < 1700) return between(wave(1400), triangle(0), (ms - 1400) / 300)
+  if (ms < 2900) return triangle(ms - 1700)
+  return between(triangle(1200), wave(0), (ms - 2900) / 300)
+}
+
+/** The working mark: three dots, moved by the frame, still under reduced motion. */
+function FoldingDots() {
+  const dots = useRef<(SVGCircleElement | null)[]>([])
+  useEffect(() => {
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return
+    const start = performance.now()
+    let frame = requestAnimationFrame(function draw(now) {
+      dotsAt((now - start) % CYCLE_MS).forEach((p, dot) => {
+        dots.current[dot]?.setAttribute("cx", p.x.toFixed(2))
+        dots.current[dot]?.setAttribute("cy", p.y.toFixed(2))
+      })
+      frame = requestAnimationFrame(draw)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [])
+  return (
+    <svg
+      aria-hidden
+      className="size-4 shrink-0"
+      fill="currentColor"
+      viewBox="-8 -8 16 16"
+    >
+      {wave(0).map((p, dot) => (
+        <circle
+          cx={p.x}
+          cy={p.y}
+          // biome-ignore lint/suspicious/noArrayIndexKey: three fixed dots
+          key={dot}
+          r="1.5"
+          ref={(node) => {
+            dots.current[dot] = node
+          }}
+        />
+      ))}
+    </svg>
   )
 }
 
@@ -240,20 +331,33 @@ function StatusLine({
           )}
           weight={shown.state === "done" ? "fill" : "regular"}
         />
+      ) : shown.kind === "reading" ? (
+        <BreathingDot />
       ) : (
-        <KindIcon kind={shown.kind} moving={working} />
+        <FoldingDots />
       )}
       {/* The words alone: the live region never reads the clock or the count. */}
       <span
         aria-live={announce ? "polite" : undefined}
-        className={cn(
-          "inline-block",
-          working && "shimmer shimmer-color-primary motion-reduce:animate-none"
-        )}
+        className="inline-block"
         data-slot="status-line-text"
         role={announce ? "status" : undefined}
       >
-        {shown.label}
+        {/* The wipe holds its own mask, outside the one the shimmer sets. */}
+        <span
+          className="inline-block motion-safe:animate-status-reveal"
+          key={shown.label}
+        >
+          <span
+            className={cn(
+              "inline-block",
+              working &&
+                "shimmer shimmer-color-foreground motion-reduce:animate-none"
+            )}
+          >
+            {shown.label}
+          </span>
+        </span>
       </span>
       {count > 1 ? <span className="tabular-nums">×{count}</span> : null}
       {clock !== null && clockAfter !== null && clock >= clockAfter ? (

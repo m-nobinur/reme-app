@@ -515,7 +515,7 @@ function PanelSegment({
             className={cn(
               "font-medium text-sm",
               (state === "now" || state === "waiting") &&
-                "shimmer shimmer-color-primary motion-reduce:animate-none"
+                "shimmer shimmer-color-foreground motion-reduce:animate-none"
             )}
             id={`${id}-title`}
           >

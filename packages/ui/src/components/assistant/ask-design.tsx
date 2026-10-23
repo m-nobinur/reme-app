@@ -57,7 +57,7 @@ const AskDesign: ToolCallMessagePartComponent = (props) => {
     )
   }
   return (
-    <Docked name="ask-design">
+    <Docked many name="ask-design">
       <QuestionTray
         businessName={siteName}
         input={view.input}

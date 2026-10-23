@@ -71,19 +71,39 @@ export const TraySlotProvider = SlotContext.Provider
 
 /**
  * Draws an open question in the thread's tray slot, brings it into view once
- * no turn runs, and takes the focus then only from an empty composer.
+ * no turn runs, and takes the focus then only from an empty composer. Where
+ * the call sits in the transcript it says the assistant is waiting; the
+ * thread dims behind an open tray (globals.css).
  */
-function Docked({ name, children }: { name: string; children: ReactNode }) {
+function Docked({
+  name,
+  many = false,
+  children,
+}: {
+  name: string
+  /** The tray asks more than one question. */
+  many?: boolean
+  children: ReactNode
+}) {
   const slot = useContext(SlotContext)
   const running = useRevealWaiting(true)
   const ref = useRef<HTMLDivElement>(null)
   useFocusWhenIdle(true, running, ref)
   if (!slot) return null
-  return createPortal(
-    <div data-slot={name} ref={ref}>
-      {children}
-    </div>,
-    slot
+  return (
+    <>
+      {running ? null : (
+        <p className="pt-3 text-muted-foreground text-sm">
+          {many ? "Waiting for your answers" : "Waiting for your answer"}
+        </p>
+      )}
+      {createPortal(
+        <div data-slot={name} ref={ref}>
+          {children}
+        </div>,
+        slot
+      )}
+    </>
   )
 }
 
@@ -567,11 +587,8 @@ function offeredPalettes(
 /** A palette's colours as a strip, left to right. */
 function Swatches({ colors }: { colors: readonly string[] }) {
   return (
-    // The strip renders the palette's own colours, data from the call.
-    <span
-      aria-hidden
-      className="flex h-9 w-full overflow-hidden rounded-xl ring-1 ring-foreground/15"
-    >
+    // The palette's own colours, data from the call, filling the tile edge to edge.
+    <span aria-hidden className="flex h-20 w-full">
       {colors.map((color, at) => (
         <span
           className="h-full flex-1"
@@ -752,6 +769,7 @@ function TrayFrame({
         "@container flex max-h-[min(36rem,max(15rem,45dvh))] w-full flex-col rounded-[var(--composer-radius,var(--radius-4xl))] border border-border bg-card text-card-foreground max-sm:max-h-[60svh]",
         className
       )}
+      data-collapsed={collapsed || undefined}
       data-slot="question-tray"
       onKeyDown={onKeyDown}
       ref={rootRef}
@@ -1137,8 +1155,18 @@ function QuestionTray({
                 "choice" in answer &&
                 answer.choice === option.id
             const look = layoutLook(option)
+            // A palette is its colours alone: the name is for screen readers.
+            const swatch = option.visual?.kind === "swatches"
             return (
-              <label className={cn(TRAY_TILE, look && "p-2")} key={option.id}>
+              <label
+                className={cn(
+                  TRAY_TILE,
+                  look && "p-2",
+                  swatch &&
+                    "gap-0 overflow-hidden p-0 has-[:checked]:ring-2 has-[:checked]:ring-foreground"
+                )}
+                key={option.id}
+              >
                 <input
                   checked={checked}
                   className="sr-only"
@@ -1156,7 +1184,7 @@ function QuestionTray({
                     look && "text-xs"
                   )}
                 >
-                  {question.visual === "font_pair" ? (
+                  {question.visual === "font_pair" || swatch ? (
                     <span className="sr-only">{option.label}</span>
                   ) : (
                     (look?.hero ?? option.label)
@@ -1177,7 +1205,7 @@ function QuestionTray({
                     )
                   ) : null}
                 </span>
-                {!look && option.hint ? (
+                {!(look || swatch) && option.hint ? (
                   <span className="text-muted-foreground text-xs">
                     {option.hint}
                   </span>

@@ -628,13 +628,8 @@ export function designCard(o: Onboarding, newId: () => string): ToolPart {
     ...new Set(directions.flatMap((d) => d.palettes)),
   ] as PaletteId[]
   const palette = factValue(o.facts, "site.palette")
-  const shown = firstOf(
-    o,
-    "palette",
-    suited,
-    (id) => id,
-    (id) => String(family(id))
-  )
+  // The same four first for every business: a clean set the owner chose.
+  const shown: PaletteId[] = ["mint", "royal", "meadow", "pebble"]
   // A held palette the four leave out takes the last place, so it shows ticked.
   const heldPalette = PaletteId.safeParse(palette?.id)
   if (heldPalette.success && !shown.includes(heldPalette.data)) {
@@ -727,6 +722,14 @@ export function designCard(o: Onboarding, newId: () => string): ToolPart {
     AskDesignInput.parse({
       questions: [
         {
+          id: "logo",
+          question: "Do you have a logo?",
+          visual: "logo",
+          card: pageCard("Yes, I have my logo", "No, create one for me"),
+          upload: dropZone(1),
+          ...(logo ? { held: [logo] } : {}),
+        },
+        {
           id: "palette",
           question: "Which colour palette feels right for your business?",
           visual: "palette",
@@ -752,14 +755,6 @@ export function designCard(o: Onboarding, newId: () => string): ToolPart {
             "Describe the lettering you like",
             font?.id === "custom" ? font.custom : undefined
           ),
-        },
-        {
-          id: "logo",
-          question: "Do you have a logo, or shall I create one?",
-          visual: "logo",
-          card: pageCard("Upload my logo", "Create one for me"),
-          upload: dropZone(1),
-          ...(logo ? { held: [logo] } : {}),
         },
         {
           id: "arrangement",

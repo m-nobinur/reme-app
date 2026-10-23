@@ -3,8 +3,13 @@ import {
   ErrorEnvelope,
   FactList,
   KeptLogo,
+  LOGO_ROUND_WAITS,
   LOGO_ROUNDS_MAX,
+  LOGO_STYLES,
+  LOGO_VARIANTS,
   LogoRound,
+  LogoRounds,
+  type LogoType,
   PALETTES,
   UploadedAssets,
 } from "@workspace/contracts"
@@ -23,17 +28,22 @@ import {
   DRAW_DEADLINE_MS,
   drawLogos,
   drawRound,
+  hasAlpha,
   LOGO_MODELS,
+  nextRoundAt,
+  readLogos,
   roundView,
   symbolsOf,
   useDaily,
+  waitBefore,
 } from "../src/logo.ts"
 import {
-  COMPOSITIONS,
   changesPrompt,
   colourName,
+  initialsOf,
   logoPrompt,
   spelled,
+  variantStyles,
 } from "../src/logo-style.ts"
 import { owner, stubOrchestrator } from "./owner-fixture.ts"
 import { stubJwksFetch } from "./sealed-session.ts"
@@ -42,7 +52,8 @@ const palette = PALETTES[0] as (typeof PALETTES)[number]
 const brief = {
   description: "Something with a home",
   colors: [palette.primary, palette.ink],
-  style: "friendly" as const,
+  type: "lockup" as const,
+  style: "minimal" as const,
 }
 const subject = { name: "Bright Homes", trade: "domestic cleaning" }
 
@@ -51,9 +62,8 @@ describe("the logo prompt", () => {
     const prompt = logoPrompt({
       subject,
       brief,
-      composition: "beside",
+      style: "minimal",
       symbol: "a droplet with a roof",
-      transparent: true,
     })
     expect(prompt).toContain('"Bright Homes"')
     expect(prompt).toContain("B-R-I-G-H-T H-O-M-E-S")
@@ -61,36 +71,49 @@ describe("the logo prompt", () => {
       `${colourName(palette.primary)} (${palette.primary}) for the main shapes`
     )
     expect(prompt).toContain(`(${palette.ink}) for the lettering`)
-    expect(prompt).toContain("Symbol idea: a droplet with a roof")
+    expect(prompt).toContain("Idea: a droplet with a roof")
+    expect(prompt).toContain("Style: Minimal")
     expect(prompt).toContain("fully transparent background")
     expect(prompt).toContain("Owner's direction: Something with a home")
   })
 
-  it("asks a model without transparency for a flat field, and a long name for a monogram", () => {
-    const prompt = logoPrompt({
-      subject: { name: "Smith and Sons Cleaning", trade: "cleaning" },
-      brief: { ...brief, description: "" },
-      composition: "lettering",
-      symbol: null,
-      transparent: false,
-    })
-    expect(prompt).toContain("perfectly even, flat")
-    expect(prompt).not.toContain("transparent")
-    expect(prompt).toContain(
-      'monogram built only from the initials of "Smith and Sons Cleaning"'
-    )
-    expect(prompt).not.toContain("Owner's direction")
-    expect(prompt).not.toContain("Symbol idea")
+  it("letters only what its type letters", () => {
+    const of = (type: LogoType, name = subject.name) =>
+      logoPrompt({
+        subject: { ...subject, name },
+        brief: { ...brief, type },
+        style: "luxury",
+        symbol: null,
+      })
+    for (const type of ["icon", "abstract"] as const) {
+      expect(of(type)).toContain("Lettering: none.")
+      expect(of(type)).not.toContain("B-R-I-G-H-T")
+    }
+    const monogram = of("monogram")
+    expect(monogram).toContain('only the initials "BH"')
+    expect(monogram).not.toContain("B-R-I-G-H-T")
+    expect(of("lockup")).toContain("B-R-I-G-H-T H-O-M-E-S")
+    expect(of("emblem")).toContain("B-R-I-G-H-T H-O-M-E-S")
+    expect(initialsOf("Smith & Sons Cleaning Co")).toBe("SSC")
+  })
+
+  it("draws a surprise round in four different styles, and a picked one in four alike", () => {
+    for (let i = 0; i < 20; i++) {
+      const styles = variantStyles("surprise")
+      expect(styles).toHaveLength(LOGO_VARIANTS)
+      expect(new Set(styles).size).toBe(LOGO_VARIANTS)
+      expect(styles.every((each) => LOGO_STYLES.includes(each))).toBe(true)
+    }
+    expect(variantStyles("retro")).toEqual(Array(LOGO_VARIANTS).fill("retro"))
   })
 
   it("keeps a name's quotes from breaking out of its own", () => {
     expect(spelled("Jo's")).toBe("J-O-'-S")
     const prompt = logoPrompt({
       subject: { name: 'The "Best" Clean', trade: "cleaning" },
-      brief,
-      composition: "badge",
+      brief: { ...brief, type: "emblem" },
+      style: "retro",
       symbol: null,
-      transparent: true,
     })
     expect(prompt).toContain(`"The 'Best' Clean"`)
   })
@@ -100,20 +123,25 @@ describe("the logo prompt", () => {
       subject,
       brief,
       changes: "Make the roof red",
-      transparent: true,
     })
     expect(prompt).toContain("Make the roof red")
     expect(prompt).toContain("Change only that.")
     expect(prompt).toContain('"Bright Homes"')
+    expect(
+      changesPrompt({
+        subject,
+        brief: { ...brief, type: "icon" },
+        changes: "Bigger",
+      })
+    ).toContain("Lettering: none.")
   })
 
-  it("takes only the director's ideas that are words, one per layout", () => {
+  it("takes the director's ideas that are words, at most one per variant", () => {
     expect(
-      symbolsOf({ beside: " a mop ", above: 4, badge: "", extra: "x" })
-    ).toEqual({
-      beside: "a mop",
-    })
-    expect(symbolsOf(null)).toEqual({})
+      symbolsOf({ ideas: [" a mop ", 4, "", "a bucket", "x", "y", "z"] })
+    ).toEqual(["a mop", "a bucket", "x", "y"])
+    expect(symbolsOf({ beside: "a mop" })).toEqual([])
+    expect(symbolsOf(null)).toEqual([])
   })
 })
 
@@ -191,15 +219,42 @@ function bucket() {
   }
 }
 
-const PNG = new Uint8Array([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2,
-])
+/** A PNG's bytes up to its first pixels: signature, header of the colour type, extra empty chunks, one IDAT. */
+function pngOf(colorType: number, ...before: string[]) {
+  const chunk = (name: string, data: number[] = []) => [
+    0,
+    0,
+    0,
+    data.length,
+    ...[...name].map((c) => c.charCodeAt(0)),
+    ...data,
+    0,
+    0,
+    0,
+    0,
+  ]
+  return new Uint8Array([
+    0x89,
+    0x50,
+    0x4e,
+    0x47,
+    0x0d,
+    0x0a,
+    0x1a,
+    0x0a,
+    ...chunk("IHDR", [0, 0, 0, 1, 0, 0, 0, 1, 8, colorType, 0, 0, 0]),
+    ...before.flatMap((name) => chunk(name)),
+    ...chunk("IDAT", [0]),
+  ])
+}
+const PNG = pngOf(6)
 const ORG = "org-a"
 const TOOL_CALL = "call_1"
 
 /** The image endpoint, failing for the prompts `fails` picks, recording each model asked. */
 function images(
-  fails: (model: string, prompt: string) => boolean = () => false
+  fails: (model: string, prompt: string) => boolean = () => false,
+  bytes: Uint8Array = PNG
 ) {
   const asked: { model: string; prompt: string; reference: boolean }[] = []
   vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {
@@ -212,7 +267,7 @@ function images(
     if (fails(body.model, body.prompt))
       return new Response("{}", { status: 502 })
     return Response.json({
-      data: [{ b64_json: btoa(String.fromCharCode(...PNG)) }],
+      data: [{ b64_json: btoa(String.fromCharCode(...bytes)) }],
       usage: { cost: 0.01 },
     })
   })
@@ -233,9 +288,11 @@ function manifest(overrides: object = {}) {
     started_at: new Date().toISOString(),
     subject: { ...subject, offerings: [] },
     brief,
-    planned: COMPOSITIONS.map(
+    planned: Array.from(
+      { length: LOGO_VARIANTS },
       (_, i) => `0000000${i}-0000-4000-8000-000000000000`
     ),
+    styles: variantStyles("minimal"),
     variants: [],
     ...overrides,
   }
@@ -257,20 +314,26 @@ describe("drawing a round in the queue", () => {
     return { sites, env, read }
   }
 
-  it("draws four layouts, falling back per variant, and lists them in layout order", async () => {
+  it("draws four ideas for one type, falling back per variant, and lists them in planned order", async () => {
     const { sites, env, read } = await setup()
     const asked = images(
       (model, prompt) =>
-        model === LOGO_MODELS[0].id && prompt.includes("emblem or badge")
+        model === LOGO_MODELS[0].id && prompt.includes("Idea: a bucket")
     )
-    await drawRound(env, job, { director: async () => ({ beside: "a mop" }) })
+    await drawRound(env, job, {
+      director: async () => ["a mop", "a bucket", "a cloth", "a spray"],
+    })
     const done = await read()
     expect(done.status).toBe("ready")
     expect(done.variants).toEqual(done.planned)
+    expect(typeof done.finished_at).toBe("string")
     expect(asked.filter((a) => a.model === LOGO_MODELS[1].id)).toHaveLength(1)
     expect(
-      asked.find((a) => a.prompt.includes("horizontal"))?.prompt
-    ).toContain("Symbol idea: a mop")
+      asked.filter((a) => a.prompt.includes("horizontal lockup"))
+    ).toHaveLength(asked.length)
+    expect(
+      asked.find((a) => a.prompt.includes("Idea: a mop"))?.prompt
+    ).toContain("Style: Minimal")
     const stored = sites.objects.get(`generated/${ORG}/${done.planned[0]}.png`)
     expect(stored?.meta).toEqual({ use: "logo" })
     expect(stored?.type).toBe("image/png")
@@ -293,7 +356,7 @@ describe("drawing a round in the queue", () => {
     const asked = images(() => true)
     await drawRound(env, job, { director: null })
     expect((await read()).status).toBe("failed")
-    expect(asked).toHaveLength(COMPOSITIONS.length * LOGO_MODELS.length)
+    expect(asked).toHaveLength(LOGO_VARIANTS * LOGO_MODELS.length)
 
     const lapsed = await setup({
       started_at: new Date(Date.now() - DRAW_DEADLINE_MS - 1000).toISOString(),
@@ -308,11 +371,39 @@ describe("drawing a round in the queue", () => {
     const { sites, env } = await setup({ base, changes: "Make the roof red" })
     await sites.put(`generated/${ORG}/${base}.png`, PNG)
     const asked = images()
-    await drawRound(env, job, { director: async () => ({ beside: "unused" }) })
+    await drawRound(env, job, { director: async () => ["unused"] })
     expect(
       asked.every((a) => a.reference && a.prompt.includes("Make the roof red"))
     ).toBe(true)
-    expect(asked.some((a) => a.prompt.includes("Symbol idea"))).toBe(false)
+    expect(asked.some((a) => a.prompt.includes("Idea:"))).toBe(false)
+  })
+
+  it("draws a surprise round in the four styles the manifest holds", async () => {
+    const styles = variantStyles("surprise")
+    const { env } = await setup({ styles })
+    const asked = images()
+    await drawRound(env, job, { director: null })
+    const looks = asked.map((a) => a.prompt.match(/Style: ([^:]+):/)?.[1])
+    expect(new Set(looks).size).toBe(LOGO_VARIANTS)
+  })
+
+  it("keeps only pictures with alpha: an opaque one falls to the next model, then loses its tile", async () => {
+    const { env, read } = await setup()
+    const asked = images(() => false, pngOf(2))
+    await drawRound(env, job, { director: null })
+    expect(asked).toHaveLength(LOGO_VARIANTS * LOGO_MODELS.length)
+    expect((await read()).status).toBe("failed")
+  })
+})
+
+describe("a PNG with alpha", () => {
+  it("is told by its colour type or a tRNS chunk, never by the model's word", () => {
+    expect(hasAlpha(pngOf(6))).toBe(true)
+    expect(hasAlpha(pngOf(4))).toBe(true)
+    expect(hasAlpha(pngOf(3, "PLTE", "tRNS"))).toBe(true)
+    expect(hasAlpha(pngOf(3, "PLTE"))).toBe(false)
+    expect(hasAlpha(pngOf(2))).toBe(false)
+    expect(hasAlpha(new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0]))).toBe(false)
   })
 })
 
@@ -330,6 +421,68 @@ describe("a round as the owner sees it", () => {
         variants: [{ id: empty.planned[0] }],
       })
     )
+  })
+})
+
+describe("the wait between rounds", () => {
+  const T = Date.parse("2026-10-23T12:00:00Z")
+  const done = (round: number, ago: number, extra: object = {}) =>
+    manifest({
+      round,
+      status: "ready",
+      started_at: new Date(T - ago - 20_000).toISOString(),
+      finished_at: new Date(T - ago).toISOString(),
+      variants: [`0000000${round}-0000-4000-8000-000000000000`],
+      ...extra,
+    }) as Parameters<typeof nextRoundAt>[0][number]
+
+  it("repeats the last wait", () => {
+    expect([1, 2, 3, 4, 5, 6, 7, 8, 12].map(waitBefore)).toEqual([
+      ...LOGO_ROUND_WAITS,
+      LOGO_ROUND_WAITS.at(-1),
+      LOGO_ROUND_WAITS.at(-1),
+    ])
+  })
+
+  it("counts from the finish of the round before", () => {
+    expect(nextRoundAt([], T)).toBeNull()
+    // The first draft and one redesign go at once.
+    expect(nextRoundAt([done(1, 0)], T)).toBeNull()
+    expect(nextRoundAt([done(1, 5000), done(2, 10_000)], T)).toBe(
+      T - 10_000 + 60_000
+    )
+    expect(nextRoundAt([done(1, 0), done(2, 61_000)], T)).toBeNull()
+    expect(nextRoundAt([done(1, 0), done(2, 0), done(3, 0)], T)).toBe(
+      T + 300_000
+    )
+  })
+
+  it("waits for nothing while a round draws or after one failed", () => {
+    const failed = done(2, 0, { status: "failed", variants: [] })
+    expect(nextRoundAt([done(1, 0), failed], T)).toBeNull()
+    const drawing = done(2, 0, {
+      status: "drawing",
+      finished_at: undefined,
+      started_at: new Date(T).toISOString(),
+      variants: [],
+    })
+    expect(nextRoundAt([done(1, 0), drawing], T)).toBeNull()
+  })
+
+  it("ends the offer once the rounds are used up", () => {
+    const all = Array.from({ length: LOGO_ROUNDS_MAX }, (_, i) =>
+      done(i + 1, 0)
+    )
+    expect(nextRoundAt(all, T)).toBeUndefined()
+  })
+
+  it("takes a round that lapsed with no finish time to have ended at its deadline", () => {
+    const lapsed = done(2, 0, {
+      status: "drawing",
+      finished_at: undefined,
+      started_at: new Date(T - DRAW_DEADLINE_MS - 1000).toISOString(),
+    })
+    expect(nextRoundAt([done(1, 0), lapsed], T)).toBe(T - 1000 + 60_000)
   })
 })
 
@@ -382,6 +535,56 @@ describe("POST /logos before it draws", () => {
       caller
     )
     expect(stranger.status).toBe(400)
+  })
+
+  it("refuses a round asked for early with 429, the seconds left and plain words, and lets a failed one be tried at once", async () => {
+    const sites = bucket()
+    const put = (round: number, extra: object) =>
+      sites.put(
+        `logos/${ORG}/${TOOL_CALL}/${round}.json`,
+        JSON.stringify(
+          manifest({
+            round,
+            key: `k${round}`,
+            status: "ready",
+            variants: [`0000000${round}-0000-4000-8000-000000000000`],
+            finished_at: new Date().toISOString(),
+            ...extra,
+          })
+        )
+      )
+    await put(1, {})
+    await put(2, { finished_at: new Date(Date.now() - 10_000).toISOString() })
+    const early = await drawLogos(post("k3", {}), envWith(sites), kit, caller)
+    expect(early.status).toBe(429)
+    const seconds = Number(early.headers.get("retry-after"))
+    expect(seconds).toBeGreaterThanOrEqual(49)
+    expect(seconds).toBeLessThanOrEqual(50)
+    const envelope = ErrorEnvelope.parse(await early.json())
+    expect(envelope.code).toBe("logos.wait")
+    expect(envelope.message).toBe(
+      "Your next round opens in a minute. Until then, pick the logo you like best."
+    )
+    expect(sites.objects.has(`logos/${ORG}/${TOOL_CALL}/3.json`)).toBe(false)
+
+    const read = LogoRounds.parse(
+      await (
+        await readLogos(
+          new Request(`https://api.test/logos?tool_call_id=${TOOL_CALL}`),
+          envWith(sites),
+          caller
+        )
+      ).json()
+    )
+    expect(Date.parse(read.next_at as string) - Date.now()).toBeGreaterThan(
+      48_000
+    )
+
+    // A failed latest round is replaced at once: past the wait, on to the facts.
+    await put(2, { status: "failed", variants: [] })
+    await expect(
+      drawLogos(post("k4", {}), envWith(sites), kit, caller)
+    ).rejects.toThrow()
   })
 
   it("counts a daily allowance and stops at its cap", async () => {
