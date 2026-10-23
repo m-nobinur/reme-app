@@ -2,6 +2,7 @@ import {
   type AskChoiceInput,
   type AskDesignInput,
   type Asset,
+  CALM_PALETTES,
   FIXED_PAGES,
   LOGO_VARIANTS,
   type LogoRound,
@@ -30,8 +31,14 @@ import type { CatalogEntry } from "./entries"
 
 const noop = () => undefined
 
+/** The palettes in the order the api offers them: the calm ones first. */
+const OFFERED = [
+  ...CALM_PALETTES.flatMap((id) => PALETTES.filter((each) => each.id === id)),
+  ...PALETTES.filter((each) => !CALM_PALETTES.includes(each.id)),
+]
+
 const [paper = "", tint = "", primary = "", ink = ""] =
-  PALETTES[0]?.swatches ?? []
+  OFFERED[0]?.swatches ?? []
 
 /** A made-up logo, one per layout a round draws, on a clear background. */
 const LOGOS = [
@@ -204,13 +211,13 @@ export const INPUT: AskDesignInput = {
       visual: "palette",
       card: card(
         "palette",
-        PALETTES.slice(0, 24).map((each) => ({
+        OFFERED.map((each) => ({
           id: each.id,
           label: each.label,
           hint: null,
           visual: { kind: "swatches", colors: [...each.swatches] },
         })),
-        { initial: PALETTES.slice(0, 4).map((each) => each.id), other: null }
+        { initial: CALM_PALETTES.slice(0, 4), other: null }
       ),
     },
     {
@@ -397,14 +404,14 @@ const STATES: State[] = [
     title: "Palette, one picked",
     start: {
       index: PALETTE,
-      answers: { palette: { choice: PALETTES[1]?.id ?? "" } },
+      answers: { palette: { choice: OFFERED[1]?.id ?? "" } },
     },
   },
   {
     title: "Palette, a surprise from beyond the four shown",
     start: {
       index: PALETTE,
-      answers: { palette: { choice: PALETTES[9]?.id ?? "" } },
+      answers: { palette: { choice: OFFERED[9]?.id ?? "" } },
     },
   },
   {

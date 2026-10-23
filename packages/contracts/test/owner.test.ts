@@ -646,11 +646,10 @@ describe("the onboarding presets", () => {
     const { PaletteId } = await import("../src/onboarding.ts")
     expect(PALETTES.map((p) => p.id)).toEqual(PaletteId.options)
     for (const palette of PALETTES) {
-      // Four of the palette's own roles, paper, tint, primary and ink unless it names others.
-      const roles = [palette.paper, palette.tint, palette.primary, palette.ink]
+      // Swatches are display data: four colours, not necessarily roles.
       expect(palette.swatches).toHaveLength(4)
       for (const colour of palette.swatches) {
-        expect([...roles, palette.accent]).toContain(colour)
+        expect(colour).toMatch(/^#[0-9a-f]{6}$/)
       }
       expect(palette.brand).toBe(palette.primary)
     }

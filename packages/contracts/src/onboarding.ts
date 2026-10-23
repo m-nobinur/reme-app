@@ -151,7 +151,64 @@ export const PaletteId = z.enum([
   "after_dark",
   "terracotta",
   "ember",
+  "fern",
+  "sage_slate",
+  "seafoam",
+  "evergreen",
+  "ocean_deep",
+  "mineral",
+  "olive_clay",
+  "dusty_rose",
+  "caramel",
+  "charcoal",
+  "harbor_blue",
+  "slate_mist",
+  "garden",
+  "teal_tide",
+  "mist_teal",
+  "stone_sage",
+  "night_forest",
+  "olive_grove",
+  "lagoon_blue",
+  "deep_sea",
+  "forest_calm",
+  "steel_teal",
 ])
+
+/**
+ * The calm palettes, in the order the design tray offers them first: the
+ * palette question shows four, the logo page six, and its Random picks from
+ * all of them, never the warm oranges.
+ */
+export const CALM_PALETTES: readonly PaletteId[] = [
+  "mint",
+  "mist_teal",
+  "garden",
+  "stone_sage",
+  "slate_mist",
+  "harbor_blue",
+  "teal_tide",
+  "night_forest",
+  "olive_grove",
+  "lagoon_blue",
+  "deep_sea",
+  "forest_calm",
+  "steel_teal",
+  "fern",
+  "sage_slate",
+  "seafoam",
+  "evergreen",
+  "ocean_deep",
+  "mineral",
+  "olive_clay",
+  "dusty_rose",
+  "caramel",
+  "charcoal",
+  "royal",
+  "meadow",
+  "pebble",
+]
+
 export const PALETTES = PaletteId.options.map((id) => {
   const spec = (palettes as Record<PaletteId, PaletteSpec>)[id]
   return {

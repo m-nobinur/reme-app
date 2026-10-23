@@ -549,8 +549,8 @@ function shownOptions(question: Question, answer: Answer | undefined) {
 /**
  * The palettes the tray offers, the site's own first: the one the owner
  * picked or read from a picture, else the first offered, else the first
- * palette there is. The sketches are drawn in the first; the logo maker
- * offers them all.
+ * palette there is, then the next in the api's order up to six. The
+ * sketches are drawn in the first; the logo page offers all six.
  */
 function offeredPalettes(
   questions: Question[],
@@ -558,11 +558,14 @@ function offeredPalettes(
 ): [Offered, ...Offered[]] {
   const asked = questions.find((each) => each.visual === "palette")
   const picked = asked && answers[asked.id]
-  const offered = (asked ? shownOptions(asked, picked) : []).flatMap(
-    ({ id, label, visual }) =>
-      visual?.kind === "swatches" && visual.colors.length === 4
-        ? [{ id, label, stops: visual.colors as unknown as Stops }]
-        : []
+  const offered = (
+    asked
+      ? [...new Set([...shownOptions(asked, picked), ...asked.card.options])]
+      : []
+  ).flatMap(({ id, label, visual }) =>
+    visual?.kind === "swatches" && visual.colors.length === 4
+      ? [{ id, label, stops: visual.colors as unknown as Stops }]
+      : []
   )
   const site =
     picked && "palette" in picked
@@ -575,7 +578,7 @@ function offeredPalettes(
         ) ?? offered[0])
   const first = PALETTES[0]
   return site
-    ? [site, ...offered.filter((each) => each.label !== site.label)]
+    ? [site, ...offered.filter((each) => each.label !== site.label).slice(0, 5)]
     : [
         {
           label: first?.label ?? "",

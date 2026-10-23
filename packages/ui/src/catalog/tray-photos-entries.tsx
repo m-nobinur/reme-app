@@ -100,7 +100,7 @@ const REVIEW: ReviewedPhotos = {
   ],
 }
 
-const STOPS = PALETTES[0]
+const STOPS = PALETTES.find((each) => each.id === "mint")
   ?.swatches as unknown as TrayPageProps<PhotosAnswer>["stops"]
 
 const never = () => new Promise<never>(() => undefined)
