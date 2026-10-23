@@ -7,6 +7,7 @@ import {
   ShuffleIcon,
   SpinnerGapIcon,
   UploadSimpleIcon,
+  XIcon,
 } from "@phosphor-icons/react"
 import {
   type Asset,
@@ -69,6 +70,7 @@ export type LogoAnswer = { logo: Asset }
 const TYPE_LABELS: Record<LogoType, string> = {
   lockup: "Icon + name",
   icon: "Icon only",
+  wordmark: "Name only",
   monogram: "Monogram",
   emblem: "Emblem / badge",
   abstract: "Abstract mark",
@@ -165,7 +167,13 @@ const retryAfter = (failure: unknown) =>
     : null
 
 /** The colours picked: one of the offered palettes, a random one, or the owner's own. */
-type Colours = { palette: number } | { random: string[] } | { custom: string[] }
+type Colours =
+  | { palette: number }
+  | { random: OfferedPalette }
+  | { custom: string[] }
+
+/** The most colours the owner may set, a palette's worth. */
+const CUSTOM_MAX = 4
 
 /** The brief as the owner fills it in, kept in the tab. */
 type Brief = {
@@ -407,7 +415,7 @@ function TrayLogo({
     : "palette" in colours
       ? logoColors((palettes[colours.palette] ?? palettes[0])?.stops ?? stops)
       : "random" in colours
-        ? colours.random
+        ? logoColors(colours.random.stops)
         : colours.custom.flatMap((each) => hex(each) ?? [])
   const settled = {
     look: true,
@@ -536,6 +544,23 @@ function TrayLogo({
   const setColours = (next: Colours) => {
     setBrief({ ...brief, colours: next })
     setFocus("colours")
+  }
+  const random = colours && "random" in colours ? colours.random : null
+  // A calm palette the tiles do not already show, and not the one drawn last.
+  const roll = () => {
+    const taken = new Set([...palettes, random].map((each) => each?.label))
+    const pool = PALETTES.filter(
+      (each) => CALM_PALETTES.includes(each.id) && !taken.has(each.label)
+    )
+    const lucky = pool[Math.floor(Math.random() * pool.length)]
+    if (lucky) {
+      setColours({
+        random: {
+          label: lucky.label,
+          stops: lucky.swatches as unknown as Stops,
+        },
+      })
+    }
   }
   const custom = colours && "custom" in colours ? colours.custom : null
   const setCustom = (slot: number, value: string) =>
@@ -748,8 +773,8 @@ function TrayLogo({
           <span className="truncate">
             {colours && "palette" in colours
               ? palettes[colours.palette]?.label
-              : colours && "random" in colours
-                ? "Random"
+              : random
+                ? random.label
                 : "Your colours"}
           </span>
         </Summary>
@@ -776,24 +801,29 @@ function TrayLogo({
               </RadioTile>
             ))}
             <RadioTile
-              checked={colours !== null && "random" in colours}
-              className={cn(TRAY_TILE, COLOUR_TILE)}
+              checked={random !== null}
+              className={cn(TRAY_TILE, COLOUR_TILE, "relative")}
               name={`${id}-colours`}
-              onPick={() => {
-                // A calm palette, never the warm oranges.
-                const lucky =
-                  CALM_PALETTES[
-                    Math.floor(Math.random() * CALM_PALETTES.length)
-                  ]
-                const swatches = (PALETTES.find((each) => each.id === lucky)
-                  ?.swatches ?? stops) as unknown as Stops
-                setColours({ random: logoColors(swatches) })
-              }}
+              // A tap on Random when it is picked draws another.
+              onClick={() => random && roll()}
+              onPick={roll}
             >
-              <span className={NAMED_TILE}>
-                <ShuffleIcon aria-hidden className="size-4" />
-                Random
-              </span>
+              {random ? (
+                <>
+                  <Swatches colors={random.stops} />
+                  <span className="absolute top-1 right-1 grid size-5 place-items-center rounded-full bg-card/90 text-foreground shadow-sm">
+                    <ShuffleIcon aria-hidden className="size-3" />
+                  </span>
+                  <span className="sr-only">
+                    Random, {random.label}. Pick again for another.
+                  </span>
+                </>
+              ) : (
+                <span className={NAMED_TILE}>
+                  <ShuffleIcon aria-hidden className="size-4" />
+                  Random
+                </span>
+              )}
             </RadioTile>
             <RadioTile
               checked={custom !== null}
@@ -808,56 +838,71 @@ function TrayLogo({
             </RadioTile>
           </div>
           {custom ? (
-            <div className="flex flex-col gap-2">
+            // In a row like a palette, the brand colour first, up to four.
+            <div className="grid @sm:grid-cols-4 grid-cols-2 gap-2">
               {custom.map((value, place) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: a colour's place is its identity
-                <div className="flex items-center gap-2" key={place}>
+                <div
+                  className="flex h-10 items-center gap-1.5 rounded-xl border border-border bg-card px-1.5 transition-colors focus-within:border-primary focus-within:ring-3 focus-within:ring-primary"
+                  // biome-ignore lint/suspicious/noArrayIndexKey: a colour's place is its identity
+                  key={place}
+                >
                   <input
                     aria-label={`Colour ${place + 1}, picker`}
-                    className="size-10 shrink-0 cursor-pointer rounded-xl border border-border bg-card p-1 outline-none focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-primary"
+                    className="size-7 shrink-0 cursor-pointer rounded-lg border border-border bg-transparent outline-none [&::-moz-color-swatch]:rounded-md [&::-moz-color-swatch]:border-0 [&::-webkit-color-swatch-wrapper]:p-0.5 [&::-webkit-color-swatch]:rounded-md [&::-webkit-color-swatch]:border-0"
                     onChange={(event) =>
                       setCustom(place, event.currentTarget.value)
                     }
                     type="color"
                     value={hex(value) ?? stops[2]}
                   />
-                  <Input
+                  <input
                     aria-invalid={hex(value) === null}
                     aria-label={`Colour ${place + 1}`}
                     autoComplete="off"
-                    className={cn("w-32 font-mono", TRAY_FIELD)}
+                    className="w-full min-w-0 bg-transparent font-mono text-base outline-none placeholder:text-muted-foreground aria-invalid:text-destructive md:text-sm"
                     maxLength={7}
                     onChange={(event) =>
                       setCustom(place, event.currentTarget.value)
                     }
-                    placeholder="Hex code"
+                    placeholder="#hex"
                     spellCheck={false}
                     value={value}
                   />
                   {place > 0 ? (
                     <Button
+                      aria-label={`Remove colour ${place + 1}`}
                       className={ACCENT_RING}
-                      onClick={() => setColours({ custom: custom.slice(0, 1) })}
-                      size="sm"
+                      onClick={() =>
+                        setColours({
+                          custom: custom.filter((_, slot) => slot !== place),
+                        })
+                      }
+                      size="icon-xs"
                       type="button"
                       variant="ghost"
                     >
-                      Remove
+                      <XIcon aria-hidden />
                     </Button>
                   ) : null}
                 </div>
               ))}
-              {custom.length < 2 ? (
-                <Button
-                  className={cn("self-start", ACCENT_RING)}
-                  onClick={() => setColours({ custom: [...custom, stops[3]] })}
-                  size="sm"
+              {custom.length < CUSTOM_MAX ? (
+                <button
+                  className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-border border-dashed font-medium text-muted-foreground text-xs outline-none transition-colors hover:border-foreground/25 hover:text-foreground focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-primary"
+                  onClick={() =>
+                    setColours({
+                      custom: [
+                        ...custom,
+                        // The site palette's next colour, as a start.
+                        stops[[2, 3, 1, 0][custom.length] ?? 0],
+                      ],
+                    })
+                  }
                   type="button"
-                  variant="ghost"
                 >
-                  <PlusIcon aria-hidden />
-                  Add a second colour
-                </Button>
+                  <PlusIcon aria-hidden className="size-4" />
+                  Add colour
+                </button>
               ) : null}
             </div>
           ) : null}
@@ -884,9 +929,10 @@ function TrayLogo({
                 key={type}
                 label={TYPE_LABELS[type]}
                 name={`${id}-type`}
+                // Picked, it folds to a row and the style opens.
                 onPick={() => {
                   setBrief({ ...brief, type })
-                  setFocus("type")
+                  setFocus("style")
                 }}
                 labelSize="text-sm"
                 picture="h-7 w-10"
