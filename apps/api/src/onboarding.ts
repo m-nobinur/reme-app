@@ -778,7 +778,7 @@ export function designCard(o: Onboarding, newId: () => string): ToolPart {
           id: "photos",
           question: "Do you have photos of your work?",
           visual: "photos",
-          card: pageCard("Upload photos", "Create them for me"),
+          card: pageCard("Yes, I have photos", "No, create them for me"),
           upload: dropZone(UPLOAD_MAX_FILES),
           ...(photos.length > 0 ? { held: photos } : {}),
         },

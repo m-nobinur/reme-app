@@ -46,6 +46,7 @@ import {
 import { layoutLook } from "@workspace/ui/lib/tool-state"
 import { cn } from "@workspace/ui/lib/utils"
 import {
+  type ComponentProps,
   createContext,
   type KeyboardEvent,
   type ReactNode,
@@ -293,6 +294,130 @@ function DropTile({
         type="file"
       />
     </label>
+  )
+}
+
+/**
+ * A part of the page that opens and folds: the height eases between none
+ * and its content's, and its opacity with it, so the tray grows and shrinks
+ * smoothly. Folded, it takes no focus.
+ */
+function Fold({ open, children }: { open: boolean; children: ReactNode }) {
+  return (
+    <div
+      className={cn(
+        "-mx-1 grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none",
+        open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+      )}
+      inert={!open}
+    >
+      {/* Relative, so the clip holds the sr-only radios too and a folded
+          section adds nothing to the tray's scroll. Room for focus rings. */}
+      <div className="relative min-h-0 overflow-hidden">
+        <div className="px-1 py-1.5">{children}</div>
+      </div>
+    </div>
+  )
+}
+
+/** A settled section as one row: what it is, what was chosen, and a tap to reopen it. */
+function Summary({
+  label,
+  onOpen,
+  children,
+}: {
+  label: string
+  onOpen: () => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      className="flex min-h-11 w-full items-center gap-3 rounded-xl border border-border bg-card px-3 py-2 text-left text-sm outline-none transition-colors duration-150 hover:bg-muted focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-primary"
+      onClick={onOpen}
+      type="button"
+    >
+      <span className="w-20 shrink-0 text-muted-foreground text-xs">
+        {label}
+      </span>
+      <span className="flex min-w-0 flex-1 items-center gap-2 font-medium">
+        {children}
+      </span>
+      <span className="shrink-0 text-muted-foreground text-xs">Change</span>
+    </button>
+  )
+}
+
+/** A tile that is one radio of a group: the input hidden, the tile its face. */
+function RadioTile({
+  checked,
+  children,
+  disabled,
+  name,
+  onPick,
+  onClick,
+  ...label
+}: Omit<ComponentProps<"label">, "onClick"> & {
+  checked: boolean
+  disabled?: boolean
+  name: string
+  onPick: () => void
+  onClick?: () => void
+}) {
+  return (
+    <label {...label}>
+      <input
+        checked={checked}
+        className="sr-only"
+        disabled={disabled}
+        name={name}
+        onChange={onPick}
+        onClick={onClick}
+        type="radio"
+      />
+      {children}
+    </label>
+  )
+}
+
+/** A yes-or-no page's answers, as a pair of tiles with a line under each. */
+function Ways<Way extends string>({
+  label,
+  ways,
+  picked,
+  onPick,
+  onRepick,
+}: {
+  label: string
+  ways: readonly { way: Way; label: string; hint: string; icon: ReactNode }[]
+  picked: Way | null
+  onPick: (way: Way) => void
+  /** A tap on the answer already picked. */
+  onRepick: (way: Way) => void
+}) {
+  const name = useId()
+  return (
+    <div
+      aria-label={label}
+      className="grid @sm:grid-cols-2 grid-cols-1 gap-2"
+      role="radiogroup"
+    >
+      {ways.map((each) => (
+        <RadioTile
+          checked={picked === each.way}
+          className={TRAY_TILE}
+          key={each.way}
+          name={name}
+          onClick={() => picked === each.way && onRepick(each.way)}
+          onPick={() => onPick(each.way)}
+        >
+          <span className="flex items-center gap-2 font-medium text-sm [&_svg]:size-5 [&_svg]:text-primary">
+            {each.icon}
+            {each.label}
+          </span>
+          <span className="text-muted-foreground text-xs">{each.hint}</span>
+        </RadioTile>
+      ))}
+    </div>
   )
 }
 
@@ -1420,7 +1545,10 @@ export {
   ACCENT_RING,
   Docked,
   DropTile,
+  Fold,
   QuestionTray,
+  RadioTile,
+  Summary,
   Swatches,
   sentence,
   TRAY_FIELD,
@@ -1428,4 +1556,5 @@ export {
   TrayFrame,
   TrayNote,
   useTabDraft,
+  Ways,
 }

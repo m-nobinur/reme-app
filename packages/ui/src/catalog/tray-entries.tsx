@@ -258,15 +258,20 @@ export const INPUT: AskDesignInput = {
     },
     {
       id: "photos",
-      question: "Add photos of your work",
+      question: "Do you have photos of your work?",
       visual: "photos",
       card: card(
         "template",
         [
-          { id: "upload", label: "Upload photos", hint: null, visual: null },
+          {
+            id: "upload",
+            label: "Yes, I have photos",
+            hint: null,
+            visual: null,
+          },
           {
             id: "create",
-            label: "Create them for me",
+            label: "No, create them for me",
             hint: null,
             visual: null,
           },

@@ -65,13 +65,18 @@ const BLURRED = asset(5, "IMG_2041.jpg")
 
 const QUESTION: AskDesignInput["questions"][number] = {
   id: "photos",
-  question: "Add photos of your work",
+  question: "Do you have photos of your work?",
   visual: "photos",
   card: {
     step: "template",
     options: [
-      { id: "upload", label: "Upload photos", hint: null, visual: null },
-      { id: "create", label: "Create them for me", hint: null, visual: null },
+      { id: "upload", label: "Yes, I have photos", hint: null, visual: null },
+      {
+        id: "create",
+        label: "No, create them for me",
+        hint: null,
+        visual: null,
+      },
     ],
     multiple: false,
     preselected: [],
@@ -152,6 +157,9 @@ function PhotosState({
       root.current?.querySelector<HTMLInputElement>('input[type="file"]')
     if (!input || choose === 0 || chosen.current) return
     chosen.current = true
+    root.current
+      ?.querySelector<HTMLInputElement>('input[type="radio"]')
+      ?.click()
     const files = new DataTransfer()
     for (const name of ["Kitchen.jpg", "Oven.jpg", "Bathroom.jpg"].slice(
       0,
@@ -202,7 +210,7 @@ const trayPhotosCatalog: CatalogEntry[] = [
         <PhotosState title="Nothing yet: the guide" />
         <PhotosState
           answer={{ photos: [], create: true }}
-          title="Create them for me, chosen"
+          title="No, create them for me, chosen"
         />
         <PhotosState
           choose={3}

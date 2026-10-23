@@ -1771,7 +1771,7 @@ describe("the design tray", () => {
     const named = PALETTES.find((p) => p.id === palette)?.label ?? ""
     expect(trayOption(card(), named)).toBe(palette)
     expect(trayOption(card(), "No, create one for me")).toBeNull()
-    expect(trayOption(card(), "Upload photos")).toBeNull()
+    expect(trayOption(card(), "Yes, I have photos")).toBeNull()
   })
 
   it("refuses a finished tray with no logo, answered or held", () => {
