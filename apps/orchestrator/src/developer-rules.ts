@@ -14,6 +14,7 @@ import {
   PAGES,
   PALETTES,
   type PageId,
+  type PaletteRoles,
   type SectionKind,
   TEMPLATES,
   TONES,
@@ -74,8 +75,12 @@ export const CUSTOM_SECTION_RULES = `- A custom section is written only when the
 
 /** A palette as `site.palette` takes it: the six roles, by name. */
 const ROLES = ["paper", "ink", "primary", "tint", "accent", "line"] as const
-export const paletteRoles = (palette: (typeof PALETTES)[number]) =>
+export const paletteRoles = (palette: PaletteRoles) =>
   ROLES.map((role) => `${role}:${palette[role]}`).join(" ")
+
+/** The name a palette read from the owner's logo or picture goes by, from its note. */
+export const ownPaletteName = (custom: string | undefined) =>
+  custom?.split(":")[0]?.trim().slice(0, 40) || "Your colours"
 
 /**
  * The directions library as prompt lines, stable across every build: how to
@@ -384,13 +389,17 @@ export function ownerChoices(facts: readonly FactRecord[]): string[] {
       ? [
           `- Colour: the brand colour is ${preset.brand}, the owner's ${preset.label} palette, whatever the direction names. Set palette in src/site-config.ts to "${paletteRoles(preset)}" exactly; derive no colour.`,
         ]
-      : palette?.brand
-        ? [ownColour(palette.brand, palette.custom)]
-        : palette?.custom
-          ? [
-              `- Colour: the owner described their colours as ${quoted(palette.custom)}. Choose one brand colour that fits, with enough contrast for text.`,
-            ]
-          : []),
+      : palette?.roles
+        ? [
+            `- Colour: the owner's own ${ownPaletteName(palette.custom)} palette, read from their logo or a picture, whatever the direction names. Set palette in src/site-config.ts to "${paletteRoles(palette.roles)}" exactly and brandColor to ${palette.roles.primary}; derive no colour.`,
+          ]
+        : palette?.brand
+          ? [ownColour(palette.brand, palette.custom)]
+          : palette?.custom
+            ? [
+                `- Colour: the owner described their colours as ${quoted(palette.custom)}. Choose one brand colour that fits, with enough contrast for text.`,
+              ]
+            : []),
     ...(pair
       ? [
           `- Font: the owner chose the ${pair.label} pair, whatever the direction names; set font in src/site-config.ts to "${pair.id}". The pair's files come with the site; add no font files and no font links.`,

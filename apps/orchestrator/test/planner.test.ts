@@ -1,9 +1,10 @@
-import type {
-  Blueprint,
-  DesignDirection,
-  FactRecord,
+import {
+  type Blueprint,
+  type DesignDirection,
+  type FactRecord,
+  PALETTES,
+  SECTION_VARIANTS,
 } from "@workspace/contracts"
-import { SECTION_VARIANTS } from "@workspace/contracts"
 import { describe, expect, it, vi } from "vitest"
 
 import { blueprintLayout, blueprintLines } from "../src/blueprint.ts"
@@ -200,6 +201,34 @@ describe("the fallback Blueprint", () => {
     expect(
       withOwnerChoices({ ...made, direction: "calm_daylight" }, facts).direction
     ).toBe("counsel")
+  })
+
+  it("builds in the whole palette the owner picked from their logo, and never one the model wrote", () => {
+    // A preset's six colours stand in for ones read from a logo.
+    const { paper, ink, primary, tint, accent, line } =
+      PALETTES[0] as (typeof PALETTES)[number]
+    const roles = { paper, ink, primary, tint, accent, line }
+    const facts = [
+      ...CLEANING,
+      fact("site.palette", {
+        id: "custom",
+        brand: roles.primary,
+        roles,
+        custom: `Teal circle: paper ${roles.paper}, tint ${roles.tint}, primary ${roles.primary}, ink ${roles.ink}`,
+      }),
+    ]
+    const made = fallbackBlueprint({ facts, recent: [], library: LIBRARY })
+    expect(made.palette).toEqual({ kind: "roles", name: "Teal circle", roles })
+    expect(blueprintLines(made).join("\n")).toContain(
+      `palette to "paper:${roles.paper} ink:${roles.ink} primary:${roles.primary}`
+    )
+    // Without the owner's pick, a whole palette from the model is only its primary.
+    expect(
+      withOwnerChoices(
+        { ...made, palette: { kind: "roles", name: "Made up", roles } },
+        CLEANING
+      ).palette
+    ).toEqual({ kind: "brand", brand: roles.primary })
   })
 
   it("takes the direction recent sites used least", () => {

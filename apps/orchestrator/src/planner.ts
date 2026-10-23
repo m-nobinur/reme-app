@@ -43,6 +43,7 @@ import {
   factValue,
   industryOf,
   ownerPhotos,
+  ownPaletteName,
   packVoice,
   SECTION_PICKS,
 } from "./developer-rules.ts"
@@ -123,9 +124,15 @@ export function ownerChoices(facts: readonly FactRecord[]) {
     palette:
       palette && palette.id !== "custom"
         ? ({ kind: "preset", id: palette.id } as const)
-        : palette?.brand
-          ? ({ kind: "brand", brand: palette.brand } as const)
-          : undefined,
+        : palette?.roles
+          ? ({
+              kind: "roles",
+              name: ownPaletteName(palette.custom),
+              roles: palette.roles,
+            } as const)
+          : palette?.brand
+            ? ({ kind: "brand", brand: palette.brand } as const)
+            : undefined,
     fonts:
       pair ??
       (font && font.id !== "custom"
@@ -224,7 +231,12 @@ export function withOwnerChoices(
   return {
     ...blueprint,
     ...(owner.direction ? { direction: owner.direction } : {}),
-    ...(owner.palette ? { palette: owner.palette } : {}),
+    // A whole palette is the owner's alone: one the model wrote is its primary.
+    palette:
+      owner.palette ??
+      (blueprint.palette.kind === "roles"
+        ? { kind: "brand", brand: blueprint.palette.roles.primary }
+        : blueprint.palette),
     ...(owner.fonts ? { fonts: owner.fonts } : {}),
     pages,
     images: fitImages({ ...budgeted, pages }),
@@ -719,7 +731,9 @@ export function fallbackBlueprint(input: {
   const colours =
     palette.kind === "preset"
       ? (PALETTES.find((p) => p.id === palette.id)?.label ?? palette.id)
-      : "your own"
+      : palette.kind === "roles"
+        ? palette.name
+        : "your own"
   const pageLabel = (page: PageId) =>
     PLANNED_PAGES.find((p) => p.id === page)?.label ?? page
   const features = [
@@ -810,8 +824,9 @@ function mergeKinds(branches: unknown[]): Record<string, unknown> | null {
  * The Blueprint's shape for structured output: the contract's JSON Schema
  * without the keywords Claude's structured outputs refuse (string and array
  * lengths, patterns, number bounds), with `oneOf` as `anyOf` and the section
- * union merged (`mergeKinds`). `Blueprint` itself checks what was dropped,
- * so nothing is lost but the model's hint.
+ * union merged (`mergeKinds`), and without the owner's own palette, which
+ * only the owner picks. `Blueprint` itself checks what was dropped, so
+ * nothing is lost but the model's hint.
  */
 export function outputSchema(): Record<string, unknown> {
   const drop = new Set([
@@ -845,10 +860,17 @@ export function outputSchema(): Record<string, unknown> {
     const merged = Array.isArray(out.anyOf) ? mergeKinds(out.anyOf) : null
     return merged ?? out
   }
-  return clean(z.toJSONSchema(Blueprint, { io: "output" })) as Record<
-    string,
-    unknown
-  >
+  const schema = clean(z.toJSONSchema(Blueprint, { io: "output" })) as {
+    properties: { palette: { anyOf: { properties?: { kind?: unknown } }[] } }
+  }
+  // The owner's whole palette is theirs to pick, never the model's to write.
+  const palette = schema.properties.palette
+  palette.anyOf = palette.anyOf.filter(
+    (branch) =>
+      (branch.properties?.kind as { const?: string } | undefined)?.const !==
+      "roles"
+  )
+  return schema as unknown as Record<string, unknown>
 }
 
 const SCHEMA = { name: "blueprint", schema: outputSchema() }

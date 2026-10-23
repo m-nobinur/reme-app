@@ -41,11 +41,16 @@ export const directionLabel = (id: string) =>
   `${id.charAt(0).toUpperCase()}${id.slice(1).replaceAll("_", " ")}`
 
 /**
- * Paper, tint, primary and ink. A preset is the contracts' own four; the
- * owner's own colour has only the one, so the others are shades of it, as a
- * strip to show the direction and not the exact roles the starter derives.
+ * Paper, tint, primary and ink. A preset is the contracts' own four, and the
+ * owner's own palette its own; the owner's own colour has only the one, so
+ * the others are shades of it, as a strip to show the direction and not the
+ * exact roles the starter derives.
  */
 export function paletteStops(palette: Blueprint["palette"]): string[] {
+  if (palette.kind === "roles") {
+    const { paper, tint, primary, ink } = palette.roles
+    return [paper, tint, primary, ink]
+  }
   if (palette.kind === "brand") {
     const { brand } = palette
     return [
@@ -59,9 +64,11 @@ export function paletteStops(palette: Blueprint["palette"]): string[] {
 }
 
 export const paletteName = (palette: Blueprint["palette"]) =>
-  palette.kind === "brand"
-    ? `Your colour ${palette.brand}`
-    : (PALETTES.find((p) => p.id === palette.id)?.label ?? palette.id)
+  palette.kind === "roles"
+    ? palette.name
+    : palette.kind === "brand"
+      ? `Your colour ${palette.brand}`
+      : (PALETTES.find((p) => p.id === palette.id)?.label ?? palette.id)
 
 export function pairOfBlueprint(id: Blueprint["fonts"]) {
   const pair = FONT_PAIRS.find((p) => p.id === id)
