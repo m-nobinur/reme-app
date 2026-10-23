@@ -588,7 +588,7 @@ function offeredPalettes(
 function Swatches({ colors }: { colors: readonly string[] }) {
   return (
     // The palette's own colours, data from the call, filling the tile edge to edge.
-    <span aria-hidden className="flex h-20 w-full">
+    <span aria-hidden className="flex h-10 w-full">
       {colors.map((color, at) => (
         <span
           className="h-full flex-1"
