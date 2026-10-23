@@ -9,6 +9,7 @@ import {
   Docked,
   TrayFrame,
   TrayNote,
+  useTabDraft,
 } from "@workspace/ui/components/assistant/question-tray"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
@@ -390,8 +391,11 @@ function ChoiceForm({
   input,
   onAnswer,
   start,
+  draftId,
 }: {
   id?: string
+  /** Where the picks are kept for this tab, the call's id; none keeps nothing. */
+  draftId?: string
   input: AskChoiceInput
   onAnswer: (answer: {
     answer: "chosen"
@@ -401,10 +405,15 @@ function ChoiceForm({
   start?: Start
 }) {
   const id = useId()
-  const [picked, setPicked] = useState<string[]>(() =>
-    start?.other !== undefined ? [OTHER] : input.preselected
-  )
-  const [other, setOther] = useState(start?.other ?? "")
+  // What was picked and written, kept in this tab, so a reload keeps it.
+  const { draft, keep } = useTabDraft(draftId ? `choice:${draftId}` : null, {
+    picked: start?.other !== undefined ? [OTHER] : input.preselected,
+    other: start?.other ?? "",
+  })
+  const { picked, other } = draft
+  const setPicked = (next: (now: string[]) => string[]) =>
+    keep({ ...draft, picked: next(picked) })
+  const setOther = (value: string) => keep({ ...draft, other: value })
   const [invalid, setInvalid] = useState<string | null>(null)
   const [shown, setShown] = useState(() => start?.shown ?? input.initial)
   const [seen, setSeen] = useState(() => shown ?? [])
@@ -662,6 +671,7 @@ const AskChoice: ToolCallMessagePartComponent = (props) => {
         }
       >
         <ChoiceForm
+          draftId={props.toolCallId}
           id={`${id}-form`}
           input={input}
           onAnswer={props.addResult}

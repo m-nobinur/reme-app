@@ -278,7 +278,7 @@ function DetailsTray({
 }) {
   const id = useId()
   const keys: readonly DetailsKey[] = DETAILS_KEYS[input.step]
-  const { draft, keep } = useTabDraft<Draft>(draftId, {
+  const { draft, keep, save } = useTabDraft<Draft>(draftId, {
     page: 0,
     values: {},
   })
@@ -407,8 +407,9 @@ function DetailsTray({
         noValidate
         onBlur={checkOnLeave}
         onChange={(event) => {
-          // Every keystroke is kept, so a reload resumes mid-page.
-          keep({ page, values: values() })
+          // Every keystroke is kept, so a reload resumes mid-page; stored
+          // only, as the fields hold what is typed.
+          save({ page, values: values() })
           const field = event.target
           if (
             field instanceof HTMLInputElement &&

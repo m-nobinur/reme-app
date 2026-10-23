@@ -165,29 +165,34 @@ function Docked({
 /**
  * A tray's answers so far, kept in this tab by the call's id, so a reload
  * resumes on the page the owner reached. Storage that throws or is empty
- * starts fresh; `clear` drops it once the call is answered.
+ * starts fresh, and a null id keeps nothing. `keep` sets the draft as state
+ * and stores it; `save` only stores it, for a draft read once, so typing
+ * renders nothing more; `clear` drops it once the call is answered.
  */
-function useTabDraft<T>(id: string, empty: T) {
-  const key = `tray:${id}`
+function useTabDraft<T>(id: string | null, empty: T) {
+  const key = id === null ? null : `tray:${id}`
   // Storage can throw (private windows, blocked site data); the tray then
   // just starts fresh after a reload.
-  const store = <R,>(use: (storage: Storage) => R) => {
+  const store = <R,>(use: (storage: Storage, key: string) => R) => {
+    if (key === null) return null
     try {
-      return use(window.sessionStorage)
+      return use(window.sessionStorage, key)
     } catch {
       return null
     }
   }
   const [draft, setDraft] = useState<T>(() => {
-    const saved = store((storage) => storage.getItem(key))
+    const saved = store((storage, at) => storage.getItem(at))
     return saved ? (JSON.parse(saved) as T) : empty
   })
+  const save = (next: T) =>
+    store((storage, at) => storage.setItem(at, JSON.stringify(next)))
   const keep = (next: T) => {
     setDraft(next)
-    store((storage) => storage.setItem(key, JSON.stringify(next)))
+    save(next)
   }
-  const clear = () => store((storage) => storage.removeItem(key))
-  return { draft, keep, clear }
+  const clear = () => store((storage, at) => storage.removeItem(at))
+  return { draft, keep, save, clear }
 }
 
 /**
@@ -1051,7 +1056,7 @@ function QuestionTray({
   // Where the owner was in this tab, so a reload loses no pick, page or
   // picture, saved or not.
   // shortcut: the key outlives the call; one small entry per tray a tab saw.
-  const { draft: saved, keep: save } = useTabDraft<{
+  const { draft: saved, save } = useTabDraft<{
     answers: Record<string, Answer>
     index: number
     picture: PaletteFromImage | null

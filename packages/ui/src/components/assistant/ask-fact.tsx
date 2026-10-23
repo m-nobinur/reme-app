@@ -4,6 +4,7 @@ import {
   Docked,
   TrayFrame,
   TrayNote,
+  useTabDraft,
 } from "@workspace/ui/components/assistant/question-tray"
 import { AnswerInputs } from "@workspace/ui/components/live-panel"
 import {
@@ -30,6 +31,20 @@ const AskFact: ToolCallMessagePartComponent = (props) => {
   const id = useId()
   const [invalid, setInvalid] = useState<string | null>(null)
   const [collapsed, setCollapsed] = useState(false)
+  // What was typed, kept in this tab, so a reload puts it back in the fields.
+  const { draft, save } = useTabDraft<Record<string, string>>(
+    `fact:${props.toolCallId}`,
+    {}
+  )
+  /** Puts the kept words back once, as the form attaches. */
+  const restore = (form: HTMLFormElement | null) => {
+    if (!form || form.dataset.restored) return
+    form.dataset.restored = "true"
+    for (const [name, value] of Object.entries(draft)) {
+      const field = form.elements.namedItem(name)
+      if (field instanceof HTMLInputElement && !field.value) field.value = value
+    }
+  }
   if (view.state === "answered" || view.state === "skipped") return null
   if (view.state !== "pending") {
     return (
@@ -94,7 +109,18 @@ const AskFact: ToolCallMessagePartComponent = (props) => {
           id={`${id}-form`}
           noValidate
           onBlur={checkOnLeave}
+          onChange={(event) =>
+            save(
+              Object.fromEntries(
+                [...new FormData(event.currentTarget)].map(([name, value]) => [
+                  name,
+                  String(value),
+                ])
+              )
+            )
+          }
           onSubmit={submit}
+          ref={restore}
         >
           <AnswerInputs
             id={id}
