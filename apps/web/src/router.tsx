@@ -1,3 +1,4 @@
+import "@/lib/zod-jitless"
 import {
   createRouter as createTanStackRouter,
   Link,
@@ -7,13 +8,7 @@ import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { EmptyState } from "@workspace/ui/components/empty-state"
 import { LoadingState } from "@workspace/ui/components/loading-state"
 import type { PanelPress } from "@workspace/ui/lib/panel"
-import { config } from "zod"
 import { routeTree } from "./routeTree.gen"
-
-// Zod probes for `new Function` before compiling a fast parser, which the CSP
-// (lib/csp.ts) refuses and reports as a violation on every page that parses.
-// Its fallback is what runs anyway, so skip the probe.
-config({ jitless: true })
 
 // The three route states, set once here so every route gets the same ones and
 // no screen has to remember to. A route overrides one only when it has a
