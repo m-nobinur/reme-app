@@ -463,7 +463,9 @@ const ThreadRoot: FC<{
           data-slot="aui_thread-viewport"
           // Clear of the workspace's floating panel, where there is one; the
           // padding sits inside the scroller, so its bar stays at the edge.
-          className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll scroll-smooth pe-(--panel-inset)"
+          // No scroll-smooth: it turned the jump to the end of a reopened
+          // chat into a glide from the top. Scrolls that glide ask for it.
+          className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll pe-(--panel-inset)"
         >
           <KeepTurnAnchor />
           <div
@@ -583,6 +585,7 @@ const localDay = (at: string | null): number | null => {
 const ThreadScrollToBottom: FC = () => {
   return (
     <ThreadPrimitive.ScrollToBottom
+      behavior="smooth"
       render={
         <TooltipIconButton
           tooltip="Scroll to bottom"
