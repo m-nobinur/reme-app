@@ -33,10 +33,17 @@ const stub = {
   },
 }
 
-const { checkpoint, checkpointKey, endSandbox, recover, rehydrate } =
-  await import("../src/sandbox.ts")
+const {
+  checkpoint,
+  checkpointKey,
+  endSandbox,
+  recover,
+  rehydrate,
+  takeWork,
+  workKey,
+} = await import("../src/sandbox.ts")
 
-const bucket = new Map<string, Uint8Array>()
+const bucket = new Map<string, Uint8Array | ArrayBuffer>()
 const env = {
   SANDBOX: { getByName: () => stub },
   SITES: {
@@ -45,7 +52,12 @@ const env = {
     },
     get: async (key: string) => {
       const found = bucket.get(key)
-      return found ? { body: new Blob([found]).stream() } : null
+      return found
+        ? {
+            body: new Blob([found]).stream(),
+            arrayBuffer: () => new Blob([found]).arrayBuffer(),
+          }
+        : null
     },
     head: async (key: string) => (bucket.has(key) ? {} : null),
     delete: async (key: string) => {
@@ -126,5 +138,21 @@ describe("a blocked build's checkpoint", () => {
     await endSandbox(env, ids)
     expect(destroyed).toBe(1)
     expect(bucket.has(checkpointKey(ids))).toBe(false)
+  })
+})
+
+describe("a failed build's kept site", () => {
+  it("moves to its retry's checkpoint once, which a replay still finds", async () => {
+    const failed = { orgId: "org-1", assignmentId: "asg-failed" }
+    const retry = { orgId: "org-1", assignmentId: "asg-retry" }
+    bucket.set(workKey(failed), new Uint8Array([1, 2]))
+    expect(await takeWork(env.SITES, failed, retry)).toBe(true)
+    expect(bucket.has(workKey(failed))).toBe(false)
+    expect(
+      new Uint8Array(bucket.get(checkpointKey(retry)) as ArrayBuffer)
+    ).toEqual(new Uint8Array([1, 2]))
+    expect(await takeWork(env.SITES, failed, retry)).toBe(true)
+    const fresh = { orgId: "org-1", assignmentId: "asg-fresh" }
+    expect(await takeWork(env.SITES, failed, fresh)).toBe(false)
   })
 })

@@ -368,7 +368,8 @@ function render({ id }: AgentProps) {
     false
   )
   const askedForFallback =
-    delivery.kind === "signal" && delivery.attributes?.model === "fallback"
+    brief.fallback === true ||
+    (delivery.kind === "signal" && delivery.attributes?.model === "fallback")
   // QE4: a section change starts on the quick section role (Sonnet, low) and
   // moves to the build role, for good, when the Workflow's resume or repair
   // signal asks for it: the quick lane's last step up.
@@ -643,10 +644,15 @@ const writePagesTool = (current: Session) =>
           if (next !== content) await stub.writeFile(CONFIG, next)
           return next
         })
-      const roles = {
-        page: roleOf(spec, "page"),
-        copy: roleOf(spec, "copy"),
+      // A retry after a provider failure writes on the fallback model too.
+      const writer = (role: "page" | "copy") => {
+        const routed = roleOf(spec, role)
+        const { fallback } = current.runtime
+        return brief.fallback && fallback
+          ? { ...routed, model: fallback }
+          : routed
       }
+      const roles = { page: writer("page"), copy: writer("copy") }
       // One string per agent, so siblings share a cached prefix.
       const systems = {
         page: pageInstructions(brief),

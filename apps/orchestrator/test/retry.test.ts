@@ -5,7 +5,9 @@ import type { writeText } from "../src/heartbeat-write.ts"
 import { freshOrg, kit } from "./fixture.ts"
 
 // app.ts loads both at import time; neither is reached here.
-vi.mock("../src/sandbox.ts", () => ({}))
+vi.mock("../src/sandbox.ts", () => ({
+  workKey: (ids: { assignmentId: string }) => `work/${ids.assignmentId}`,
+}))
 vi.mock("../src/agents/developer.ts", () => ({ Developer: {} }))
 
 const { insertAssignment } = await import("../src/app.ts")
@@ -22,6 +24,7 @@ const {
   retryingText,
   stoppedText,
 } = await import("../src/retry.ts")
+const { workKey } = await import("../src/sandbox.ts")
 const { advance } = await import("../src/state.ts")
 
 const reasons = Object.keys(BUILD_FAILURES) as (keyof typeof BUILD_FAILURES)[]
@@ -69,6 +72,7 @@ describe("what the owner reads", () => {
   const lines = [
     ...retried.flatMap((reason) => [
       retryingText("site.build", reason),
+      retryingText("site.build", reason, true),
       stoppedText("site.revise", reason),
     ]),
     readyText("site.build", plan),
@@ -244,6 +248,7 @@ afterAll(() => kit.close())
 
 live("a failed owner build's retry", () => {
   const created: string[] = []
+  const saved = new Set<string>()
   const env = {
     ASSIGNMENTS: {
       create: async ({ id }: { id: string }) => {
@@ -251,7 +256,8 @@ live("a failed owner build's retry", () => {
         return { id }
       },
     },
-  } as unknown as Pick<Env, "ASSIGNMENTS">
+    SITES: { head: async (key: string) => (saved.has(key) ? {} : null) },
+  } as unknown as Pick<Env, "ASSIGNMENTS" | "SITES">
 
   /** An owner's build with a plan whose photos were drawn, failed for `reason`. */
   async function failedBuild(orgId: string, reason: string, key: string) {
@@ -373,6 +379,26 @@ live("a failed owner build's retry", () => {
         next: "waiting_owner",
       }),
     ])
+  })
+
+  it("keeps the drawn photos when the retry carries on from the kept site", async () => {
+    const orgId = await freshOrg(kit)
+    const ids = await failedBuild(orgId, "gates.failed", "k-kept")
+    saved.add(workKey(ids))
+    const { retry_id, note } = await afterFailure(env, kit, ids)
+    expect(note?.text).toContain("fixing it from where it stopped")
+    const [row] = await kit.withOrg({ orgId }, (db) =>
+      db
+        .select({ blueprint: assignments.blueprint })
+        .from(assignments)
+        .where(eq(assignments.id, retry_id as string))
+    )
+    const plan = Blueprint.parse(row?.blueprint)
+    expect(
+      plan.images
+        .filter((s) => s.source === "generated")
+        .every((s) => s.asset_id)
+    ).toBe(true)
   })
 
   it("leaves a build that waited on the owner as it ended, with a quiet note", async () => {

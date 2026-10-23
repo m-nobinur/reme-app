@@ -259,19 +259,24 @@ export async function takeWarm(sandbox: {
 export const checkpointKey = (ids: Ids) =>
   `sites/${ids.orgId}/checkpoints/${ids.assignmentId}.tar.zst`
 
+/** Where a build that failed its checks leaves its site for the retry to carry on from. */
+export const workKey = (ids: Ids) =>
+  `sites/${ids.orgId}/work/${ids.assignmentId}.tar.zst`
+
 /**
  * The site as the Developer left it when it asked, in R2, so the container
  * can stop while the question waits: a sleeping container comes back with
  * the image's disk, and a question can wait days. Taken at the block, before
  * `SLEEP_AFTER` can run out. Uncommitted edits and `.git` both travel.
+ * A failed build's site is taken the same way, under `workKey`.
  */
 export async function checkpoint(
   env: Env,
-  ids: Ids
+  ids: Ids,
+  key = checkpointKey(ids)
 ): Promise<{ taken: boolean; key: string; bytes: number; ms: number }> {
   const started = Date.now()
   const sandbox = sandboxFor(env, ids.orgId)
-  const key = checkpointKey(ids)
   // The container can sleep before this runs, and `exec` then starts a fresh
   // one from the image with no site on it. There is nothing left to save, so
   // say so: the caller fails the assignment, which releases the site lock,
@@ -293,6 +298,25 @@ export async function checkpoint(
   const body = Uint8Array.from(atob(file.content), (c) => c.charCodeAt(0))
   await env.SITES.put(key, body)
   return { taken: true, key, bytes: body.length, ms: Date.now() - started }
+}
+
+/**
+ * Moves the failed build's site to the retry's own checkpoint, whose
+ * lifetime is the retry's (`endSandbox`), and says whether the retry has one
+ * to start from. A replayed step finds the move already made.
+ */
+export async function takeWork(
+  sites: Env["SITES"],
+  failed: Ids,
+  ids: Ids
+): Promise<boolean> {
+  const work = await sites.get(workKey(failed))
+  if (work) {
+    await sites.put(checkpointKey(ids), await work.arrayBuffer())
+    await sites.delete(workKey(failed))
+    return true
+  }
+  return (await sites.head(checkpointKey(ids))) !== null
 }
 
 /**

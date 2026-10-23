@@ -61,6 +61,10 @@ export type Brief = {
   photos?: PhotoFile[]
   /** A retry's account of the build it starts again, sent as its first signal. */
   previous?: RetryContext
+  /** A retry restored from the site its failed build left, by what that build was. */
+  continues?: "build" | "revise"
+  /** A retry after a provider failure: the Developer starts on the fallback model. */
+  fallback?: true
 }
 
 /**

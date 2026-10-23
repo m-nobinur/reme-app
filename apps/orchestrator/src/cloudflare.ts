@@ -8,6 +8,7 @@ import { NonRetryableError } from "cloudflare:workflows"
 import {
   Blueprint,
   type BuildLane,
+  buildFailure,
   type ChangeKind,
   siteUrl,
 } from "@workspace/contracts"
@@ -36,6 +37,7 @@ import { type ConsoleEnv, noRoute, ownerRoutes } from "./app.ts"
 import {
   type Brief,
   creationChoices,
+  failureReason,
   issueSpec,
   retryContext,
   takeSnapshot,
@@ -87,6 +89,7 @@ import {
 } from "./revise.ts"
 import {
   checkpoint,
+  checkpointKey,
   endSandbox,
   keepWarm,
   PoolExhaustedError,
@@ -96,7 +99,9 @@ import {
   tailSandbox,
   takeScreenshots,
   takeWarm,
+  takeWork,
   whileHeld,
+  workKey,
 } from "./sandbox.ts"
 import { type JobsQueueMessage, SCHEDULE_CRON, scanDue } from "./schedule.ts"
 import { afterPublish, startDueSyncs } from "./search-sync.ts"
@@ -236,11 +241,14 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
 
     // An owner's build that failed on our side starts once more, and the chat
     // hears what happened (retry.ts). Nothing here changes how this build ended.
-    const followUp = async () => {
+    const followUp = async (kept: boolean) => {
       try {
-        const { note } = await step.do("retry", () =>
+        const { note, retry_id } = await step.do("retry", () =>
           run((kit) => afterFailure(this.env, kit, ids))
         )
+        if (kept && !retry_id) {
+          await step.do("drop work", () => this.env.SITES.delete(workKey(ids)))
+        }
         if (note) {
           await step.do("say failed", SAY_RETRIES, () =>
             run((kit) => postNote(kit, ids.orgId, note))
@@ -249,6 +257,20 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
       } catch {
         // The failure stands, and the panel shows it.
       }
+    }
+    // A retry of failed checks carries on from the site, so it is kept before
+    // the sandbox goes; without it the retry starts afresh.
+    const keepWork = async (reason: string) => {
+      if (buildFailure(reason).retry !== "fix_forward") return false
+      await step
+        .do("keep work", async () => {
+          const kept = await whileHeld(this.env, ids, () =>
+            checkpoint(this.env, ids, workKey(ids))
+          )
+          return { taken: kept?.taken ?? false }
+        })
+        .catch(() => null)
+      return true
     }
     // A build that cannot continue ends in `failed` and destroys its sandbox,
     // if it holds one (`endSandbox` leaves a warm one another build holds),
@@ -259,11 +281,12 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
       await step.do(`fail ${name}`, () =>
         run((kit) => advance(kit, ids, "failed", { reason }))
       )
+      const kept = await keepWork(reason)
       await step.do("destroy sandbox", async () => {
         await endSandbox(this.env, ids)
         return { destroyed: ids.assignmentId }
       })
-      await followUp()
+      await followUp(kept)
       return { outcome: "failed" as const }
     }
 
@@ -376,7 +399,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
      */
     const prepare = async (role: "quick_section" | null, handedOn: boolean) => {
       const briefStarted = Date.now()
-      const { brief, origin, kind, from, left } = await run((kit) =>
+      const { brief, origin, kind, from, left, retry } = await run((kit) =>
         kit.withOrg({ orgId: ids.orgId }, async (db) => {
           const [row] = await db
             .select()
@@ -402,6 +425,13 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           const previous = choices.retry_of
             ? await retryContext(db, choices.retry_of)
             : undefined
+          const retryOf = choices.retry_of
+            ? {
+                of: choices.retry_of,
+                mode: buildFailure(await failureReason(db, choices.retry_of))
+                  .retry,
+              }
+            : null
           const built: Brief = {
             spec,
             snapshot,
@@ -418,6 +448,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
               ? { site_plan: await latestBlueprint(db) }
               : {}),
             ...(previous ? { previous } : {}),
+            ...(retryOf?.mode === "fallback_model" ? { fallback: true } : {}),
           }
           return {
             brief: built,
@@ -425,9 +456,22 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             kind: row.kind,
             from: source?.revision_id ?? null,
             left: previewed?.status === "preview" ? previewed.id : null,
+            retry: retryOf,
           }
         })
       )
+      // The retry of failed checks starts from the site the failed build left.
+      const carried =
+        retry?.mode === "fix_forward" &&
+        (await takeWork(
+          this.env.SITES,
+          { orgId: ids.orgId, assignmentId: retry.of },
+          ids
+        ))
+      if (carried) {
+        brief.restore_key = checkpointKey(ids)
+        brief.continues = kind === "site.revise" ? "revise" : "build"
+      }
       const briefMs = since(briefStarted)
       const restoreStarted = Date.now()
       // The container is provisioned. A warm one that holds the revision this
@@ -444,7 +488,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
       ) {
         held = left
       }
-      const warm = from !== null && held === from
+      const warm = !carried && from !== null && held === from
       if (brief.restore_key) {
         brief.map = warm
           ? await mapSite(sandbox)
@@ -913,6 +957,9 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
                 takeScreenshots(this.env, ids, payload.revision_id)
               )
           : null
+        const kept =
+          verdict.outcome === "failed" &&
+          (await keepWork("gates.repair_budget_exhausted"))
         const endMs = await step.do(
           warmAfter ? "keep warm" : "destroy sandbox",
           async () => {
@@ -973,7 +1020,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           [warmAfter ? "keep_warm_ms" : "destroy_ms"]: endMs,
           end_to_end_ms: done - t0,
         })
-        if (verdict.outcome === "failed") await followUp()
+        if (verdict.outcome === "failed") await followUp(kept)
         // Last, so a chat busy for days holds up nothing.
         if (reviewed) {
           try {

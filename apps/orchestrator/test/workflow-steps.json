@@ -80,8 +80,10 @@
       "validating 1",
       "a11y 1",
       "gates 1",
+      "keep work",
       "destroy sandbox",
-      "retry"
+      "retry",
+      "drop work"
     ],
     "owner build failed, then retried": [
       "claim 1",
@@ -93,6 +95,7 @@
       "validating 1",
       "a11y 1",
       "gates 1",
+      "keep work",
       "destroy sandbox",
       "retry",
       "say failed"

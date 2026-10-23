@@ -49,7 +49,7 @@ export const BUILD_MARK = "== This build =="
  */
 export function instructions(brief: Brief, budgetUsd: number): string {
   const { facts } = brief.snapshot
-  const revising = brief.restore_key !== null
+  const revising = brief.restore_key !== null && brief.continues !== "build"
   const pack = packVoice(facts)
   return [
     ROLE,
@@ -73,9 +73,11 @@ export function instructions(brief: Brief, budgetUsd: number): string {
       ? [`Industry pack (${industryOf(facts)}):`, ...pack, ""]
       : []),
     BUILD_MARK,
-    revising
-      ? "This is a revision. The site is restored as it is live; you change only what the change request asks and keep everything else exactly as it is."
-      : "This is a first build from the starter.",
+    brief.continues
+      ? "This carries on from the last attempt, which stopped before its checks passed. The site is restored as that attempt left it: keep what is done, fix what failed, finish what is missing, then build and report."
+      : revising
+        ? "This is a revision. The site is restored as it is live; you change only what the change request asks and keep everything else exactly as it is."
+        : "This is a first build from the starter.",
     // After the mark, so a retry keeps the shared prefix.
     ...(brief.previous
       ? [

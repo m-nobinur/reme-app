@@ -25,6 +25,7 @@ import { assistantName } from "./assistant.ts"
 import { creationChoices, failureReason, lastReport } from "./brief.ts"
 import { eventKey } from "./domain-flow.ts"
 import { logSpend, replyOf, writeText } from "./heartbeat-write.ts"
+import { workKey } from "./sandbox.ts"
 import { type Ids, REPAIR_LIMIT, repairsSoFar } from "./state.ts"
 
 /**
@@ -82,10 +83,17 @@ export function decide(ended: Ended): "retry" | "stop" | "quiet" {
 const subject = (kind: string) =>
   kind === "site.revise" ? "Your website change" : "Your website build"
 
-export function retryingText(kind: string, reason: string): string {
+export function retryingText(
+  kind: string,
+  reason: string,
+  kept = false
+): string {
   const where =
     reason === "gates.repair_budget_exhausted" ? " in its final checks" : ""
-  return `${subject(kind)} hit a problem${where}, so I'm starting it again. Nothing for you to do: I'll say here when the draft is ready.`
+  const next = kept
+    ? "I'm fixing it from where it stopped"
+    : "I'm starting it again"
+  return `${subject(kind)} hit a problem${where}, so ${next}. Nothing for you to do: I'll say here when the draft is ready.`
 }
 
 export function stoppedText(kind: string, reason: string): string {
@@ -397,7 +405,7 @@ const redrawn = (blueprint: unknown) => {
  * An owner's build that ends quietly still gets its `stopped` note.
  */
 export async function afterFailure(
-  env: Pick<Env, "ASSIGNMENTS"> & { OPENROUTER_API_KEY?: string },
+  env: Pick<Env, "ASSIGNMENTS" | "SITES"> & { OPENROUTER_API_KEY?: string },
   kit: Tenancy,
   ids: Ids
 ): Promise<{ retry_id: string | null; note: Note | null }> {
@@ -468,6 +476,8 @@ export async function afterFailure(
   }
   if (verdict === "quiet") return stop("none")
   if (verdict === "stop") return stop("waiting_owner")
+  // A retry that carries on from the kept site keeps the photos placed in it.
+  const kept = (await env.SITES.head(workKey(ids))) !== null
   const made = await kit.withOrg({ orgId: ids.orgId }, (db) =>
     insertAssignment(db, ids.orgId, key, true, {
       kind: row.kind,
@@ -478,7 +488,7 @@ export async function afterFailure(
       change_kind: choices.change_kind,
       retry_of: {
         assignment_id: ids.assignmentId,
-        blueprint: redrawn(row.blueprint),
+        blueprint: kept ? row.blueprint : redrawn(row.blueprint),
       },
     })
   )
@@ -508,7 +518,7 @@ export async function afterFailure(
     retry_id: retry.id,
   }
   await writeNote(kit, ids.orgId, note)
-  const text = retryingText(row.kind, reason)
+  const text = retryingText(row.kind, reason, kept)
   return {
     retry_id: retry.id,
     note: {
