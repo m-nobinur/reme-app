@@ -3,6 +3,7 @@ import {
   type AskDesignInput,
   type Asset,
   FIXED_PAGES,
+  LOGO_VARIANTS,
   type LogoRound,
   PAGES,
   PALETTES,
@@ -63,21 +64,75 @@ const KEPT: Asset = {
 const later = <T,>(value: T) =>
   new Promise<T>((resolve) => setTimeout(() => resolve(value), 1200))
 
-/** Fakes of the app's services, with the logo rounds a state starts from. */
-const fakes = (rounds: LogoRound[] = []): TrayServices => ({
-  upload: () => later({ assets: [KEPT] }),
-  reviewPhotos: () => later({ photos: [], missing: [] }),
-  paletteFromImage: () =>
+/**
+ * Fakes of the app's services, with the logo rounds a state starts from. A
+ * round started here lands one design each time the page reads the rounds.
+ */
+const fakes = (
+  given: LogoRound[] = [],
+  overrides: Partial<TrayServices> = {}
+): TrayServices => {
+  const rounds = [...given]
+  let started = 0
+  return {
+    upload: () => later({ assets: [KEPT] }),
+    reviewPhotos: () => later({ photos: [], missing: [] }),
+    paletteFromImage: () =>
+      later({
+        name: "Van blue",
+        stops: { paper, tint, primary, ink },
+      }),
+    drawLogos: () => {
+      const round: LogoRound = {
+        round: rounds.length + 1,
+        status: "drawing",
+        variants: [],
+      }
+      rounds.push(round)
+      started = round.round
+      return later(round)
+    },
+    logoRounds: () => {
+      const last = rounds.at(-1)
+      if (last?.round === started && last.status === "drawing") {
+        const variants = [...last.variants, variant(last.variants.length)]
+        rounds[rounds.length - 1] = {
+          ...last,
+          variants,
+          status: variants.length === LOGO_VARIANTS ? "ready" : "drawing",
+        }
+      }
+      return later({ rounds: [...rounds] })
+    },
+    keepLogo: () => later({ asset: KEPT }),
+    imageUrl: (id) => LOGOS[Number(id.at(-1))] ?? LOGOS[0] ?? "",
+    ...overrides,
+  }
+}
+
+/** The api's answer while the next round waits this many seconds. */
+const waiting = (rounds: LogoRound[], seconds: number) => ({
+  logoRounds: () =>
     later({
-      name: "Van blue",
-      stops: { paper, tint, primary, ink },
+      rounds,
+      next_at: new Date(Date.now() + seconds * 1000).toISOString(),
     }),
-  drawLogos: () =>
-    later({ round: rounds.length + 1, status: "drawing", variants: [] }),
-  logoRounds: () => later({ rounds }),
-  keepLogo: () => later({ asset: KEPT }),
-  imageUrl: (id) => LOGOS[Number(id.at(-1))] ?? LOGOS[0] ?? "",
 })
+
+/** A round asked for early, refused as the api refuses it. */
+const refused = {
+  drawLogos: () =>
+    Promise.reject(
+      Object.assign(new Error("Your next designs can start in 5 minutes."), {
+        retryAfter: 300,
+      })
+    ),
+}
+
+/** A brief filled in up to each section. */
+const COLOURED = { colours: { palette: 0 } }
+const TYPED = { ...COLOURED, type: "emblem" } as const
+const STYLED = { ...TYPED, style: "hand_drawn" } as const
 
 const card = (
   step: AskChoiceInput["step"],
@@ -115,6 +170,35 @@ const LAYOUTS = [
 export const INPUT: AskDesignInput = {
   questions: [
     {
+      id: "logo",
+      question: "Do you have a logo?",
+      visual: "logo",
+      card: card(
+        "template",
+        [
+          {
+            id: "upload",
+            label: "Yes, I have my logo",
+            hint: null,
+            visual: null,
+          },
+          {
+            id: "create",
+            label: "No, create one for me",
+            hint: null,
+            visual: null,
+          },
+        ],
+        { other: null }
+      ),
+      upload: {
+        accept: [...UPLOAD_TYPES],
+        max_files: 1,
+        max_bytes: UPLOAD_MAX_BYTES,
+        skippable: false,
+      },
+    },
+    {
       id: "palette",
       question: "Which colour palette feels right for Mop & Pail Cleaning?",
       visual: "palette",
@@ -143,30 +227,6 @@ export const INPUT: AskDesignInput = {
         })),
         { skippable: true }
       ),
-    },
-    {
-      id: "logo",
-      question: "Add your logo, or have one made",
-      visual: "logo",
-      card: card(
-        "template",
-        [
-          { id: "upload", label: "Upload your logo", hint: null, visual: null },
-          {
-            id: "create",
-            label: "Create one for me",
-            hint: null,
-            visual: null,
-          },
-        ],
-        { other: null }
-      ),
-      upload: {
-        accept: [...UPLOAD_TYPES],
-        max_files: 1,
-        max_bytes: UPLOAD_MAX_BYTES,
-        skippable: false,
-      },
     },
     {
       id: "arrangement",
@@ -231,8 +291,12 @@ const logoOn = (path: "upload" | "create"): AskDesignInput => ({
   ),
 })
 
-const LOGO = 2
+const LOGO = 0
+const PALETTE = 1
+const LETTERING = 2
 const PHONE = "max-w-[22.5rem]"
+const SECOND: LogoRound = { ...ROUND, round: 2 }
+const create = logoOn("create")
 
 type State = {
   title: string
@@ -240,30 +304,112 @@ type State = {
   input?: AskDesignInput
   /** The logo rounds the fake services hold. */
   rounds?: LogoRound[]
+  /** Fake services that answer otherwise. */
+  services?: Partial<TrayServices>
   width?: string
 }
 
 const STATES: State[] = [
-  { title: "Palette, nothing picked" },
+  { title: "Logo, nothing chosen" },
+  { title: "Logo, upload", input: logoOn("upload") },
+  {
+    title: "Logo, uploaded and kept",
+    input: logoOn("upload"),
+    start: { index: LOGO, answers: { logo: { logo: KEPT } } },
+  },
+  { title: "Logo, create: how it should look and colours", input: create },
+  {
+    title: "Logo, create: own colours",
+    input: create,
+    start: { logo: { brief: { colours: { custom: [primary] } } } },
+  },
+  {
+    title: "Logo, create: colours picked, logo type next",
+    input: create,
+    start: { logo: { brief: COLOURED } },
+  },
+  {
+    title: "Logo, create: type picked, style next",
+    input: create,
+    start: { logo: { brief: TYPED } },
+  },
+  {
+    title: "Logo, create: ready to design",
+    input: create,
+    start: { logo: { brief: STYLED } },
+  },
+  {
+    title: "Logo, drawing",
+    start: { logo: { brief: STYLED } },
+    rounds: [{ round: 1, status: "drawing", variants: [variant(0)] }],
+  },
+  {
+    title: "Logo, designs to pick from",
+    start: { logo: { brief: STYLED } },
+    rounds: [ROUND],
+  },
+  {
+    title: "Logo, a design picked",
+    start: {
+      index: LOGO,
+      answers: { logo: { logo: KEPT } },
+      logo: { brief: STYLED },
+    },
+    rounds: [ROUND],
+  },
+  {
+    title: "Logo, changing the picked design",
+    start: {
+      index: LOGO,
+      answers: { logo: { logo: KEPT } },
+      logo: { brief: STYLED, changes: "Make the bucket smaller" },
+    },
+    rounds: [ROUND],
+  },
+  {
+    title: "Logo, waiting for the next round",
+    start: {
+      index: LOGO,
+      answers: { logo: { logo: KEPT } },
+      logo: { brief: STYLED, changes: "Try a rounder badge" },
+    },
+    rounds: [ROUND, SECOND],
+    services: waiting([ROUND, SECOND], 299),
+  },
+  {
+    title: "Logo, redesign refused for now",
+    start: { logo: { brief: STYLED, changes: "Warmer colours" } },
+    rounds: [ROUND, SECOND],
+    services: refused,
+  },
+  {
+    title: "Logo, a second round failed",
+    start: { logo: { brief: STYLED } },
+    rounds: [ROUND, { round: 2, status: "failed", variants: [] }],
+  },
+  { title: "Palette, nothing picked", start: { index: PALETTE } },
   {
     title: "Palette, one picked",
     start: {
-      index: 0,
+      index: PALETTE,
       answers: { palette: { choice: PALETTES[1]?.id ?? "" } },
     },
   },
   {
     title: "Palette, a surprise from beyond the four shown",
     start: {
-      index: 0,
+      index: PALETTE,
       answers: { palette: { choice: PALETTES[9]?.id ?? "" } },
     },
   },
-  { title: "Palette, reading a picture", start: { reading: true } },
+  {
+    title: "Palette, reading a picture",
+    start: { index: PALETTE, reading: true },
+  },
   {
     title: "Palette, read from a picture",
     start: {
-      index: 0,
+      index: PALETTE,
       answers: {
         palette: {
           palette: { name: "Van blue", stops: { paper, tint, primary, ink } },
@@ -271,37 +417,7 @@ const STATES: State[] = [
       },
     },
   },
-  { title: "Lettering, may be skipped", start: { index: 1 } },
-  { title: "Logo, nothing chosen", start: { index: LOGO } },
-  {
-    title: "Logo, upload",
-    start: { index: LOGO },
-    input: logoOn("upload"),
-  },
-  {
-    title: "Logo, create one",
-    start: { index: LOGO },
-    input: logoOn("create"),
-  },
-  {
-    title: "Logo, drawing",
-    start: { index: LOGO },
-    rounds: [{ round: 1, status: "drawing", variants: [variant(0)] }],
-  },
-  {
-    title: "Logo, designs to pick from",
-    start: { index: LOGO },
-    rounds: [ROUND],
-  },
-  {
-    title: "Logo, a second round failed",
-    start: { index: LOGO },
-    rounds: [ROUND, { round: 2, status: "failed", variants: [] }],
-  },
-  {
-    title: "Logo, kept",
-    start: { index: LOGO, answers: { logo: { logo: KEPT } } },
-  },
+  { title: "Lettering, may be skipped", start: { index: LETTERING } },
   {
     title: "Arrangement, picked",
     start: { index: 3, answers: { arrangement: { choice: "dark_rows" } } },
@@ -318,19 +434,24 @@ const STATES: State[] = [
       answers: { pages: { choices: ["services", "gallery", "faq"] } },
     },
   },
-  { title: "Collapsed", start: { index: 1, collapsed: true } },
-  { title: "Phone width", start: { index: 0 }, width: PHONE },
-  { title: "Phone width, lettering", start: { index: 1 }, width: PHONE },
+  { title: "Collapsed", start: { index: LETTERING, collapsed: true } },
+  { title: "Phone width, logo", width: PHONE },
   {
-    title: "Phone width, logo",
-    start: { index: LOGO },
-    input: logoOn("create"),
+    title: "Phone width, logo style",
+    input: create,
+    start: { logo: { brief: STYLED } },
     width: PHONE,
   },
   {
     title: "Phone width, logo designs",
-    start: { index: LOGO },
+    start: { index: LOGO, logo: { brief: STYLED } },
     rounds: [ROUND],
+    width: PHONE,
+  },
+  { title: "Phone width, palette", start: { index: PALETTE }, width: PHONE },
+  {
+    title: "Phone width, lettering",
+    start: { index: LETTERING },
     width: PHONE,
   },
   { title: "Phone width, layout", start: { index: 3 }, width: PHONE },
@@ -343,21 +464,22 @@ const trayCatalog: CatalogEntry[] = (
   name,
   render: () => (
     <div className="flex flex-col gap-10">
-      {STATES.map(({ title, start, input, rounds, width }) => (
+      {STATES.map(({ title, start, input, rounds, services, width }) => (
         <section
           className={`flex max-w-2xl flex-col gap-3 ${width ?? ""}`}
           key={title}
         >
           <h3 className="font-medium text-muted-foreground text-xs">{title}</h3>
           <div className="flex flex-col gap-2">
-            <TrayServicesProvider value={fakes(rounds)}>
+            <TrayServicesProvider value={fakes(rounds, services)}>
               <QuestionTray
                 businessName="Mop & Pail Cleaning"
                 input={input ?? INPUT}
                 onAnswer={noop}
                 onFinish={noop}
                 start={start}
-                toolCallId="catalog"
+                // One call per state, so each keeps its own logo brief.
+                toolCallId={`catalog:${name}:${title}`}
               />
             </TrayServicesProvider>
             <div className="rounded-4xl border border-border bg-card px-5 py-4 text-muted-foreground text-sm">
