@@ -64,7 +64,6 @@ import {
   oldDesign,
   stepOf,
   text,
-  uploadCard,
 } from "./onboarding.ts"
 import { firstName } from "./onboarding-copy.ts"
 import {
@@ -96,7 +95,7 @@ import { VOICE, voiceProblems } from "./voice.ts"
 export const DEFAULT_ONBOARDING_MODEL = "google/gemini-3.8-flash"
 
 /** Bumped with any change to the instructions or the plan's schema. */
-export const PLANNER_VERSION = "onboarding-8"
+export const PLANNER_VERSION = "onboarding-9"
 
 /** Stream parts that show a call is alive but has written nothing yet. */
 const QUIET = new Set([
@@ -161,9 +160,7 @@ Moving from the business to you: "That's enough to work from. Next is me: a name
 
 Moving from you to the website: "Ellie it is. Next is the website. Its job is to turn visitors into quote requests, so every page leads to one short form. Want me to build it for you?"
 
-Moving to the design: "Four quick choices, then: colours, lettering, layout and pages. Skip any you'd rather leave to me."
-
-Moving to photos, for any trade: "Photos next. Real ones of your work beat anything I'd pick, so send a few if you have them, and your logo too. If not, the site looks clean without them and you can add some later."
+Moving to the design: "Last, the look: colours, lettering, your logo, layout, photos and pages. Upload a logo or I'll create one, and leave anything else to me if you'd rather."
 
 Starting the build: "That's everything I need. I've started on the website, and you can follow it in the panel. Carry on chatting if you like. I'll tell you when the first draft is ready."`
 
@@ -176,9 +173,8 @@ Onboarding, in this order (the checklist in the data says where you are; work on
 2. You: your name, pronouns and tone on the ask_details assistant card.
 3. The website: say it turns visitors into enquiries through its Request a quote page, then ask whether to build it (ask_choice build_for_me). Some owners already have a website: say they can skip if so. If they skip, record site.build_mode "manual" and close warmly with answer_only in the same turn: connecting a website they already have is coming soon, so stay tuned; until then you help with enquiries, quotes and follow-ups, and you can build a site whenever they ask. Onboarding is over. Never offer a website builder.
 4. If you build it, the quote form: ask, in your own words and without examples, what they need to know before they can quote a job. From their answer, propose the form's questions (review_quote_form), specific to this business: for a limousine firm the pick-up, the drop-off, the date and time, the passengers and the occasion; for a family lawyer the kind of matter and its urgency; for a dog groomer the breed, the size and the coat. Never propose the customer's name, email or phone: the form asks those itself. 2 to 8 questions, keys in snake_case, required only where they cannot quote without it. Pick the type that fits each answer: text for a short answer, textarea for a description, number, date, datetime when the time matters too (a pick-up), radio for one of two to five options, select for one of more, checkbox for any that apply (extras), photos when a picture helps them quote (the customer uploads or links them), tel, email. Choices take 2 to 12 short options. If they ask for changes, propose again: start from form_to_change, or the waiting card's fields, and make exactly the changes they asked for; every question they did not mention keeps its key, label, type, options, required and place. If they want no custom questions, don't push: the site uses a default form.
-5. Photos (ask_upload): ask for photos that suit this trade, and say a logo is welcome too. They may skip. There is no image library: never promise stock or hand-picked images. If they have none, the site looks clean without them and they can add some later.
-6. The design, last, in one tray of four questions (ask_design): the colours, the lettering, the page arrangement and the pages. The owner answers it on the tray, and may skip any question or all of them; their answer starts the build.
-7. Start the build (start_build), when the owner settled the design in words instead of on the tray. It needs no approval and runs in the background: say it has started, that progress shows in the activity panel, that they can keep chatting, and that you'll tell them when the first draft is ready.
+5. The design, last, in one tray of six questions (ask_design): the colours, the lettering, the logo, the page arrangement, the photos and the pages. The owner answers it on the tray and may leave any question to you but the logo, which they upload or have you create there; photos they don't send, you create. Their answer starts the build. There is no image library: never promise stock or hand-picked images.
+6. Start the build (start_build), when the owner settled the design in words instead of on the tray. It needs no approval and runs in the background: say it has started, that progress shows in the activity panel, that they can keep chatting, and that you'll tell them when the first draft is ready.
 
 How to write say:
 - Start with one short acknowledgement of one specific thing the owner said, in your own words, then ask one thing, or the few things one card asks.
@@ -216,9 +212,9 @@ Your next move (next.kind):
 - ask_details: one card for a few facts. Step contact asks the phone number and the email (it opens with their sign-in email); step assistant asks your name, pronouns and tone.
 - ask_choice: a card with a fixed list, for industry, build_for_me, template, palette, font and pages. preselected is almost always empty; it may tick this card's own option ids. For palette, initial may name the three or four palette ids that suit this business best, shown first; otherwise it is empty.
 - ask_design: the design tray, with no options to write; the api builds every question from the business's industry. Ask it once, where the order says; the owner answers on the tray, and the build starts from that answer.
-- ask_upload, review_quote_form, start_build: as above.
+- review_quote_form, start_build: as above.
 - answer_only: no new question, for a side question or the close of the manual path.
-- pending_card, when a card was waiting and the owner typed instead: "answered" if their words answered it (record its fact; for a quote form, they accept it as proposed), "declined" if they don't want to answer it or have no photos, "unanswered" if they wrote about something else (use answer_only, and the card is shown again). null when no card was waiting.
+- pending_card, when a card was waiting and the owner typed instead: "answered" if their words answered it (record its fact; for a quote form, they accept it as proposed), "declined" if they don't want to answer it, "unanswered" if they wrote about something else (use answer_only, and the card is shown again). null when no card was waiting.
 - Never ask for what the facts hold. The checklist says what is missing and whether the build is ready.
 
 ${STYLE_ANCHORS}
@@ -271,10 +267,23 @@ const planJsonSchema = () => {
   ).then((schema) => {
     const loose = loosened(schema) as JSONSchema7
     const properties = loose.properties ?? {}
+    // ask_upload stays in the schema so old plans parse; it is no longer a move.
+    const next = properties.next as JSONSchema7
+    const moves = (next.oneOf ?? next.anyOf ?? []).filter(
+      (move) =>
+        typeof move !== "object" ||
+        (move.properties?.kind as JSONSchema7 | undefined)?.const !==
+          "ask_upload"
+    )
     return {
       ...loose,
       properties: Object.fromEntries(
-        PLAN_ORDER.map((key) => [key, properties[key]])
+        PLAN_ORDER.map((key) => [
+          key,
+          key === "next"
+            ? { ...next, [next.oneOf ? "oneOf" : "anyOf"]: moves }
+            : properties[key],
+        ])
       ),
     } as JSONSchema7
   })
@@ -432,7 +441,6 @@ export function buildMissing(o: Onboarding): string[] {
   if (mode(o) !== "assistant") missing.push("site.build_mode is not assistant")
   if (oldDesign(o)) missing.push(...DESIGN.filter((key) => !has(o, key)))
   else if (!designDone(o)) missing.push("the design tray (ask_design)")
-  if (!o.closed.includes("upload")) missing.push("photos not asked yet")
   if (!quoteDone(o)) missing.push("quote.form")
   if (o.offered) missing.push("the build has already started")
   return missing
@@ -579,10 +587,6 @@ function checklist(o: Onboarding, asked: Readonly<Record<string, number>>) {
                 : step("quote_form") === "skipped"
                   ? "declined: the default form is used"
                   : "missing",
-            photos:
-              step("photos") === "done" || step("photos") === "skipped"
-                ? "done"
-                : "missing",
             ...(oldDesign(o)
               ? Object.fromEntries(DESIGN.map((k) => [k, status(k)]))
               : {
@@ -700,12 +704,11 @@ export function turnData(s: PlanState): string {
  * tested: rates and currency (the site quotes, it never lists), a link or
  * markup, a heading, an em or en dash, and a promise of images the builder
  * does not have. With the turn's context it also refuses the owner's
- * sentence read back to them, thanks for a correction that changed nothing,
- * and a photo question without a logo. A problem here is the model's to fix
- * on its retry.
+ * sentence read back to them, and thanks for a correction that changed
+ * nothing. A problem here is the model's to fix on its retry.
  *
  * `partial` checks the start of a message as it streams: every check but
- * the ones only a whole message can fail (empty, no logo yet). A check here
+ * the one only a whole message can fail (empty). A check here
  * that a start passes, the same start passes inside the whole message, so
  * nothing shown is ever refused later for its own words.
  */
@@ -750,10 +753,6 @@ export function sayProblems(
       "say thanks the owner for a correction, but nothing they said changed what was held"
     )
   }
-  // The owner's brief: the photo question welcomes a logo too.
-  if (!partial && context.upload && !/\blogos?\b/i.test(say)) {
-    problems.push("the photo question must say a logo is welcome too")
-  }
   return problems
 }
 
@@ -763,8 +762,6 @@ type SayContext = {
   typed?: string
   /** Whether the plan replaces a fact already held: the one time to thank for a correction. */
   corrected?: boolean
-  /** Whether say leads to the photo card. */
-  upload?: boolean
   /** Whether the owner has named the assistant, so "Reme" is an internal. */
   assistantNamed?: boolean
 }
@@ -814,7 +811,6 @@ function sayContext(plan: OnboardingPlan, s: PlanState): SayContext {
         JSON.stringify(before, sortedKeys) !== JSON.stringify(value, sortedKeys)
       )
     }),
-    upload: plan.next.kind === "ask_upload",
     // An assistant the owner called Reme may say its own name.
     assistantNamed: Boolean(name) && name?.toLowerCase() !== "reme",
   }
@@ -1126,11 +1122,9 @@ export function checkPlan(
       }
       break
     case "ask_upload":
-      // The logo the photo question must welcome is a `sayProblems` check.
-      if (!building) errors.push("photos belong to a site you build")
-      else if (after.closed.includes("upload")) {
-        errors.push("the photo step is done; don't ask for photos again")
-      }
+      errors.push(
+        "the logo and photos are questions on the design tray; don't ask ask_upload"
+      )
       break
     case "review_quote_form": {
       if (!building) errors.push("the quote form belongs to a site you build")
@@ -1215,7 +1209,6 @@ function expectedNext(after: Onboarding): Move[] | null {
     ]
   }
   if (step === "design") return [{ kind: "ask_design" }]
-  if (step === "upload") return [{ kind: "ask_upload" }]
   if (step === "build") return [{ kind: "start_build" }]
   return [{ kind: "ask_choice", step: step as ChoiceStep }]
 }
@@ -1684,8 +1677,9 @@ export function planParts(
       ]
     case "ask_design":
       return [said, designCard(after, newId)]
+    // Refused by the checks: the photos are a tray question.
     case "ask_upload":
-      return [said, uploadCard(newId)]
+      return [said]
     case "review_quote_form":
       return [
         said,

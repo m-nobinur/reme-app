@@ -9,10 +9,10 @@ import type { ToolPart } from "../src/chat.ts"
 import { priceOf } from "../src/cos/agent.ts"
 import {
   applied,
+  call,
   cardAnswer,
   choiceCard,
   type Onboarding,
-  uploadCard,
 } from "../src/onboarding.ts"
 import {
   askedSoFar,
@@ -131,15 +131,15 @@ const errorsOf = (p: Plan, s: PlanState) => {
   return checked.ok ? [] : checked.errors
 }
 
-/** Ready to build: every fact, photos closed, the quote form confirmed. */
-const ready = () => onboarding([...EVERYTHING, QUOTE], { closed: ["upload"] })
+/** Ready to build: every fact, the quote form confirmed. */
+const ready = () => onboarding([...EVERYTHING, QUOTE])
 
-/** At the design, which comes last: the quote form confirmed, photos closed. */
+/** At the design, which comes last: the quote form confirmed. */
 const atDesign = (facts: FactValue[], over: Partial<Onboarding> = {}) =>
-  onboarding([...facts, QUOTE], { closed: ["upload"], ...over })
+  onboarding([...facts, QUOTE], over)
 
 describe("the plan's checks", () => {
-  it("starts a build only when every fact, the photos and the quote form are settled", () => {
+  it("starts a build only when every fact and the quote form are settled", () => {
     const start = plan({ say: "Starting now.", next: { kind: "start_build" } })
     expect(errorsOf(start, typed("go", ready()))).toEqual([])
     expect(buildMissing(ready())).toEqual([])
@@ -152,17 +152,14 @@ describe("the plan's checks", () => {
     )
     expect(missing).toContainEqual(
       expect.stringMatching(
-        /build cannot start.*business\.phone.*site\.font.*photos.*quote\.form/
+        /build cannot start.*business\.phone.*site\.font.*quote\.form/
       )
     )
     // A quote form the owner declined is settled too.
     expect(
       errorsOf(
         start,
-        typed(
-          "go",
-          onboarding(EVERYTHING, { closed: ["upload", "quote_form"] })
-        )
+        typed("go", onboarding(EVERYTHING, { closed: ["quote_form"] }))
       )
     ).toEqual([])
     // Never twice.
@@ -540,22 +537,38 @@ describe("the plan's checks", () => {
     expect(blank.ok && buildMissing(blank.checked.after)).toContain(
       "site.palette"
     )
+    // A photo card from before the photos joined the tray still reads.
+    const oldUpload = call(
+      "tool-ask_upload",
+      {
+        accept: ["image/jpeg"],
+        max_files: 12,
+        max_bytes: 10_000_000,
+        skippable: true,
+      },
+      counter()
+    )
     expect(
       errorsOf(
         plan({ pending_card: "answered" }),
-        typed("no photos", onboarding(EVERYTHING), uploadCard(counter()))
+        typed("no photos", onboarding(EVERYTHING), oldUpload)
       )[0]
     ).toMatch(/photos can only be added on the card/)
   })
 
-  it("asks for photos with a logo welcome, and proposes a quote form without contact questions", () => {
+  it("asks for photos only on the tray, and proposes a quote form without contact questions", () => {
     const o = onboarding([...EVERYTHING])
     expect(
       errorsOf(
-        plan({ say: "Any photos of the fleet?", next: { kind: "ask_upload" } }),
+        plan({
+          say: "Any photos? A logo too.",
+          next: { kind: "ask_upload" },
+        }),
         typed("ok", o)
       )
-    ).toContain("the photo question must say a logo is welcome too")
+    ).toContain(
+      "the logo and photos are questions on the design tray; don't ask ask_upload"
+    )
     const proposal = (fields: typeof FIELDS) =>
       plan({ next: { kind: "review_quote_form", fields, note: null } })
     expect(
@@ -607,7 +620,7 @@ describe("what the planner reads and how often it asks", () => {
     expect(
       buildMissing(
         onboarding(without("business.audience"), {
-          closed: ["upload", "quote_form"],
+          closed: ["quote_form"],
         })
       )
     ).toEqual([])
@@ -1170,7 +1183,7 @@ describe("a planned turn", () => {
   })
 
   it("proposes a quote form, reads the owner's changes, and states the confirmed form", async () => {
-    const o = onboarding(EVERYTHING, { closed: ["upload"] })
+    const o = onboarding(EVERYTHING)
     const proposal = plan({
       say: "Here is what the form would ask.",
       next: { kind: "review_quote_form", fields: FIELDS, note: null },
@@ -1486,6 +1499,12 @@ describe("a streamed turn", () => {
     expect(out.calls.map((c) => c.errors.length > 0)).toEqual([true, false])
     expect(JSON.stringify(run.prompts[1])).toContain("ceremony or praise")
     expect(await plannerInstructions()).toContain("How you sound")
+  })
+
+  it("offers no photo move: the photos are a tray question", async () => {
+    const instructions = await plannerInstructions()
+    expect(instructions).not.toContain("ask_upload")
+    expect(instructions).toContain("review_quote_form")
   })
 
   it("shows nothing of a plan whose next move is refused, and streams the retry", async () => {

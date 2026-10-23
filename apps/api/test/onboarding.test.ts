@@ -38,6 +38,7 @@ import {
   STEPS,
   type StepId,
   stepOf,
+  trayOption,
   typedAnswer,
   voiceOf,
   withChoice,
@@ -46,7 +47,6 @@ import {
   chose,
   manualEnd,
   opener,
-  photos,
   question,
   quoteForm,
   retry,
@@ -149,16 +149,39 @@ function walk(o: Onboarding, answers: (card: ToolPart) => unknown) {
     const id = card.type === "tool-request_change" ? "build" : stepOf(card)
     asked.push(id as StepId)
     if (id === "build") return { asked, at, step }
-    const answer = cardAnswer(card, answers(card), [])
+    // The logo page keeps the logo before the tray's answer names it.
+    const answer = cardAnswer(card, answers(card), [], [...at.facts, UPLOADS])
     if (!answer) throw new Error(`refused ${id}`)
     at = applied(at, answer)
   }
   throw new Error("the script did not end")
 }
 
+/** The logo the logo page kept, as `media.uploads` holds it. */
+const LOGO = {
+  id: "0d9e0f10-2131-4a2b-9c3d-4e5f60718293",
+  name: "logo.png",
+  content_type: "image/png",
+  bytes: 4821,
+  use: "logo",
+} as const
+const UPLOADS = { key: "media.uploads", value: { items: [LOGO] } }
+
+/** A photo card from a conversation before the photos joined the tray: it still reads. */
+const OLD_UPLOAD: ToolPart = {
+  type: "tool-ask_upload",
+  toolCallId: "old_upload",
+  state: "input-available",
+  input: {
+    accept: ["image/jpeg", "image/png", "image/webp"],
+    max_files: 12,
+    max_bytes: 10_000_000,
+    skippable: true,
+  },
+}
+
 const everyCard = (card: ToolPart): unknown => {
   const step = stepOf(card) as StepId
-  if (card.type === "tool-ask_upload") return { answer: "skipped" }
   if (card.type === "tool-ask_design") {
     const { questions } = AskDesignInput.parse(card.input)
     return {
@@ -167,7 +190,13 @@ const everyCard = (card: ToolPart): unknown => {
           const first = q.card.options[0]?.id
           return [
             q.id,
-            q.card.multiple ? { choices: [first] } : { choice: first },
+            q.visual === "logo"
+              ? { logo: LOGO }
+              : q.visual === "photos"
+                ? { photos: [], create: true }
+                : q.card.multiple
+                  ? { choices: [first] }
+                  : { choice: first },
           ]
         })
       ),
@@ -195,7 +224,6 @@ describe("the onboarding steps", () => {
       "assistant",
       "build_for_me",
       "quote_form",
-      "upload",
       "design",
       "build",
     ])
@@ -239,9 +267,9 @@ describe("the onboarding steps", () => {
     }
   })
 
-  it("never starts a build before the quote form is confirmed or declined, then the photos and the design", () => {
+  it("never starts a build before the quote form is confirmed or declined, then the design", () => {
     const { asked, at } = walk(start(), everyCard)
-    expect(asked.slice(-4)).toEqual(["quote_form", "upload", "design", "build"])
+    expect(asked.slice(-3)).toEqual(["quote_form", "design", "build"])
     // Asked for changes: the question comes back before any build.
     const changed = applied(
       { ...at, facts: at.facts.filter((f) => f.key !== "quote.form") },
@@ -456,9 +484,6 @@ const KEYS: Partial<Record<StepId, string[]>> = {
   quote_form: ["quote.form"],
 }
 
-/** The photos closed: an org past them, on the design or the old cards. */
-const PHOTOS_DONE = { closed: ["upload"] } satisfies Partial<Onboarding>
-
 /** Every fact of the steps before `step`, the business name always. */
 function ALL_BEFORE(step: StepId): FactValue[] {
   const order = STEPS.map((s) => s.id)
@@ -475,10 +500,8 @@ function cardFor(step: StepId): ToolPart {
     (f) => step !== "business.name" || f.key !== "business.name"
   )
   // The four cards the tray replaced are asked to an org that was on them.
-  const order = STEPS.map((s) => s.id)
   const at = start({
     facts,
-    ...(order.indexOf(step) > order.indexOf("upload") ? PHOTOS_DONE : {}),
     ...(["template", "palette", "font", "pages"].includes(step)
       ? { oldDesign: true }
       : {}),
@@ -645,7 +668,7 @@ describe("an answer on a card", () => {
     expect(
       cardAnswer(cardFor("business.audience"), { answer: "skipped" }, [])
     ).toEqual({ kind: "passed", step: "business.audience" })
-    const upload = cardFor("upload")
+    const upload = OLD_UPLOAD
     const asset = {
       id: "3f2b9c1e-8a4d-4f6b-9c2a-1d5e7f8a9b0c",
       name: "van.jpg",
@@ -862,11 +885,11 @@ describe("a typed reply", () => {
   })
 
   it("skips the photos and who the customers are, and asks again for anything else on the photo card", () => {
-    expect(facts("upload", "I don't have any")).toEqual({
+    expect(typedAnswer(OLD_UPLOAD, "I don't have any")).toEqual({
       kind: "passed",
       step: "upload",
     })
-    expect(facts("upload", "here you go")).toEqual({
+    expect(typedAnswer(OLD_UPLOAD, "here you go")).toEqual({
       kind: "retry",
       reason: "upload",
     })
@@ -925,7 +948,7 @@ describe("a reply Jev read", () => {
   })
 
   it("picks for an owner who left it to the assistant, and says what it picked", () => {
-    const at = start({ facts: ALL_BEFORE("palette"), ...PHOTOS_DONE })
+    const at = start({ facts: ALL_BEFORE("palette") })
     const picked = decided(cardFor("palette"), { kind: "defer" }, at)
     expect(picked).toMatchObject({
       kind: "facts",
@@ -1087,7 +1110,6 @@ const voice = (over: Partial<Voice> = {}): Voice => ({
   ownLook: null,
   ownColour: null,
   services: null,
-  photoQuestion: null,
   ...over,
 })
 
@@ -1104,7 +1126,6 @@ const lines = (v: Voice): [string, string][] => [
       (id) => id !== "upload" && id !== "build" && id !== "manual_builder"
     ) as Exclude<StepId, "upload" | "build" | "manual_builder">[]
   ).map((id): [string, string] => [id, question(id, v)]),
-  ["upload", photos(v)],
   ["default_quote_form", quoteForm(v)],
   ["started", started(v, true)],
   ["manual_end", manualEnd(v)],
@@ -1169,7 +1190,6 @@ describe("the onboarding copy", () => {
       "contact",
       "build_for_me",
       "quote_form",
-      "upload",
       "started",
       "business.audience",
       "business.proof",
@@ -1181,33 +1201,7 @@ describe("the onboarding copy", () => {
     }
   })
 
-  it("asks about photos three ways for each industry, and names an Other industry and its first service", () => {
-    for (const industry of INDUSTRY_VOICES) {
-      const asked = new Set(ORGS.map((org) => photos(voice({ org, industry }))))
-      expect(asked.size, industry.name).toBeGreaterThanOrEqual(3)
-    }
-    const other = ORGS.map((org) =>
-      photos(
-        voice({
-          org,
-          industry: { name: "Dog grooming", category: null },
-          offering: "Full grooms",
-        })
-      )
-    ).join("\n")
-    expect(other).toContain("dog grooming work")
-    expect(other).toContain("full grooms")
-  })
-
-  it("asks the photo question written for the business when it is ready, and always welcomes a logo", () => {
-    const fleet =
-      "Do you have photos of your fleet, inside and out, or your chauffeurs in uniform?"
-    for (const org of ORGS) {
-      const asked = photos(voice({ org, photoQuestion: fleet }))
-      expect(asked).toContain(fleet)
-      expect(asked).toMatch(/\blogo\b/)
-      expect(photos(voice({ org }))).toMatch(/\blogo\b/)
-    }
+  it("asks the quote question with the services written for the business", () => {
     const prepared = voice({ services: "your wedding cars and airport runs" })
     expect(
       ORGS.map((org) => question("quote_form", { ...prepared, org })).join()
@@ -1293,7 +1287,7 @@ describe("the design tray", () => {
     AskDesignInput.parse(
       (
         onboardingStep(
-          start({ facts: heldBefore(), ...PHOTOS_DONE, ...over }),
+          start({ facts: heldBefore(), ...over }),
           counter()
         )[1] as ToolPart
       ).input
@@ -1302,24 +1296,38 @@ describe("the design tray", () => {
     design.questions.find((q) => q.id === id)?.card.options.map((o) => o.id) ??
     []
 
-  it("is one step of four questions, each with its own text, after the website question", () => {
+  it("is one step of six questions, each with its own text, after the website question", () => {
     const input = tray()
     expect(input.questions.map((q) => q.id)).toEqual([
       "palette",
       "lettering",
+      "logo",
       "arrangement",
+      "photos",
       "pages",
     ])
     expect(input.questions.every((q) => q.question)).toBe(true)
     expect(input.questions.map((q) => q.visual)).toEqual([
       "palette",
       "font_pair",
+      "logo",
       "layout",
+      "photos",
       "text",
     ])
-    expect(
-      currentStep(start({ facts: ALL_BEFORE("design"), ...PHOTOS_DONE }))?.id
-    ).toBe("design")
+    // The logo and photos pages: upload or create, never skipped.
+    const [logo, photos] = ["logo", "photos"].map((id) =>
+      input.questions.find((q) => q.id === id)
+    )
+    expect(logo?.card).toMatchObject({ skippable: false, other: null })
+    expect(logo?.card.options.map((o) => o.id)).toEqual(["upload", "create"])
+    expect(logo?.upload?.max_files).toBe(1)
+    expect(photos?.card.skippable).toBe(false)
+    expect(photos?.upload?.max_files).toBe(12)
+    expect(logo?.held).toBeUndefined()
+    expect(currentStep(start({ facts: ALL_BEFORE("design") }))?.id).toBe(
+      "design"
+    )
   })
 
   it("draws every option from directions that list the industry", () => {
@@ -1335,16 +1343,34 @@ describe("the design tray", () => {
       for (const id of ids(input, "lettering")) {
         expect(fit.map((d) => d.fonts)).toContain(id)
       }
-      for (const id of ids(input, "palette")) {
+      // Every palette is offered; the four shown first suit the industry.
+      const palette = input.questions.find((q) => q.id === "palette")?.card
+      expect(palette?.initial).toHaveLength(4)
+      for (const id of palette?.initial ?? []) {
         expect(fit.flatMap((d) => d.palettes)).toContain(id)
       }
-      expect(ids(input, "palette")).toHaveLength(4)
+      expect(ids(input, "palette")).toHaveLength(PALETTES.length)
+      expect(ids(input, "palette").slice(0, 4)).toEqual(palette?.initial)
     }
+  })
+
+  it("shows a held palette among the four, ticked", () => {
+    const outside = PaletteId.options.find(
+      (id) => !tray().questions[0]?.card.initial?.includes(id)
+    )
+    const held = tray({
+      facts: [...heldBefore(), { key: "site.palette", value: { id: outside } }],
+    }).questions[0]?.card
+    expect(held?.initial).toContain(outside)
+    expect(held?.preselected).toEqual([outside])
   })
 
   it("shows layouts that differ, and the pair's faces and the layout's variants as visuals", () => {
     const input = tray()
-    const layouts = input.questions[2]?.card.options.map((o) => o.visual) ?? []
+    const layouts =
+      input.questions
+        .find((q) => q.id === "arrangement")
+        ?.card.options.map((o) => o.visual) ?? []
     const looks = layouts.map((v) => JSON.stringify(v))
     expect(new Set(looks).size).toBe(looks.length)
     for (const o of input.questions[1]?.card.options ?? []) {
@@ -1389,11 +1415,13 @@ describe("the design tray", () => {
     expect(input.questions.map((q) => q.card.own)).toEqual([
       "warm greys and brass",
       "a quiet serif",
+      undefined,
       "airy",
+      undefined,
       undefined,
     ])
     // Pages, a card of many, opens on the usual ones.
-    for (const q of input.questions.slice(0, 3))
+    for (const q of input.questions.filter((each) => each.id !== "pages"))
       expect(q.card.preselected).toEqual([])
     // A hex code is held as the brand colour and comes back as the words;
     // pages' own words ride beside the ids they came with.
@@ -1409,18 +1437,47 @@ describe("the design tray", () => {
       code,
       undefined,
       undefined,
+      undefined,
+      undefined,
       "home, fees",
     ])
   })
 
+  it("opens the logo and photos pages on what the org holds", () => {
+    const photo = {
+      id: "1d9e0f10-2131-4a2b-9c3d-4e5f60718293",
+      name: "kitchen.jpg",
+      content_type: "image/jpeg" as const,
+      bytes: 90_000,
+      use: "hero" as const,
+    }
+    const unread = { ...photo, id: "2d9e0f10-2131-4a2b-9c3d-4e5f60718293" }
+    const { use: _use, ...plain } = unread
+    const input = tray({
+      facts: [
+        ...heldBefore(),
+        { key: "media.uploads", value: { items: [LOGO, photo, plain] } },
+      ],
+    })
+    const held = (id: string) => input.questions.find((q) => q.id === id)?.held
+    expect(held("logo")).toEqual([LOGO])
+    // A photo the review found no use for is not held.
+    expect(held("photos")).toEqual([photo])
+  })
+
   const card = () =>
-    onboardingStep(
-      start({ facts: heldBefore(), ...PHOTOS_DONE }),
-      counter()
-    )[1] as ToolPart
+    onboardingStep(start({ facts: heldBefore() }), counter())[1] as ToolPart
   const input = () => AskDesignInput.parse(card().input)
-  const pick = (answers: Record<string, unknown>, skip_all = false) =>
-    cardAnswer(card(), { answers, skip_all }, [], [])
+  // The logo page has kept its logo; `held` replaces what the org holds.
+  const pick = (
+    answers: Record<string, unknown>,
+    skip_all = false,
+    held: FactValue[] = [UPLOADS as FactValue]
+  ) => cardAnswer(card(), { answers, skip_all }, [], held)
+  const PAGES_ANSWERED = {
+    logo: { logo: LOGO },
+    photos: { photos: [], create: true },
+  }
 
   it("states each answer as a fact as given, and leaves the tray open until it is finished", () => {
     const [palette] = ids(input(), "palette")
@@ -1435,6 +1492,7 @@ describe("the design tray", () => {
       lettering: { choice: ids(input(), "lettering")[0] },
       arrangement: { choice: ids(input(), "arrangement")[0] },
       pages: { choices: ["services", "gallery", "faq"] },
+      ...PAGES_ANSWERED,
     })
     expect(all).toMatchObject({ kind: "design", settled: true })
     expect((all as { facts: FactValue[] }).facts.map((f) => f.key)).toEqual([
@@ -1578,6 +1636,7 @@ describe("the design tray", () => {
         lettering: { own: "Like a newspaper" },
         arrangement: { own: "A long single page" },
         pages: { own: "A blog too" },
+        ...PAGES_ANSWERED,
       })
     ).toMatchObject({
       settled: true,
@@ -1603,6 +1662,70 @@ describe("the design tray", () => {
     expect(pick({ palette: { own: "#12" } })).toBeNull()
   })
 
+  it("takes a palette read from a picture as the brand colour, its name and stops kept", () => {
+    const { paper, tint, primary, ink } = PALETTES[0] as (typeof PALETTES)[0]
+    const stops = { paper, tint, primary, ink }
+    expect(
+      pick({ palette: { palette: { name: "Clay van", stops } } })
+    ).toMatchObject({
+      facts: [
+        {
+          key: "site.palette",
+          value: {
+            id: "custom",
+            brand: primary,
+            custom: `Clay van: paper ${paper}, tint ${tint}, primary ${primary}, ink ${ink}`,
+          },
+        },
+      ],
+    })
+    // Only the palette question takes one.
+    expect(
+      pick({ lettering: { palette: { name: "Clay van", stops } } })
+    ).toBeNull()
+  })
+
+  it("takes the logo and photos the org holds, and nothing else on their pages", () => {
+    const photo = { ...LOGO, id: "1d9e0f10-2131-4a2b-9c3d-4e5f60718293" }
+    const { use: _use, ...sent } = photo
+    const both = {
+      key: "media.uploads",
+      value: { items: [LOGO, sent] },
+    } as FactValue
+    expect(pick({ logo: { logo: LOGO } })).toMatchObject({ facts: [] })
+    // Not kept as the logo, or not held at all.
+    expect(pick({ logo: { logo: sent } }, false, [both])).toBeNull()
+    expect(pick({ logo: { logo: LOGO } }, false, [])).toBeNull()
+    expect(
+      pick({ photos: { photos: [sent], create: false } }, false, [both])
+    ).toMatchObject({ facts: [] })
+    expect(pick({ photos: { photos: [sent], create: true } })).toBeNull()
+    expect(pick({ photos: { photos: [], create: true } })).toMatchObject({
+      facts: [],
+    })
+    // Their cards' options are ways in, never answers.
+    expect(pick({ logo: { choice: "create" } })).toBeNull()
+    expect(pick({ photos: { choice: "upload" } })).toBeNull()
+    expect(pick({ logo: { skipped: true } })).toBeNull()
+    expect(pick({ palette: { logo: LOGO } })).toBeNull()
+  })
+
+  it("reads a typed option's label as its pick, but never a logo or photos way in", () => {
+    const [palette] = ids(input(), "palette")
+    const named = PALETTES.find((p) => p.id === palette)?.label ?? ""
+    expect(trayOption(card(), named)).toBe(palette)
+    expect(trayOption(card(), "Create one for me")).toBeNull()
+    expect(trayOption(card(), "Upload photos")).toBeNull()
+  })
+
+  it("refuses a finished tray with no logo, answered or held", () => {
+    expect(pick({}, true, [])).toBeNull()
+    expect(pick({ logo: { logo: LOGO } }, true)).toMatchObject({
+      settled: true,
+    })
+    expect(pick({}, true)).toMatchObject({ settled: true })
+  })
+
   it("refuses an answer its question did not offer", () => {
     expect(pick({ palette: { choice: "not_a_palette" } })).toBeNull()
     expect(
@@ -1626,6 +1749,7 @@ describe("the design tray", () => {
     })
     expect(
       designAnswer(input(), { answers: {}, skip_all: true }, [
+        UPLOADS,
         { key: "site.direction", value: { id: "calm_daylight" } },
       ])
     ).toEqual({ kind: "design", facts: [], settled: true })
@@ -1637,27 +1761,26 @@ describe("the design tray", () => {
   })
 
   it("is done once finished, or once every answer is held, and is not asked of an org on the old cards", () => {
-    const at = start({ facts: ALL_BEFORE("design"), ...PHOTOS_DONE })
+    const at = start({ facts: ALL_BEFORE("design") })
     expect(designDone(at)).toBe(false)
     const finished = applied(at, pick({}, true) as never)
     expect(designDone(finished)).toBe(true)
     expect(currentStep(finished)?.id).toBe("build")
-    // Four held answers with the tray never closed: still done.
-    const held = start({
-      facts: [
-        ...ALL_BEFORE("design"),
-        { key: "site.palette", value: { id: "ocean" } },
-        { key: "site.font", value: { id: "sora_manrope" } },
-        { key: "site.direction", value: { id: "fresh_modern" } },
-        { key: "site.pages", value: { ids: ["home", "quote"] } },
-      ],
-    })
-    expect(designDone(held)).toBe(true)
+    // Four held answers and a logo with the tray never closed: still done.
+    const four: FactValue[] = [
+      ...ALL_BEFORE("design"),
+      { key: "site.palette", value: { id: "ocean" } },
+      { key: "site.font", value: { id: "sora_manrope" } },
+      { key: "site.direction", value: { id: "fresh_modern" } },
+      { key: "site.pages", value: { ids: ["home", "quote"] } },
+    ]
+    expect(designDone(start({ facts: four }))).toBe(false)
+    expect(designDone(start({ facts: [...four, UPLOADS as FactValue] }))).toBe(
+      true
+    )
     // Mid-way through the old cards on deploy day: they finish.
     expect(
-      currentStep(
-        start({ facts: ALL_BEFORE("design"), ...PHOTOS_DONE, oldDesign: true })
-      )?.id
+      currentStep(start({ facts: ALL_BEFORE("design"), oldDesign: true }))?.id
     ).toBe("template")
     expect(
       currentStep(
@@ -1666,7 +1789,6 @@ describe("the design tray", () => {
             ...ALL_BEFORE("design"),
             { key: "site.template", value: { id: "classic" } },
           ],
-          ...PHOTOS_DONE,
         })
       )?.id
     ).toBe("palette")

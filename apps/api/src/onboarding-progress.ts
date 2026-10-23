@@ -44,7 +44,6 @@ export const ONBOARDING_STEPS = [
   "assistant",
   "website",
   "quote_form",
-  "photos",
   "look",
 ] as const
 
@@ -63,7 +62,6 @@ const STEP_OF: Record<string, StepId> = {
   build_for_me: "website",
   quote_form: "quote_form",
   "quote.form": "quote_form",
-  upload: "photos",
   design: "look",
 }
 
@@ -92,7 +90,6 @@ function settled(
   const proof = factValue(o.facts, "business.proof")?.text
   const area = factValue(o.facts, "service_area.text")?.text
   const quote = factValue(o.facts, "quote.form")?.fields
-  const uploads = factValue(o.facts, "media.uploads")?.items
   const look = voiceOf(o)
   const manual = mode(o) === "manual"
   const out: Partial<Record<StepId, Settled>> = {}
@@ -120,18 +117,13 @@ function settled(
   if (manual) {
     // The owner skipped the website: nothing the build needs is asked.
     out.website = skipped
-    out.quote_form = out.photos = out.look = skipped
+    out.quote_form = out.look = skipped
   } else {
     if (quote) {
       out.quote_form = done(
         `${quote.length} ${quote.length === 1 ? "question" : "questions"}`
       )
     } else if (o.closed.includes("quote_form")) out.quote_form = skipped
-    if (o.closed.includes("upload")) {
-      out.photos = uploads
-        ? done(`${uploads.length} ${uploads.length === 1 ? "photo" : "photos"}`)
-        : skipped
-    }
     if (oldDesign(o) ? DESIGN.every(fact) : designDone(o)) {
       out.look = done(
         [look.palette, look.direction ?? look.ownLook]
@@ -146,7 +138,7 @@ function settled(
 /**
  * Every step with where it stands: `done` or `skipped` once settled, then
  * the one open now as `now` (or `waiting` when a question for the owner is
- * open in the chat), the rest `next`. The list is the same eight steps for
+ * open in the chat), the rest `next`. The list is the same nine steps for
  * every run from its first moment; only their states move.
  *
  * The step open now is the one the script is on, so the panel and the
