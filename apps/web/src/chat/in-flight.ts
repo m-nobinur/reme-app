@@ -2,11 +2,8 @@ import { CHAT_TURN_MS } from "@workspace/contracts"
 import { useSyncExternalStore } from "react"
 
 /**
- * The owner's message a turn is carrying, kept in this tab by stored
- * thread, so a reload mid-turn shows it with a working line until its reply
- * lands, and gives the words back to the composer if it never does. Storage
- * that throws (private windows, blocked site data) keeps nothing, and the
- * page behaves as it did before.
+ * The owner's message a turn is carrying, kept per stored thread, so a reload
+ * mid-turn still shows it and gives the words back if no reply lands.
  */
 
 export type InFlight = { id: string; text: string; at: number }
@@ -24,7 +21,6 @@ const store = <R>(use: (storage: Storage) => R): R | null => {
   }
 }
 
-/** Notes the message a turn carries, or forgets it with null. */
 export function keepInFlight(thread: string, message: InFlight | null) {
   store((storage) =>
     message
@@ -33,7 +29,6 @@ export function keepInFlight(thread: string, message: InFlight | null) {
   )
 }
 
-/** The message a turn was carrying when the page went, while it may still land. */
 export function readInFlight(
   thread: string,
   now = Date.now()

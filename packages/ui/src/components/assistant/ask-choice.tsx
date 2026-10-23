@@ -405,7 +405,6 @@ function ChoiceForm({
   start?: Start
 }) {
   const id = useId()
-  // What was picked and written, kept in this tab, so a reload keeps it.
   const { draft, keep } = useTabDraft(draftId ? `choice:${draftId}` : null, {
     picked: start?.other !== undefined ? [OTHER] : input.preselected,
     other: start?.other ?? "",

@@ -368,10 +368,9 @@ export const ReviewedPhotos = z.strictObject({
 })
 
 /**
- * A whole palette as the site uses it, the six roles of `Palette`
- * (design.ts): one read from the owner's logo or picture, so the site is
- * built in exactly the colours they picked, not derived from one of them.
- * The api brings its `PALETTE_AA_PAIRS` to AA before it is stored.
+ * All six roles of `Palette` (design.ts), for a palette read from the owner's
+ * logo or picture, so the site uses exactly those colours. The api brings
+ * `PALETTE_AA_PAIRS` to AA before it is stored.
  */
 export const PaletteRoles = z.strictObject({
   paper: HexColour,
@@ -406,9 +405,8 @@ export const PaletteFromImage = z.strictObject({
 export const LOGO_PALETTES_MAX = 6
 
 /**
- * `POST /palettes/from-logo`: palettes built from the org's kept logo, read
- * by one vision call and held per logo, so asking again, after a reload
- * too, costs nothing. Each is brought to AA as `PaletteFromImage` is.
+ * `POST /palettes/from-logo`: one vision call per kept logo, then held. Each
+ * palette is brought to AA as `PaletteFromImage` is.
  */
 export const LogoPalettesRequest = z.strictObject({ asset_id: Uuid })
 export const LogoPalettes = z.strictObject({

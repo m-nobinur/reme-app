@@ -27,10 +27,8 @@ export function tabBadge(workspace: Workspace | null): TabBadge {
 const SIZE = 64
 
 /**
- * The face's tab icons redrawn with a dot while `badge` holds: filled in the
- * brand colour when something waits on the owner, a ring while the assistant
- * works. Redrawn only when the face or the badge changes, and put back when
- * it clears, so another tab shows at a glance whether the owner is needed.
+ * Dots the face's tab icons while `badge` holds, filled when waiting and a
+ * ring when working, so another tab shows whether the owner is needed.
  */
 export function useTabBadge(face: string | undefined, badge: TabBadge) {
   useEffect(() => {

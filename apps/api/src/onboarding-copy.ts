@@ -291,7 +291,6 @@ function colourNoted(v: Voice): string {
     : `I'll pick colours to match "${v.ownColour}". `
 }
 
-/** Whether the script has its own question for a step. */
 export const isAsked = (step: string): step is Asked => step in QUESTIONS
 
 /** The step's question, with the phase transition for a step that opens a phase. */

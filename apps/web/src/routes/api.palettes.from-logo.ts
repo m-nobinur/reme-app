@@ -5,10 +5,8 @@ import { readCapped } from "@/lib/body"
 import { ownerFrom } from "@/lib/tenant"
 
 /**
- * The palette page's same-origin door to `apps/api`'s
- * `POST /palettes/from-logo`, which reads the kept logo into palettes. The
- * body goes through unparsed for the api to validate; only the session
- * cookie travels with it, and the answer comes back untouched.
+ * Same-origin door to `apps/api`'s `POST /palettes/from-logo`. The api
+ * validates the body; only the session cookie travels with it.
  */
 
 /** One logo id, with room to spare. */

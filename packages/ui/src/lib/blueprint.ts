@@ -41,10 +41,8 @@ export const directionLabel = (id: string) =>
   `${id.charAt(0).toUpperCase()}${id.slice(1).replaceAll("_", " ")}`
 
 /**
- * Paper, tint, primary and ink. A preset is the contracts' own four, and the
- * owner's own palette its own; the owner's own colour has only the one, so
- * the others are shades of it, as a strip to show the direction and not the
- * exact roles the starter derives.
+ * Paper, tint, primary and ink. A single brand colour gets shades of itself,
+ * to show the direction rather than the roles the starter derives.
  */
 export function paletteStops(palette: Blueprint["palette"]): string[] {
   if (palette.kind === "roles") {

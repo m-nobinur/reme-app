@@ -532,7 +532,6 @@ const NEXT_LINE: Record<
   answer_only: "Working on your answer",
 }
 
-/** The line for what the planner is on: its own line, a fact it stated or the move it chose. */
 export const onboardingLine = (on: OnboardingStatus["on"]) =>
   on.kind === "doing"
     ? on.text

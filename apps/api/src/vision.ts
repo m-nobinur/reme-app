@@ -413,10 +413,7 @@ export function logoPalettesOf(value: unknown): PaletteFromImage[] {
 const logoPalettesKey = (orgId: string, assetId: string) =>
   `logo-palettes/${orgId}/${assetId}.json`
 
-/**
- * `POST /palettes/from-logo`: the kept logo read into palettes once, then
- * answered from what was held, so a reload or a second tab costs nothing.
- */
+/** `POST /palettes/from-logo`: one vision call per logo, then served from what was held. */
 export async function logoPalettes(
   request: Request,
   env: Env,

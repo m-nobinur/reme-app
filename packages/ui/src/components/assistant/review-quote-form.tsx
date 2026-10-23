@@ -138,7 +138,6 @@ function Pill({
 const ReviewQuoteForm: ToolCallMessagePartComponent = (props) => {
   const view = reviewQuoteFormView(props)
   const { toolCallId } = props
-  // Kept in this tab, so a reload keeps what the owner dropped or switched.
   const { draft, keep: setDraft } = useTabDraft<QuoteDraft>(
     `quote:${toolCallId}`,
     view.state === "pending" ? draftOf(view.input.fields) : []

@@ -407,8 +407,7 @@ function DetailsTray({
         noValidate
         onBlur={checkOnLeave}
         onChange={(event) => {
-          // Every keystroke is kept, so a reload resumes mid-page; stored
-          // only, as the fields hold what is typed.
+          // Stored only, not state: the fields already hold what is typed.
           save({ page, values: values() })
           const field = event.target
           if (

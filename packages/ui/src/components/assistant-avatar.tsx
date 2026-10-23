@@ -20,9 +20,8 @@ const ICONS = import.meta.glob<string>("../assets/avatars/icons/*.png", {
 })
 
 /**
- * A picked face's tab icons, made once from its portrait: the face in a
- * circle at 32 and 64 px, and the head on an opaque square at 180 px for a
- * phone's home screen. Undefined for Reme's own, which is the app's icon.
+ * A picked face's tab icons, the 180 px one for a phone's home screen.
+ * Undefined for Reme's own, which is the app's icon.
  */
 export function avatarIcons(id: AvatarId | null | undefined) {
   if (!id || id === "reme") return undefined

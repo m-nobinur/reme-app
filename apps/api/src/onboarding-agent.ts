@@ -110,11 +110,7 @@ const QUIET = new Set([
 ])
 
 export const PLANNER = {
-  /**
-   * One plan, then up to two more with the last one's problems fed back,
-   * while the turn has time; a plan refused only for its message is then
-   * kept with the script's question (`salvaged`).
-   */
+  /** One plan, then up to two retries with the last one's problems fed back. */
   attempts: 3,
   /**
    * A plan with a six-question form is about 700 tokens and reasoning at
@@ -1394,12 +1390,10 @@ const systemMessage = (content: string): SystemModelMessage => ({
 })
 
 /**
- * The turn's plan: at most `PLANNER.attempts` calls, each after the first
- * with the last plan's problems fed back and only while a whole call still
- * fits, each aborted at its time limit. A provider error is asked once more
- * after a short pause; a second, or a timeout, ends the planning: the
- * script answers, and more retries would only keep the owner waiting. A
- * plan refused only for its message is kept with the script's question.
+ * The turn's plan: up to `PLANNER.attempts` calls, retried only while a
+ * whole call still fits. A provider error is asked once more; a second, or a
+ * timeout, hands the turn to the script, since more retries only keep the
+ * owner waiting. A plan refused only for its message is `salvaged`.
  *
  * With `onSay`, the message streams as the model writes it, a whole
  * sentence at a time, and never a word the checks would refuse later:
@@ -1446,7 +1440,6 @@ export async function planTurn(
   const tell = (part: OnboardingStatus) => {
     if (!cancel?.aborted) status?.send(part)
   }
-  // The last plan read, for `salvaged` once the attempts run out.
   let last: OnboardingPlan | null = null
   let providerRetried = false
   let doingShown = false
@@ -1626,8 +1619,7 @@ export async function planTurn(
         ms: Date.now() - started,
         errors: [timedOut ? "timeout" : "provider error"],
       })
-      // A provider's passing refusal (a 429, a 5xx) is asked once more after
-      // a breath, while a whole call still fits; a timeout is not.
+      // A 429 or 5xx is often passing, so it gets one more try; a timeout does not.
       const room = limits.totalMs - (Date.now() - began)
       if (!timedOut && !providerRetried && room >= RETRY_ROOM_MS) {
         providerRetried = true
@@ -1697,11 +1689,7 @@ export async function planTurn(
   return { ok: false, reason: "invalid", calls, ...out }
 }
 
-/**
- * The plan's line for its turn, as the owner may read it: trimmed, without a
- * closing full stop, and only when it names no key, card or tool and passes
- * the voice checks. Null otherwise: the web then writes the line itself.
- */
+/** The plan's `doing` line when safe to show; null lets the web write its own. */
 export function doingLine(value: unknown): string | null {
   if (typeof value !== "string") return null
   const line = value
@@ -1717,10 +1705,8 @@ export function doingLine(value: unknown): string | null {
 /** The least time a retry needs: two slow calls measured about 6 s each. */
 const RETRY_ROOM_MS = 8_000
 
-/** The pause before asking a provider again after it refused. */
 const PROVIDER_PAUSE_MS = 800
 
-/** The script's step for a planned question, where it has a question of its own. */
 function askedStep(next: OnboardingPlan["next"]) {
   const step =
     next.kind === "ask_open"
@@ -1740,12 +1726,10 @@ function askedStep(next: OnboardingPlan["next"]) {
 }
 
 /**
- * A plan whose facts and move pass but whose message never did, kept with
- * the script's own question after what the owner has already read, so a
- * phrase the checks refuse never costs the owner their answer. Null when the
- * plan fails for more than its message, or its move has no script question.
- * Observed 2026-10-23: a plan asking about proof was refused for "peace of
- * mind" after its first sentence showed, and the script asked "All" again.
+ * A plan that fails only for its message, kept with the script's question
+ * after what the owner already read, so a refused phrase never costs them
+ * their answer. Observed 2026-10-23: a plan was refused for "peace of mind"
+ * after its first sentence showed, and the script asked "All" again.
  */
 export function salvaged(
   plan: OnboardingPlan,

@@ -93,7 +93,6 @@ export function useConversationRuntime({
   // The message of a turn a reload cut off, while its reply is awaited.
   const resumed = useRef<InFlight | null>(null)
   const thread = () => aui.threadListItem.getState().remoteId
-  /** Forgets the message a turn carried: its reply came, or it ended. */
   const settled = () => {
     const stored = thread()
     if (stored) keepInFlight(stored, null)
@@ -117,7 +116,6 @@ export function useConversationRuntime({
         // assistant works out whether a message asks or changes something.
         prepareSendMessagesRequest: async (options) => {
           const body = await prepare(options)
-          // Kept while the turn runs, so a reload mid-turn keeps it.
           const stored = thread()
           const last = sending.current
           if (stored && last?.role === "user") {
@@ -335,8 +333,7 @@ export function useConversationRuntime({
       try {
         use(window.sessionStorage)
       } catch {
-        // Private windows and blocked site data throw; the words then live
-        // only as long as the page.
+        // Private windows and blocked site data throw; the words then last as long as the page.
       }
     }
     store((storage) => {

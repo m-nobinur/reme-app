@@ -31,12 +31,10 @@ const AskFact: ToolCallMessagePartComponent = (props) => {
   const id = useId()
   const [invalid, setInvalid] = useState<string | null>(null)
   const [collapsed, setCollapsed] = useState(false)
-  // What was typed, kept in this tab, so a reload puts it back in the fields.
   const { draft, save } = useTabDraft<Record<string, string>>(
     `fact:${props.toolCallId}`,
     {}
   )
-  /** Puts the kept words back once, as the form attaches. */
   const restore = (form: HTMLFormElement | null) => {
     if (!form || form.dataset.restored) return
     form.dataset.restored = "true"

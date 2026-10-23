@@ -78,7 +78,6 @@ const ROLES = ["paper", "ink", "primary", "tint", "accent", "line"] as const
 export const paletteRoles = (palette: PaletteRoles) =>
   ROLES.map((role) => `${role}:${palette[role]}`).join(" ")
 
-/** The name a palette read from the owner's logo or picture goes by, from its note. */
 export const ownPaletteName = (custom: string | undefined) =>
   custom?.split(":")[0]?.trim().slice(0, 40) || "Your colours"
 

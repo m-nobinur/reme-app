@@ -849,11 +849,7 @@ export const designDone = (o: Onboarding) =>
   ((Object.values(DESIGN) as FactValueKey[]).every((key) => has(o, key)) &&
     logoOf(o.facts) !== undefined)
 
-/**
- * A palette read from the owner's logo or picture: all six roles, which the
- * site is built in as they are, its primary the brand colour, and its name
- * and stops in the note the tray shows back.
- */
+/** A palette read from a logo or picture: the site uses its six roles as they are. */
 const picturePalette = ({ name, stops }: PaletteFromImage) => {
   const roles = paletteRoles(stops)
   return {
@@ -1597,8 +1593,7 @@ function typedContact(words: string): Answer {
  * first whenever it can; this is the script's reading without a model.
  */
 export function typedAnswer(part: ToolPart, words: string): Answer {
-  // An open question takes the words as its fact; the quote question gets
-  // the script's short list to confirm.
+  // The quote question asked in words gets the script's short list instead.
   if (part.type === "tool-ask_open") {
     const { about } = part.input as AskOpenInput
     if (about === "quote.form") return { kind: "retry", reason: "quote" }
@@ -1640,7 +1635,6 @@ export function again(
   o: Onboarding,
   newId: () => string
 ): Part[] {
-  // The quote question asked in words becomes the script's short list.
   if (reason === "quote" && part.type === "tool-ask_open")
     return defaultQuoteForm(o, newId)
   const why =

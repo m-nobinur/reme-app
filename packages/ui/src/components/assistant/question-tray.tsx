@@ -165,9 +165,8 @@ function Docked({
 /**
  * A tray's answers so far, kept in this tab by the call's id, so a reload
  * resumes on the page the owner reached. Storage that throws or is empty
- * starts fresh, and a null id keeps nothing. `keep` sets the draft as state
- * and stores it; `save` only stores it, for a draft read once, so typing
- * renders nothing more; `clear` drops it once the call is answered.
+ * starts fresh, and a null id keeps nothing. `save` stores without setting
+ * state, so typing into fields renders nothing more.
  */
 function useTabDraft<T>(id: string | null, empty: T) {
   const key = id === null ? null : `tray:${id}`
@@ -1053,8 +1052,6 @@ function QuestionTray({
       return first ? [[each.id, { choice: first }]] : []
     })
   )
-  // Where the owner was in this tab, so a reload loses no pick, page or
-  // picture, saved or not.
   // shortcut: the key outlives the call; one small entry per tray a tab saw.
   const { draft: saved, save } = useTabDraft<{
     answers: Record<string, Answer>
@@ -1101,8 +1098,7 @@ function QuestionTray({
   const paletteAnswer = paletteQuestion && answers[paletteQuestion.id]
   const logoPalettes = fromLogo.state === "ready" ? fromLogo.palettes : []
   const pickedFromLogo = logoPick(paletteAnswer, logoPalettes)
-  // The previews take the logo's palette picked, else its first until
-  // another is picked.
+  // Previews show the picked logo palette, else the logo's first.
   const previewPalette =
     pickedFromLogo ??
     (paletteAnswer && !("skipped" in paletteAnswer)

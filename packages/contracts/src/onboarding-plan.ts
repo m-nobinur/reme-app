@@ -123,15 +123,12 @@ export const PlanNext = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("answer_only") }),
 ])
 
-/** The longest line the planner may write for what it is doing. */
 export const PLAN_DOING_MAX = 60
 
 /**
- * The `ONBOARDING_STATUS` chunk: what the planner is on, as the plan's keys
- * close in the stream. `on` is the plan's own line for the turn (`doing`),
- * checked by the api, or a fact it stated or the move it chose, for which
- * the web writes the line ("Noting your services"). `facts` lists the keys
- * just stated, for the checklist to tick at once; empty otherwise.
+ * The `ONBOARDING_STATUS` chunk, sent as the plan's keys close. `on` is the
+ * plan's own `doing` line, or a fact or move the web words itself. `facts`
+ * lists the keys just stated, for the checklist to tick at once.
  */
 export const OnboardingStatus = z.strictObject({
   on: z.discriminatedUnion("kind", [
@@ -163,11 +160,7 @@ export const OnboardingStatus = z.strictObject({
 export const PendingCard = z.enum(["answered", "declined", "unanswered"])
 
 export const OnboardingPlan = z.strictObject({
-  /**
-   * What this turn is doing, in a few words the owner sees while it runs,
-   * such as "Drafting quote questions for a window cleaner"; empty on a
-   * plain turn, which shows the typing dots alone. Written first.
-   */
+  /** A few words the owner sees while the turn runs; empty on a plain turn. Written first. */
   doing: z.string().max(PLAN_DOING_MAX).optional(),
   facts: PlanFacts,
   /** Keys in `facts` the assistant chose because the owner left it to them. */

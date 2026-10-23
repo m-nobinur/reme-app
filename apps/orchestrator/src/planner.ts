@@ -863,7 +863,6 @@ export function outputSchema(): Record<string, unknown> {
   const schema = clean(z.toJSONSchema(Blueprint, { io: "output" })) as {
     properties: { palette: { anyOf: { properties?: { kind?: unknown } }[] } }
   }
-  // The owner's whole palette is theirs to pick, never the model's to write.
   const palette = schema.properties.palette
   palette.anyOf = palette.anyOf.filter(
     (branch) =>
