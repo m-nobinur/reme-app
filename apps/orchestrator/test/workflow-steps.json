@@ -26,7 +26,8 @@
       "gates 1",
       "review",
       "screenshots",
-      "keep warm"
+      "keep warm",
+      "say ready"
     ],
     "information round trip": [
       "claim 1",
@@ -78,7 +79,22 @@
       "validating 1",
       "a11y 1",
       "gates 1",
-      "destroy sandbox"
+      "destroy sandbox",
+      "retry"
+    ],
+    "owner build failed, then retried": [
+      "claim 1",
+      "planning",
+      "sandbox 1",
+      "implementing",
+      "developer",
+      "developer 1",
+      "validating 1",
+      "a11y 1",
+      "gates 1",
+      "destroy sandbox",
+      "retry",
+      "say failed"
     ],
     "budget park": [
       "claim 1",
@@ -119,7 +135,8 @@
       "resume run 2",
       "developer 3",
       "fail interrupted 3",
-      "destroy sandbox"
+      "destroy sandbox",
+      "retry"
     ],
     "developer went quiet": [
       "claim 1",
@@ -130,7 +147,8 @@
       "developer 1",
       "quiet 1.1",
       "fail stalled 1",
-      "destroy sandbox"
+      "destroy sandbox",
+      "retry"
     ],
     "developer still working past a wait": [
       "claim 1",
@@ -155,7 +173,8 @@
       "developer",
       "developer 1",
       "fail unreported 1",
-      "destroy sandbox"
+      "destroy sandbox",
+      "retry"
     ],
     "developer could not start": [
       "claim 1",
@@ -165,7 +184,8 @@
       "developer",
       "developer 1",
       "fail start 1",
-      "destroy sandbox"
+      "destroy sandbox",
+      "retry"
     ],
     "superseded a preview": [
       "claim 1",
@@ -254,7 +274,8 @@
       "sandbox 20",
       "pool full 20",
       "fail pool",
-      "destroy sandbox"
+      "destroy sandbox",
+      "retry"
     ],
     "checkpoint found the site gone": [
       "claim 1",
@@ -266,7 +287,8 @@
       "blocked 1",
       "checkpoint 1",
       "fail lost 1",
-      "destroy sandbox"
+      "destroy sandbox",
+      "retry"
     ],
     "nobody answered": [
       "claim 1",
@@ -336,7 +358,8 @@
       "answer 1.28",
       "look 1.29",
       "fail unanswered 1",
-      "destroy sandbox"
+      "destroy sandbox",
+      "retry"
     ],
     "a stale nudge, then the answer": [
       "claim 1",
@@ -373,7 +396,8 @@
       "a11y 1",
       "review",
       "screenshots",
-      "keep warm"
+      "keep warm",
+      "say ready"
     ],
     "quick edit handed on": [
       "claim 1",
@@ -388,7 +412,8 @@
       "gates 1",
       "review",
       "screenshots",
-      "keep warm"
+      "keep warm",
+      "say ready"
     ],
     "quick edit failed a gate": [
       "claim 1",
@@ -406,7 +431,8 @@
       "gates 2",
       "review",
       "screenshots",
-      "keep warm"
+      "keep warm",
+      "say ready"
     ],
     "accessibility failed after a quick edit": [
       "claim 1",
@@ -426,7 +452,8 @@
       "gates 2",
       "review",
       "screenshots",
-      "keep warm"
+      "keep warm",
+      "say ready"
     ],
     "superseded before accessibility": [
       "claim 1",
@@ -451,7 +478,8 @@
       "gates 1",
       "review",
       "screenshots",
-      "keep warm"
+      "keep warm",
+      "say ready"
     ],
     "planned build": [
       "claim 1",
@@ -495,7 +523,8 @@
       "validating 1",
       "gates 1",
       "review",
-      "keep warm"
+      "keep warm",
+      "say ready"
     ],
     "design critique repaired": [
       "claim 1",

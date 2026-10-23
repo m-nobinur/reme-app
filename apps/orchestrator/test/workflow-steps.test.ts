@@ -154,6 +154,8 @@ const script = {
   lane: {} as { lane?: string; change_kind?: string | null },
   /** Whether the one-call quick edit gets to a report. */
   quickDone: true as boolean,
+  /** Whether a failure is followed up with a retry and a line in the chat. */
+  followUp: false as boolean,
   /** The axe run each `validateRevision` call was handed. */
   gated: [] as unknown[],
   /** The fixes each look of the design critic finds; none left is none. */
@@ -334,6 +336,15 @@ vi.mock("../src/search-sync.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/search-sync.ts")>()),
   startDueSyncs: async () => 0,
 }))
+// The follow-up's bodies are driven in retry.test.ts; here only its steps.
+vi.mock("../src/retry.ts", () => ({
+  afterFailure: async () => ({
+    retry_id: script.followUp ? "retry" : null,
+    note: script.followUp ? { key: "k", text: "t" } : null,
+  }),
+  postNote: async () => undefined,
+  sayReady: async () => undefined,
+}))
 vi.mock("../src/validate.ts", () => ({
   assignmentFacts: async () => [],
   // What a quick edit's accessibility gate finds after its preview; none left is a pass.
@@ -473,6 +484,7 @@ type Setup = {
   critic?: typeof script.critic
   quiet?: number[]
   photosFail?: boolean
+  followUp?: boolean
 }
 const full = { lane: "full" }
 const copy = { lane: "quick", change_kind: "copy" }
@@ -515,6 +527,13 @@ const paths: [string, Wake[], Setup, { outcome: string }][] = [
     "gate failure ends failed",
     [completion],
     { verdicts: ["failed"] },
+    { outcome: "failed" },
+  ],
+  // An owner's build that failed on our side is started again, and said.
+  [
+    "owner build failed, then retried",
+    [completion],
+    { origin: "owner", verdicts: ["failed"], followUp: true },
     { outcome: "failed" },
   ],
   ["budget park", [budget], {}, { outcome: "blocked_on_approval" }],
@@ -681,6 +700,7 @@ describe("the assignment Workflow's step names", () => {
     script.quickDone = setup.quickDone ?? true
     script.critic = [...(setup.critic ?? [])]
     script.quiet = [...(setup.quiet ?? [])]
+    script.followUp = setup.followUp ?? false
     photoStep.fail = setup.photosFail ?? false
     photoStep.appended.length = 0
     const { names, run } = drive([...wakes], [...(setup.answers ?? [])])
@@ -882,7 +902,8 @@ describe("the assignment Workflow's step names", () => {
     script.reviewRefusal = "assignment.not_previewable"
     const { names, run } = drive([completion])
     expect(await run()).toMatchObject({ outcome: "preview_ready" })
-    expect(names).toEqual(expected["owner build"])
+    // No review opened, so no ready line either.
+    expect([...names, "say ready"]).toEqual(expected["owner build"])
     // Any other refusal is still final.
     script.reviewRefusal = "revision.not_preview"
     await expect(drive([completion]).run()).rejects.toThrow()
@@ -897,6 +918,7 @@ describe("the assignment Workflow's step names", () => {
         "information round trip",
         "gate failure repaired",
         "gate failure ends failed",
+        "owner build failed, then retried",
         "budget park",
         "interrupted then resumed",
         "interrupted past the resume budget",

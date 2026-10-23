@@ -25,6 +25,7 @@ import {
   events,
   facts,
   logFailure,
+  type OrgScopedDb,
   orgs,
   resolveOrgBySlug,
   STAFF_CODE,
@@ -345,6 +346,114 @@ bridge.post("/", async (c) => {
 /** Builds an owner may start in 24 hours (open item 76: a guess until someone hits it). */
 const OWNER_DAILY_BUILDS = 20
 
+export type NewAssignment = {
+  kind: string
+  goal: string
+  model: "A" | "B"
+  withhold: string[]
+  lane: BuildLane
+  change_kind: ChangeKind | null
+  /** The failed build this one starts again (retry.ts), whose plan it keeps. */
+  retry_of?: { assignment_id: string; blueprint: unknown }
+}
+
+/** The row and its `assignment.created` event, or why not, in the caller's transaction. */
+export async function insertAssignment(
+  db: OrgScopedDb,
+  orgId: string,
+  key: string,
+  owner: boolean,
+  input: NewAssignment
+): Promise<
+  | { row: typeof assignments.$inferSelect; replayed: boolean }
+  | { capped: true }
+  | { unpublished: true }
+  | { missing: true }
+> {
+  const { kind, goal, model, withhold, lane, change_kind } = input
+  const taint: TaintLabel[] =
+    owner || kind === "site.revise" ? ["untrusted_input"] : []
+  const [existing] = await db
+    .select()
+    .from(assignments)
+    .where(eq(assignments.idempotencyKey, key))
+  if (existing) return { row: existing, replayed: true }
+  if (owner) {
+    // The owner's own builds only, read off each recent row's created
+    // event, so console and harness builds on the org use none of it.
+    // ponytail: count-then-insert, so k concurrent creates at 19 can all
+    // pass and overshoot by k - 1. An advisory lock per org if that matters.
+    const [today] = await db
+      .select({ built: sql<number>`count(*)::int` })
+      .from(assignments)
+      .innerJoin(
+        events,
+        sql`${events.assignmentId} = ${assignments.id} and ${events.type} = 'assignment.created'`
+      )
+      .where(
+        sql`${assignments.createdAt} > now() - interval '24 hours' and ${events.payload}->>'origin' = 'owner'`
+      )
+    if ((today?.built ?? 0) >= OWNER_DAILY_BUILDS) {
+      return { capped: true as const }
+    }
+  }
+  const source =
+    kind === "site.revise" ? await publishedSource(db, orgId) : null
+  if (kind === "site.revise" && !source) return { unpublished: true as const }
+  const codes = await db
+    .select({ id: staff.id, code: staff.staffCode })
+    .from(staff)
+    .where(
+      sql`${staff.staffCode} in (${STAFF_CODE.developer}, ${STAFF_CODE.chief})`
+    )
+  const developer = codes.find((s) => s.code === STAFF_CODE.developer)
+  const chief = codes.find((s) => s.code === STAFF_CODE.chief)
+  if (!developer || !chief) return { missing: true as const }
+  const [row] = await db
+    .insert(assignments)
+    .values({
+      orgId,
+      staffId: developer.id,
+      createdByStaffId: chief.id,
+      kind,
+      goal,
+      revisionOfAssignmentId: source?.assignment_id ?? null,
+      acceptanceCriteria: [
+        "Every price, hour and service area on the site matches a canonical fact",
+        "The site builds and every gate passes",
+      ],
+      // A placeholder: the Workflow's first step takes the snapshot and
+      // writes its id here (`takeSnapshot`).
+      factSnapshotId: crypto.randomUUID(),
+      packRefs: [{ key: "cleaning", version: "0.1.0" }],
+      budgetUsd: 20,
+      idempotencyKey: key,
+      ...(input.retry_of ? { blueprint: input.retry_of.blueprint } : {}),
+    })
+    .returning()
+  if (!row) throw new Error("insert returned no row")
+  await appendEvent(db, {
+    orgId,
+    assignmentId: row.id,
+    staffId: chief.id,
+    type: "assignment.created",
+    payload: {
+      kind,
+      model,
+      goal,
+      withhold,
+      // The lane is chosen once, here, and read back by the Workflow and EV3.
+      lane,
+      change_kind,
+      origin: owner ? "owner" : "console",
+      ...(source ? { revises_revision_id: source.revision_id } : {}),
+      ...(input.retry_of ? { retry_of: input.retry_of.assignment_id } : {}),
+    },
+    taint,
+  })
+  return { row, replayed: false }
+}
+
 /**
  * The row, its `assignment.created` event and the instance, replayed by
  * idempotency key. A `site.revise` names the build whose revision the site
@@ -357,99 +466,14 @@ const OWNER_DAILY_BUILDS = 20
 async function createAssignment(
   c: Context<ConsoleEnv>,
   key: string,
-  input: {
-    kind: string
-    goal: string
-    model: "A" | "B"
-    withhold: string[]
-    lane: BuildLane
-    change_kind: ChangeKind | null
-  }
+  input: NewAssignment
 ) {
-  const { kind, goal, model, withhold, lane, change_kind } = input
   const orgId = c.get("orgId")
-  const owner = byOwner(c)
-  const taint: TaintLabel[] =
-    owner || kind === "site.revise" ? ["untrusted_input"] : []
-  const result = await c.get("kit").withOrg({ orgId }, async (db) => {
-    const [existing] = await db
-      .select()
-      .from(assignments)
-      .where(eq(assignments.idempotencyKey, key))
-    if (existing) return { row: existing, replayed: true }
-    if (owner) {
-      // The owner's own builds only, read off each recent row's created
-      // event, so console and harness builds on the org use none of it.
-      // ponytail: count-then-insert, so k concurrent creates at 19 can all
-      // pass and overshoot by k - 1. An advisory lock per org if that matters.
-      const [today] = await db
-        .select({ built: sql<number>`count(*)::int` })
-        .from(assignments)
-        .innerJoin(
-          events,
-          sql`${events.assignmentId} = ${assignments.id} and ${events.type} = 'assignment.created'`
-        )
-        .where(
-          sql`${assignments.createdAt} > now() - interval '24 hours' and ${events.payload}->>'origin' = 'owner'`
-        )
-      if ((today?.built ?? 0) >= OWNER_DAILY_BUILDS) {
-        return { capped: true as const }
-      }
-    }
-    const source =
-      kind === "site.revise" ? await publishedSource(db, orgId) : null
-    if (kind === "site.revise" && !source) return { unpublished: true as const }
-    const codes = await db
-      .select({ id: staff.id, code: staff.staffCode })
-      .from(staff)
-      .where(
-        sql`${staff.staffCode} in (${STAFF_CODE.developer}, ${STAFF_CODE.chief})`
-      )
-    const developer = codes.find((s) => s.code === STAFF_CODE.developer)
-    const chief = codes.find((s) => s.code === STAFF_CODE.chief)
-    if (!developer || !chief) return { missing: true as const }
-    const [row] = await db
-      .insert(assignments)
-      .values({
-        orgId,
-        staffId: developer.id,
-        createdByStaffId: chief.id,
-        kind,
-        goal,
-        revisionOfAssignmentId: source?.assignment_id ?? null,
-        acceptanceCriteria: [
-          "Every price, hour and service area on the site matches a canonical fact",
-          "The site builds and every gate passes",
-        ],
-        // A placeholder: the Workflow's first step takes the snapshot and
-        // writes its id here (`takeSnapshot`).
-        factSnapshotId: crypto.randomUUID(),
-        packRefs: [{ key: "cleaning", version: "0.1.0" }],
-        budgetUsd: 20,
-        idempotencyKey: key,
-      })
-      .returning()
-    if (!row) throw new Error("insert returned no row")
-    await appendEvent(db, {
-      orgId,
-      assignmentId: row.id,
-      staffId: chief.id,
-      type: "assignment.created",
-      payload: {
-        kind,
-        model,
-        goal,
-        withhold,
-        // The lane is chosen once, here, and read back by the Workflow and EV3.
-        lane,
-        change_kind,
-        origin: owner ? "owner" : "console",
-        ...(source ? { revises_revision_id: source.revision_id } : {}),
-      },
-      taint,
-    })
-    return { row, replayed: false }
-  })
+  const result = await c
+    .get("kit")
+    .withOrg({ orgId }, (db) =>
+      insertAssignment(db, orgId, key, byOwner(c), input)
+    )
   if ("unpublished" in result) {
     return failure(c, 409, {
       class: "validation",

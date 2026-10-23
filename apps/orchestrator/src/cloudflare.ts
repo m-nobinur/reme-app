@@ -70,6 +70,7 @@ import {
 } from "./publish.ts"
 import { quickEdit } from "./quick.ts"
 import { retireOthers, type SweepCounts, sweepOrg } from "./retention.ts"
+import { afterFailure, postNote, sayReady } from "./retry.ts"
 import {
   latestBlueprint,
   mapSite,
@@ -226,6 +227,22 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
     }
     if (!claimed) return { outcome: "queued" }
 
+    // An owner's build that failed on our side starts once more, and the chat
+    // hears what happened (retry.ts). Nothing here changes how this build ended.
+    const followUp = async () => {
+      try {
+        const { note } = await step.do("retry", () =>
+          run((kit) => afterFailure(this.env, kit, ids))
+        )
+        if (note) {
+          await step.do("say failed", SAY_RETRIES, () =>
+            run((kit) => postNote(kit, ids.orgId, note))
+          )
+        }
+      } catch {
+        // The failure stands, and the panel shows it.
+      }
+    }
     // A build that cannot continue ends in `failed` and destroys its sandbox,
     // if it holds one (`endSandbox` leaves a warm one another build holds),
     // which releases the site lock (§13): a provider that keeps failing, a
@@ -239,6 +256,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         await endSandbox(this.env, ids)
         return { destroyed: ids.assignmentId }
       })
+      await followUp()
       return { outcome: "failed" as const }
     }
 
@@ -852,8 +870,9 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         // cancelled since the gates has nothing to review and ends as it is.
         // The console asks for its own review, so its builds stop at
         // `preview_ready` as before.
+        let reviewed = false
         if (warmAfter && admitted.origin === "owner") {
-          await step.do("review", () =>
+          const opened = await step.do("review", () =>
             run(async (kit) => {
               try {
                 const { request } = await requestReview(kit, ids)
@@ -869,6 +888,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
               }
             })
           )
+          reviewed = opened.approval_id !== null
         }
         // The screenshots come after the preview exists, not before it: the
         // review card above is already in front of the owner, and the
@@ -941,6 +961,17 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           [warmAfter ? "keep_warm_ms" : "destroy_ms"]: endMs,
           end_to_end_ms: done - t0,
         })
+        if (verdict.outcome === "failed") await followUp()
+        // Last, so a chat busy for days holds up nothing.
+        if (reviewed) {
+          try {
+            await step.do("say ready", SAY_RETRIES, () =>
+              run((kit) => sayReady(kit, ids))
+            )
+          } catch {
+            // The ready card says it as well; the chat misses one line.
+          }
+        }
         return { outcome: verdict.outcome }
       }
       if (payload.kind === "budget") {

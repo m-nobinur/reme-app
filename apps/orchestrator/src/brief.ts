@@ -106,6 +106,8 @@ export async function creationChoices(
   lane: BuildLane
   change_kind: ChangeKind | null
   kind: string
+  /** The failed build this one starts again (retry.ts). */
+  retry_of: string | null
 }> {
   const [row] = await db
     .select({ payload: events.payload })
@@ -126,6 +128,7 @@ export async function creationChoices(
     lane: payload.lane === "quick" ? "quick" : "full",
     change_kind: ChangeKind.safeParse(payload.change_kind).data ?? null,
     kind: typeof payload.kind === "string" ? payload.kind : "site.build",
+    retry_of: typeof payload.retry_of === "string" ? payload.retry_of : null,
   }
 }
 

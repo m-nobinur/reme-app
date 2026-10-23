@@ -1083,7 +1083,7 @@ export async function plan(input: {
 /** The step's answer: ids and counts only, the plan itself is on the row (R8). */
 type PlanStep = {
   round: number
-  source: "model" | "fallback"
+  source: "model" | "fallback" | "retry"
   attempts: number
 }
 
@@ -1121,6 +1121,18 @@ export async function planRound(input: {
       .where(eq(assignments.id, ids.assignmentId))
     if (!row) throw new Error("assignment.not_found")
     const choices = await creationChoices(db, ids)
+    // A retry builds the plan its failed build was given, with no new call.
+    if (choices.retry_of && Blueprint.safeParse(row.blueprint).success) {
+      const kept: PlanStep = { round: ROUND, source: "retry", attempts: 0 }
+      await appendEvent(db, {
+        orgId: ids.orgId,
+        assignmentId: ids.assignmentId,
+        staffId: row.staffId,
+        type: "blueprint.proposed",
+        payload: { ...kept, errors: [], previous: null },
+      })
+      return { done: kept }
+    }
     const facts = (await currentFacts(db))
       .filter((f) => !choices.withhold.includes(f.key))
       .map(toFactRecord)
