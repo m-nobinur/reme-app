@@ -1,4 +1,4 @@
-import { ArrowSquareOutIcon } from "@phosphor-icons/react"
+import { ArrowSquareOutIcon, ChatCircleTextIcon } from "@phosphor-icons/react"
 import {
   getRouteApi,
   Link,
@@ -13,6 +13,7 @@ import type {
   Reminder,
 } from "@workspace/contracts"
 import { ShowFoldedQuestion } from "@workspace/ui/components/assistant/question-tray"
+import { AssistantAvatar } from "@workspace/ui/components/assistant-avatar"
 import { buttonVariants } from "@workspace/ui/components/button"
 import {
   ApprovalItem,
@@ -38,6 +39,8 @@ import {
   TabsList,
   TabsTrigger,
 } from "@workspace/ui/components/tabs"
+import { Hint } from "@workspace/ui/components/tooltip"
+import { cn } from "@workspace/ui/lib/utils"
 import { browserZone } from "@workspace/ui/lib/zone"
 import {
   type ReactNode,
@@ -790,6 +793,55 @@ export function WorkspacePanelLine({
       avatar={avatar}
       lines={panel?.lines}
     />
+  )
+}
+
+/**
+ * Where opening the floating panel moves focus: the review or question
+ * waiting on the owner, so the pill opens on what it asks.
+ */
+export function firstAsk(panel: Panel | null) {
+  if (panel?.review) return anchorOf.approval(panel.review.id)
+  const [ask] = panel?.waiting ?? []
+  return ask?.kind === "approval" || ask?.kind === "question"
+    ? anchorOf[ask.kind](ask.id)
+    : undefined
+}
+
+/** The floating panel's way back to the chat. */
+export function ChatLink({ id }: { id: string }) {
+  return (
+    <Link className={cn(NEXT_STEP, "grow")} params={{ id }} to="/app/c/$id">
+      <ChatCircleTextIcon aria-hidden />
+      Go to conversation
+    </Link>
+  )
+}
+
+/**
+ * The assistant at the bottom right of a page with nothing under way, its
+ * face alone: a tap opens the chat.
+ */
+export function IdleAssistant({
+  id,
+  avatar,
+  name,
+}: {
+  id: string
+  avatar: AvatarId | null
+  name: string
+}) {
+  return (
+    <Hint label={`Chat with ${name}`} side="left">
+      <Link
+        className="flex size-11 items-center justify-center rounded-full border border-border bg-popover shadow-lg outline-none transition-transform duration-150 hover:scale-105 focus-visible:ring-3 focus-visible:ring-ring motion-reduce:transition-none"
+        params={{ id }}
+        to="/app/c/$id"
+      >
+        <AssistantAvatar className="size-6" id={avatar} sway />
+        <span className="sr-only">Chat with {name}</span>
+      </Link>
+    </Hint>
   )
 }
 

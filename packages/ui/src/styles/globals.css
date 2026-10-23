@@ -156,6 +156,8 @@
   /* A logo still drawing: its colours drift and sharpen. A drawn one lands
      from a blur. The logo page holds both still under reduced motion. */
   --animate-logo-diffuse: logo-diffuse 6s ease-in-out infinite alternate;
+  /* The floating panel asking for a look: its ring glows twice, then rests. */
+  --animate-panel-nudge: panel-nudge 1.4s ease-in-out 2;
   /* The conversation's reading type, sized per viewport by `--chat-size`. A
      step line (a check the assistant ran) sits a size under the reply. */
   --text-chat: var(--chat-size);
@@ -331,6 +333,15 @@
     }
   }
   /* New words wiped in from the left. */
+  @keyframes panel-nudge {
+    0%,
+    100% {
+      opacity: 0;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
   @keyframes status-reveal {
     from {
       mask-image: linear-gradient(90deg, #000 45%, transparent 55%);

@@ -61,6 +61,9 @@ import { tabBadge, useTabBadge } from "@/lib/tab-icon"
 import { requireOwner } from "@/lib/tenant"
 import { LiveWorkspaceProvider, useLiveWorkspaceState } from "@/lib/workspace"
 import {
+  ChatLink,
+  firstAsk,
+  IdleAssistant,
   PanelAnnouncer,
   useBrowserZone,
   usePanel,
@@ -287,6 +290,13 @@ function AppLayout() {
     )
   // The rail's Chat icon: current only inside this conversation.
   const last = lastChat(conversations)
+  // Away from the conversation the panel floats, with a way back to the chat
+  // the work is in: getting started's own while it runs, else the latest.
+  const floating = !conversation
+  const chat = onboarding ?? last?.id
+  const continues = panel?.suggestions.some(
+    (each) => each.kind === "onboarding"
+  )
 
   return (
     <LiveWorkspaceProvider value={live}>
@@ -297,8 +307,21 @@ function AppLayout() {
           defaultPanelOpen={panelOpen}
           defaultRailOpen={railOpen}
           onPanelToggle={auto.toggled}
+          floating={floating}
           openPanel={press}
           panel={showPanel ? <WorkspacePanel panel={panel} /> : null}
+          // Not beside Continue getting started, which goes to the same chat.
+          panelFooter={chat && !continues ? <ChatLink id={chat} /> : null}
+          panelFocus={firstAsk(panel)}
+          panelIdle={
+            chat ? (
+              <IdleAssistant
+                avatar={live.workspace?.assistantAvatar ?? null}
+                id={chat}
+                name={live.workspace?.assistantName ?? "Reme"}
+              />
+            ) : null
+          }
           panelLine={
             showPanel ? (
               <WorkspacePanelLine

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import type { Workspace } from "@/lib/api/types"
 import { EMPTY_WORKSPACE } from "@/lib/attention"
 import {
+  firstAsk,
   PanelAnnouncer,
   useAnnouncement,
   usePanel,
@@ -458,4 +459,21 @@ it("keeps what the owner did until the state it describes moves on", async () =>
   // The version goes live: the line no longer describes anything.
   await show(at({ live: 2 }))
   expect(status()).toBe("")
+})
+
+it("opens the floating pill on the review, else the first question waiting", () => {
+  const panel = (over: object) => over as Parameters<typeof firstAsk>[0]
+  expect(firstAsk(null)).toBeUndefined()
+  expect(firstAsk(panel({ review: null, waiting: [] }))).toBeUndefined()
+  expect(
+    firstAsk(panel({ review: null, waiting: [{ kind: "question", id: "q" }] }))
+  ).toBe("question-q")
+  expect(
+    firstAsk(
+      panel({
+        review: { kind: "approval", id: "r" },
+        waiting: [{ kind: "question", id: "q" }],
+      })
+    )
+  ).toBe("approval-r")
 })

@@ -37,3 +37,24 @@ test("on a phone nothing scrolls sideways", async ({ page }) => {
   const composer = await rect(page, '[data-slot="aui_composer-shell"]')
   expect(composer.right).toBeLessThanOrEqual(390)
 })
+
+for (const width of [390, 1440]) {
+  test(`at ${width} wide the floating pill keeps no room and fits`, async ({
+    page,
+  }) => {
+    await open(page, "WorkspaceShell floating", width)
+    const main = await rect(page, "#main")
+    const content = await rect(page, '[data-slot="workspace-page"]')
+    // Centred in the page: as much space at the right as at the left.
+    expect(
+      Math.abs(main.right - content.right - (content.left - main.left))
+    ).toBeLessThanOrEqual(1)
+    const pill = await rect(page, "#workspace-panel")
+    expect(pill.right).toBeLessThanOrEqual(width)
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth > window.innerWidth
+      )
+    ).toBe(false)
+  })
+}
