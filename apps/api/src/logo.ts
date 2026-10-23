@@ -23,6 +23,7 @@ import {
 } from "./assets.ts"
 import type { Owner } from "./changes.ts"
 import { failure, invalid, keyMissing, readBody, sha256Hex } from "./http.ts"
+import { logoReference } from "./logo-references.ts"
 import {
   changesPrompt,
   DIRECTOR_GUIDE,
@@ -45,8 +46,11 @@ import { readFacts } from "./workspace.ts"
  *
  * The owner picks the logo type, so a round's four variants share it and
  * differ by idea: a first round asks the director, one quick text call, for
- * four ideas for that type first. A round of changes to a picked variant
- * hands the image model that picture instead. A variant is one call, so one
+ * four ideas for that type first, and for one colour a second to go with it.
+ * Each variant is handed the example picture for its type and style
+ * (`logo-references.ts`) to take its layout and look from; the model draws
+ * all the lettering itself. A round of changes to a picked variant hands the
+ * image model that picture instead. A variant is one call, so one
  * failure loses one tile, not all. Every variant is a PNG on a transparent
  * background; the bytes are checked, not the model's word for it.
  *
@@ -57,7 +61,8 @@ import { readFacts } from "./workspace.ts"
  * (medium, transparent) took 17 to 18 s a call and 19 s a round, $0.0133 a
  * logo and $0.053 a round, 1024 px PNGs of 0.6 to 0.9 MB. Its Flare tier
  * answered the same request in 10 s at the same price, also with alpha. The
- * director (Gemini 3.8 Flash) took 4.8 s and $0.0016.
+ * director (Gemini 3.8 Flash) took 4.8 s and $0.0016. With an example attached
+ * to each call, measured the same day: 23 to 24 s and $0.069 a round.
  */
 
 /**
@@ -95,7 +100,7 @@ const DIRECTOR_MS = 6_000
  * The rounds one org may start in a UTC day, counting tries after a failure.
  * Twenty: one logo question allows ten, and an owner who starts onboarding
  * again or asks for a logo later has room for another question's worth. At
- * $0.053 a round that bounds a day at about $1.06 of drawing, well under the
+ * $0.069 a round that bounds a day at about $1.38 of drawing, well under the
  * org's daily model cap.
  */
 export const LOGO_ROUNDS_PER_DAY = 20
@@ -477,11 +482,14 @@ export async function keepLogo(
 
 // --- The drawing, in the queue consumer -------------------------------------
 
-/** The director: up to four ideas for the logo type, or null when it is slow or says nothing usable. */
+/**
+ * The director: up to four ideas for the logo type, and for an owner who gave
+ * one colour a supporting one, or null when it is slow or says nothing usable.
+ */
 export type Director = (
   subject: Manifest["subject"],
   brief: LogoBrief
-) => Promise<string[] | null>
+) => Promise<{ ideas: string[]; support?: string } | null>
 
 function openrouterDirector(apiKey: string, modelId: string): Director | null {
   const model = plannerModel(apiKey, modelId)
@@ -492,6 +500,7 @@ function openrouterDirector(apiKey: string, modelId: string): Director | null {
       type: brief.type,
       direction: brief.description,
       style: brief.style,
+      colors: brief.colors,
     }).replace(/</g, "\\u003c")
     const result = await generateText({
       model,
@@ -503,8 +512,17 @@ function openrouterDirector(apiKey: string, modelId: string): Director | null {
       maxRetries: 0,
       abortSignal: AbortSignal.timeout(DIRECTOR_MS),
     })
-    return symbolsOf(result.output)
+    const support = supportOf(result.output)
+    return { ideas: symbolsOf(result.output), ...(support ? { support } : {}) }
   }
+}
+
+/** The director's supporting colour: a `#rrggbb` hex, or nothing. */
+export function supportOf(value: unknown): string | undefined {
+  const support = (value as { support?: unknown } | null)?.support
+  return typeof support === "string" && /^#[0-9a-f]{6}$/i.test(support.trim())
+    ? support.trim().toLowerCase()
+    : undefined
 }
 
 /** The director's answer: its ideas that are words, each short, at most one per variant. */
@@ -630,14 +648,18 @@ export async function drawRound(
       )
     ).some(Boolean)
 
-  let reference: string | null = null
+  // A round of changes hands over the picked variant. Any other round hands
+  // each variant the example for its type and style, set per variant below.
+  let base: string | null = null
   if (manifest.base) {
     const picked = await findGenerated(env, job.orgId, manifest.base)
     if (picked) {
       const bytes = new Uint8Array(await picked.arrayBuffer())
-      reference = dataUrl(bytes, sniff(bytes) ?? "image/png")
+      base = dataUrl(bytes, sniff(bytes) ?? "image/png")
     }
   }
+  const exampleFor = (style: LogoStyle) =>
+    dataUrl(logoReference(manifest.brief.type, style), "image/webp")
   const director =
     deps.director !== undefined
       ? deps.director
@@ -645,11 +667,14 @@ export async function drawRound(
           apiKey,
           env.ONBOARDING_MODEL ?? DEFAULT_ONBOARDING_MODEL
         )
-  const symbols =
-    reference || !director
-      ? []
-      : ((await director(manifest.subject, manifest.brief).catch(() => null)) ??
-        [])
+  const directed =
+    base || !director
+      ? null
+      : await director(manifest.subject, manifest.brief).catch(() => null)
+  const symbols = directed?.ideas ?? []
+  // A second colour only for an owner who gave one.
+  const support =
+    manifest.brief.colors.length === 1 ? directed?.support : undefined
 
   const outcomes = await Promise.all(
     manifest.planned.map(async (id, i) => {
@@ -658,21 +683,25 @@ export async function drawRound(
         return { model: "kept", cost: 0 }
       }
       await new Promise((resolve) => setTimeout(resolve, i * STAGGER_MS))
+      const style = manifest.styles[i] as LogoStyle
+      const asked = manifest.changes && base
+      const reference = base ?? exampleFor(style)
       for (const model of LOGO_MODELS) {
-        const prompt =
-          manifest.changes && reference
-            ? changesPrompt({
-                subject: manifest.subject,
-                brief: manifest.brief,
-                changes: manifest.changes,
-              })
-            : logoPrompt({
-                subject: manifest.subject,
-                brief: manifest.brief,
-                style: manifest.styles[i] as LogoStyle,
-                symbol: symbols[i] ?? null,
-                changes: manifest.changes,
-              })
+        const prompt = asked
+          ? changesPrompt({
+              subject: manifest.subject,
+              brief: manifest.brief,
+              changes: manifest.changes as string,
+            })
+          : logoPrompt({
+              subject: manifest.subject,
+              brief: manifest.brief,
+              style,
+              symbol: symbols[i] ?? null,
+              support,
+              reference: !base,
+              changes: manifest.changes,
+            })
         const drawn = await drawOne(apiKey, model, prompt, reference).catch(
           (error: unknown) => {
             console.error(
