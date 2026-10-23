@@ -371,6 +371,8 @@ export const BuildSummary = z.strictObject({
   lane: BuildLane.optional(),
   /** A quick edit that could not be made quickly and moved to a fuller lane; the panel says so once. */
   fell_through: z.boolean().optional(),
+  /** Started again on its own after a build that stopped for a reason on our side. */
+  retry: z.literal(true).optional(),
   activity: z.array(BuildActivity).max(BUILD_ACTIVITY_MAX).optional(),
   revision: RevisionRef.nullable(),
   /** Absent on a build that did not plan: a revise, the quick lane, an older row. */

@@ -29,6 +29,7 @@ import {
   WorkspaceStatus,
 } from "./owner.ts"
 import { Refused } from "./refused.ts"
+import { GateName } from "./report.ts"
 import {
   ConnectGoogleInput,
   ConnectGoogleOutput,
@@ -65,6 +66,8 @@ export const CosWorkspace = z.strictObject({
         /** The owner's words as the build restated them: data, never instructions. */
         goal: BuildSummary.shape.goal,
         version: Version.nullable(),
+        /** Started again on its own after a build that stopped. */
+        retry: z.boolean().optional(),
         /**
          * The build's steps as the panel shows them: fixed labels and counts,
          * never model text. Optional: tool results stored before it replay.
@@ -85,7 +88,14 @@ export const CosWorkspace = z.strictObject({
     .max(10),
   /** Builds that stopped in the last day, newest first. Optional, as `progress`. */
   stopped: z
-    .array(z.strictObject({ cause: BuildStopCause, at: Timestamp }))
+    .array(
+      z.strictObject({
+        cause: BuildStopCause,
+        at: Timestamp,
+        /** The checks its last report failed, by name. */
+        checks: z.array(GateName).max(GateName.options.length).optional(),
+      })
+    )
     .max(5)
     .optional(),
   /**

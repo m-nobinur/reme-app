@@ -3114,6 +3114,8 @@ export interface components {
       /** @enum {string} */
       lane?: "full" | "quick"
       fell_through?: boolean
+      /** @constant */
+      retry?: true
       activity?: {
         id: string
         label: string
@@ -5547,6 +5549,7 @@ export interface components {
               lane?: "full" | "quick"
               goal: string
               version: number | null
+              retry?: boolean
               progress?: {
                 step: string
                 done: number
@@ -5564,6 +5567,17 @@ export interface components {
                 | "other"
               /** Format: date-time */
               at: string
+              checks?: (
+                | "build"
+                | "types"
+                | "links"
+                | "structured_data"
+                | "content"
+                | "claims"
+                | "copy"
+                | "a11y"
+                | "size"
+              )[]
             }[]
             questions: {
               /** Format: uuid */
@@ -6102,6 +6116,8 @@ export interface components {
                   /** @enum {string} */
                   lane?: "full" | "quick"
                   fell_through?: boolean
+                  /** @constant */
+                  retry?: true
                   activity?: {
                     id: string
                     label: string
@@ -7482,6 +7498,7 @@ export interface components {
         lane?: "full" | "quick"
         goal: string
         version: number | null
+        retry?: boolean
         progress?: {
           step: string
           done: number
@@ -7494,6 +7511,17 @@ export interface components {
         cause: "stalled" | "unfinished" | "unanswered" | "service" | "other"
         /** Format: date-time */
         at: string
+        checks?: (
+          | "build"
+          | "types"
+          | "links"
+          | "structured_data"
+          | "content"
+          | "claims"
+          | "copy"
+          | "a11y"
+          | "size"
+        )[]
       }[]
       questions: {
         /** Format: uuid */
@@ -9430,6 +9458,8 @@ export interface components {
             /** @enum {string} */
             lane?: "full" | "quick"
             fell_through?: boolean
+            /** @constant */
+            retry?: true
             activity?: {
               id: string
               label: string
@@ -10895,6 +10925,8 @@ export interface components {
         /** @enum {string} */
         lane?: "full" | "quick"
         fell_through?: boolean
+        /** @constant */
+        retry?: true
         activity?: {
           id: string
           label: string
