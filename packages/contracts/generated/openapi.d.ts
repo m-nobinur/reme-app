@@ -8706,6 +8706,21 @@ export interface components {
         use?: "logo" | "hero" | "work" | "team"
       }
     }
+    LogoPalettes: {
+      palettes: {
+        name: string
+        stops: {
+          paper: string
+          tint: string
+          primary: string
+          ink: string
+        }
+      }[]
+    }
+    LogoPalettesRequest: {
+      /** Format: uuid */
+      asset_id: string
+    }
     LogoRounds: {
       rounds: {
         round: number

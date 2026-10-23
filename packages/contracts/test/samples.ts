@@ -385,6 +385,20 @@ export const samples: Record<ContractName, unknown> = {
     ],
     next_at: null,
   },
+  LogoPalettesRequest: { asset_id: "8d9e0f10-2131-4a2b-9c3d-4e5f60718293" },
+  LogoPalettes: {
+    palettes: [
+      {
+        name: "Forest paper",
+        stops: {
+          paper: paletteSample.paper,
+          tint: paletteSample.tint,
+          primary: paletteSample.primary,
+          ink: paletteSample.ink,
+        },
+      },
+    ],
+  },
   KeptLogo: {
     asset: {
       id: "8d9e0f10-2131-4a2b-9c3d-4e5f60718293",

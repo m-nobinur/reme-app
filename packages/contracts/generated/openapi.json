@@ -30184,6 +30184,80 @@
         ],
         "additionalProperties": false
       },
+      "LogoPalettes": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "palettes": {
+            "minItems": 1,
+            "maxItems": 6,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 40,
+                  "pattern": "\\S"
+                },
+                "stops": {
+                  "type": "object",
+                  "properties": {
+                    "paper": {
+                      "type": "string",
+                      "pattern": "^#[0-9a-f]{6}$"
+                    },
+                    "tint": {
+                      "type": "string",
+                      "pattern": "^#[0-9a-f]{6}$"
+                    },
+                    "primary": {
+                      "type": "string",
+                      "pattern": "^#[0-9a-f]{6}$"
+                    },
+                    "ink": {
+                      "type": "string",
+                      "pattern": "^#[0-9a-f]{6}$"
+                    }
+                  },
+                  "required": [
+                    "paper",
+                    "tint",
+                    "primary",
+                    "ink"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "name",
+                "stops"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "palettes"
+        ],
+        "additionalProperties": false
+      },
+      "LogoPalettesRequest": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "asset_id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "asset_id"
+        ],
+        "additionalProperties": false
+      },
       "LogoRounds": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",

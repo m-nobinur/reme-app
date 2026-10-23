@@ -387,6 +387,19 @@ export const PaletteFromImage = z.strictObject({
   stops: PaletteStops,
 })
 
+/** The palettes one logo is read into: four shown, the rest for Surprise me. */
+export const LOGO_PALETTES_MAX = 6
+
+/**
+ * `POST /palettes/from-logo`: palettes built from the org's kept logo, read
+ * by one vision call and held per logo, so asking again, after a reload
+ * too, costs nothing. Each is brought to AA as `PaletteFromImage` is.
+ */
+export const LogoPalettesRequest = z.strictObject({ asset_id: Uuid })
+export const LogoPalettes = z.strictObject({
+  palettes: z.array(PaletteFromImage).min(1).max(LOGO_PALETTES_MAX),
+})
+
 /**
  * What a logo is made of: a symbol beside the name, the symbol alone, the
  * name alone in its own lettering, the initials, the name inside a badge, or
@@ -600,6 +613,8 @@ export type ReviewPhotosRequest = z.infer<typeof ReviewPhotosRequest>
 export type ReviewedPhotos = z.infer<typeof ReviewedPhotos>
 export type PaletteStops = z.infer<typeof PaletteStops>
 export type PaletteFromImage = z.infer<typeof PaletteFromImage>
+export type LogoPalettesRequest = z.infer<typeof LogoPalettesRequest>
+export type LogoPalettes = z.infer<typeof LogoPalettes>
 export type LogoType = z.infer<typeof LogoType>
 export type LogoStyle = z.infer<typeof LogoStyle>
 export type LogoBrief = z.infer<typeof LogoBrief>
