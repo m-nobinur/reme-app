@@ -10,6 +10,10 @@ const FILES = import.meta.glob<string>("../assets/avatars/*.webp", {
 })
 const file = (name: string) => FILES[`../assets/avatars/${name}.webp`]
 
+/** A picked face's portrait, as a URL; undefined for Reme's own, which is drawn. */
+export const avatarPortrait = (id: AvatarId | null | undefined) =>
+  id && id !== "reme" ? file(id) : undefined
+
 const BLINK_MS = 130
 
 /**
@@ -75,7 +79,7 @@ function AssistantAvatar({
   sway?: boolean
   className?: string
 }) {
-  const portrait = id && id !== "reme" ? file(id) : undefined
+  const portrait = avatarPortrait(id)
   if (!(id && portrait)) {
     return <PersonaAvatar className={className} delay={delay} sway={sway} />
   }

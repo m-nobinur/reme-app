@@ -19,6 +19,7 @@ import {
 } from "@tanstack/react-router"
 import type { Conversation } from "@workspace/contracts"
 import { railItemClass } from "@workspace/ui/components/app-shell"
+import { avatarPortrait } from "@workspace/ui/components/assistant-avatar"
 import {
   ChatHistory,
   type HistoryEntry,
@@ -96,6 +97,17 @@ export const Route = createFileRoute("/app")({
       })
     }
     return { owner, ...frame }
+  },
+  // The tab names the assistant and the business, and shows the face the
+  // owner picked; Reme's own face is the app's icon already.
+  head: ({ loaderData }) => {
+    const business = loaderData?.active?.name
+    const assistant = loaderData?.workspace?.assistantName?.trim() || "Reme"
+    const face = avatarPortrait(loaderData?.workspace?.assistantAvatar)
+    return {
+      meta: business ? [{ title: `${assistant} | ${business}` }] : [],
+      links: face ? [{ rel: "icon", href: face, type: "image/webp" }] : [],
+    }
   },
   // `?google=` is where the Google connect callback sends the owner back.
   validateSearch: (
