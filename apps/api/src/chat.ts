@@ -155,6 +155,7 @@ import {
 } from "./onboarding-agent.ts"
 import { notStarted } from "./onboarding-copy.ts"
 import { prepare, readPrepared } from "./onboarding-prepare.ts"
+import { type Pace, pace } from "./pacing.ts"
 import { ownerStaffId } from "./staff.ts"
 import { readFacts } from "./workspace.ts"
 
@@ -333,13 +334,50 @@ function stream(
     { type: "finish-step" },
     { type: "finish" },
   ]
-  const frames = chunks.map(
-    (chunk) => `data: ${JSON.stringify(chunk, sortedKeys)}\n\n`
-  )
-  return new Response(`${frames.join("")}data: [DONE]\n\n`, {
+  return new Response(`${chunks.map(frame).join("")}${DONE}`, {
     headers: UI_MESSAGE_STREAM_HEADERS,
   })
 }
+
+const frame = (chunk: UIMessageChunk) =>
+  `data: ${JSON.stringify(chunk, sortedKeys)}\n\n`
+const DONE = "data: [DONE]\n\n"
+
+/**
+ * A scripted turn's response, written the way a model would stream it
+ * (`pace`). The turn is stored and its lock released before this runs, so
+ * the waits hold nothing; a closed tab only stops the waiting. Anything but
+ * a stream passes through, and a model's stream is never given here.
+ */
+async function paced(response: Response, how: Pace): Promise<Response> {
+  if (!response.headers.get("content-type")?.includes("text/event-stream")) {
+    return response
+  }
+  const chunks = await framesOf(response)
+  const encoder = new TextEncoder()
+  let open = true
+  const body = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      await pace(
+        chunks,
+        (chunk) => open && controller.enqueue(encoder.encode(frame(chunk))),
+        how
+      )
+      if (open) {
+        controller.enqueue(encoder.encode(DONE))
+        controller.close()
+      }
+    },
+    cancel() {
+      open = false
+    },
+  })
+  return new Response(body, { headers: response.headers })
+}
+
+/** The characters the owner typed on a turn, which the reading beat scales with. */
+const typedChars = (turn: ChatRequest["turn"]) =>
+  turn.kind === "message" ? turn.text.length : (turn.reply?.text.length ?? 0)
 
 /** The step that followed `call` in the stored row, as it was first made. */
 function stepAfter(parts: Part[], call: ToolPart): Part[] {
@@ -702,6 +740,10 @@ export async function chat(
   const body = await readBody(request)
   const parsed = ChatRequest.safeParse(body)
   if (!parsed.success) return invalid(parsed.error.issues)
+  const how: Pace = {
+    typed: typedChars(parsed.data.turn),
+    since: arrived.getTime(),
+  }
   // Postgres refuses NUL in text and jsonb, and a refusal there is a 500.
   if (holdsNul(parsed.data)) return invalid([{ path: ["turn"] }])
   const { conversation_id: id, mode, turn, time_zone: browser } = parsed.data
@@ -946,7 +988,7 @@ export async function chat(
     if (error instanceof NoSuchSession) return notFound()
     throw error
   }
-  if (opened instanceof Response) return prepareLater(opened)
+  if (opened instanceof Response) return paced(prepareLater(opened), how)
   if ("plan" in opened) {
     // The response streams before the turn commits, so the copy call waits
     // for the commit rather than for the response.
@@ -989,6 +1031,7 @@ export async function chat(
     modelId,
     newId,
     waitUntil,
+    how,
   })
 }
 
@@ -1414,6 +1457,8 @@ type Answering = {
   modelId: string
   newId: () => string
   waitUntil: (promise: Promise<unknown>) => void
+  /** What paces a reply the script writes in the model's place. */
+  how: Pace
 }
 
 /**
@@ -1474,7 +1519,7 @@ async function fellBack(
 ): Promise<Response> {
   const response = await fallbackTurn(run, a, rows, payload)
   a.waitUntil(enqueueAfterTurn(a.env, run.turn))
-  return response
+  return paced(response, a.how)
 }
 
 /** The model's run over the history the log derives now, which `settle` left caught up. */
@@ -2357,8 +2402,8 @@ const PLANNED_ERROR = "Something went wrong on our side. Try again."
 async function framesOf(response: Response): Promise<UIMessageChunk[]> {
   return (await response.text())
     .split("\n\n")
-    .filter((frame) => frame.startsWith("data: ") && frame !== "data: [DONE]")
-    .map((frame) => JSON.parse(frame.slice("data: ".length)) as UIMessageChunk)
+    .filter((sse) => sse.startsWith("data: ") && sse !== "data: [DONE]")
+    .map((sse) => JSON.parse(sse.slice("data: ".length)) as UIMessageChunk)
 }
 
 /** The owner-facing words of a refusal the api would have answered with. */
@@ -2423,6 +2468,7 @@ async function plannedTurn(
   write: (chunk: UIMessageChunk) => void
 ): Promise<void> {
   const { turn } = p.request
+  const how: Pace = { typed: typedChars(turn), since: p.sentAt.getTime() }
   // A results turn without a reply continues the card's own message.
   const continued =
     turn.kind === "results" && !turn.reply ? (job.tail?.id ?? null) : null
@@ -2531,12 +2577,11 @@ async function plannedTurn(
       },
     ])
   /** The step's parts as chunks, after the message already streamed. */
-  const finish = (parts: Part[], lead: UIMessageChunk[]) => {
+  const finish = async (parts: Part[], lead: UIMessageChunk[]) => {
     if (!stepOpen) write({ type: "start-step" })
-    for (const chunk of lead) write(chunk)
     const rest =
       outcome.shown && parts[0]?.type === "text" ? parts.slice(1) : parts
-    for (const part of rest) for (const chunk of made(part)) write(chunk)
+    await pace([...lead, ...rest.flatMap(made)], write, how, !!outcome.shown)
     if (!continued) write(writtenAt())
     write({ type: "finish-step" })
     write({ type: "finish" })
@@ -2587,8 +2632,12 @@ async function plannedTurn(
       const boundary = stepOpen
         ? chunks.findIndex((c) => c.type === "start-step")
         : -1
-      for (const [i, chunk] of chunks.entries())
-        if (i !== boundary) write(chunk)
+      await pace(
+        chunks.filter((_, i) => i !== boundary),
+        write,
+        how,
+        !!outcome.shown
+      )
       return
     }
     const step = staged.build
@@ -2596,7 +2645,7 @@ async function plannedTurn(
           close(db, "answered")
         )
       : staged.step
-    finish(step, staged.lead)
+    await finish(step, staged.lead)
   } catch (error) {
     await p.kit
       .withOrg(scope, (db) => close(db, "error"))
