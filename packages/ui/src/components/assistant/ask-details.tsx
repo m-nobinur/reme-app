@@ -298,11 +298,6 @@ function DetailsTray({
   const startOf = (each: DetailsKey, name: string) =>
     draft.values[name] ?? prefilled(input, each)?.[name]
 
-  // The name ideas show only while the name field is empty.
-  const nameField = fieldOf("assistant.name")
-  const [named, setNamed] = useState(() =>
-    Boolean(startOf("assistant.name", nameField)?.toString().trim())
-  )
   // The faces on offer follow the pronouns picked a page before.
   const [pronouns, setPronouns] = useState(
     () =>
@@ -423,12 +418,6 @@ function DetailsTray({
             setPronouns(field.value as PronounId)
           }
         }}
-        onInput={(event) => {
-          const field = event.target
-          if (field instanceof HTMLInputElement && field.name === nameField) {
-            setNamed(field.value.trim() !== "")
-          }
-        }}
         onSubmit={submit}
         ref={formRef}
       >
@@ -472,7 +461,7 @@ function DetailsTray({
                     spec={{ kind: "fact", key: each }}
                     title={factLabel(each)}
                   />
-                  {each === "assistant.name" && !named ? (
+                  {each === "assistant.name" ? (
                     <NameIdeas
                       ideas={nameIdeas(input.ideas)}
                       onPick={(name) => {
@@ -482,7 +471,6 @@ function DetailsTray({
                           )
                         if (!field) return
                         field.value = name
-                        setNamed(true)
                         setProblem(null)
                         field.focus()
                       }}
