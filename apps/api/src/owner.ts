@@ -38,7 +38,7 @@ import { failure, invalid, keyMissing, readBody } from "./http.ts"
 import { drawLogos, keepLogo, readLogos } from "./logo.ts"
 import { pushRoute } from "./push.ts"
 import { reminderRoute } from "./reminders.ts"
-import { paletteFromImage, reviewPhotos } from "./vision.ts"
+import { logoPalettes, paletteFromImage, reviewPhotos } from "./vision.ts"
 import { readActivity, readFacts, unchanged } from "./workspace.ts"
 import { readTaggedWorkspace } from "./workspace-tag.ts"
 
@@ -56,7 +56,7 @@ const LOGO_KEEP_PATH =
 
 /** The routes `ownerRoute` answers, for `index.ts` to resolve an org before. */
 export const OWNER_PATH =
-  /^\/(workspace|facts|assets(\/review)?|photos\/[^/]+|logos(\/[^/]+\/keep)?|palettes\/from-image|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback))?)?|reminders(\/[^/]+)?|memory(\/(undo|review))?|push\/(config|subscriptions(\/[^/]+)?)|domains\/[^/]+(\/checkout)?|google\/(connect|disconnect)|chat)$/
+  /^\/(workspace|facts|assets(\/review)?|photos\/[^/]+|logos(\/[^/]+\/keep)?|palettes\/from-(image|logo)|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback))?)?|reminders(\/[^/]+)?|memory(\/(undo|review))?|push\/(config|subscriptions(\/[^/]+)?)|domains\/[^/]+(\/checkout)?|google\/(connect|disconnect)|chat)$/
 
 async function setFacts(request: Request, kit: Tenancy, owner: Owner) {
   if (!idempotencyKey(request)) return keyMissing()
@@ -263,6 +263,9 @@ export async function ownerRoute(
   }
   if (pathname === "/palettes/from-image" && method === "POST") {
     return paletteFromImage(request, env, owner)
+  }
+  if (pathname === "/palettes/from-logo" && method === "POST") {
+    return logoPalettes(request, env, kit, owner)
   }
   if (pathname === "/changes" && method === "POST") {
     return requestChange(request, env, kit, owner)

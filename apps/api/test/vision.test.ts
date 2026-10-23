@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest"
 import type { Owner } from "../src/changes.ts"
 import {
   contrast,
+  logoPalettesOf,
   looksOf,
   missingOf,
   paletteFromImage,
@@ -83,6 +84,32 @@ describe("a palette read from a picture", () => {
     })
     expect(read?.name).toBe("Your colours")
     expect(read?.stops.paper).toBe(hex(250, 250, 250))
+  })
+})
+
+describe("palettes read from a logo", () => {
+  it("keeps the readable ones, each colour pair once, at most six", () => {
+    const palette = (name: string, primary: string) => ({
+      name,
+      paper: hex(250, 250, 250),
+      tint: hex(230, 236, 242),
+      primary,
+      ink: hex(15, 27, 42),
+    })
+    const read = logoPalettesOf({
+      palettes: [
+        palette("Harbour blue", hex(30, 58, 95)),
+        palette("Same again", hex(30, 58, 95)),
+        { name: "Broken", paper: "not a colour" },
+        ...Array.from({ length: 8 }, (_, i) =>
+          palette(`Shade ${i}`, hex(20 + i * 10, 60, 40))
+        ),
+      ],
+    })
+    expect(read).toHaveLength(6)
+    expect(read[0]?.name).toBe("Harbour blue")
+    expect(read.map((p) => p.name)).not.toContain("Same again")
+    expect(logoPalettesOf("nonsense")).toEqual([])
   })
 })
 
