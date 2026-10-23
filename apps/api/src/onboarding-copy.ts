@@ -274,24 +274,11 @@ ${ask}`,
     "Nearly there. Which pages should the site have? I've ticked the ones most businesses start with.",
     "Last design question. Which pages do you want? The usual ones are already ticked.",
   ],
-  // Phase 3: right after the yes to the website, what a quote needs, in their words.
+  // After what sets them apart: what they need to know to quote, in their words.
   quote_form: (v) => [
-    `I'll build it. First, the Request a quote form, so every enquiry arrives with what you need. Think of things like the date, the address or the size of the job.
-
-When someone asks ${v.business} for a quote, what do you usually find out first?`,
-    `Then let's start with your Request a quote form. List whatever comes to mind and I'll turn it into a tidy form.
-
-Picture a new customer getting in touch: what do you need to know from them before you can quote properly?`,
-    `Good${comma(v.owner)}. One practical thing first: I'll shape the quote form on your site around your answer, so enquiries about ${services(v)} come with the details you need.
-
-Think about the last few quotes you gave. What did you need to ask the customer before you could work them out?`,
-    v.offering
-      ? `First, the quote form. For ${lower(v.offering)}, the usual things are when, where and what the job involves, but you know your customers best.
-
-So customers can ask for a quote in one go, what should the form ask them?`
-      : `First, the quote form. The usual things are when, where and what the job involves, but you know your customers best.
-
-So customers can ask for a quote in one go, what should the form ask them?`,
+    `Now, quotes. When a customer asks ${v.business} for one, what do you need to know before you can reply? For instance: the address, the date and the size of the job.`,
+    `Picture a new customer getting in touch: what do you need to know from them before you can quote properly? For instance: where, when and what the job involves.`,
+    `Think of the last few quotes you gave${comma(v.owner)}. What did you have to ask before you could work them out? For instance: the location, the timing and any access details.`,
   ],
 }
 
@@ -309,14 +296,14 @@ export function question(step: Asked, v: Voice): string {
   return say(v, pick(v, step, QUESTIONS[step](v)))
 }
 
-/** The quote form, for when no model can draft one: a short form the owner confirms or changes. */
+/** The quote requirements, for when no model can draft them: a short list the owner confirms or changes. */
 export function quoteForm(v: Voice): string {
   return say(
     v,
     pick(v, "quote_form", [
-      `One last thing before I build. Every enquiry from the site comes through Request a quote, so what should it ask a customer? I've started a short form for ${v.business} below. Keep it, or tell me what you need to know to quote a job and I'll change it.`,
-      `Nearly there. When a customer asks ${v.business} for a quote, what do you need to know first? Here's a simple form to start from. Confirm it, or say what to add.`,
-      `Almost ready to build. Here's a starting point for your quote form, so customers tell you what you need in one go. Does it cover it, or is there something you always ask first?`,
+      `Here's a starting point for what I'll ask each customer before a quote. Keep it, or tell me what to change.`,
+      `I've drafted what ${v.business} needs to know before a quote. Say if anything is missing.`,
+      `Here's a short list to start from. Confirm it, or tell me what you always ask first.`,
     ])
   )
 }

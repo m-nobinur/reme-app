@@ -221,10 +221,10 @@ describe("the onboarding steps", () => {
       "business.audience",
       "business.proof",
       "industry",
+      "quote_form",
       "contact",
       "assistant",
       "build_for_me",
-      "quote_form",
       "design",
       "build",
     ])
@@ -270,7 +270,8 @@ describe("the onboarding steps", () => {
 
   it("never starts a build before the quote form is confirmed or declined, then the design", () => {
     const { asked, at } = walk(start(), everyCard)
-    expect(asked.slice(-3)).toEqual(["quote_form", "design", "build"])
+    expect(asked.indexOf("quote_form")).toBeLessThan(asked.indexOf("design"))
+    expect(asked.slice(-2)).toEqual(["design", "build"])
     // Asked for changes: the question comes back before any build.
     const changed = applied(
       { ...at, facts: at.facts.filter((f) => f.key !== "quote.form") },
@@ -1202,11 +1203,12 @@ describe("the onboarding copy", () => {
     }
   })
 
-  it("asks the quote question with the services written for the business", () => {
-    const prepared = voice({ services: "your wedding cars and airport runs" })
-    expect(
-      ORGS.map((org) => question("quote_form", { ...prepared, org })).join()
-    ).toContain("your wedding cars and airport runs")
+  it("asks the quote question with a short example answer", () => {
+    for (const org of ORGS) {
+      expect(question("quote_form", voice({ org }))).toMatch(
+        /For instance: [^.]{10,60}\.$/
+      )
+    }
   })
 
   it("offers the website, with its quote page, as one thing it can do", () => {
@@ -1220,11 +1222,12 @@ describe("the onboarding copy", () => {
     }
   })
 
-  it("asks what a quote needs right after the website question, in words", () => {
+  it("asks what a quote needs in words, without the website", () => {
     for (const org of ORGS) {
       const asked = question("quote_form", voice({ org }))
       expect(asked).toMatch(/quote/)
-      expect(asked.trim()).toMatch(/\?$/)
+      expect(asked).toContain("?")
+      expect(asked).not.toMatch(/website|site/i)
     }
   })
 

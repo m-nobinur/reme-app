@@ -28,6 +28,7 @@ import {
   sayProblems,
   transcriptOf,
   turnData,
+  typedOverForm,
 } from "../src/onboarding-agent.ts"
 
 const counter = () => {
@@ -403,12 +404,24 @@ describe("the plan's checks", () => {
     expect(
       errorsOf(
         website,
-        typed("hi", onboarding(without("site.build_mode", "business.email")))
+        typed(
+          "hi",
+          onboarding([...without("site.build_mode", "business.email"), QUOTE])
+        )
       )
     ).toEqual(
       expect.arrayContaining([
         expect.stringMatching(/still missing: business\.email/),
         expect.stringMatching(/the next step is ask_details contact/),
+      ])
+    )
+    // What a quote needs is part of the business, asked before the website.
+    expect(
+      errorsOf(website, typed("hi", onboarding(without("site.build_mode"))))
+    ).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/still missing: quote\.form/),
+        expect.stringMatching(/the next step is ask_open quote\.form/),
       ])
     )
     const card = choiceCard("build_for_me", onboarding(), counter())
@@ -624,7 +637,10 @@ describe("what the planner reads and how often it asks", () => {
         })
       )
     ).toEqual([])
-    const o = onboarding(without("business.audience", "business.phone"))
+    const o = onboarding([
+      ...without("business.audience", "business.phone"),
+      QUOTE,
+    ])
     const audience = plan({
       next: { kind: "ask_open", about: "business.audience" },
     })
@@ -651,7 +667,10 @@ describe("what the planner reads and how often it asks", () => {
   })
 
   it("asks what sets the business apart once, and never lets the assistant choose it", () => {
-    const o = onboarding(without("business.proof", "site.build_mode"))
+    const o = onboarding([
+      ...without("business.proof", "site.build_mode"),
+      QUOTE,
+    ])
     const proof = plan({ next: { kind: "ask_open", about: "business.proof" } })
     expect(errorsOf(proof, typed("ok", o))).toEqual([])
     expect(turnData(typed("ok", o))).toContain(
@@ -732,9 +751,10 @@ describe("what the planner reads and how often it asks", () => {
   })
 
   it("keeps to the script's order: each code step's own card next", () => {
-    const o = onboarding(
-      without("assistant.name", "assistant.pronouns", "assistant.tone")
-    )
+    const o = onboarding([
+      ...without("assistant.name", "assistant.pronouns", "assistant.tone"),
+      QUOTE,
+    ])
     expect(
       errorsOf(
         plan({
@@ -761,7 +781,10 @@ describe("what the planner reads and how often it asks", () => {
   })
 
   it("asks each optional detail once before the website, unless the owner already gave it", () => {
-    const o = onboarding(without("site.build_mode", "business.audience"))
+    const o = onboarding([
+      ...without("site.build_mode", "business.audience"),
+      QUOTE,
+    ])
     const website = plan({
       next: {
         kind: "ask_choice",
@@ -784,7 +807,7 @@ describe("what the planner reads and how often it asks", () => {
     // Asked once, and the owner said nothing of it: that is an answer.
     expect(errorsOf(website, at({ "business.audience": 1 }))).toEqual([])
     // Given in the owner's own words: never asked.
-    const held = onboarding(without("site.build_mode"))
+    const held = onboarding([...without("site.build_mode"), QUOTE])
     expect(errorsOf(website, at({}, held))).toEqual([])
   })
 
@@ -829,7 +852,10 @@ describe("the plan's parts", () => {
   })
 
   it("builds a details card with what is held and the sign-in email filled in", () => {
-    const o = onboarding(without("business.phone", "business.email"))
+    const o = onboarding([
+      ...without("business.phone", "business.email"),
+      QUOTE,
+    ])
     const s = typed("ok", o)
     const checked = checkPlan(
       plan({
@@ -1214,32 +1240,51 @@ describe("a planned turn", () => {
         options: null,
       },
     ]
+    // The owner's words read as a message over the form as they left it:
+    // here they made the passengers optional on the card first.
+    const left = FIELDS.map((f) =>
+      f.key === "passengers" ? { ...f, required: false } : f
+    )
+    const typedOver = typedOverForm(card, { ...changes, fields: left })
+    if (!typedOver) throw new Error("not read as words over the form")
+    expect(typedOver.text).toBe("Add the date")
+    expect((typedOver.form.input as { fields: unknown }).fields).toEqual(left)
+    // Without fields, the form stands as proposed; other cards are not words.
+    expect(typedOverForm(card, changes)?.form.input).toMatchObject({
+      fields: FIELDS,
+    })
+    expect(
+      typedOverForm(card, { answer: "confirmed", fields: FIELDS })
+    ).toBeNull()
+    const over = typed(typedOver.text, o, typedOver.form)
     const again = await planTurn(
       planner([
         plan({
           say: "Added the date.",
+          pending_card: "declined",
           next: { kind: "review_quote_form", fields: dated, note: null },
         }),
       ]).model,
       PRICE,
-      {
-        onboarding: o,
-        pending: null,
-        input: { kind: "card", card, output: changes },
-        rows: [],
-      }
+      over
     )
     expect(again.ok).toBe(true)
-    // The planner sees the whole form it is changing, not only its labels.
-    const data = turnData({
-      onboarding: o,
-      pending: null,
-      input: { kind: "card", card, output: changes },
-      rows: [],
-    })
-    expect(data).toContain(
-      `"form_to_change":${JSON.stringify((card.input as { fields: unknown }).fields)}`
+    // The step stays open for the new proposal rather than reading as skipped.
+    expect(again.ok && again.checked.after.closed).not.toContain("quote_form")
+    // The planner sees the whole form it is changing, as the owner left it.
+    expect(turnData(over)).toContain(
+      `"waiting_card":${JSON.stringify({ card: "review_quote_form", fields: left })}`
     )
+    // Words that accept it state the form as the owner left it.
+    const accepted = await planTurn(
+      planner([plan({ say: "Noted.", pending_card: "answered" })]).model,
+      PRICE,
+      typed("looks good", o, typedOver.form)
+    )
+    expect(accepted.ok && accepted.checked.stated).toContainEqual({
+      key: "quote.form",
+      value: { fields: left },
+    })
 
     // Confirmed on the card: the fact is the owner's list, then the build may start.
     const confirmed = { answer: "confirmed", fields: dated }

@@ -40,10 +40,10 @@ export const ONBOARDING_STEPS = [
   "area",
   "customers",
   "proof",
+  "quote_form",
   "contact",
   "assistant",
   "website",
-  "quote_form",
   "look",
 ] as const
 
@@ -113,17 +113,17 @@ function settled(
   else if ((asked["business.proof"] ?? 0) >= OPTIONAL_ASKS || out.contact) {
     out.proof = skipped
   }
+  if (quote) {
+    out.quote_form = done(
+      `${quote.length} ${quote.length === 1 ? "question" : "questions"}`
+    )
+  } else if (o.closed.includes("quote_form")) out.quote_form = skipped
   if (mode(o) === "assistant") out.website = done()
   if (manual) {
     // The owner skipped the website: nothing the build needs is asked.
     out.website = skipped
-    out.quote_form = out.look = skipped
+    out.look = skipped
   } else {
-    if (quote) {
-      out.quote_form = done(
-        `${quote.length} ${quote.length === 1 ? "question" : "questions"}`
-      )
-    } else if (o.closed.includes("quote_form")) out.quote_form = skipped
     if (oldDesign(o) ? DESIGN.every(fact) : designDone(o)) {
       out.look = done(
         [look.palette, look.direction ?? look.ownLook]

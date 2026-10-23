@@ -152,6 +152,7 @@ import {
   planReservation,
   planTurn,
   turnData,
+  typedOverForm,
 } from "./onboarding-agent.ts"
 import { notStarted } from "./onboarding-copy.ts"
 import { prepare, readPrepared } from "./onboarding-prepare.ts"
@@ -2220,7 +2221,11 @@ async function openPlan(
     const answered = answerOf(held, turn, onboarding)
     if (!answered) return null
     current = withAnswer(onboarding, answered.meant)
-    input = { kind: "card", card: answered.call, output: answered.output }
+    const words = typedOverForm(answered.call, answered.output)
+    if (words) waitingOn = words.form
+    input = words
+      ? { kind: "message", text: words.text }
+      : { kind: "card", card: answered.call, output: answered.output }
   }
   const state: PlanState = {
     onboarding: current,

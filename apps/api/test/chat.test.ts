@@ -2833,6 +2833,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       const changes = planner([
         plan({
           say: "Added pets.",
+          pending_card: "declined",
           next: { kind: "review_quote_form", fields: dated, note: null },
         }),
       ])
@@ -2843,9 +2844,9 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
           text: "Ask about pets too",
         })
       )
-      expect(changes.calls[0]).toContain(
-        "asked for changes: Ask about pets too"
-      )
+      // The words read as a message typed over the waiting form.
+      expect(changes.calls[0]).toMatch(/typed\\+":\\+"Ask about pets too/)
+      expect(changes.calls[0]).toMatch(/waiting_card\\+":\{\\+"card/)
       expect((await factsOf(who)).some((f) => f.key === "quote.form")).toBe(
         false
       )

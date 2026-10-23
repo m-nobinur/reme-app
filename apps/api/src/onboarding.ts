@@ -1041,9 +1041,9 @@ const askChoice = (
 const building = (o: Onboarding) => mode(o) === "assistant"
 
 /**
- * The script, in order. Phase 1 the business, phase 2 the assistant, phase
- * 3 the website and its quote form, phase 4 the design, logo and photos
- * in one tray, whose answer starts the build. "Skip" on the build question
+ * The script, in order. Phase 1 the business and what it needs to know to
+ * quote, phase 2 the assistant, phase 3 the website, phase 4 the design,
+ * logo and photos in one tray, whose answer starts the build. "Skip" on the build question
  * takes the manual branch instead of phases 3 and 4. The opener asks what the business does in words, and the planner
  * reads the answers to the open questions; the script asks the rest with a
  * card, and asks the open ones with a form when the planner cannot run. The
@@ -1061,22 +1061,22 @@ export const STEPS: readonly Step[] = [
   askChoice("industry", "business.industry"),
   // Sign-up states it; asked only when the name it gave did not parse.
   askFact("business.name"),
-  askDetails("contact"),
-  askDetails("assistant"),
-  askChoice("build_for_me", "site.build_mode"),
   {
-    // The build waits for a quote form the owner reviewed or declined. The
-    // question is asked in words, answered in the tray, and the planner
-    // proposes a form from the answer; with no model, a typed answer gets the
-    // script's short form to confirm (`defaultQuoteForm`).
+    // What the owner needs to know to quote, reviewed or declined: the
+    // assistant asks it of every enquiry, and a site it builds asks it on
+    // Request a quote. The question is asked in words, and the planner
+    // proposes the questions from the answer; with no model, a typed answer
+    // gets the script's short list to confirm (`defaultQuoteForm`).
     id: "quote_form",
-    done: (o) =>
-      !building(o) || has(o, "quote.form") || o.closed.includes("quote_form"),
+    done: (o) => has(o, "quote.form") || o.closed.includes("quote_form"),
     ask: (o, newId) => [
       text(question("quote_form", voiceOf(o))),
       call("tool-ask_open", AskOpenInput.parse({ about: "quote.form" }), newId),
     ],
   },
+  askDetails("contact"),
+  askDetails("assistant"),
+  askChoice("build_for_me", "site.build_mode"),
   // An org that reaches the design after the tray shipped is asked in one
   // tray; one that was mid-way through the four cards finishes on them.
   {

@@ -61,10 +61,10 @@ describe("onboardingSteps", () => {
       area: "next",
       customers: "next",
       proof: "next",
+      quote_form: "next",
       contact: "next",
       assistant: "next",
       website: "next",
-      quote_form: "next",
       look: "next",
     })
   })
@@ -100,7 +100,7 @@ describe("onboardingSteps", () => {
   })
 
   it("marks the open step waiting while a question is open in the chat", () => {
-    const o = at([...WORK, AREA, ...CONTACT])
+    const o = at([...WORK, AREA, ...CONTACT], { closed: ["quote_form"] })
     expect(states(o).assistant).toBe("now")
     expect(states(o, {}, true, "assistant").assistant).toBe("waiting")
   })
@@ -129,17 +129,21 @@ describe("onboardingSteps", () => {
   })
 
   it("skips what the website needs on the manual path, and finishes there", () => {
-    const manual = at([
+    const facts = [
       ...WORK,
       AREA,
       ...CONTACT,
       ...ASSISTANT,
       { key: "site.build_mode", value: { mode: "manual" } },
-    ])
-    expect(states(manual)).toMatchObject({
-      quote_form: "skipped",
+    ] as const satisfies FactValue[]
+    // The quote questions serve every enquiry, so the manual path keeps them.
+    expect(states(at(facts))).toMatchObject({
+      quote_form: "now",
+      website: "skipped",
       look: "skipped",
     })
+    const manual = at(facts, { closed: ["quote_form"] })
+    expect(states(manual).quote_form).toBe("skipped")
     expect(onboardingSegment(manual, "2026-10-22T10:00:00.000Z").state).toBe(
       "done"
     )
