@@ -3,6 +3,7 @@ import {
   type ChatRequest,
   type ChatResult,
   ErrorEnvelope,
+  type QuoteField,
   ReviewQuoteFormOutput,
   TOOL_CALL_CANCELLED,
 } from "@workspace/contracts"
@@ -196,9 +197,10 @@ export function cancelOvertaken(messages: ChatMessage[]): ChatMessage[] {
 
 /**
  * A typed message while a proposed quote form waits is the owner's change to
- * it: the call it answers, as `{ answer: "changes", text }`, so the words
- * resolve the card rather than cancel it and the assistant reads them as
- * what to change. Null when no form waits, when the message carries a mode
+ * it: the call it answers, as `{ answer: "changes", text, fields }`, so the
+ * words resolve the card rather than cancel it and the assistant reads them
+ * as an acceptance or what to change. `shown` gives the questions as the
+ * owner left them on the card, when they dropped or switched any. Null when no form waits, when the message carries a mode
  * of its own (a website change is not about the form), or when the words
  * do not fit an answer; such a message goes out as itself and overtakes the
  * card, as any typed message does.
@@ -206,7 +208,8 @@ export function cancelOvertaken(messages: ChatMessage[]): ChatMessage[] {
 export function quoteChanges(
   messages: ChatMessage[],
   text: string,
-  intent?: ChatRequest["intent"]
+  intent?: ChatRequest["intent"],
+  shown?: (toolCallId: string) => QuoteField[] | undefined
 ): {
   tool: "review_quote_form"
   toolCallId: string
@@ -218,11 +221,13 @@ export function quoteChanges(
     (part) =>
       part.type === "tool-review_quote_form" && part.state === "input-available"
   )
+  if (!waiting || !isToolUIPart(waiting)) return null
   const output = ReviewQuoteFormOutput.safeParse({
     answer: "changes",
     text: text.trim(),
+    fields: shown?.(waiting.toolCallId),
   })
-  if (!waiting || !isToolUIPart(waiting) || !output.success) return null
+  if (!output.success) return null
   return {
     tool: "review_quote_form",
     toolCallId: waiting.toolCallId,
@@ -292,9 +297,7 @@ export function replyText(part: ChatMessage["parts"][number]): string | null {
       : `Uploaded ${part.output.assets.length} photos`
   }
   if (part.type === "tool-review_quote_form") {
-    return part.output.answer === "confirmed"
-      ? "Use this form"
-      : part.output.text
+    return part.output.answer === "confirmed" ? "Looks good" : part.output.text
   }
   return null
 }

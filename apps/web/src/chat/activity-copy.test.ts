@@ -193,7 +193,7 @@ describe("onboarding lines", () => {
       "Noting your services"
     )
     expect(onboardingLine({ kind: "next", next: "review_quote_form" })).toBe(
-      "Drafting your quote form"
+      "Drafting your quote requirements"
     )
   })
 })

@@ -12,7 +12,6 @@ import {
   dropField,
   keptFields,
   labelProblem,
-  restoreField,
   setRequired,
 } from "@workspace/ui/lib/quote-form"
 import { reviewQuoteFormView, waitsOnTray } from "@workspace/ui/lib/tool-state"
@@ -48,7 +47,7 @@ const relabel = (fields: QuoteField[], key: string, label: string) =>
   fields.map((each) => (each.key === key ? { ...each, label } : each))
 
 describe("editing a proposed quote form", () => {
-  it("drops and restores a question in its place", () => {
+  it("drops a question and keeps its place", () => {
     const dropped = dropField(draftOf(LIMOUSINE), "dropoff")
     expect(keptFields(dropped).map((f) => f.key)).toEqual([
       "pickup",
@@ -58,7 +57,6 @@ describe("editing a proposed quote form", () => {
     expect(dropped.map((row) => row.field.key)).toEqual(
       LIMOUSINE.map((f) => f.key)
     )
-    expect(keptFields(restoreField(dropped, "dropoff"))).toEqual(LIMOUSINE)
   })
 
   it("never drops below the contract's minimum", () => {
@@ -69,7 +67,6 @@ describe("editing a proposed quote form", () => {
     expect(keptFields(draft)).toHaveLength(QUOTE_FIELDS_MIN)
     expect(canDrop(draft)).toBe(false)
     expect(dropField(draft, "occasion")).toBe(draft)
-    expect(canDrop(restoreField(draft, "pickup"))).toBe(true)
   })
 
   it("refuses a blank or a repeated label, and lets a dropped one repeat", () => {
@@ -166,7 +163,7 @@ describe("the review card's turn", () => {
     const reply = replyTo(waiting, { toolCallId: "call_quote", output })
     expect(reply).toEqual({
       role: "user",
-      parts: [{ type: "text", text: "Use this form" }],
+      parts: [{ type: "text", text: "Looks good" }],
       metadata: { reply: true },
     })
     // The reply sends it, never the SDK on its own.
@@ -178,7 +175,7 @@ describe("the review card's turn", () => {
         kind: "results",
         message_id: "msg_assistant",
         results: [{ kind: "answer", tool_call_id: "call_quote", output }],
-        reply: { message_id: "msg_reply", text: "Use this form" },
+        reply: { message_id: "msg_reply", text: "Looks good" },
       }
     )
   })
@@ -214,6 +211,13 @@ describe("the review card's turn", () => {
 
   it("leaves a message alone that is a website change, too long, or has no card to answer", () => {
     const waiting = [assistant(review("input-available"))]
+    // The questions as the owner left them on the pills go with the words.
+    const kept = LIMOUSINE.slice(0, 3)
+    expect(
+      quoteChanges(waiting, "Looks good", undefined, (id) =>
+        id === "call_quote" ? kept : undefined
+      )?.output
+    ).toEqual({ answer: "changes", text: "Looks good", fields: kept })
     expect(quoteChanges(waiting, "Add Saturday hours", "site_change")).toBe(
       null
     )

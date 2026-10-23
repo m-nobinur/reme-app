@@ -11,6 +11,7 @@ import {
   clearOnboardingStatus,
   readOnboardingStatus,
 } from "@workspace/ui/hooks/use-onboarding-status"
+import { shownQuote } from "@workspace/ui/lib/quote-form"
 import { SESSION_ENDED } from "@workspace/ui/lib/tool-state"
 import { DefaultChatTransport } from "ai"
 import { useEffect, useRef, useState } from "react"
@@ -254,7 +255,12 @@ export function useConversationRuntime({
         const carried = intent?.current
         // Typed while a proposed quote form waits: the words answer it, and
         // go out as the owner's reply.
-        const changes = quoteChanges(chat.messages, typedText(message), carried)
+        const changes = quoteChanges(
+          chat.messages,
+          typedText(message),
+          carried,
+          (callId) => shownQuote.get(callId)
+        )
         if (changes) return addToolOutput(changes)
         chat.setMessages(cancelOvertaken)
         if (!carried) return send(message, options)

@@ -273,7 +273,7 @@ describe("the first run", () => {
       ["Customers", "next"],
       ["Contact details", "next"],
       ["Your assistant", "next"],
-      ["Quote form", "next"],
+      ["Quote requirements", "next"],
       ["Photos", "next"],
       ["Look and feel", "next"],
     ])
