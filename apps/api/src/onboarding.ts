@@ -54,6 +54,7 @@ import {
   started,
   type Voice,
 } from "./onboarding-copy.ts"
+import { paletteRoles } from "./palette.ts"
 
 /**
  * The onboarding script as pure functions: which step comes next, what it
@@ -848,12 +849,20 @@ export const designDone = (o: Onboarding) =>
   ((Object.values(DESIGN) as FactValueKey[]).every((key) => has(o, key)) &&
     logoOf(o.facts) !== undefined)
 
-/** The palette read from the owner's picture: its primary is the brand colour, its name and stops the notes. */
-const picturePalette = ({ name, stops }: PaletteFromImage) => ({
-  id: "custom",
-  brand: stops.primary,
-  custom: `${name}: paper ${stops.paper}, tint ${stops.tint}, primary ${stops.primary}, ink ${stops.ink}`,
-})
+/**
+ * A palette read from the owner's logo or picture: all six roles, which the
+ * site is built in as they are, its primary the brand colour, and its name
+ * and stops in the note the tray shows back.
+ */
+const picturePalette = ({ name, stops }: PaletteFromImage) => {
+  const roles = paletteRoles(stops)
+  return {
+    id: "custom",
+    brand: roles.primary,
+    roles,
+    custom: `${name}: paper ${roles.paper}, tint ${roles.tint}, primary ${roles.primary}, ink ${roles.ink}`,
+  }
+}
 const PICTURE =
   /^(.+): paper #[0-9a-f]{6}, tint #[0-9a-f]{6}, primary #[0-9a-f]{6}, ink #[0-9a-f]{6}$/
 

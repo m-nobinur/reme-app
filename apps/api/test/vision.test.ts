@@ -1,19 +1,19 @@
 import {
   type Asset,
   ErrorEnvelope,
+  PALETTE_AA_PAIRS,
   PaletteFromImage,
 } from "@workspace/contracts"
 import { MockLanguageModelV4 } from "ai/test"
 import { describe, expect, it } from "vitest"
 import type { Owner } from "../src/changes.ts"
+import { contrast, paletteRoles, readableStops } from "../src/palette.ts"
 import {
-  contrast,
   logoPalettesOf,
   looksOf,
   missingOf,
   paletteFromImage,
   paletteOf,
-  readableStops,
 } from "../src/vision.ts"
 
 /** `#rrggbb` from channels, so no colour literal sits in the code. */
@@ -67,6 +67,34 @@ describe("a palette read from a picture", () => {
     expect(readableStops(fine)).toEqual(fine)
   })
 
+  it("makes six roles in which every pair the site reads holds at AA, a dark page too", () => {
+    for (const stops of [
+      // A light amber on cream, and a dim ink: most of it must move.
+      {
+        paper: hex(253, 250, 244),
+        tint: hex(250, 237, 210),
+        primary: hex(242, 157, 14),
+        ink: hex(120, 110, 100),
+      },
+      // A dark page with a muted gold.
+      {
+        paper: hex(30, 40, 55),
+        tint: hex(42, 55, 74),
+        primary: hex(160, 104, 9),
+        ink: hex(200, 200, 200),
+      },
+    ]) {
+      const roles = paletteRoles(stops)
+      for (const { text, on } of PALETTE_AA_PAIRS) {
+        expect(
+          contrast(rgb(roles[text]), rgb(roles[on])),
+          `${text} on ${on}`
+        ).toBeGreaterThanOrEqual(4.5)
+      }
+      expect(roles.paper).toBe(stops.paper)
+    }
+  })
+
   it("takes only colours, lower case, with a name or a plain one", () => {
     expect(
       paletteOf({
@@ -88,7 +116,7 @@ describe("a palette read from a picture", () => {
 })
 
 describe("palettes read from a logo", () => {
-  it("keeps the readable ones, each primary once, at most six", () => {
+  it("keeps the readable ones, each colour pair once, at most six", () => {
     const palette = (name: string, primary: string) => ({
       name,
       paper: hex(250, 250, 250),
