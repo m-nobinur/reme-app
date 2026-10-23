@@ -10,15 +10,19 @@ import {
 } from "@phosphor-icons/react"
 import { type Asset, PHOTO_NEEDS, type PhotoNeed } from "@workspace/contracts"
 import {
+  DropTile,
+  sentence,
+  TRAY_TILE,
+} from "@workspace/ui/components/assistant/question-tray"
+import {
   type TrayPageProps,
   useTrayServices,
 } from "@workspace/ui/components/assistant/tray-services"
 import { Button } from "@workspace/ui/components/button"
 import { Skeleton } from "@workspace/ui/components/skeleton"
-import { OPTION, OPTION_TILE } from "@workspace/ui/lib/card"
 import { checkPhotos, sizeText, typesText } from "@workspace/ui/lib/upload"
 import { cn } from "@workspace/ui/lib/utils"
-import { type DragEvent, useEffect, useId, useState } from "react"
+import { useState } from "react"
 
 /**
  * The photos question of the design tray. Three lines say what the site
@@ -81,7 +85,6 @@ function TrayPhotos({
   onAnswer,
 }: TrayPageProps<PhotosAnswer>) {
   const services = useTrayServices()
-  const id = useId()
   const limits = question.upload
   const [photos, setPhotos] = useState<Held[]>(() =>
     startOf(answer, question.held)
@@ -94,13 +97,6 @@ function TrayPhotos({
   >()
   const [refused, setRefused] = useState<string[]>([])
   const [failed, setFailed] = useState<string | null>(null)
-  const [over, setOver] = useState(false)
-
-  // Photos the org already holds may settle the question as it opens.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: once, as the page opens
-  useEffect(() => {
-    if (!answer) onAnswer(answerOf(photos, create))
-  }, [])
 
   const settle = (nextPhotos: Held[], nextCreate: boolean) => {
     setPhotos(nextPhotos)
@@ -127,8 +123,8 @@ function TrayPhotos({
     }
   }
 
-  const add = async (files: FileList | null) => {
-    if (!files || !limits || busy) return
+  const add = async (files: File[]) => {
+    if (!limits || busy) return
     setFailed(null)
     if (!services) {
       setFailed("Photos cannot be uploaded here. Choose Create them for me.")
@@ -140,7 +136,7 @@ function TrayPhotos({
         type: asset.content_type,
         size: asset.bytes,
       })),
-      Array.from(files),
+      files,
       limits
     )
     setRefused(checked.refused)
@@ -162,12 +158,6 @@ function TrayPhotos({
       photos.filter((each) => each.asset.id !== gone),
       create
     )
-  }
-
-  const drop = (event: DragEvent<HTMLLabelElement>) => {
-    event.preventDefault()
-    setOver(false)
-    void add(event.dataTransfer.files)
   }
 
   const usable = photos.filter((each) => each.usable)
@@ -332,57 +322,28 @@ function TrayPhotos({
       {/* The two ways on: send photos, or leave them to the assistant. */}
       <div className="grid @md:grid-cols-2 grid-cols-1 gap-3 empty:hidden">
         {limits && photos.length + unread.length < limits.max_files ? (
-          <label
+          <div
             className={cn(
-              OPTION,
-              OPTION_TILE,
-              "rounded-xl border-dashed has-[:focus-visible]:border-primary has-[:focus-visible]:ring-primary",
-              over && "border-primary bg-primary/5",
+              "grid",
               busy && "pointer-events-none opacity-60",
               !short && "@md:col-span-2"
             )}
-            onDragLeave={() => setOver(false)}
-            onDragOver={(event) => {
-              event.preventDefault()
-              setOver(true)
-            }}
-            onDrop={drop}
           >
-            <span className="flex items-center gap-1.5 font-medium text-sm">
-              {started ? "Add more photos" : "Upload your photos"}
-              <UploadSimpleIcon
-                aria-hidden
-                className="ml-auto size-5 shrink-0 text-muted-foreground"
-              />
-            </span>
-            <span className="text-muted-foreground text-xs" id={`${id}-limits`}>
-              Drop them here or choose them. {typesText(limits.accept)}, up to{" "}
-              {sizeText(limits.max_bytes)} each.
-            </span>
-            <input
-              accept={limits.accept.join(",")}
-              aria-describedby={`${id}-limits`}
-              className="sr-only"
-              disabled={Boolean(busy)}
+            <DropTile
+              accept={limits.accept}
+              help={`${typesText(limits.accept)}, up to ${sizeText(limits.max_bytes)} each`}
+              icon={<UploadSimpleIcon />}
               multiple={limits.max_files > 1}
-              onChange={(event) => {
-                void add(event.currentTarget.files)
-                // The same file can be chosen again after it is taken out.
-                event.currentTarget.value = ""
-              }}
-              type="file"
+              onFiles={(files) => void add(files)}
+              title={
+                started ? "Add more photos" : "Drop photos here or choose them"
+              }
             />
-          </label>
+          </div>
         ) : null}
         {short ? (
           <label
-            className={cn(
-              OPTION,
-              OPTION_TILE,
-              "rounded-xl has-[:focus-visible]:border-primary has-[:focus-visible]:ring-primary",
-              "has-[:checked]:inset-ring-1 has-[:checked]:inset-ring-foreground has-[:checked]:border-foreground has-[:checked]:bg-card",
-              busy && "pointer-events-none opacity-60"
-            )}
+            className={cn(TRAY_TILE, busy && "pointer-events-none opacity-60")}
           >
             <input
               checked={create}
@@ -418,9 +379,12 @@ function TrayPhotos({
   )
 }
 
-/** The thrown sentence, or `fallback` when there is none. */
-const sentence = (error: unknown, fallback: string) =>
-  error instanceof Error && error.message ? error.message : fallback
+/**
+ * The answer the org's held photos already give, so a reload goes past a
+ * photos question they settle.
+ */
+const heldPhotosAnswer = (held?: Asset[]) =>
+  answerOf(startOf(undefined, held), false)
 
 export type { PhotosAnswer }
-export { answerOf as photosAnswerOf, TrayPhotos }
+export { answerOf as photosAnswerOf, heldPhotosAnswer, TrayPhotos }

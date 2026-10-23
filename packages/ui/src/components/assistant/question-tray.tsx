@@ -16,6 +16,10 @@ import {
 } from "@workspace/contracts"
 import { TrayLogo } from "@workspace/ui/components/assistant/tray-logo"
 import { PalettePicture } from "@workspace/ui/components/assistant/tray-palette"
+import {
+  heldPhotosAnswer,
+  TrayPhotos,
+} from "@workspace/ui/components/assistant/tray-photos"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { useFocusComposer } from "@workspace/ui/hooks/use-composer-input"
@@ -937,7 +941,10 @@ function QuestionTray({
         const logo = each.held?.[0]
         return logo ? [[each.id, { logo }]] : []
       }
-      if (each.visual === "photos") return []
+      if (each.visual === "photos") {
+        const held = heldPhotosAnswer(each.held)
+        return held ? [[each.id, held]] : []
+      }
       if (own) return [[each.id, { own }]]
       if (first && each.card.multiple)
         return [[each.id, { choices: each.card.preselected }]]
@@ -1070,7 +1077,13 @@ function QuestionTray({
           onAnswer={set}
         />
       ) : null}
-      {/* The photos page (tray-photos.tsx) renders here, like the logo's. */}
+      {question.visual === "photos" ? (
+        <TrayPhotos
+          {...page}
+          answer={answer && "photos" in answer ? answer : undefined}
+          onAnswer={set}
+        />
+      ) : null}
       {!ownPage && question.card.options.length > 0 ? (
         // biome-ignore lint/a11y/useAriaPropsSupportedByRole: group and radiogroup both take a label; the rule cannot read a role chosen at runtime
         <div

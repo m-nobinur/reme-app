@@ -8,6 +8,7 @@ import {
 } from "@workspace/contracts"
 import { TrayFrame } from "@workspace/ui/components/assistant/question-tray"
 import {
+  heldPhotosAnswer,
   type PhotosAnswer,
   TrayPhotos,
 } from "@workspace/ui/components/assistant/tray-photos"
@@ -141,7 +142,8 @@ function PhotosState({
   choose?: number
   width?: string
 }) {
-  const [now, setNow] = useState(answer)
+  // As the tray opens it: held photos that leave nothing missing are the answer.
+  const [now, setNow] = useState(answer ?? heldPhotosAnswer(held))
   const root = useRef<HTMLDivElement>(null)
   const chosen = useRef(false)
   useEffect(() => {
