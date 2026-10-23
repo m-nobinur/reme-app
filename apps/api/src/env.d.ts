@@ -47,3 +47,9 @@ interface Env {
    */
   SITE_PORT?: string
 }
+
+/** A `.webp` is a Data module (wrangler `rules`): its bytes. */
+declare module "*.webp" {
+  const bytes: ArrayBuffer
+  export default bytes
+}

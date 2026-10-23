@@ -33,10 +33,12 @@ import {
   nextRoundAt,
   readLogos,
   roundView,
+  supportOf,
   symbolsOf,
   useDaily,
   waitBefore,
 } from "../src/logo.ts"
+import { logoReference } from "../src/logo-references.ts"
 import {
   changesPrompt,
   colourName,
@@ -49,6 +51,7 @@ import { owner, stubOrchestrator } from "./owner-fixture.ts"
 import { stubJwksFetch } from "./sealed-session.ts"
 
 const palette = PALETTES[0] as (typeof PALETTES)[number]
+const { primary: light, ink: dark } = palette
 const brief = {
   description: "Something with a home",
   colors: [palette.primary, palette.ink],
@@ -68,13 +71,47 @@ describe("the logo prompt", () => {
     expect(prompt).toContain('"Bright Homes"')
     expect(prompt).toContain("B-R-I-G-H-T H-O-M-E-S")
     expect(prompt).toContain(
-      `${colourName(palette.primary)} (${palette.primary}) for the main shapes`
+      `${colourName(palette.primary)} (${palette.primary}), the brand colour, for the symbol and main shapes`
     )
-    expect(prompt).toContain(`(${palette.ink}) for the lettering`)
+    expect(prompt).toContain(`(${palette.ink}) for all lettering`)
     expect(prompt).toContain("Idea: a droplet with a roof")
     expect(prompt).toContain("Style: Minimal")
     expect(prompt).toContain("fully transparent background")
     expect(prompt).toContain("Owner's direction: Something with a home")
+  })
+
+  it("letters in the darkest colour, adds the supporting one, and says the example is for layout and look only", () => {
+    const prompt = logoPrompt({
+      subject,
+      brief: { ...brief, colors: [light] },
+      style: "luxury",
+      symbol: null,
+      support: dark,
+      reference: true,
+    })
+    expect(prompt).toContain(`(${light}), the brand colour, for the symbol`)
+    expect(prompt).toContain(`(${dark}) for all lettering`)
+    expect(prompt).toContain("No colours outside this list.")
+    expect(prompt).toContain("Take its layout from it")
+    expect(prompt).toContain("Never copy its name, its symbol or its colours")
+    // A lighter supporting colour is the accent; the brand colour letters.
+    const lighter = logoPrompt({
+      subject,
+      brief: { ...brief, colors: [dark] },
+      style: "luxury",
+      symbol: null,
+      support: light,
+    })
+    expect(lighter).toContain(`(${dark}) for all lettering, and`)
+    expect(lighter).toContain(`(${light}) for one small accent`)
+    expect(lighter).not.toContain("Reference:")
+  })
+
+  it("takes the director's supporting colour only as a hex", () => {
+    expect(supportOf({ support: ` ${light.toUpperCase()} ` })).toBe(light)
+    expect(supportOf({ support: "a warm tone" })).toBeUndefined()
+    expect(supportOf({ support: "fff" })).toBeUndefined()
+    expect(supportOf(null)).toBeUndefined()
   })
 
   it("letters only what its type letters", () => {
@@ -256,13 +293,20 @@ function images(
   fails: (model: string, prompt: string) => boolean = () => false,
   bytes: Uint8Array = PNG
 ) {
-  const asked: { model: string; prompt: string; reference: boolean }[] = []
+  const asked: {
+    model: string
+    prompt: string
+    reference: boolean
+    /** The attached picture's url, when there is one. */
+    url?: string
+  }[] = []
   vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {
     const body = JSON.parse(String(init.body))
     asked.push({
       model: body.model,
       prompt: body.prompt,
       reference: Boolean(body.input_references),
+      url: body.input_references?.[0]?.image_url?.url,
     })
     if (fails(body.model, body.prompt))
       return new Response("{}", { status: 502 })
@@ -321,7 +365,9 @@ describe("drawing a round in the queue", () => {
         model === LOGO_MODELS[0].id && prompt.includes("Idea: a bucket")
     )
     await drawRound(env, job, {
-      director: async () => ["a mop", "a bucket", "a cloth", "a spray"],
+      director: async () => ({
+        ideas: ["a mop", "a bucket", "a cloth", "a spray"],
+      }),
     })
     const done = await read()
     expect(done.status).toBe("ready")
@@ -371,7 +417,7 @@ describe("drawing a round in the queue", () => {
     const { sites, env } = await setup({ base, changes: "Make the roof red" })
     await sites.put(`generated/${ORG}/${base}.png`, PNG)
     const asked = images()
-    await drawRound(env, job, { director: async () => ["unused"] })
+    await drawRound(env, job, { director: async () => ({ ideas: ["unused"] }) })
     expect(
       asked.every((a) => a.reference && a.prompt.includes("Make the roof red"))
     ).toBe(true)
@@ -385,6 +431,42 @@ describe("drawing a round in the queue", () => {
     await drawRound(env, job, { director: null })
     const looks = asked.map((a) => a.prompt.match(/Style: ([^:]+):/)?.[1])
     expect(new Set(looks).size).toBe(LOGO_VARIANTS)
+  })
+
+  it("hands each variant of a first round the example for its own type and style", async () => {
+    const styles = variantStyles("surprise")
+    const { env } = await setup({
+      styles,
+      brief: { ...brief, type: "emblem" },
+    })
+    const asked = images()
+    await drawRound(env, job, { director: null })
+    expect(asked).toHaveLength(LOGO_VARIANTS)
+    const urls = asked.map((a) => a.url)
+    expect(new Set(urls).size).toBe(LOGO_VARIANTS)
+    for (const style of styles) {
+      const example = `data:image/webp;base64,${Buffer.from(logoReference("emblem", style)).toString("base64")}`
+      expect(urls).toContain(example)
+    }
+    expect(asked.every((a) => a.prompt.includes("Reference:"))).toBe(true)
+  })
+
+  it("gives a one-colour brief the director's supporting colour, and a many-colour one its own", async () => {
+    const one = await setup({ brief: { ...brief, colors: [light] } })
+    const askedOne = images()
+    await drawRound(one.env, job, {
+      director: async () => ({ ideas: [], support: dark }),
+    })
+    expect(
+      askedOne.every((a) => a.prompt.includes(`(${dark}) for all lettering`))
+    ).toBe(true)
+    const other = (PALETTES[1] as (typeof PALETTES)[number]).primary
+    const many = await setup()
+    const askedMany = images()
+    await drawRound(many.env, job, {
+      director: async () => ({ ideas: [], support: other }),
+    })
+    expect(askedMany.some((a) => a.prompt.includes(other))).toBe(false)
   })
 
   it("keeps only pictures with alpha: an opaque one falls to the next model, then loses its tile", async () => {

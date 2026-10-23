@@ -91,16 +91,28 @@ export function colourName(hex: string): string {
 
 const named = (hex: string) => `${colourName(hex)} (${hex})`
 
+/** How light a `#rrggbb` looks, 0 to 255, by the usual weights. */
+const lightness = (hex: string) =>
+  [1, 3, 5]
+    .map((i) => Number.parseInt(hex.slice(i, i + 2), 16))
+    .reduce((sum, c, i) => sum + c * ([0.299, 0.587, 0.114][i] as number), 0)
+
 /**
- * The brief's colours bound to parts, in the order given: the first for the
- * main shapes, the second for the lettering, the third for one small
- * accent. More than three crowd a logo, so the rest are left out. How they
- * are filled is the style's word.
+ * The colours bound to parts: the brand colour (the first) for the symbol and
+ * main shapes, the darkest for the lettering, and the one left over, if any,
+ * for a small accent. `support` is the director's second colour for an owner
+ * who gave one. More than three crowd a logo, so the rest are left out. How
+ * they are filled is the style's word.
  */
-function colourLine(colors: readonly string[]): string {
-  const [shapes, lettering = shapes, accent] = colors as [string, ...string[]]
+function colourLine(colors: readonly string[], support?: string): string {
+  const pool = (support ? [...colors, support] : [...colors]).slice(0, 3)
+  const shapes = pool[0] as string
+  const lettering = pool.reduce((best, each) =>
+    lightness(each) < lightness(best) ? each : best
+  )
+  const accent = pool.find((each) => each !== shapes && each !== lettering)
   return [
-    `Colours: use only ${named(shapes)} for the main shapes, ${named(lettering)} for the lettering`,
+    `Colours: use only ${named(shapes)}, the brand colour, for the symbol and main shapes, ${named(lettering)} for all lettering`,
     accent ? `, and ${named(accent)} for one small accent` : "",
     ". No colours outside this list.",
   ].join("")
@@ -120,6 +132,10 @@ const quoted = (text: string) => text.replaceAll('"', "'").trim()
 /** Every logo is a PNG on a transparent background: it sits on the site's paper. */
 const FORMAT_LINE =
   "Format: one centred logo with generous margin on a fully transparent background, clean alpha edges. No backdrop, scenery, mockup, checkerboard, drop shadow or watermark."
+
+/** The example picture sets structure and style, nothing of its own. */
+const REFERENCE_LINE =
+  "Reference: the attached picture is an example of the layout and the look wanted, for another business. Take its layout from it (where the parts sit and how big they are) and its look (the lettering's case, weight and spacing, the line weight, the finish). Never copy its name, its symbol or its colours: draw this business's own symbol, never the picture's, and use only the colours listed below."
 
 /** What, if anything, a logo of this type letters. */
 function letteringLine(type: LogoType, name: string): string {
@@ -143,6 +159,10 @@ export function logoPrompt(input: {
   brief: LogoBrief
   style: LogoStyle
   symbol: string | null
+  /** The director's second colour, when the owner gave one colour only. */
+  support?: string
+  /** Whether an example picture is attached for the layout and look. */
+  reference?: boolean
   /** Changes asked for without a picked variant to start from. */
   changes?: string
 }): string {
@@ -156,8 +176,9 @@ export function logoPrompt(input: {
     `Style: ${LOGO_STYLE_WORDS[style]}`,
     description ? `Owner's direction: ${description}` : "",
     input.changes ? `Changes asked: ${scrub(quoted(input.changes))}` : "",
+    input.reference ? REFERENCE_LINE : "",
     letteringLine(brief.type, name),
-    colourLine(brief.colors),
+    colourLine(brief.colors, input.support),
     FORMAT_LINE,
     "Quality bar: strong silhouette, balanced negative space; reads at favicon size and on a van door or a yard sign. Favour simplicity over detail.",
   ]
@@ -191,7 +212,9 @@ export function changesPrompt(input: {
  * ideas for the logo type, specific to the trade, so the four variants are
  * not the same generic house or sparkle.
  */
-export const DIRECTOR_GUIDE = `You direct a logo designer for a small local service business. Answer with one JSON object: {"ideas": ["...", "...", "...", "..."]}.
+export const DIRECTOR_GUIDE = `You direct a logo designer for a small local service business. Answer with one JSON object: {"ideas": ["...", "...", "...", "..."], "support": "#rrggbb"}.
+
+When data.colors holds a single colour, "support" is one supporting colour as a #rrggbb hex that suits this trade and goes well with it. Otherwise leave "support" out.
 
 Each idea is under 120 characters, and the four differ from each other. What an idea is depends on data.type. For lockup, icon and emblem it is the symbol: a simple, concrete object or shape from this trade, drawable in two or three shapes, such as "a droplet whose highlight forms a house roof". For monogram it is how the initials are built into one mark, such as "the H's crossbar is a roof line". For abstract it is a non-literal shape or arrangement of shapes that suggests what the trade gives the customer, such as "two overlapping arcs, one a wave and one a roof". Never text, never a photo, never a person's face, never a famous brand's mark. Follow the owner's direction where they gave one. Ignore data.style.
 
