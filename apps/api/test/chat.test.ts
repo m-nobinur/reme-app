@@ -2315,7 +2315,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
 
       it("states an answer as the owner leaves its question, and stays open for the rest", async () => {
         const { who, id, card, at, tray } = await atTray("chat-tray-partial")
-        const option = tray.questions[0]?.card.options[0]?.id as string
+        const option = tray.questions[1]?.card.options[0]?.id as string
         const sent = await talker(who).send({
           conversation_id: id,
           mode: "act",
@@ -2335,7 +2335,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         const waitingCall = pendingCall(await talker(who).tail(id))
         expect(waitingCall.toolCallId).toBe(card.toolCallId)
         expect(
-          AskDesignInput.parse(waitingCall.input).questions[0]?.card.preselected
+          AskDesignInput.parse(waitingCall.input).questions[1]?.card.preselected
         ).toEqual([option])
         // An answer the question never offered is refused.
         const bad = await talker(who).send({
@@ -2351,7 +2351,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
 
       it("answers a reply that is one option's label by code, and shows the tray again ticked", async () => {
         const { who, id, tray } = await atTray("chat-tray-typed")
-        const pair = tray.questions[1]?.card.options[0]
+        const pair = tray.questions[2]?.card.options[0]
         const unused = planner([plan({ say: "never sent" })])
         const typed = await talker(who, undefined, {
           planner: unused.model,
@@ -2363,7 +2363,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         const again = pendingCall(typed.after)
         expect(again.type).toBe("tool-ask_design")
         expect(
-          AskDesignInput.parse(again.input).questions[1]?.card.preselected
+          AskDesignInput.parse(again.input).questions[2]?.card.preselected
         ).toEqual([pair?.id])
       }, 60_000)
 

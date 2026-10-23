@@ -1299,18 +1299,18 @@ describe("the design tray", () => {
   it("is one step of six questions, each with its own text, after the website question", () => {
     const input = tray()
     expect(input.questions.map((q) => q.id)).toEqual([
+      "logo",
       "palette",
       "lettering",
-      "logo",
       "arrangement",
       "photos",
       "pages",
     ])
     expect(input.questions.every((q) => q.question)).toBe(true)
     expect(input.questions.map((q) => q.visual)).toEqual([
+      "logo",
       "palette",
       "font_pair",
-      "logo",
       "layout",
       "photos",
       "text",
@@ -1356,11 +1356,11 @@ describe("the design tray", () => {
 
   it("shows a held palette among the four, ticked", () => {
     const outside = PaletteId.options.find(
-      (id) => !tray().questions[0]?.card.initial?.includes(id)
+      (id) => !tray().questions[1]?.card.initial?.includes(id)
     )
     const held = tray({
       facts: [...heldBefore(), { key: "site.palette", value: { id: outside } }],
-    }).questions[0]?.card
+    }).questions[1]?.card
     expect(held?.initial).toContain(outside)
     expect(held?.preselected).toEqual([outside])
   })
@@ -1373,10 +1373,10 @@ describe("the design tray", () => {
         ?.card.options.map((o) => o.visual) ?? []
     const looks = layouts.map((v) => JSON.stringify(v))
     expect(new Set(looks).size).toBe(looks.length)
-    for (const o of input.questions[1]?.card.options ?? []) {
+    for (const o of input.questions[2]?.card.options ?? []) {
       expect(o.visual).toMatchObject({ kind: "font_pair" })
     }
-    for (const o of input.questions[0]?.card.options ?? []) {
+    for (const o of input.questions[1]?.card.options ?? []) {
       expect(o.visual).toMatchObject({ kind: "swatches" })
     }
   })
@@ -1395,8 +1395,8 @@ describe("the design tray", () => {
         { key: "site.palette", value: { id: palette as never } },
       ],
     })
-    expect(input.questions[0]?.card.preselected).toEqual([palette])
-    expect(input.questions[1]?.card.preselected).toEqual([])
+    expect(input.questions[1]?.card.preselected).toEqual([palette])
+    expect(input.questions[2]?.card.preselected).toEqual([])
   })
 
   it("opens on the owner's own words where the org wrote its own", () => {
@@ -1413,9 +1413,9 @@ describe("the design tray", () => {
       ],
     })
     expect(input.questions.map((q) => q.card.own)).toEqual([
+      undefined,
       "warm greys and brass",
       "a quiet serif",
-      undefined,
       "airy",
       undefined,
       undefined,
@@ -1434,8 +1434,8 @@ describe("the design tray", () => {
       ],
     })
     expect(rest.questions.map((q) => q.card.own)).toEqual([
-      code,
       undefined,
+      code,
       undefined,
       undefined,
       undefined,
@@ -1690,7 +1690,7 @@ describe("the design tray", () => {
       }
     ).facts
     expect(
-      tray({ facts: [...heldBefore(), ...read] }).questions[0]?.card.own
+      tray({ facts: [...heldBefore(), ...read] }).questions[1]?.card.own
     ).toBe("Clay van")
     expect(
       pick({ palette: { own: "Clay van" } }, false, [
@@ -1729,7 +1729,7 @@ describe("the design tray", () => {
     const [palette] = ids(input(), "palette")
     const named = PALETTES.find((p) => p.id === palette)?.label ?? ""
     expect(trayOption(card(), named)).toBe(palette)
-    expect(trayOption(card(), "Create one for me")).toBeNull()
+    expect(trayOption(card(), "No, create one for me")).toBeNull()
     expect(trayOption(card(), "Upload photos")).toBeNull()
   })
 
