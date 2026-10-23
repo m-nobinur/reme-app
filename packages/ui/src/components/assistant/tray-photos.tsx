@@ -83,6 +83,7 @@ function TrayPhotos({
   question,
   answer,
   onAnswer,
+  onNext,
 }: TrayPageProps<PhotosAnswer>) {
   const services = useTrayServices()
   const limits = question.upload
@@ -349,7 +350,14 @@ function TrayPhotos({
               checked={create}
               className="sr-only"
               disabled={Boolean(busy)}
-              onChange={() => settle(photos, !create)}
+              onChange={() => {
+                // Choosing it is the way past, so the tray moves on as Next would.
+                const chosen = !create && onNext ? answerOf(photos, true) : null
+                if (chosen) {
+                  setCreate(true)
+                  onNext?.(chosen)
+                } else settle(photos, !create)
+              }}
               type="checkbox"
             />
             <span className="flex items-center gap-1.5 font-medium text-sm">

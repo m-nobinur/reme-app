@@ -980,22 +980,22 @@ function QuestionTray({
   const other = question.card.other
 
   /** Hands the current answer on, and returns the answers with it. */
-  const settle = (skipping: boolean) => {
-    const given = answer ?? (skipping && skippable ? { skipped: true } : null)
+  const settle = (skipping: boolean, chosen = answer) => {
+    const given = chosen ?? (skipping && skippable ? { skipped: true } : null)
     if (!given) return answers
     const now = { ...answers, [question.id]: given } as typeof answers
     onAnswer?.(question.id, given as Answer)
     setAnswers(now)
     return now
   }
-  const go = (to: number, skipping: boolean) => {
-    settle(skipping)
+  const go = (to: number, skipping: boolean, chosen = answer) => {
+    settle(skipping, chosen)
     setIndex(to)
   }
   // The logo cannot be skipped: Skip all without one opens its page, whose
   // primary button then finishes the skip.
-  const finish = (skipAll: boolean) => {
-    const now = settle(!skipAll)
+  const finish = (skipAll: boolean, chosen = answer) => {
+    const now = settle(!skipAll, chosen)
     const logo = questions.findIndex(
       (each) => each.visual === "logo" && !(each.id in now)
     )
@@ -1007,10 +1007,13 @@ function QuestionTray({
     onFinish({ answers: now, skip_all: skipAll || finishing })
     focusComposer()
   }
+  // Next, with the answer a page has only just set when it moves on itself.
+  const onward = (chosen = answer) => {
+    if (last || finishing) finish(finishing, chosen)
+    else go(index + 1, true, chosen)
+  }
   const next = () => {
-    if (!ready) return
-    if (last || finishing) finish(finishing)
-    else go(index + 1, true)
+    if (ready) onward()
   }
   const set = (given: Answer | undefined) =>
     setAnswers((now) => {
@@ -1082,6 +1085,10 @@ function QuestionTray({
           {...page}
           answer={answer && "photos" in answer ? answer : undefined}
           onAnswer={set}
+          onNext={(given) => {
+            set(given)
+            onward(given)
+          }}
         />
       ) : null}
       {!ownPage && question.card.options.length > 0 ? (
