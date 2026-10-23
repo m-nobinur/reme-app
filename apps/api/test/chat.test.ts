@@ -2699,11 +2699,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         body: JSON.stringify({ facts: UP_TO_PHOTOS }),
       })
       const id = await talker(who).onboarding()
-      const question =
-        "Do you have photos of your sparkling kitchens, or your team at work in uniform?"
-      const prep = planner([
-        { photo_question: question, services_phrase: "your regular cleans" },
-      ])
+      const prep = planner([{ services_phrase: "your regular cleans" }])
       const later: Promise<unknown>[] = []
       const t = () =>
         talker(who, undefined, {
@@ -2730,7 +2726,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         rows.find((r) => r.type === "onboarding.prepared")?.payload
       ).toMatchObject({
         conversation_id: id,
-        copy: { photo_question: question },
+        copy: { services_phrase: "your regular cleans" },
         cost_usd: expect.any(Number),
       })
       // The quote form confirmed, which starts the build: no second call.
@@ -2765,9 +2761,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         }),
       })
       const id = await talker(who).onboarding()
-      const prep = planner([
-        { photo_question: "Any photos?", services_phrase: "your cleans" },
-      ])
+      const prep = planner([{ services_phrase: "your cleans" }])
       const later: Promise<unknown>[] = []
       await talker(who, undefined, {
         planner: null,

@@ -141,8 +141,6 @@ export type Onboarding = Progress & {
 
 /** What the background call writes for later steps (`onboarding-prepare.ts`). */
 export type Prepared = {
-  /** The photo question for this business, such as the fleet for a chauffeur firm. */
-  photo_question: string
   /** The business's services as a short phrase, such as "your wedding cars". */
   services_phrase: string
   /** Up to three names that suit this business's assistant, offered on its card. */

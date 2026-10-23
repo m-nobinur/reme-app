@@ -1842,7 +1842,6 @@ describe("the assistant card's name ideas", () => {
   it("carries the names written for the business once they are ready", () => {
     expect(ideas(start())).toBeUndefined()
     const prepared = {
-      photo_question: "Do you have photos?",
       services_phrase: "your cleans",
       assistant_names: ["Poppy", "Theo"],
     }
