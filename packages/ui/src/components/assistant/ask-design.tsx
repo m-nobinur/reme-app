@@ -82,6 +82,7 @@ const AskDesign: ToolCallMessagePartComponent = (props) => {
             props.addResult(output)
           })
         }}
+        toolCallId={props.toolCallId}
         start={
           sent.current
             ? {

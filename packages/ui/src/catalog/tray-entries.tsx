@@ -160,6 +160,7 @@ const trayCatalog: CatalogEntry[] = (
               onAnswer={noop}
               onFinish={noop}
               start={start}
+              toolCallId="catalog"
             />
             <div className="rounded-4xl border border-border bg-card px-5 py-4 text-muted-foreground text-sm">
               Tell Sam what to do instead…

@@ -12,6 +12,7 @@ import {
   FONT_PAIRS,
   PALETTES,
 } from "@workspace/contracts"
+import { TrayLogo } from "@workspace/ui/components/assistant/tray-logo"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { useFocusComposer } from "@workspace/ui/hooks/use-composer-input"
@@ -404,7 +405,8 @@ function LayoutSketch({
 }
 
 /**
- * The colours the sketches are drawn in: the palette the owner picked, else
+ * The colours the sketches and the logo maker use: the palette the owner
+ * picked or read from a picture, else
  * the first one offered, else the first palette there is.
  */
 function siteStops(
@@ -417,6 +419,10 @@ function siteStops(
       ? (option.visual.colors as unknown as Stops)
       : undefined
   const picked = asked && answers[asked.id]
+  if (picked && "palette" in picked) {
+    const { paper, tint, primary, ink } = picked.palette.stops
+    return [paper, tint, primary, ink]
+  }
   const chosen =
     picked && "choice" in picked
       ? asked?.card.options.find((each) => each.id === picked.choice)
@@ -764,6 +770,8 @@ type Start = {
 
 type QuestionTrayProps = {
   input: AskDesignInput
+  /** The tray's call, which names its logo rounds. */
+  toolCallId: string
   /** An answer, as the owner leaves its question. Store it; a reload resumes after it. */
   onAnswer?: (id: string, answer: Answer) => void
   /** Build my site or Skip all. */
@@ -783,6 +791,7 @@ type QuestionTrayProps = {
  */
 function QuestionTray({
   input,
+  toolCallId,
   onAnswer,
   onFinish,
   start,
@@ -797,6 +806,8 @@ function QuestionTray({
     questions.flatMap((each): [string, Answer][] => {
       const [first] = each.card.preselected
       const own = each.card.own
+      const logo = each.visual === "logo" ? each.held?.[0] : undefined
+      if (logo) return [[each.id, { logo }]]
       if (own) return [[each.id, { own }]]
       if (first && each.card.multiple)
         return [[each.id, { choices: each.card.preselected }]]
@@ -809,10 +820,12 @@ function QuestionTray({
     start?.index ?? (firstOpen < 0 ? questions.length - 1 : firstOpen)
   )
   const [collapsed, setCollapsed] = useState(start?.collapsed ?? false)
+  const [finishing, setFinishing] = useState(false)
   const focusComposer = useFocusComposer()
 
   const question = questions[index]
   if (!question) return null
+  const name = businessName?.trim() || "Your business"
   const stops = siteStops(questions, answers)
   const total = questions.length
   const last = index === total - 1
@@ -834,15 +847,33 @@ function QuestionTray({
     settle(skipping)
     setIndex(to)
   }
+  // The logo cannot be skipped: Skip all without one opens its page, whose
+  // primary button then finishes the skip.
   const finish = (skipAll: boolean) => {
-    onFinish({ answers: settle(!skipAll), skip_all: skipAll })
+    const now = settle(!skipAll)
+    const logo = questions.findIndex(
+      (each) => each.visual === "logo" && !(each.id in now)
+    )
+    if (logo >= 0) {
+      setIndex(logo)
+      setFinishing(true)
+      return
+    }
+    onFinish({ answers: now, skip_all: skipAll || finishing })
     focusComposer()
   }
   const next = () => {
     if (!ready) return
-    if (last) finish(false)
+    if (last || finishing) finish(finishing)
     else go(index + 1, true)
   }
+  const set = (given: Answer | undefined) =>
+    setAnswers((now) => {
+      const { [question.id]: _, ...rest } = now
+      return given ? { ...now, [question.id]: given } : rest
+    })
+  const page = { question, toolCallId, stops, businessName: name }
+  const ownPage = question.visual === "logo" || question.visual === "photos"
 
   const own = answer && "own" in answer ? answer.own : ""
   const multiple = question.card.multiple
@@ -859,10 +890,7 @@ function QuestionTray({
       return choices.length > 0 ? { ...now, [question.id]: { choices } } : rest
     })
   const write = (words: string) =>
-    setAnswers((now) => {
-      const { [question.id]: _, ...rest } = now
-      return words.trim() ? { ...now, [question.id]: { own: words } } : rest
-    })
+    set(words.trim() ? { own: words } : undefined)
 
   return (
     <TrayFrame
@@ -874,15 +902,28 @@ function QuestionTray({
       onForward={last || !ready ? undefined : () => go(index + 1, true)}
       page={{ index, total }}
       question={question.question ?? "Choose one"}
-      skip={{ label: "Skip all", onSkip: () => finish(true) }}
+      skip={{
+        label: "Skip all",
+        onSkip: () => finish(true),
+        disabled: finishing && !ready,
+      }}
+      status={finishing && !ready ? "A logo is all that is still needed" : null}
       submit={{
-        label: last ? "Build my site" : "Next",
+        label: last || finishing ? "Build my site" : "Next",
         onSubmit: next,
         disabled: !ready,
       }}
     >
       {question.visual === "font_pair" && <PreviewFaces />}
-      {question.card.options.length > 0 ? (
+      {question.visual === "logo" ? (
+        <TrayLogo
+          {...page}
+          answer={answer && "logo" in answer ? answer : undefined}
+          onAnswer={set}
+        />
+      ) : null}
+      {/* The photos page (tray-photos.tsx) renders here, like the logo's. */}
+      {!ownPage && question.card.options.length > 0 ? (
         // biome-ignore lint/a11y/useAriaPropsSupportedByRole: group and radiogroup both take a label; the rule cannot read a role chosen at runtime
         <div
           aria-label={question.question ?? "Choose one"}
@@ -931,11 +972,7 @@ function QuestionTray({
                   type={multiple ? "checkbox" : "radio"}
                   value={option.id}
                 />
-                <Picture
-                  name={businessName?.trim() || "Your business"}
-                  option={option}
-                  stops={stops}
-                />
+                <Picture name={name} option={option} stops={stops} />
                 <span
                   className={cn(
                     "flex items-center gap-1.5 font-medium text-sm",
@@ -963,9 +1000,9 @@ function QuestionTray({
                     )
                   ) : null}
                 </span>
-                {(look?.services ?? option.hint) ? (
+                {!look && option.hint ? (
                   <span className="text-muted-foreground text-xs">
-                    {look?.services ?? option.hint}
+                    {option.hint}
                   </span>
                 ) : null}
               </label>
@@ -973,11 +1010,13 @@ function QuestionTray({
           })}
         </div>
       ) : null}
-      {other ? (
+      {other && !ownPage ? (
         <Input
           aria-label={other.label}
+          // The tiles' radius, border and focus ring; shrink-0, or the
+          // scrolling body squeezes it below its height.
           className={cn(
-            "h-12 rounded-xl border-border bg-card px-3.5 md:text-sm",
+            "shrink-0 rounded-xl border-border bg-card focus-visible:ring-3",
             ACCENT_RING
           )}
           autoComplete="off"
