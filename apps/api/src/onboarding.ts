@@ -1588,6 +1588,15 @@ function typedContact(words: string): Answer {
  * first whenever it can; this is the script's reading without a model.
  */
 export function typedAnswer(part: ToolPart, words: string): Answer {
+  // An open question takes the words as its fact; the quote question gets
+  // the script's short list to confirm.
+  if (part.type === "tool-ask_open") {
+    const { about } = part.input as AskOpenInput
+    if (about === "quote.form") return { kind: "retry", reason: "quote" }
+    if (SKIPPABLE.includes(about) && saysSkip(words))
+      return { kind: "passed", step: about as StepId }
+    return typedFact(about, words)
+  }
   const step = stepOf(part)
   // Without a model nothing can read a proposal's changes from words.
   if (step === "quote_form") return { kind: "retry", reason: "quote" }
@@ -1622,6 +1631,9 @@ export function again(
   o: Onboarding,
   newId: () => string
 ): Part[] {
+  // The quote question asked in words becomes the script's short list.
+  if (reason === "quote" && part.type === "tool-ask_open")
+    return defaultQuoteForm(o, newId)
   const why =
     reason === "quote" ? quoteForm(voiceOf(o)) : retry(reason, voiceOf(o))
   // The tray comes back as the org's answers leave it, not as it was first made.

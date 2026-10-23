@@ -15,8 +15,10 @@ import DIRECTIONS from "@workspace/starter-site/directions.json"
 import { describe, expect, it } from "vitest"
 import type { ToolPart } from "../src/chat.ts"
 import {
+  again,
   applied,
   built,
+  call,
   cardAnswer,
   choiceCard,
   chosen,
@@ -787,6 +789,29 @@ describe("a typed reply", () => {
     typedAnswer(factCard(start(), key, counter()), words)
   const choice = (step: Parameters<typeof choiceCard>[0], words: string) =>
     typedAnswer(choiceCard(step, start(), counter()), words)
+
+  it("reads an open question's words as its fact, and the quote question as the short list", () => {
+    const open = (about: string) =>
+      call("tool-ask_open", { about }, counter()) as ToolPart
+    // "All" over who the customers are, as an owner typed it: a fact, not
+    // "I didn't quite catch that".
+    expect(typedAnswer(open("business.audience"), "All")).toEqual({
+      kind: "facts",
+      facts: [{ key: "business.audience", value: { text: "All" } }],
+    })
+    expect(typedAnswer(open("business.proof"), "skip")).toEqual({
+      kind: "passed",
+      step: "business.proof",
+    })
+    const quote = open("quote.form")
+    expect(typedAnswer(quote, "The address")).toEqual({
+      kind: "retry",
+      reason: "quote",
+    })
+    expect(
+      again(quote, "quote", start(), counter()).map((p) => p.type)
+    ).toEqual(["text", "tool-review_quote_form"])
+  })
 
   it("takes the words as a text ask's value, a phone number as E.164", () => {
     expect(form("business.phone", "+44 (1632) 960-001")).toEqual({
