@@ -38,6 +38,9 @@
      value is out of gamut too but there is no in-gamut red bright enough to
      replace it, so dark fixes its hover through the alpha instead. */
   --destructive: oklch(0.5 0.195 27.325);
+  /* The tab icon's dot: work running, and something waiting on the owner. */
+  --presence-working: oklch(0.66 0.16 152);
+  --presence-waiting: oklch(0.8 0.15 78);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   /* The focus ring is the indicator, so WCAG 2.2 AA wants 3:1 against what it
