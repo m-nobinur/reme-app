@@ -4,6 +4,7 @@ import {
   CaretRightIcon,
   CaretUpIcon,
   CheckSquareIcon,
+  ShuffleIcon,
   SquareIcon,
 } from "@phosphor-icons/react"
 import {
@@ -11,7 +12,10 @@ import {
   type AskDesignOutput,
   FONT_PAIRS,
   PALETTES,
+  type PaletteStops,
 } from "@workspace/contracts"
+import { TrayLogo } from "@workspace/ui/components/assistant/tray-logo"
+import { PalettePicture } from "@workspace/ui/components/assistant/tray-palette"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { useFocusComposer } from "@workspace/ui/hooks/use-composer-input"
@@ -123,6 +127,89 @@ function TrayNote({ name, error }: { name: string; error?: string | null }) {
  * can take focus in the tray carries it.
  */
 const ACCENT_RING = "focus-visible:border-primary focus-visible:ring-primary"
+
+/**
+ * An option tile in the tray, a label over a native radio or checkbox.
+ * Picked is a 2px line in the text colour: a border and an inset ring of
+ * one pixel each.
+ */
+const TRAY_TILE = cn(
+  OPTION,
+  OPTION_TILE,
+  "rounded-xl has-[:focus-visible]:border-primary has-[:focus-visible]:ring-primary",
+  "has-[:checked]:inset-ring-1 has-[:checked]:inset-ring-foreground has-[:checked]:border-foreground has-[:checked]:bg-card"
+)
+
+/** A field in the tray: the option tiles' radius, border and focus ring. */
+const TRAY_FIELD = cn(
+  "rounded-xl border-border bg-card focus-visible:ring-3",
+  ACCENT_RING
+)
+
+/** A dashed tile that takes dropped files or opens the file chooser. */
+function DropTile({
+  title,
+  help,
+  accept,
+  multiple = false,
+  onFiles,
+  icon,
+}: {
+  title: string
+  help: string
+  accept: readonly string[]
+  multiple?: boolean
+  onFiles: (files: File[]) => void
+  icon: ReactNode
+}) {
+  const id = useId()
+  const [over, setOver] = useState(false)
+  return (
+    <label
+      className={cn(
+        "flex cursor-pointer items-center gap-3 rounded-xl border border-border border-dashed bg-card px-4 py-3 transition-colors duration-150",
+        "hover:border-primary/50 has-[:focus-visible]:border-primary has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-primary",
+        over && "border-primary bg-primary/5"
+      )}
+      onDragLeave={() => setOver(false)}
+      onDragOver={(event) => {
+        event.preventDefault()
+        setOver(true)
+      }}
+      onDrop={(event) => {
+        event.preventDefault()
+        setOver(false)
+        onFiles(Array.from(event.dataTransfer.files))
+      }}
+    >
+      <span aria-hidden className="text-primary [&_svg]:size-6">
+        {icon}
+      </span>
+      <span className="flex min-w-0 flex-col gap-0.5">
+        <span className="font-medium text-sm">{title}</span>
+        <span className="text-muted-foreground text-xs" id={`${id}-help`}>
+          {help}
+        </span>
+      </span>
+      <input
+        accept={accept.join(",")}
+        aria-describedby={`${id}-help`}
+        className="sr-only"
+        multiple={multiple}
+        onChange={(event) => {
+          onFiles(Array.from(event.currentTarget.files ?? []))
+          // The same file can be chosen again.
+          event.currentTarget.value = ""
+        }}
+        type="file"
+      />
+    </label>
+  )
+}
+
+/** An error's sentence for the owner, or the fallback when it has none. */
+const sentence = (error: unknown, fallback: string) =>
+  error instanceof Error && error.message ? error.message : fallback
 
 type Question = AskDesignInput["questions"][number]
 type Option = Question["card"]["options"][number]
@@ -403,28 +490,87 @@ function LayoutSketch({
   )
 }
 
+/** A palette as the tray offers it: its name and its four stops. */
+type Offered = { label: string; stops: Stops }
+
+/** A picture's palette as four stops. */
+const pictureStops = ({ paper, tint, primary, ink }: PaletteStops): Stops => [
+  paper,
+  tint,
+  primary,
+  ink,
+]
+
 /**
- * The colours the sketches are drawn in: the palette the owner picked, else
- * the first one offered, else the first palette there is.
+ * The options a page shows: the card's `initial` ones when it has them, with
+ * a pick from the rest (Surprise me) first in place of the last.
  */
-function siteStops(
+function shownOptions(question: Question, answer: Answer | undefined) {
+  const { options, initial } = question.card
+  if (!initial) return options
+  const shown = options.filter((each) => initial.includes(each.id))
+  const picked =
+    answer && "choice" in answer && !initial.includes(answer.choice)
+      ? options.find((each) => each.id === answer.choice)
+      : undefined
+  return picked ? [picked, ...shown.slice(0, -1)] : shown
+}
+
+/**
+ * The palettes the tray offers, the site's own first: the one the owner
+ * picked or read from a picture, else the first offered, else the first
+ * palette there is. The sketches are drawn in the first; the logo maker
+ * offers them all.
+ */
+function offeredPalettes(
   questions: Question[],
   answers: Record<string, Answer>
-): Stops {
+): [Offered, ...Offered[]] {
   const asked = questions.find((each) => each.visual === "palette")
-  const swatches = (option?: Option) =>
-    option?.visual?.kind === "swatches" && option.visual.colors.length === 4
-      ? (option.visual.colors as unknown as Stops)
-      : undefined
   const picked = asked && answers[asked.id]
-  const chosen =
-    picked && "choice" in picked
-      ? asked?.card.options.find((each) => each.id === picked.choice)
-      : undefined
+  const offered = (asked ? shownOptions(asked, picked) : []).flatMap(
+    ({ id, label, visual }) =>
+      visual?.kind === "swatches" && visual.colors.length === 4
+        ? [{ id, label, stops: visual.colors as unknown as Stops }]
+        : []
+  )
+  const site =
+    picked && "palette" in picked
+      ? {
+          label: picked.palette.name,
+          stops: pictureStops(picked.palette.stops),
+        }
+      : (offered.find(
+          (each) => picked && "choice" in picked && each.id === picked.choice
+        ) ?? offered[0])
+  const first = PALETTES[0]
+  return site
+    ? [site, ...offered.filter((each) => each.label !== site.label)]
+    : [
+        {
+          label: first?.label ?? "",
+          stops: first?.swatches as unknown as Stops,
+        },
+      ]
+}
+
+/** A palette's colours as a strip, left to right. */
+function Swatches({ colors }: { colors: readonly string[] }) {
   return (
-    swatches(chosen) ??
-    swatches(asked?.card.options[0]) ??
-    (PALETTES[0]?.swatches as unknown as Stops)
+    // The strip renders the palette's own colours, data from the call.
+    <span
+      aria-hidden
+      className="flex h-9 w-full overflow-hidden rounded-xl ring-1 ring-foreground/15"
+    >
+      {colors.map((color, at) => (
+        <span
+          className="h-full flex-1"
+          // biome-ignore lint/suspicious/noArrayIndexKey: two stops may share a colour
+          key={at}
+          style={{ backgroundColor: color }}
+        />
+      ))}
+    </span>
   )
 }
 
@@ -439,23 +585,7 @@ function Picture({
   name: string
 }) {
   const { visual } = option
-  if (visual?.kind === "swatches") {
-    return (
-      // The strip renders the palette's own colours, data from the call.
-      <span
-        aria-hidden
-        className="flex h-9 w-full overflow-hidden rounded-xl ring-1 ring-foreground/15"
-      >
-        {visual.colors.map((color) => (
-          <span
-            className="h-full flex-1"
-            key={color}
-            style={{ backgroundColor: color }}
-          />
-        ))}
-      </span>
-    )
-  }
+  if (visual?.kind === "swatches") return <Swatches colors={visual.colors} />
   if (visual?.kind === "font_pair") {
     const { display, body } = visual
     return (
@@ -760,10 +890,14 @@ type Start = {
   index?: number
   collapsed?: boolean
   answers?: Record<string, Answer>
+  /** A picture's colours being read on the palette page. */
+  reading?: boolean
 }
 
 type QuestionTrayProps = {
   input: AskDesignInput
+  /** The tray's call, which names its logo rounds. */
+  toolCallId: string
   /** An answer, as the owner leaves its question. Store it; a reload resumes after it. */
   onAnswer?: (id: string, answer: Answer) => void
   /** Build my site or Skip all. */
@@ -783,6 +917,7 @@ type QuestionTrayProps = {
  */
 function QuestionTray({
   input,
+  toolCallId,
   onAnswer,
   onFinish,
   start,
@@ -797,6 +932,12 @@ function QuestionTray({
     questions.flatMap((each): [string, Answer][] => {
       const [first] = each.card.preselected
       const own = each.card.own
+      // A logo or photos page's ticked option only opens that path.
+      if (each.visual === "logo") {
+        const logo = each.held?.[0]
+        return logo ? [[each.id, { logo }]] : []
+      }
+      if (each.visual === "photos") return []
       if (own) return [[each.id, { own }]]
       if (first && each.card.multiple)
         return [[each.id, { choices: each.card.preselected }]]
@@ -809,11 +950,21 @@ function QuestionTray({
     start?.index ?? (firstOpen < 0 ? questions.length - 1 : firstOpen)
   )
   const [collapsed, setCollapsed] = useState(start?.collapsed ?? false)
+  const [finishing, setFinishing] = useState(false)
+  // A palette read from a picture stays offered when another is picked.
+  const [picture, setPicture] = useState(
+    () =>
+      Object.values(answers).flatMap((each) =>
+        "palette" in each ? [each.palette] : []
+      )[0] ?? null
+  )
   const focusComposer = useFocusComposer()
 
   const question = questions[index]
   if (!question) return null
-  const stops = siteStops(questions, answers)
+  const name = businessName?.trim() || "Your business"
+  const palettes = offeredPalettes(questions, answers)
+  const { stops } = palettes[0]
   const total = questions.length
   const last = index === total - 1
   const answer = answers[question.id]
@@ -834,15 +985,42 @@ function QuestionTray({
     settle(skipping)
     setIndex(to)
   }
+  // The logo cannot be skipped: Skip all without one opens its page, whose
+  // primary button then finishes the skip.
   const finish = (skipAll: boolean) => {
-    onFinish({ answers: settle(!skipAll), skip_all: skipAll })
+    const now = settle(!skipAll)
+    const logo = questions.findIndex(
+      (each) => each.visual === "logo" && !(each.id in now)
+    )
+    if (logo >= 0) {
+      setIndex(logo)
+      setFinishing(true)
+      return
+    }
+    onFinish({ answers: now, skip_all: skipAll || finishing })
     focusComposer()
   }
   const next = () => {
     if (!ready) return
-    if (last) finish(false)
+    if (last || finishing) finish(finishing)
     else go(index + 1, true)
   }
+  const set = (given: Answer | undefined) =>
+    setAnswers((now) => {
+      const { [question.id]: _, ...rest } = now
+      return given ? { ...now, [question.id]: given } : rest
+    })
+  const page = { question, toolCallId, stops, businessName: name }
+  const shown = shownOptions(question, answer)
+  // Any palette but the one picked, from every one offered, not only those shown.
+  const surprise = () => {
+    const rest = question.card.options.filter(
+      (each) => !(answer && "choice" in answer && answer.choice === each.id)
+    )
+    const lucky = rest[Math.floor(Math.random() * rest.length)]
+    if (lucky) pick(lucky.id)
+  }
+  const ownPage = question.visual === "logo" || question.visual === "photos"
 
   const own = answer && "own" in answer ? answer.own : ""
   const multiple = question.card.multiple
@@ -859,10 +1037,7 @@ function QuestionTray({
       return choices.length > 0 ? { ...now, [question.id]: { choices } } : rest
     })
   const write = (words: string) =>
-    setAnswers((now) => {
-      const { [question.id]: _, ...rest } = now
-      return words.trim() ? { ...now, [question.id]: { own: words } } : rest
-    })
+    set(words.trim() ? { own: words } : undefined)
 
   return (
     <TrayFrame
@@ -874,15 +1049,29 @@ function QuestionTray({
       onForward={last || !ready ? undefined : () => go(index + 1, true)}
       page={{ index, total }}
       question={question.question ?? "Choose one"}
-      skip={{ label: "Skip all", onSkip: () => finish(true) }}
+      skip={{
+        label: "Skip all",
+        onSkip: () => finish(true),
+        disabled: finishing && !ready,
+      }}
+      status={finishing && !ready ? "A logo is all that is still needed" : null}
       submit={{
-        label: last ? "Build my site" : "Next",
+        label: last || finishing ? "Build my site" : "Next",
         onSubmit: next,
         disabled: !ready,
       }}
     >
       {question.visual === "font_pair" && <PreviewFaces />}
-      {question.card.options.length > 0 ? (
+      {question.visual === "logo" ? (
+        <TrayLogo
+          {...page}
+          palettes={palettes}
+          answer={answer && "logo" in answer ? answer : undefined}
+          onAnswer={set}
+        />
+      ) : null}
+      {/* The photos page (tray-photos.tsx) renders here, like the logo's. */}
+      {!ownPage && question.card.options.length > 0 ? (
         // biome-ignore lint/a11y/useAriaPropsSupportedByRole: group and radiogroup both take a label; the rule cannot read a role chosen at runtime
         <div
           aria-label={question.question ?? "Choose one"}
@@ -893,15 +1082,14 @@ function QuestionTray({
             // all of them show at once on a phone.
             question.visual === "font_pair"
               ? "@md:grid-cols-2"
-              : question.visual === "layout" &&
-                  question.card.options.length === 3
+              : question.visual === "layout" && shown.length === 3
                 ? "grid-cols-3 gap-2"
                 : "min-[380px]:grid-cols-2"
           )}
           key={question.id}
           role={multiple ? "group" : "radiogroup"}
         >
-          {question.card.options.map((option) => {
+          {shown.map((option) => {
             const checked = multiple
               ? ticks.includes(option.id)
               : answer !== undefined &&
@@ -909,18 +1097,7 @@ function QuestionTray({
                 answer.choice === option.id
             const look = layoutLook(option)
             return (
-              <label
-                className={cn(
-                  OPTION,
-                  OPTION_TILE,
-                  look && "p-2",
-                  "rounded-xl has-[:focus-visible]:border-primary has-[:focus-visible]:ring-primary",
-                  // Picked is a 2px line in the text colour: a border and an
-                  // inset ring of one pixel each.
-                  "has-[:checked]:inset-ring-1 has-[:checked]:inset-ring-foreground has-[:checked]:border-foreground has-[:checked]:bg-card"
-                )}
-                key={option.id}
-              >
+              <label className={cn(TRAY_TILE, look && "p-2")} key={option.id}>
                 <input
                   checked={checked}
                   className="sr-only"
@@ -931,11 +1108,7 @@ function QuestionTray({
                   type={multiple ? "checkbox" : "radio"}
                   value={option.id}
                 />
-                <Picture
-                  name={businessName?.trim() || "Your business"}
-                  option={option}
-                  stops={stops}
-                />
+                <Picture name={name} option={option} stops={stops} />
                 <span
                   className={cn(
                     "flex items-center gap-1.5 font-medium text-sm",
@@ -963,9 +1136,9 @@ function QuestionTray({
                     )
                   ) : null}
                 </span>
-                {(look?.services ?? option.hint) ? (
+                {!look && option.hint ? (
                   <span className="text-muted-foreground text-xs">
-                    {look?.services ?? option.hint}
+                    {option.hint}
                   </span>
                 ) : null}
               </label>
@@ -973,13 +1146,33 @@ function QuestionTray({
           })}
         </div>
       ) : null}
-      {other ? (
+      {question.visual === "palette" ? (
+        <>
+          <Button
+            className={cn("self-start", ACCENT_RING)}
+            onClick={surprise}
+            size="sm"
+            type="button"
+            variant="ghost"
+          >
+            <ShuffleIcon aria-hidden />
+            Surprise me
+          </Button>
+          <PalettePicture
+            checked={answer !== undefined && "palette" in answer}
+            group={`${id}-${question.id}`}
+            onPick={(palette) => set({ palette })}
+            read={picture}
+            reading={start?.reading}
+            setRead={setPicture}
+          />
+        </>
+      ) : null}
+      {other && !ownPage ? (
         <Input
           aria-label={other.label}
-          className={cn(
-            "h-12 rounded-xl border-border bg-card px-3.5 md:text-sm",
-            ACCENT_RING
-          )}
+          // shrink-0, or the scrolling body squeezes it below its height.
+          className={cn("shrink-0", TRAY_FIELD)}
           autoComplete="off"
           maxLength={200}
           onChange={(event) => write(event.currentTarget.value)}
@@ -991,5 +1184,17 @@ function QuestionTray({
   )
 }
 
-export type { Start as QuestionTrayStart }
-export { ACCENT_RING, Docked, QuestionTray, TrayFrame, TrayNote, useTabDraft }
+export type { Offered as OfferedPalette, Start as QuestionTrayStart, Stops }
+export {
+  ACCENT_RING,
+  Docked,
+  DropTile,
+  QuestionTray,
+  Swatches,
+  sentence,
+  TRAY_FIELD,
+  TRAY_TILE,
+  TrayFrame,
+  TrayNote,
+  useTabDraft,
+}
