@@ -759,9 +759,12 @@ export function segmentLine(
     case "onboarding":
       return null
     case "website":
-      return elapsed
-        ? `${elapsed} so far, usually 5 to 10 minutes`
-        : "Usually 5 to 10 minutes"
+      return (
+        cleanArg(segment.step, "text", 60) ??
+        (elapsed
+          ? `${elapsed} so far, usually 5 to 10 minutes`
+          : "Usually 5 to 10 minutes")
+      )
     case "change": {
       const step = cleanArg(segment.step, "text", 60)
       return step ?? (elapsed ? `${elapsed} so far` : null)
