@@ -629,8 +629,10 @@ export function designCard(o: Onboarding, newId: () => string): ToolPart {
     ...new Set(directions.flatMap((d) => d.palettes)),
   ] as PaletteId[]
   const palette = factValue(o.facts, "site.palette")
-  // The four shown first, the same for every business: calm ones the owner chose.
-  const shown = CALM_PALETTES.slice(0, SHOWN)
+  // The calm palettes in an order seeded by org, so businesses see different
+  // ones first and a reload sees the same.
+  const calm = seeded(o.orgId, "palette", CALM_PALETTES, (id) => id)
+  const shown = calm.slice(0, SHOWN)
   // A held palette the four leave out takes the last place, so it shows ticked.
   const heldPalette = PaletteId.safeParse(palette?.id)
   if (heldPalette.success && !shown.includes(heldPalette.data)) {
@@ -638,7 +640,7 @@ export function designCard(o: Onboarding, newId: () => string): ToolPart {
   }
   // Every palette: the four shown, the other calm ones, then those that suit the business.
   const palettes = [
-    ...new Set([...shown, ...CALM_PALETTES, ...suited, ...PaletteId.options]),
+    ...new Set([...shown, ...calm, ...suited, ...PaletteId.options]),
   ]
   const pairs = firstOf(
     o,

@@ -2,6 +2,7 @@ import {
   AskChoiceInput,
   AskDesignInput,
   AskDetailsInput,
+  CALM_PALETTES,
   type FactValue,
   FONT_PAIRS,
   INDUSTRIES,
@@ -1343,21 +1344,27 @@ describe("the design tray", () => {
       for (const id of ids(input, "lettering")) {
         expect(fit.map((d) => d.fonts)).toContain(id)
       }
-      // Every palette is offered; the same calm six lead for every business, four shown.
+      // Every palette is offered; calm ones lead, four shown.
       const palette = input.questions.find((q) => q.id === "palette")?.card
-      expect(palette?.initial).toEqual([
-        "mint",
-        "mist_teal",
-        "garden",
-        "stone_sage",
-      ])
+      expect(palette?.initial).toHaveLength(4)
       expect(ids(input, "palette")).toHaveLength(PALETTES.length)
       expect(ids(input, "palette").slice(0, 6)).toEqual([
         ...(palette?.initial ?? []),
-        "slate_mist",
-        "harbor_blue",
+        ...ids(input, "palette").slice(4, 6),
       ])
+      for (const id of ids(input, "palette").slice(0, CALM_PALETTES.length)) {
+        expect(CALM_PALETTES).toContain(id)
+      }
     }
+  })
+
+  it("orders the calm palettes by org, the same after a reload", () => {
+    const first = (orgId: string) =>
+      tray({ orgId }).questions.find((q) => q.id === "palette")?.card.initial
+    expect(first(ORG)).toEqual(first(ORG))
+    expect(first(ORG)).not.toEqual(
+      first("7b1c9e2a-0d3f-4a6b-8c5e-1f2a3b4c5d6e")
+    )
   })
 
   it("shows a held palette among the four, ticked", () => {
