@@ -491,6 +491,18 @@
   }
 }
 
+/* An open question in the tray takes the focus: the conversation behind it
+   steps back until it is answered or folded away. */
+[data-slot="aui_message-group"] {
+  transition: opacity 300ms ease;
+}
+[data-slot="aui_thread-viewport"]:has(
+    [data-slot="question-tray"]:not([data-collapsed])
+  )
+  [data-slot="aui_message-group"] {
+  opacity: 0.4;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
