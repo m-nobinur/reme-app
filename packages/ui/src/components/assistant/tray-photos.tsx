@@ -194,6 +194,46 @@ function TrayPhotos({
     else if (create) settle(photos, false)
   }
 
+  // What the site needs, ticking off as photos are read: inside the drop box.
+  const guide = (
+    <ul
+      aria-label="What your site needs"
+      className="mt-3 flex w-fit flex-col gap-1.5 self-center text-left"
+    >
+      {missing.map(({ need, more }) => {
+        const done = started && more === 0 && !busy
+        return (
+          <li className="flex items-center gap-2 text-sm" key={need.id}>
+            {done ? (
+              <CheckCircleIcon
+                aria-hidden
+                className="size-4.5 shrink-0 text-primary"
+                weight="fill"
+              />
+            ) : need.optional ? (
+              <CircleDashedIcon
+                aria-hidden
+                className="size-4.5 shrink-0 text-muted-foreground"
+              />
+            ) : (
+              <CircleIcon
+                aria-hidden
+                className="size-4.5 shrink-0 text-muted-foreground"
+              />
+            )}
+            <span className="min-w-0 flex-1">{NEED_WORDS[need.id]}</span>
+            {done ? <span className="sr-only">Done</span> : null}
+            {started && !done && !busy && !need.optional ? (
+              <span className="shrink-0 text-muted-foreground text-xs tabular-nums">
+                {more} more
+              </span>
+            ) : null}
+          </li>
+        )
+      })}
+    </ul>
+  )
+
   const [uploadOption, createOption] = question.card.options
   const choiceOpen = path !== "upload" || reopened
   const createRest = short && usable.length > 0
@@ -231,52 +271,31 @@ function TrayPhotos({
 
       <Fold open={path === "upload"}>
         <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-2.5 rounded-xl border border-border bg-card px-3.5 py-3">
-            <ul
-              aria-label="What your site needs"
-              className="flex flex-col gap-2"
+          {limits && photos.length + unread.length < limits.max_files ? (
+            <div
+              className={cn("grid", busy && "pointer-events-none opacity-60")}
             >
-              {missing.map(({ need, more }) => {
-                const done = started && more === 0 && !busy
-                return (
-                  <li
-                    className="flex items-center gap-2.5 text-sm"
-                    key={need.id}
-                  >
-                    {done ? (
-                      <CheckCircleIcon
-                        aria-hidden
-                        className="size-5 shrink-0 text-primary"
-                        weight="fill"
-                      />
-                    ) : need.optional ? (
-                      <CircleDashedIcon
-                        aria-hidden
-                        className="size-5 shrink-0 text-muted-foreground"
-                      />
-                    ) : (
-                      <CircleIcon
-                        aria-hidden
-                        className="size-5 shrink-0 text-muted-foreground"
-                      />
-                    )}
-                    <span className="min-w-0 flex-1">
-                      {NEED_WORDS[need.id]}
-                    </span>
-                    {done ? <span className="sr-only">Done</span> : null}
-                    {started && !done && !busy && !need.optional ? (
-                      <span className="shrink-0 text-muted-foreground text-xs tabular-nums">
-                        {more} more
-                      </span>
-                    ) : null}
-                  </li>
-                )
-              })}
-            </ul>
-            <p className="border-border border-t pt-2.5 text-muted-foreground text-xs">
-              Sharp, well-lit photos you took yourself work best.
-            </p>
-          </div>
+              <DropTile
+                accept={limits.accept}
+                className="min-h-40 flex-col justify-center text-center [&>span]:items-center"
+                help={`${typesText(limits.accept)}, up to ${sizeText(limits.max_bytes)} each. Sharp, well-lit shots work best.`}
+                icon={<UploadSimpleIcon />}
+                multiple={limits.max_files > 1}
+                onFiles={(files) => void add(files)}
+                title={
+                  started
+                    ? "Add more photos"
+                    : "Drop photos here or choose them"
+                }
+              >
+                {guide}
+              </DropTile>
+            </div>
+          ) : (
+            <div className="flex justify-center rounded-xl border border-border bg-card px-3.5 pb-3">
+              {guide}
+            </div>
+          )}
 
           {usable.length + unread.length > 0 || busy?.doing === "uploading" ? (
             <ul aria-label="Your photos" className="flex flex-wrap gap-2">
@@ -395,64 +414,40 @@ function TrayPhotos({
             </div>
           ) : null}
 
-          <div className="grid @md:grid-cols-2 grid-cols-1 gap-3 empty:hidden">
-            {limits && photos.length + unread.length < limits.max_files ? (
-              <div
-                className={cn(
-                  "grid",
-                  busy && "pointer-events-none opacity-60",
-                  !createRest && "@md:col-span-2"
+          {createRest ? (
+            <label
+              className={cn(
+                TRAY_TILE,
+                busy && "pointer-events-none opacity-60"
+              )}
+            >
+              <input
+                checked={create}
+                className="sr-only"
+                disabled={Boolean(busy)}
+                onChange={() => (create ? settle(photos, false) : leave())}
+                type="checkbox"
+              />
+              <span className="flex items-center gap-1.5 font-medium text-sm">
+                Create the rest
+                {create ? (
+                  <CheckSquareIcon
+                    aria-hidden
+                    className="ml-auto size-5 shrink-0"
+                    weight="fill"
+                  />
+                ) : (
+                  <SquareIcon
+                    aria-hidden
+                    className="ml-auto size-5 shrink-0 text-muted-foreground"
+                  />
                 )}
-              >
-                <DropTile
-                  accept={limits.accept}
-                  help={`${typesText(limits.accept)}, up to ${sizeText(limits.max_bytes)} each`}
-                  icon={<UploadSimpleIcon />}
-                  multiple={limits.max_files > 1}
-                  onFiles={(files) => void add(files)}
-                  title={
-                    started
-                      ? "Add more photos"
-                      : "Drop photos here or choose them"
-                  }
-                />
-              </div>
-            ) : null}
-            {createRest ? (
-              <label
-                className={cn(
-                  TRAY_TILE,
-                  busy && "pointer-events-none opacity-60"
-                )}
-              >
-                <input
-                  checked={create}
-                  className="sr-only"
-                  disabled={Boolean(busy)}
-                  onChange={() => (create ? settle(photos, false) : leave())}
-                  type="checkbox"
-                />
-                <span className="flex items-center gap-1.5 font-medium text-sm">
-                  Create the rest
-                  {create ? (
-                    <CheckSquareIcon
-                      aria-hidden
-                      className="ml-auto size-5 shrink-0"
-                      weight="fill"
-                    />
-                  ) : (
-                    <SquareIcon
-                      aria-hidden
-                      className="ml-auto size-5 shrink-0 text-muted-foreground"
-                    />
-                  )}
-                </span>
-                <span className="text-muted-foreground text-xs">
-                  Only the ones still missing, used beside yours.
-                </span>
-              </label>
-            ) : null}
-          </div>
+              </span>
+              <span className="text-muted-foreground text-xs">
+                Only the ones still missing, used beside yours.
+              </span>
+            </label>
+          ) : null}
         </div>
       </Fold>
     </div>

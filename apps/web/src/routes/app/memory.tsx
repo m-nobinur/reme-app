@@ -25,7 +25,7 @@ import { useBrowserZone } from "@/panel/workspace-panel"
  */
 export const Route = createFileRoute("/app/memory")({
   loader: async () => await getMemory(),
-  component: MemoryPage,
+  component: Memory,
 })
 
 const SOURCE: Record<ProfileLine["source"], string> = {
@@ -282,13 +282,5 @@ function Memory() {
         .
       </p>
     </>
-  )
-}
-
-function MemoryPage() {
-  return (
-    <div className="max-w-2xl">
-      <Memory />
-    </div>
   )
 }

@@ -287,21 +287,33 @@ function LogoPalettes({
           </label>
         ))}
       </div>
-      {others.length > 0 ? (
-        <Button
-          className={cn("self-start", ACCENT_RING)}
-          onClick={surprise}
-          size="sm"
-          type="button"
-          variant="ghost"
-        >
-          <ShuffleIcon aria-hidden />
-          Surprise me
-        </Button>
-      ) : null}
+      {others.length > 0 ? <Surprise onClick={surprise} /> : null}
     </>
   )
 }
 
+/** Another palette in first place, at the right under the palettes. */
+function Surprise({ onClick }: { onClick: () => void }) {
+  return (
+    <Button
+      className={cn("self-end", ACCENT_RING)}
+      onClick={onClick}
+      size="sm"
+      type="button"
+      variant="ghost"
+    >
+      <ShuffleIcon aria-hidden />
+      Surprise me
+    </Button>
+  )
+}
+
 export type { LogoRead }
-export { LogoPalettes, logoPick, PalettePicture, samePalette, useLogoPalettes }
+export {
+  LogoPalettes,
+  logoPick,
+  PalettePicture,
+  Surprise,
+  samePalette,
+  useLogoPalettes,
+}

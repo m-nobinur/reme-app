@@ -32,7 +32,7 @@ import {
 } from "@/panel/workspace-panel"
 
 export const Route = createFileRoute("/app/website")({
-  component: WebsitePage,
+  component: Website,
 })
 
 const frame = getRouteApi("/app")
@@ -231,9 +231,10 @@ function Website() {
         description="What your customers see, and where to ask for a change."
         title="Website"
       />
-      <div className="flex max-w-xl flex-col gap-4">
+      {/* The screenshot beside the checklist once there is room for both. */}
+      <div className="grid items-start gap-4 lg:grid-cols-2 lg:gap-6">
         {build ? (
-          <p className="flex flex-wrap items-center gap-x-3 text-sm">
+          <p className="flex flex-wrap items-center gap-x-3 text-sm lg:col-span-2">
             <StatusLine
               announce={false}
               clockAfter={null}
@@ -256,17 +257,5 @@ function Website() {
         <Checklist rows={checklistFor(workspace, zone, new Date())} />
       </div>
     </>
-  )
-}
-
-/**
- * The page keeps to the composer's width and the left edge every page title
- * shares, so its actions stay clear of the panel floating at the top right.
- */
-function WebsitePage() {
-  return (
-    <div className="max-w-2xl">
-      <Website />
-    </div>
   )
 }

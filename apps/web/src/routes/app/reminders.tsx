@@ -18,7 +18,7 @@ import { Completable, useBrowserZone } from "@/panel/workspace-panel"
  * exactly as the panel completes it.
  */
 export const Route = createFileRoute("/app/reminders")({
-  component: RemindersPage,
+  component: Reminders,
 })
 
 const ACTION = buttonVariants({ variant: "outline", size: "sm" })
@@ -182,17 +182,5 @@ function Reminders() {
         </div>
       )}
     </>
-  )
-}
-
-/**
- * The page keeps to the composer's width and the left edge every page title
- * shares, so its actions stay clear of the panel floating at the top right.
- */
-function RemindersPage() {
-  return (
-    <div className="max-w-2xl">
-      <Reminders />
-    </div>
   )
 }

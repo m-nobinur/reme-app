@@ -930,7 +930,7 @@ function TrayLogo({
               <div
                 aria-busy={round.status === "drawing"}
                 aria-label="Logo designs"
-                className="grid grid-cols-3 gap-2"
+                className="grid max-w-md grid-cols-3 gap-2"
                 role="radiogroup"
               >
                 {Array.from({ length: LOGO_VARIANTS }, (_, place) => {

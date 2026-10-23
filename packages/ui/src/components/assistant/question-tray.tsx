@@ -4,7 +4,6 @@ import {
   CaretRightIcon,
   CaretUpIcon,
   CheckSquareIcon,
-  ShuffleIcon,
   SquareIcon,
 } from "@phosphor-icons/react"
 import {
@@ -23,6 +22,7 @@ import {
   LogoPalettes,
   logoPick,
   PalettePicture,
+  Surprise,
   samePalette,
   useLogoPalettes,
 } from "@workspace/ui/components/assistant/tray-palette"
@@ -242,6 +242,7 @@ function DropTile({
   onFiles,
   icon,
   className,
+  children,
 }: {
   title: string
   help: string
@@ -250,6 +251,8 @@ function DropTile({
   onFiles: (files: File[]) => void
   icon: ReactNode
   className?: string
+  /** A guide under the help, such as what the photos should show. */
+  children?: ReactNode
 }) {
   const id = useId()
   const [over, setOver] = useState(false)
@@ -280,6 +283,7 @@ function DropTile({
         <span className="text-muted-foreground text-xs" id={`${id}-help`}>
           {help}
         </span>
+        {children}
       </span>
       <input
         accept={accept.join(",")}
@@ -1486,18 +1490,7 @@ function QuestionTray({
       ) : null}
       {question.visual === "palette" ? (
         <>
-          {logoLed ? null : (
-            <Button
-              className={cn("self-start", ACCENT_RING)}
-              onClick={surprise}
-              size="sm"
-              type="button"
-              variant="ghost"
-            >
-              <ShuffleIcon aria-hidden />
-              Surprise me
-            </Button>
-          )}
+          {logoLed ? null : <Surprise onClick={surprise} />}
           <PalettePicture
             checked={
               answer !== undefined &&
