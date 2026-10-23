@@ -1,6 +1,8 @@
 import {
   type Asset,
   idempotencyKey,
+  SiteMedia,
+  thumbnailOf,
   UPLOAD_MAX_BYTES,
   UPLOAD_MAX_FILES,
   type UploadedAssets,
@@ -8,7 +10,7 @@ import {
 import { sql, type Tenancy } from "@workspace/db"
 import { type Owner, stateFacts } from "./changes.ts"
 import { failure, invalid, keyMissing, sha256Hex } from "./http.ts"
-import { factValue } from "./onboarding.ts"
+import { factValue, logoOf } from "./onboarding.ts"
 import { readFacts } from "./workspace.ts"
 
 /**
@@ -267,6 +269,46 @@ export async function readPhoto(
     message: "No photo with that id in this business.",
     detail: {},
   })
+}
+
+/** One placed picture, as a build's `site.photos` event lists it. */
+type PlacedSlot = {
+  id: string
+  section: string
+  alt: string
+  source: string
+  asset_id?: string
+}
+
+/**
+ * `GET /site/media`: the logo the org holds, and the pictures on its newest
+ * version as that build's newest `site.photos` event placed them: the build
+ * waiting for review (as `readApprovals` reads it), else the live one.
+ */
+export async function readSiteMedia(
+  kit: Tenancy,
+  owner: Owner
+): Promise<Response> {
+  const media = await kit.withOrg({ orgId: owner.orgId }, async (db) => {
+    const held = await readFacts(db)
+    const [placed] = (await db.execute(
+      sql`select payload->'slots' as slots from events where type = 'site.photos' and assignment_id = coalesce(
+        (select a.assignment_id from approvals a join assignments s on s.id = a.assignment_id where a.decision is null and ((s.state = 'awaiting_review' and a.expires_at > now()) or s.state = 'blocked_on_approval') order by a.requested_at desc limit 1),
+        (select r.assignment_id from deployments d join site_revisions r on r.id = d.revision_id where d.site_id = (select id from orgs limit 1) order by d.config_version desc limit 1)
+      ) order by event_id desc limit 1`
+    )) as unknown as { slots: PlacedSlot[] | null }[]
+    return SiteMedia.parse({
+      logo: logoOf(held) ?? null,
+      photos: (placed?.slots ?? []).map((slot) => ({
+        slot_id: slot.id,
+        section: slot.section,
+        alt: slot.alt.slice(0, 200),
+        generated: slot.source === "generated",
+        thumbnail: thumbnailOf(slot.asset_id),
+      })),
+    })
+  })
+  return Response.json(media, { headers: { "cache-control": "no-store" } })
 }
 
 /** A generated picture of the org's, with its extension found by trying each. */

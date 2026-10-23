@@ -5,6 +5,7 @@ import {
   ErrorEnvelope,
   FactList,
   InformationAnswer,
+  SiteMedia,
   WorkspaceStatus,
 } from "@workspace/contracts"
 import {
@@ -965,6 +966,31 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       busyIds.failure,
       busyIds.published,
       busyIds.old,
+    ])
+  })
+
+  it("lists the pictures on the version in review, and nothing before a build placed any", async () => {
+    const media = async (who: Owner) => {
+      const response = await who.call(stubOrchestrator(), "/site/media")
+      expect(response.status).toBe(200)
+      return SiteMedia.parse(await response.json())
+    }
+    expect(await media(fresh)).toEqual({ logo: null, photos: [] })
+    expect((await media(busy)).photos).toEqual([
+      {
+        slot_id: "hero_room",
+        section: "hero",
+        alt: "A sunlit room",
+        generated: true,
+        thumbnail: `/api/photos/${PHOTO_ID}`,
+      },
+      {
+        slot_id: "owner_team",
+        section: "about",
+        alt: "Our team",
+        generated: false,
+        thumbnail: null,
+      },
     ])
   })
 

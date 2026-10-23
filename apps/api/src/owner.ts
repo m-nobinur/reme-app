@@ -18,7 +18,7 @@ import {
   postChangeAsked,
   type Tenancy,
 } from "@workspace/db"
-import { readPhoto, uploadAssets } from "./assets.ts"
+import { readPhoto, readSiteMedia, uploadAssets } from "./assets.ts"
 import {
   bridge,
   holds,
@@ -56,7 +56,7 @@ const LOGO_KEEP_PATH =
 
 /** The routes `ownerRoute` answers, for `index.ts` to resolve an org before. */
 export const OWNER_PATH =
-  /^\/(workspace|facts|assets(\/review)?|photos\/[^/]+|logos(\/[^/]+\/keep)?|palettes\/from-(image|logo)|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback))?)?|reminders(\/[^/]+)?|memory(\/(undo|review))?|push\/(config|subscriptions(\/[^/]+)?)|domains\/[^/]+(\/checkout)?|google\/(connect|disconnect)|chat)$/
+  /^\/(workspace|facts|assets(\/review)?|site\/media|photos\/[^/]+|logos(\/[^/]+\/keep)?|palettes\/from-(image|logo)|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback))?)?|reminders(\/[^/]+)?|memory(\/(undo|review))?|push\/(config|subscriptions(\/[^/]+)?)|domains\/[^/]+(\/checkout)?|google\/(connect|disconnect)|chat)$/
 
 async function setFacts(request: Request, kit: Tenancy, owner: Owner) {
   if (!idempotencyKey(request)) return keyMissing()
@@ -247,6 +247,9 @@ export async function ownerRoute(
   }
   if (pathname === "/assets/review" && method === "POST") {
     return reviewPhotos(request, env, kit, owner)
+  }
+  if (pathname === "/site/media" && method === "GET") {
+    return readSiteMedia(kit, owner)
   }
   if (PHOTO_PATH.test(pathname) && method === "GET") {
     return readPhoto(env, owner, pathname.slice("/photos/".length))
