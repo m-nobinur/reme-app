@@ -738,9 +738,7 @@ export function designCard(o: Onboarding, newId: () => string): ToolPart {
               paletteOptions,
               palette?.id,
               "A colour code, or describe your colours",
-              palette?.id === "custom"
-                ? (palette.custom ?? palette.brand)
-                : undefined
+              paletteOwn(o.facts)
             ),
             ...(shown.length >= 3 ? { initial: shown } : {}),
           },
@@ -858,6 +856,19 @@ const picturePalette = ({ name, stops }: PaletteFromImage) => ({
   brand: stops.primary,
   custom: `${name}: paper ${stops.paper}, tint ${stops.tint}, primary ${stops.primary}, ink ${stops.ink}`,
 })
+const PICTURE =
+  /^(.+): paper #[0-9a-f]{6}, tint #[0-9a-f]{6}, primary #[0-9a-f]{6}, ink #[0-9a-f]{6}$/
+
+/**
+ * A held custom palette as the tray shows it in `own`: one read from a
+ * picture by its name, else the owner's words or colour. The tray sends it
+ * back unchanged when the owner keeps it.
+ */
+const paletteOwn = (held: readonly Held[]) => {
+  const palette = factValue(held, "site.palette")
+  if (palette?.id !== "custom") return undefined
+  return palette.custom?.match(PICTURE)?.[1] ?? palette.custom ?? palette.brand
+}
 
 /**
  * What the tray's answers mean: the fact each one states, as given. "Write
@@ -910,6 +921,14 @@ export function designAnswer(
         return null
       continue
     }
+    // The held palette sent back as the tray showed it: kept as held, so a
+    // picture's colours survive a reload.
+    if (
+      key === "site.palette" &&
+      "own" in answer &&
+      answer.own === paletteOwn(held)
+    )
+      continue
     if ("skipped" in answer) {
       if (!asked.card.skippable) return null
       continue

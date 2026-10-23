@@ -1683,6 +1683,21 @@ describe("the design tray", () => {
     expect(
       pick({ lettering: { palette: { name: "Clay van", stops } } })
     ).toBeNull()
+    // After a reload the tray shows it by name, and sending that back keeps it.
+    const read = (
+      pick({ palette: { palette: { name: "Clay van", stops } } }) as {
+        facts: FactValue[]
+      }
+    ).facts
+    expect(
+      tray({ facts: [...heldBefore(), ...read] }).questions[0]?.card.own
+    ).toBe("Clay van")
+    expect(
+      pick({ palette: { own: "Clay van" } }, false, [
+        UPLOADS as FactValue,
+        ...read,
+      ])
+    ).toMatchObject({ facts: [] })
   })
 
   it("takes the logo and photos the org holds, and nothing else on their pages", () => {
