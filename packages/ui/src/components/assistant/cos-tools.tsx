@@ -2,7 +2,6 @@ import {
   type ToolCallMessagePartComponent,
   useAuiState,
 } from "@assistant-ui/react"
-import { CaretDownIcon } from "@phosphor-icons/react"
 import {
   AnswerQuestionInput,
   AnswerQuestionOutput,
@@ -27,14 +26,8 @@ import {
   RemoveDomain,
 } from "@workspace/ui/components/assistant/domain"
 import { ConnectGoogle } from "@workspace/ui/components/assistant/google"
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@workspace/ui/components/collapsible"
-import { stageWord } from "@workspace/ui/components/live-panel"
 import { ToolStatus } from "@workspace/ui/components/status-line"
-import { type ToolArgs, toolLine } from "@workspace/ui/lib/activity-copy"
+import type { ToolArgs } from "@workspace/ui/lib/activity-copy"
 import { factLabel, factText } from "@workspace/ui/lib/facts"
 import { formatDateTime } from "@workspace/ui/lib/format"
 import { refusalText } from "@workspace/ui/lib/refusal"
@@ -43,13 +36,12 @@ import {
   type ReadView,
   readView,
 } from "@workspace/ui/lib/tool-state"
-import { META } from "@workspace/ui/lib/utils"
 import { browserZone, wallText, zoneLabel } from "@workspace/ui/lib/zone"
-import { createContext, type ReactNode, useContext } from "react"
+import { createContext, useContext } from "react"
 
 /**
- * The Chief of Staff's tools, in the owner's words. A read is one quiet line
- * that opens onto what it found, drawn as the panel draws its lists. A tool
+ * The Chief of Staff's tools, in the owner's words. A read is one quiet
+ * status line; the reply says what it found. A tool
  * that acts waits for the owner's yes on a card that names exactly what it
  * will do. No tool name, id or raw output reaches the screen, and the api's
  * error text, which is written for the model, never does either.
@@ -57,175 +49,63 @@ import { createContext, type ReactNode, useContext } from "react"
 
 /* Reads ----------------------------------------------------------------- */
 
-/** One read: a line while it runs, then a line that opens onto its findings. */
+/** One read: a line while it runs, then the same line, done. The reply says what it found. */
 function Read<O>({
   view,
   tool,
   args,
   slot,
-  children,
 }: {
   view: ReadView<O>
-  /** The tool, whose lines come from the copy table. */
   tool: string
   args?: ToolArgs
   slot: string
-  children: (output: O) => ReactNode
 }) {
-  // A read the stream left running is over once its message is: it says
-  // it stopped rather than shimmering on.
+  // A read the stream left running is over once its message is.
   const running = useAuiState((s) => s.message.status?.type === "running")
-  if (view.state !== "done") {
-    const working = view.state === "working" && running
-    const stopped = view.state === "working" || view.state === "cancelled"
-    return (
-      <ToolStatus
-        args={args}
-        className="flex px-1 py-1.5 text-chat-step"
-        data-slot={slot}
-        state={working ? "working" : stopped ? "stopped" : "failed"}
-        tool={tool}
-      />
-    )
-  }
+  const state =
+    view.state === "done"
+      ? "done"
+      : view.state === "working" && running
+        ? "working"
+        : view.state === "failed"
+          ? "failed"
+          : "stopped"
   return (
-    <Collapsible data-slot={slot}>
-      <CollapsibleTrigger className="group/read flex items-center gap-1.5 rounded-lg px-1 py-1.5 text-chat-step text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring">
-        {toolLine(tool, "done", args)}
-        <CaretDownIcon
-          aria-hidden
-          className="size-3.5 -rotate-90 transition-transform duration-150 group-data-panel-open/read:rotate-0 motion-reduce:transition-none"
-        />
-      </CollapsibleTrigger>
-      <CollapsibleContent className="ps-1 pb-2">
-        {children(view.output)}
-      </CollapsibleContent>
-    </Collapsible>
+    <ToolStatus
+      args={args}
+      className="flex px-1 py-1.5 text-chat-step"
+      data-slot={slot}
+      delay={state === "working" ? undefined : 0}
+      state={state}
+      tool={tool}
+    />
   )
 }
 
-/** Label and value rows, separated by hairlines like the panel's lists. */
-function Rows({ rows }: { rows: { label: string; value: ReactNode }[] }) {
-  return (
-    <dl className="flex max-w-md flex-col divide-y divide-border text-sm">
-      {rows.map(({ label, value }) => (
-        <div className="flex flex-col gap-0.5 py-2" key={label}>
-          <dt className={META}>{label}</dt>
-          <dd className="min-w-0 break-words">{value}</dd>
-        </div>
-      ))}
-    </dl>
-  )
-}
-
-/** An instant on the owner's clock, with its zone named. */
-const useOwnerTime = () => {
-  const { zone } = useCosTools()
-  return (at: string) => `${formatDateTime(at, zone) ?? at} ${zoneLabel(zone)}`
-}
-
-const WorkspaceRead: ToolCallMessagePartComponent = (props) => {
-  const time = useOwnerTime()
-  return (
-    <Read
-      slot="cos-read-workspace"
-      tool="get_workspace"
-      view={readView(props, CosWorkspace)}
-    >
-      {(workspace) => (
-        <Rows
-          rows={[
-            {
-              label: "Your website",
-              value: workspace.site.live_version ? "Live" : "Not published yet",
-            },
-            {
-              label: "Working on",
-              value: workspace.builds.length ? (
-                <ul className="flex flex-col gap-1">
-                  {workspace.builds.map((build) => (
-                    <li className="flex flex-col" key={build.assignment_id}>
-                      <span>{build.goal}</span>
-                      <span className={META}>{stageWord(build.state)}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                "Nothing"
-              ),
-            },
-            {
-              label: "Waiting on you",
-              value:
-                workspace.questions.length || workspace.approvals.length ? (
-                  <ul className="flex flex-col gap-1">
-                    {workspace.questions.map((question) => (
-                      <li key={question.request_id}>
-                        A question about{" "}
-                        {factLabel(question.field).toLowerCase()}
-                      </li>
-                    ))}
-                    {workspace.approvals.map((approval) => (
-                      <li key={approval.version}>
-                        A new version to review by {time(approval.expires_at)}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  "Nothing"
-                ),
-            },
-            ...(workspace.missing_facts.length
-              ? [
-                  {
-                    label: "Details still to give",
-                    value: workspace.missing_facts.map(factLabel).join(", "),
-                  },
-                ]
-              : []),
-          ]}
-        />
-      )}
-    </Read>
-  )
-}
-
-const FactsRead: ToolCallMessagePartComponent = (props) => (
-  <Read slot="cos-read-facts" tool="get_facts" view={readView(props, CosFacts)}>
-    {({ facts }) =>
-      facts.length ? (
-        <Rows
-          rows={facts.map((fact) => ({
-            label: factLabel(fact.key),
-            value: factText(fact.key, fact.value),
-          }))}
-        />
-      ) : (
-        <p className={META}>No details saved yet.</p>
-      )
-    }
-  </Read>
+const WorkspaceRead: ToolCallMessagePartComponent = (props) => (
+  <Read
+    slot="cos-read-workspace"
+    tool="get_workspace"
+    view={readView(props, CosWorkspace)}
+  />
 )
 
-const PreviewRead: ToolCallMessagePartComponent = (props) => {
-  const time = useOwnerTime()
-  const view = readView(props, GetPreviewOutput)
-  return (
-    <Read slot="cos-read-preview" tool="get_preview" view={view}>
-      {(output) =>
-        output.outcome === "ready" ? (
-          <p className="text-sm">
-            Open until {time(output.expires_at)}. It shows under Your website.
-          </p>
-        ) : (
-          <p className="text-sm">
-            {refusalText(output.error.code, "There is no preview to check.")}
-          </p>
-        )
-      }
-    </Read>
-  )
-}
+const FactsRead: ToolCallMessagePartComponent = (props) => (
+  <Read
+    slot="cos-read-facts"
+    tool="get_facts"
+    view={readView(props, CosFacts)}
+  />
+)
+
+const PreviewRead: ToolCallMessagePartComponent = (props) => (
+  <Read
+    slot="cos-read-preview"
+    tool="get_preview"
+    view={readView(props, GetPreviewOutput)}
+  />
+)
 
 /**
  * Where a domain stands, as one plain sentence: a domain check is quick and
@@ -256,9 +136,7 @@ const DomainRead: ToolCallMessagePartComponent = (props) => {
       slot="cos-read-domain"
       tool="check_domain"
       view={view}
-    >
-      {() => null}
-    </Read>
+    />
   )
 }
 
