@@ -389,6 +389,9 @@ export async function readBuilds(
       lane: sql<
         string | null
       >`(select e.payload->>'lane' from events e where e.assignment_id = assignments.id and e.type = 'assignment.created' limit 1)`,
+      retryOf: sql<
+        string | null
+      >`(select e.payload->>'retry_of' from events e where e.assignment_id = assignments.id and e.type = 'assignment.created' limit 1)`,
       // QE4: the quick lane handed the change on, to the Developer or on to
       // the build model. The orchestrator logs each, and the row's lane is
       // only where it started.
@@ -446,6 +449,7 @@ export async function readBuilds(
       goal: row.goal,
       lane,
       ...(fellThrough ? { fell_through: true } : {}),
+      ...(row.retryOf ? { retry: true as const } : {}),
       activity: activityFor(lane, row.state, progress, {
         plan,
         settled,

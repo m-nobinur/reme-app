@@ -21,6 +21,7 @@ import {
   FactValueKey,
   type FindDomainInput,
   FindDomainOutput,
+  GateResult,
   type GetPreviewInput,
   GetPreviewOutput,
   InformationAnswer,
@@ -176,9 +177,8 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
   /** The open reminders with a time, soonest first, for a conversation's first turn. */
   reminders: Opening["reminders"]
 }> {
-  const [{ status, facts }, rows, { lines: profile }] = await kit.withOrg(
-    { orgId: owner.orgId },
-    (db) =>
+  const [{ status, facts }, rows, { lines: profile }, reports] =
+    await kit.withOrg({ orgId: owner.orgId }, (db) =>
       Promise.all([
         statusWithFacts(db, env, new Date()),
         db
@@ -192,8 +192,17 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
           .orderBy(sql`${domains.createdAt} desc`)
           .limit(10),
         readProfile(db),
+        // Each build's last check report from the day, for what a stopped one failed.
+        db.execute<{ assignment_id: string; gates: unknown }>(
+          sql`select distinct on (assignment_id) assignment_id, payload->'gates' as gates from events where type = 'assignment.validation_reported' and occurred_at > now() - interval '24 hours' order by assignment_id, event_id desc`
+        ),
       ])
-  )
+    )
+  const failedChecks = (assignmentId: string | null) => {
+    const report = [...reports].find((r) => r.assignment_id === assignmentId)
+    const gates = GateResult.array().safeParse(report?.gates).data ?? []
+    return gates.filter((g) => !g.passed).map((g) => g.gate)
+  }
   const workspace = CosWorkspace.parse({
     site: {
       host: status.site.host,
@@ -206,6 +215,7 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
       lane: b.lane,
       goal: b.goal,
       version: b.revision?.version ?? null,
+      ...(b.retry ? { retry: true } : {}),
       progress: (b.activity ?? [])
         .filter((step) => !step.skipped)
         .map((step) => ({
@@ -218,7 +228,13 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
     stopped: status.attention
       .flatMap((item) =>
         item.kind === "alert" && item.reason === "build_failed"
-          ? [{ cause: item.cause ?? "other", at: item.at }]
+          ? [
+              {
+                cause: item.cause ?? "other",
+                at: item.at,
+                checks: failedChecks(item.assignment_id),
+              },
+            ]
           : []
       )
       .slice(0, 5),

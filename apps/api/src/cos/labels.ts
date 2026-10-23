@@ -4,6 +4,7 @@ import type {
   CosWorkspace,
   DomainCheck,
   DomainState,
+  GateName,
 } from "@workspace/contracts"
 
 // The workspace as the model reads it each turn: labels in the owner's
@@ -58,6 +59,18 @@ const STOPPED: Record<BuildStopCause, string> = {
   other: "something went wrong on our side",
 }
 
+const CHECK_WORDS: Record<GateName, string> = {
+  build: "the site would not build",
+  types: "the code checks",
+  links: "broken links",
+  structured_data: "the search engine data",
+  content: "a claim the facts do not back",
+  claims: "a claim the facts do not back",
+  copy: "the wording checks",
+  a11y: "the accessibility checks",
+  size: "the page size",
+}
+
 /** `owner.preferred_name` as `owner preferred name`. */
 const plain = (key: string) => key.replace(/[._]/g, " ")
 
@@ -79,6 +92,7 @@ export function workspaceLabels(workspace: CosWorkspace) {
       state: STATE[b.state],
       lane: b.lane,
       goal: b.goal,
+      ...(b.retry && { started_again_after_a_stop: true }),
       progress: (b.progress ?? []).map(
         (p) =>
           `${p.step}${p.total > 1 ? `: ${p.done} of ${p.total}` : ""}${p.now ? " (now)" : p.done >= p.total ? " (done)" : ""}`
@@ -86,6 +100,9 @@ export function workspaceLabels(workspace: CosWorkspace) {
     })),
     stopped_recently: (stopped ?? []).map((s) => ({
       why: STOPPED[s.cause],
+      ...(s.checks?.length && {
+        failed: [...new Set(s.checks.map((c) => CHECK_WORDS[c]))],
+      }),
       at: s.at,
     })),
     questions: questions.map((q) => ({

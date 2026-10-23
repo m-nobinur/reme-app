@@ -127,6 +127,19 @@ describe("journey", () => {
     expect(now).toEqual([])
   })
 
+  it("says a rebuild is fixing what stopped the last build", () => {
+    const [website] = view({
+      builds: [build("implementing", { retry: true })],
+    }).journey
+    expect(website).toMatchObject({
+      state: "now",
+      step: "Fixing what stopped the last build",
+    })
+    expect(view({ builds: [build("implementing")] }).journey[0]?.step).toBe(
+      undefined
+    )
+  })
+
   it("leaves the website to come once the owner stopped its build", () => {
     const { journey, now } = view({ builds: [build("cancelled")] })
     expect(journey[0]?.state).toBe("upcoming")

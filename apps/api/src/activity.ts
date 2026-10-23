@@ -489,6 +489,9 @@ export function journeyOf(input: ActivityInput): Segment[] {
       state === "done"
         ? (build.ready_at ?? build.updated_at)
         : build.created_at,
+    ...(build.retry && state !== "done"
+      ? { step: "Fixing what stopped the last build" }
+      : {}),
     ...(names && { names }),
   }
   const review = input.approvals.find(

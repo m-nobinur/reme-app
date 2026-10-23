@@ -21,7 +21,13 @@ const WORKSPACE: CosWorkspace = {
       ],
     },
   ],
-  stopped: [{ cause: "unfinished", at: "2026-10-30T08:00:00.000Z" }],
+  stopped: [
+    {
+      cause: "unfinished",
+      at: "2026-10-30T08:00:00.000Z",
+      checks: ["types", "content", "claims"],
+    },
+  ],
   questions: [
     {
       request_id: ASKED,
@@ -70,13 +76,16 @@ describe("the workspace the CoS reads", () => {
   it("reads each build's steps and the builds that stopped, in plain words", () => {
     const data = dumped(WORKSPACE) as {
       builds: { progress: string[] }[]
-      stopped_recently: { why: string }[]
+      stopped_recently: { why: string; failed?: string[] }[]
     }
     expect(data.builds[0]?.progress).toEqual([
       "Planning the pages (done)",
       "Writing the pages: 3 of 7 (now)",
     ])
-    expect(data.stopped_recently[0]?.why).toBe("it could not pass its checks")
+    expect(data.stopped_recently[0]).toMatchObject({
+      why: "it could not pass its checks",
+      failed: ["the code checks", "a claim the facts do not back"],
+    })
   })
 
   it("holds no id or hash outside a ref", () => {
