@@ -108,7 +108,8 @@ export async function lockRow(
   return row
 }
 
-async function repairsSoFar(
+/** How many times the assignment entered `repairing`. */
+export async function repairsSoFar(
   db: OrgScopedDb,
   assignmentId: string
 ): Promise<number> {

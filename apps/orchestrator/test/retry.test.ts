@@ -1,6 +1,7 @@
-import { Blueprint } from "@workspace/contracts"
-import { assignments, eq, events, sql } from "@workspace/db"
+import { AGENT_NOTE, Blueprint, BUILD_FAILURES } from "@workspace/contracts"
+import { assignments, eq, events, newUlid, sql } from "@workspace/db"
 import { afterAll, describe, expect, it, vi } from "vitest"
+import type { writeText } from "../src/heartbeat-write.ts"
 import { freshOrg, kit } from "./fixture.ts"
 
 // app.ts loads both at import time; neither is reached here.
@@ -12,12 +13,19 @@ const { fallbackBlueprint, planRound } = await import("../src/planner.ts")
 const {
   afterFailure,
   decide,
+  NARRATED_PER_HOUR,
+  narrate,
+  narrationOk,
+  noteProblem,
+  readyNote,
   readyText,
   retryingText,
-  SYSTEM_CAUSES,
   stoppedText,
 } = await import("../src/retry.ts")
 const { advance } = await import("../src/state.ts")
+
+const reasons = Object.keys(BUILD_FAILURES) as (keyof typeof BUILD_FAILURES)[]
+const retried = reasons.filter((r) => BUILD_FAILURES[r].retry !== null)
 
 const ended = {
   origin: "owner" as const,
@@ -29,12 +37,11 @@ const ended = {
 }
 
 describe("whether a failed build is started again", () => {
-  it.each(Object.keys(SYSTEM_CAUSES))(
-    "retries an owner's build for %s",
-    (reason) => {
-      expect(decide({ ...ended, reason })).toBe("retry")
-    }
-  )
+  it.each(reasons)("follows the failure table for %s", (reason) => {
+    expect(decide({ ...ended, reason })).toBe(
+      BUILD_FAILURES[reason].retry === null ? "quiet" : "retry"
+    )
+  })
 
   it("retries a full rebuild of a live site, and only says a quick change failed", () => {
     expect(decide({ ...ended, kind: "site.revise" })).toBe("retry")
@@ -60,7 +67,7 @@ describe("whether a failed build is started again", () => {
 describe("what the owner reads", () => {
   const plan = fallbackBlueprint({ facts: [], recent: [] })
   const lines = [
-    ...Object.keys(SYSTEM_CAUSES).flatMap((reason) => [
+    ...retried.flatMap((reason) => [
       retryingText("site.build", reason),
       stoppedText("site.revise", reason),
     ]),
@@ -93,8 +100,145 @@ describe("what the owner reads", () => {
   })
 })
 
+describe("whether a narrated line may stand in for the template", () => {
+  it("keeps one or two short sentences in plain words", () => {
+    expect(
+      narrationOk(
+        "I hit a snag while building your website, so I've started it again. Nothing for you to do, I'll tell you here when it's ready.",
+        []
+      )
+    ).toBe(true)
+  })
+
+  it.each([
+    ["a dash", "I hit a snag — so I've started again."],
+    ["a spaced hyphen", "I hit a snag - so I've started again."],
+    ["a link", "It's ready at https://example.test, have a look."],
+    ["a bare host", "It's ready at sparkle.example.test, have a look."],
+    ["a digit", "Attempt 2 is under way now."],
+    ["our name", "Reme hit a snag, so I've started again."],
+    ["three sentences", "I hit a snag. I started again. I'll say when."],
+    ["a line break", "I hit a snag.\nI started again."],
+    ["silence", "[quiet]"],
+    ["too long", `I hit a snag ${"and kept going ".repeat(30)}.`],
+  ])("refuses %s", (_, text) => {
+    expect(narrationOk(text, [])).toBe(false)
+  })
+
+  it("allows a name or number that is one of the values it was given", () => {
+    expect(narrationOk("Ava here: A1 Cleaning's site is ready.", ["Ava"])).toBe(
+      false
+    )
+    expect(
+      narrationOk("Ava here: A1 Cleaning's site is ready.", [
+        "Ava",
+        "A1 Cleaning",
+      ])
+    ).toBe(true)
+  })
+})
+
 const url = process.env.DATABASE_URL
 const live = describe.skipIf(!url)
+
+/** The notes an assignment's steps wrote. */
+const notesOf = (orgId: string, assignmentId: string) =>
+  kit.withOrg({ orgId }, async (db) =>
+    (
+      await db
+        .select({ payload: events.payload })
+        .from(events)
+        .where(
+          sql`${events.assignmentId} = ${assignmentId} and ${events.type} = ${AGENT_NOTE}`
+        )
+        .orderBy(events.eventId)
+    ).map((r) => r.payload)
+  )
+
+const SPENT = {
+  model: "stand-in",
+  cost_usd: 0.001,
+  usage: { input_tokens: 200, output_tokens: 30 },
+  ms: 5,
+}
+const writer = (text: string | Error) =>
+  vi.fn<typeof writeText>(async () => {
+    if (text instanceof Error) throw text
+    return { text, spent: SPENT }
+  })
+
+live("a build note in the assistant's own voice", () => {
+  const env = { OPENROUTER_API_KEY: "test-key" }
+  const note = {
+    kind: "retrying" as const,
+    key: "site.retrying:x",
+    assignment_id: crypto.randomUUID(),
+    attempt: 1,
+    of: 2,
+    cause: "unfinished" as const,
+    next: "retrying" as const,
+    failed: ["claims" as const],
+  }
+  const good =
+    "I ran into a problem checking your details while building the site, so I've started it again. Nothing for you to do, I'll say here when it's ready."
+
+  it("uses the model's line when it passes, from structured fields only", async () => {
+    const orgId = await freshOrg(kit)
+    const write = writer(good)
+    expect(
+      await narrate(env, kit, orgId, "site.build", note, "template", write)
+    ).toBe(good)
+    const data = write.mock.calls[0]?.[2] as Record<string, unknown>
+    expect(data).toMatchObject({
+      event: "retrying",
+      cause: "it stopped before the draft was done",
+      checks_failed: ["checking every claim against your details"],
+      draft: "template",
+    })
+  })
+
+  it("falls back to the template on a bad line, an error, no key or the hourly cap", async () => {
+    const orgId = await freshOrg(kit)
+    const bad = "Done — see https://x.test"
+    expect(
+      await narrate(env, kit, orgId, "site.build", note, "t", writer(bad))
+    ).toBe("t")
+    expect(
+      await narrate(
+        env,
+        kit,
+        orgId,
+        "site.build",
+        note,
+        "t",
+        writer(new Error("timeout"))
+      )
+    ).toBe("t")
+    const unused = writer(good)
+    expect(await narrate({}, kit, orgId, "site.build", note, "t", unused)).toBe(
+      "t"
+    )
+    // The org's share of the hour, used up.
+    await kit.withOrg({ orgId }, (db) =>
+      db.insert(events).values(
+        Array.from({ length: NARRATED_PER_HOUR }, () => ({
+          eventId: newUlid(),
+          orgId,
+          staffId: null,
+          assignmentId: null,
+          type: "cos.background_step",
+          occurredAt: new Date(),
+          idempotencyKey: newUlid(),
+          payload: { job: "build_note", outcome: "written" },
+        }))
+      )
+    )
+    expect(
+      await narrate(env, kit, orgId, "site.build", note, "t", unused)
+    ).toBe("t")
+    expect(unused).not.toHaveBeenCalled()
+  })
+})
 
 afterAll(() => kit.close())
 
@@ -206,14 +350,105 @@ live("a failed owner build's retry", () => {
       },
     })
     expect(created).toHaveLength(1)
+
+    // One note each, however often the step ran.
+    expect(await notesOf(orgId, ids.assignmentId)).toEqual([
+      {
+        kind: "retrying",
+        key: `site.retrying:${ids.assignmentId}`,
+        assignment_id: ids.assignmentId,
+        attempt: 1,
+        of: 2,
+        cause: "unfinished",
+        next: "retrying",
+        failed: [],
+        retry_id: first.retry_id,
+      },
+    ])
+    expect(await notesOf(orgId, retry.assignmentId)).toEqual([
+      expect.objectContaining({
+        kind: "stopped",
+        attempt: 2,
+        cause: "stalled",
+        next: "waiting_owner",
+      }),
+    ])
   })
 
-  it("leaves a build that waited on the owner as it ended", async () => {
+  it("leaves a build that waited on the owner as it ended, with a quiet note", async () => {
     const orgId = await freshOrg(kit)
     const ids = await failedBuild(orgId, "blueprint.undecided", "k2")
     expect(await afterFailure(env, kit, ids)).toEqual({
       retry_id: null,
       note: null,
     })
+    expect(await notesOf(orgId, ids.assignmentId)).toEqual([
+      expect.objectContaining({
+        kind: "stopped",
+        cause: "unanswered",
+        next: "none",
+      }),
+    ])
+  })
+
+  it("notes each repair round once, and a ready draft with its pages", async () => {
+    const orgId = await freshOrg(kit)
+    const made = await kit.withOrg({ orgId }, (db) =>
+      insertAssignment(db, orgId, "k3", true, {
+        kind: "site.build",
+        goal: "Build the site from the canonical facts.",
+        model: "A",
+        withhold: [],
+        lane: "full",
+        change_kind: null,
+      })
+    )
+    if (!("row" in made)) throw new Error("not created")
+    const ids = { orgId, assignmentId: made.row.id }
+    await kit.withOrg({ orgId }, (db) =>
+      db
+        .update(assignments)
+        .set({ blueprint: fallbackBlueprint({ facts: [], recent: [] }) })
+        .where(eq(assignments.id, ids.assignmentId))
+    )
+    for (const to of [
+      "briefing",
+      "planning",
+      "implementing",
+      "validating",
+      "repairing",
+    ] as const) {
+      await advance(kit, ids, to)
+    }
+    const failed = [{ gate: "claims" as const }, { gate: "claims" as const }]
+    await noteProblem(kit, ids, failed)
+    await noteProblem(kit, ids, failed)
+    const [problem] = await notesOf(orgId, ids.assignmentId)
+    expect(problem).toMatchObject({
+      kind: "problem",
+      attempt: 1,
+      of: 3,
+      next: "repairing",
+      failed: ["claims"],
+    })
+
+    // Not in review: no note, no line.
+    expect(await readyNote({}, kit, ids)).toBeNull()
+    await kit.withOrg({ orgId }, (db) =>
+      db
+        .update(assignments)
+        .set({ state: "awaiting_review" })
+        .where(eq(assignments.id, ids.assignmentId))
+    )
+    const ready = await readyNote({}, kit, ids)
+    await readyNote({}, kit, ids)
+    expect(ready?.key).toBe(`site.ready:${ids.assignmentId}`)
+    expect(ready?.text).toMatch(/^Your website draft is ready, with /)
+    const done = (await notesOf(orgId, ids.assignmentId)).filter(
+      (n) => n.kind === "done"
+    )
+    expect(done).toHaveLength(1)
+    expect(done[0]).toMatchObject({ next: "waiting_owner", attempt: 1 })
+    expect(done[0]?.pages).toEqual(expect.arrayContaining(["Home"]))
   })
 })

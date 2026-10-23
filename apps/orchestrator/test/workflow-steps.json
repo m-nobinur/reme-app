@@ -27,6 +27,7 @@
       "review",
       "screenshots",
       "keep warm",
+      "ready note",
       "say ready"
     ],
     "information round trip": [
@@ -397,6 +398,7 @@
       "review",
       "screenshots",
       "keep warm",
+      "ready note",
       "say ready"
     ],
     "quick edit handed on": [
@@ -413,6 +415,7 @@
       "review",
       "screenshots",
       "keep warm",
+      "ready note",
       "say ready"
     ],
     "quick edit failed a gate": [
@@ -432,6 +435,7 @@
       "review",
       "screenshots",
       "keep warm",
+      "ready note",
       "say ready"
     ],
     "accessibility failed after a quick edit": [
@@ -453,6 +457,7 @@
       "review",
       "screenshots",
       "keep warm",
+      "ready note",
       "say ready"
     ],
     "superseded before accessibility": [
@@ -479,6 +484,7 @@
       "review",
       "screenshots",
       "keep warm",
+      "ready note",
       "say ready"
     ],
     "planned build": [
@@ -524,6 +530,7 @@
       "gates 1",
       "review",
       "keep warm",
+      "ready note",
       "say ready"
     ],
     "design critique repaired": [

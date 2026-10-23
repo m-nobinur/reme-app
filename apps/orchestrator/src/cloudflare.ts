@@ -37,6 +37,7 @@ import {
   type Brief,
   creationChoices,
   issueSpec,
+  retryContext,
   takeSnapshot,
 } from "./brief.ts"
 import { critiqueRound, type Fix, repairMessage } from "./critic.ts"
@@ -70,7 +71,13 @@ import {
 } from "./publish.ts"
 import { quickEdit } from "./quick.ts"
 import { retireOthers, type SweepCounts, sweepOrg } from "./retention.ts"
-import { afterFailure, postNote, sayReady } from "./retry.ts"
+import {
+  afterFailure,
+  noteProblem,
+  postNote,
+  readyNote,
+  sayReady,
+} from "./retry.ts"
 import {
   latestBlueprint,
   mapSite,
@@ -392,6 +399,9 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           const previewed = superseded
             ? await latestRevision(db, superseded)
             : null
+          const previous = choices.retry_of
+            ? await retryContext(db, choices.retry_of)
+            : undefined
           const built: Brief = {
             spec,
             snapshot,
@@ -407,6 +417,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             ...(role === "quick_section"
               ? { site_plan: await latestBlueprint(db) }
               : {}),
+            ...(previous ? { previous } : {}),
           }
           return {
             brief: built,
@@ -844,6 +855,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           // answer does; the Developer fixes them and reports again.
           const lift = escalate()
           await step.do(`repair ${round}`, async () => {
+            await run((kit) => noteProblem(kit, ids, verdict.failed))
             await init(Developer, { id: ids.assignmentId }).dispatch({
               idempotencyKey: `${ids.assignmentId}:repair-${round}`,
               message: {
@@ -965,9 +977,14 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         // Last, so a chat busy for days holds up nothing.
         if (reviewed) {
           try {
-            await step.do("say ready", SAY_RETRIES, () =>
-              run((kit) => sayReady(kit, ids))
+            const note = await step.do("ready note", () =>
+              run((kit) => readyNote(this.env, kit, ids))
             )
+            if (note) {
+              await step.do("say ready", SAY_RETRIES, () =>
+                run((kit) => sayReady(kit, ids, note))
+              )
+            }
           } catch {
             // The ready card says it as well; the chat misses one line.
           }

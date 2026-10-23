@@ -47,7 +47,7 @@ import {
 } from "@workspace/facade"
 import { cloudflareSandbox } from "@workspace/facade/cloudflare"
 import { z } from "zod"
-import type { Brief } from "../brief.ts"
+import { type Brief, retryContextSignal } from "../brief.ts"
 import {
   copyInstructions,
   FAN_OUT,
@@ -420,7 +420,7 @@ function render({ id }: AgentProps) {
     false
   )
 
-  useAgentStart(async ({ harness }) => {
+  useAgentStart(async ({ append, harness }) => {
     // Every delivery is a new turn, so a turn a terminal tool ended reopens
     // here, and a failure that woke the Workflow before may wake it again.
     current.gate.open()
@@ -451,6 +451,9 @@ function render({ id }: AgentProps) {
         instructions: shown(),
       })
       setSegmentLogged(true)
+      // The first delivery only: a retry hears what failed last time.
+      const previous = retryContextSignal(brief)
+      if (previous) append(previous)
     }
     // biome-ignore lint/suspicious/noUnnecessaryConditions: same, the persisted value
     if (restored && (await siteKept(current))) return

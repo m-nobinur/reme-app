@@ -136,6 +136,7 @@ vi.mock("../src/brief.ts", () => ({
   }),
   takeSnapshot: async () => ({}),
   issueSpec: async () => ({}),
+  retryContext: async () => undefined,
 }))
 
 const SUPERSEDED = "10000001-0000-4000-8000-00000000aaaa"
@@ -342,7 +343,9 @@ vi.mock("../src/retry.ts", () => ({
     retry_id: script.followUp ? "retry" : null,
     note: script.followUp ? { key: "k", text: "t" } : null,
   }),
+  noteProblem: async () => undefined,
   postNote: async () => undefined,
+  readyNote: async () => ({ key: "k", text: "t" }),
   sayReady: async () => undefined,
 }))
 vi.mock("../src/validate.ts", () => ({
@@ -903,7 +906,9 @@ describe("the assignment Workflow's step names", () => {
     const { names, run } = drive([completion])
     expect(await run()).toMatchObject({ outcome: "preview_ready" })
     // No review opened, so no ready line either.
-    expect([...names, "say ready"]).toEqual(expected["owner build"])
+    expect([...names, "ready note", "say ready"]).toEqual(
+      expected["owner build"]
+    )
     // Any other refusal is still final.
     script.reviewRefusal = "revision.not_preview"
     await expect(drive([completion]).run()).rejects.toThrow()
