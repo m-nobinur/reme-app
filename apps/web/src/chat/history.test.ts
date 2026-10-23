@@ -275,6 +275,16 @@ describe("following the open thread", () => {
     expect(apply).toHaveBeenCalledWith(stored)
   })
 
+  it("reads a reply stored after the history load, before the first tag came", async () => {
+    const screen = { idle: true, messages: [] as { id: string }[] }
+    const { follow, read, apply } = setup(screen)
+    await follow("srv_1") // still loading: waits
+    expect(read).not.toHaveBeenCalled()
+    screen.messages = [{ id: "m1" }]
+    await follow("srv_1")
+    expect(apply).toHaveBeenCalledWith(stored)
+  })
+
   it("leaves a thread that already holds the tail, as after the owner's own turn", async () => {
     const screen = { idle: true, messages: [{ id: "m1" }, { id: "m2" }] }
     const { follow, read } = setup(screen)

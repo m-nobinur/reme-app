@@ -129,7 +129,8 @@ export const tailOf = (etag: string | null | undefined): string | null =>
 /**
  * Reads the open thread again when the polled tag names a message it does
  * not hold, which is one the assistant posted with no owner turn. Given each
- * tag's tail: the first is what the history load already read; one that
+ * tag's tail: the first waits for the history load and is read only when
+ * the load lacks it, as a reply stored just after a reload; one that
  * arrives mid-turn waits for the turn to end; and a read that lands after
  * a turn began, or the thread changed, is dropped. The composer is never
  * touched, so a half-typed message stays.
@@ -151,8 +152,14 @@ export function followThread({
   let seen: string | null | undefined
   return async (tail) => {
     if (seen === undefined) {
-      seen = tail
-      return
+      const loaded = now().messages
+      // The history is still loading: the next tail decides.
+      if (tail && loaded.length === 0) return
+      if (!tail || loaded.some((m) => m.id === tail)) {
+        seen = tail
+        return
+      }
+      seen = null
     }
     const { idle, messages } = now()
     if (!tail || tail === seen || !idle) return

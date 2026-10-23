@@ -151,25 +151,26 @@ export function useConversationRuntime({
     return remoteId ? getConversationMessages({ data: { id: remoteId } }) : null
   }
   restore.current = (error) => {
-    // A session that ended can read nothing back; the error offers sign-in.
-    const read = error.message === SESSION_ENDED ? null : storedRows()
-    if (!read) return
     const last = sending.current
+    // A reply to a card goes with it: the card is open again instead.
+    // Words the owner typed, such as changes to a quote form, go back.
+    const typed =
+      last?.role === "user" && (!last.metadata?.reply || last.metadata.typed)
+    const giveBack = () => {
+      if (typed) runtime.thread.composer.setText(textOf(last))
+    }
+    // A session that ended can read nothing back; the error offers sign-in,
+    // and the words wait in the composer, which this tab keeps.
+    const read = error.message === SESSION_ENDED ? null : storedRows()
+    if (!read) return giveBack()
     void read
       .then((rows) => {
         const stored = rows.map(toUIMessage)
         chat.setMessages(stored)
-        // A reply to a card goes with it: the card is open again instead.
-        // Words the owner typed, such as changes to a quote form, go back.
-        if (
-          last?.role === "user" &&
-          (!last.metadata?.reply || last.metadata.typed) &&
-          !stored.some((m) => m.id === last.id)
-        ) {
-          runtime.thread.composer.setText(textOf(last))
-        }
+        if (!stored.some((m) => m.id === last?.id)) giveBack()
       })
-      .catch(() => undefined)
+      // Offline the rows cannot be read either; the words still go back.
+      .catch(giveBack)
   }
   showAnswered.current = () => {
     const callId = answered.current
@@ -281,5 +282,30 @@ export function useConversationRuntime({
       adapters: { feedback },
     }
   )
+  // The composer's words, kept in this tab by thread, so a reload, a lost
+  // connection or signing in again never loses them.
+  const remoteId = useAuiState((s) => s.threadListItem.remoteId)
+  const composer = runtime.thread.composer
+  useEffect(() => {
+    const key = `composer:${remoteId ?? "new"}`
+    const store = (use: (storage: Storage) => void) => {
+      try {
+        use(window.sessionStorage)
+      } catch {
+        // Private windows and blocked site data throw; the words then live
+        // only as long as the page.
+      }
+    }
+    store((storage) => {
+      const saved = storage.getItem(key)
+      if (saved && !composer.getState().text) composer.setText(saved)
+    })
+    return composer.subscribe(() => {
+      const { text } = composer.getState()
+      store((storage) =>
+        text ? storage.setItem(key, text) : storage.removeItem(key)
+      )
+    })
+  }, [composer, remoteId])
   return runtime
 }
