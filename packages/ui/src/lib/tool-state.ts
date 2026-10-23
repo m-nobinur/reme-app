@@ -431,12 +431,24 @@ export function designText(
       const option = each.card.options.find((o) => o.id === id)
       return option ? (layoutLook(option)?.hero ?? option.label) : id
     }
+    const photos = (count: number) =>
+      count === 1 ? "1 photo" : `${count} photos`
     return [
       "own" in answer
         ? answer.own
         : "choices" in answer
           ? answer.choices.map(label).join(", ")
-          : label(answer.choice),
+          : "palette" in answer
+            ? answer.palette.name
+            : "logo" in answer
+              ? "Logo"
+              : "photos" in answer
+                ? answer.photos.length === 0
+                  ? "Photos made for me"
+                  : answer.create
+                    ? `${photos(answer.photos.length)}, the rest made for me`
+                    : photos(answer.photos.length)
+                : label(answer.choice),
     ]
   })
   return picked.length > 0 ? picked.join(" · ") : SKIPPED
