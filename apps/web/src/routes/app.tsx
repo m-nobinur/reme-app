@@ -19,7 +19,7 @@ import {
 } from "@tanstack/react-router"
 import type { Conversation } from "@workspace/contracts"
 import { railItemClass } from "@workspace/ui/components/app-shell"
-import { avatarPortrait } from "@workspace/ui/components/assistant-avatar"
+import { avatarIcons } from "@workspace/ui/components/assistant-avatar"
 import {
   ChatHistory,
   type HistoryEntry,
@@ -57,6 +57,7 @@ import {
 import { onboardingFor, settingUp } from "@/lib/onboarding"
 import { OwnerSettings } from "@/lib/owner-settings"
 import { anchorOf } from "@/lib/reminders"
+import { tabBadge, useTabBadge } from "@/lib/tab-icon"
 import { requireOwner } from "@/lib/tenant"
 import { LiveWorkspaceProvider, useLiveWorkspaceState } from "@/lib/workspace"
 import {
@@ -99,14 +100,30 @@ export const Route = createFileRoute("/app")({
     return { owner, ...frame }
   },
   // The tab names the assistant and the business, and shows the face the
-  // owner picked; Reme's own face is the app's icon already.
+  // owner picked in place of the app's icons (the root leaves them out).
   head: ({ loaderData }) => {
     const business = loaderData?.active?.name
     const assistant = loaderData?.workspace?.assistantName?.trim() || "Reme"
-    const face = avatarPortrait(loaderData?.workspace?.assistantAvatar)
+    const icons = avatarIcons(loaderData?.workspace?.assistantAvatar)
     return {
       meta: business ? [{ title: `${assistant} | ${business}` }] : [],
-      links: face ? [{ rel: "icon", href: face, type: "image/webp" }] : [],
+      links: icons
+        ? [
+            {
+              rel: "icon",
+              href: icons.small,
+              sizes: "32x32",
+              type: "image/png",
+            },
+            {
+              rel: "icon",
+              href: icons.large,
+              sizes: "64x64",
+              type: "image/png",
+            },
+            { rel: "apple-touch-icon", href: icons.home },
+          ]
+        : [],
     }
   },
   // `?google=` is where the Google connect callback sends the owner back.
@@ -160,6 +177,10 @@ function AppLayout() {
     seenAt,
   } = Route.useLoaderData()
   const live = useLiveWorkspaceState(workspace, readWorkspace)
+  useTabBadge(
+    avatarIcons(live.workspace?.assistantAvatar)?.large,
+    tabBadge(live.workspace)
+  )
   // What the panel says on this page; with nothing to say there is no panel.
   // A workspace that did not load still shows one, which says so.
   const panel = usePanel(live.workspace)

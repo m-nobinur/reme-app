@@ -4,13 +4,22 @@ import {
   Scripts,
   useRouter,
 } from "@tanstack/react-router"
+import type { AvatarId } from "@workspace/contracts"
+import { avatarIcons } from "@workspace/ui/components/assistant-avatar"
 import { formGuardScript } from "@workspace/ui/components/auth-card"
 import { themeInitScript } from "@workspace/ui/components/theme-toggle"
 
 import appCss from "@workspace/ui/globals.css?url"
 
+/** Whether a match's data names a face with icons of its own. */
+const faceOf = (data: unknown) =>
+  avatarIcons(
+    (data as { workspace?: { assistantAvatar?: AvatarId | null } } | undefined)
+      ?.workspace?.assistantAvatar
+  ) !== undefined
+
 export const Route = createRootRoute({
-  head: () => ({
+  head: ({ matches }) => ({
     meta: [
       {
         charSet: "utf-8",
@@ -33,10 +42,18 @@ export const Route = createRootRoute({
         rel: "stylesheet",
         href: appCss,
       },
-      // The .ico stays for browsers and crawlers that ask for it by name.
-      { rel: "icon", href: "/favicon.ico", sizes: "32x32" },
-      { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
-      { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+      // The app's icons, unless the app shows the assistant's face instead:
+      // browsers keep an SVG icon over any PNG, whatever the order. The .ico
+      // stays for browsers and crawlers that ask for it by name.
+      ...(matches.some(
+        (m) => (m.routeId as string) === "/app" && faceOf(m.loaderData)
+      )
+        ? []
+        : [
+            { rel: "icon", href: "/favicon.ico", sizes: "32x32" },
+            { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
+            { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+          ]),
       // Android's home-screen icons, from the same full-bleed drawing.
       { rel: "manifest", href: "/site.webmanifest" },
     ],
