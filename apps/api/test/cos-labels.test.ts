@@ -15,6 +15,7 @@ const WORKSPACE: CosWorkspace = {
       lane: "full",
       goal: "Add a Saturday slot.",
       version: 4,
+      fixing: { round: 2, checks: ["types"] },
       progress: [
         { step: "Planning the pages", done: 1, total: 1, now: false },
         { step: "Writing the pages", done: 3, total: 7, now: true },
@@ -75,9 +76,12 @@ const withoutRefs = (value: unknown): unknown => {
 describe("the workspace the CoS reads", () => {
   it("reads each build's steps and the builds that stopped, in plain words", () => {
     const data = dumped(WORKSPACE) as {
-      builds: { progress: string[] }[]
+      builds: { progress: string[]; fixing?: string }[]
       stopped_recently: { why: string; failed?: string[] }[]
     }
+    expect(data.builds[0]).toMatchObject({
+      fixing: "round 2 of fixing the code checks",
+    })
     expect(data.builds[0]?.progress).toEqual([
       "Planning the pages (done)",
       "Writing the pages: 3 of 7 (now)",

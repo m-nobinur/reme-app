@@ -93,6 +93,13 @@ export function workspaceLabels(workspace: CosWorkspace) {
       lane: b.lane,
       goal: b.goal,
       ...(b.retry && { started_again_after_a_stop: true }),
+      ...(b.fixing && {
+        fixing: `round ${b.fixing.round} of fixing ${
+          [...new Set(b.fixing.checks.map((c) => CHECK_WORDS[c]))].join(
+            " and "
+          ) || "what its checks found"
+        }`,
+      }),
       progress: (b.progress ?? []).map(
         (p) =>
           `${p.step}${p.total > 1 ? `: ${p.done} of ${p.total}` : ""}${p.now ? " (now)" : p.done >= p.total ? " (done)" : ""}`

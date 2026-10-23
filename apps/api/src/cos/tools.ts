@@ -177,7 +177,7 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
   /** The open reminders with a time, soonest first, for a conversation's first turn. */
   reminders: Opening["reminders"]
 }> {
-  const [{ status, facts }, rows, { lines: profile }, reports] =
+  const [{ status, facts }, rows, { lines: profile }, reports, repairs] =
     await kit.withOrg({ orgId: owner.orgId }, (db) =>
       Promise.all([
         statusWithFacts(db, env, new Date()),
@@ -196,8 +196,13 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
         db.execute<{ assignment_id: string; gates: unknown }>(
           sql`select distinct on (assignment_id) assignment_id, payload->'gates' as gates from events where type = 'assignment.validation_reported' and occurred_at > now() - interval '24 hours' order by assignment_id, event_id desc`
         ),
+        db.execute<{ assignment_id: string; rounds: number }>(
+          sql`select assignment_id, count(*)::int as rounds from events where type = 'assignment.state_changed' and payload->>'to' = 'repairing' and occurred_at > now() - interval '24 hours' group by assignment_id`
+        ),
       ])
     )
+  const roundsOf = (assignmentId: string) =>
+    [...repairs].find((r) => r.assignment_id === assignmentId)?.rounds ?? 0
   const failedChecks = (assignmentId: string | null) => {
     const report = [...reports].find((r) => r.assignment_id === assignmentId)
     const gates = GateResult.array().safeParse(report?.gates).data ?? []
@@ -216,6 +221,15 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
       goal: b.goal,
       version: b.revision?.version ?? null,
       ...(b.retry ? { retry: true } : {}),
+      ...(roundsOf(b.assignment_id) > 0 &&
+      ["repairing", "implementing", "validating"].includes(b.state)
+        ? {
+            fixing: {
+              round: Math.min(roundsOf(b.assignment_id), 9),
+              checks: failedChecks(b.assignment_id),
+            },
+          }
+        : {}),
       progress: (b.activity ?? [])
         .filter((step) => !step.skipped)
         .map((step) => ({
