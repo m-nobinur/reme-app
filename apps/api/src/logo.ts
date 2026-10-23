@@ -3,10 +3,13 @@ import {
   DrawLogosRequest,
   idempotencyKey,
   type KeptLogo,
+  LOGO_ROUND_WAITS,
   LOGO_ROUNDS_MAX,
+  LOGO_VARIANTS,
   type LogoBrief,
   type LogoRound,
   type LogoRounds,
+  type LogoStyle,
 } from "@workspace/contracts"
 import type { Tenancy } from "@workspace/db"
 import { generateText, Output } from "ai"
@@ -21,12 +24,11 @@ import {
 import type { Owner } from "./changes.ts"
 import { failure, invalid, keyMissing, readBody, sha256Hex } from "./http.ts"
 import {
-  COMPOSITIONS,
-  type Composition,
   changesPrompt,
   DIRECTOR_GUIDE,
   type LogoSubject,
   logoPrompt,
+  variantStyles,
 } from "./logo-style.ts"
 import { factValue } from "./onboarding.ts"
 import { DEFAULT_ONBOARDING_MODEL, plannerModel } from "./onboarding-agent.ts"
@@ -41,34 +43,40 @@ import { readFacts } from "./workspace.ts"
  * `GET /logos` and loses nothing, and a consumer that died leaves a round
  * that reads `failed` once its deadline passes, for the owner to try again.
  *
- * Each variant is one call with its own layout (`COMPOSITIONS`), so four
- * calls differ in more than detail and one failure loses one tile, not all.
- * A first round asks the director, one quick text call, for a symbol idea
- * per layout first; a round of changes to a picked variant hands the image
- * model that picture instead.
+ * The owner picks the logo type, so a round's four variants share it and
+ * differ by idea: a first round asks the director, one quick text call, for
+ * four ideas for that type first. A round of changes to a picked variant
+ * hands the image model that picture instead. A variant is one call, so one
+ * failure loses one tile, not all. Every variant is a PNG on a transparent
+ * background; the bytes are checked, not the model's word for it.
  *
- * Measured 2026-10-23, one round each, four calls in parallel: GPT Image 2.5
- * Sunburst (medium, transparent) took 17 to 18 s a call and 19 s a round,
- * $0.0145 a logo and $0.058 a round, 1024 px PNGs of 0.6 to 0.9 MB.
- * Seedream 5 lite (2K) took 36 to 39 s a call and 40 s a round, $0.035 a
- * logo and $0.14 a round, 2048 px JPEGs of about 130 KB. The director
- * (Gemini 3.8 Flash) took 4.8 s and $0.0016.
+ * Rounds are paced by `LOGO_ROUND_WAITS`: each waits that long after the
+ * one before it finished, which is why the manifest records a finish time.
+ *
+ * Measured 2026-10-23, four calls in parallel: GPT Image 2.5 Sunburst
+ * (medium, transparent) took 17 to 18 s a call and 19 s a round, $0.0133 a
+ * logo and $0.053 a round, 1024 px PNGs of 0.6 to 0.9 MB. Its Flare tier
+ * answered the same request in 10 s at the same price, also with alpha. The
+ * director (Gemini 3.8 Flash) took 4.8 s and $0.0016.
  */
 
-/** Tried in order for each variant: the owner's pick, then a model on another provider. */
+/**
+ * Tried in order for each variant. Seedream, the old fallback, cannot draw a
+ * transparent background. Of the live image models only the GPT Image family
+ * took one when probed on 2026-10-23 (2.5 Flare, 1 and 1 mini answered with
+ * alpha, 2 refused the request), so the fallback is Flare, the other tier of
+ * the same family.
+ */
 export const LOGO_MODELS = [
   {
     id: "openai/gpt-image-2.5-sunburst",
-    transparent: true,
     options: { quality: "medium", background: "transparent" },
     ms: 75_000,
   },
   {
-    // No transparency and nothing under 2K on this one.
-    id: "bytedance-seed/seedream-5-0-lite",
-    transparent: false,
-    options: { resolution: "2K" },
-    ms: 90_000,
+    id: "openai/gpt-image-2.5-flare",
+    options: { quality: "medium", background: "transparent" },
+    ms: 75_000,
   },
 ] as const
 
@@ -85,10 +93,10 @@ const DIRECTOR_MS = 6_000
 
 /**
  * The rounds one org may start in a UTC day, counting tries after a failure.
- * Twenty: one logo question allows five, and an owner who starts onboarding
- * again or asks for a logo later has room for three more questions'
- * worth. At Seedream's price, the dearer, that bounds a day at $2.80 of
- * drawing, well under the org's daily model cap.
+ * Twenty: one logo question allows ten, and an owner who starts onboarding
+ * again or asks for a logo later has room for another question's worth. At
+ * $0.053 a round that bounds a day at about $1.06 of drawing, well under the
+ * org's daily model cap.
  */
 export const LOGO_ROUNDS_PER_DAY = 20
 
@@ -109,12 +117,16 @@ type Manifest = {
   /** The request's Idempotency-Key: a retry replays this round, a new try replaces a failed one. */
   key: string
   started_at: string
+  /** When the round became ready or failed; absent while drawing. */
+  finished_at?: string
   subject: LogoSubject & { offerings: string[] }
   brief: LogoBrief
   changes?: string
   base?: string
-  /** The four ids the round draws, in `COMPOSITIONS` order. */
+  /** The four ids the round draws, in the order the tiles show them. */
   planned: string[]
+  /** The style each planned variant is drawn in: one, or four for `surprise`. */
+  styles: LogoStyle[]
   /** The ones drawn so far. */
   variants: string[]
 }
@@ -147,6 +159,40 @@ export function roundView(manifest: Manifest, now = Date.now()): LogoRound {
     status,
     variants: manifest.variants.map((id) => ({ id })),
   }
+}
+
+/** Seconds round `round` waits after the one before it finished; the last wait repeats. */
+export const waitBefore = (round: number) =>
+  LOGO_ROUND_WAITS[Math.min(round, LOGO_ROUND_WAITS.length) - 1] as number
+
+/** A round that lapsed with no finish time is taken to have ended at its deadline. */
+const finishedAt = (m: Manifest) =>
+  m.finished_at
+    ? Date.parse(m.finished_at)
+    : Date.parse(m.started_at) + DRAW_DEADLINE_MS
+
+/**
+ * When the next round may start, in epoch ms, as `LogoRounds.next_at` has
+ * it: null when it may now or one is drawing (a failed round is replaced at
+ * once, so it waits for nothing), undefined once `LOGO_ROUNDS_MAX` are drawn.
+ */
+export function nextRoundAt(
+  rounds: readonly Manifest[],
+  now = Date.now()
+): number | null | undefined {
+  const latest = rounds.at(-1)
+  if (!latest || roundView(latest, now).status !== "ready") return null
+  if (latest.round >= LOGO_ROUNDS_MAX) return undefined
+  const at = finishedAt(latest) + waitBefore(latest.round + 1) * 1000
+  return at > now ? at : null
+}
+
+/** A wait in plain words, rounded up: "a minute", "5 minutes", "an hour", "24 hours". */
+const inWords = (seconds: number) => {
+  const minutes = Math.ceil(seconds / 60)
+  if (minutes < 60) return minutes === 1 ? "a minute" : `${minutes} minutes`
+  const hours = Math.ceil(minutes / 60)
+  return hours === 1 ? "an hour" : `${hours} hours`
 }
 
 type Stored = { manifest: Manifest; etag: string }
@@ -243,6 +289,25 @@ export async function drawLogos(
   if (base && !rounds.some((r) => r.manifest.variants.includes(base))) {
     return invalid([{ path: ["base"] }])
   }
+  // A new try after a failed round replaces it and waits for nothing.
+  const now = Date.now()
+  const opens = retry
+    ? null
+    : nextRoundAt(
+        rounds.map((r) => r.manifest),
+        now
+      )
+  if (opens) {
+    const seconds = Math.ceil((opens - now) / 1000)
+    const response = failure(429, {
+      class: "transient",
+      code: "logos.wait",
+      message: `Your next round opens in ${inWords(seconds)}. Until then, pick the logo you like best.`,
+      detail: {},
+    })
+    response.headers.set("retry-after", String(seconds))
+    return response
+  }
 
   const facts = await kit.withOrg({ orgId }, readFacts)
   const name = factValue(facts, "business.name")?.name
@@ -287,10 +352,11 @@ export async function drawLogos(
     // The key is in the seed, so a try that replaces a failed round never
     // shares an id with a late picture from the one before.
     planned: await Promise.all(
-      COMPOSITIONS.map((c) =>
-        stableId(`${orgId}:${toolCallId}:${round}:${key}:${c}`)
+      Array.from({ length: LOGO_VARIANTS }, (_, i) =>
+        stableId(`${orgId}:${toolCallId}:${round}:${key}:${i}`)
       )
     ),
+    styles: variantStyles(brief.style),
     variants: [],
   }
   const at = manifestKey(orgId, toolCallId, round)
@@ -327,7 +393,7 @@ export async function drawLogos(
   return Response.json(roundView(manifest), { status: 202 })
 }
 
-/** `GET /logos?tool_call_id=`: every round of that question, oldest first. */
+/** `GET /logos?tool_call_id=`: every round of that question, oldest first, and when the next may start. */
 export async function readLogos(
   request: Request,
   env: Env,
@@ -338,7 +404,13 @@ export async function readLogos(
   )
   if (!toolCallId.success) return invalid([{ path: ["tool_call_id"] }])
   const rounds = await readRounds(env, owner.orgId, toolCallId.data)
-  const body: LogoRounds = { rounds: rounds.map((r) => roundView(r.manifest)) }
+  const opens = nextRoundAt(rounds.map((r) => r.manifest))
+  const body: LogoRounds = {
+    rounds: rounds.map((r) => roundView(r.manifest)),
+    ...(opens === undefined
+      ? {}
+      : { next_at: opens === null ? null : new Date(opens).toISOString() }),
+  }
   return Response.json(body, { headers: { "cache-control": "no-store" } })
 }
 
@@ -405,11 +477,11 @@ export async function keepLogo(
 
 // --- The drawing, in the queue consumer -------------------------------------
 
-/** The director: a symbol idea per layout, or null when it is slow or says nothing usable. */
+/** The director: up to four ideas for the logo type, or null when it is slow or says nothing usable. */
 export type Director = (
   subject: Manifest["subject"],
   brief: LogoBrief
-) => Promise<Partial<Record<Composition, string>> | null>
+) => Promise<string[] | null>
 
 function openrouterDirector(apiKey: string, modelId: string): Director | null {
   const model = plannerModel(apiKey, modelId)
@@ -417,6 +489,7 @@ function openrouterDirector(apiKey: string, modelId: string): Director | null {
   return async (subject, brief) => {
     const data = JSON.stringify({
       ...subject,
+      type: brief.type,
       direction: brief.description,
       style: brief.style,
     }).replace(/</g, "\\u003c")
@@ -434,24 +507,36 @@ function openrouterDirector(apiKey: string, modelId: string): Director | null {
   }
 }
 
-/** The director's answer, each idea a short string or left out. */
-export function symbolsOf(
-  value: unknown
-): Partial<Record<Composition, string>> {
-  const out: Partial<Record<Composition, string>> = {}
-  if (!value || typeof value !== "object") return out
-  for (const c of COMPOSITIONS) {
-    const idea = (value as Record<string, unknown>)[c]
-    if (typeof idea === "string" && idea.trim()) {
-      out[c] = idea.trim().slice(0, 160)
-    }
+/** The director's answer: its ideas that are words, each short, at most one per variant. */
+export function symbolsOf(value: unknown): string[] {
+  const ideas = (value as { ideas?: unknown } | null)?.ideas
+  if (!Array.isArray(ideas)) return []
+  return ideas
+    .filter((idea): idea is string => typeof idea === "string" && !!idea.trim())
+    .map((idea) => idea.trim().slice(0, 160))
+    .slice(0, LOGO_VARIANTS)
+}
+
+/**
+ * Whether PNG bytes carry alpha: a colour type with an alpha channel, or a
+ * tRNS chunk ahead of the pixels. The model's word that it drew a
+ * transparent background is not taken.
+ */
+export function hasAlpha(bytes: Uint8Array): boolean {
+  if (sniff(bytes) !== "image/png" || bytes.length < 26) return false
+  if (bytes[25] === 4 || bytes[25] === 6) return true
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  for (let at = 8; at + 8 <= bytes.length; at += 12 + view.getUint32(at)) {
+    const name = String.fromCharCode(...bytes.subarray(at + 4, at + 8))
+    if (name === "tRNS") return true
+    if (name === "IDAT") return false
   }
-  return out
+  return false
 }
 
 type Drawn = { bytes: Uint8Array; type: string; cost: number }
 
-/** One picture from one model, its bytes checked to be an image. */
+/** One picture from one model, its bytes checked to be a PNG with alpha. */
 async function drawOne(
   apiKey: string,
   model: (typeof LOGO_MODELS)[number],
@@ -490,6 +575,7 @@ async function drawOne(
   const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
   const type = sniff(bytes)
   if (!type) throw new Error("logos.not_an_image")
+  if (!hasAlpha(bytes)) throw new Error("logos.opaque")
   return { bytes, type, cost: Number(body.usage?.cost ?? 0) }
 }
 
@@ -561,13 +647,12 @@ export async function drawRound(
         )
   const symbols =
     reference || !director
-      ? {}
+      ? []
       : ((await director(manifest.subject, manifest.brief).catch(() => null)) ??
-        {})
+        [])
 
   const outcomes = await Promise.all(
-    COMPOSITIONS.map(async (composition, i) => {
-      const id = manifest.planned[i] as string
+    manifest.planned.map(async (id, i) => {
       if (manifest.variants.includes(id) || (await exists(id))) {
         await add(id)
         return { model: "kept", cost: 0 }
@@ -580,14 +665,12 @@ export async function drawRound(
                 subject: manifest.subject,
                 brief: manifest.brief,
                 changes: manifest.changes,
-                transparent: model.transparent,
               })
             : logoPrompt({
                 subject: manifest.subject,
                 brief: manifest.brief,
-                composition,
-                symbol: symbols[composition] ?? null,
-                transparent: model.transparent,
+                style: manifest.styles[i] as LogoStyle,
+                symbol: symbols[i] ?? null,
                 changes: manifest.changes,
               })
         const drawn = await drawOne(apiKey, model, prompt, reference).catch(
@@ -620,9 +703,10 @@ export async function drawRound(
   const drawn = outcomes.filter((o) => o.model !== null).length
   await record((m) => ({
     ...m,
-    // Tiles in layout order, whatever order they finished in.
+    // Tiles in planned order, whatever order they finished in.
     variants: m.planned.filter((id) => m.variants.includes(id)),
     status: drawn > 0 ? "ready" : "failed",
+    finished_at: new Date().toISOString(),
   }))
   console.log(
     JSON.stringify({
