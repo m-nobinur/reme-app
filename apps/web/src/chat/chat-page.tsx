@@ -24,6 +24,7 @@ import {
   SITE_CHANGE_MODE,
   Thread,
 } from "@workspace/ui/components/assistant/thread"
+import { TrayServicesProvider } from "@workspace/ui/components/assistant/tray-services"
 import { buttonVariants } from "@workspace/ui/components/button"
 import { EmptyState } from "@workspace/ui/components/empty-state"
 import { browserZone } from "@workspace/ui/lib/zone"
@@ -44,6 +45,7 @@ import { domainPurchase } from "./domain-purchase"
 import { asked, missingConversations, startsNewChat, tailOf } from "./history"
 import { useConversationRuntime } from "./runtime"
 import { SiteReadyCard } from "./site-ready"
+import { trayServices } from "./tray-services"
 import { uploadPhotos } from "./upload"
 
 const frame = getRouteApi("/app")
@@ -214,28 +216,30 @@ export function ChatPage() {
         ) : (
           <CosToolsProvider value={tools}>
             <UploadPhotosProvider value={uploadPhotos}>
-              <SaveDesignAnswerProvider value={saveDesignAnswer}>
-                <DomainPurchaseProvider value={domainPurchase}>
-                  <Thread
-                    after={
-                      <>
-                        <SiteReadyCard />
-                        <BuildStopped />
-                      </>
-                    }
-                    assistant={live.workspace?.assistantName}
-                    briefing={briefing.line}
-                    components={{ ToolFallback: Approval }}
-                    mode={mode}
-                    placeholder={`Ask ${assistant} anything…`}
-                    placeholderIdeas={ideas}
-                    questionPlaceholder={`Tell ${assistant} what to do instead…`}
-                    quickActions={OWNER_QUICK_ACTIONS}
-                    reveal={onboarding ? OPENING_REVEAL : undefined}
-                    stored={id}
-                  />
-                </DomainPurchaseProvider>
-              </SaveDesignAnswerProvider>
+              <TrayServicesProvider value={trayServices}>
+                <SaveDesignAnswerProvider value={saveDesignAnswer}>
+                  <DomainPurchaseProvider value={domainPurchase}>
+                    <Thread
+                      after={
+                        <>
+                          <SiteReadyCard />
+                          <BuildStopped />
+                        </>
+                      }
+                      assistant={live.workspace?.assistantName}
+                      briefing={briefing.line}
+                      components={{ ToolFallback: Approval }}
+                      mode={mode}
+                      placeholder={`Ask ${assistant} anything…`}
+                      placeholderIdeas={ideas}
+                      questionPlaceholder={`Tell ${assistant} what to do instead…`}
+                      quickActions={OWNER_QUICK_ACTIONS}
+                      reveal={onboarding ? OPENING_REVEAL : undefined}
+                      stored={id}
+                    />
+                  </DomainPurchaseProvider>
+                </SaveDesignAnswerProvider>
+              </TrayServicesProvider>
             </UploadPhotosProvider>
           </CosToolsProvider>
         )}

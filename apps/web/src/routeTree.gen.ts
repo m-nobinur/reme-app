@@ -26,6 +26,7 @@ import { Route as TermsRouteImport } from './routes/terms'
 import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 import { Route as ApiAssetsRouteImport } from './routes/api.assets'
 import { Route as ApiChatRouteImport } from './routes/api.chat'
+import { Route as ApiLogosRouteImport } from './routes/api.logos'
 import { Route as AppConversationRouteImport } from './routes/app/_conversation'
 import { Route as AppAccountRouteImport } from './routes/app/account'
 import { Route as AppApprovalsRouteImport } from './routes/app/approvals'
@@ -37,13 +38,16 @@ import { Route as AppRemindersRouteImport } from './routes/app/reminders'
 import { Route as AppStaffRouteImport } from './routes/app/staff'
 import { Route as AppTasksRouteImport } from './routes/app/tasks'
 import { Route as AppWebsiteRouteImport } from './routes/app/website'
+import { Route as ApiAssetsReviewRouteImport } from './routes/api.assets.review'
 import { Route as ApiAuthCallbackRouteImport } from './routes/api.auth.callback'
 import { Route as ApiAuthSocialRouteImport } from './routes/api.auth.social'
 import { Route as ApiGoogleCallbackRouteImport } from './routes/api.google.callback'
 import { Route as ApiGoogleStartRouteImport } from './routes/api.google.start'
+import { Route as ApiPalettesFromImageRouteImport } from './routes/api.palettes.from-image'
 import { Route as ApiPhotosIdRouteImport } from './routes/api.photos.$id'
 import { Route as AppConversationIndexRouteImport } from './routes/app/_conversation/index'
 import { Route as AppDomainsReturnRouteImport } from './routes/app/domains.return'
+import { Route as ApiLogosIdKeepRouteImport } from './routes/api.logos.$id.keep'
 import { Route as AppConversationCIdRouteImport } from './routes/app/_conversation/c.$id'
 
 const IndexRoute = IndexRouteImport.update({
@@ -131,6 +135,11 @@ const ApiChatRoute = ApiChatRouteImport.update({
   path: '/api/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiLogosRoute = ApiLogosRouteImport.update({
+  id: '/api/logos',
+  path: '/api/logos',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppConversationRoute = AppConversationRouteImport.update({
   id: '/_conversation',
   getParentRoute: () => AppRoute,
@@ -185,6 +194,11 @@ const AppWebsiteRoute = AppWebsiteRouteImport.update({
   path: '/website',
   getParentRoute: () => AppRoute,
 } as any)
+const ApiAssetsReviewRoute = ApiAssetsReviewRouteImport.update({
+  id: '/review',
+  path: '/review',
+  getParentRoute: () => ApiAssetsRoute,
+} as any)
 const ApiAuthCallbackRoute = ApiAuthCallbackRouteImport.update({
   id: '/api/auth/callback',
   path: '/api/auth/callback',
@@ -205,6 +219,11 @@ const ApiGoogleStartRoute = ApiGoogleStartRouteImport.update({
   path: '/api/google/start',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPalettesFromImageRoute = ApiPalettesFromImageRouteImport.update({
+  id: '/api/palettes/from-image',
+  path: '/api/palettes/from-image',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPhotosIdRoute = ApiPhotosIdRouteImport.update({
   id: '/api/photos/$id',
   path: '/api/photos/$id',
@@ -219,6 +238,11 @@ const AppDomainsReturnRoute = AppDomainsReturnRouteImport.update({
   id: '/domains/return',
   path: '/domains/return',
   getParentRoute: () => AppRoute,
+} as any)
+const ApiLogosIdKeepRoute = ApiLogosIdKeepRouteImport.update({
+  id: '/$id/keep',
+  path: '/$id/keep',
+  getParentRoute: () => ApiLogosRoute,
 } as any)
 const AppConversationCIdRoute = AppConversationCIdRouteImport.update({
   id: '/c/$id',
@@ -242,8 +266,9 @@ export interface FileRoutesByFullPath {
   '/sign-up': typeof SignUpRoute
   '/terms': typeof TermsRoute
   '/verify-email': typeof VerifyEmailRoute
-  '/api/assets': typeof ApiAssetsRoute
+  '/api/assets': typeof ApiAssetsRouteWithChildren
   '/api/chat': typeof ApiChatRoute
+  '/api/logos': typeof ApiLogosRouteWithChildren
   '/app/account': typeof AppAccountRoute
   '/app/approvals': typeof AppApprovalsRoute
   '/app/memory': typeof AppMemoryRoute
@@ -254,13 +279,16 @@ export interface FileRoutesByFullPath {
   '/app/staff': typeof AppStaffRoute
   '/app/tasks': typeof AppTasksRoute
   '/app/website': typeof AppWebsiteRoute
+  '/api/assets/review': typeof ApiAssetsReviewRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/social': typeof ApiAuthSocialRoute
   '/api/google/callback': typeof ApiGoogleCallbackRoute
   '/api/google/start': typeof ApiGoogleStartRoute
+  '/api/palettes/from-image': typeof ApiPalettesFromImageRoute
   '/api/photos/$id': typeof ApiPhotosIdRoute
   '/app/domains/return': typeof AppDomainsReturnRoute
   '/app/': typeof AppConversationIndexRoute
+  '/api/logos/$id/keep': typeof ApiLogosIdKeepRoute
   '/app/c/$id': typeof AppConversationCIdRoute
 }
 export interface FileRoutesByTo {
@@ -279,8 +307,9 @@ export interface FileRoutesByTo {
   '/sign-up': typeof SignUpRoute
   '/terms': typeof TermsRoute
   '/verify-email': typeof VerifyEmailRoute
-  '/api/assets': typeof ApiAssetsRoute
+  '/api/assets': typeof ApiAssetsRouteWithChildren
   '/api/chat': typeof ApiChatRoute
+  '/api/logos': typeof ApiLogosRouteWithChildren
   '/app/account': typeof AppAccountRoute
   '/app/approvals': typeof AppApprovalsRoute
   '/app/memory': typeof AppMemoryRoute
@@ -291,12 +320,15 @@ export interface FileRoutesByTo {
   '/app/staff': typeof AppStaffRoute
   '/app/tasks': typeof AppTasksRoute
   '/app/website': typeof AppWebsiteRoute
+  '/api/assets/review': typeof ApiAssetsReviewRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/social': typeof ApiAuthSocialRoute
   '/api/google/callback': typeof ApiGoogleCallbackRoute
   '/api/google/start': typeof ApiGoogleStartRoute
+  '/api/palettes/from-image': typeof ApiPalettesFromImageRoute
   '/api/photos/$id': typeof ApiPhotosIdRoute
   '/app/domains/return': typeof AppDomainsReturnRoute
+  '/api/logos/$id/keep': typeof ApiLogosIdKeepRoute
   '/app/c/$id': typeof AppConversationCIdRoute
 }
 export interface FileRoutesById {
@@ -316,8 +348,9 @@ export interface FileRoutesById {
   '/sign-up': typeof SignUpRoute
   '/terms': typeof TermsRoute
   '/verify-email': typeof VerifyEmailRoute
-  '/api/assets': typeof ApiAssetsRoute
+  '/api/assets': typeof ApiAssetsRouteWithChildren
   '/api/chat': typeof ApiChatRoute
+  '/api/logos': typeof ApiLogosRouteWithChildren
   '/app/_conversation': typeof AppConversationRouteWithChildren
   '/app/account': typeof AppAccountRoute
   '/app/approvals': typeof AppApprovalsRoute
@@ -329,13 +362,16 @@ export interface FileRoutesById {
   '/app/staff': typeof AppStaffRoute
   '/app/tasks': typeof AppTasksRoute
   '/app/website': typeof AppWebsiteRoute
+  '/api/assets/review': typeof ApiAssetsReviewRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/social': typeof ApiAuthSocialRoute
   '/api/google/callback': typeof ApiGoogleCallbackRoute
   '/api/google/start': typeof ApiGoogleStartRoute
+  '/api/palettes/from-image': typeof ApiPalettesFromImageRoute
   '/api/photos/$id': typeof ApiPhotosIdRoute
   '/app/domains/return': typeof AppDomainsReturnRoute
   '/app/_conversation/': typeof AppConversationIndexRoute
+  '/api/logos/$id/keep': typeof ApiLogosIdKeepRoute
   '/app/_conversation/c/$id': typeof AppConversationCIdRoute
 }
 export interface FileRouteTypes {
@@ -358,6 +394,7 @@ export interface FileRouteTypes {
     | '/verify-email'
     | '/api/assets'
     | '/api/chat'
+    | '/api/logos'
     | '/app/account'
     | '/app/approvals'
     | '/app/memory'
@@ -368,13 +405,16 @@ export interface FileRouteTypes {
     | '/app/staff'
     | '/app/tasks'
     | '/app/website'
+    | '/api/assets/review'
     | '/api/auth/callback'
     | '/api/auth/social'
     | '/api/google/callback'
     | '/api/google/start'
+    | '/api/palettes/from-image'
     | '/api/photos/$id'
     | '/app/domains/return'
     | '/app/'
+    | '/api/logos/$id/keep'
     | '/app/c/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -395,6 +435,7 @@ export interface FileRouteTypes {
     | '/verify-email'
     | '/api/assets'
     | '/api/chat'
+    | '/api/logos'
     | '/app/account'
     | '/app/approvals'
     | '/app/memory'
@@ -405,12 +446,15 @@ export interface FileRouteTypes {
     | '/app/staff'
     | '/app/tasks'
     | '/app/website'
+    | '/api/assets/review'
     | '/api/auth/callback'
     | '/api/auth/social'
     | '/api/google/callback'
     | '/api/google/start'
+    | '/api/palettes/from-image'
     | '/api/photos/$id'
     | '/app/domains/return'
+    | '/api/logos/$id/keep'
     | '/app/c/$id'
   id:
     | '__root__'
@@ -431,6 +475,7 @@ export interface FileRouteTypes {
     | '/verify-email'
     | '/api/assets'
     | '/api/chat'
+    | '/api/logos'
     | '/app/_conversation'
     | '/app/account'
     | '/app/approvals'
@@ -442,13 +487,16 @@ export interface FileRouteTypes {
     | '/app/staff'
     | '/app/tasks'
     | '/app/website'
+    | '/api/assets/review'
     | '/api/auth/callback'
     | '/api/auth/social'
     | '/api/google/callback'
     | '/api/google/start'
+    | '/api/palettes/from-image'
     | '/api/photos/$id'
     | '/app/domains/return'
     | '/app/_conversation/'
+    | '/api/logos/$id/keep'
     | '/app/_conversation/c/$id'
   fileRoutesById: FileRoutesById
 }
@@ -468,12 +516,14 @@ export interface RootRouteChildren {
   SignUpRoute: typeof SignUpRoute
   TermsRoute: typeof TermsRoute
   VerifyEmailRoute: typeof VerifyEmailRoute
-  ApiAssetsRoute: typeof ApiAssetsRoute
+  ApiAssetsRoute: typeof ApiAssetsRouteWithChildren
   ApiChatRoute: typeof ApiChatRoute
+  ApiLogosRoute: typeof ApiLogosRouteWithChildren
   ApiAuthCallbackRoute: typeof ApiAuthCallbackRoute
   ApiAuthSocialRoute: typeof ApiAuthSocialRoute
   ApiGoogleCallbackRoute: typeof ApiGoogleCallbackRoute
   ApiGoogleStartRoute: typeof ApiGoogleStartRoute
+  ApiPalettesFromImageRoute: typeof ApiPalettesFromImageRoute
   ApiPhotosIdRoute: typeof ApiPhotosIdRoute
 }
 
@@ -598,6 +648,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/logos': {
+      id: '/api/logos'
+      path: '/api/logos'
+      fullPath: '/api/logos'
+      preLoaderRoute: typeof ApiLogosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/app/_conversation': {
       id: '/app/_conversation'
       path: ''
@@ -675,6 +732,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppWebsiteRouteImport
       parentRoute: typeof AppRoute
     }
+    '/api/assets/review': {
+      id: '/api/assets/review'
+      path: '/review'
+      fullPath: '/api/assets/review'
+      preLoaderRoute: typeof ApiAssetsReviewRouteImport
+      parentRoute: typeof ApiAssetsRoute
+    }
     '/api/auth/callback': {
       id: '/api/auth/callback'
       path: '/api/auth/callback'
@@ -703,6 +767,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiGoogleStartRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/palettes/from-image': {
+      id: '/api/palettes/from-image'
+      path: '/api/palettes/from-image'
+      fullPath: '/api/palettes/from-image'
+      preLoaderRoute: typeof ApiPalettesFromImageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/photos/$id': {
       id: '/api/photos/$id'
       path: '/api/photos/$id'
@@ -723,6 +794,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/app/domains/return'
       preLoaderRoute: typeof AppDomainsReturnRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/api/logos/$id/keep': {
+      id: '/api/logos/$id/keep'
+      path: '/$id/keep'
+      fullPath: '/api/logos/$id/keep'
+      preLoaderRoute: typeof ApiLogosIdKeepRouteImport
+      parentRoute: typeof ApiLogosRoute
     }
     '/app/_conversation/c/$id': {
       id: '/app/_conversation/c/$id'
@@ -780,6 +858,30 @@ const AppRouteChildren: AppRouteChildren = {
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
+interface ApiAssetsRouteChildren {
+  ApiAssetsReviewRoute: typeof ApiAssetsReviewRoute
+}
+
+const ApiAssetsRouteChildren: ApiAssetsRouteChildren = {
+  ApiAssetsReviewRoute: ApiAssetsReviewRoute,
+}
+
+const ApiAssetsRouteWithChildren = ApiAssetsRoute._addFileChildren(
+  ApiAssetsRouteChildren,
+)
+
+interface ApiLogosRouteChildren {
+  ApiLogosIdKeepRoute: typeof ApiLogosIdKeepRoute
+}
+
+const ApiLogosRouteChildren: ApiLogosRouteChildren = {
+  ApiLogosIdKeepRoute: ApiLogosIdKeepRoute,
+}
+
+const ApiLogosRouteWithChildren = ApiLogosRoute._addFileChildren(
+  ApiLogosRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
@@ -796,12 +898,14 @@ const rootRouteChildren: RootRouteChildren = {
   SignUpRoute: SignUpRoute,
   TermsRoute: TermsRoute,
   VerifyEmailRoute: VerifyEmailRoute,
-  ApiAssetsRoute: ApiAssetsRoute,
+  ApiAssetsRoute: ApiAssetsRouteWithChildren,
   ApiChatRoute: ApiChatRoute,
+  ApiLogosRoute: ApiLogosRouteWithChildren,
   ApiAuthCallbackRoute: ApiAuthCallbackRoute,
   ApiAuthSocialRoute: ApiAuthSocialRoute,
   ApiGoogleCallbackRoute: ApiGoogleCallbackRoute,
   ApiGoogleStartRoute: ApiGoogleStartRoute,
+  ApiPalettesFromImageRoute: ApiPalettesFromImageRoute,
   ApiPhotosIdRoute: ApiPhotosIdRoute,
 }
 export const routeTree = rootRouteImport
@@ -809,11 +913,15 @@ export const routeTree = rootRouteImport
   ._addFileTypes<FileRouteTypes>()
 
 import type { getRouter } from './router.tsx'
+
 import type { startInstance } from './start.ts'
+
 declare module '@tanstack/react-start' {
   interface Register {
     ssr: true
+
     router: Awaited<ReturnType<typeof getRouter>>
+
     config: Awaited<ReturnType<typeof startInstance.getOptions>>
   }
 }
