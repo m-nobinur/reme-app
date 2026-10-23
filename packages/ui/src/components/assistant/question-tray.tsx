@@ -48,6 +48,7 @@ import {
   useId,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react"
 import { createPortal } from "react-dom"
 
@@ -68,6 +69,49 @@ const SlotContext = createContext<HTMLElement | null>(null)
 
 /** The element above the composer the tray docks into, set by the thread. */
 export const TraySlotProvider = SlotContext.Provider
+
+/**
+ * How to open the docked question again while the owner has it folded, for
+ * the line where its call sits and for the activity panel; null while it is
+ * open or nothing waits.
+ * shortcut: one folded tray per page, as the thread docks one at a time;
+ * key it by call if two ever dock together.
+ */
+type Reopen = { open: () => void; many: boolean }
+let reopen: Reopen | null = null
+const reopenWatchers = new Set<() => void>()
+const setReopen = (next: Reopen | null) => {
+  reopen = next
+  for (const watch of reopenWatchers) watch()
+}
+const watchReopen = (watch: () => void) => {
+  reopenWatchers.add(watch)
+  return () => {
+    reopenWatchers.delete(watch)
+  }
+}
+
+/** A text button that opens the folded question, or nothing while none is folded. */
+export function ShowFoldedQuestion({ className }: { className?: string }) {
+  const folded = useSyncExternalStore(
+    watchReopen,
+    () => reopen,
+    () => null
+  )
+  if (!folded) return null
+  return (
+    <button
+      className={cn(
+        "rounded-sm text-foreground underline decoration-muted-foreground/60 underline-offset-3 outline-none hover:decoration-foreground focus-visible:ring-2 focus-visible:ring-ring",
+        className
+      )}
+      onClick={folded.open}
+      type="button"
+    >
+      {folded.many ? "Show the questions" : "Show the question"}
+    </button>
+  )
+}
 
 /**
  * Draws an open question in the thread's tray slot once no turn runs, so it
@@ -93,8 +137,9 @@ function Docked({
   if (!slot || running) return null
   return (
     <>
-      <p className="pt-3 text-muted-foreground text-sm">
+      <p className="flex flex-wrap items-baseline gap-x-2 pt-3 text-muted-foreground text-sm">
         {many ? "Waiting for your answers" : "Waiting for your answer"}
+        <ShowFoldedQuestion />
       </p>
       {createPortal(
         <div
@@ -746,6 +791,15 @@ function TrayFrame({
     watch.observe(body)
     return () => watch.disconnect()
   }, [page?.index, collapsed])
+
+  // Folded, the tray can be opened again from its waiting line and the panel.
+  const expand = useRef(() => onCollapsedChange(false))
+  expand.current = () => onCollapsedChange(false)
+  useEffect(() => {
+    if (!collapsed) return
+    setReopen({ open: () => expand.current(), many: paged })
+    return () => setReopen(null)
+  }, [collapsed, paged])
 
   const collapse = () => {
     onCollapsedChange(true)
