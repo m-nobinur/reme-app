@@ -510,13 +510,24 @@ function TrayLogo({
     }
   }
   const custom = colours && "custom" in colours ? colours.custom : null
-  const setCustom = (slot: number, value: string) =>
-    custom &&
-    setColours({
-      custom: custom.map((each, place) => (place === slot ? value : each)),
-    })
 
   const firstRound = create && rounds.length === 0
+
+  // The section that opens comes into view once its fold has eased open.
+  const page = useRef<HTMLDivElement>(null)
+  const shownTop = useRef(top)
+  useEffect(() => {
+    if (shownTop.current === top) return
+    shownTop.current = top
+    const timer = setTimeout(() => {
+      const still = window.matchMedia("(prefers-reduced-motion: reduce)")
+      page.current?.querySelector(`[data-part="${top}"]`)?.scrollIntoView({
+        block: "nearest",
+        behavior: still.matches ? "auto" : "smooth",
+      })
+    }, FOLD_MS)
+    return () => clearTimeout(timer)
+  }, [top])
 
   // Before the first round the tray's primary button is Design my logo; a
   // layout effect, so the tray never paints Next in its place.
@@ -549,7 +560,7 @@ function TrayLogo({
   useLayoutEffect(() => () => setSubmit(undefined), [setSubmit])
 
   return (
-    <div className="-my-1.5 flex shrink-0 flex-col">
+    <div className="-my-1.5 flex shrink-0 flex-col" ref={page}>
       <Fold open={!choiceOpen}>
         <Summary label="Logo" onOpen={() => setFocus("choice")}>
           <span className="truncate">
@@ -672,7 +683,7 @@ function TrayLogo({
         </Summary>
       </Fold>
       <Fold open={opened("look")}>
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2" data-part="look">
           <label className="font-medium text-sm" htmlFor={`${id}-look`}>
             How should it look?{" "}
             <span className="font-normal text-muted-foreground text-xs">
@@ -710,7 +721,7 @@ function TrayLogo({
         </Summary>
       </Fold>
       <Fold open={opened("colours")}>
-        <fieldset className="flex flex-col gap-2">
+        <fieldset className="flex flex-col gap-2" data-part="colours">
           <legend className="mb-2 font-medium text-sm">Colours</legend>
           <div className="grid @sm:grid-cols-4 grid-cols-2 gap-2">
             {/* A palette is its colours alone, as on the palette page; the name is for screen readers. */}
@@ -730,31 +741,39 @@ function TrayLogo({
                 <span className="sr-only">{each.label}</span>
               </RadioTile>
             ))}
-            <RadioTile
-              checked={random !== null}
-              className={cn(TRAY_TILE, COLOUR_TILE, "relative")}
-              name={`${id}-colours`}
-              // A tap on Random when it is picked draws another.
-              onClick={() => random && roll()}
-              onPick={roll}
-            >
+            {/* The shuffle sits beside the radio, not in its label, so it stays its own button. */}
+            <div className="relative grid">
+              <RadioTile
+                checked={random !== null}
+                className={cn(TRAY_TILE, COLOUR_TILE)}
+                name={`${id}-colours`}
+                // The first tap draws one; a tap on the one drawn picks it.
+                onClick={() => random && setFocus("type")}
+                onPick={roll}
+              >
+                {random ? (
+                  <>
+                    <Swatches colors={random.stops} />
+                    <span className="sr-only">Random, {random.label}</span>
+                  </>
+                ) : (
+                  <span className={NAMED_TILE}>
+                    <ShuffleIcon aria-hidden className="size-4" />
+                    Random
+                  </span>
+                )}
+              </RadioTile>
               {random ? (
-                <>
-                  <Swatches colors={random.stops} />
-                  <span className="absolute top-1 right-1 grid size-5 place-items-center rounded-full bg-card/90 text-foreground shadow-sm">
-                    <ShuffleIcon aria-hidden className="size-3" />
-                  </span>
-                  <span className="sr-only">
-                    Random, {random.label}. Pick again for another.
-                  </span>
-                </>
-              ) : (
-                <span className={NAMED_TILE}>
+                <button
+                  aria-label="Another random palette"
+                  className="absolute top-1/2 right-1.5 grid size-8 -translate-y-1/2 place-items-center rounded-full bg-card/90 text-foreground shadow-sm outline-none transition-colors hover:bg-card focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none"
+                  onClick={roll}
+                  type="button"
+                >
                   <ShuffleIcon aria-hidden className="size-4" />
-                  Random
-                </span>
-              )}
-            </RadioTile>
+                </button>
+              ) : null}
+            </div>
             <RadioTile
               checked={custom !== null}
               className={cn(TRAY_TILE, COLOUR_TILE)}
@@ -768,73 +787,12 @@ function TrayLogo({
             </RadioTile>
           </div>
           {custom ? (
-            // In a row like a palette, the brand colour first, up to four.
-            <div className="grid @sm:grid-cols-4 grid-cols-2 gap-2">
-              {custom.map((value, place) => (
-                <div
-                  className="flex h-10 items-center gap-1.5 rounded-xl border border-border bg-card px-1.5 transition-colors focus-within:border-primary focus-within:ring-3 focus-within:ring-primary"
-                  // biome-ignore lint/suspicious/noArrayIndexKey: a colour's place is its identity
-                  key={place}
-                >
-                  <input
-                    aria-label={`Colour ${place + 1}, picker`}
-                    className="size-7 shrink-0 cursor-pointer rounded-lg border border-border bg-transparent outline-none [&::-moz-color-swatch]:rounded-md [&::-moz-color-swatch]:border-0 [&::-webkit-color-swatch-wrapper]:p-0.5 [&::-webkit-color-swatch]:rounded-md [&::-webkit-color-swatch]:border-0"
-                    onChange={(event) =>
-                      setCustom(place, event.currentTarget.value)
-                    }
-                    type="color"
-                    value={hex(value) ?? stops[2]}
-                  />
-                  <input
-                    aria-invalid={hex(value) === null}
-                    aria-label={`Colour ${place + 1}`}
-                    autoComplete="off"
-                    className="w-full min-w-0 bg-transparent font-mono text-base outline-none placeholder:text-muted-foreground aria-invalid:text-destructive md:text-sm"
-                    maxLength={7}
-                    onChange={(event) =>
-                      setCustom(place, event.currentTarget.value)
-                    }
-                    placeholder="#hex"
-                    spellCheck={false}
-                    value={value}
-                  />
-                  {place > 0 ? (
-                    <Button
-                      aria-label={`Remove colour ${place + 1}`}
-                      className={ACCENT_RING}
-                      onClick={() =>
-                        setColours({
-                          custom: custom.filter((_, slot) => slot !== place),
-                        })
-                      }
-                      size="icon-xs"
-                      type="button"
-                      variant="ghost"
-                    >
-                      <XIcon aria-hidden />
-                    </Button>
-                  ) : null}
-                </div>
-              ))}
-              {custom.length < CUSTOM_MAX ? (
-                <button
-                  className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-border border-dashed font-medium text-muted-foreground text-xs outline-none transition-colors hover:border-foreground/25 hover:text-foreground focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-primary"
-                  onClick={() =>
-                    setColours({
-                      custom: [
-                        ...custom,
-                        // The site palette's next colour, as a start.
-                        stops[[2, 3, 1, 0][custom.length] ?? 0],
-                      ],
-                    })
-                  }
-                  type="button"
-                >
-                  <PlusIcon aria-hidden className="size-4" />
-                  Add colour
-                </button>
-              ) : null}
-            </div>
+            <CustomColours
+              colours={custom}
+              onChange={(next) => setColours({ custom: next })}
+              onDone={() => setFocus("type")}
+              starts={stops}
+            />
           ) : null}
         </fieldset>
       </Fold>
@@ -847,7 +805,7 @@ function TrayLogo({
         </Summary>
       </Fold>
       <Fold open={opened("type")}>
-        <fieldset className="flex flex-col gap-2">
+        <fieldset className="flex flex-col gap-2" data-part="type">
           <legend className="mb-2 font-medium text-sm">Logo type</legend>
           {/* As many to a row as fit whole: three on a wide tray, one on the narrowest, so no name wraps. */}
           <div className="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-2">
@@ -880,7 +838,7 @@ function TrayLogo({
         </Summary>
       </Fold>
       <Fold open={opened("style")}>
-        <fieldset className="flex flex-col gap-2">
+        <fieldset className="flex flex-col gap-2" data-part="style">
           <legend className="mb-2 font-medium text-sm">Style</legend>
           <div className="grid @md:grid-cols-4 grid-cols-3 gap-2">
             {LOGO_STYLES.map((style) => (
@@ -1098,6 +1056,143 @@ function TrayLogo({
 }
 
 /** A logo type or style to pick: its pictures, cycling while hovered, and its name. */
+/** How long a section takes to fold, as `Fold` eases it. */
+const FOLD_MS = 220
+
+/** The width a custom colour opens to: its picker, its code and a remove. */
+const OPEN_COLOUR = "flex-[0_0_11rem]"
+
+/**
+ * The owner's own colours as one strip, like a palette, the brand colour
+ * first. A colour widens to its picker and code under the pointer or focus;
+ * one just added opens with its code focused, and joins the strip again when
+ * focus leaves it. Done keeps them and folds the section.
+ */
+function CustomColours({
+  colours,
+  starts,
+  onChange,
+  onDone,
+}: {
+  colours: string[]
+  /** The site palette, whose next stop a new colour starts from. */
+  starts: Stops
+  onChange: (colours: string[]) => void
+  onDone: () => void
+}) {
+  const [editing, setEditing] = useState<number | null>(null)
+  // The colour just added, whose code takes focus as it mounts.
+  const added = useRef<number | null>(null)
+  const alone = colours.length === 1
+  const set = (slot: number, value: string) =>
+    onChange(colours.map((each, place) => (place === slot ? value : each)))
+  const add = () => {
+    added.current = colours.length
+    setEditing(colours.length)
+    onChange([...colours, starts[[2, 3, 1, 0][colours.length] ?? 0]])
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <fieldset
+        aria-label="Your colours"
+        className="flex h-10 min-w-60 flex-1 overflow-hidden rounded-xl border border-border"
+      >
+        {colours.map((value, place) => (
+          // biome-ignore lint/a11y/noStaticElementInteractions: only listens for focus leaving the colour's own fields
+          <div
+            className={cn(
+              "group/colour flex min-w-6 flex-1 items-center justify-center transition-[flex] duration-200 ease-out motion-reduce:transition-none",
+              !alone &&
+                (editing === place
+                  ? OPEN_COLOUR
+                  : "focus-within:flex-[0_0_11rem] hover:flex-[0_0_11rem]")
+            )}
+            // biome-ignore lint/suspicious/noArrayIndexKey: a colour's place is its identity
+            key={place}
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget)) {
+                setEditing(null)
+              }
+            }}
+            style={{ backgroundColor: hex(value) ?? undefined }}
+          >
+            <div
+              className={cn(
+                "flex items-center gap-1 rounded-lg bg-card/95 p-0.5 shadow-sm transition-opacity duration-150 motion-reduce:transition-none",
+                alone || editing === place
+                  ? "opacity-100"
+                  : "opacity-0 group-focus-within/colour:opacity-100 group-hover/colour:opacity-100"
+              )}
+            >
+              <input
+                aria-label={`Colour ${place + 1}, picker`}
+                className="size-6 shrink-0 cursor-pointer rounded-md border border-border bg-transparent outline-none [&::-moz-color-swatch]:rounded [&::-moz-color-swatch]:border-0 [&::-webkit-color-swatch-wrapper]:p-0.5 [&::-webkit-color-swatch]:rounded [&::-webkit-color-swatch]:border-0"
+                onChange={(event) => set(place, event.currentTarget.value)}
+                type="color"
+                value={hex(value) ?? starts[2]}
+              />
+              <input
+                aria-invalid={hex(value) === null}
+                aria-label={`Colour ${place + 1}`}
+                autoComplete="off"
+                className="w-[4.75rem] min-w-0 bg-transparent font-mono text-base outline-none placeholder:text-muted-foreground aria-invalid:text-destructive md:text-xs"
+                maxLength={7}
+                onChange={(event) => set(place, event.currentTarget.value)}
+                placeholder="#hex"
+                ref={(node) => {
+                  if (node && added.current === place) {
+                    added.current = null
+                    node.focus()
+                  }
+                }}
+                spellCheck={false}
+                value={value}
+              />
+              {alone ? null : (
+                <Button
+                  aria-label={`Remove colour ${place + 1}`}
+                  className={ACCENT_RING}
+                  onClick={() => {
+                    setEditing(null)
+                    onChange(colours.filter((_, slot) => slot !== place))
+                  }}
+                  size="icon-xs"
+                  type="button"
+                  variant="ghost"
+                >
+                  <XIcon aria-hidden />
+                </Button>
+              )}
+            </div>
+          </div>
+        ))}
+      </fieldset>
+      {colours.length < CUSTOM_MAX ? (
+        <Button
+          className={ACCENT_RING}
+          onClick={add}
+          size="sm"
+          type="button"
+          variant="ghost"
+        >
+          <PlusIcon aria-hidden />
+          Add colour
+        </Button>
+      ) : null}
+      <Button
+        className={ACCENT_RING}
+        disabled={colours.every((each) => hex(each) === null)}
+        onClick={onDone}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        Done
+      </Button>
+    </div>
+  )
+}
+
 function PickTile({
   checked,
   className,
