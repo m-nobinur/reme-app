@@ -51,13 +51,22 @@ describe("GET /photos/:id's thumbnail", () => {
   const id = "0b9c4a1e-2f3d-4c5b-8a6e-7d8f9a0b1c2d"
   const ORIGINAL = new Uint8Array(2000)
   const THUMB = new Uint8Array([1, 2, 3])
+  const upload = "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f"
+  const logo = "2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f6a"
   const mine = { orgId: "org-a" } as Owner
+  const stored: Record<string, Record<string, string>> = {
+    [`generated/org-a/${id}.png`]: {},
+    [`uploads/org-a/${upload}`]: {},
+    [`generated/org-a/${logo}.png`]: { use: "logo" },
+  }
   const sites = {
     get: async (key: string) =>
-      key === `generated/org-a/${id}.png`
+      key in stored
         ? {
+            key,
             body: new Blob([ORIGINAL]).stream(),
             httpMetadata: { contentType: "image/png" },
+            customMetadata: stored[key],
           }
         : null,
   }
@@ -88,6 +97,22 @@ describe("GET /photos/:id's thumbnail", () => {
     expect(response.headers.get("cache-control")).toContain("immutable")
     expect(await bytes(response)).toEqual(THUMB)
     expect(asked).toEqual([{ width: 320 }])
+  })
+
+  it("serves an owner's upload and a drawn logo at the tray's 512 px", async () => {
+    asked.length = 0
+    for (const each of [upload, logo]) {
+      const response = await readPhoto(env({ IMAGES: images }), mine, each)
+      expect(response.status).toBe(200)
+      await response.arrayBuffer()
+    }
+    expect(asked).toEqual([{ width: 512 }, { width: 512 }])
+    const theirs = await readPhoto(
+      env({ IMAGES: images }),
+      { orgId: "org-b" } as Owner,
+      upload
+    )
+    expect(theirs.status).toBe(404)
   })
 
   it("is the original where there is no binding", async () => {
@@ -331,6 +356,7 @@ describe.skipIf(!url)("GET /photos/:id, on a live connection", () => {
       get: async (asked: string) =>
         asked === key
           ? {
+              key,
               body: new Blob([WEBP]).stream(),
               httpMetadata: { contentType: "image/webp" },
             }
