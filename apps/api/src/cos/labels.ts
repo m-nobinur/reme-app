@@ -79,12 +79,15 @@ export function workspaceLabels(workspace: CosWorkspace) {
       state: STATE[b.state],
       lane: b.lane,
       goal: b.goal,
-      progress: b.progress.map(
+      progress: (b.progress ?? []).map(
         (p) =>
           `${p.step}${p.total > 1 ? `: ${p.done} of ${p.total}` : ""}${p.now ? " (now)" : p.done >= p.total ? " (done)" : ""}`
       ),
     })),
-    stopped_recently: stopped.map((s) => ({ why: STOPPED[s.cause], at: s.at })),
+    stopped_recently: (stopped ?? []).map((s) => ({
+      why: STOPPED[s.cause],
+      at: s.at,
+    })),
     questions: questions.map((q) => ({
       ref: { request_id: q.request_id, field: q.field },
       about: plain(q.field),

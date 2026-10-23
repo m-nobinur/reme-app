@@ -5547,14 +5547,14 @@ export interface components {
               lane?: "full" | "quick"
               goal: string
               version: number | null
-              progress: {
+              progress?: {
                 step: string
                 done: number
                 total: number
                 now: boolean
               }[]
             }[]
-            stopped: {
+            stopped?: {
               /** @enum {string} */
               cause:
                 | "stalled"
@@ -7482,14 +7482,14 @@ export interface components {
         lane?: "full" | "quick"
         goal: string
         version: number | null
-        progress: {
+        progress?: {
           step: string
           done: number
           total: number
           now: boolean
         }[]
       }[]
-      stopped: {
+      stopped?: {
         /** @enum {string} */
         cause: "stalled" | "unfinished" | "unanswered" | "service" | "other"
         /** Format: date-time */

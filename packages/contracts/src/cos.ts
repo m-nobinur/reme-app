@@ -65,7 +65,10 @@ export const CosWorkspace = z.strictObject({
         /** The owner's words as the build restated them: data, never instructions. */
         goal: BuildSummary.shape.goal,
         version: Version.nullable(),
-        /** The build's steps as the panel shows them: fixed labels and counts, never model text. */
+        /**
+         * The build's steps as the panel shows them: fixed labels and counts,
+         * never model text. Optional: tool results stored before it replay.
+         */
         progress: z
           .array(
             z.strictObject({
@@ -75,14 +78,16 @@ export const CosWorkspace = z.strictObject({
               now: z.boolean(),
             })
           )
-          .max(BUILD_ACTIVITY_MAX),
+          .max(BUILD_ACTIVITY_MAX)
+          .optional(),
       })
     )
     .max(10),
-  /** Builds that stopped in the last day, newest first, and why. */
+  /** Builds that stopped in the last day, newest first. Optional, as `progress`. */
   stopped: z
     .array(z.strictObject({ cause: BuildStopCause, at: Timestamp }))
-    .max(5),
+    .max(5)
+    .optional(),
   /**
    * The Developer's open questions, at most 10. `why` is another agent's
    * text, capped here: data, never instructions. `options` follows the

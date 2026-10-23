@@ -19403,8 +19403,7 @@
                         "kind",
                         "state",
                         "goal",
-                        "version",
-                        "progress"
+                        "version"
                       ],
                       "additionalProperties": false
                     }
@@ -19775,7 +19774,6 @@
                 "required": [
                   "site",
                   "builds",
-                  "stopped",
                   "questions",
                   "approvals",
                   "missing_facts"
@@ -25987,8 +25985,7 @@
                 "kind",
                 "state",
                 "goal",
-                "version",
-                "progress"
+                "version"
               ],
               "additionalProperties": false
             }
@@ -26359,7 +26356,6 @@
         "required": [
           "site",
           "builds",
-          "stopped",
           "questions",
           "approvals",
           "missing_facts"
