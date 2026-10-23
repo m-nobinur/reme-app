@@ -30708,6 +30708,26 @@
                 "properties": {
                   "kind": {
                     "type": "string",
+                    "const": "doing"
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60,
+                    "pattern": "\\S"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "text"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
                     "const": "fact"
                   },
                   "key": {

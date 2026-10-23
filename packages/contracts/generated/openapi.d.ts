@@ -8819,6 +8819,11 @@ export interface components {
       on:
         | {
             /** @constant */
+            kind: "doing"
+            text: string
+          }
+        | {
+            /** @constant */
             kind: "fact"
             /** @enum {string} */
             key:
