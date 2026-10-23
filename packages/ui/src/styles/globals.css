@@ -153,6 +153,10 @@
   --animate-icon-hammer: icon-hammer 1.2s ease-in-out infinite;
   --animate-icon-breathe: icon-breathe 2.4s ease-in-out infinite;
   --animate-note-cycle: note-cycle 9s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  /* A logo still drawing: its colours drift and sharpen. A drawn one lands
+     from a blur. The logo page holds both still under reduced motion. */
+  --animate-logo-diffuse: logo-diffuse 6s ease-in-out infinite alternate;
+  --animate-logo-land: logo-land 0.6s ease-out both;
   /* The conversation's reading type, sized per viewport by `--chat-size`. A
      step line (a check the assistant ran) sits a size under the reply. */
   --text-chat: var(--chat-size);
@@ -458,6 +462,22 @@
   }
   /* Base UI measures the panel and publishes the height; the Radix variable the
      registry ships alongside it is dropped, because Radix is not in this tree. */
+  @keyframes logo-diffuse {
+    from {
+      filter: blur(28px) saturate(0.6);
+      transform: scale(1.25) rotate(0deg);
+    }
+    to {
+      filter: blur(14px) saturate(1);
+      transform: scale(1) rotate(25deg);
+    }
+  }
+  @keyframes logo-land {
+    from {
+      filter: blur(12px);
+      opacity: 0;
+    }
+  }
   @keyframes collapsible-down {
     from {
       height: 0;

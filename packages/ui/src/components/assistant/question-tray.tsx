@@ -14,7 +14,10 @@ import {
   PALETTES,
   type PaletteStops,
 } from "@workspace/contracts"
-import { TrayLogo } from "@workspace/ui/components/assistant/tray-logo"
+import {
+  type LogoStart,
+  TrayLogo,
+} from "@workspace/ui/components/assistant/tray-logo"
 import { PalettePicture } from "@workspace/ui/components/assistant/tray-palette"
 import {
   heldPhotosAnswer,
@@ -178,6 +181,7 @@ function DropTile({
   multiple = false,
   onFiles,
   icon,
+  className,
 }: {
   title: string
   help: string
@@ -185,6 +189,7 @@ function DropTile({
   multiple?: boolean
   onFiles: (files: File[]) => void
   icon: ReactNode
+  className?: string
 }) {
   const id = useId()
   const [over, setOver] = useState(false)
@@ -193,7 +198,8 @@ function DropTile({
       className={cn(
         "flex cursor-pointer items-center gap-3 rounded-xl border border-border border-dashed bg-card px-4 py-3 transition-colors duration-150",
         "hover:border-primary/50 has-[:focus-visible]:border-primary has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-primary",
-        over && "border-primary bg-primary/5"
+        over && "border-primary bg-primary/5",
+        className
       )}
       onDragLeave={() => setOver(false)}
       onDragOver={(event) => {
@@ -715,7 +721,7 @@ function TrayFrame({
     // Pages the owner is not on stay in the form, hidden; their fields are skipped.
     const shown = [
       ...(bodyRef.current?.querySelectorAll<HTMLInputElement>("input") ?? []),
-    ].filter((input) => input.checkVisibility())
+    ].filter((input) => input.checkVisibility({ checkOpacity: true }))
     ;(shown.find((input) => input.checked) ?? shown[0])?.focus()
   }, [page?.index])
 
@@ -914,6 +920,8 @@ type Start = {
   answers?: Record<string, Answer>
   /** A picture's colours being read on the palette page. */
   reading?: boolean
+  /** Where the logo page opens. */
+  logo?: LogoStart
 }
 
 type QuestionTrayProps = {
@@ -983,6 +991,8 @@ function QuestionTray({
         "palette" in each ? [each.palette] : []
       )[0] ?? null
   )
+  // The logo page's own primary button (Design my logo), while it has one.
+  const [logoSubmit, setLogoSubmit] = useState<TrayFrameProps["submit"]>()
   const focusComposer = useFocusComposer()
 
   const question = questions[index]
@@ -1067,6 +1077,8 @@ function QuestionTray({
   const write = (words: string) =>
     set(words.trim() ? { own: words } : undefined)
 
+  const logo = question.visual === "logo"
+
   return (
     <TrayFrame
       className={className}
@@ -1077,25 +1089,34 @@ function QuestionTray({
       onForward={last || !ready ? undefined : () => go(index + 1, true)}
       page={{ index, total }}
       question={question.question ?? "Choose one"}
-      skip={{
-        label: "Skip all",
-        onSkip: () => finish(true),
-        disabled: finishing && !ready,
-      }}
+      // The logo cannot be skipped, so its page offers no Skip all.
+      skip={
+        logo
+          ? undefined
+          : {
+              label: "Skip all",
+              onSkip: () => finish(true),
+              disabled: finishing && !ready,
+            }
+      }
       status={finishing && !ready ? "A logo is all that is still needed" : null}
-      submit={{
-        label: last || finishing ? "Build my site" : "Next",
-        onSubmit: next,
-        disabled: !ready,
-      }}
+      submit={
+        (logo && logoSubmit) || {
+          label: last || finishing ? "Build my site" : "Next",
+          onSubmit: next,
+          disabled: !ready,
+        }
+      }
     >
       {question.visual === "font_pair" && <PreviewFaces />}
-      {question.visual === "logo" ? (
+      {logo ? (
         <TrayLogo
           {...page}
-          palettes={palettes}
           answer={answer && "logo" in answer ? answer : undefined}
           onAnswer={set}
+          palettes={palettes}
+          setSubmit={setLogoSubmit}
+          start={start?.logo}
         />
       ) : null}
       {question.visual === "photos" ? (
@@ -1232,7 +1253,12 @@ function QuestionTray({
   )
 }
 
-export type { Offered as OfferedPalette, Start as QuestionTrayStart, Stops }
+export type {
+  Offered as OfferedPalette,
+  Start as QuestionTrayStart,
+  Stops,
+  TrayFrameProps,
+}
 export {
   ACCENT_RING,
   Docked,

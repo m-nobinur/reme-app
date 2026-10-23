@@ -396,9 +396,13 @@ export async function chatFetch(
   if (response.ok) return response
   const body: unknown = await response.json().catch(() => null)
   if (response.status === 401) throw new Error(SESSION_ENDED)
+  // A refusal that says when to try again carries the seconds, for a countdown.
+  const wait = Number(response.headers.get("retry-after"))
+  const fail = (message: string) =>
+    Object.assign(new Error(message), wait > 0 ? { retryAfter: wait } : {})
   const envelope = ErrorEnvelope.safeParse(body)
   if (envelope.success) {
-    throw new Error(
+    throw fail(
       envelope.data.code === "org.unresolved"
         ? NO_BUSINESS
         : envelope.data.message
@@ -408,7 +412,7 @@ export async function chatFetch(
     typeof body === "object" && body !== null && "error" in body
       ? body.error
       : undefined
-  throw new Error(
+  throw fail(
     typeof own === "string"
       ? own
       : `The assistant did not answer (${response.status}). Try again.`

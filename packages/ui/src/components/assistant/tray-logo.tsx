@@ -1,7 +1,10 @@
 import {
   CaretLeftIcon,
   CaretRightIcon,
+  EyedropperIcon,
   PenNibIcon,
+  PlusIcon,
+  ShuffleIcon,
   SpinnerGapIcon,
   UploadSimpleIcon,
 } from "@phosphor-icons/react"
@@ -9,18 +12,24 @@ import {
   type Asset,
   LOGO_ROUNDS_MAX,
   LOGO_STYLES,
+  LOGO_TYPES,
   LOGO_VARIANTS,
+  type LogoBrief,
   type LogoRound,
   type LogoStyle,
+  type LogoType,
+  PALETTES,
 } from "@workspace/contracts"
 import {
   ACCENT_RING,
   DropTile,
   type OfferedPalette,
   type Stops,
+  Swatches,
   sentence,
   TRAY_FIELD,
   TRAY_TILE,
+  type TrayFrameProps,
   useTabDraft,
 } from "@workspace/ui/components/assistant/question-tray"
 import {
@@ -29,37 +38,69 @@ import {
 } from "@workspace/ui/components/assistant/tray-services"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
-import { Skeleton } from "@workspace/ui/components/skeleton"
-import { FIELD_ERROR, OPTION, OPTION_PILL } from "@workspace/ui/lib/card"
+import { FIELD_ERROR } from "@workspace/ui/lib/card"
 import { checkPhotos, sizeText, typesText } from "@workspace/ui/lib/upload"
 import { cn } from "@workspace/ui/lib/utils"
-import { useEffect, useId, useRef, useState } from "react"
+import {
+  type ReactNode,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react"
 
 /**
- * The logo question's page in the design tray, which cannot be skipped: the
- * owner uploads the logo they have, or has one made. Making one takes a few
- * words on the look, the colours (the site's palette first) and a style; a
- * round draws four designs, saved by the api, so a reload reads the rounds
- * back and carries on. Picking a design keeps it as the logo and answers the
- * question; Ask for changes draws another round from the picked one.
+ * The logo question's page in the design tray, the first question and one
+ * that cannot be skipped. It opens one section at a time, and a settled one
+ * folds into a summary row that reopens it: do they have a logo; if so the
+ * upload, else a few words on the look, the colours, the logo type and a
+ * style. Design my logo draws a round of four, saved by the api, so a reload
+ * reads the rounds back. Picking a design keeps it as the logo and answers
+ * the question; Change my logo draws another round from the picked one,
+ * after the wait the api sets between rounds.
  */
 
 /** The logo question's answer: the logo kept. */
 export type LogoAnswer = { logo: Asset }
 
-const STYLE_LABELS: Record<LogoStyle, string> = {
-  clean: "Clean",
-  classic: "Classic",
-  friendly: "Friendly",
-  bold: "Bold",
-  crafted: "Hand-drawn",
-  premium: "Premium",
+const TYPE_LABELS: Record<LogoType, string> = {
+  lockup: "Icon + name",
+  icon: "Icon only",
+  monogram: "Monogram",
+  emblem: "Emblem / badge",
+  abstract: "Abstract mark",
 }
+
+const STYLE_LABELS: Record<LogoStyle, string> = {
+  minimal: "Minimal",
+  geometric: "Geometric",
+  gradient: "Gradient",
+  mascot: "Mascot",
+  hand_drawn: "Hand-drawn",
+  luxury: "Luxury",
+  retro: "Retro",
+  three_d: "3D",
+}
+
+const styleLabel = (style: LogoBrief["style"]) =>
+  style === "surprise" ? "Surprise me" : STYLE_LABELS[style]
+
+/**
+ * Example logos for a made-up brand: each type (`type-<type>`), and each
+ * style drawn as each type (`<type>-<style>`).
+ */
+const EXAMPLES = import.meta.glob<string>("../../assets/logo-examples/*.webp", {
+  eager: true,
+  import: "default",
+})
+const example = (name: string) =>
+  EXAMPLES[`../../assets/logo-examples/${name}.webp`]
 
 /** What the status line says while a round draws, a step every few seconds. */
 const drawingLines = (name: string) => [
   `Sketching ideas for ${name}`,
-  "Trying the name in four layouts",
+  "Trying four different ideas",
   "Putting in your colours",
   "Tidying the edges",
   "Nearly there",
@@ -67,204 +108,176 @@ const drawingLines = (name: string) => [
 
 const NO_SERVICES = "Logos cannot be uploaded or made here."
 
-/** The colours a logo is drawn in: the palette's primary for the shapes, its ink for the name. */
+/** A colour tile, edge to edge like the palette page's, with a 2px line when picked. */
+const COLOUR_TILE =
+  "gap-0 overflow-hidden p-0 has-[:checked]:ring-2 has-[:checked]:ring-foreground"
+/** Random and Custom inside a colour tile: an icon and a name, a palette's height. */
+const NAMED_TILE =
+  "flex h-20 flex-col items-center justify-center gap-1 font-medium text-muted-foreground text-xs"
+
+/** The colours a logo is drawn in from a palette: its primary for the shapes, its ink for the name. */
 const logoColors = ([, , primary, ink]: Stops) => [primary, ink]
 
+/** A typed colour as the api takes it, or null when it is not one. */
+const hex = (text: string) => {
+  const colour = `#${text.trim().replace(/^#/, "").toLowerCase()}`
+  return /^#[0-9a-f]{6}$/.test(colour) ? colour : null
+}
+
+/** How long a wait has left, as Redesign says it. */
+export const waitText = (seconds: number) =>
+  seconds >= 86_400
+    ? "tomorrow"
+    : seconds > 3600
+      ? `in ${Math.ceil(seconds / 3600)} hours`
+      : seconds === 3600
+        ? "in 1 hour"
+        : `in ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`
+
+/** The seconds a refused round must wait, when the refusal said. */
+const retryAfter = (failure: unknown) =>
+  failure instanceof Error &&
+  "retryAfter" in failure &&
+  typeof failure.retryAfter === "number"
+    ? failure.retryAfter
+    : null
+
+/** The colours picked: one of the offered palettes, a random one, or the owner's own. */
+type Colours = { palette: number } | { random: string[] } | { custom: string[] }
+
+/** The brief as the owner fills it in, kept in the tab. */
+type Brief = {
+  description: string
+  colours: Colours | null
+  type: LogoType | null
+  style: LogoBrief["style"] | null
+}
+
+/** Where the catalog opens the page. */
+export type LogoStart = {
+  brief?: Partial<Brief>
+  /** The change field open, with these words. */
+  changes?: string
+}
+
+const BRIEF_PARTS = ["look", "colours", "type", "style"] as const
+type Part = "choice" | (typeof BRIEF_PARTS)[number] | "end"
+const order = (part: Part) =>
+  part === "choice"
+    ? -1
+    : part === "end"
+      ? BRIEF_PARTS.length
+      : BRIEF_PARTS.indexOf(part)
+
 /**
- * A style's chip picture: the business's first letter set the way the style
- * would set it, in the chosen colours on the site's paper. Drawn, not
- * loaded, so it follows the colours picked.
+ * A part of the page that opens and folds: the height eases between none
+ * and its content's, and its opacity with it, so the tray grows and shrinks
+ * smoothly. Folded, it takes no focus.
  */
-function StyleMark({
-  style,
-  stops: [paper, , primary, ink],
-  letter,
-}: {
-  style: LogoStyle
-  stops: Stops
-  letter: string
-}) {
-  const type = {
-    x: 32,
-    y: 21,
-    textAnchor: "middle",
-    dominantBaseline: "central",
-  } as const
+function Fold({ open, children }: { open: boolean; children: ReactNode }) {
   return (
-    <svg
-      aria-hidden
-      className="h-12 w-full rounded-lg ring-1 ring-foreground/10"
-      style={{ backgroundColor: paper }}
-      viewBox="0 0 64 42"
-    >
-      {style === "clean" ? (
-        <>
-          <rect fill={primary} height="24" rx="5" width="24" x="20" y="9" />
-          <text
-            {...type}
-            fill={paper}
-            fontFamily="system-ui, sans-serif"
-            fontSize="15"
-            fontWeight="600"
-          >
-            {letter}
-          </text>
-        </>
-      ) : style === "classic" ? (
-        <>
-          <circle cx="32" cy="21" fill="none" r="14" stroke={ink} />
-          <circle
-            cx="32"
-            cy="21"
-            fill="none"
-            r="11.5"
-            stroke={ink}
-            strokeWidth="0.5"
-          />
-          <line
-            stroke={ink}
-            strokeWidth="0.75"
-            x1="8"
-            x2="15"
-            y1="21"
-            y2="21"
-          />
-          <line
-            stroke={ink}
-            strokeWidth="0.75"
-            x1="49"
-            x2="56"
-            y1="21"
-            y2="21"
-          />
-          <text
-            {...type}
-            fill={primary}
-            fontFamily="Georgia, 'Times New Roman', serif"
-            fontSize="14"
-          >
-            {letter}
-          </text>
-        </>
-      ) : style === "friendly" ? (
-        <>
-          <path
-            d="M32 6c9 0 15 6 15 15s-6 15-15 15-15-5-15-15 6-15 15-15Z"
-            fill={primary}
-          />
-          <text
-            {...type}
-            fill={paper}
-            fontFamily="ui-rounded, 'SF Pro Rounded', 'Arial Rounded MT Bold', system-ui, sans-serif"
-            fontSize="16"
-            fontWeight="700"
-          >
-            {letter}
-          </text>
-        </>
-      ) : style === "bold" ? (
-        <>
-          <rect fill={ink} height="28" width="28" x="18" y="7" />
-          <text
-            {...type}
-            fill={primary}
-            fontFamily="Impact, 'Arial Narrow', system-ui, sans-serif"
-            fontSize="20"
-            fontWeight="900"
-          >
-            {letter}
-          </text>
-        </>
-      ) : style === "crafted" ? (
-        <>
-          <path
-            d="M33 7.5c7.5.3 13.6 6 13 13.8-.5 7.6-6.6 13.4-14.3 13.2C24 34.2 18 28.3 18.5 20.5 19 13 25.6 7.2 33 7.5Z"
-            fill="none"
-            stroke={primary}
-            strokeLinecap="round"
-            strokeWidth="1.6"
-          />
-          <text
-            {...type}
-            fill={ink}
-            fontFamily="'Segoe Script', 'Bradley Hand', 'Brush Script MT', cursive"
-            fontSize="17"
-            fontStyle="italic"
-          >
-            {letter}
-          </text>
-        </>
-      ) : (
-        <>
-          <circle
-            cx="32"
-            cy="21"
-            fill="none"
-            r="14"
-            stroke={primary}
-            strokeWidth="0.6"
-          />
-          <text
-            {...type}
-            fill={ink}
-            fontFamily="Didot, 'Bodoni 72', Georgia, serif"
-            fontSize="13"
-            fontWeight="300"
-          >
-            {letter}
-          </text>
-        </>
+    <div
+      className={cn(
+        "-mx-1 grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none",
+        open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
       )}
-    </svg>
+      inert={!open}
+    >
+      {/* Room inside the clip for the focus rings. */}
+      <div className="min-h-0 overflow-hidden">
+        <div className="px-1 py-1">{children}</div>
+      </div>
+    </div>
   )
 }
 
-/** A round in progress: the designs done so far, and a placeholder for each still drawing. */
-function DrawingRound({
-  round,
-  imageUrl,
-  paper,
-  name,
+/** A settled section as one row: what it is, what was chosen, and a tap to reopen it. */
+function Summary({
+  label,
+  onOpen,
+  children,
 }: {
-  round: LogoRound
-  imageUrl: (id: string) => string
-  paper: string
-  name: string
+  label: string
+  onOpen: () => void
+  children: ReactNode
 }) {
-  const lines = drawingLines(name)
-  const [beat, setBeat] = useState(0)
-  useEffect(() => {
-    const timer = setInterval(
-      () => setBeat((now) => Math.min(now + 1, lines.length - 1)),
-      3000
-    )
-    return () => clearInterval(timer)
-  }, [lines.length])
   return (
-    <div className="flex flex-col gap-2">
-      <ul aria-hidden className="grid @md:grid-cols-4 grid-cols-2 gap-2">
-        {Array.from({ length: LOGO_VARIANTS }, (_, at) => {
-          const variant = round.variants[at]
-          return (
-            <li key={variant?.id ?? at}>
-              {variant ? (
-                <img
-                  alt=""
-                  className="aspect-square w-full rounded-xl border border-border object-contain p-2"
-                  src={imageUrl(variant.id)}
-                  style={{ backgroundColor: paper }}
-                />
-              ) : (
-                <Skeleton className="aspect-square rounded-xl border border-border bg-card" />
-              )}
-            </li>
-          )
-        })}
-      </ul>
-      <p className="text-muted-foreground text-sm" role="status">
-        {lines[beat]}
-      </p>
-    </div>
+    <button
+      className="flex min-h-11 w-full items-center gap-3 rounded-xl border border-border bg-card px-3 py-2 text-left text-sm outline-none transition-colors duration-150 hover:bg-muted focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-primary"
+      onClick={onOpen}
+      type="button"
+    >
+      <span className="w-20 shrink-0 text-muted-foreground text-xs">
+        {label}
+      </span>
+      <span className="flex min-w-0 flex-1 items-center gap-2 font-medium">
+        {children}
+      </span>
+      <span className="shrink-0 text-muted-foreground text-xs">Change</span>
+    </button>
+  )
+}
+
+/** A few colours as overlapping dots, for a summary row. */
+function Dots({ colors }: { colors: readonly string[] }) {
+  return (
+    <span aria-hidden className="flex shrink-0">
+      {colors.map((color, at) => (
+        <span
+          // The outline keeps a colour near the card's own visible in either theme.
+          className="-ml-1 size-4 rounded-full border border-foreground/20 ring-2 ring-card first:ml-0"
+          // biome-ignore lint/suspicious/noArrayIndexKey: two colours may match
+          key={at}
+          style={{ backgroundColor: color }}
+        />
+      ))}
+    </span>
+  )
+}
+
+/**
+ * A design still drawing: the chosen colours as soft light under a grain,
+ * drifting and sharpening while it waits. Still under reduced motion.
+ */
+function Diffusing({
+  colors,
+  paper,
+  delay,
+}: {
+  colors: readonly string[]
+  paper: string
+  delay: number
+}) {
+  const id = useId()
+  const [first = paper, second = first] = colors
+  return (
+    <span
+      aria-hidden
+      className="relative block aspect-square overflow-hidden rounded-lg"
+      style={{ backgroundColor: paper }}
+    >
+      <span
+        className="absolute -inset-1/4 opacity-60 blur-xl motion-safe:animate-logo-diffuse"
+        style={{
+          animationDelay: `${-delay}ms`,
+          backgroundImage: `radial-gradient(circle at 35% 35%, ${first}, transparent 55%), radial-gradient(circle at 65% 70%, ${second}, transparent 55%)`,
+        }}
+      />
+      <svg
+        className="absolute inset-0 size-full opacity-30 mix-blend-multiply"
+        role="presentation"
+      >
+        <filter id={id}>
+          <feTurbulence
+            baseFrequency="0.85"
+            numOctaves="2"
+            stitchTiles="stitch"
+            type="fractalNoise"
+          />
+        </filter>
+        <rect filter={`url(#${id})`} height="100%" width="100%" />
+      </svg>
+    </span>
   )
 }
 
@@ -276,9 +289,14 @@ function TrayLogo({
   stops,
   businessName,
   palettes,
+  setSubmit,
+  start,
 }: TrayPageProps<LogoAnswer> & {
   /** The palettes the tray offers, the site's own first. */
   palettes: readonly OfferedPalette[]
+  /** Sets the tray's primary button while this page has its own; undefined hands it back. */
+  setSubmit: (submit: TrayFrameProps["submit"]) => void
+  start?: LogoStart | undefined
 }) {
   const id = useId()
   const services = useTrayServices()
@@ -286,53 +304,62 @@ function TrayLogo({
   const [path, setPath] = useState<"upload" | "create" | null>(
     first === "upload" || first === "create" ? first : null
   )
-  const { draft: brief, keep: setBrief } = useTabDraft<{
-    description: string
-    palette: number
-    style: LogoStyle
-  }>(`logo:${toolCallId}`, { description: "", palette: 0, style: "clean" })
+  const { draft: brief, keep: setBrief } = useTabDraft<Brief>(
+    `logo-brief:${toolCallId}`,
+    {
+      description: "",
+      colours: null,
+      type: null,
+      style: null,
+      ...start?.brief,
+    }
+  )
+  const [focus, setFocus] = useState<Part | null>(null)
   const [rounds, setRounds] = useState<LogoRound[]>([])
+  const [nextAt, setNextAt] = useState<number | null>(null)
   const [at, setAt] = useState<number | null>(null)
-  const [editing, setEditing] = useState(false)
-  const [changes, setChanges] = useState<string | null>(null)
-  const [kept, setKept] = useState<string | null>(null)
+  const [changes, setChanges] = useState<string | null>(start?.changes ?? null)
+  const [kept, setKept] = useState<string | null>(answer?.logo.id ?? null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [file, setFile] = useState<{ file: File; url: string } | null>(null)
+  const [, tick] = useState(0)
+  const replace = useRef<HTMLInputElement>(null)
   // What the last round asked for beyond the brief, so Try again repeats it.
   const asked = useRef<{ changes?: string; base?: string }>({})
 
   const latest = rounds.at(-1)
   const drawing = latest?.status === "drawing"
 
-  // The rounds drawn before a reload, and the page they were on.
+  // The rounds drawn before a reload, and again every few seconds while one
+  // draws, since a round draws after its request answers.
   useEffect(() => {
     if (!services) return
     let live = true
-    services
-      .logoRounds(toolCallId)
-      .then(({ rounds: drawn }) => {
-        if (!live || drawn.length === 0) return
-        setRounds(drawn)
-        setPath((now) => now ?? "create")
-      })
-      .catch(() => undefined)
-    return () => {
-      live = false
-    }
-  }, [services, toolCallId])
-
-  // A round draws after its request answers; read it again until it is done.
-  useEffect(() => {
-    if (!drawing || !services) return
-    const timer = setInterval(() => {
+    const read = () =>
       services
         .logoRounds(toolCallId)
-        .then(({ rounds: drawn }) => setRounds(drawn))
+        .then((drawn) => {
+          if (!live) return
+          setRounds(drawn.rounds)
+          setNextAt(drawn.next_at ? Date.parse(drawn.next_at) : null)
+        })
         .catch(() => undefined)
-    }, 2500)
-    return () => clearInterval(timer)
+    const timer = drawing ? setInterval(read, 2500) : undefined
+    if (!drawing) void read()
+    return () => {
+      live = false
+      clearInterval(timer)
+    }
   }, [drawing, services, toolCallId])
+
+  // The wait before the next round, counted down a second at a time.
+  const left = nextAt === null ? 0 : Math.ceil((nextAt - Date.now()) / 1000)
+  useEffect(() => {
+    if (left <= 0) return
+    const timer = setTimeout(() => tick((now) => now + 1), 1000)
+    return () => clearTimeout(timer)
+  }, [left])
 
   // The chosen file's preview, freed when another is chosen or the page goes.
   useEffect(
@@ -344,11 +371,51 @@ function TrayLogo({
 
   const accept = question.upload?.accept ?? []
   const maxBytes = question.upload?.max_bytes ?? 0
-  const palette = palettes[brief.palette] ?? palettes[0]
-  const colors = palette?.stops ?? stops
-  const letter = businessName.trim().charAt(0).toUpperCase() || "A"
+  const paper = stops[0]
+  const shownPath =
+    path ?? (rounds.length > 0 ? "create" : answer ? "upload" : null)
   const round = at === null ? latest : rounds[at]
   const shownAt = at ?? rounds.length - 1
+  const [uploadOption, createOption] = question.card.options
+
+  const colours = brief.colours
+  const colors = !colours
+    ? []
+    : "palette" in colours
+      ? logoColors((palettes[colours.palette] ?? palettes[0])?.stops ?? stops)
+      : "random" in colours
+        ? colours.random
+        : colours.custom.flatMap((each) => hex(each) ?? [])
+  const settled = {
+    look: true,
+    colours: colors.length > 0,
+    type: brief.type !== null,
+    style: brief.style !== null,
+  }
+  const briefReady = settled.colours && settled.type && settled.style
+  // The first brief section still to answer, or the last.
+  const limit = Math.max(
+    BRIEF_PARTS.findIndex((part) => !settled[part]),
+    briefReady ? BRIEF_PARTS.length - 1 : 0
+  )
+  // The top section open: the one the owner last settled or reopened.
+  const top: Part =
+    focus ??
+    (shownPath === null
+      ? "choice"
+      : shownPath === "upload"
+        ? "end"
+        : !briefReady
+          ? (BRIEF_PARTS[Math.max(0, limit - 1)] ?? "look")
+          : rounds.length > 0
+            ? "end"
+            : "style")
+  const create = shownPath === "create"
+  const opened = (part: (typeof BRIEF_PARTS)[number]) =>
+    create && order(part) >= order(top) && order(part) <= limit
+  const folded = (part: (typeof BRIEF_PARTS)[number]) =>
+    create && settled[part] && order(part) < order(top)
+  const choiceOpen = shownPath === null || top === "choice"
 
   const send = async (chosen: File) => {
     if (!services) return setError(NO_SERVICES)
@@ -383,6 +450,7 @@ function TrayLogo({
 
   const draw = async (extra: { changes?: string; base?: string }) => {
     if (!services) return setError(NO_SERVICES)
+    if (!brief.type || !brief.style || colors.length === 0) return
     asked.current = extra
     setError(null)
     setBusy("draw")
@@ -391,7 +459,8 @@ function TrayLogo({
         tool_call_id: toolCallId,
         brief: {
           description: brief.description.trim(),
-          colors: logoColors(colors),
+          colors,
+          type: brief.type,
           style: brief.style,
         },
         ...extra,
@@ -401,9 +470,11 @@ function TrayLogo({
         started,
       ])
       setAt(null)
-      setEditing(false)
       setChanges(null)
+      setFocus(null)
     } catch (failure) {
+      const wait = retryAfter(failure)
+      if (wait) setNextAt(Date.now() + wait * 1000)
       setError(sentence(failure, "The designs did not start. Try again."))
     } finally {
       setBusy(null)
@@ -425,339 +496,618 @@ function TrayLogo({
     }
   }
 
-  const askChanges = () => {
+  // A new round starts from the picked design, wherever it was drawn.
+  const redesign = () => {
     const words = changes?.trim()
-    if (!words) return
-    const base =
-      kept && round?.variants.some((each) => each.id === kept)
-        ? kept
-        : undefined
-    void draw(base ? { changes: words, base } : { changes: words })
+    const base = rounds.some((each) =>
+      each.variants.some((variant) => variant.id === kept)
+    )
+      ? (kept ?? undefined)
+      : undefined
+    void draw({
+      ...(words ? { changes: words } : {}),
+      ...(base ? { base } : {}),
+    })
   }
 
-  const form = path === "create" && (rounds.length === 0 || editing)
-  const keptShown =
-    answer && !(kept && round?.variants.some((each) => each.id === kept))
+  const setColours = (next: Colours) => {
+    setBrief({ ...brief, colours: next })
+    setFocus("colours")
+  }
+  const custom = colours && "custom" in colours ? colours.custom : null
+  const setCustom = (slot: number, value: string) =>
+    custom &&
+    setColours({
+      custom: custom.map((each, place) => (place === slot ? value : each)),
+    })
+
+  const firstRound = create && rounds.length === 0
+  const exampleType = brief.type ?? "lockup"
+
+  // Before the first round the tray's primary button is Design my logo; a
+  // layout effect, so the tray never paints Next in its place.
+  const design = useRef(() => undefined as undefined)
+  design.current = () => {
+    // A logo kept before is set aside until a design is picked.
+    if (answer) onAnswer(undefined)
+    void draw({})
+  }
+  const designDisabled = !briefReady || busy !== null
+  const designBusy = busy === "draw"
+  useLayoutEffect(() => {
+    setSubmit(
+      firstRound
+        ? {
+            label: (
+              <>
+                {designBusy ? (
+                  <SpinnerGapIcon aria-hidden className="animate-spin" />
+                ) : null}
+                Design my logo
+              </>
+            ),
+            onSubmit: () => design.current(),
+            disabled: designDisabled,
+          }
+        : undefined
+    )
+  }, [firstRound, designBusy, designDisabled, setSubmit])
+  useLayoutEffect(() => () => setSubmit(undefined), [setSubmit])
 
   return (
-    <div className="flex shrink-0 flex-col gap-3">
-      {keptShown && services ? (
-        <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-2">
-          <img
-            alt="Your logo"
-            className="size-14 shrink-0 rounded-lg object-contain p-1"
-            src={services.imageUrl(answer.logo.id)}
-            style={{ backgroundColor: stops[0] }}
-          />
-          <span className="flex min-w-0 flex-col gap-0.5">
-            <span className="font-medium text-sm">Your logo</span>
-            <span className="text-muted-foreground text-xs">
-              Upload or create another to change it
-            </span>
+    <div className="flex shrink-0 flex-col">
+      <Fold open={!choiceOpen}>
+        <Summary label="Logo" onOpen={() => setFocus("choice")}>
+          <span className="truncate">
+            {shownPath === "upload" ? uploadOption?.label : createOption?.label}
           </span>
+        </Summary>
+      </Fold>
+      <Fold open={choiceOpen}>
+        <div
+          aria-label={question.question ?? "Your logo"}
+          className="grid grid-cols-1 gap-3 min-[380px]:grid-cols-2"
+          role="radiogroup"
+        >
+          {(
+            [
+              [
+                "upload",
+                uploadOption?.label ?? "Yes, I have my logo",
+                "Upload the file you have",
+                <UploadSimpleIcon aria-hidden key="icon" />,
+              ],
+              [
+                "create",
+                createOption?.label ?? "No, create one for me",
+                "Pick from four designs",
+                <PenNibIcon aria-hidden key="icon" />,
+              ],
+            ] as const
+          ).map(([value, label, hint, icon]) => (
+            <label className={TRAY_TILE} key={value}>
+              <input
+                checked={shownPath === value}
+                className="sr-only"
+                name={`${id}-path`}
+                onChange={() => {
+                  setPath(value)
+                  setFocus(null)
+                  setError(null)
+                }}
+                // A tap on the one already chosen folds the pair again.
+                onClick={() => shownPath === value && setFocus(null)}
+                type="radio"
+                value={value}
+              />
+              <span className="flex items-center gap-2 font-medium text-sm [&_svg]:size-5 [&_svg]:text-primary">
+                {icon}
+                {label}
+              </span>
+              <span className="text-muted-foreground text-xs">{hint}</span>
+            </label>
+          ))}
         </div>
-      ) : null}
+      </Fold>
 
-      <div
-        aria-label="Your logo"
-        className="grid grid-cols-1 gap-3 min-[380px]:grid-cols-2"
-        role="radiogroup"
-      >
-        {(
-          [
-            [
-              "upload",
-              "Upload your logo",
-              "Use the one you have",
-              <UploadSimpleIcon aria-hidden key="icon" />,
-            ],
-            [
-              "create",
-              "Create one for me",
-              "Pick from four designs",
-              <PenNibIcon aria-hidden key="icon" />,
-            ],
-          ] as const
-        ).map(([value, label, hint, icon]) => (
-          <label className={TRAY_TILE} key={value}>
-            <input
-              checked={path === value}
-              className="sr-only"
-              name={`${id}-path`}
-              onChange={() => {
-                setPath(value)
-                setError(null)
-              }}
-              type="radio"
-              value={value}
-            />
-            <span className="flex items-center gap-2 font-medium text-sm [&_svg]:size-5 [&_svg]:text-primary">
-              {icon}
-              {label}
-            </span>
-            <span className="text-muted-foreground text-xs">{hint}</span>
-          </label>
-        ))}
-      </div>
-
-      {path === "upload" ? (
-        file ? (
+      {/* Yes: the upload. */}
+      <Fold open={shownPath === "upload"}>
+        {file || (answer && services) ? (
           <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-2">
             <img
-              alt=""
-              className="size-14 shrink-0 rounded-lg object-contain p-1"
-              src={file.url}
-              style={{ backgroundColor: stops[0] }}
+              alt={file ? "" : "Your logo"}
+              className="h-24 w-32 shrink-0 rounded-lg object-contain p-2"
+              src={file ? file.url : services?.imageUrl(answer?.logo.id ?? "")}
+              style={{ backgroundColor: paper }}
             />
             <span
-              className="flex min-w-0 flex-1 items-center gap-2 text-sm"
+              className="flex min-w-0 flex-1 flex-col gap-0.5 text-sm"
               role="status"
             >
               {busy === "upload" ? (
-                <>
+                <span className="flex items-center gap-2">
                   <SpinnerGapIcon aria-hidden className="size-4 animate-spin" />
                   Saving your logo
-                </>
-              ) : (
+                </span>
+              ) : file ? (
                 <span className="truncate">{file.file.name}</span>
+              ) : (
+                <>
+                  <span className="font-medium">Your logo</span>
+                  <span className="text-muted-foreground text-xs">
+                    Kept for your site
+                  </span>
+                </>
               )}
             </span>
             {busy !== "upload" ? (
-              <Button
-                className={ACCENT_RING}
-                onClick={() => void send(file.file)}
-                size="sm"
-                type="button"
-                variant="ghost"
-              >
-                Try again
-              </Button>
+              file ? (
+                <Button
+                  className={ACCENT_RING}
+                  onClick={() => void send(file.file)}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  Try again
+                </Button>
+              ) : (
+                <Button
+                  className={ACCENT_RING}
+                  onClick={() => replace.current?.click()}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  Replace
+                </Button>
+              )
             ) : null}
+            <input
+              accept={accept.join(",")}
+              aria-hidden
+              className="sr-only"
+              onChange={(event) => {
+                choose(Array.from(event.currentTarget.files ?? []))
+                event.currentTarget.value = ""
+              }}
+              ref={replace}
+              tabIndex={-1}
+              type="file"
+            />
           </div>
         ) : (
           <DropTile
             accept={accept}
+            className="min-h-40 flex-col justify-center text-center [&>span]:items-center"
             help={`${typesText(accept)}, up to ${sizeText(maxBytes)}. A clear background works best.`}
             icon={<UploadSimpleIcon />}
             onFiles={choose}
             title="Drop your logo here or choose it"
           />
-        )
-      ) : null}
+        )}
+      </Fold>
 
-      {form ? (
-        <form
-          className="flex flex-col gap-4"
-          onSubmit={(event) => {
-            event.preventDefault()
-            void draw({})
-          }}
-        >
-          <div className="flex flex-col gap-1.5">
-            <label className="font-medium text-sm" htmlFor={`${id}-look`}>
-              How should it look?
+      {/* No: the brief, a section at a time. */}
+      <Fold open={folded("look")}>
+        <Summary label="Look" onOpen={() => setFocus("look")}>
+          <span className="truncate">
+            {brief.description.trim() || "No preference"}
+          </span>
+        </Summary>
+      </Fold>
+      <Fold open={opened("look")}>
+        <div className="flex flex-col gap-1.5">
+          <label className="font-medium text-sm" htmlFor={`${id}-look`}>
+            How should it look?{" "}
+            <span className="font-normal text-muted-foreground text-xs">
+              Optional
+            </span>
+          </label>
+          <textarea
+            className={cn(
+              // Grows with the words, from two rows to about six.
+              "field-sizing-content max-h-40 min-h-16 w-full resize-none border px-3 py-2 text-base outline-none placeholder:text-muted-foreground md:text-sm",
+              TRAY_FIELD
+            )}
+            id={`${id}-look`}
+            maxLength={300}
+            onChange={(event) =>
+              setBrief({ ...brief, description: event.currentTarget.value })
+            }
+            placeholder="For example: a simple house shape, plain and modern"
+            rows={2}
+            value={brief.description}
+          />
+        </div>
+      </Fold>
+
+      <Fold open={folded("colours")}>
+        <Summary label="Colours" onOpen={() => setFocus("colours")}>
+          <Dots colors={colors} />
+          <span className="truncate">
+            {colours && "palette" in colours
+              ? palettes[colours.palette]?.label
+              : colours && "random" in colours
+                ? "Random"
+                : "Your colours"}
+          </span>
+        </Summary>
+      </Fold>
+      <Fold open={opened("colours")}>
+        <fieldset className="flex flex-col gap-2">
+          <legend className="mb-1.5 font-medium text-sm">Colours</legend>
+          <div className="grid @md:grid-cols-3 grid-cols-2 gap-2">
+            {/* A palette is its colours alone, as on the palette page; the name is for screen readers. */}
+            {palettes.map((each, index) => (
+              <label className={cn(TRAY_TILE, COLOUR_TILE)} key={each.label}>
+                <input
+                  checked={
+                    colours !== null &&
+                    "palette" in colours &&
+                    colours.palette === index
+                  }
+                  className="sr-only"
+                  name={`${id}-colours`}
+                  onChange={() => setColours({ palette: index })}
+                  type="radio"
+                />
+                <Swatches colors={each.stops} />
+                <span className="sr-only">{each.label}</span>
+              </label>
+            ))}
+            <label className={cn(TRAY_TILE, COLOUR_TILE)}>
+              <input
+                checked={colours !== null && "random" in colours}
+                className="sr-only"
+                name={`${id}-colours`}
+                onChange={() => {
+                  const lucky =
+                    PALETTES[Math.floor(Math.random() * PALETTES.length)]
+                  const swatches = (lucky?.swatches ??
+                    stops) as unknown as Stops
+                  setColours({ random: logoColors(swatches) })
+                }}
+                type="radio"
+              />
+              <span className={NAMED_TILE}>
+                <ShuffleIcon aria-hidden className="size-5" />
+                Random
+              </span>
             </label>
-            <textarea
-              className={cn(
-                "min-h-20 w-full border px-3 py-2 text-base outline-none placeholder:text-muted-foreground md:text-sm",
-                TRAY_FIELD
-              )}
-              id={`${id}-look`}
-              maxLength={300}
-              onChange={(event) =>
-                setBrief({ ...brief, description: event.currentTarget.value })
-              }
-              placeholder="For example: a simple house shape, plain and modern"
-              value={brief.description}
-            />
+            <label className={cn(TRAY_TILE, COLOUR_TILE)}>
+              <input
+                checked={custom !== null}
+                className="sr-only"
+                name={`${id}-colours`}
+                onChange={() => setColours({ custom: [stops[2]] })}
+                type="radio"
+              />
+              <span className={NAMED_TILE}>
+                <EyedropperIcon aria-hidden className="size-5" />
+                Custom
+              </span>
+            </label>
           </div>
-          <fieldset className="flex flex-col gap-1.5">
-            <legend className="mb-1.5 font-medium text-sm">Colours</legend>
-            <div className="flex flex-wrap gap-2">
-              {palettes.map((each, index) => (
-                <label
-                  className={cn(
-                    OPTION,
-                    OPTION_PILL,
-                    "gap-2 px-3 has-[:checked]:inset-ring-1 has-[:checked]:inset-ring-foreground has-[:checked]:border-foreground has-[:focus-visible]:border-primary has-[:checked]:bg-card has-[:focus-visible]:ring-primary"
-                  )}
-                  key={each.label}
-                >
+          {custom ? (
+            <div className="flex flex-col gap-2">
+              {custom.map((value, place) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: a colour's place is its identity
+                <div className="flex items-center gap-2" key={place}>
                   <input
-                    checked={index === brief.palette}
+                    aria-label={`Colour ${place + 1}, picker`}
+                    className="size-10 shrink-0 cursor-pointer rounded-xl border border-border bg-card p-1 outline-none focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-primary"
+                    onChange={(event) =>
+                      setCustom(place, event.currentTarget.value)
+                    }
+                    type="color"
+                    value={hex(value) ?? stops[2]}
+                  />
+                  <Input
+                    aria-invalid={hex(value) === null}
+                    aria-label={`Colour ${place + 1}`}
+                    autoComplete="off"
+                    className={cn("w-32 font-mono", TRAY_FIELD)}
+                    maxLength={7}
+                    onChange={(event) =>
+                      setCustom(place, event.currentTarget.value)
+                    }
+                    placeholder="Hex code"
+                    spellCheck={false}
+                    value={value}
+                  />
+                  {place > 0 ? (
+                    <Button
+                      className={ACCENT_RING}
+                      onClick={() => setColours({ custom: custom.slice(0, 1) })}
+                      size="sm"
+                      type="button"
+                      variant="ghost"
+                    >
+                      Remove
+                    </Button>
+                  ) : null}
+                </div>
+              ))}
+              {custom.length < 2 ? (
+                <Button
+                  className={cn("self-start", ACCENT_RING)}
+                  onClick={() => setColours({ custom: [...custom, stops[3]] })}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  <PlusIcon aria-hidden />
+                  Add a second colour
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+        </fieldset>
+      </Fold>
+
+      <Fold open={folded("type")}>
+        <Summary label="Logo type" onOpen={() => setFocus("type")}>
+          <span className="truncate">
+            {brief.type ? TYPE_LABELS[brief.type] : null}
+          </span>
+        </Summary>
+      </Fold>
+      <Fold open={opened("type")}>
+        <fieldset className="flex flex-col gap-2">
+          <legend className="mb-1.5 font-medium text-sm">Logo type</legend>
+          <div className="grid grid-cols-3 gap-2">
+            {LOGO_TYPES.map((type) => {
+              const src = example(`type-${type}`)
+              return (
+                <label className={cn(TRAY_TILE, "gap-1.5 p-1.5")} key={type}>
+                  <input
+                    checked={type === brief.type}
                     className="sr-only"
-                    name={`${id}-colours`}
-                    onChange={() => setBrief({ ...brief, palette: index })}
+                    name={`${id}-type`}
+                    onChange={() => {
+                      setBrief({ ...brief, type })
+                      setFocus("type")
+                    }}
                     type="radio"
                   />
-                  <span aria-hidden className="flex">
-                    {logoColors(each.stops).map((color, dot) => (
-                      <span
-                        className="-ml-1 size-4 rounded-full ring-2 ring-card first:ml-0"
-                        // biome-ignore lint/suspicious/noArrayIndexKey: a palette may repeat a colour
-                        key={dot}
-                        style={{ backgroundColor: color }}
+                  {/* One 3:2 box for every type: the wide lockup reads large and the square ones still fit. */}
+                  <span
+                    className="flex aspect-[3/2] items-center justify-center overflow-hidden rounded-lg"
+                    style={{ backgroundColor: paper }}
+                  >
+                    {src ? (
+                      <img
+                        alt=""
+                        className="size-full object-contain p-1.5"
+                        src={src}
                       />
-                    ))}
+                    ) : null}
                   </span>
-                  {each.label}
+                  <span className="font-medium text-xs">
+                    {TYPE_LABELS[type]}
+                  </span>
                 </label>
-              ))}
-            </div>
-          </fieldset>
-          <fieldset className="flex flex-col gap-1.5">
-            <legend className="mb-1.5 font-medium text-sm">Style</legend>
-            <div className="grid grid-cols-2 gap-2 min-[380px]:grid-cols-3">
-              {LOGO_STYLES.map((style) => (
-                <label className={cn(TRAY_TILE, "p-2")} key={style}>
+              )
+            })}
+          </div>
+        </fieldset>
+      </Fold>
+
+      <Fold open={folded("style")}>
+        <Summary label="Style" onOpen={() => setFocus("style")}>
+          <span className="truncate">
+            {brief.style ? styleLabel(brief.style) : null}
+          </span>
+        </Summary>
+      </Fold>
+      <Fold open={opened("style")}>
+        <fieldset className="flex flex-col gap-2">
+          <legend className="mb-1.5 font-medium text-sm">Style</legend>
+          <div className="grid grid-cols-3 gap-2">
+            {LOGO_STYLES.map((style) => {
+              const src = example(`${exampleType}-${style}`)
+              return (
+                <label className={cn(TRAY_TILE, "gap-1.5 p-1.5")} key={style}>
                   <input
                     checked={style === brief.style}
                     className="sr-only"
                     name={`${id}-style`}
-                    onChange={() => setBrief({ ...brief, style })}
+                    onChange={() => {
+                      setBrief({ ...brief, style })
+                      setFocus("style")
+                    }}
                     type="radio"
                   />
-                  <StyleMark letter={letter} stops={colors} style={style} />
+                  <span
+                    className={cn(
+                      "flex items-center justify-center overflow-hidden rounded-lg",
+                      exampleType === "lockup"
+                        ? "aspect-[2/1]"
+                        : "aspect-square"
+                    )}
+                    style={{ backgroundColor: paper }}
+                  >
+                    {src ? (
+                      <img
+                        alt=""
+                        className="size-full object-contain p-1.5"
+                        src={src}
+                      />
+                    ) : null}
+                  </span>
                   <span className="font-medium text-xs">
                     {STYLE_LABELS[style]}
                   </span>
                 </label>
-              ))}
-            </div>
-          </fieldset>
-          <div className="flex items-center gap-2">
-            <Button
+              )
+            })}
+            <label
               className={cn(
-                ACCENT_RING,
-                "focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+                TRAY_TILE,
+                "gap-1.5 border-foreground/30 border-dashed p-1.5 has-[:checked]:border-solid"
               )}
-              disabled={busy === "draw"}
-              type="submit"
             >
-              {busy === "draw" ? (
-                <SpinnerGapIcon aria-hidden className="animate-spin" />
-              ) : null}
-              Design my logo
-            </Button>
-            {editing ? (
-              <Button
-                className={ACCENT_RING}
-                onClick={() => setEditing(false)}
-                type="button"
-                variant="ghost"
+              <input
+                checked={brief.style === "surprise"}
+                className="sr-only"
+                name={`${id}-style`}
+                onChange={() => {
+                  setBrief({ ...brief, style: "surprise" })
+                  setFocus("style")
+                }}
+                type="radio"
+              />
+              <span
+                className={cn(
+                  "flex items-center justify-center rounded-lg bg-muted text-muted-foreground",
+                  exampleType === "lockup" ? "aspect-[2/1]" : "aspect-square"
+                )}
               >
-                Back to the designs
-              </Button>
-            ) : null}
-          </div>
-        </form>
-      ) : null}
-
-      {path === "create" && !form && round && services ? (
-        <div className="flex flex-col gap-3">
-          {rounds.length > 1 ? (
-            <div className="flex items-center gap-1">
-              <Button
-                aria-label="Earlier designs"
-                className={ACCENT_RING}
-                disabled={shownAt === 0}
-                onClick={() => setAt(shownAt - 1)}
-                size="icon-sm"
-                type="button"
-                variant="ghost"
-              >
-                <CaretLeftIcon aria-hidden />
-              </Button>
-              <span className="text-muted-foreground text-xs tabular-nums">
-                Round {shownAt + 1} of {rounds.length}
+                <ShuffleIcon aria-hidden className="size-6" />
               </span>
-              <Button
-                aria-label="Later designs"
-                className={ACCENT_RING}
-                disabled={shownAt === rounds.length - 1}
-                onClick={() => setAt(shownAt + 1)}
-                size="icon-sm"
-                type="button"
-                variant="ghost"
-              >
-                <CaretRightIcon aria-hidden />
-              </Button>
-            </div>
-          ) : null}
+              <span className="font-medium text-xs">Surprise me</span>
+            </label>
+          </div>
+        </fieldset>
+      </Fold>
 
-          {round.status === "drawing" ? (
-            <DrawingRound
-              imageUrl={services.imageUrl}
-              key={round.round}
-              name={businessName}
-              paper={stops[0]}
-              round={round}
-            />
-          ) : round.status === "failed" ? (
-            <div className="flex flex-col items-start gap-2 rounded-xl border border-border bg-card p-3">
-              <p className="text-sm">These designs did not come through.</p>
+      {/* The designs, once a round has started. */}
+      <Fold open={create && round !== undefined}>
+        {round && services ? (
+          <div className="flex flex-col gap-3">
+            {rounds.length > 1 ? (
+              <div className="flex items-center gap-1">
+                <Button
+                  aria-label="Earlier designs"
+                  className={ACCENT_RING}
+                  disabled={shownAt === 0}
+                  onClick={() => setAt(shownAt - 1)}
+                  size="icon-sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  <CaretLeftIcon aria-hidden />
+                </Button>
+                <span className="text-muted-foreground text-xs tabular-nums">
+                  Round {shownAt + 1} of {rounds.length}
+                </span>
+                <Button
+                  aria-label="Later designs"
+                  className={ACCENT_RING}
+                  disabled={shownAt === rounds.length - 1}
+                  onClick={() => setAt(shownAt + 1)}
+                  size="icon-sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  <CaretRightIcon aria-hidden />
+                </Button>
+              </div>
+            ) : null}
+
+            {round.status === "failed" ? (
+              <div className="flex flex-col items-start gap-2 rounded-xl border border-border bg-card p-3">
+                <p className="text-sm">These designs did not come through.</p>
+                <Button
+                  className={ACCENT_RING}
+                  disabled={busy === "draw"}
+                  onClick={() => void draw(asked.current)}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  Try again
+                </Button>
+              </div>
+            ) : (
+              <div
+                aria-busy={round.status === "drawing"}
+                aria-label="Logo designs"
+                className="grid @md:grid-cols-4 grid-cols-2 gap-2"
+                role="radiogroup"
+              >
+                {Array.from({ length: LOGO_VARIANTS }, (_, place) => {
+                  const variant = round.variants[place]
+                  return (
+                    <label
+                      className={cn(TRAY_TILE, "p-1.5")}
+                      // biome-ignore lint/suspicious/noArrayIndexKey: a slot stays put while its design lands
+                      key={place}
+                    >
+                      <input
+                        checked={variant !== undefined && kept === variant.id}
+                        className="sr-only"
+                        disabled={
+                          !variant || round.status !== "ready" || busy !== null
+                        }
+                        name={`${id}-design`}
+                        onChange={() => variant && void keep(variant.id)}
+                        type="radio"
+                      />
+                      <span className="relative">
+                        {variant ? (
+                          <img
+                            alt={`Design ${place + 1}`}
+                            className="aspect-square w-full rounded-lg object-contain p-2 motion-safe:animate-logo-land"
+                            key={variant.id}
+                            src={services.imageUrl(variant.id)}
+                            style={{ backgroundColor: paper }}
+                          />
+                        ) : (
+                          <Diffusing
+                            colors={colors.length > 0 ? colors : [stops[2]]}
+                            delay={place * 1500}
+                            paper={paper}
+                          />
+                        )}
+                        {busy === variant?.id ? (
+                          <SpinnerGapIcon
+                            aria-label="Saving"
+                            className="absolute top-1.5 right-1.5 size-4 animate-spin"
+                          />
+                        ) : null}
+                      </span>
+                    </label>
+                  )
+                })}
+              </div>
+            )}
+
+            {round.status === "drawing" ? (
+              <DrawingLine key={round.round} name={businessName} />
+            ) : null}
+
+            {round.status === "ready" && rounds.length >= LOGO_ROUNDS_MAX ? (
+              <p className="text-muted-foreground text-xs">
+                That is all the rounds for this logo. Pick one, or upload your
+                own.
+              </p>
+            ) : round.status === "ready" && changes === null ? (
               <Button
-                className={ACCENT_RING}
-                disabled={busy === "draw"}
-                onClick={() => void draw(asked.current)}
+                className={cn("self-start", ACCENT_RING)}
+                onClick={() => setChanges("")}
                 size="sm"
                 type="button"
                 variant="outline"
               >
-                Try again
+                Change my logo
               </Button>
-            </div>
-          ) : (
-            <div
-              aria-label="Logo designs"
-              className="grid @md:grid-cols-4 grid-cols-2 gap-2"
-              role="radiogroup"
-            >
-              {round.variants.map((variant, place) => (
-                <label className={cn(TRAY_TILE, "p-1.5")} key={variant.id}>
-                  <input
-                    checked={kept === variant.id}
-                    className="sr-only"
-                    disabled={busy !== null}
-                    name={`${id}-design`}
-                    onChange={() => void keep(variant.id)}
-                    type="radio"
-                  />
-                  <span className="relative">
-                    <img
-                      alt={`Design ${place + 1}`}
-                      className="aspect-square w-full rounded-lg object-contain p-2"
-                      src={services.imageUrl(variant.id)}
-                      style={{ backgroundColor: stops[0] }}
-                    />
-                    {busy === variant.id ? (
-                      <SpinnerGapIcon
-                        aria-label="Saving"
-                        className="absolute top-1.5 right-1.5 size-4 animate-spin"
-                      />
-                    ) : null}
-                  </span>
-                </label>
-              ))}
-            </div>
-          )}
-
-          {round.status === "ready" ? (
-            changes !== null ? (
+            ) : round.status === "ready" && changes !== null ? (
               <div className="flex @md:flex-row flex-col gap-2">
                 <Input
                   aria-label="What should change?"
                   autoComplete="off"
-                  autoFocus
+                  autoFocus={start?.changes === undefined}
                   className={cn("@md:flex-1 shrink-0", TRAY_FIELD)}
                   maxLength={300}
                   onChange={(event) => setChanges(event.currentTarget.value)}
                   onKeyDown={(event) => {
-                    // Enter tries again here, not the tray's Next.
+                    // Enter redesigns here, not the tray's Next.
                     if (event.key !== "Enter") return
                     event.preventDefault()
                     event.stopPropagation()
-                    askChanges()
+                    if (left <= 0 && busy === null && briefReady) redesign()
                   }}
                   placeholder={
                     kept
@@ -768,12 +1118,15 @@ function TrayLogo({
                 />
                 <div className="flex gap-2">
                   <Button
-                    className={ACCENT_RING}
-                    disabled={!changes.trim() || busy === "draw"}
-                    onClick={askChanges}
+                    className={cn("tabular-nums", ACCENT_RING)}
+                    disabled={left > 0 || busy !== null || !briefReady}
+                    onClick={redesign}
                     type="button"
                   >
-                    Try again
+                    {busy === "draw" ? (
+                      <SpinnerGapIcon aria-hidden className="animate-spin" />
+                    ) : null}
+                    {left > 0 ? `Redesign ${waitText(left)}` : "Redesign"}
                   </Button>
                   <Button
                     className={ACCENT_RING}
@@ -785,43 +1138,35 @@ function TrayLogo({
                   </Button>
                 </div>
               </div>
-            ) : rounds.length < LOGO_ROUNDS_MAX ? (
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  className={ACCENT_RING}
-                  onClick={() => setChanges("")}
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                >
-                  Ask for changes
-                </Button>
-                <Button
-                  className={ACCENT_RING}
-                  onClick={() => setEditing(true)}
-                  size="sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  Start again
-                </Button>
-              </div>
-            ) : (
-              <p className="text-muted-foreground text-xs">
-                That is all the rounds for this logo. Pick one, or upload your
-                own.
-              </p>
-            )
-          ) : null}
-        </div>
-      ) : null}
+            ) : null}
+          </div>
+        ) : null}
+      </Fold>
 
       {error ? (
-        <p className={FIELD_ERROR} role="alert">
+        <p className={cn(FIELD_ERROR, "px-0 pt-1")} role="alert">
           {error}
         </p>
       ) : null}
     </div>
+  )
+}
+
+/** The live line under a round still drawing, a step every few seconds. */
+function DrawingLine({ name }: { name: string }) {
+  const lines = drawingLines(name)
+  const [beat, setBeat] = useState(0)
+  useEffect(() => {
+    const timer = setInterval(
+      () => setBeat((now) => Math.min(now + 1, lines.length - 1)),
+      3000
+    )
+    return () => clearInterval(timer)
+  }, [lines.length])
+  return (
+    <p className="text-muted-foreground text-sm" role="status">
+      {lines[beat]}
+    </p>
   )
 }
 

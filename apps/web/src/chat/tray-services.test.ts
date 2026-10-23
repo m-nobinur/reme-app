@@ -1,3 +1,5 @@
+import { PALETTES } from "@workspace/contracts"
+import { waitText } from "@workspace/ui/components/assistant/tray-logo"
 import { afterEach, expect, it, vi } from "vitest"
 import { trayServices } from "./tray-services"
 
@@ -38,6 +40,45 @@ it("throws the api's own sentence when it refuses", async () => {
   await expect(trayServices.keepLogo(ID)).rejects.toThrow(
     "That is all the logos for today. Try again tomorrow."
   )
+})
+
+it("hands an early round's wait to the page with the api's sentence", async () => {
+  vi.stubGlobal("fetch", async () =>
+    Response.json(
+      {
+        class: "resource",
+        code: "logo.wait",
+        message: "Your next designs can start in 5 minutes.",
+        occurred_at: "2026-10-23T09:00:00Z",
+        detail: {},
+      },
+      { status: 429, headers: { "retry-after": "300" } }
+    )
+  )
+  const refused = await trayServices
+    .drawLogos({
+      tool_call_id: "call_1",
+      brief: {
+        description: "",
+        colors: [PALETTES[0]?.swatches[2] ?? ""],
+        type: "emblem",
+        style: "surprise",
+      },
+    })
+    .catch((failure: unknown) => failure)
+  expect(refused).toBeInstanceOf(Error)
+  expect(refused).toMatchObject({
+    message: "Your next designs can start in 5 minutes.",
+    retryAfter: 300,
+  })
+})
+
+it("says a wait as Redesign shows it", () => {
+  expect(waitText(59)).toBe("in 0:59")
+  expect(waitText(299)).toBe("in 4:59")
+  expect(waitText(3600)).toBe("in 1 hour")
+  expect(waitText(3601)).toBe("in 2 hours")
+  expect(waitText(86_400)).toBe("tomorrow")
 })
 
 it("never hands a page an answer it could not read", async () => {
