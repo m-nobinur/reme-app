@@ -727,6 +727,14 @@ export function designCard(o: Onboarding, newId: () => string): ToolPart {
     AskDesignInput.parse({
       questions: [
         {
+          id: "logo",
+          question: "Do you have a logo?",
+          visual: "logo",
+          card: pageCard("Yes, I have my logo", "No, create one for me"),
+          upload: dropZone(1),
+          ...(logo ? { held: [logo] } : {}),
+        },
+        {
           id: "palette",
           question: "Which colour palette feels right for your business?",
           visual: "palette",
@@ -752,14 +760,6 @@ export function designCard(o: Onboarding, newId: () => string): ToolPart {
             "Describe the lettering you like",
             font?.id === "custom" ? font.custom : undefined
           ),
-        },
-        {
-          id: "logo",
-          question: "Do you have a logo, or shall I create one?",
-          visual: "logo",
-          card: pageCard("Upload my logo", "Create one for me"),
-          upload: dropZone(1),
-          ...(logo ? { held: [logo] } : {}),
         },
         {
           id: "arrangement",
