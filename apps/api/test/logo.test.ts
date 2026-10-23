@@ -161,7 +161,7 @@ describe("the logo prompt", () => {
     expect(initialsOf("Smith & Sons Cleaning Co")).toBe("SSC")
   })
 
-  it("draws a surprise round in four different styles, and a picked one in four alike", () => {
+  it("draws a surprise round in different styles, and a picked one all alike", () => {
     for (let i = 0; i < 20; i++) {
       const styles = variantStyles("surprise")
       expect(styles).toHaveLength(LOGO_VARIANTS)
@@ -204,7 +204,7 @@ describe("the logo prompt", () => {
   it("takes the director's ideas that are words, at most one per variant", () => {
     expect(
       symbolsOf({ ideas: [" a mop ", 4, "", "a bucket", "x", "y", "z"] })
-    ).toEqual(["a mop", "a bucket", "x", "y"])
+    ).toEqual(["a mop", "a bucket", "x", "y"].slice(0, LOGO_VARIANTS))
     expect(symbolsOf({ beside: "a mop" })).toEqual([])
     expect(symbolsOf(null)).toEqual([])
   })
@@ -386,7 +386,7 @@ describe("drawing a round in the queue", () => {
     return { sites, env, read }
   }
 
-  it("draws four ideas for one type, falling back per variant, and lists them in planned order", async () => {
+  it("draws an idea per variant for one type, falling back per variant, and lists them in planned order", async () => {
     const { sites, env, read } = await setup()
     const asked = images(
       (model, prompt) =>
@@ -419,10 +419,10 @@ describe("drawing a round in the queue", () => {
     await sites.put(`generated/${ORG}/${first}.png`, PNG)
     const asked = images()
     await drawRound(env, job, { director: null })
-    expect(asked).toHaveLength(3)
-    expect((await read()).variants).toHaveLength(4)
+    expect(asked).toHaveLength(LOGO_VARIANTS - 1)
+    expect((await read()).variants).toHaveLength(LOGO_VARIANTS)
     await drawRound(env, job, { director: null })
-    expect(asked).toHaveLength(3)
+    expect(asked).toHaveLength(LOGO_VARIANTS - 1)
   })
 
   it("marks a round no model drew as failed, and leaves a lapsed one alone", async () => {
@@ -452,7 +452,7 @@ describe("drawing a round in the queue", () => {
     expect(asked.some((a) => a.prompt.includes("Idea:"))).toBe(false)
   })
 
-  it("draws a surprise round in the four styles the manifest holds", async () => {
+  it("draws a surprise round in the styles the manifest holds", async () => {
     const styles = variantStyles("surprise")
     const { env } = await setup({ styles })
     const asked = images()
@@ -536,6 +536,11 @@ describe("a round as the owner sees it", () => {
         status: "ready",
         variants: [{ id: empty.planned[0] }],
       })
+    )
+    // A round drawn when a round was four still reads under the contract.
+    const four = { ...empty, variants: [...empty.planned, crypto.randomUUID()] }
+    expect(LogoRound.parse(roundView(four)).variants).toHaveLength(
+      LOGO_VARIANTS
     )
   })
 })

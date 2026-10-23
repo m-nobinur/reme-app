@@ -36,7 +36,7 @@ import { DEFAULT_ONBOARDING_MODEL, plannerModel } from "./onboarding-agent.ts"
 import { readFacts } from "./workspace.ts"
 
 /**
- * The logo maker. `POST /logos` starts a round of four variants for one
+ * The logo maker. `POST /logos` starts a round of three variants for one
  * design tray's logo question and answers 202 at once; the drawing runs in
  * the api's own queue consumer (`after-turn.ts` hands it `LogoJob`s), which
  * has fifteen minutes where `waitUntil` has thirty seconds. The round's
@@ -44,9 +44,9 @@ import { readFacts } from "./workspace.ts"
  * `GET /logos` and loses nothing, and a consumer that died leaves a round
  * that reads `failed` once its deadline passes, for the owner to try again.
  *
- * The owner picks the logo type, so a round's four variants share it and
+ * The owner picks the logo type, so a round's three variants share it and
  * differ by idea: a first round asks the director, one quick text call, for
- * four ideas for that type first, and for one colour a second to go with it.
+ * three ideas for that type first, and for one colour a second to go with it.
  * Each variant is handed the example picture for its type and style
  * (`logo-references.ts`) to take its layout and look from; the model draws
  * all the lettering itself. A round of changes to a picked variant hands the
@@ -100,13 +100,10 @@ const DIRECTOR_MS = 6_000
  * The rounds one org may start in a UTC day, counting tries after a failure.
  * Twenty: one logo question allows ten, and an owner who starts onboarding
  * again or asks for a logo later has room for another question's worth. At
- * $0.069 a round that bounds a day at about $1.38 of drawing, well under the
- * org's daily model cap.
+ * three quarters of the $0.069 measured for a round of four, that bounds a
+ * day at about $1.04 of drawing, well under the org's daily model cap.
  */
 export const LOGO_ROUNDS_PER_DAY = 20
-
-/** Calls started 350 ms apart, as logocreator does, so four do not land at once. */
-const STAGGER_MS = 350
 
 /** What the queue carries: names only, the manifest holds the rest. */
 export type LogoJob = {
@@ -128,9 +125,9 @@ type Manifest = {
   brief: LogoBrief
   changes?: string
   base?: string
-  /** The four ids the round draws, in the order the tiles show them. */
+  /** The ids the round draws, in the order the tiles show them. */
   planned: string[]
-  /** The style each planned variant is drawn in: one, or four for `surprise`. */
+  /** The style each planned variant is drawn in: one, or several for `surprise`. */
   styles: LogoStyle[]
   /** The ones drawn so far. */
   variants: string[]
@@ -162,7 +159,8 @@ export function roundView(manifest: Manifest, now = Date.now()): LogoRound {
   return {
     round: manifest.round,
     status,
-    variants: manifest.variants.map((id) => ({ id })),
+    // A round drawn when a round was four keeps its first `LOGO_VARIANTS`.
+    variants: manifest.variants.slice(0, LOGO_VARIANTS).map((id) => ({ id })),
   }
 }
 
@@ -483,7 +481,7 @@ export async function keepLogo(
 // --- The drawing, in the queue consumer -------------------------------------
 
 /**
- * The director: up to four ideas for the logo type, and for an owner who gave
+ * The director: an idea per variant for the logo type, and for an owner who gave
  * one colour a supporting one, or null when it is slow or says nothing usable.
  */
 export type Director = (
@@ -682,7 +680,6 @@ export async function drawRound(
         await add(id)
         return { model: "kept", cost: 0 }
       }
-      await new Promise((resolve) => setTimeout(resolve, i * STAGGER_MS))
       const style = manifest.styles[i] as LogoStyle
       const asked = manifest.changes && base
       const reference = base ?? exampleFor(style)

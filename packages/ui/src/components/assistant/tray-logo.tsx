@@ -54,7 +54,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react"
  * that cannot be skipped. It opens one section at a time, and a settled one
  * folds into a summary row that reopens it: do they have a logo; if so the
  * upload, else a few words on the look, the colours, the logo type and a
- * style. Design my logo draws a round of four, saved by the api, so a reload
+ * style. Design my logo draws a round of three, saved by the api, so a reload
  * reads the rounds back. Picking a design keeps it as the logo and answers
  * the question; Change my logo draws another round from the picked one,
  * after the wait the api sets between rounds.
@@ -109,7 +109,7 @@ const PICK_LABEL =
 /** What the status line says while a round draws, a step every few seconds. */
 const drawingLines = (name: string) => [
   `Sketching ideas for ${name}`,
-  "Trying four different ideas",
+  "Trying three different ideas",
   "Putting in your colours",
   "Tidying the edges",
   "Nearly there",
@@ -589,7 +589,7 @@ function TrayLogo({
             {
               way: "create",
               label: createOption?.label ?? "No, create one for me",
-              hint: "Pick from four designs",
+              hint: "Pick from three designs",
               icon: <PenNibIcon aria-hidden />,
             },
           ]}
@@ -930,7 +930,7 @@ function TrayLogo({
               <div
                 aria-busy={round.status === "drawing"}
                 aria-label="Logo designs"
-                className="grid @md:grid-cols-4 grid-cols-2 gap-2"
+                className="grid grid-cols-3 gap-2"
                 role="radiogroup"
               >
                 {Array.from({ length: LOGO_VARIANTS }, (_, place) => {

@@ -458,7 +458,7 @@ export const LogoBrief = z.strictObject({
 })
 
 /** The variants one round draws. */
-export const LOGO_VARIANTS = 4
+export const LOGO_VARIANTS = 3
 /** The most rounds one logo question may draw: a first draft and changes. */
 export const LOGO_ROUNDS_MAX = 10
 /**
