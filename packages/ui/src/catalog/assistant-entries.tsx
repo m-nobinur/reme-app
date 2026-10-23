@@ -51,8 +51,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@workspace/ui/components/collapsible"
-import { GeneratedPhotos } from "@workspace/ui/components/generated-photos"
 import { AnswerInputs } from "@workspace/ui/components/live-panel"
+import { SitePictures } from "@workspace/ui/components/site-pictures"
 import {
   Tooltip,
   TooltipContent,
@@ -2316,26 +2316,31 @@ const assistantCatalog = [
     ),
   })),
   {
-    name: "GeneratedPhotos",
+    name: "SitePictures",
     render: () => (
-      <div className="max-w-xl">
-        <GeneratedPhotos
-          actions={{ onRemove: noop, onTryAnother: noop, onUseOwn: noop }}
-          photos={[
-            {
-              alt: "A bright kitchen after a clean",
-              section: "hero",
-              slot_id: "hero",
-              src: KITCHEN,
-            },
-            {
-              alt: "The team at work",
-              section: "about",
-              slot_id: "about",
-            },
-          ]}
-        />
-      </div>
+      <SitePictures
+        actions={{ onRemove: noop, onTryAnother: noop, onUseOwn: noop }}
+        logo={KITCHEN}
+        maker="Ava"
+        onReplaceLogo={noop}
+        pictures={[
+          {
+            alt: "A bright kitchen after a clean",
+            section: "hero",
+            slot_id: "hero",
+            generated: true,
+            src: KITCHEN,
+          },
+          {
+            alt: "The team at work",
+            section: "about",
+            slot_id: "about",
+            generated: false,
+            src: null,
+          },
+        ]}
+        status="Sent. A new version replaces this one."
+      />
     ),
   },
   // At the end of an open thread, then its other states on their own:

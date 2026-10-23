@@ -22,6 +22,7 @@ import {
   PushSubscribed,
   type PushSubscribeRequest,
   type RegistrantDetails,
+  SiteMedia,
   StaffDirectory,
   Uuid,
   WorkspaceStatus,
@@ -576,6 +577,11 @@ async function preview(assignmentId: string): Promise<PreviewLinks | null> {
   }
 }
 
+async function siteMedia(): Promise<SiteMedia | null> {
+  const body = await get("/site/media")
+  return body === null ? null : SiteMedia.parse(body)
+}
+
 async function requestChange(
   text: string,
   key: string,
@@ -838,6 +844,7 @@ export const apiSource: OwnerDataSource = {
   cancelBuild,
   deleteAccount,
   preview,
+  siteMedia,
   requestChange,
   createReminder,
   completeReminder,

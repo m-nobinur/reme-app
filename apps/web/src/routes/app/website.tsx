@@ -6,17 +6,26 @@ import {
   GlobeIcon,
   WarningCircleIcon,
 } from "@phosphor-icons/react"
-import { createFileRoute, getRouteApi, Link } from "@tanstack/react-router"
+import {
+  createFileRoute,
+  getRouteApi,
+  Link,
+  useRouter,
+} from "@tanstack/react-router"
 import type { BuildSummary } from "@workspace/contracts"
 import { PageHeader } from "@workspace/ui/components/app-shell"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { EmptyState } from "@workspace/ui/components/empty-state"
 import { YourWebsite } from "@workspace/ui/components/live-panel"
+import { SitePictures } from "@workspace/ui/components/site-pictures"
 import { BuildingIcon } from "@workspace/ui/components/status-icons"
 import { StatusIcon, StatusLine } from "@workspace/ui/components/status-line"
 import { segmentKind, workLine } from "@workspace/ui/lib/activity-copy"
 import { cn } from "@workspace/ui/lib/utils"
+import { useEffect, useRef, useState } from "react"
 import { SiteReadyCard } from "@/chat/site-ready"
+import { getSiteMedia } from "@/lib/api/server"
+import type { Workspace, WriteOutcome } from "@/lib/api/types"
 import { assistantOf, leading } from "@/lib/briefing"
 import { currentBuild } from "@/lib/panel"
 import { anchorOf } from "@/lib/reminders"
@@ -27,6 +36,7 @@ import {
   type RowAction,
 } from "@/lib/website-checklist"
 import { useLiveWorkspace } from "@/lib/workspace"
+import { photoActions, replaceLogo } from "@/panel/photo-actions"
 import {
   useBrowserZone,
   useLiveThumbnail,
@@ -34,6 +44,7 @@ import {
 } from "@/panel/workspace-panel"
 
 export const Route = createFileRoute("/app/website")({
+  loader: async () => await getSiteMedia(),
   component: Website,
 })
 
@@ -140,6 +151,59 @@ function Checklist({ rows }: { rows: CheckRow[] }) {
 }
 
 /**
+ * The site's logo and pictures, each changed by a request like any other
+ * change. A new version brings its own pictures, so they are read again
+ * when the version on show changes.
+ */
+function Pictures({ workspace }: { workspace: Workspace }) {
+  const media = Route.useLoaderData()
+  const router = useRouter()
+  const [pending, setPending] = useState(false)
+  const [status, setStatus] = useState<string | null>(null)
+  const shown =
+    readyForReview(workspace)?.revisionId ??
+    workspace.liveRevision?.revisionId ??
+    null
+  const seen = useRef(shown)
+  useEffect(() => {
+    if (seen.current === shown) return
+    seen.current = shown
+    void router.invalidate({ filter: (match) => match.routeId === Route.id })
+  }, [router, shown])
+
+  const send = (write: () => Promise<WriteOutcome>) => {
+    setPending(true)
+    setStatus(null)
+    write()
+      .then((outcome) =>
+        setStatus(
+          outcome.done
+            ? "Sent. A new version replaces this one."
+            : outcome.reason
+        )
+      )
+      .catch(() => setStatus("That did not go through. Try again."))
+      .finally(() => setPending(false))
+  }
+
+  if (!media) return null
+  return (
+    <SitePictures
+      actions={photoActions(send)}
+      disabled={pending}
+      logo={media.logo ? `/api/photos/${media.logo.id}` : null}
+      maker={assistantOf(workspace)}
+      onReplaceLogo={(file) => send(replaceLogo(file))}
+      pictures={media.photos.map(({ thumbnail, ...photo }) => ({
+        ...photo,
+        src: thumbnail,
+      }))}
+      status={status}
+    />
+  )
+}
+
+/**
  * The owner's website, read from the frame's live workspace: its screenshot,
  * Request changes, which does what the panel's does, and the rows of where
  * the site stands, read from the same activity as the panel.
@@ -184,7 +248,10 @@ function Website() {
       <>
         <PageHeader title="Website" />
         {review ? (
-          <SiteReadyCard />
+          <div className="flex flex-col gap-8">
+            <SiteReadyCard />
+            <Pictures workspace={workspace} />
+          </div>
         ) : build ? (
           <EmptyState
             description={
@@ -262,6 +329,9 @@ function Website() {
             changes sit above, where the page puts its actions. */}
         <YourWebsite host={null} live={live} thumbnail={thumbnail} />
         <Checklist rows={checklistFor(workspace, zone, new Date())} />
+      </div>
+      <div className="mt-8">
+        <Pictures workspace={workspace} />
       </div>
     </>
   )

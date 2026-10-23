@@ -242,6 +242,10 @@ export const getPreview = createServerFn({ method: "GET" })
     return await source.preview(data.assignmentId)
   })
 
+export const getSiteMedia = createServerFn({ method: "GET" }).handler(
+  async () => await source.siteMedia()
+)
+
 export const askForChanges = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const data = record(input)

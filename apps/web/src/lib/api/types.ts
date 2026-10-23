@@ -21,6 +21,7 @@ import type {
   PushSubscribeRequest,
   RegistrantDetails,
   Reminder,
+  SiteMedia,
   WorkspaceStatus,
 } from "@workspace/contracts"
 import type { AnswerSpec } from "@workspace/ui/lib/answer"
@@ -293,6 +294,8 @@ export type OwnerDataSource = {
   /** The owner's own account, ended (ADR-035). A second call finishes the first. */
   deleteAccount: () => Promise<WriteOutcome>
   preview: (assignmentId: string) => Promise<PreviewLinks | null>
+  /** The logo, and the pictures on the newest version; null when there is no session. */
+  siteMedia: () => Promise<SiteMedia | null>
   /** A reminder the owner wrote. Idempotent on `key`. */
   createReminder: (
     input: CreateReminderRequest,
