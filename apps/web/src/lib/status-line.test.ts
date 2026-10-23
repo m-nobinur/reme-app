@@ -97,21 +97,17 @@ it("replaces a working line at once when the work fails", async () => {
 it("shimmers and moves only while working, and speaks only its words", async () => {
   await show({ delay: 0, count: 3 })
   const words = container.querySelector('[data-slot="status-line-text"]')
-  expect(words?.className).toContain("shimmer-color-primary")
+  expect(words?.innerHTML).toContain("shimmer-color-foreground")
   expect(words?.getAttribute("aria-live")).toBe("polite")
   expect(words?.textContent).toBe("Checking your DNS")
   expect(text()).toContain("×3")
-  expect(container.querySelector("svg")?.getAttribute("class")).toContain(
-    "animate-status-sweep"
-  )
+  expect(container.querySelectorAll("svg circle")).toHaveLength(3)
   await show({ delay: 0, state: "done", label: "Checked your DNS" })
   await wait(2000)
   expect(
-    container.querySelector('[data-slot="status-line-text"]')?.className
+    container.querySelector('[data-slot="status-line-text"]')?.innerHTML
   ).not.toContain("shimmer")
-  expect(container.querySelector("svg")?.getAttribute("class")).not.toContain(
-    "animate-status-sweep"
-  )
+  expect(container.querySelectorAll("svg circle")).toHaveLength(0)
 })
 
 it("shows the clock only after the chat threshold", async () => {

@@ -122,7 +122,7 @@ function Checklist({ rows }: { rows: CheckRow[] }) {
                   className={cn(
                     "text-[0.8125rem] text-muted-foreground",
                     row.mark === "now" &&
-                      "shimmer shimmer-color-primary motion-reduce:animate-none"
+                      "shimmer shimmer-color-foreground motion-reduce:animate-none"
                   )}
                 >
                   {row.line}

@@ -137,6 +137,8 @@
   --animate-status-meet: status-meet 1.6s ease-in-out infinite;
   --animate-status-swing: status-swing 1.4s ease-in-out infinite;
   --animate-status-lift: status-lift 1.4s ease-in-out infinite;
+  --animate-status-breathe: status-breathe 1.8s ease-in-out infinite;
+  --animate-status-reveal: status-reveal 0.5s ease-out backwards;
   /* The drawn icons' parts (status-icons.tsx). */
   --animate-icon-spin: icon-spin 3s linear infinite;
   --animate-icon-dash: icon-dash 1.2s linear infinite;
@@ -311,6 +313,31 @@
   @keyframes status-lift {
     50% {
       transform: translateY(-2px);
+    }
+  }
+  /* The reading dot, swelling and settling like a breath. */
+  @keyframes status-breathe {
+    0%,
+    100% {
+      transform: scale(0.72);
+      opacity: 0.5;
+    }
+    50% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+  /* New words wiped in from the left. */
+  @keyframes status-reveal {
+    from {
+      mask-image: linear-gradient(90deg, #000 45%, transparent 55%);
+      mask-size: 220% 100%;
+      mask-position: 100% 0;
+    }
+    to {
+      mask-image: linear-gradient(90deg, #000 45%, transparent 55%);
+      mask-size: 220% 100%;
+      mask-position: 0 0;
     }
   }
   @keyframes icon-spin {
