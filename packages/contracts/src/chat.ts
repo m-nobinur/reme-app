@@ -452,12 +452,18 @@ export const ReviewQuoteFormInput = z.strictObject({
 /**
  * `review_quote_form`'s output. `confirmed` carries the list the owner
  * settled on, which the api checks as `QuoteFields` and stores as the
- * `quote.form` fact. `changes` is what the owner wants different, as data for
- * the assistant's next proposal.
+ * `quote.form` fact. `changes` is the owner's words, typed while the
+ * proposal waited, as data for the assistant: they may accept it or ask for
+ * something different. `fields` is the proposal as the owner left it, after
+ * any question they dropped or made optional on the card.
  */
 export const ReviewQuoteFormOutput = z.discriminatedUnion("answer", [
   z.strictObject({ answer: z.literal("confirmed"), fields: QuoteFields }),
-  z.strictObject({ answer: z.literal("changes"), text: Text(ANSWER_TEXT_MAX) }),
+  z.strictObject({
+    answer: z.literal("changes"),
+    text: Text(ANSWER_TEXT_MAX),
+    fields: QuoteFields.optional(),
+  }),
 ])
 
 /**

@@ -4647,6 +4647,26 @@ export interface components {
                             /** @constant */
                             answer: "changes"
                             text: string
+                            fields?: {
+                              key: string
+                              label: string
+                              /** @enum {string} */
+                              type:
+                                | "text"
+                                | "textarea"
+                                | "number"
+                                | "date"
+                                | "datetime"
+                                | "select"
+                                | "radio"
+                                | "checkbox"
+                                | "photos"
+                                | "tel"
+                                | "email"
+                              required: boolean
+                              hint: string | null
+                              options: string[] | null
+                            }[]
                           }
                       )
                 }
@@ -9913,6 +9933,26 @@ export interface components {
           /** @constant */
           answer: "changes"
           text: string
+          fields?: {
+            key: string
+            label: string
+            /** @enum {string} */
+            type:
+              | "text"
+              | "textarea"
+              | "number"
+              | "date"
+              | "datetime"
+              | "select"
+              | "radio"
+              | "checkbox"
+              | "photos"
+              | "tel"
+              | "email"
+            required: boolean
+            hint: string | null
+            options: string[] | null
+          }[]
         }
     ReviewedPhotos: {
       photos: {

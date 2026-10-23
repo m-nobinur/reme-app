@@ -15945,6 +15945,85 @@
                                           "minLength": 1,
                                           "maxLength": 500,
                                           "pattern": "\\S"
+                                        },
+                                        "fields": {
+                                          "minItems": 2,
+                                          "maxItems": 8,
+                                          "type": "array",
+                                          "items": {
+                                            "type": "object",
+                                            "properties": {
+                                              "key": {
+                                                "type": "string",
+                                                "pattern": "^[a-z][a-z0-9_]{1,30}$"
+                                              },
+                                              "label": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 80,
+                                                "pattern": "\\S"
+                                              },
+                                              "type": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "text",
+                                                  "textarea",
+                                                  "number",
+                                                  "date",
+                                                  "datetime",
+                                                  "select",
+                                                  "radio",
+                                                  "checkbox",
+                                                  "photos",
+                                                  "tel",
+                                                  "email"
+                                                ]
+                                              },
+                                              "required": {
+                                                "type": "boolean"
+                                              },
+                                              "hint": {
+                                                "anyOf": [
+                                                  {
+                                                    "type": "string",
+                                                    "minLength": 1,
+                                                    "maxLength": 120,
+                                                    "pattern": "\\S"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              },
+                                              "options": {
+                                                "anyOf": [
+                                                  {
+                                                    "minItems": 2,
+                                                    "maxItems": 12,
+                                                    "type": "array",
+                                                    "items": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 60,
+                                                      "pattern": "\\S"
+                                                    }
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              }
+                                            },
+                                            "required": [
+                                              "key",
+                                              "label",
+                                              "type",
+                                              "required",
+                                              "hint",
+                                              "options"
+                                            ],
+                                            "additionalProperties": false
+                                          }
                                         }
                                       },
                                       "required": [
@@ -34295,6 +34374,85 @@
                 "minLength": 1,
                 "maxLength": 500,
                 "pattern": "\\S"
+              },
+              "fields": {
+                "minItems": 2,
+                "maxItems": 8,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9_]{1,30}$"
+                    },
+                    "label": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80,
+                      "pattern": "\\S"
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "text",
+                        "textarea",
+                        "number",
+                        "date",
+                        "datetime",
+                        "select",
+                        "radio",
+                        "checkbox",
+                        "photos",
+                        "tel",
+                        "email"
+                      ]
+                    },
+                    "required": {
+                      "type": "boolean"
+                    },
+                    "hint": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120,
+                          "pattern": "\\S"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "options": {
+                      "anyOf": [
+                        {
+                          "minItems": 2,
+                          "maxItems": 12,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 60,
+                            "pattern": "\\S"
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "label",
+                    "type",
+                    "required",
+                    "hint",
+                    "options"
+                  ],
+                  "additionalProperties": false
+                }
               }
             },
             "required": [
