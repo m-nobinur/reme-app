@@ -7825,7 +7825,13 @@ export interface components {
         description: string | ""
         colors: string[]
         /** @enum {string} */
-        type: "lockup" | "icon" | "monogram" | "emblem" | "abstract"
+        type:
+          | "lockup"
+          | "icon"
+          | "wordmark"
+          | "monogram"
+          | "emblem"
+          | "abstract"
         /** @enum {string} */
         style:
           | "minimal"

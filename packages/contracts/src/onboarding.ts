@@ -176,9 +176,9 @@ export const PaletteId = z.enum([
 ])
 
 /**
- * The calm palettes, in the order the design tray offers them first: the
- * palette question shows four, the logo page six, and its Random picks from
- * all of them, never the warm oranges.
+ * The calm palettes the design tray offers first, in an order seeded by
+ * org: the palette question shows four, the logo page six, and its Random
+ * picks from the rest, never the warm oranges.
  */
 export const CALM_PALETTES: readonly PaletteId[] = [
   "mint",
@@ -389,13 +389,14 @@ export const PaletteFromImage = z.strictObject({
 
 /**
  * What a logo is made of: a symbol beside the name, the symbol alone, the
- * initials, the name inside a badge, or a shape that stands for the business
- * without depicting it. The web shows an example of each; the prompt words
+ * name alone in its own lettering, the initials, the name inside a badge, or
+ * a shape that stands for the business without depicting it. The web shows an example of each; the prompt words
  * are the api's (`logo-style.ts`).
  */
 export const LOGO_TYPES = [
   "lockup",
   "icon",
+  "wordmark",
   "monogram",
   "emblem",
   "abstract",

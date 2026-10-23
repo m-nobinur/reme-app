@@ -26864,6 +26864,7 @@
                 "enum": [
                   "lockup",
                   "icon",
+                  "wordmark",
                   "monogram",
                   "emblem",
                   "abstract"
