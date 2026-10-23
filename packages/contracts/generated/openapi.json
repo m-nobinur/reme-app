@@ -19474,6 +19474,39 @@
                         "retry": {
                           "type": "boolean"
                         },
+                        "fixing": {
+                          "type": "object",
+                          "properties": {
+                            "round": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 9
+                            },
+                            "checks": {
+                              "maxItems": 9,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "build",
+                                  "types",
+                                  "links",
+                                  "structured_data",
+                                  "content",
+                                  "claims",
+                                  "copy",
+                                  "a11y",
+                                  "size"
+                                ]
+                              }
+                            }
+                          },
+                          "required": [
+                            "round",
+                            "checks"
+                          ],
+                          "additionalProperties": false
+                        },
                         "progress": {
                           "maxItems": 8,
                           "type": "array",
@@ -26080,6 +26113,39 @@
                 },
                 "retry": {
                   "type": "boolean"
+                },
+                "fixing": {
+                  "type": "object",
+                  "properties": {
+                    "round": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9
+                    },
+                    "checks": {
+                      "maxItems": 9,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "build",
+                          "types",
+                          "links",
+                          "structured_data",
+                          "content",
+                          "claims",
+                          "copy",
+                          "a11y",
+                          "size"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "round",
+                    "checks"
+                  ],
+                  "additionalProperties": false
                 },
                 "progress": {
                   "maxItems": 8,

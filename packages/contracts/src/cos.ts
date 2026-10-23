@@ -68,6 +68,13 @@ export const CosWorkspace = z.strictObject({
         version: Version.nullable(),
         /** Started again on its own after a build that stopped. */
         retry: z.boolean().optional(),
+        /** Fixing what its checks found: the repair round it is on, and the checks that failed. */
+        fixing: z
+          .strictObject({
+            round: z.int().min(1).max(9),
+            checks: z.array(GateName).max(GateName.options.length),
+          })
+          .optional(),
         /**
          * The build's steps as the panel shows them: fixed labels and counts,
          * never model text. Optional: tool results stored before it replay.

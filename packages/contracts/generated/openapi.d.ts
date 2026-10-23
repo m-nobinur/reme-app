@@ -5578,6 +5578,20 @@ export interface components {
               goal: string
               version: number | null
               retry?: boolean
+              fixing?: {
+                round: number
+                checks: (
+                  | "build"
+                  | "types"
+                  | "links"
+                  | "structured_data"
+                  | "content"
+                  | "claims"
+                  | "copy"
+                  | "a11y"
+                  | "size"
+                )[]
+              }
               progress?: {
                 step: string
                 done: number
@@ -7527,6 +7541,20 @@ export interface components {
         goal: string
         version: number | null
         retry?: boolean
+        fixing?: {
+          round: number
+          checks: (
+            | "build"
+            | "types"
+            | "links"
+            | "structured_data"
+            | "content"
+            | "claims"
+            | "copy"
+            | "a11y"
+            | "size"
+          )[]
+        }
         progress?: {
           step: string
           done: number
