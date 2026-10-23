@@ -14,6 +14,24 @@ const file = (name: string) => FILES[`../assets/avatars/${name}.webp`]
 export const avatarPortrait = (id: AvatarId | null | undefined) =>
   id && id !== "reme" ? file(id) : undefined
 
+const ICONS = import.meta.glob<string>("../assets/avatars/icons/*.png", {
+  eager: true,
+  import: "default",
+})
+
+/**
+ * A picked face's tab icons, made once from its portrait: the face in a
+ * circle at 32 and 64 px, and the head on an opaque square at 180 px for a
+ * phone's home screen. Undefined for Reme's own, which is the app's icon.
+ */
+export function avatarIcons(id: AvatarId | null | undefined) {
+  if (!id || id === "reme") return undefined
+  const at = (size: number) =>
+    ICONS[`../assets/avatars/icons/${id}-${size}.png`]
+  const [small, large, home] = [at(32), at(64), at(180)]
+  return small && large && home ? { small, large, home } : undefined
+}
+
 const BLINK_MS = 130
 
 /**
