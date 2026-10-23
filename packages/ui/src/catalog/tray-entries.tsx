@@ -437,6 +437,12 @@ const STATES: State[] = [
   { title: "Collapsed", start: { index: LETTERING, collapsed: true } },
   { title: "Phone width, logo", width: PHONE },
   {
+    title: "Phone width, logo type",
+    input: create,
+    start: { logo: { brief: COLOURED } },
+    width: PHONE,
+  },
+  {
     title: "Phone width, logo style",
     input: create,
     start: { logo: { brief: STYLED } },

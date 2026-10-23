@@ -108,6 +108,13 @@ const drawingLines = (name: string) => [
 
 const NO_SERVICES = "Logos cannot be uploaded or made here."
 
+/** A colour tile, edge to edge like the palette page's, with a 2px line when picked. */
+const COLOUR_TILE =
+  "gap-0 overflow-hidden p-0 has-[:checked]:ring-2 has-[:checked]:ring-foreground"
+/** Random and Custom inside a colour tile: an icon and a name, a palette's height. */
+const NAMED_TILE =
+  "flex h-20 flex-col items-center justify-center gap-1 font-medium text-muted-foreground text-xs"
+
 /** The colours a logo is drawn in from a palette: its primary for the shapes, its ink for the name. */
 const logoColors = ([, , primary, ink]: Stops) => [primary, ink]
 
@@ -731,8 +738,9 @@ function TrayLogo({
         <fieldset className="flex flex-col gap-2">
           <legend className="mb-1.5 font-medium text-sm">Colours</legend>
           <div className="grid @md:grid-cols-3 grid-cols-2 gap-2">
+            {/* A palette is its colours alone, as on the palette page; the name is for screen readers. */}
             {palettes.map((each, index) => (
-              <label className={cn(TRAY_TILE, "p-2")} key={each.label}>
+              <label className={cn(TRAY_TILE, COLOUR_TILE)} key={each.label}>
                 <input
                   checked={
                     colours !== null &&
@@ -745,10 +753,10 @@ function TrayLogo({
                   type="radio"
                 />
                 <Swatches colors={each.stops} />
-                <span className="font-medium text-xs">{each.label}</span>
+                <span className="sr-only">{each.label}</span>
               </label>
             ))}
-            <label className={cn(TRAY_TILE, "p-2")}>
+            <label className={cn(TRAY_TILE, COLOUR_TILE)}>
               <input
                 checked={colours !== null && "random" in colours}
                 className="sr-only"
@@ -762,16 +770,12 @@ function TrayLogo({
                 }}
                 type="radio"
               />
-              {colours && "random" in colours ? (
-                <Swatches colors={colours.random} />
-              ) : (
-                <span className="flex h-9 items-center justify-center rounded-xl bg-muted text-muted-foreground">
-                  <ShuffleIcon aria-hidden className="size-5" />
-                </span>
-              )}
-              <span className="font-medium text-xs">Random</span>
+              <span className={NAMED_TILE}>
+                <ShuffleIcon aria-hidden className="size-5" />
+                Random
+              </span>
             </label>
-            <label className={cn(TRAY_TILE, "p-2")}>
+            <label className={cn(TRAY_TILE, COLOUR_TILE)}>
               <input
                 checked={custom !== null}
                 className="sr-only"
@@ -779,14 +783,10 @@ function TrayLogo({
                 onChange={() => setColours({ custom: [stops[2]] })}
                 type="radio"
               />
-              {custom && colors.length > 0 ? (
-                <Swatches colors={colors} />
-              ) : (
-                <span className="flex h-9 items-center justify-center rounded-xl bg-muted text-muted-foreground">
-                  <EyedropperIcon aria-hidden className="size-5" />
-                </span>
-              )}
-              <span className="font-medium text-xs">Custom</span>
+              <span className={NAMED_TILE}>
+                <EyedropperIcon aria-hidden className="size-5" />
+                Custom
+              </span>
             </label>
           </div>
           {custom ? (
@@ -871,9 +871,9 @@ function TrayLogo({
                     }}
                     type="radio"
                   />
-                  {/* Square for every type, so the rows line up; a wide lockup sits contained. */}
+                  {/* One 3:2 box for every type: the wide lockup reads large and the square ones still fit. */}
                   <span
-                    className="flex aspect-square items-center justify-center overflow-hidden rounded-lg"
+                    className="flex aspect-[3/2] items-center justify-center overflow-hidden rounded-lg"
                     style={{ backgroundColor: paper }}
                   >
                     {src ? (
@@ -945,7 +945,7 @@ function TrayLogo({
             <label
               className={cn(
                 TRAY_TILE,
-                "gap-1.5 border-dashed p-1.5 has-[:checked]:border-solid"
+                "gap-1.5 border-foreground/30 border-dashed p-1.5 has-[:checked]:border-solid"
               )}
             >
               <input
