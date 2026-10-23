@@ -275,6 +275,7 @@ function StatusLine({
   elapsed,
   delay = SHOW_DELAY_MS,
   announce = true,
+  bare = false,
   className,
   ...props
 }: Omit<ComponentProps<"span">, "children"> & {
@@ -294,6 +295,8 @@ function StatusLine({
   delay?: number
   /** Say the line in a polite live region. One per surface: the rest pass false. */
   announce?: boolean
+  /** The mark alone on screen; the words stay for screen readers. */
+  bare?: boolean
 }) {
   const shown = useSettled({ kind, state, label }, delay)
   const active = shown?.state === "working" || shown?.state === "waiting"
@@ -340,7 +343,7 @@ function StatusLine({
       {/* The words alone: the live region never reads the clock or the count. */}
       <span
         aria-live={announce ? "polite" : undefined}
-        className="inline-block"
+        className={bare ? "sr-only" : "inline-block"}
         data-slot="status-line-text"
         role={announce ? "status" : undefined}
       >

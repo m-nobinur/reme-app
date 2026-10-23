@@ -911,6 +911,9 @@ const TypingIndicator: FC<{ immediate?: boolean }> = ({
   return (
     <span data-slot="aui_assistant-message-indicator">
       <StatusLine
+        // The first beat of a turn is the dots alone: the same words every
+        // turn read as a script.
+        bare={!status && !immediate && !toolsRan && seconds < THINKING_AFTER}
         delay={immediate ? 0 : SHOW_DELAY_MS}
         kind={
           status

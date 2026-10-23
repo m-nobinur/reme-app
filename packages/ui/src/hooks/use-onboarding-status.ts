@@ -24,7 +24,8 @@ export const clearOnboardingStatus = () => set(null)
 
 /**
  * Reads a stream's data part, and says whether it was a status. A status
- * becomes the waiting line, and one that names facts calls `refresh`: the
+ * becomes the waiting line, unless the planner's own line for the turn
+ * already is, and one that names facts calls `refresh`: the
  * api wrote them before sending it, so the panel can tick them at once.
  */
 export function readOnboardingStatus(
@@ -34,7 +35,9 @@ export function readOnboardingStatus(
   if (part.type !== ONBOARDING_STATUS) return false
   const status = OnboardingStatus.safeParse(part.data)
   if (!status.success) return true
-  set(status.data.on)
+  // The planner's own line for the turn stands; the stock lines after it
+  // would only read as a step back.
+  if (latest?.kind !== "doing") set(status.data.on)
   if (status.data.facts.length > 0) refresh()
   return true
 }

@@ -528,9 +528,13 @@ const NEXT_LINE: Record<
   answer_only: "Working on your answer",
 }
 
-/** The line for what the planner is on: a fact it stated or the move it chose. */
+/** The line for what the planner is on: its own line, a fact it stated or the move it chose. */
 export const onboardingLine = (on: OnboardingStatus["on"]) =>
-  on.kind === "fact" ? FACT_LINE[on.key] : NEXT_LINE[on.next]
+  on.kind === "doing"
+    ? on.text
+    : on.kind === "fact"
+      ? FACT_LINE[on.key]
+      : NEXT_LINE[on.next]
 
 const NEXT_KIND: Record<
   Extract<OnboardingStatus["on"], { kind: "next" }>["next"],
@@ -549,7 +553,7 @@ const NEXT_KIND: Record<
 
 /** The icon for `onboardingLine`: a fact noted down, or the move being made ready. */
 export const onboardingKind = (on: OnboardingStatus["on"]): StatusKind =>
-  on.kind === "fact" ? "planning" : NEXT_KIND[on.next]
+  on.kind === "next" ? NEXT_KIND[on.next] : "planning"
 
 // ---------------------------------------------------------------------------
 // Segments: a title, a line under it and a done title, with the business and
