@@ -90,7 +90,7 @@ function Docked({
   return (
     <>
       {running ? null : (
-        <p className="text-muted-foreground text-sm">
+        <p className="pt-3 text-muted-foreground text-sm">
           {many ? "Waiting for your answers" : "Waiting for your answer"}
         </p>
       )}
