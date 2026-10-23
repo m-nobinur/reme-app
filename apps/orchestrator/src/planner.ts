@@ -1,4 +1,5 @@
 import {
+  type Asset,
   BLUEPRINT_FEATURES_MAX,
   Blueprint,
   type DesignDirection,
@@ -563,8 +564,9 @@ function fitImages(blueprint: Blueprint): Blueprint["images"] {
 /**
  * The plan code writes when the model's will not do: the pack's page order,
  * the least-used direction for the industry with the owner's answers over it,
- * and one hero photo when the hero takes one, the owner's first upload if
- * there is one. It always passes `problems`, which a test holds it to.
+ * and the photos: the owner's where their use places them, generated in
+ * every other slot that may be drawn. It always passes `problems`, which a
+ * test holds it to.
  */
 export function fallbackBlueprint(input: {
   facts: readonly FactRecord[]
@@ -610,28 +612,47 @@ export function fallbackBlueprint(input: {
   })
   const heroVariant = pages[0]?.sections.find((s) => s.kind === "hero")?.variant
   const aspect = heroVariant ? PHOTO_HERO[heroVariant] : undefined
-  const upload = uploads[0]
-  // The starter's gallery shows three; the hero keeps the first photo when others remain.
+  // Each photo where the owner's photo review placed it. One from before the
+  // review has no use: the first is the hero, the rest are the work.
+  const unread = uploads.filter((u) => !u.use)
+  const upload = uploads.find((u) => u.use === "hero") ?? unread[0]
+  const work = [
+    ...uploads.filter((u) => u.use === "work"),
+    ...unread.filter((u) => u !== upload),
+  ]
+  const team = uploads.find((u) => u.use === "team")
+  const ownShot = (
+    id: string,
+    page: PageId,
+    section: "gallery" | "service_cards" | "hero",
+    photo: Asset
+  ) => ({
+    id,
+    page,
+    section,
+    aspect: "4:3" as const,
+    resolution: "1K" as const,
+    subject: cap(photo.alt ?? photo.name, 300),
+    alt: cap(photo.alt ?? photo.name, 200),
+    source: "upload" as const,
+    asset_id: photo.id,
+  })
+  // The starter's gallery shows three: the work, or the hero when it is the only photo.
   const galleryOn = pages.find((p) =>
     p.sections.some((s) => s.kind === "gallery")
   )
-  const galleryPhotos = (uploads.length > 1 ? uploads.slice(1) : uploads).slice(
-    0,
-    3
-  )
   const galleryImages = galleryOn
-    ? galleryPhotos.map((photo, i) => ({
-        id: `gallery_${i + 1}`,
-        page: galleryOn.page,
-        section: "gallery" as const,
-        aspect: "4:3" as const,
-        resolution: "1K" as const,
-        subject: cap(photo.alt ?? photo.name, 300),
-        alt: cap(photo.alt ?? photo.name, 200),
-        source: "upload" as const,
-        asset_id: photo.id,
-      }))
+    ? (work.length > 0 ? work : uploads)
+        .slice(0, 3)
+        .map((photo, i) =>
+          ownShot(`gallery_${i + 1}`, galleryOn.page, "gallery", photo)
+        )
     : []
+  // The team photo heads the about page; never drawn, a person is a claim.
+  const aboutImages =
+    team && pages.some((p) => p.page === "about")
+      ? [ownShot("about_hero", "about", "hero", team)]
+      : []
   const slot = {
     id: "home_hero",
     page: "home" as const,
@@ -641,9 +662,11 @@ export function fallbackBlueprint(input: {
     subject: cap(direction.image_style, 300),
     alt: cap(upload?.alt ?? direction.image_style, 200),
   }
-  // With no uploads, each service gets a photo for its card where the home
-  // cards show one, and another of its own for its page header, drawn from
-  // its name in the direction's style. The budget trims the headers last.
+  // Each service gets a photo for its card where the home cards show one,
+  // the owner's work first, and another of its own for its page header,
+  // drawn from its name in the direction's style. The work goes to the
+  // gallery when there is one, so no photo shows twice on a page. The
+  // budget trims the headers last.
   const offerings = (factValue(facts, "business.offerings")?.items ?? []).slice(
     0,
     6
@@ -666,29 +689,27 @@ export function fallbackBlueprint(input: {
     alt: cap(`${name}, shown in a customer's space`, 200),
     source: "generated" as const,
   })
+  const cardPhotos = galleryOn ? [] : work
   const cardImages =
-    uploads.length === 0 &&
-    (homeServices === "photo_cards" || homeServices === "alternating")
-      ? offerings.map((name, i) =>
-          serviceShot(
-            `service_${i + 1}_card`,
-            name,
-            "done well",
-            "service_cards"
-          )
-        )
+    homeServices === "photo_cards" || homeServices === "alternating"
+      ? offerings.map((name, i) => {
+          const id = `service_${i + 1}_card`
+          const own = cardPhotos[i]
+          return own
+            ? ownShot(id, "home", "service_cards", own)
+            : serviceShot(id, name, "done well", "service_cards")
+        })
       : []
-  const headerImages =
-    uploads.length === 0 && pages.some((p) => p.page === "service")
-      ? offerings.map((name, i) =>
-          serviceShot(
-            `service_${i + 1}_hero`,
-            name,
-            "a closer view of the finished work",
-            "hero"
-          )
+  const headerImages = pages.some((p) => p.page === "service")
+    ? offerings.map((name, i) =>
+        serviceShot(
+          `service_${i + 1}_hero`,
+          name,
+          "a closer view of the finished work",
+          "hero"
         )
-      : []
+      )
+    : []
   const fonts = owner.fonts ?? direction.fonts
   const palette = owner.palette ?? {
     kind: "preset" as const,
@@ -727,6 +748,7 @@ export function fallbackBlueprint(input: {
         : []),
       ...cardImages,
       ...headerImages,
+      ...aboutImages,
       ...galleryImages,
     ],
     voice: direction.voice,
@@ -858,10 +880,10 @@ export function plannerPrompt(input: {
     "- Design like a studio, not a template. Pick the direction that fits this trade and this business's audience, a type pair with character, one dominant colour with one sharp accent. Vary the sections' order and variants from the pack's starting order where the facts make a different order read better, within the kinds each page may hold.",
     "- The site has exactly the pages listed under the business's pages. Every page holds only the kinds listed for it below, and each section's variant is one listed for its kind.",
     "- Plan a section only when the facts can fill it. No testimonials without testimonial facts; no gallery without the owner's photos; no proof strip without business.proof. A section the owner picked under 'Picked as home page sections' is the exception: plan it where they are listed as planned, and give a gallery one upload slot per photo, three at most.",
-    "- Images: plan a slot only where a section shows a picture: a hero other than text_led, photo service cards, a photo CTA band, the gallery, the header of a service, about or contact page. Use the owner's uploads first, as source upload with their asset id. A generated photo is atmosphere: rooms, surfaces, objects, hands at work. Never generate one for an about section, gallery, testimonials or a fleet: there a photo is a claim. Each subject names one concrete scene in plain words; the alt says what it shows. Code sets each slot's aspect to its section's box.",
+    "- Images: plan a slot only where a section shows a picture: a hero other than text_led, photo service cards, a photo CTA band, the gallery, the header of a service, about or contact page. Use the owner's uploads first, as source upload with their asset id, each where its use places it: hero in the home hero, work in the service cards or the gallery, team in the about page's header; never the same photo twice on a page. The upload with use logo is the logo, never a photo slot. A generated photo is atmosphere: rooms, surfaces, objects, hands at work. Never generate one for an about section, gallery, testimonials or a fleet: there a photo is a claim. Each subject names one concrete scene in plain words; the alt says what it shows. Code sets each slot's aspect to its section's box.",
     "- Plan generated photos as one photographer's shot list for one shoot. The hero is the establishing shot: the core service's finished result in the customer's own space (a whole room, a whole garden), never a street or skyline. Each service card is a different room, area or detail that shows that service at a glance (a worktop for regular cleaning, a bathroom for a deep clean), never the hero's scene again. A service's card and its page header show that service's own subject, indoors or out as the service is: gutters, fascias, soffits, roofs and windows seen from outside are exteriors in daylight, never a room. A photo CTA band is a calm texture (a wall in window light, foliage) that complements the rest. No two subjects share a room, a composition or a main prop. Prefer simple shapes (a worktop, a sink, a sofa, a bed, a desk) over mechanisms image models warp: oven doors, hinges, ladders, hands holding tools.",
-    "- With no uploads, a trade people want to see done well (a cleaned room, a finished job, a plate, a space) still gets pictures: the hero, a slot for each service card when you set photo_cards, and one for a photo CTA band. Plan up to 8 slots in all, drawn one per section, never a bare hero when the pages have more places for a photo.",
-    "- Page headers, with no uploads: each service's own page gets a header photo, a slot on page service, section hero, id service_<n>_hero, n being the service's place (1 to 6) in business.offerings, its subject a different room, area or detail from every other slot, in the same house style. A service's card slot (page home, section service_cards, id service_<n>_card) and its header slot are two photos of two different scenes: a page header never reuses its card's photo. Order the slots: the hero, every card, then the service headers, then About and Contact (page about or contact, section hero, ids about_hero and contact_hero): a calm place with no people, team, vehicle or result in it, such as a window in daylight or a tidy entrance, never the home hero's scene. A build draws eight photos and code drops the rest in that order, so a service page whose header slot did not fit shows a plain text header.",
+    "- Where the uploads leave a slot empty, a trade people want to see done well (a cleaned room, a finished job, a plate, a space) still gets pictures: the hero, a slot for each service card when you set photo_cards, and one for a photo CTA band. Plan up to 8 slots in all, drawn one per section, never a bare hero when the pages have more places for a photo.",
+    "- Page headers: each service's own page gets a header photo, a slot on page service, section hero, id service_<n>_hero, n being the service's place (1 to 6) in business.offerings, its subject a different room, area or detail from every other slot, in the same house style. A service's card slot (page home, section service_cards, id service_<n>_card) and its header slot are two photos of two different scenes: a page header never reuses its card's photo. Order the slots: the hero, every card, then the service headers, then About and Contact (page about or contact, section hero, ids about_hero and contact_hero): a calm place with no people, team, vehicle or result in it, such as a window in daylight or a tidy entrance, never the home hero's scene. A build draws eight photos and code drops the rest in that order, so a service page whose header slot did not fit shows a plain text header.",
     "- Services: photo_cards, and alternating on the home page, only when you plan a photo slot for every service; without one, set numbered_rows. Three alike cards with an icon each read as a template.",
     "- purpose says in one line what a section does for this business; content_notes says which facts fill it, or null.",
     "- features: four to ten lines the owner reads, each a plain sentence about what their site will have, under 140 characters, no jargon, no section or variant ids.",

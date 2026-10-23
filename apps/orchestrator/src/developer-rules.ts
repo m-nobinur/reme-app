@@ -281,9 +281,17 @@ const labelOf = (list: readonly { id: string; label: string }[], id: string) =>
 /** The owner's own words, quoted so they read as data. */
 const quoted = (words: string) => JSON.stringify(words)
 
-/** The owner's photos, from the `media.uploads` fact. */
-export const ownerPhotos = (facts: readonly FactRecord[]): Asset[] =>
+/** Every image the owner stored, from the `media.uploads` fact: the files a site carries. */
+export const ownerUploads = (facts: readonly FactRecord[]): Asset[] =>
   factValue(facts, "media.uploads")?.items ?? []
+
+/** The owner's photos: their uploads but the logo. */
+export const ownerPhotos = (facts: readonly FactRecord[]): Asset[] =>
+  ownerUploads(facts).filter((a) => a.use !== "logo")
+
+/** The owner's logo, kept by the design tray's logo page. */
+export const ownerLogo = (facts: readonly FactRecord[]): Asset | undefined =>
+  ownerUploads(facts).find((a) => a.use === "logo")
 
 /**
  * Where the words come from. A build once promised airport meet-and-greets
@@ -338,6 +346,8 @@ export function ownerChoices(facts: readonly FactRecord[]): string[] {
   const pages = factValue(facts, "site.pages")
   const tone = factValue(facts, "assistant.tone")
   const photos = ownerPhotos(facts)
+  const logo = ownerLogo(facts)
+  const business = factValue(facts, "business.name")?.name
   const preset = PALETTES.find((p) => p.id === palette?.id)
   const family = FONTS.find((f) => f.id === font?.id)
   // OI2's design tray stores a pair id; older onboarding a face.
@@ -404,9 +414,14 @@ export function ownerChoices(facts: readonly FactRecord[]): string[] {
           `- Voice: the site speaks in a ${labelOf(TONES, tone.id).toLowerCase()} tone. Friendly is warm and plain; professional is polished, with no exclamation marks; casual is relaxed, with contractions.`,
         ]
       : []),
+    ...(logo
+      ? [
+          `- Logo: the owner's own, /${photoFile(logo)}. Set site.logo to that path and site.logoAlt to ${quoted(`${business ?? "The business"} logo`)}. It shows in the header and footer and nowhere else; draw or write no other logo.`,
+        ]
+      : []),
     ...(photos.length > 0
       ? [
-          `- Photos: the owner's own, in src/assets/ and named by these paths: ${photos.map((p) => `/${photoFile(p)} (${quoted(p.alt ?? p.name)})`).join(", ")}. A logo, judged from its name, its alt text and what it shows, goes in the header and footer through site.logo and site.logoAlt and nowhere else, never the hero or the gallery. Of the photos, the best, widest one goes in the home page's hero through site.heroImage and site.heroImageAlt; when the names do not tell them apart, the first. The rest go in the gallery through site.photo1Src to site.photo3Src and their alt fields, or in the about section or a service card when the name says it shows that subject, as a Photo (import Photo from "../layouts/Photo.astro", with src, alt, class and sizes; never a raw img, which the build would not find) styled with width 100%, a fixed aspect-ratio and object-fit: cover. Never stretch a photo or give it a width and height that distort it. With up to four photos use every one, and never the same photo twice on a page. Give every photo alt text that says what it shows for this business, from its name and where you put it; never the file name and never "image". Use no other photos. Name any photo you left out, and why, in risks.`,
+          `- Photos: the owner's own, in src/assets/ and named by these paths, each with what it shows and, where the owner's photo review set one, its use: ${photos.map((p) => `/${photoFile(p)} (${quoted(p.alt ?? p.name)}${p.use ? `, use ${p.use}` : ""})`).join(", ")}. A photo's use places it: hero in the home page's hero through site.heroImage and site.heroImageAlt; work in the service cards and the gallery through site.photo1Src to site.photo3Src and their alt fields; team in the about section. A photo with no use goes where its name says it fits, and with no hero photo the best, widest one is the hero; when the names do not tell them apart, the first. A photo in a service card or the about section is a Photo (import Photo from "../layouts/Photo.astro", with src, alt, class and sizes; never a raw img, which the build would not find) styled with width 100%, a fixed aspect-ratio and object-fit: cover. Never stretch a photo or give it a width and height that distort it. With up to four photos use every one, and never the same photo twice on a page. Give every photo alt text that says what it shows for this business, from its name and where you put it; never the file name and never "image". Add no other photos than these and the Blueprint's generated ones. Name any photo you left out, and why, in risks.`,
         ]
       : []),
   ]

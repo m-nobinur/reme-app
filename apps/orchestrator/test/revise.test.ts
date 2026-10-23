@@ -109,7 +109,10 @@ describe("the owner's photos in the container", () => {
       value: {
         items: [
           photo("3f2b9c1e-8a4d-4f6b-9c2a-1d5e7f8a9b0c", "image/jpeg"),
-          photo("3f2b9c1e-8a4d-4f6b-9c2a-1d5e7f8a9b0d", "image/webp"),
+          {
+            ...photo("3f2b9c1e-8a4d-4f6b-9c2a-1d5e7f8a9b0d", "image/webp"),
+            use: "logo",
+          },
         ],
       },
       version: 1,
@@ -125,7 +128,7 @@ describe("the owner's photos in the container", () => {
     },
   ]
 
-  it("copies each from the org's uploads into src/assets/uploads, and names the ones it cannot find", async () => {
+  it("copies each from the org's uploads into src/assets/uploads, the logo too, and names the ones it cannot find", async () => {
     const commands: string[] = []
     const written: [string, number][] = []
     const sandbox = {

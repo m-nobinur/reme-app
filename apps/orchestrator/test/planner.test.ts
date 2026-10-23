@@ -242,10 +242,56 @@ describe("the fallback Blueprint", () => {
       "service",
       "quote",
     ])
-    expect(made.images).toMatchObject([
-      { id: "home_hero", source: "upload", alt: "A clean kitchen" },
-      { id: "gallery_1", section: "gallery", source: "upload" },
+    // The owner's photo is the hero and the gallery; every other slot is drawn.
+    expect(made.images.map((s) => [s.id, s.source])).toEqual([
+      ["home_hero", "upload"],
+      ["service_1_card", "generated"],
+      ["service_2_card", "generated"],
+      ["gallery_1", "upload"],
+      ["service_1_hero", "generated"],
+      ["service_2_hero", "generated"],
     ])
+    expect(made.images[0]).toMatchObject({ alt: "A clean kitchen" })
+    expect(problems(made, { facts, library: LIBRARY })).toEqual([])
+  })
+
+  it("places each photo by its use, draws only what they leave, and never uses the logo", () => {
+    const photo = (n: number, use: string) => ({
+      id: `20000000-0000-4000-8000-00000000000${n}`,
+      name: `${use}.jpg`,
+      content_type: "image/jpeg",
+      bytes: 1000,
+      alt: `The ${use}`,
+      use,
+    })
+    const facts = [
+      ...CLEANING,
+      fact("site.pages", { ids: ["home", "services", "about", "quote"] }),
+      fact("media.uploads", {
+        items: [
+          photo(1, "logo"),
+          photo(2, "work"),
+          photo(3, "hero"),
+          photo(4, "team"),
+        ],
+      }),
+    ]
+    const made = fallbackBlueprint({ facts, recent: [], library: LIBRARY })
+    const placed = Object.fromEntries(
+      made.images.map((s) => [
+        s.id,
+        s.source === "upload" ? s.asset_id.slice(-1) : "drawn",
+      ])
+    )
+    // The work fills the home page's gallery, so the cards beside it are drawn.
+    expect(placed).toMatchObject({
+      home_hero: "3",
+      gallery_1: "2",
+      service_1_card: "drawn",
+      service_2_card: "drawn",
+      about_hero: "4",
+    })
+    expect(Object.values(placed)).not.toContain("1")
     expect(problems(made, { facts, library: LIBRARY })).toEqual([])
   })
 
@@ -348,7 +394,7 @@ describe("page header photos", () => {
   const fallback = (facts: FactRecord[]) =>
     fallbackBlueprint({ facts, recent: [], library: LIBRARY })
 
-  it("plans a photo for each service page with no uploads, none with uploads", () => {
+  it("plans a photo for each service page, with uploads or without", () => {
     const made = fallback(CLEANING)
     expect(made.images.map((s) => [s.id, s.page, s.section])).toEqual([
       ["home_hero", "home", "hero"],
@@ -377,7 +423,10 @@ describe("page header photos", () => {
         ],
       }),
     ])
-    expect(owned.images.some((s) => s.page === "service")).toBe(false)
+    // The owner's photos cover the home page; a service's header is still drawn.
+    expect(
+      owned.images.filter((s) => s.page === "service").map((s) => s.source)
+    ).toEqual(["generated", "generated"])
   })
 
   it("puts back the about page's principles and visit steps when a plan drops them", () => {
