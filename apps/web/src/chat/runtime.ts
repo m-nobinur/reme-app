@@ -282,12 +282,15 @@ export function useConversationRuntime({
       adapters: { feedback },
     }
   )
-  // The composer's words, kept in this tab by thread, so a reload, a lost
-  // connection or signing in again never loses them.
+  // The composer's words, kept in this tab by stored thread, so a reload, a
+  // lost connection or signing in again never loses them. Only a stored
+  // thread: its id opens for its own org alone, where a new chat's key would
+  // hand a draft to whoever signs in next in this tab.
   const remoteId = useAuiState((s) => s.threadListItem.remoteId)
   const composer = runtime.thread.composer
   useEffect(() => {
-    const key = `composer:${remoteId ?? "new"}`
+    if (!remoteId) return
+    const key = `composer:${remoteId}`
     const store = (use: (storage: Storage) => void) => {
       try {
         use(window.sessionStorage)
