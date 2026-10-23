@@ -666,7 +666,7 @@ const COLOUR_CARD = {
     label: "Your own colour",
     placeholder: "A colour code, or describe your colours",
   },
-  initial: ["ocean", "lagoon", "sunset", "damson"],
+  initial: ["mint", "mist_teal", "garden", "stone_sage"],
   color: true,
 }
 const FONT_OPTIONS = FONTS.map((each) => ({
@@ -698,15 +698,15 @@ const COLOUR_STATES: [string, Parameters<typeof ChoiceForm>[0]["start"]][] = [
   ["Four first", undefined],
   [
     "After Show other colours",
-    { shown: ["harbour", "sage", "cardinal", "graphite"] },
+    { shown: ["deep_sea", "forest_calm", "ocean_deep", "charcoal"] },
   ],
-  ["Own colour, picked", { other: brandOf("harbour") }],
+  ["Own colour, picked", { other: brandOf("mineral") }],
   [
     "Own colour, too light for white text",
     {
       other:
-        PALETTES.find((each) => each.id === "sunset")?.swatches[1] ??
-        brandOf("sunset"),
+        PALETTES.find((each) => each.id === "fern")?.swatches[0] ??
+        brandOf("fern"),
     },
   ],
   ["Own colour, in words", { other: "Navy and gold, like our vans" }],

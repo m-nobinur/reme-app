@@ -10,6 +10,7 @@ import {
   AskOpenInput,
   AskOpenOutput,
   AskUploadOutput,
+  CALM_PALETTES,
   type ChoiceStep,
   DETAILS_KEYS,
   type DetailsStep,
@@ -628,15 +629,17 @@ export function designCard(o: Onboarding, newId: () => string): ToolPart {
     ...new Set(directions.flatMap((d) => d.palettes)),
   ] as PaletteId[]
   const palette = factValue(o.facts, "site.palette")
-  // The same four first for every business: a clean set the owner chose.
-  const shown: PaletteId[] = ["mint", "royal", "meadow", "pebble"]
+  // The four shown first, the same for every business: calm ones the owner chose.
+  const shown = CALM_PALETTES.slice(0, SHOWN)
   // A held palette the four leave out takes the last place, so it shows ticked.
   const heldPalette = PaletteId.safeParse(palette?.id)
   if (heldPalette.success && !shown.includes(heldPalette.data)) {
     shown.splice(SHOWN - 1, 1, heldPalette.data)
   }
-  // Every palette: the four shown, then the rest that suit the business.
-  const palettes = [...new Set([...shown, ...suited, ...PaletteId.options])]
+  // Every palette: the four shown, the other calm ones, then those that suit the business.
+  const palettes = [
+    ...new Set([...shown, ...CALM_PALETTES, ...suited, ...PaletteId.options]),
+  ]
   const pairs = firstOf(
     o,
     "lettering",

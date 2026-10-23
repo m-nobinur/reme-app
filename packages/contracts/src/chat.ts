@@ -207,7 +207,7 @@ export const AskChoiceInput = z
         })
       )
       .min(2)
-      .max(24),
+      .max(48),
     /** Whether more than one may be picked. */
     multiple: z.boolean(),
     /** Options ticked when the card opens. */

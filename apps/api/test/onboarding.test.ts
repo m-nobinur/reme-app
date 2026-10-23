@@ -1343,11 +1343,20 @@ describe("the design tray", () => {
       for (const id of ids(input, "lettering")) {
         expect(fit.map((d) => d.fonts)).toContain(id)
       }
-      // Every palette is offered; the same four show first for every business.
+      // Every palette is offered; the same calm six lead for every business, four shown.
       const palette = input.questions.find((q) => q.id === "palette")?.card
-      expect(palette?.initial).toEqual(["mint", "royal", "meadow", "pebble"])
+      expect(palette?.initial).toEqual([
+        "mint",
+        "mist_teal",
+        "garden",
+        "stone_sage",
+      ])
       expect(ids(input, "palette")).toHaveLength(PALETTES.length)
-      expect(ids(input, "palette").slice(0, 4)).toEqual(palette?.initial)
+      expect(ids(input, "palette").slice(0, 6)).toEqual([
+        ...(palette?.initial ?? []),
+        "slate_mist",
+        "harbor_blue",
+      ])
     }
   })
 
