@@ -371,7 +371,8 @@ export const samples: Record<ContractName, unknown> = {
     brief: {
       description: "A simple car outline beside the name",
       colors: [paletteSample.primary, paletteSample.accent],
-      style: "premium",
+      type: "lockup",
+      style: "luxury",
     },
   },
   LogoRounds: {
@@ -382,6 +383,7 @@ export const samples: Record<ContractName, unknown> = {
         variants: [{ id: "8d9e0f10-2131-4a2b-9c3d-4e5f60718293" }],
       },
     ],
+    next_at: null,
   },
   KeptLogo: {
     asset: {

@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { Uuid } from "./common.ts"
+import { Timestamp, Uuid } from "./common.ts"
 import palettes from "./palettes.json" with { type: "json" }
 import { Text } from "./text.ts"
 
@@ -329,17 +329,35 @@ export const PaletteFromImage = z.strictObject({
 })
 
 /**
- * The looks the logo maker offers, each drawn as a small illustration on
- * its chip. The prompt words for each are the api's (`logo-style.ts`), the
- * labels and pictures the web's.
+ * What a logo is made of: a symbol beside the name, the symbol alone, the
+ * initials, the name inside a badge, or a shape that stands for the business
+ * without depicting it. The web shows an example of each; the prompt words
+ * are the api's (`logo-style.ts`).
+ */
+export const LOGO_TYPES = [
+  "lockup",
+  "icon",
+  "monogram",
+  "emblem",
+  "abstract",
+] as const
+export const LogoType = z.enum(LOGO_TYPES)
+
+/**
+ * The looks the logo maker offers, each shown with an example drawn for the
+ * logo type picked. The prompt words for each are the api's, the labels and
+ * examples the web's. `surprise` draws each variant of a round in a
+ * different look.
  */
 export const LOGO_STYLES = [
-  "clean",
-  "classic",
-  "friendly",
-  "bold",
-  "crafted",
-  "premium",
+  "minimal",
+  "geometric",
+  "gradient",
+  "mascot",
+  "hand_drawn",
+  "luxury",
+  "retro",
+  "three_d",
 ] as const
 export const LogoStyle = z.enum(LOGO_STYLES)
 
@@ -349,13 +367,21 @@ export const LogoBrief = z.strictObject({
   description: Text(300).or(z.literal("")),
   /** The colours to draw in, the brand colour first. */
   colors: z.array(HexColour).min(1).max(5),
-  style: LogoStyle,
+  type: LogoType,
+  style: z.enum([...LOGO_STYLES, "surprise"]),
 })
 
 /** The variants one round draws. */
 export const LOGO_VARIANTS = 4
 /** The most rounds one logo question may draw: a first draft and changes. */
-export const LOGO_ROUNDS_MAX = 5
+export const LOGO_ROUNDS_MAX = 10
+/**
+ * Seconds a round waits after the one before it finished, by round: the
+ * first draft and one redesign at once, then one minute, five, ten, an
+ * hour, and a day for every round after. The api refuses a round asked for
+ * early with 429 and `Retry-After`; the web counts the wait down.
+ */
+export const LOGO_ROUND_WAITS = [0, 0, 60, 300, 600, 3600, 86_400] as const
 
 /**
  * `POST /logos`: draw a round of `LOGO_VARIANTS` logos for one design
@@ -373,9 +399,10 @@ export const DrawLogosRequest = z.strictObject({
 })
 
 /**
- * One round of logos. Each variant's picture is `GET /photos/{id}`; a round
- * still `drawing` lists the ones done so far. `failed` means no model drew
- * any, and the owner may try again.
+ * One round of logos. Each variant's picture is `GET /photos/{id}`, a PNG
+ * on a transparent background; a round still `drawing` lists the ones done
+ * so far. `failed` means no model drew any, and the owner may try again at
+ * once: a new try replaces a failed round and waits for nothing.
  */
 export const LogoRound = z.strictObject({
   round: z.int().min(1).max(LOGO_ROUNDS_MAX),
@@ -383,9 +410,14 @@ export const LogoRound = z.strictObject({
   variants: z.array(z.strictObject({ id: Uuid })).max(LOGO_VARIANTS),
 })
 
-/** `GET /logos?tool_call_id=`: every round drawn for that question, oldest first. */
+/**
+ * `GET /logos?tool_call_id=`: every round drawn for that question, oldest
+ * first, and when the next may start: null when it may now, or while a
+ * round is drawing; absent once `LOGO_ROUNDS_MAX` are drawn.
+ */
 export const LogoRounds = z.strictObject({
   rounds: z.array(LogoRound).max(LOGO_ROUNDS_MAX),
+  next_at: Timestamp.nullable().optional(),
 })
 
 /**
@@ -508,6 +540,7 @@ export type ReviewPhotosRequest = z.infer<typeof ReviewPhotosRequest>
 export type ReviewedPhotos = z.infer<typeof ReviewedPhotos>
 export type PaletteStops = z.infer<typeof PaletteStops>
 export type PaletteFromImage = z.infer<typeof PaletteFromImage>
+export type LogoType = z.infer<typeof LogoType>
 export type LogoStyle = z.infer<typeof LogoStyle>
 export type LogoBrief = z.infer<typeof LogoBrief>
 export type DrawLogosRequest = z.infer<typeof DrawLogosRequest>

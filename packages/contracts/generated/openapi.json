@@ -26529,21 +26529,35 @@
                   "pattern": "^#[0-9a-f]{6}$"
                 }
               },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "lockup",
+                  "icon",
+                  "monogram",
+                  "emblem",
+                  "abstract"
+                ]
+              },
               "style": {
                 "type": "string",
                 "enum": [
-                  "clean",
-                  "classic",
-                  "friendly",
-                  "bold",
-                  "crafted",
-                  "premium"
+                  "minimal",
+                  "geometric",
+                  "gradient",
+                  "mascot",
+                  "hand_drawn",
+                  "luxury",
+                  "retro",
+                  "three_d",
+                  "surprise"
                 ]
               }
             },
             "required": [
               "description",
               "colors",
+              "type",
               "style"
             ],
             "additionalProperties": false
@@ -29743,7 +29757,7 @@
         "type": "object",
         "properties": {
           "rounds": {
-            "maxItems": 5,
+            "maxItems": 10,
             "type": "array",
             "items": {
               "type": "object",
@@ -29751,7 +29765,7 @@
                 "round": {
                   "type": "integer",
                   "minimum": 1,
-                  "maximum": 5
+                  "maximum": 10
                 },
                 "status": {
                   "type": "string",
@@ -29787,6 +29801,18 @@
               ],
               "additionalProperties": false
             }
+          },
+          "next_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [

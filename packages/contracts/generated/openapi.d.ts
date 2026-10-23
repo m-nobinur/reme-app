@@ -7495,7 +7495,18 @@ export interface components {
         description: string | ""
         colors: string[]
         /** @enum {string} */
-        style: "clean" | "classic" | "friendly" | "bold" | "crafted" | "premium"
+        type: "lockup" | "icon" | "monogram" | "emblem" | "abstract"
+        /** @enum {string} */
+        style:
+          | "minimal"
+          | "geometric"
+          | "gradient"
+          | "mascot"
+          | "hand_drawn"
+          | "luxury"
+          | "retro"
+          | "three_d"
+          | "surprise"
       }
       changes?: string
       /** Format: uuid */
@@ -8327,6 +8338,7 @@ export interface components {
           id: string
         }[]
       }[]
+      next_at?: string | null
     }
     MemoryChip: {
       version: number
