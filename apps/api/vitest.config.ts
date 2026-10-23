@@ -25,4 +25,7 @@ const webpAsBytes = {
   },
 }
 
-export default defineConfig({ plugins: [webpAsBytes], test: {} })
+export default defineConfig({
+  plugins: [webpAsBytes],
+  test: { setupFiles: ["./test/no-pacing.ts"] },
+})

@@ -70,10 +70,11 @@ const SlotContext = createContext<HTMLElement | null>(null)
 export const TraySlotProvider = SlotContext.Provider
 
 /**
- * Draws an open question in the thread's tray slot, brings it into view once
- * no turn runs, and takes the focus then only from an empty composer. Where
- * the call sits in the transcript it says the assistant is waiting; the
- * thread dims behind an open tray (globals.css).
+ * Draws an open question in the thread's tray slot once no turn runs, so it
+ * never appears mid-stream, in the moment the waiting line does, fading and
+ * rising in. It is then brought into view, and takes the focus only from an
+ * empty composer. Where the call sits in the transcript it says the
+ * assistant is waiting; the thread dims behind an open tray (globals.css).
  */
 function Docked({
   name,
@@ -89,16 +90,18 @@ function Docked({
   const running = useRevealWaiting(true)
   const ref = useRef<HTMLDivElement>(null)
   useFocusWhenIdle(true, running, ref)
-  if (!slot) return null
+  if (!slot || running) return null
   return (
     <>
-      {running ? null : (
-        <p className="pt-3 text-muted-foreground text-sm">
-          {many ? "Waiting for your answers" : "Waiting for your answer"}
-        </p>
-      )}
+      <p className="pt-3 text-muted-foreground text-sm">
+        {many ? "Waiting for your answers" : "Waiting for your answer"}
+      </p>
       {createPortal(
-        <div data-slot={name} ref={ref}>
+        <div
+          data-slot={name}
+          ref={ref}
+          className="motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-2 duration-250 ease-out motion-safe:animate-in"
+        >
           {children}
         </div>,
         slot
