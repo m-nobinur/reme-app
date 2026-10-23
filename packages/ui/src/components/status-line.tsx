@@ -132,7 +132,7 @@ function BreathingDot() {
   )
 }
 
-const CYCLE_MS = 3200
+const CYCLE_MS = 4400
 const SPREAD = 4.6
 const RADIUS = 4.4
 const ease = (k: number) => (k < 0.5 ? 4 * k ** 3 : 1 - (-2 * k + 2) ** 3 / 2)
@@ -141,14 +141,15 @@ const ease = (k: number) => (k < 0.5 ? 4 * k ** 3 : 1 - (-2 * k + 2) ** 3 / 2)
 const wave = (ms: number) =>
   [0, 1, 2].map((dot) => ({
     x: (dot - 1) * SPREAD,
-    y: 2 * Math.sin((ms / 700) * 2 * Math.PI - dot * 0.9),
+    y: 1.8 * Math.sin((ms / 1600) * 2 * Math.PI - dot * 0.8),
   }))
 
-/** The dots as a turning triangle that draws in to its centre and out, twice. */
+/** The dots as a slowly turning triangle that draws in towards its centre and out, twice. */
 const triangle = (ms: number) => {
-  const r = 1 + (RADIUS - 1) * (0.5 + 0.5 * Math.cos((ms / 600) * 2 * Math.PI))
+  const r =
+    1.6 + (RADIUS - 1.6) * (0.5 + 0.5 * Math.cos((ms / 1000) * 2 * Math.PI))
   return [0, 1, 2].map((dot) => {
-    const a = (ms / 2400) * 2 * Math.PI + (dot * 2 * Math.PI) / 3 + Math.PI
+    const a = (ms / 5000) * 2 * Math.PI + (dot * 2 * Math.PI) / 3 + Math.PI
     return { x: r * Math.cos(a), y: r * Math.sin(a) }
   })
 }
@@ -165,10 +166,10 @@ const between = (
 
 /** Where the dots are `ms` into a cycle: wave, fold, triangle, unfold. */
 function dotsAt(ms: number) {
-  if (ms < 1400) return wave(ms)
-  if (ms < 1700) return between(wave(1400), triangle(0), (ms - 1400) / 300)
-  if (ms < 2900) return triangle(ms - 1700)
-  return between(triangle(1200), wave(0), (ms - 2900) / 300)
+  if (ms < 1600) return wave(ms)
+  if (ms < 2000) return between(wave(1600), triangle(0), (ms - 1600) / 400)
+  if (ms < 4000) return triangle(ms - 2000)
+  return between(triangle(2000), wave(0), (ms - 4000) / 400)
 }
 
 /** The working mark: three dots, moved by the frame, still under reduced motion. */
