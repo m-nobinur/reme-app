@@ -80,7 +80,8 @@ const enctype = byEmail
     ? "multipart/form-data"
     : undefined
 /** The browser's input type, where it differs from the question's. */
-const INPUT: Record<string, string> = { datetime: "datetime-local" }
+type InputType = astroHTML.JSX.HTMLInputTypeAttribute
+const INPUT: Record<string, InputType> = { datetime: "datetime-local" }
 ---
 
 {
@@ -127,7 +128,7 @@ const INPUT: Record<string, string> = { datetime: "datetime-local" }
                         <input
                           id={`${field.id}-${i}`}
                           name={field.name}
-                          type={field.type}
+                          type={field.type === "radio" ? "radio" : "checkbox"}
                           value={option}
                           required={field.type === "radio" && field.required}
                         />
@@ -197,7 +198,7 @@ const INPUT: Record<string, string> = { datetime: "datetime-local" }
                 ) : (
                   <input
                     {...common}
-                    type={INPUT[field.type] ?? field.type}
+                    type={INPUT[field.type] ?? (field.type as InputType)}
                     maxlength={MAX[field.type]}
                     min={field.type === "number" ? "0" : undefined}
                   />
