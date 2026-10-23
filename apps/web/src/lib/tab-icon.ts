@@ -25,10 +25,14 @@ export function tabBadge(workspace: Workspace | null): TabBadge {
 }
 
 const SIZE = 64
+/** The dot sits on the circle's lower right, as a presence dot does. */
+const DOT = { x: 52, y: 52, r: 10, gap: 4 }
 
 /**
- * Dots the face's tab icons while `badge` holds, filled when waiting and a
- * ring when working, so another tab shows whether the owner is needed.
+ * The face's tab icons redrawn with a presence dot while `badge` holds:
+ * amber when something waits on the owner, green while work runs, cut
+ * clear of the face so it reads on a light or dark tab strip. Put back when
+ * it clears.
  */
 export function useTabBadge(face: string | undefined, badge: TabBadge) {
   useEffect(() => {
@@ -43,19 +47,18 @@ export function useTabBadge(face: string | undefined, badge: TabBadge) {
       canvas.width = canvas.height = SIZE
       const context = canvas.getContext("2d")
       if (!context) return
-      const tokens = getComputedStyle(document.documentElement)
       context.drawImage(image, 0, 0, SIZE, SIZE)
+      context.globalCompositeOperation = "destination-out"
       context.beginPath()
-      context.arc(SIZE - 14, SIZE - 14, 12, 0, Math.PI * 2)
-      context.fillStyle = tokens.getPropertyValue("--background")
+      context.arc(DOT.x, DOT.y, DOT.r + DOT.gap, 0, Math.PI * 2)
       context.fill()
+      context.globalCompositeOperation = "source-over"
       context.beginPath()
-      context.arc(SIZE - 14, SIZE - 14, 8, 0, Math.PI * 2)
-      context.fillStyle = context.strokeStyle =
-        tokens.getPropertyValue("--primary")
-      context.lineWidth = 4
-      if (badge === "waiting") context.fill()
-      else context.stroke()
+      context.arc(DOT.x, DOT.y, DOT.r, 0, Math.PI * 2)
+      context.fillStyle = getComputedStyle(
+        document.documentElement
+      ).getPropertyValue(`--presence-${badge}`)
+      context.fill()
       drawn = canvas.toDataURL("image/png")
       for (const link of links) {
         link.dataset.face = link.href
