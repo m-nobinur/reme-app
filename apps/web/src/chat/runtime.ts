@@ -90,6 +90,23 @@ export function useConversationRuntime({
   // The last message of the turn in flight, as the transport saw it. A turn
   // refused before the thread re-renders leaves `chat.messages` without it.
   const sending = useRef<ChatMessage | undefined>(undefined)
+  // The message of a turn a reload cut off, while its reply is awaited.
+  const resumed = useRef<InFlight | null>(null)
+  const thread = () => aui.threadListItem.getState().remoteId
+  /** Forgets the message a turn carried: its reply came, or it ended. */
+  const settled = () => {
+    const stored = thread()
+    if (stored) keepInFlight(stored, null)
+    if (resumed.current) {
+      resumed.current = null
+      setResuming(false)
+    }
+  }
+  const prepare = turnBody(
+    () => aui.threadListItem.initialize(),
+    () => "act",
+    sending
+  )
   const [transport] = useState(
     () =>
       new DefaultChatTransport<ChatMessage>({
@@ -98,11 +115,20 @@ export function useConversationRuntime({
         // The whole body is the turn: no history, system prompt or tools
         // ever leave the browser. Always Act, which includes the reads: the
         // assistant works out whether a message asks or changes something.
-        prepareSendMessagesRequest: turnBody(
-          () => aui.threadListItem.initialize(),
-          () => "act",
-          sending
-        ),
+        prepareSendMessagesRequest: async (options) => {
+          const body = await prepare(options)
+          // Kept while the turn runs, so a reload mid-turn keeps it.
+          const stored = thread()
+          const last = sending.current
+          if (stored && last?.role === "user") {
+            keepInFlight(stored, {
+              id: last.id,
+              text: textOf(last),
+              at: Date.now(),
+            })
+          }
+          return body
+        },
       })
   )
   // A failed turn leaves the screen ahead of the stored row: the answer or
@@ -128,12 +154,14 @@ export function useConversationRuntime({
       showAnswered.current()
     },
     onFinish: () => {
+      settled()
       clearOnboardingStatus()
       showAnswered.current()
       answered.current = null
       onFinish()
     },
     onError: (error) => {
+      settled()
       clearOnboardingStatus()
       restore.current(error)
     },
@@ -203,7 +231,12 @@ export function useConversationRuntime({
         idle: ["ready", "error"].includes(latest.current.status),
         messages: latest.current.messages,
       }),
-      apply: (rows) => latest.current.setMessages(rows.map(toUIMessage)),
+      apply: (rows) => {
+        latest.current.setMessages(rows.map(toUIMessage))
+        // A reply after the message a reload cut off: its turn is over.
+        const at = rows.findIndex((row) => row.id === resumed.current?.id)
+        if (at >= 0 && at < rows.length - 1) settled()
+      },
     })
   )
   useEffect(() => {
@@ -317,34 +350,9 @@ export function useConversationRuntime({
       )
     })
   }, [composer, remoteId])
-  // The owner's message while its turn runs, so a reload mid-turn keeps it.
-  // Forgotten when a turn of this page ends, never on load, where the
-  // status starts ready.
-  const running = useRef<boolean>(false)
-  useEffect(() => {
-    if (!remoteId) return
-    if (chat.status === "submitted") {
-      running.current = true
-      const last = sending.current
-      if (last?.role === "user") {
-        keepInFlight(remoteId, {
-          id: last.id,
-          text: textOf(last),
-          at: Date.now(),
-        })
-      }
-    } else if (
-      running.current &&
-      (chat.status === "ready" || chat.status === "error")
-    ) {
-      running.current = false
-      keepInFlight(remoteId, null)
-    }
-  }, [chat.status, remoteId])
   // After a reload, a turn still running shows its message and a working
   // line until the polled rows bring its reply; past its time, the words go
   // back to the composer.
-  const resumed = useRef<InFlight | null>(null)
   const loaded = chat.messages.length > 0
   // biome-ignore lint/correctness/useExhaustiveDependencies: decided once, when the history is in
   useEffect(() => {
@@ -381,15 +389,5 @@ export function useConversationRuntime({
     )
     return () => clearTimeout(timer)
   }, [remoteId, loaded])
-  // The reply landed: the rows hold an answer after the message.
-  useEffect(() => {
-    const held = resumed.current
-    if (!held || !remoteId) return
-    const at = chat.messages.findIndex((m) => m.id === held.id)
-    if (at < 0 || chat.messages[at + 1]?.role !== "assistant") return
-    resumed.current = null
-    setResuming(false)
-    keepInFlight(remoteId, null)
-  }, [chat.messages, remoteId])
   return runtime
 }
