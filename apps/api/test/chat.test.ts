@@ -56,7 +56,7 @@ import {
   opening,
   stepOf,
 } from "../src/onboarding.ts"
-import { PLANNER_VERSION } from "../src/onboarding-agent.ts"
+import { PLANNER, PLANNER_VERSION } from "../src/onboarding-agent.ts"
 import {
   type Owner,
   owner,
@@ -298,13 +298,18 @@ const answerFor = (card: ToolPart): unknown => {
   }
   if (card.type === "tool-ask_design") {
     const { questions } = AskDesignInput.parse(card.input)
+    // The logo kept on its page (LOGO_HELD); the photos left to the assistant.
     return {
       answers: Object.fromEntries(
         questions.map((q) => [
           q.id,
-          q.card.multiple
-            ? { choices: [q.card.options[0]?.id] }
-            : { choice: q.card.options[0]?.id },
+          q.visual === "logo"
+            ? { logo: LOGO }
+            : q.visual === "photos"
+              ? { photos: [], create: true }
+              : q.card.multiple
+                ? { choices: [q.card.options[0]?.id] }
+                : { choice: q.card.options[0]?.id },
         ])
       ),
       skip_all: false,
@@ -340,11 +345,14 @@ const UP_TO_PHOTOS: FactValue[] = [
   { key: "site.pages", value: { ids: ["home", "quote"] } },
 ]
 
+/** The script's quote form, confirmed: asked right after what sets the business apart. */
+const QUOTE_FORM: FactValue = {
+  key: "quote.form",
+  value: { fields: [...DEFAULT_QUOTE_FIELDS] },
+}
+
 /** Every fact before the design, which comes last: the quote form confirmed too. */
-const AT_DESIGN: FactValue[] = [
-  ...UP_TO_PHOTOS.slice(0, -4),
-  { key: "quote.form", value: { fields: [...DEFAULT_QUOTE_FIELDS] } },
-]
+const AT_DESIGN: FactValue[] = [...UP_TO_PHOTOS.slice(0, -4), QUOTE_FORM]
 
 /** The logo the tray's logo page kept, which a finished tray needs. */
 const LOGO = {
@@ -487,7 +495,8 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       turn(conversationId, { turn: { kind: "message", message_id, text } })
     /**
      * The onboarding conversation at the industry card: where the business
-     * works and for whom already held, and the opener answered in words.
+     * works and for whom already held, the quote form too, and the opener
+     * answered in words.
      */
     const atIndustry = async () => {
       const set = await who.call(stubOrchestrator(), "/facts", {
@@ -498,6 +507,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
             FACTS["service_area.text"],
             FACTS["business.audience"],
             FACTS["business.proof"],
+            QUOTE_FORM,
           ],
         }),
       })
@@ -635,6 +645,14 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         bodies.push(wordless(typed.text))
         continue
       }
+      // The tray's logo page keeps the logo before the tray is answered.
+      if (call.type === "tool-ask_design") {
+        await who.call(stubOrchestrator(), "/facts", {
+          method: "POST",
+          headers: { "idempotency-key": ids() },
+          body: JSON.stringify({ facts: [LOGO_HELD] }),
+        })
+      }
       if (replies) said.push(`Answer ${i + 1}`)
       const done = await me.turn(
         id,
@@ -731,6 +749,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         "business.audience",
         "business.phone",
         "business.proof",
+        "media.uploads",
         "owner.preferred_name",
         "quote.form",
         "service_area.text",
@@ -792,11 +811,13 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
     const roles = messages.map((m) => m.content.role)
     const asked = legacy.messages
       .flatMap((m) => m.content.parts)
+      // An open question is answered in words, which IN_WORDS counts.
       .filter(
         (p) =>
-          p.type.startsWith("tool-ask_") || p.type === "tool-review_quote_form"
+          (p.type.startsWith("tool-ask_") && p.type !== "tool-ask_open") ||
+          p.type === "tool-review_quote_form"
       ).length
-    expect(asked).toBeGreaterThanOrEqual(10)
+    expect(asked).toBeGreaterThanOrEqual(9)
     // Every card answer and every typed answer is a message of the owner's.
     expect(roles.filter((role) => role === "user")).toHaveLength(
       asked + IN_WORDS.length
@@ -819,10 +840,11 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         continue
       }
       // Each step asks one card at most, and ends on it, answered, bar the
-      // last; the opener and the quote question are asked in words.
+      // last; the opener and the quote question are asked in words, which
+      // close the quote question's card as typed over.
       const cards = m.content.parts.filter(
         (p) =>
-          p.type.startsWith("tool-ask_") ||
+          (p.type.startsWith("tool-ask_") && p.type !== "tool-ask_open") ||
           p.type === "tool-review_quote_form" ||
           p.type === "tool-request_change"
       )
@@ -1027,6 +1049,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         ],
         ["business.proof", expect.any(Object), "owner_stated"],
         ["owner.preferred_name", { name: "Probe" }, "owner_stated"],
+        ["quote.form", expect.any(Object), "owner_stated"],
         ["service_area.text", expect.any(Object), "owner_stated"],
       ])
       // The next step is the next question, in the same row: the contact
@@ -1184,6 +1207,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
             FACTS["business.audience"],
             FACTS["business.proof"],
             FACTS["service_area.text"],
+            QUOTE_FORM,
           ],
         }),
       })
@@ -1325,13 +1349,15 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       })
     })
 
-    it("ends on the Skip branch with the builder question and a closing line", async () => {
+    it("ends on the Skip branch with a closing line", async () => {
       const fresh = await owner(kit, url as string, "chat-manual")
       const talk = talker(fresh)
       await fresh.call(stubOrchestrator(), "/facts", {
         method: "POST",
         headers: { "idempotency-key": crypto.randomUUID() },
-        body: JSON.stringify({ facts: UP_TO_PHOTOS.slice(0, -5) }),
+        body: JSON.stringify({
+          facts: [...UP_TO_PHOTOS.slice(0, -5), QUOTE_FORM],
+        }),
       })
       const id = await talk.onboarding()
       const asked = await talk.turn(id, {
@@ -1352,13 +1378,8 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
           ],
         },
       })
-      expect(pendingCall(skipped.after)).toMatchObject({
-        input: { step: "manual_builder" },
-      })
-      const done = await talk.turn(id, {
-        turn: { kind: "message", message_id: "u_no", text: "No" },
-      })
-      expect(done.after.parts).toEqual([
+      // The builder question is no longer asked: the row ends on the closing line.
+      expect(skipped.after.parts.slice(-2)).toEqual([
         { type: "step-start" },
         { type: "text", text: expect.any(String), state: "done" },
       ])
@@ -1366,9 +1387,10 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         await kit.withOrg({ orgId: fresh.orgId }, (db) => readScript(db, id))
       ).toEqual({
         passed: [],
-        closed: ["build_for_me", "manual_builder"],
+        closed: ["build_for_me"],
         offered: false,
-        builder: false,
+        builder: null,
+        siteSkipped: true,
       })
     })
 
@@ -2942,9 +2964,12 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
 
     it("asks who the customers are once before the website, counting a question asked in words", async () => {
       // Everything for the website but who the customers are, never asked.
-      const before = UP_TO_PHOTOS.filter(
-        (f) => f.key !== "business.audience" && !f.key.startsWith("site.")
-      )
+      const before = [
+        ...UP_TO_PHOTOS.filter(
+          (f) => f.key !== "business.audience" && !f.key.startsWith("site.")
+        ),
+        QUOTE_FORM,
+      ]
       const website = plan({
         say: "Shall I build your website?",
         next: {
@@ -2968,14 +2993,14 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         turn: { kind: "message", message_id, text },
       })
 
-      // Never asked: the website question is refused twice, and the script
-      // reads the reply as its own step asks it, who the customers are.
+      // Never asked: the website question is refused on every attempt, and
+      // the script reads the reply as its own step asks it, who the customers are.
       const early = await setUp("chat-customers-early")
       const refused = planner([website, website])
       const fell = await talker(early.who, undefined, {
         planner: refused.model,
       }).turn(early.id, typedTurn("u_au_1", "Mostly busy families"))
-      expect(refused.calls).toHaveLength(2)
+      expect(refused.calls).toHaveLength(PLANNER.attempts)
       expect(
         (await factsOf(early.who)).find((f) => f.key === "business.audience")
           ?.value
