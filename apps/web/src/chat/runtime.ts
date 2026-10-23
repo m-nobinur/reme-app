@@ -17,6 +17,13 @@ import { DefaultChatTransport } from "ai"
 import { useEffect, useRef, useState } from "react"
 import { getConversationMessages, rateMessage } from "@/lib/api/server"
 import { followThread, toUIMessage } from "./history"
+import {
+  IN_FLIGHT_MS,
+  type InFlight,
+  keepInFlight,
+  readInFlight,
+  setResuming,
+} from "./in-flight"
 import type { ChatMessage } from "./message"
 import {
   cancelOvertaken,
@@ -310,5 +317,79 @@ export function useConversationRuntime({
       )
     })
   }, [composer, remoteId])
+  // The owner's message while its turn runs, so a reload mid-turn keeps it.
+  // Forgotten when a turn of this page ends, never on load, where the
+  // status starts ready.
+  const running = useRef<boolean>(false)
+  useEffect(() => {
+    if (!remoteId) return
+    if (chat.status === "submitted") {
+      running.current = true
+      const last = sending.current
+      if (last?.role === "user") {
+        keepInFlight(remoteId, {
+          id: last.id,
+          text: textOf(last),
+          at: Date.now(),
+        })
+      }
+    } else if (
+      running.current &&
+      (chat.status === "ready" || chat.status === "error")
+    ) {
+      running.current = false
+      keepInFlight(remoteId, null)
+    }
+  }, [chat.status, remoteId])
+  // After a reload, a turn still running shows its message and a working
+  // line until the polled rows bring its reply; past its time, the words go
+  // back to the composer.
+  const resumed = useRef<InFlight | null>(null)
+  const loaded = chat.messages.length > 0
+  // biome-ignore lint/correctness/useExhaustiveDependencies: decided once, when the history is in
+  useEffect(() => {
+    if (!remoteId || !loaded || resumed.current || chat.status !== "ready")
+      return
+    const held = readInFlight(remoteId)
+    if (!held || chat.messages.some((m) => m.id === held.id)) {
+      keepInFlight(remoteId, null)
+      return
+    }
+    resumed.current = held
+    chat.setMessages((messages) => [
+      ...messages,
+      {
+        id: held.id,
+        role: "user",
+        parts: [{ type: "text", text: held.text }],
+        metadata: { custom: { createdAt: new Date(held.at).toISOString() } },
+      },
+    ])
+    setResuming(true)
+    const timer = setTimeout(
+      () => {
+        if (resumed.current !== held) return
+        resumed.current = null
+        setResuming(false)
+        keepInFlight(remoteId, null)
+        latest.current.setMessages((messages) =>
+          messages.filter((m) => m.id !== held.id)
+        )
+        if (!composer.getState().text) composer.setText(held.text)
+      },
+      Math.max(0, held.at + IN_FLIGHT_MS - Date.now())
+    )
+    return () => clearTimeout(timer)
+  }, [remoteId, loaded])
+  // The reply landed: the rows hold an answer after the message.
+  useEffect(() => {
+    const held = resumed.current
+    if (!held || !remoteId) return
+    const at = chat.messages.findIndex((m) => m.id === held.id)
+    if (at < 0 || chat.messages[at + 1]?.role !== "assistant") return
+    resumed.current = null
+    setResuming(false)
+    keepInFlight(remoteId, null)
+  }, [chat.messages, remoteId])
   return runtime
 }

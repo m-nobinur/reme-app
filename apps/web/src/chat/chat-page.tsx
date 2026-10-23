@@ -45,6 +45,7 @@ import { domainPurchase } from "./domain-purchase"
 import { asked, missingConversations, startsNewChat, tailOf } from "./history"
 import { useConversationRuntime } from "./runtime"
 import { SiteReadyCard } from "./site-ready"
+import { StillWorking } from "./still-working"
 import { trayServices } from "./tray-services"
 import { uploadPhotos } from "./upload"
 
@@ -222,6 +223,7 @@ export function ChatPage() {
                     <Thread
                       after={
                         <>
+                          <StillWorking />
                           <SiteReadyCard />
                           <BuildStopped />
                         </>
