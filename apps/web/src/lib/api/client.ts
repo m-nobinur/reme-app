@@ -865,6 +865,12 @@ export const apiSource: OwnerDataSource = {
     }),
   paletteFromImage: (upload) =>
     multipart("/palettes/from-image", upload, MODEL_TIMEOUT_MS),
+  logoPalettes: (raw) =>
+    call("/palettes/from-logo", {
+      method: "POST",
+      raw,
+      timeoutMs: MODEL_TIMEOUT_MS,
+    }),
   drawLogos: (raw, key) =>
     call("/logos", { method: "POST", raw, key, timeoutMs: MODEL_TIMEOUT_MS }),
   logoRounds: (toolCallId) =>

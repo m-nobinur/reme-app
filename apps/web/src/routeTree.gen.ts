@@ -44,6 +44,7 @@ import { Route as ApiAuthSocialRouteImport } from './routes/api.auth.social'
 import { Route as ApiGoogleCallbackRouteImport } from './routes/api.google.callback'
 import { Route as ApiGoogleStartRouteImport } from './routes/api.google.start'
 import { Route as ApiPalettesFromImageRouteImport } from './routes/api.palettes.from-image'
+import { Route as ApiPalettesFromLogoRouteImport } from './routes/api.palettes.from-logo'
 import { Route as ApiPhotosIdRouteImport } from './routes/api.photos.$id'
 import { Route as AppConversationIndexRouteImport } from './routes/app/_conversation/index'
 import { Route as AppDomainsReturnRouteImport } from './routes/app/domains.return'
@@ -224,6 +225,11 @@ const ApiPalettesFromImageRoute = ApiPalettesFromImageRouteImport.update({
   path: '/api/palettes/from-image',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPalettesFromLogoRoute = ApiPalettesFromLogoRouteImport.update({
+  id: '/api/palettes/from-logo',
+  path: '/api/palettes/from-logo',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPhotosIdRoute = ApiPhotosIdRouteImport.update({
   id: '/api/photos/$id',
   path: '/api/photos/$id',
@@ -285,6 +291,7 @@ export interface FileRoutesByFullPath {
   '/api/google/callback': typeof ApiGoogleCallbackRoute
   '/api/google/start': typeof ApiGoogleStartRoute
   '/api/palettes/from-image': typeof ApiPalettesFromImageRoute
+  '/api/palettes/from-logo': typeof ApiPalettesFromLogoRoute
   '/api/photos/$id': typeof ApiPhotosIdRoute
   '/app/domains/return': typeof AppDomainsReturnRoute
   '/app/': typeof AppConversationIndexRoute
@@ -326,6 +333,7 @@ export interface FileRoutesByTo {
   '/api/google/callback': typeof ApiGoogleCallbackRoute
   '/api/google/start': typeof ApiGoogleStartRoute
   '/api/palettes/from-image': typeof ApiPalettesFromImageRoute
+  '/api/palettes/from-logo': typeof ApiPalettesFromLogoRoute
   '/api/photos/$id': typeof ApiPhotosIdRoute
   '/app/domains/return': typeof AppDomainsReturnRoute
   '/api/logos/$id/keep': typeof ApiLogosIdKeepRoute
@@ -368,6 +376,7 @@ export interface FileRoutesById {
   '/api/google/callback': typeof ApiGoogleCallbackRoute
   '/api/google/start': typeof ApiGoogleStartRoute
   '/api/palettes/from-image': typeof ApiPalettesFromImageRoute
+  '/api/palettes/from-logo': typeof ApiPalettesFromLogoRoute
   '/api/photos/$id': typeof ApiPhotosIdRoute
   '/app/domains/return': typeof AppDomainsReturnRoute
   '/app/_conversation/': typeof AppConversationIndexRoute
@@ -411,6 +420,7 @@ export interface FileRouteTypes {
     | '/api/google/callback'
     | '/api/google/start'
     | '/api/palettes/from-image'
+    | '/api/palettes/from-logo'
     | '/api/photos/$id'
     | '/app/domains/return'
     | '/app/'
@@ -452,6 +462,7 @@ export interface FileRouteTypes {
     | '/api/google/callback'
     | '/api/google/start'
     | '/api/palettes/from-image'
+    | '/api/palettes/from-logo'
     | '/api/photos/$id'
     | '/app/domains/return'
     | '/api/logos/$id/keep'
@@ -493,6 +504,7 @@ export interface FileRouteTypes {
     | '/api/google/callback'
     | '/api/google/start'
     | '/api/palettes/from-image'
+    | '/api/palettes/from-logo'
     | '/api/photos/$id'
     | '/app/domains/return'
     | '/app/_conversation/'
@@ -524,6 +536,7 @@ export interface RootRouteChildren {
   ApiGoogleCallbackRoute: typeof ApiGoogleCallbackRoute
   ApiGoogleStartRoute: typeof ApiGoogleStartRoute
   ApiPalettesFromImageRoute: typeof ApiPalettesFromImageRoute
+  ApiPalettesFromLogoRoute: typeof ApiPalettesFromLogoRoute
   ApiPhotosIdRoute: typeof ApiPhotosIdRoute
 }
 
@@ -774,6 +787,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPalettesFromImageRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/palettes/from-logo': {
+      id: '/api/palettes/from-logo'
+      path: '/api/palettes/from-logo'
+      fullPath: '/api/palettes/from-logo'
+      preLoaderRoute: typeof ApiPalettesFromLogoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/photos/$id': {
       id: '/api/photos/$id'
       path: '/api/photos/$id'
@@ -906,6 +926,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiGoogleCallbackRoute: ApiGoogleCallbackRoute,
   ApiGoogleStartRoute: ApiGoogleStartRoute,
   ApiPalettesFromImageRoute: ApiPalettesFromImageRoute,
+  ApiPalettesFromLogoRoute: ApiPalettesFromLogoRoute,
   ApiPhotosIdRoute: ApiPhotosIdRoute,
 }
 export const routeTree = rootRouteImport

@@ -1,5 +1,6 @@
 import {
   KeptLogo,
+  LogoPalettes,
   LogoRound,
   LogoRounds,
   PaletteFromImage,
@@ -52,6 +53,12 @@ export const trayServices: TrayServices = {
       headers: { "idempotency-key": crypto.randomUUID() },
     })
   },
+  logoPalettes: (assetId) =>
+    read(LogoPalettes, "/api/palettes/from-logo", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ asset_id: assetId }),
+    }),
   drawLogos: (request) => read(LogoRound, "/api/logos", write(request)),
   logoRounds: (toolCallId) =>
     read(

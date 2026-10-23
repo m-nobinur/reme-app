@@ -391,6 +391,8 @@ export type OwnerDataSource = {
     length: number
     key: string
   }) => Promise<Response | null>
+  /** The kept logo read into palettes, answered as `POST /palettes/from-logo` answers. Null when there is no session. */
+  logoPalettes: (body: string) => Promise<Response | null>
   /** A round of logos started, answered as `POST /logos` answers. Null when there is no session. */
   drawLogos: (body: string, key: string) => Promise<Response | null>
   /** One logo question's rounds, answered as `GET /logos` answers. Null when there is no session. */
