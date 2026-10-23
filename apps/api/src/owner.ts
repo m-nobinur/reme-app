@@ -35,10 +35,16 @@ import { removal } from "./cos/tools.ts"
 import { checkout, isOrgOwner, purchaseStatus } from "./domain-buy.ts"
 import { googleConnect } from "./google.ts"
 import { failure, invalid, keyMissing, readBody } from "./http.ts"
+import { drawLogos, keepLogo, readLogos } from "./logo.ts"
 import { pushRoute } from "./push.ts"
 import { reminderRoute } from "./reminders.ts"
+import { paletteFromImage, reviewPhotos } from "./vision.ts"
 import { readActivity, readFacts, unchanged } from "./workspace.ts"
 import { readTaggedWorkspace } from "./workspace-tag.ts"
+
+/** `POST /logos/{id}/keep`, the id a UUID: a drawn variant's or an uploaded asset's. */
+const LOGO_KEEP_PATH =
+  /^\/logos\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/keep$/
 
 /**
  * The owner's routes. The org is the one `index.ts` resolved from the sealed
@@ -50,7 +56,7 @@ import { readTaggedWorkspace } from "./workspace-tag.ts"
 
 /** The routes `ownerRoute` answers, for `index.ts` to resolve an org before. */
 export const OWNER_PATH =
-  /^\/(workspace|facts|assets|photos\/[^/]+|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback))?)?|reminders(\/[^/]+)?|memory(\/(undo|review))?|push\/(config|subscriptions(\/[^/]+)?)|domains\/[^/]+(\/checkout)?|google\/(connect|disconnect)|chat)$/
+  /^\/(workspace|facts|assets(\/review)?|photos\/[^/]+|logos(\/[^/]+\/keep)?|palettes\/from-image|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback))?)?|reminders(\/[^/]+)?|memory(\/(undo|review))?|push\/(config|subscriptions(\/[^/]+)?)|domains\/[^/]+(\/checkout)?|google\/(connect|disconnect)|chat)$/
 
 async function setFacts(request: Request, kit: Tenancy, owner: Owner) {
   if (!idempotencyKey(request)) return keyMissing()
@@ -239,8 +245,24 @@ export async function ownerRoute(
   if (pathname === "/assets" && method === "POST") {
     return uploadAssets(request, env, kit, owner)
   }
+  if (pathname === "/assets/review" && method === "POST") {
+    return reviewPhotos(request, env, kit, owner)
+  }
   if (PHOTO_PATH.test(pathname) && method === "GET") {
     return readPhoto(env, owner, pathname.slice("/photos/".length))
+  }
+  if (pathname === "/logos" && method === "POST") {
+    return drawLogos(request, env, kit, owner)
+  }
+  if (pathname === "/logos" && method === "GET") {
+    return readLogos(request, env, owner)
+  }
+  const kept = LOGO_KEEP_PATH.exec(pathname)
+  if (kept && method === "POST") {
+    return keepLogo(request, env, kit, owner, kept[1] as string)
+  }
+  if (pathname === "/palettes/from-image" && method === "POST") {
+    return paletteFromImage(request, env, owner)
   }
   if (pathname === "/changes" && method === "POST") {
     return requestChange(request, env, kit, owner)

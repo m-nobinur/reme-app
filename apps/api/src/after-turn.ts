@@ -3,6 +3,7 @@ import { LIMITS, openrouterModel } from "./cos/agent.ts"
 import { COMPACTION, compactAfterTurn } from "./cos/compaction.ts"
 import { REFLECTION, reflectAfterTurn } from "./cos/reflection.ts"
 import { GRACE_MS, SessionBusy } from "./cos/turns.ts"
+import { drawLogoMessage, isLogoJob, type LogoJob } from "./logo.ts"
 
 /** What a closed turn tells the queue: ids only, never text. */
 export type AfterTurn = {
@@ -54,15 +55,21 @@ export async function enqueueAfterTurn(
  * goes to the dead-letter queue.
  */
 export async function afterTurnBatch(
-  batch: MessageBatch<AfterTurn>,
+  batch: MessageBatch<AfterTurn | LogoJob>,
   env: Env
 ): Promise<void> {
+  // Logo rounds ride this queue for a consumer's fifteen minutes (`logo.ts`),
+  // drawn beside the turns' work rather than ahead of it.
+  const logos = batch.messages
+    .filter((m): m is Message<LogoJob> => isLogoJob(m.body))
+    .map((m) => drawLogoMessage(env, m))
   const kit = tenancy(env.HYPERDRIVE.connectionString)
   const model = env.OPENROUTER_API_KEY
     ? openrouterModel(env.OPENROUTER_API_KEY, COMPACTION.model)
     : null
   try {
     for (const message of batch.messages) {
+      if (isLogoJob(message.body)) continue
       try {
         if (!message.body.idle) await compactAfterTurn(kit, model, message.body)
         await reflectAfterTurn(kit, model, message.body)
@@ -84,6 +91,7 @@ export async function afterTurnBatch(
         )
       }
     }
+    await Promise.all(logos)
   } finally {
     await kit.close()
   }
