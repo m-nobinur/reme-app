@@ -370,8 +370,31 @@ export type OwnerDataSource = {
     key: string
   }) => Promise<Response | null>
   /**
-   * One generated photo of the owner's org, answered as `apps/api`'s
-   * `GET /photos/:id` answers. Null when there is no session.
+   * One generated or uploaded image of the owner's org, answered as
+   * `apps/api`'s `GET /photos/:id` answers. Null when there is no session.
    */
   photo: (assetId: string) => Promise<Response | null>
+  /**
+   * The design tray's photos read against the photo needs, the JSON body as
+   * the owner sent it, answered as `apps/api`'s `POST /assets/review`
+   * answers. Null when there is no session.
+   */
+  reviewPhotos: (body: string, key: string) => Promise<Response | null>
+  /**
+   * The colours in one picture, streamed through as the browser sent it and
+   * never stored, answered as `POST /palettes/from-image` answers. Null when
+   * there is no session.
+   */
+  paletteFromImage: (upload: {
+    body: ReadableStream<Uint8Array>
+    type: string
+    length: number
+    key: string
+  }) => Promise<Response | null>
+  /** A round of logos started, answered as `POST /logos` answers. Null when there is no session. */
+  drawLogos: (body: string, key: string) => Promise<Response | null>
+  /** One logo question's rounds, answered as `GET /logos` answers. Null when there is no session. */
+  logoRounds: (toolCallId: string) => Promise<Response | null>
+  /** A variant or an upload kept as the logo, answered as `POST /logos/{id}/keep`. Null when there is no session. */
+  keepLogo: (id: string, key: string) => Promise<Response | null>
 }

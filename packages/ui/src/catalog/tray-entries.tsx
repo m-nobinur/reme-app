@@ -7,6 +7,7 @@ import {
   PAGES,
   PALETTES,
   UPLOAD_MAX_BYTES,
+  UPLOAD_MAX_FILES,
   UPLOAD_TYPES,
 } from "@workspace/contracts"
 import {
@@ -182,6 +183,30 @@ export const INPUT: AskDesignInput = {
       ),
     },
     {
+      id: "photos",
+      question: "Add photos of your work",
+      visual: "photos",
+      card: card(
+        "template",
+        [
+          { id: "upload", label: "Upload photos", hint: null, visual: null },
+          {
+            id: "create",
+            label: "Create them for me",
+            hint: null,
+            visual: null,
+          },
+        ],
+        { other: null }
+      ),
+      upload: {
+        accept: [...UPLOAD_TYPES],
+        max_files: UPLOAD_MAX_FILES,
+        max_bytes: UPLOAD_MAX_BYTES,
+        skippable: false,
+      },
+    },
+    {
       id: "pages",
       question:
         "Which pages should the site have, besides Home and Request a quote?",
@@ -281,14 +306,15 @@ const STATES: State[] = [
     title: "Arrangement, picked",
     start: { index: 3, answers: { arrangement: { choice: "dark_rows" } } },
   },
+  { title: "Photos, nothing yet", start: { index: 4 } },
   {
     title: "Last question, own words typed",
-    start: { index: 4, answers: { pages: { own: "A page for our prices" } } },
+    start: { index: 5, answers: { pages: { own: "A page for our prices" } } },
   },
   {
     title: "Pages, several ticked",
     start: {
-      index: 4,
+      index: 5,
       answers: { pages: { choices: ["services", "gallery", "faq"] } },
     },
   },
@@ -308,6 +334,7 @@ const STATES: State[] = [
     width: PHONE,
   },
   { title: "Phone width, layout", start: { index: 3 }, width: PHONE },
+  { title: "Phone width, photos", start: { index: 4 }, width: PHONE },
 ]
 
 const trayCatalog: CatalogEntry[] = (

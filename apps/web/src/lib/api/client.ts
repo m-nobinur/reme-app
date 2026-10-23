@@ -106,6 +106,9 @@ async function get(path: string): Promise<unknown | null> {
 /** How long a photo upload has before the api starts answering. */
 const UPLOAD_TIMEOUT_MS = 120_000
 
+/** How long a call that waits on a vision or image model has. */
+const MODEL_TIMEOUT_MS = 60_000
+
 const sessionCookie = (session: string) =>
   `${COOKIE}=${encodeURIComponent(session)}`
 
@@ -146,6 +149,34 @@ async function call(
         (init.body === undefined ? undefined : JSON.stringify(init.body)),
     },
     init.timeoutMs
+  )
+}
+
+/**
+ * A multipart body streamed through as the browser sent it, or null when
+ * there is no session. Only the session, the body's type and length and the
+ * press's key travel with it.
+ */
+async function multipart(
+  path: string,
+  upload: Parameters<OwnerDataSource["assets"]>[0],
+  timeoutMs: number
+): Promise<Response | null> {
+  const session = await forwardedSession()
+  if (!session) return null
+  return await apiFetch(
+    new URL(path, apiUrl()),
+    {
+      method: "POST",
+      headers: {
+        cookie: sessionCookie(session),
+        "content-type": upload.type,
+        "content-length": String(upload.length),
+        "idempotency-key": upload.key,
+      },
+      body: upload.body,
+    },
+    timeoutMs
   )
 }
 
@@ -822,26 +853,24 @@ export const apiSource: OwnerDataSource = {
   // answers; cut short, the owner's retry finds it still running (chat.busy).
   chat: (raw) =>
     call("/chat", { method: "POST", raw, timeoutMs: CHAT_TURN_MS }),
-  assets: async ({ body, type, length, key }) => {
-    const session = await forwardedSession()
-    if (!session) return null
-    return await apiFetch(
-      new URL("/assets", apiUrl()),
-      {
-        method: "POST",
-        headers: {
-          cookie: sessionCookie(session),
-          "content-type": type,
-          "content-length": String(length),
-          "idempotency-key": key,
-        },
-        body,
-      },
-      // The api answers once every byte is in, which a slow line takes a while to send.
-      UPLOAD_TIMEOUT_MS
-    )
-  },
+  // The api answers once every byte is in, which a slow line takes a while to send.
+  assets: (upload) => multipart("/assets", upload, UPLOAD_TIMEOUT_MS),
   photo: (assetId) => call(`/photos/${segment(assetId)}`),
+  reviewPhotos: (raw, key) =>
+    call("/assets/review", {
+      method: "POST",
+      raw,
+      key,
+      timeoutMs: MODEL_TIMEOUT_MS,
+    }),
+  paletteFromImage: (upload) =>
+    multipart("/palettes/from-image", upload, MODEL_TIMEOUT_MS),
+  drawLogos: (raw, key) =>
+    call("/logos", { method: "POST", raw, key, timeoutMs: MODEL_TIMEOUT_MS }),
+  logoRounds: (toolCallId) =>
+    call(`/logos?tool_call_id=${encodeURIComponent(toolCallId)}`),
+  keepLogo: (id, key) =>
+    call(`/logos/${segment(id)}/keep`, { method: "POST", key }),
   decideApproval: async (approvalId, revisionId, decision) => {
     const path = `/approvals/${segment(approvalId)}/decision`
     const response = await post(

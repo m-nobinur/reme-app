@@ -55,6 +55,8 @@ export type TrayPageProps<A extends Answer> = {
   toolCallId: string
   answer: A | undefined
   onAnswer: (answer: A | undefined) => void
+  /** Sets the answer and goes on, as Next would: for a choice that is itself the way past. */
+  onNext?: (answer: A) => void
   /** The site's four colours as picked so far: paper, tint, primary, ink. */
   stops: readonly [string, string, string, string]
   businessName: string
