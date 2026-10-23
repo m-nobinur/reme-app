@@ -1138,7 +1138,15 @@ function QuestionTray({
       setFinishing(true)
       return
     }
-    onFinish({ answers: now, skip_all: skipAll || finishing })
+    // Colours left open with a logo take the best palette read from it,
+    // not one that ignores it.
+    const open = paletteQuestion && now[paletteQuestion.id]
+    const [best] = logoPalettes
+    const sent =
+      paletteQuestion && best && (!open || "skipped" in open)
+        ? { ...now, [paletteQuestion.id]: { palette: best } }
+        : now
+    onFinish({ answers: sent, skip_all: skipAll || finishing })
     focusComposer()
   }
   // Next, with the answer a page has only just set when it moves on itself.
