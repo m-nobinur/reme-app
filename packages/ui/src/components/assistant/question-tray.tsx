@@ -831,8 +831,12 @@ function TrayFrame({
             </Button>
           </div>
           <div className="relative flex min-h-0 flex-col [--body:var(--muted)] dark:[--body:var(--background)]">
+            {/* relative: the visually hidden radios inside are placed against
+                this scroller, so it clips them. Placed against the frame
+                instead, the ones in a folded section stretched the thread
+                and the composer slid as it scrolled. */}
             <div
-              className="flex min-h-0 flex-col gap-3 overflow-y-auto rounded-b-3xl bg-(--body) p-3"
+              className="relative flex min-h-0 flex-col gap-3 overflow-y-auto rounded-b-3xl bg-(--body) p-3"
               id={`${id}-body`}
               onScroll={measure}
               ref={bodyRef}
