@@ -1085,7 +1085,7 @@ describe("a planned turn", () => {
     })
   })
 
-  it("retries once with the problems fed back, then falls back", async () => {
+  it("retries with the problems fed back, then falls back", async () => {
     const bad = plan({
       say: "Our prices are fair.",
       next: { kind: "start_build" },
@@ -1099,21 +1099,46 @@ describe("a planned turn", () => {
     expect(second).toContain("That plan was refused")
     expect(second).toContain("the build cannot start yet")
 
-    const twice = planner([bad, bad])
-    const fell = await planTurn(twice.model, PRICE, typed("hello"))
+    const thrice = planner([bad, bad, bad])
+    const fell = await planTurn(thrice.model, PRICE, typed("hello"))
     expect(fell).toMatchObject({ ok: false, reason: "invalid" })
-    expect(fell.calls).toHaveLength(2)
+    expect(fell.calls).toHaveLength(3)
 
     // Not JSON at all is a refused plan too.
     const prose = planner(["Sure! Here's my plan...", good])
     expect((await planTurn(prose.model, PRICE, typed("hello"))).ok).toBe(true)
   })
 
-  it("falls back at once on a provider error or a slow call, counting the call at its worst", async () => {
-    const broken = planner([new Error("503")])
+  it("keeps a plan refused only for its words, with the script's question after what was read", async () => {
+    // Every attempt asks the right thing in a phrase the checks refuse.
+    const worded = plan({
+      say: "Glad to have you. It gives you peace of mind.",
+      next: { kind: "ask_open", about: "business.offerings" },
+    })
+    const said: string[] = []
+    const kept = await planTurn(
+      planner([worded, worded, worded]).model,
+      PRICE,
+      typed("hello"),
+      undefined,
+      (text) => said.push(text)
+    )
+    expect(kept.ok).toBe(true)
+    expect(kept.calls).toHaveLength(3)
+    const whole = said.join("")
+    expect(whole.startsWith("Glad to have you.")).toBe(true)
+    expect(whole).not.toContain("peace of mind")
+    expect(whole).toContain("?")
+    if (kept.ok) expect(kept.checked.plan.say).toBe(whole)
+  })
+
+  it("asks again once after a provider error, and falls back on a second or a slow call, counting the call at its worst", async () => {
+    const blip = planner([new Error("503"), plan({ say: "Noted." })])
+    expect((await planTurn(blip.model, PRICE, typed("hello"))).ok).toBe(true)
+    const broken = planner([new Error("503"), new Error("503")])
     const failed = await planTurn(broken.model, PRICE, typed("hello"))
     expect(failed).toMatchObject({ ok: false, reason: "provider" })
-    expect(broken.prompts).toHaveLength(1)
+    expect(broken.prompts).toHaveLength(2)
     expect(failed.calls[0]?.costUsd).toBeGreaterThan(0)
 
     const slow = planner(["hang"])

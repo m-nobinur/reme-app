@@ -583,10 +583,17 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
     ) as unknown as ToolPart | undefined
   const pendingCall = (message: UIMessage) => waiting(message) as ToolPart
 
-  /** Wording varies by org, so a run's bytes are compared with the words taken out. */
+  /**
+   * Wording varies by org, so a run's bytes are compared with the words
+   * taken out, and a wording's sentences, which stream one chunk each, as one.
+   */
   const wordless = (text: string) =>
     text
       .replace(/"delta":"(?:[^"\\]|\\.)*"/g, '"delta":""')
+      .replace(
+        /(data: \{"delta":"","id":"text","type":"text-delta"\}\n\n)+/g,
+        "$1"
+      )
       // The tray's options are seeded by the org, and its answer picks one.
       .replace(/^data: (\{.*\})$/gm, (_frame, json: string) => {
         const chunk = JSON.parse(json) as {
@@ -615,7 +622,8 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
     for (let i = 0; i < 30; i++) {
       const at = await me.tail(id)
       const call = waiting(at)
-      if (!call) {
+      // An open question is answered in words, as the composer sends them.
+      if (!call || call.type === "tool-ask_open") {
         const text = words.shift()
         if (!text) break
         const typed = await me.turn(
@@ -3173,13 +3181,17 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
 
     it("lets the script answer a turn the planner cannot: a failing model, and a spent budget", async () => {
       const who = await owner(kit, url as string, "chat-fallback")
-      const broken = planner([new Error("provider down")])
+      // Down twice: asked once more after the first, then the script.
+      const broken = planner([
+        new Error("provider down"),
+        new Error("provider down"),
+      ])
       const me = talker(who, undefined, { planner: broken.model })
       const id = await me.onboarding()
       const done = await me.turn(id, {
         turn: { kind: "message", message_id: "u_fb_1", text: "Dog grooming" },
       })
-      expect(broken.calls).toHaveLength(1)
+      expect(broken.calls).toHaveLength(2)
       // The script's own answer: what the business does, then its next card.
       expect(done.after.parts.slice(1)).toMatchObject([
         { type: "text", state: "done" },

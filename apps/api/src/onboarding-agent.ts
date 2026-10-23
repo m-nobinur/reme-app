@@ -65,8 +65,9 @@ import {
   oldDesign,
   stepOf,
   text,
+  voiceOf,
 } from "./onboarding.ts"
-import { firstName } from "./onboarding-copy.ts"
+import { firstName, isAsked, question } from "./onboarding-copy.ts"
 import {
   DESIGN,
   OPTIONAL_ASKS,
@@ -81,8 +82,8 @@ import { VOICE, voiceProblems } from "./voice.ts"
  * and names the next move; this module only checks the plan against the
  * conversation's state and builds the parts. Code never reads the owner's
  * words for meaning. The script in `onboarding.ts` answers any turn the
- * planner cannot: no key, no budget, a provider failure, a timeout, or two
- * plans that fail the checks.
+ * planner cannot: no key, no budget, a provider failure asked twice, a
+ * timeout, or plans that fail the checks for more than their message.
  *
  * No tool is given to the model. The prompt holds no tenancy id, and the
  * plan's schema has no field that could carry one: every card, option id and
@@ -108,8 +109,12 @@ const QUIET = new Set([
 ])
 
 export const PLANNER = {
-  /** One plan, and one more with the first one's problems fed back. */
-  attempts: 2,
+  /**
+   * One plan, then up to two more with the last one's problems fed back,
+   * while the turn has time; a plan refused only for its message is then
+   * kept with the script's question (`salvaged`).
+   */
+  attempts: 3,
   /**
    * A plan with a six-question form is about 700 tokens and reasoning at
    * low effort adds some; a plan cut off is broken, so this errs high.
@@ -1381,10 +1386,12 @@ const systemMessage = (content: string): SystemModelMessage => ({
 })
 
 /**
- * The turn's plan: at most `PLANNER.attempts` calls, the second with the
- * first plan's problems fed back, each aborted at its time limit. A provider
- * error or a timeout ends the turn's planning at once: the script answers,
- * and a retry would only keep the owner waiting.
+ * The turn's plan: at most `PLANNER.attempts` calls, each after the first
+ * with the last plan's problems fed back and only while a whole call still
+ * fits, each aborted at its time limit. A provider error is asked once more
+ * after a short pause; a second, or a timeout, ends the planning: the
+ * script answers, and more retries would only keep the owner waiting. A
+ * plan refused only for its message is kept with the script's question.
  *
  * With `onSay`, the message streams as the model writes it, a whole
  * sentence at a time, and never a word the checks would refuse later:
@@ -1431,11 +1438,16 @@ export async function planTurn(
   const tell = (part: OnboardingStatus) => {
     if (!cancel?.aborted) status?.send(part)
   }
+  // The last plan read, for `salvaged` once the attempts run out.
+  let last: OnboardingPlan | null = null
+  let providerRetried = false
   for (let attempt = 0; attempt < PLANNER.attempts; attempt++) {
     const left = limits.totalMs - (Date.now() - began)
     if (left <= 1_000 || cancel?.aborted) {
       return { ok: false, reason: "timeout", calls, ...out }
     }
+    // A retry needs room for a whole call, or the owner only waits longer.
+    if (attempt > 0 && left < RETRY_ROOM_MS) break
     const sent = [...messages]
     const started = Date.now()
     const signal = AbortSignal.any([
@@ -1594,6 +1606,14 @@ export async function planTurn(
         ms: Date.now() - started,
         errors: [timedOut ? "timeout" : "provider error"],
       })
+      // A provider's passing refusal (a 429, a 5xx) is asked once more after
+      // a breath, while a whole call still fits; a timeout is not.
+      const room = limits.totalMs - (Date.now() - began)
+      if (!timedOut && !providerRetried && room >= RETRY_ROOM_MS) {
+        providerRetried = true
+        await new Promise((resolve) => setTimeout(resolve, PROVIDER_PAUSE_MS))
+        continue
+      }
       return {
         ok: false,
         reason: timedOut ? "timeout" : "provider",
@@ -1604,6 +1624,7 @@ export async function planTurn(
 
     const read = planOf(raw)
     if ("plan" in read) {
+      last = read.plan
       const checked = checkPlan(read.plan, s)
       const said = read.plan.say.trim()
       if (checked.ok && said.startsWith(out.shown)) {
@@ -1648,7 +1669,64 @@ export async function planTurn(
       }
     )
   }
+  const kept = last && !cancel?.aborted ? salvaged(last, s, out.shown) : null
+  if (kept) {
+    show(kept.plan.say.slice(out.shown.length))
+    return { ok: true, checked: kept, calls, ...out }
+  }
   return { ok: false, reason: "invalid", calls, ...out }
+}
+
+/** The least time a retry needs: two slow calls measured about 6 s each. */
+const RETRY_ROOM_MS = 8_000
+
+/** The pause before asking a provider again after it refused. */
+const PROVIDER_PAUSE_MS = 800
+
+/** The script's step for a planned question, where it has a question of its own. */
+function askedStep(next: OnboardingPlan["next"]) {
+  const step =
+    next.kind === "ask_open"
+      ? next.about
+      : next.kind === "ask_fact"
+        ? next.key
+        : next.kind === "ask_details" || next.kind === "ask_choice"
+          ? next.step
+          : null
+  const named =
+    step === "business.industry"
+      ? "industry"
+      : step === "quote.form"
+        ? "quote_form"
+        : step?.replace(/^assistant\.(pronouns|tone)$/, "$1")
+  return named && isAsked(named) ? named : null
+}
+
+/**
+ * A plan whose facts and move pass but whose message never did, kept with
+ * the script's own question after what the owner has already read, so a
+ * phrase the checks refuse never costs the owner their answer. Null when the
+ * plan fails for more than its message, or its move has no script question.
+ * Observed 2026-10-23: a plan asking about proof was refused for "peace of
+ * mind" after its first sentence showed, and the script asked "All" again.
+ */
+export function salvaged(
+  plan: OnboardingPlan,
+  s: PlanState,
+  shown: string
+): Checked | null {
+  const step = askedStep(plan.next)
+  if (!step || !checkPlan(plan, s, false).ok) return null
+  const ask = question(step, voiceOf(s.onboarding))
+  // What was read may hold the question already.
+  for (const say of [
+    ...(shown.includes("?") ? [shown.trim()] : []),
+    shown ? `${shown.trimEnd()}\n\n${ask}` : ask,
+  ]) {
+    const checked = checkPlan({ ...plan, say }, s)
+    if (checked.ok) return checked.checked
+  }
+  return null
 }
 
 // --- The parts -------------------------------------------------------------
