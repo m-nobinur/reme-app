@@ -156,7 +156,6 @@
   /* A logo still drawing: its colours drift and sharpen. A drawn one lands
      from a blur. The logo page holds both still under reduced motion. */
   --animate-logo-diffuse: logo-diffuse 6s ease-in-out infinite alternate;
-  --animate-logo-land: logo-land 0.6s ease-out both;
   /* The conversation's reading type, sized per viewport by `--chat-size`. A
      step line (a check the assistant ran) sits a size under the reply. */
   --text-chat: var(--chat-size);
@@ -460,8 +459,8 @@
       transform: rotate(4deg);
     }
   }
-  /* Base UI measures the panel and publishes the height; the Radix variable the
-     registry ships alongside it is dropped, because Radix is not in this tree. */
+  /* A design still drawing: a looping drift, which tw-animate-css's enter and
+     exit animations do not cover. */
   @keyframes logo-diffuse {
     from {
       filter: blur(28px) saturate(0.6);
@@ -472,12 +471,8 @@
       transform: scale(1) rotate(25deg);
     }
   }
-  @keyframes logo-land {
-    from {
-      filter: blur(12px);
-      opacity: 0;
-    }
-  }
+  /* Base UI measures the panel and publishes the height; the Radix variable the
+     registry ships alongside it is dropped, because Radix is not in this tree. */
   @keyframes collapsible-down {
     from {
       height: 0;

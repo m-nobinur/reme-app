@@ -10,6 +10,7 @@ import {
 } from "@phosphor-icons/react"
 import {
   type Asset,
+  CALM_PALETTES,
   LOGO_ROUNDS_MAX,
   LOGO_STYLES,
   LOGO_TYPES,
@@ -42,6 +43,7 @@ import { FIELD_ERROR } from "@workspace/ui/lib/card"
 import { checkPhotos, sizeText, typesText } from "@workspace/ui/lib/upload"
 import { cn } from "@workspace/ui/lib/utils"
 import {
+  type ComponentProps,
   type ReactNode,
   useEffect,
   useId,
@@ -102,9 +104,9 @@ const framesOf = (dir: "logo-types" | "logo-styles", name: string) =>
  * read on light and dark alike, so they sit on the tile itself.
  */
 const PICK_TILE =
-  "group flex cursor-pointer rounded-2xl border border-border bg-background transition-all duration-150 hover:border-foreground/25 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-card has-[:checked]:border-primary has-[:checked]:ring-2 has-[:checked]:ring-primary/20"
+  "group flex cursor-pointer rounded-xl border border-border bg-card transition-all duration-150 hover:border-foreground/25 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-card has-[:checked]:border-primary has-[:checked]:ring-2 has-[:checked]:ring-primary/20"
 const PICK_LABEL =
-  "font-medium text-muted-foreground text-xs transition-colors group-has-[:checked]:text-foreground"
+  "font-medium text-muted-foreground transition-colors group-has-[:checked]:text-foreground"
 
 /** What the status line says while a round draws, a step every few seconds. */
 const drawingLines = (name: string) => [
@@ -203,9 +205,10 @@ function Fold({ open, children }: { open: boolean; children: ReactNode }) {
       )}
       inert={!open}
     >
-      {/* Room inside the clip for the focus rings. */}
-      <div className="min-h-0 overflow-hidden">
-        <div className="px-1 py-1">{children}</div>
+      {/* Relative, so the clip holds the sr-only radios too and a folded
+          section adds nothing to the tray's scroll. Room for focus rings. */}
+      <div className="relative min-h-0 overflow-hidden">
+        <div className="px-1 py-1.5">{children}</div>
       </div>
     </div>
   )
@@ -574,7 +577,7 @@ function TrayLogo({
   useLayoutEffect(() => () => setSubmit(undefined), [setSubmit])
 
   return (
-    <div className="flex shrink-0 flex-col">
+    <div className="-my-1.5 flex shrink-0 flex-col">
       <Fold open={!choiceOpen}>
         <Summary label="Logo" onOpen={() => setFocus("choice")}>
           <span className="truncate">
@@ -585,7 +588,7 @@ function TrayLogo({
       <Fold open={choiceOpen}>
         <div
           aria-label={question.question ?? "Your logo"}
-          className="grid grid-cols-1 gap-3 min-[380px]:grid-cols-2"
+          className="grid @sm:grid-cols-2 grid-cols-1 gap-2"
           role="radiogroup"
         >
           {(
@@ -604,27 +607,25 @@ function TrayLogo({
               ],
             ] as const
           ).map(([value, label, hint, icon]) => (
-            <label className={TRAY_TILE} key={value}>
-              <input
-                checked={shownPath === value}
-                className="sr-only"
-                name={`${id}-path`}
-                onChange={() => {
-                  setPath(value)
-                  setFocus(null)
-                  setError(null)
-                }}
-                // A tap on the one already chosen folds the pair again.
-                onClick={() => shownPath === value && setFocus(null)}
-                type="radio"
-                value={value}
-              />
+            <RadioTile
+              checked={shownPath === value}
+              className={TRAY_TILE}
+              key={value}
+              name={`${id}-path`}
+              // A tap on the one already chosen folds the pair again.
+              onClick={() => shownPath === value && setFocus(null)}
+              onPick={() => {
+                setPath(value)
+                setFocus(null)
+                setError(null)
+              }}
+            >
               <span className="flex items-center gap-2 font-medium text-sm [&_svg]:size-5 [&_svg]:text-primary">
                 {icon}
                 {label}
               </span>
               <span className="text-muted-foreground text-xs">{hint}</span>
-            </label>
+            </RadioTile>
           ))}
         </div>
       </Fold>
@@ -716,7 +717,7 @@ function TrayLogo({
         </Summary>
       </Fold>
       <Fold open={opened("look")}>
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-2">
           <label className="font-medium text-sm" htmlFor={`${id}-look`}>
             How should it look?{" "}
             <span className="font-normal text-muted-foreground text-xs">
@@ -755,58 +756,56 @@ function TrayLogo({
       </Fold>
       <Fold open={opened("colours")}>
         <fieldset className="flex flex-col gap-2">
-          <legend className="mb-1.5 font-medium text-sm">Colours</legend>
-          <div className="grid @md:grid-cols-3 grid-cols-2 gap-2">
+          <legend className="mb-2 font-medium text-sm">Colours</legend>
+          <div className="grid @sm:grid-cols-4 grid-cols-2 gap-2">
             {/* A palette is its colours alone, as on the palette page; the name is for screen readers. */}
             {palettes.map((each, index) => (
-              <label className={cn(TRAY_TILE, COLOUR_TILE)} key={each.label}>
-                <input
-                  checked={
-                    colours !== null &&
-                    "palette" in colours &&
-                    colours.palette === index
-                  }
-                  className="sr-only"
-                  name={`${id}-colours`}
-                  onChange={() => setColours({ palette: index })}
-                  type="radio"
-                />
+              <RadioTile
+                checked={
+                  colours !== null &&
+                  "palette" in colours &&
+                  colours.palette === index
+                }
+                className={cn(TRAY_TILE, COLOUR_TILE)}
+                key={each.label}
+                name={`${id}-colours`}
+                onPick={() => setColours({ palette: index })}
+              >
                 <Swatches colors={each.stops} />
                 <span className="sr-only">{each.label}</span>
-              </label>
+              </RadioTile>
             ))}
-            <label className={cn(TRAY_TILE, COLOUR_TILE)}>
-              <input
-                checked={colours !== null && "random" in colours}
-                className="sr-only"
-                name={`${id}-colours`}
-                onChange={() => {
-                  const lucky =
-                    PALETTES[Math.floor(Math.random() * PALETTES.length)]
-                  const swatches = (lucky?.swatches ??
-                    stops) as unknown as Stops
-                  setColours({ random: logoColors(swatches) })
-                }}
-                type="radio"
-              />
+            <RadioTile
+              checked={colours !== null && "random" in colours}
+              className={cn(TRAY_TILE, COLOUR_TILE)}
+              name={`${id}-colours`}
+              onPick={() => {
+                // A calm palette, never the warm oranges.
+                const lucky =
+                  CALM_PALETTES[
+                    Math.floor(Math.random() * CALM_PALETTES.length)
+                  ]
+                const swatches = (PALETTES.find((each) => each.id === lucky)
+                  ?.swatches ?? stops) as unknown as Stops
+                setColours({ random: logoColors(swatches) })
+              }}
+            >
               <span className={NAMED_TILE}>
                 <ShuffleIcon aria-hidden className="size-4" />
                 Random
               </span>
-            </label>
-            <label className={cn(TRAY_TILE, COLOUR_TILE)}>
-              <input
-                checked={custom !== null}
-                className="sr-only"
-                name={`${id}-colours`}
-                onChange={() => setColours({ custom: [stops[2]] })}
-                type="radio"
-              />
+            </RadioTile>
+            <RadioTile
+              checked={custom !== null}
+              className={cn(TRAY_TILE, COLOUR_TILE)}
+              name={`${id}-colours`}
+              onPick={() => setColours({ custom: [stops[2]] })}
+            >
               <span className={NAMED_TILE}>
                 <EyedropperIcon aria-hidden className="size-4" />
                 Custom
               </span>
-            </label>
+            </RadioTile>
           </div>
           {custom ? (
             <div className="flex flex-col gap-2">
@@ -874,12 +873,13 @@ function TrayLogo({
       </Fold>
       <Fold open={opened("type")}>
         <fieldset className="flex flex-col gap-2">
-          <legend className="mb-1.5 font-medium text-sm">Logo type</legend>
-          <div className="grid @md:grid-cols-2 gap-2">
+          <legend className="mb-2 font-medium text-sm">Logo type</legend>
+          {/* As many to a row as fit whole: three on a wide tray, one on the narrowest, so no name wraps. */}
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-2">
             {LOGO_TYPES.map((type) => (
               <PickTile
                 checked={type === brief.type}
-                className="flex-row items-center gap-3 px-2 py-1.5"
+                className="h-11 flex-row items-center gap-2.5 px-2"
                 frames={framesOf("logo-types", type)}
                 key={type}
                 label={TYPE_LABELS[type]}
@@ -888,7 +888,8 @@ function TrayLogo({
                   setBrief({ ...brief, type })
                   setFocus("type")
                 }}
-                picture="h-9 w-14"
+                labelSize="text-sm"
+                picture="h-7 w-10"
               />
             ))}
           </div>
@@ -904,7 +905,7 @@ function TrayLogo({
       </Fold>
       <Fold open={opened("style")}>
         <fieldset className="flex flex-col gap-2">
-          <legend className="mb-1.5 font-medium text-sm">Style</legend>
+          <legend className="mb-2 font-medium text-sm">Style</legend>
           <div className="grid @md:grid-cols-4 grid-cols-3 gap-2">
             {LOGO_STYLES.map((style) => (
               <PickTile
@@ -921,30 +922,24 @@ function TrayLogo({
                 picture="size-9"
               />
             ))}
-            <label
+            <RadioTile
+              checked={brief.style === "surprise"}
               className={cn(
                 PICK_TILE,
-                "flex-col items-center gap-1.5 border-dashed px-1.5 py-2 hover:border-foreground/30 has-[:checked]:border-solid"
+                "col-span-full h-10 items-center justify-center gap-2 border-dashed has-[:checked]:border-solid"
               )}
+              name={`${id}-style`}
+              onPick={() => {
+                setBrief({ ...brief, style: "surprise" })
+                setFocus("style")
+              }}
             >
-              <input
-                checked={brief.style === "surprise"}
-                className="sr-only"
-                name={`${id}-style`}
-                onChange={() => {
-                  setBrief({ ...brief, style: "surprise" })
-                  setFocus("style")
-                }}
-                type="radio"
+              <ShuffleIcon
+                aria-hidden
+                className="size-4 text-muted-foreground transition-colors group-has-[:checked]:text-primary"
               />
-              <span className="flex size-9 items-center justify-center">
-                <ShuffleIcon
-                  aria-hidden
-                  className="size-5 text-muted-foreground transition-colors group-has-[:checked]:text-primary"
-                />
-              </span>
-              <span className={PICK_LABEL}>Surprise me</span>
-            </label>
+              <span className={cn(PICK_LABEL, "text-xs")}>Surprise me</span>
+            </RadioTile>
           </div>
         </fieldset>
       </Fold>
@@ -1007,26 +1002,23 @@ function TrayLogo({
                 {Array.from({ length: LOGO_VARIANTS }, (_, place) => {
                   const variant = round.variants[place]
                   return (
-                    <label
+                    <RadioTile
+                      checked={variant !== undefined && kept === variant.id}
                       className={cn(TRAY_TILE, "p-1.5")}
+                      disabled={
+                        !variant || round.status !== "ready" || busy !== null
+                      }
                       // biome-ignore lint/suspicious/noArrayIndexKey: a slot stays put while its design lands
                       key={place}
+                      name={`${id}-design`}
+                      onPick={() => variant && void keep(variant.id)}
                     >
-                      <input
-                        checked={variant !== undefined && kept === variant.id}
-                        className="sr-only"
-                        disabled={
-                          !variant || round.status !== "ready" || busy !== null
-                        }
-                        name={`${id}-design`}
-                        onChange={() => variant && void keep(variant.id)}
-                        type="radio"
-                      />
                       <span className="relative">
                         {variant ? (
                           <img
                             alt={`Design ${place + 1}`}
-                            className="aspect-square w-full rounded-lg object-contain p-2 motion-safe:animate-logo-land"
+                            // Lands from a blur, as tw-animate-css draws it.
+                            className="motion-safe:fade-in aspect-square w-full rounded-lg object-contain p-2 duration-600 ease-out motion-safe:animate-in motion-safe:blur-in-md"
                             key={variant.id}
                             src={services.imageUrl(variant.id)}
                             style={{ backgroundColor: paper }}
@@ -1045,7 +1037,7 @@ function TrayLogo({
                           />
                         ) : null}
                       </span>
-                    </label>
+                    </RadioTile>
                   )
                 })}
               </div>
@@ -1135,6 +1127,7 @@ function PickTile({
   className,
   frames,
   label,
+  labelSize = "text-xs",
   name,
   onPick,
   picture,
@@ -1143,6 +1136,7 @@ function PickTile({
   className: string
   frames: string[]
   label: string
+  labelSize?: string
   name: string
   onPick: () => void
   /** The picture box's size. */
@@ -1150,20 +1144,48 @@ function PickTile({
 }) {
   const [hovered, setHovered] = useState(false)
   return (
-    <label
+    <RadioTile
+      checked={checked}
       className={cn(PICK_TILE, className)}
+      name={name}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      onPick={onPick}
     >
+      <Cycling active={hovered} className={picture} frames={frames} />
+      <span className={cn(PICK_LABEL, labelSize)}>{label}</span>
+    </RadioTile>
+  )
+}
+
+/** A tile that is one radio of a group: the input hidden, the tile its face. */
+function RadioTile({
+  checked,
+  children,
+  disabled,
+  name,
+  onPick,
+  onClick,
+  ...label
+}: Omit<ComponentProps<"label">, "onClick"> & {
+  checked: boolean
+  disabled?: boolean
+  name: string
+  onPick: () => void
+  onClick?: () => void
+}) {
+  return (
+    <label {...label}>
       <input
         checked={checked}
         className="sr-only"
+        disabled={disabled}
         name={name}
         onChange={onPick}
+        onClick={onClick}
         type="radio"
       />
-      <Cycling active={hovered} className={picture} frames={frames} />
-      <span className={PICK_LABEL}>{label}</span>
+      {children}
     </label>
   )
 }
