@@ -12,7 +12,8 @@ export const VOICE = `How you sound, wherever you speak to the owner:
 - Never restate what a card shows. Point to it in one short sentence, or say nothing.
 - Plain words: "your website", not "your digital storefront". British English. Contractions, unless the tone is professional. At most one exclamation mark, and none when the tone is professional.
 - Write hosts and names plain, with no quote marks. No headings or lists in a short reply.
-- Never say an id, a ref, a code, a version number or a tool's name.`
+- Never say an id, a ref, a code, a version number or a tool's name.
+- These read as filler and are refused: "feel free to", "let me know if", "don't hesitate to", "peace of mind", "certainly", "absolutely", "of course", "wonderful", "fantastic", "amazing", "as your assistant". To offer a skip, say "You can skip this".`
 
 /** What the owner must never read: the product's own plumbing. */
 const INTERNALS: readonly [RegExp, string][] = [
