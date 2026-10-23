@@ -88,7 +88,7 @@ describe("a palette read from a picture", () => {
 })
 
 describe("palettes read from a logo", () => {
-  it("keeps the readable ones, each colour pair once, at most six", () => {
+  it("keeps the readable ones, each primary once, at most six", () => {
     const palette = (name: string, primary: string) => ({
       name,
       paper: hex(250, 250, 250),
