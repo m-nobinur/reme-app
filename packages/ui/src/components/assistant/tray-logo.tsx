@@ -115,8 +115,19 @@ const COLOUR_TILE =
 const NAMED_TILE =
   "flex h-20 flex-col items-center justify-center gap-1 font-medium text-muted-foreground text-xs"
 
-/** The colours a logo is drawn in from a palette: its primary for the shapes, its ink for the name. */
-const logoColors = ([, , primary, ink]: Stops) => [primary, ink]
+/** A colour's lightness, enough to tell the darker of two apart. */
+const lightness = (colour: string) => {
+  const n = Number.parseInt(colour.slice(1), 16)
+  return 0.2126 * (n >> 16) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)
+}
+
+/**
+ * The colours a logo is drawn in from a palette's last two swatches: the
+ * darker for the name, the other for the shapes. Most palettes show primary
+ * then ink, but one may show a light accent last.
+ */
+const logoColors = ([, , third, fourth]: Stops) =>
+  lightness(third) <= lightness(fourth) ? [fourth, third] : [third, fourth]
 
 /** A typed colour as the api takes it, or null when it is not one. */
 const hex = (text: string) => {
