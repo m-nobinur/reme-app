@@ -33,8 +33,6 @@ export type Voice = {
   ownColour: string | null
   /** The services as a short phrase written in the background, such as "your wedding cars". */
   services: string | null
-  /** The photo question written in the background for this business. */
-  photoQuestion: string | null
 }
 
 /** FNV-1a over UTF-16 units: stable across isolates and deploys. */
@@ -252,10 +250,10 @@ If ${v.business} needs a website, I can build it. It would have a Request a quot
 ${ask}`,
     ]
   },
-  // Phase 5: the last questions; their answer starts the build.
+  // Phase 4: the last questions; their answer starts the build.
   design: (v) => [
-    `Last, the look of ${v.business}. Four quick questions below set the colours, the lettering, the layout and the pages. Skip any you like and I'll choose for you, then I'll start building.`,
-    `Now the look of ${v.business}, the last step before I build. Four quick questions below cover colour, lettering, layout and pages, and you can skip them all if you'd rather I chose.`,
+    `Last, the look of ${v.business}: the colours, lettering, your logo, the layout, photos and pages, all in the questions below. Leave any to me except the logo, which you can upload or have me create. Then I'll start building.`,
+    `Now the look of ${v.business}, the last step before I build. The questions below cover colours, lettering, your logo, layout, photos and pages. Upload a logo or let me create one, and leave the rest to me if you'd rather.`,
   ],
   template: (v) => [
     `Let's design it together. First, the layout. Which of these feels most like ${v.business}?`,
@@ -309,115 +307,6 @@ function colourNoted(v: Voice): string {
 /** The step's question, with the phase transition for a step that opens a phase. */
 export function question(step: Asked, v: Voice): string {
   return say(v, pick(v, step, QUESTIONS[step](v)))
-}
-
-/**
- * The photo question, three ways per industry. Chauffeur and legal are the
- * owner's own lines; the rest follow their voice: a specific question, then
- * why it matters.
- */
-type Photos = ((v: Voice) => string)[]
-
-/** The owner's industry as a noun phrase, for the lines that name it. */
-const work = (v: Voice) =>
-  v.industry ? `your ${lower(v.industry.name)} work` : "your work"
-
-const PHOTOS: Partial<Record<IndustryId, Photos>> = {
-  chauffeur: [
-    () =>
-      "Do you have any photos of your fleet, like exterior shots of the vehicles, interior luxury features, or your chauffeurs in uniform? Showing off your cars is the best way to help clients picture their ride.",
-    () =>
-      "Do you have photos of your limos in action, for example, at weddings, corporate events, or airport pickups? Real shots of your vehicles make a huge impression on visitors.",
-    () =>
-      "Do you have a few photos of your vehicles, both inside and outside? We can feature your best fleet photos right on the homepage to highlight the luxury experience.",
-  ],
-  legal: [
-    () =>
-      "Family law is deeply personal, so clients really connect with familiar, approachable faces. Do you have a professional headshot, a photo of your team, or your office space that we could feature?",
-    () =>
-      "Do you have high-resolution photos of yourself or your practice, or any association badges and certifications? Adding these helps build immediate confidence and trust with prospective clients.",
-    () =>
-      "Do you have a welcoming portrait of yourself or a photo of your consultation office? Having a friendly, professional face on the website helps put clients at ease from their very first visit.",
-  ],
-  cleaning: [
-    (v) =>
-      `Do you have any photos of your work, like a sparkling kitchen, a fresh bathroom or a before and after of a deep clean? Real results show visitors the difference ${v.business} makes better than anything we could write.`,
-    () =>
-      "Do you have photos of your team at work, in uniform or with your equipment? People are inviting you into their home, so friendly, professional faces help them book with confidence.",
-    () =>
-      "Do you have a few before and after shots of your cleans? We can feature the best ones right on the homepage to show your standard at a glance.",
-  ],
-  health: [
-    () =>
-      "Do you have a photo of yourself or your team, and one of the room where you see clients? People feel much more at ease booking when they know who they'll be seeing, and where.",
-    () =>
-      "Do you have professional photos of your practice, or any qualifications and memberships you'd like to show? They help new clients feel confident before their first appointment.",
-    () =>
-      "Do you have a friendly portrait of yourself or a photo of your treatment room? A real face on the homepage makes that first booking much easier.",
-  ],
-  beauty: [
-    () =>
-      "Do you have photos of your work, like finished looks, nails or styles you're proud of? Real results are the first thing new clients look for, and they show your skill better than words can.",
-    () =>
-      "Do you have photos of your salon or treatment rooms, maybe set up for a wedding party or a special occasion? Seeing the space helps clients picture their visit before they book.",
-    () =>
-      "Do you have a few before and after shots? We can make them the centrepiece of your gallery.",
-  ],
-  food: [
-    (v) =>
-      `Do you have photos of your food, like your signature dishes${v.offering ? ` or ${lower(v.offering)}` : ""}? Good food photos do more to bring people through the door than any description.`,
-    () =>
-      "Do you have photos of your place set up for service, or for events and private bookings? Real shots of the room help guests picture their visit.",
-    () =>
-      "Do you have a few shots of your best dishes? We can put them front and centre on the homepage.",
-  ],
-  trades: [
-    () =>
-      "Do you have photos of jobs you've finished, ideally a before and an after? Real projects show the quality of your work better than anything we could write.",
-    () =>
-      "Do you have photos of you or your team on site, your van, or any accreditations and trade memberships? They reassure customers about who will be turning up.",
-    () =>
-      "Do you have a few photos of your best work? We can build a project gallery from them.",
-  ],
-  property: [
-    () =>
-      "Do you have photos of properties you've sold, let or managed? Good property photos are what buyers and tenants click on first.",
-    () =>
-      "Do you have a professional photo of yourself, your team or your office? People trust you with one of their biggest decisions, so a friendly face goes a long way.",
-    () =>
-      "Do you have a few of your best property shots? We can feature them on the homepage to show the kind of homes you handle.",
-  ],
-}
-
-/** For every other industry, the owner's own "Something else" included. */
-const GENERIC: Photos = [
-  (v) =>
-    `Do you have any photos of ${work(v)}${v.offering ? `, like ${lower(v.offering)},` : ""} or of ${v.business} in action? Real photos help people picture working with you, and they build trust before anyone gets in touch.`,
-  (v) =>
-    `Do you have photos of yourself, your team or your workplace, or any qualifications you'd like to show? People choosing ${v.business} like to know who they'll be dealing with.`,
-  (v) =>
-    `Do you have a few photos of ${work(v)}? We can feature the best ones on the homepage.`,
-]
-
-/** The photo question alone: the one written for this business, or the industry's. */
-export function photoQuestion(v: Voice): string {
-  if (v.photoQuestion) return say(v, v.photoQuestion)
-  const set = (v.industry?.category && PHOTOS[v.industry.category]) || GENERIC
-  return say(v, pick(v, "photos", set)(v))
-}
-
-/** The quote form settled, then the photos and a logo that make the site theirs. */
-export function photos(v: Voice): string {
-  const lead = pick(v, "to_photos", [
-    "Thanks, the quote form is set. To make the site truly yours, I'd love some real photos.",
-    "That's the quote form sorted. The one thing a template can't give you is real photos.",
-    "Your quote form is ready. Now, photos are what will make the site feel like yours.",
-  ])
-  const close = pick(v, "photos_close", [
-    "A logo is welcome too. If you have some, drop them in below. If not, no worries at all, we can skip this.",
-    "Your logo is welcome too. Add them below, or skip this for now.",
-  ])
-  return `${say(v, lead)}\n\n${photoQuestion(v)} ${say(v, close)}`
 }
 
 /** The quote form, for when no model can draft one: a short form the owner confirms or changes. */

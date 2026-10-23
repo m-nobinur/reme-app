@@ -6,7 +6,7 @@ import {
   siteRevisions,
   sql,
 } from "@workspace/db"
-import { ownerPhotos } from "./developer-rules.ts"
+import { ownerUploads } from "./developer-rules.ts"
 import { photoFile, photoKey } from "./photo-files.ts"
 import { activeDeployment } from "./publish.ts"
 import { repoMap } from "./repo-map.ts"
@@ -136,7 +136,7 @@ export async function mapSite(sandbox: Restorable): Promise<string> {
 }
 
 /**
- * Copies the owner's photos from the bucket into the site's `src/assets/`,
+ * Copies the owner's photos and logo from the bucket into the site's `src/assets/`,
  * where `astro:assets` resizes them and the source snapshot keeps them for a revise. The
  * sandbox reaches no network, so the bytes go in through the SDK. Returns
  * the ids it could not find, for the log.
@@ -154,7 +154,7 @@ export async function placePhotos(
   orgId: string,
   facts: readonly FactRecord[]
 ): Promise<string[]> {
-  const photos = ownerPhotos(facts)
+  const photos = ownerUploads(facts)
   if (photos.length === 0) return []
   await sandbox.exec(`mkdir -p ${SITE_ROOT}/src/assets/uploads`)
   const missing: string[] = []

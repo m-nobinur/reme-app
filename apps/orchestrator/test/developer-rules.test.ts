@@ -19,6 +19,9 @@ import {
   assignmentGoal,
   COPY_RULES,
   ownerChoices,
+  ownerLogo,
+  ownerPhotos,
+  ownerUploads,
   paletteRoles,
   siteRules,
 } from "../src/developer-rules.ts"
@@ -357,12 +360,14 @@ describe("the owner's onboarding choices in the rules", () => {
     expect(photoFile(PHOTO)).toBe(`uploads/${PHOTO.id}.jpg`)
     expect(rules).toContain(`/uploads/${PHOTO.id}.jpg ("Our van.jpg")`)
     expect(rules).toContain(
-      "Of the photos, the best, widest one goes in the home page's hero through site.heroImage and site.heroImageAlt"
+      "hero in the home page's hero through site.heroImage and site.heroImageAlt"
+    )
+    expect(rules).toContain(
+      "with no hero photo the best, widest one is the hero"
     )
     expect(rules).toContain("site.photo1Src to site.photo3Src")
-    expect(rules).toContain(
-      "A logo, judged from its name, its alt text and what it shows, goes in the header and footer through site.logo and site.logoAlt and nowhere else, never the hero or the gallery"
-    )
+    // A logo is never judged from its name: only the logo page sets one.
+    expect(rules).not.toContain("Logo:")
     expect(rules).toContain(
       "With up to four photos use every one, and never the same photo twice on a page"
     )
@@ -370,6 +375,28 @@ describe("the owner's onboarding choices in the rules", () => {
     expect(rules).toContain("Name any photo you left out, and why, in risks")
     expect(rules).toContain('never the file name and never "image"')
     expect(ownerChoices([]).join("\n")).not.toContain("Photos:")
+  })
+
+  it("puts the kept logo in the header and footer, never among the photos, and each photo by its use", () => {
+    const logo = { ...PHOTO, id: crypto.randomUUID(), use: "logo" as const }
+    const hero = { ...PHOTO, use: "hero" as const }
+    const facts = [
+      fact("business.name", { name: "Bright Clean" }),
+      fact("media.uploads", { items: [logo, hero] }),
+    ]
+    const rules = ownerChoices(facts).join("\n")
+    expect(rules).toContain(
+      `- Logo: the owner's own, /uploads/${logo.id}.jpg. Set site.logo to that path and site.logoAlt to "Bright Clean logo".`
+    )
+    expect(rules).toContain(`/uploads/${hero.id}.jpg ("Our van.jpg", use hero)`)
+    expect(rules.split("Photos:")[1]).not.toContain(logo.id)
+    expect(ownerPhotos(facts)).toEqual([hero])
+    expect(ownerUploads(facts)).toEqual([logo, hero])
+    expect(ownerLogo(facts)).toEqual(logo)
+    // A logo alone is no photo.
+    expect(
+      ownerChoices([fact("media.uploads", { items: [logo] })]).join("\n")
+    ).not.toContain("Photos:")
   })
 
   it("tells the writer never to mention facts or gaps, to leave a question out, and names the gate", () => {

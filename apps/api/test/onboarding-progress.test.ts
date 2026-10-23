@@ -52,7 +52,7 @@ const states = (o: Onboarding, asked = {}, waiting = false, asking?: string) =>
   )
 
 describe("onboardingSteps", () => {
-  it("lists the same ten steps from the first moment, in the panel's order", () => {
+  it("lists the same nine steps from the first moment, in the panel's order", () => {
     for (const o of [at([]), at([...WORK, AREA, ...CONTACT, ...ASSISTANT])]) {
       expect(onboardingSteps(o).map((s) => s.id)).toEqual([...ONBOARDING_STEPS])
     }
@@ -65,7 +65,6 @@ describe("onboardingSteps", () => {
       assistant: "next",
       website: "next",
       quote_form: "next",
-      photos: "next",
       look: "next",
     })
   })
@@ -139,7 +138,6 @@ describe("onboardingSteps", () => {
     ])
     expect(states(manual)).toMatchObject({
       quote_form: "skipped",
-      photos: "skipped",
       look: "skipped",
     })
     expect(onboardingSegment(manual, "2026-10-22T10:00:00.000Z").state).toBe(
@@ -147,7 +145,7 @@ describe("onboardingSteps", () => {
     )
   })
 
-  it("settles the quote form, photos and look as the owner answers them", () => {
+  it("settles the quote form and look as the owner answers them", () => {
     const building = at(
       [
         ...WORK,
@@ -160,7 +158,6 @@ describe("onboardingSteps", () => {
     )
     expect(states(building)).toMatchObject({
       quote_form: "now",
-      photos: "next",
       look: "done",
     })
     const finished = at(
@@ -171,11 +168,10 @@ describe("onboardingSteps", () => {
         ...ASSISTANT,
         { key: "site.build_mode", value: { mode: "assistant" } },
       ],
-      { closed: ["design", "quote_form", "upload"] }
+      { closed: ["design", "quote_form"] }
     )
     expect(states(finished)).toMatchObject({
       quote_form: "skipped",
-      photos: "skipped",
       look: "done",
     })
   })

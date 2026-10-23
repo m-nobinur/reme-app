@@ -9,7 +9,6 @@ import {
   AskFactOutput,
   AskOpenInput,
   AskOpenOutput,
-  AskUploadInput,
   AskUploadOutput,
   type ChoiceStep,
   DETAILS_KEYS,
@@ -23,6 +22,7 @@ import {
   ONBOARDING_GOAL,
   PAGES,
   PALETTES,
+  type PaletteFromImage,
   PaletteId,
   PRONOUNS,
   type QuoteField,
@@ -46,7 +46,6 @@ import {
   manualEnd,
   notStarted,
   opener,
-  photos,
   question,
   quoteForm,
   type RetryReason,
@@ -205,7 +204,6 @@ export function voiceOf(o: Onboarding): Voice {
       direction?.custom ?? factValue(o.facts, "site.font")?.custom ?? null,
     ownColour: palette?.brand ?? palette?.custom ?? null,
     services: o.prepared?.services_phrase ?? null,
-    photoQuestion: o.prepared?.photo_question ?? null,
   }
 }
 
@@ -232,10 +230,10 @@ const other = (placeholder: string) => ({
 const FAMILIES: readonly (readonly PaletteId[])[] = [
   ["ocean", "classic_blue", "harbour", "royal"],
   ["lagoon", "forest", "sage", "mint", "meadow"],
-  ["sunset", "mocha"],
+  ["sunset", "mocha", "terracotta"],
   ["cardinal", "berry", "burgundy"],
   ["midnight", "damson", "ultra_violet"],
-  ["graphite", "onyx", "pebble", "counsel", "after_dark"],
+  ["graphite", "onyx", "pebble", "counsel", "after_dark", "ember"],
 ]
 const family = (id: PaletteId) => FAMILIES.findIndex((f) => f.includes(id))
 
@@ -502,6 +500,9 @@ const DESIGN = {
   pages: "site.pages",
 } as const satisfies Record<string, FactValueKey>
 
+/** The tray's pages of their own, answered with what they settled, never a pick. */
+const PAGES_OF_THEIR_OWN: readonly string[] = ["logo", "photos"]
+
 /** The pages the tray's last question offers: every page but the ones always built. */
 const PAGE_PICKS = PAGES.filter(
   (p) => !(FIXED_PAGES as readonly string[]).includes(p.id)
@@ -586,21 +587,63 @@ function firstOf<T>(
   return kept
 }
 
+/** The org's stored images, from `media.uploads`. */
+const uploadsOf = (facts: readonly Held[]) =>
+  factValue(facts, "media.uploads")?.items ?? []
+
+/** The logo the org holds, kept by the logo page. */
+export const logoOf = (facts: readonly Held[]) =>
+  uploadsOf(facts).find((a) => a.use === "logo")
+
+/** A logo or photos page's card: its two ways, so every question reads alike. */
+const pageCard = (upload: string, create: string): AskChoiceInput => ({
+  // The card's shape needs a step; these pages stand in for no old card.
+  step: "template",
+  options: plain([
+    { id: "upload", label: upload },
+    { id: "create", label: create },
+  ]),
+  multiple: false,
+  preselected: [],
+  other: null,
+  skippable: false,
+})
+
+/** A logo or photos page's drop zone. */
+const dropZone = (files: number) => ({
+  accept: [...UPLOAD_TYPES],
+  max_files: files,
+  max_bytes: UPLOAD_MAX_BYTES,
+  skippable: false,
+})
+
 /**
- * The design tray: four questions, with options drawn from the directions
+ * The design tray: six questions, with options drawn from the directions
  * that list the business's industry and seeded by org, so two cleaning
  * businesses do not see the same four. A question the org already answered
- * opens ticked, so a tray asked again starts where the owner left off.
+ * opens ticked, so a tray asked again starts where the owner left off; the
+ * logo and photos pages open with what the org holds.
  */
 export function designCard(o: Onboarding, newId: () => string): ToolPart {
   const directions = directionsFor(o)
-  const palettes = firstOf(
+  const suited = [
+    ...new Set(directions.flatMap((d) => d.palettes)),
+  ] as PaletteId[]
+  const palette = factValue(o.facts, "site.palette")
+  const shown = firstOf(
     o,
     "palette",
-    [...new Set(directions.flatMap((d) => d.palettes))] as PaletteId[],
+    suited,
     (id) => id,
     (id) => String(family(id))
   )
+  // A held palette the four leave out takes the last place, so it shows ticked.
+  const heldPalette = PaletteId.safeParse(palette?.id)
+  if (heldPalette.success && !shown.includes(heldPalette.data)) {
+    shown.splice(SHOWN - 1, 1, heldPalette.data)
+  }
+  // Every palette: the four shown, then the rest that suit the business.
+  const palettes = [...new Set([...shown, ...suited, ...PaletteId.options])]
   const pairs = firstOf(
     o,
     "lettering",
@@ -637,12 +680,12 @@ export function designCard(o: Onboarding, newId: () => string): ToolPart {
     ...(words ? { own: words } : {}),
   })
   const paletteOptions = palettes.map((id): Option => {
-    const palette = PALETTES.find((p) => p.id === id)
+    const preset = PALETTES.find((p) => p.id === id)
     return {
       id,
-      label: palette?.label ?? id,
+      label: preset?.label ?? id,
       hint: null,
-      visual: { kind: "swatches", colors: palette?.swatches ?? [] },
+      visual: { kind: "swatches", colors: preset?.swatches ?? [] },
     }
   })
   const pairOptions = pairs.map(
@@ -673,10 +716,14 @@ export function designCard(o: Onboarding, newId: () => string): ToolPart {
       visual: null,
     })
   )
-  const palette = factValue(o.facts, "site.palette")
   const font = factValue(o.facts, "site.font")
   const direction = factValue(o.facts, "site.direction")
   const pagesHeld = factValue(o.facts, "site.pages")
+  const logo = logoOf(o.facts)
+  // The photos the review placed; one it found no use for is not held.
+  const photos = uploadsOf(o.facts).filter(
+    (a) => a.use !== undefined && a.use !== "logo"
+  )
   return call(
     "tool-ask_design",
     AskDesignInput.parse({
@@ -685,15 +732,16 @@ export function designCard(o: Onboarding, newId: () => string): ToolPart {
           id: "palette",
           question: "Which colour palette feels right for your business?",
           visual: "palette",
-          card: card(
-            "palette",
-            paletteOptions,
-            palette?.id,
-            "A colour code, or describe your colours",
-            palette?.id === "custom"
-              ? (palette.custom ?? palette.brand)
-              : undefined
-          ),
+          card: {
+            ...card(
+              "palette",
+              paletteOptions,
+              palette?.id,
+              "A colour code, or describe your colours",
+              paletteOwn(o.facts)
+            ),
+            ...(shown.length >= 3 ? { initial: shown } : {}),
+          },
         },
         {
           id: "lettering",
@@ -708,6 +756,14 @@ export function designCard(o: Onboarding, newId: () => string): ToolPart {
           ),
         },
         {
+          id: "logo",
+          question: "Do you have a logo, or shall I create one?",
+          visual: "logo",
+          card: pageCard("Upload my logo", "Create one for me"),
+          upload: dropZone(1),
+          ...(logo ? { held: [logo] } : {}),
+        },
+        {
           id: "arrangement",
           question: "Which page arrangement do you prefer?",
           visual: "layout",
@@ -718,6 +774,14 @@ export function designCard(o: Onboarding, newId: () => string): ToolPart {
             "Describe the layout you have in mind",
             direction?.id === "custom" ? direction.custom : undefined
           ),
+        },
+        {
+          id: "photos",
+          question: "Do you have photos of your work?",
+          visual: "photos",
+          card: pageCard("Upload photos", "Create them for me"),
+          upload: dropZone(UPLOAD_MAX_FILES),
+          ...(photos.length > 0 ? { held: photos } : {}),
         },
         {
           id: "pages",
@@ -769,25 +833,54 @@ export function trayOption(part: ToolPart, words: string): string | null {
   const said = plainly(words)
   const named = tray.success
     ? tray.data.questions
+        .filter((q) => !PAGES_OF_THEIR_OWN.includes(q.visual))
         .flatMap((q) => q.card.options)
         .filter((o) => plainly(o.label) === said)
     : []
   return named.length === 1 ? (named[0]?.id ?? null) : null
 }
 
-/** Whether the tray is finished: closed, or every answer it asks is held. */
+/**
+ * Whether the tray is finished: closed, or every answer it asks is held,
+ * the logo with them. The photos leave no fact, and with none the builder
+ * draws them.
+ */
 export const designDone = (o: Onboarding) =>
   o.closed.includes("design") ||
-  (Object.values(DESIGN) as FactValueKey[]).every((key) => has(o, key))
+  ((Object.values(DESIGN) as FactValueKey[]).every((key) => has(o, key)) &&
+    logoOf(o.facts) !== undefined)
+
+/** The palette read from the owner's picture: its primary is the brand colour, its name and stops the notes. */
+const picturePalette = ({ name, stops }: PaletteFromImage) => ({
+  id: "custom",
+  brand: stops.primary,
+  custom: `${name}: paper ${stops.paper}, tint ${stops.tint}, primary ${stops.primary}, ink ${stops.ink}`,
+})
+const PICTURE =
+  /^(.+): paper #[0-9a-f]{6}, tint #[0-9a-f]{6}, primary #[0-9a-f]{6}, ink #[0-9a-f]{6}$/
+
+/**
+ * A held custom palette as the tray shows it in `own`: one read from a
+ * picture by its name, else the owner's words or colour. The tray sends it
+ * back unchanged when the owner keeps it.
+ */
+const paletteOwn = (held: readonly Held[]) => {
+  const palette = factValue(held, "site.palette")
+  if (palette?.id !== "custom") return undefined
+  return palette.custom?.match(PICTURE)?.[1] ?? palette.custom ?? palette.brand
+}
 
 /**
  * What the tray's answers mean: the fact each one states, as given. "Write
  * your own" is kept as the owner wrote it, in the fact's `custom` note, and
- * a colour code takes the brand colour path. A question skipped states
- * nothing. `settled` is whether the tray is done: Build my site or Skip all,
- * as against an answer sent as the owner leaves its question. Skip all also
- * records that the owner left the look to the builder, unless a layout is
- * already held. Null when an answer does not fit its question.
+ * a colour code takes the brand colour path, as does a palette read from a
+ * picture. The logo and photos pages state no fact: what they settled is in
+ * `media.uploads` already, so their answer must name what it holds. A
+ * question skipped states nothing. `settled` is whether the tray is done:
+ * Build my site or Skip all, as against an answer sent as the owner leaves
+ * its question; it needs a logo, answered or held. Skip all also records
+ * that the owner left the look to the builder, unless a layout is already
+ * held. Null when an answer does not fit its question.
  */
 export function designAnswer(
   input: AskDesignInput,
@@ -797,6 +890,7 @@ export function designAnswer(
   const given = AskDesignOutput.safeParse(output)
   if (!given.success) return null
   const { answers, skip_all } = given.data
+  const uploads = uploadsOf(held)
   const facts: FactValue[] = []
   const state = (key: FactValueKey, value: unknown) => {
     const fact = FactValue.safeParse({ key, value })
@@ -805,8 +899,36 @@ export function designAnswer(
   }
   for (const [id, answer] of Object.entries(answers)) {
     const asked = input.questions.find((q) => q.id === id)
+    if (!asked) return null
+    if (asked.visual === "logo") {
+      const logo = "logo" in answer ? answer.logo : null
+      if (!uploads.some((u) => u.id === logo?.id && u.use === "logo"))
+        return null
+      continue
+    }
+    if (asked.visual === "photos") {
+      if (
+        !("photos" in answer) ||
+        !answer.photos.every((p) => uploads.some((u) => u.id === p.id))
+      )
+        return null
+      continue
+    }
     const key = DESIGN[id as keyof typeof DESIGN]
-    if (!asked || !key) return null
+    if (!key || "logo" in answer || "photos" in answer) return null
+    if ("palette" in answer) {
+      if (key !== "site.palette" || !state(key, picturePalette(answer.palette)))
+        return null
+      continue
+    }
+    // The held palette sent back as the tray showed it: kept as held, so a
+    // picture's colours survive a reload.
+    if (
+      key === "site.palette" &&
+      "own" in answer &&
+      answer.own === paletteOwn(held)
+    )
+      continue
     if ("skipped" in answer) {
       if (!asked.card.skippable) return null
       continue
@@ -849,6 +971,14 @@ export function designAnswer(
   }
   const settled =
     skip_all || input.questions.every((each) => each.id in answers)
+  const logoAsked = input.questions.find((q) => q.visual === "logo")
+  if (
+    settled &&
+    logoAsked &&
+    !(logoAsked.id in answers) &&
+    logoOf(held) === undefined
+  )
+    return null
   if (
     skip_all &&
     !facts.some((f) => f.key === "site.direction") &&
@@ -858,18 +988,6 @@ export function designAnswer(
   }
   return { kind: "design", facts, settled }
 }
-
-export const uploadCard = (newId: () => string) =>
-  call(
-    "tool-ask_upload",
-    AskUploadInput.parse({
-      accept: [...UPLOAD_TYPES],
-      max_files: UPLOAD_MAX_FILES,
-      max_bytes: UPLOAD_MAX_BYTES,
-      skippable: true,
-    }),
-    newId
-  )
 
 type Step = {
   id: StepId
@@ -926,9 +1044,9 @@ const building = (o: Onboarding) => mode(o) === "assistant"
 
 /**
  * The script, in order. Phase 1 the business, phase 2 the assistant, phase
- * 3 the website and its quote form, phase 4 photos, phase 5 the design,
- * whose answer starts the build. "Skip" on the build question takes the
- * manual branch instead of phases 3 to 5. The opener asks what the business does in words, and the planner
+ * 3 the website and its quote form, phase 4 the design, logo and photos
+ * in one tray, whose answer starts the build. "Skip" on the build question
+ * takes the manual branch instead of phases 3 and 4. The opener asks what the business does in words, and the planner
  * reads the answers to the open questions; the script asks the rest with a
  * card, and asks the open ones with a form when the planner cannot run. The
  * industry card comes only when the owner's words did not tell the planner.
@@ -960,11 +1078,6 @@ export const STEPS: readonly Step[] = [
       text(question("quote_form", voiceOf(o))),
       call("tool-ask_open", AskOpenInput.parse({ about: "quote.form" }), newId),
     ],
-  },
-  {
-    id: "upload",
-    done: (o) => !building(o) || o.closed.includes("upload"),
-    ask: (o, newId) => [text(photos(voiceOf(o))), uploadCard(newId)],
   },
   // An org that reaches the design after the tray shipped is asked in one
   // tray; one that was mid-way through the four cards finishes on them.
@@ -1063,7 +1176,11 @@ export function built(
     { type: "step-start" },
     text(
       output.outcome === "started"
-        ? (said ?? started(v, has(o, "media.uploads")))
+        ? (said ??
+            started(
+              v,
+              uploadsOf(o.facts).some((a) => a.use !== "logo")
+            ))
         : notStarted(v)
     ),
   ]
@@ -1603,8 +1720,10 @@ export function decided(
     const tray = AskDesignInput.safeParse(part.input)
     const asked =
       tray.success &&
-      tray.data.questions.find((q) =>
-        q.card.options.some((each) => each.id === decision.option)
+      tray.data.questions.find(
+        (q) =>
+          !PAGES_OF_THEIR_OWN.includes(q.visual) &&
+          q.card.options.some((each) => each.id === decision.option)
       )
     return asked
       ? designAnswer(

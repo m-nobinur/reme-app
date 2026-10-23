@@ -218,5 +218,25 @@
     "tint": "#1d1914",
     "accent": "#e6d3a3",
     "line": "#3a342b"
+  },
+  "terracotta": {
+    "label": "Terracotta",
+    "hint": "Warm cream, clay and moss",
+    "paper": "#faf5ef",
+    "ink": "#2a1e18",
+    "primary": "#a4472b",
+    "tint": "#f1e6d9",
+    "accent": "#3e6b5c",
+    "line": "#dbd5cf"
+  },
+  "ember": {
+    "label": "Ember",
+    "hint": "Charcoal with an ember orange",
+    "paper": "#161412",
+    "ink": "#f3eee7",
+    "primary": "#e07a3f",
+    "tint": "#221f1c",
+    "accent": "#c9b79c",
+    "line": "#373532"
   }
 }
