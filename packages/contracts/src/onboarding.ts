@@ -367,6 +367,21 @@ export const ReviewedPhotos = z.strictObject({
     .max(PHOTO_NEEDS.length),
 })
 
+/**
+ * A whole palette as the site uses it, the six roles of `Palette`
+ * (design.ts): one read from the owner's logo or picture, so the site is
+ * built in exactly the colours they picked, not derived from one of them.
+ * The api brings its `PALETTE_AA_PAIRS` to AA before it is stored.
+ */
+export const PaletteRoles = z.strictObject({
+  paper: HexColour,
+  ink: HexColour,
+  primary: HexColour,
+  tint: HexColour,
+  accent: HexColour,
+  line: HexColour,
+})
+
 /** The four stops a site's palette shows the owner, in `PALETTES[].swatches` order. */
 export const PaletteStops = z.strictObject({
   paper: HexColour,
@@ -576,12 +591,14 @@ export const choiceFacts = {
   template: { id: TemplateId, custom: Text(200).optional() },
   /**
    * A preset, or `custom` with the owner's words, the colour they picked as
-   * `brand`, or both. `owner.ts` checks the pairing.
+   * `brand`, or both; a palette read from their logo or a picture also
+   * carries its six `roles`. `owner.ts` checks the pairing.
    */
   palette: {
     id: orCustom(PaletteId),
     custom: Text(200).optional(),
     brand: HexColour.optional(),
+    roles: PaletteRoles.optional(),
   },
   font: { id: orCustom(FontId), custom: Text(200).optional() },
   pages: {
@@ -612,6 +629,7 @@ export type AssetUse = z.infer<typeof AssetUse>
 export type ReviewPhotosRequest = z.infer<typeof ReviewPhotosRequest>
 export type ReviewedPhotos = z.infer<typeof ReviewedPhotos>
 export type PaletteStops = z.infer<typeof PaletteStops>
+export type PaletteRoles = z.infer<typeof PaletteRoles>
 export type PaletteFromImage = z.infer<typeof PaletteFromImage>
 export type LogoPalettesRequest = z.infer<typeof LogoPalettesRequest>
 export type LogoPalettes = z.infer<typeof LogoPalettes>

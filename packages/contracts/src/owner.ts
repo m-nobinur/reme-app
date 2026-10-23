@@ -112,7 +112,9 @@ export const FactValue = z.discriminatedUnion("key", [
       (p) =>
         p.id === "custom"
           ? p.custom !== undefined || p.brand !== undefined
-          : p.custom === undefined && p.brand === undefined,
+          : p.custom === undefined &&
+            p.brand === undefined &&
+            p.roles === undefined,
       "a preset stands alone; custom needs the owner's words or a brand colour"
     )
   ),

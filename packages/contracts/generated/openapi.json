@@ -1786,6 +1786,44 @@
                           "brand": {
                             "type": "string",
                             "pattern": "^#[0-9a-f]{6}$"
+                          },
+                          "roles": {
+                            "type": "object",
+                            "properties": {
+                              "paper": {
+                                "type": "string",
+                                "pattern": "^#[0-9a-f]{6}$"
+                              },
+                              "ink": {
+                                "type": "string",
+                                "pattern": "^#[0-9a-f]{6}$"
+                              },
+                              "primary": {
+                                "type": "string",
+                                "pattern": "^#[0-9a-f]{6}$"
+                              },
+                              "tint": {
+                                "type": "string",
+                                "pattern": "^#[0-9a-f]{6}$"
+                              },
+                              "accent": {
+                                "type": "string",
+                                "pattern": "^#[0-9a-f]{6}$"
+                              },
+                              "line": {
+                                "type": "string",
+                                "pattern": "^#[0-9a-f]{6}$"
+                              }
+                            },
+                            "required": [
+                              "paper",
+                              "ink",
+                              "primary",
+                              "tint",
+                              "accent",
+                              "line"
+                            ],
+                            "additionalProperties": false
                           }
                         },
                         "required": [
@@ -4441,6 +4479,44 @@
                         "brand": {
                           "type": "string",
                           "pattern": "^#[0-9a-f]{6}$"
+                        },
+                        "roles": {
+                          "type": "object",
+                          "properties": {
+                            "paper": {
+                              "type": "string",
+                              "pattern": "^#[0-9a-f]{6}$"
+                            },
+                            "ink": {
+                              "type": "string",
+                              "pattern": "^#[0-9a-f]{6}$"
+                            },
+                            "primary": {
+                              "type": "string",
+                              "pattern": "^#[0-9a-f]{6}$"
+                            },
+                            "tint": {
+                              "type": "string",
+                              "pattern": "^#[0-9a-f]{6}$"
+                            },
+                            "accent": {
+                              "type": "string",
+                              "pattern": "^#[0-9a-f]{6}$"
+                            },
+                            "line": {
+                              "type": "string",
+                              "pattern": "^#[0-9a-f]{6}$"
+                            }
+                          },
+                          "required": [
+                            "paper",
+                            "ink",
+                            "primary",
+                            "tint",
+                            "accent",
+                            "line"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
@@ -5617,6 +5693,44 @@
                             "brand": {
                               "type": "string",
                               "pattern": "^#[0-9a-f]{6}$"
+                            },
+                            "roles": {
+                              "type": "object",
+                              "properties": {
+                                "paper": {
+                                  "type": "string",
+                                  "pattern": "^#[0-9a-f]{6}$"
+                                },
+                                "ink": {
+                                  "type": "string",
+                                  "pattern": "^#[0-9a-f]{6}$"
+                                },
+                                "primary": {
+                                  "type": "string",
+                                  "pattern": "^#[0-9a-f]{6}$"
+                                },
+                                "tint": {
+                                  "type": "string",
+                                  "pattern": "^#[0-9a-f]{6}$"
+                                },
+                                "accent": {
+                                  "type": "string",
+                                  "pattern": "^#[0-9a-f]{6}$"
+                                },
+                                "line": {
+                                  "type": "string",
+                                  "pattern": "^#[0-9a-f]{6}$"
+                                }
+                              },
+                              "required": [
+                                "paper",
+                                "ink",
+                                "primary",
+                                "tint",
+                                "accent",
+                                "line"
+                              ],
+                              "additionalProperties": false
                             }
                           },
                           "required": [
@@ -7007,6 +7121,44 @@
                       "brand": {
                         "type": "string",
                         "pattern": "^#[0-9a-f]{6}$"
+                      },
+                      "roles": {
+                        "type": "object",
+                        "properties": {
+                          "paper": {
+                            "type": "string",
+                            "pattern": "^#[0-9a-f]{6}$"
+                          },
+                          "ink": {
+                            "type": "string",
+                            "pattern": "^#[0-9a-f]{6}$"
+                          },
+                          "primary": {
+                            "type": "string",
+                            "pattern": "^#[0-9a-f]{6}$"
+                          },
+                          "tint": {
+                            "type": "string",
+                            "pattern": "^#[0-9a-f]{6}$"
+                          },
+                          "accent": {
+                            "type": "string",
+                            "pattern": "^#[0-9a-f]{6}$"
+                          },
+                          "line": {
+                            "type": "string",
+                            "pattern": "^#[0-9a-f]{6}$"
+                          }
+                        },
+                        "required": [
+                          "paper",
+                          "ink",
+                          "primary",
+                          "tint",
+                          "accent",
+                          "line"
+                        ],
+                        "additionalProperties": false
                       }
                     },
                     "required": [
@@ -8241,6 +8393,44 @@
                           "brand": {
                             "type": "string",
                             "pattern": "^#[0-9a-f]{6}$"
+                          },
+                          "roles": {
+                            "type": "object",
+                            "properties": {
+                              "paper": {
+                                "type": "string",
+                                "pattern": "^#[0-9a-f]{6}$"
+                              },
+                              "ink": {
+                                "type": "string",
+                                "pattern": "^#[0-9a-f]{6}$"
+                              },
+                              "primary": {
+                                "type": "string",
+                                "pattern": "^#[0-9a-f]{6}$"
+                              },
+                              "tint": {
+                                "type": "string",
+                                "pattern": "^#[0-9a-f]{6}$"
+                              },
+                              "accent": {
+                                "type": "string",
+                                "pattern": "^#[0-9a-f]{6}$"
+                              },
+                              "line": {
+                                "type": "string",
+                                "pattern": "^#[0-9a-f]{6}$"
+                              }
+                            },
+                            "required": [
+                              "paper",
+                              "ink",
+                              "primary",
+                              "tint",
+                              "accent",
+                              "line"
+                            ],
+                            "additionalProperties": false
                           }
                         },
                         "required": [
@@ -9687,6 +9877,65 @@
                   "brand"
                 ],
                 "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "roles"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40,
+                    "pattern": "\\S"
+                  },
+                  "roles": {
+                    "type": "object",
+                    "properties": {
+                      "paper": {
+                        "type": "string",
+                        "pattern": "^#[0-9a-f]{6}$"
+                      },
+                      "ink": {
+                        "type": "string",
+                        "pattern": "^#[0-9a-f]{6}$"
+                      },
+                      "primary": {
+                        "type": "string",
+                        "pattern": "^#[0-9a-f]{6}$"
+                      },
+                      "tint": {
+                        "type": "string",
+                        "pattern": "^#[0-9a-f]{6}$"
+                      },
+                      "accent": {
+                        "type": "string",
+                        "pattern": "^#[0-9a-f]{6}$"
+                      },
+                      "line": {
+                        "type": "string",
+                        "pattern": "^#[0-9a-f]{6}$"
+                      }
+                    },
+                    "required": [
+                      "paper",
+                      "ink",
+                      "primary",
+                      "tint",
+                      "accent",
+                      "line"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "kind",
+                  "name",
+                  "roles"
+                ],
+                "additionalProperties": false
               }
             ]
           },
@@ -10789,6 +11038,65 @@
                           "brand"
                         ],
                         "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "roles"
+                          },
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 40,
+                            "pattern": "\\S"
+                          },
+                          "roles": {
+                            "type": "object",
+                            "properties": {
+                              "paper": {
+                                "type": "string",
+                                "pattern": "^#[0-9a-f]{6}$"
+                              },
+                              "ink": {
+                                "type": "string",
+                                "pattern": "^#[0-9a-f]{6}$"
+                              },
+                              "primary": {
+                                "type": "string",
+                                "pattern": "^#[0-9a-f]{6}$"
+                              },
+                              "tint": {
+                                "type": "string",
+                                "pattern": "^#[0-9a-f]{6}$"
+                              },
+                              "accent": {
+                                "type": "string",
+                                "pattern": "^#[0-9a-f]{6}$"
+                              },
+                              "line": {
+                                "type": "string",
+                                "pattern": "^#[0-9a-f]{6}$"
+                              }
+                            },
+                            "required": [
+                              "paper",
+                              "ink",
+                              "primary",
+                              "tint",
+                              "accent",
+                              "line"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "name",
+                          "roles"
+                        ],
+                        "additionalProperties": false
                       }
                     ]
                   },
@@ -11747,6 +12055,65 @@
                             "required": [
                               "kind",
                               "brand"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "const": "roles"
+                              },
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 40,
+                                "pattern": "\\S"
+                              },
+                              "roles": {
+                                "type": "object",
+                                "properties": {
+                                  "paper": {
+                                    "type": "string",
+                                    "pattern": "^#[0-9a-f]{6}$"
+                                  },
+                                  "ink": {
+                                    "type": "string",
+                                    "pattern": "^#[0-9a-f]{6}$"
+                                  },
+                                  "primary": {
+                                    "type": "string",
+                                    "pattern": "^#[0-9a-f]{6}$"
+                                  },
+                                  "tint": {
+                                    "type": "string",
+                                    "pattern": "^#[0-9a-f]{6}$"
+                                  },
+                                  "accent": {
+                                    "type": "string",
+                                    "pattern": "^#[0-9a-f]{6}$"
+                                  },
+                                  "line": {
+                                    "type": "string",
+                                    "pattern": "^#[0-9a-f]{6}$"
+                                  }
+                                },
+                                "required": [
+                                  "paper",
+                                  "ink",
+                                  "primary",
+                                  "tint",
+                                  "accent",
+                                  "line"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "name",
+                              "roles"
                             ],
                             "additionalProperties": false
                           }
@@ -13807,6 +14174,44 @@
                                                     "brand": {
                                                       "type": "string",
                                                       "pattern": "^#[0-9a-f]{6}$"
+                                                    },
+                                                    "roles": {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "paper": {
+                                                          "type": "string",
+                                                          "pattern": "^#[0-9a-f]{6}$"
+                                                        },
+                                                        "ink": {
+                                                          "type": "string",
+                                                          "pattern": "^#[0-9a-f]{6}$"
+                                                        },
+                                                        "primary": {
+                                                          "type": "string",
+                                                          "pattern": "^#[0-9a-f]{6}$"
+                                                        },
+                                                        "tint": {
+                                                          "type": "string",
+                                                          "pattern": "^#[0-9a-f]{6}$"
+                                                        },
+                                                        "accent": {
+                                                          "type": "string",
+                                                          "pattern": "^#[0-9a-f]{6}$"
+                                                        },
+                                                        "line": {
+                                                          "type": "string",
+                                                          "pattern": "^#[0-9a-f]{6}$"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "paper",
+                                                        "ink",
+                                                        "primary",
+                                                        "tint",
+                                                        "accent",
+                                                        "line"
+                                                      ],
+                                                      "additionalProperties": false
                                                     }
                                                   },
                                                   "required": [
@@ -14983,6 +15388,44 @@
                                                       "brand": {
                                                         "type": "string",
                                                         "pattern": "^#[0-9a-f]{6}$"
+                                                      },
+                                                      "roles": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                          "paper": {
+                                                            "type": "string",
+                                                            "pattern": "^#[0-9a-f]{6}$"
+                                                          },
+                                                          "ink": {
+                                                            "type": "string",
+                                                            "pattern": "^#[0-9a-f]{6}$"
+                                                          },
+                                                          "primary": {
+                                                            "type": "string",
+                                                            "pattern": "^#[0-9a-f]{6}$"
+                                                          },
+                                                          "tint": {
+                                                            "type": "string",
+                                                            "pattern": "^#[0-9a-f]{6}$"
+                                                          },
+                                                          "accent": {
+                                                            "type": "string",
+                                                            "pattern": "^#[0-9a-f]{6}$"
+                                                          },
+                                                          "line": {
+                                                            "type": "string",
+                                                            "pattern": "^#[0-9a-f]{6}$"
+                                                          }
+                                                        },
+                                                        "required": [
+                                                          "paper",
+                                                          "ink",
+                                                          "primary",
+                                                          "tint",
+                                                          "accent",
+                                                          "line"
+                                                        ],
+                                                        "additionalProperties": false
                                                       }
                                                     },
                                                     "required": [
@@ -18119,6 +18562,44 @@
                         "brand": {
                           "type": "string",
                           "pattern": "^#[0-9a-f]{6}$"
+                        },
+                        "roles": {
+                          "type": "object",
+                          "properties": {
+                            "paper": {
+                              "type": "string",
+                              "pattern": "^#[0-9a-f]{6}$"
+                            },
+                            "ink": {
+                              "type": "string",
+                              "pattern": "^#[0-9a-f]{6}$"
+                            },
+                            "primary": {
+                              "type": "string",
+                              "pattern": "^#[0-9a-f]{6}$"
+                            },
+                            "tint": {
+                              "type": "string",
+                              "pattern": "^#[0-9a-f]{6}$"
+                            },
+                            "accent": {
+                              "type": "string",
+                              "pattern": "^#[0-9a-f]{6}$"
+                            },
+                            "line": {
+                              "type": "string",
+                              "pattern": "^#[0-9a-f]{6}$"
+                            }
+                          },
+                          "required": [
+                            "paper",
+                            "ink",
+                            "primary",
+                            "tint",
+                            "accent",
+                            "line"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
@@ -19983,6 +20464,44 @@
                                 "brand": {
                                   "type": "string",
                                   "pattern": "^#[0-9a-f]{6}$"
+                                },
+                                "roles": {
+                                  "type": "object",
+                                  "properties": {
+                                    "paper": {
+                                      "type": "string",
+                                      "pattern": "^#[0-9a-f]{6}$"
+                                    },
+                                    "ink": {
+                                      "type": "string",
+                                      "pattern": "^#[0-9a-f]{6}$"
+                                    },
+                                    "primary": {
+                                      "type": "string",
+                                      "pattern": "^#[0-9a-f]{6}$"
+                                    },
+                                    "tint": {
+                                      "type": "string",
+                                      "pattern": "^#[0-9a-f]{6}$"
+                                    },
+                                    "accent": {
+                                      "type": "string",
+                                      "pattern": "^#[0-9a-f]{6}$"
+                                    },
+                                    "line": {
+                                      "type": "string",
+                                      "pattern": "^#[0-9a-f]{6}$"
+                                    }
+                                  },
+                                  "required": [
+                                    "paper",
+                                    "ink",
+                                    "primary",
+                                    "tint",
+                                    "accent",
+                                    "line"
+                                  ],
+                                  "additionalProperties": false
                                 }
                               },
                               "required": [
@@ -20801,6 +21320,65 @@
                                         "required": [
                                           "kind",
                                           "brand"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "kind": {
+                                            "type": "string",
+                                            "const": "roles"
+                                          },
+                                          "name": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 40,
+                                            "pattern": "\\S"
+                                          },
+                                          "roles": {
+                                            "type": "object",
+                                            "properties": {
+                                              "paper": {
+                                                "type": "string",
+                                                "pattern": "^#[0-9a-f]{6}$"
+                                              },
+                                              "ink": {
+                                                "type": "string",
+                                                "pattern": "^#[0-9a-f]{6}$"
+                                              },
+                                              "primary": {
+                                                "type": "string",
+                                                "pattern": "^#[0-9a-f]{6}$"
+                                              },
+                                              "tint": {
+                                                "type": "string",
+                                                "pattern": "^#[0-9a-f]{6}$"
+                                              },
+                                              "accent": {
+                                                "type": "string",
+                                                "pattern": "^#[0-9a-f]{6}$"
+                                              },
+                                              "line": {
+                                                "type": "string",
+                                                "pattern": "^#[0-9a-f]{6}$"
+                                              }
+                                            },
+                                            "required": [
+                                              "paper",
+                                              "ink",
+                                              "primary",
+                                              "tint",
+                                              "accent",
+                                              "line"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        },
+                                        "required": [
+                                          "kind",
+                                          "name",
+                                          "roles"
                                         ],
                                         "additionalProperties": false
                                       }
@@ -21761,6 +22339,65 @@
                                             "required": [
                                               "kind",
                                               "brand"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "kind": {
+                                                "type": "string",
+                                                "const": "roles"
+                                              },
+                                              "name": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 40,
+                                                "pattern": "\\S"
+                                              },
+                                              "roles": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "paper": {
+                                                    "type": "string",
+                                                    "pattern": "^#[0-9a-f]{6}$"
+                                                  },
+                                                  "ink": {
+                                                    "type": "string",
+                                                    "pattern": "^#[0-9a-f]{6}$"
+                                                  },
+                                                  "primary": {
+                                                    "type": "string",
+                                                    "pattern": "^#[0-9a-f]{6}$"
+                                                  },
+                                                  "tint": {
+                                                    "type": "string",
+                                                    "pattern": "^#[0-9a-f]{6}$"
+                                                  },
+                                                  "accent": {
+                                                    "type": "string",
+                                                    "pattern": "^#[0-9a-f]{6}$"
+                                                  },
+                                                  "line": {
+                                                    "type": "string",
+                                                    "pattern": "^#[0-9a-f]{6}$"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "paper",
+                                                  "ink",
+                                                  "primary",
+                                                  "tint",
+                                                  "accent",
+                                                  "line"
+                                                ],
+                                                "additionalProperties": false
+                                              }
+                                            },
+                                            "required": [
+                                              "kind",
+                                              "name",
+                                              "roles"
                                             ],
                                             "additionalProperties": false
                                           }
@@ -28306,6 +28943,44 @@
                   "brand": {
                     "type": "string",
                     "pattern": "^#[0-9a-f]{6}$"
+                  },
+                  "roles": {
+                    "type": "object",
+                    "properties": {
+                      "paper": {
+                        "type": "string",
+                        "pattern": "^#[0-9a-f]{6}$"
+                      },
+                      "ink": {
+                        "type": "string",
+                        "pattern": "^#[0-9a-f]{6}$"
+                      },
+                      "primary": {
+                        "type": "string",
+                        "pattern": "^#[0-9a-f]{6}$"
+                      },
+                      "tint": {
+                        "type": "string",
+                        "pattern": "^#[0-9a-f]{6}$"
+                      },
+                      "accent": {
+                        "type": "string",
+                        "pattern": "^#[0-9a-f]{6}$"
+                      },
+                      "line": {
+                        "type": "string",
+                        "pattern": "^#[0-9a-f]{6}$"
+                      }
+                    },
+                    "required": [
+                      "paper",
+                      "ink",
+                      "primary",
+                      "tint",
+                      "accent",
+                      "line"
+                    ],
+                    "additionalProperties": false
                   }
                 },
                 "required": [
@@ -32277,6 +32952,65 @@
                                   "brand"
                                 ],
                                 "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "const": "roles"
+                                  },
+                                  "name": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 40,
+                                    "pattern": "\\S"
+                                  },
+                                  "roles": {
+                                    "type": "object",
+                                    "properties": {
+                                      "paper": {
+                                        "type": "string",
+                                        "pattern": "^#[0-9a-f]{6}$"
+                                      },
+                                      "ink": {
+                                        "type": "string",
+                                        "pattern": "^#[0-9a-f]{6}$"
+                                      },
+                                      "primary": {
+                                        "type": "string",
+                                        "pattern": "^#[0-9a-f]{6}$"
+                                      },
+                                      "tint": {
+                                        "type": "string",
+                                        "pattern": "^#[0-9a-f]{6}$"
+                                      },
+                                      "accent": {
+                                        "type": "string",
+                                        "pattern": "^#[0-9a-f]{6}$"
+                                      },
+                                      "line": {
+                                        "type": "string",
+                                        "pattern": "^#[0-9a-f]{6}$"
+                                      }
+                                    },
+                                    "required": [
+                                      "paper",
+                                      "ink",
+                                      "primary",
+                                      "tint",
+                                      "accent",
+                                      "line"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "name",
+                                  "roles"
+                                ],
+                                "additionalProperties": false
                               }
                             ]
                           },
@@ -33235,6 +33969,65 @@
                                     "required": [
                                       "kind",
                                       "brand"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "const": "roles"
+                                      },
+                                      "name": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 40,
+                                        "pattern": "\\S"
+                                      },
+                                      "roles": {
+                                        "type": "object",
+                                        "properties": {
+                                          "paper": {
+                                            "type": "string",
+                                            "pattern": "^#[0-9a-f]{6}$"
+                                          },
+                                          "ink": {
+                                            "type": "string",
+                                            "pattern": "^#[0-9a-f]{6}$"
+                                          },
+                                          "primary": {
+                                            "type": "string",
+                                            "pattern": "^#[0-9a-f]{6}$"
+                                          },
+                                          "tint": {
+                                            "type": "string",
+                                            "pattern": "^#[0-9a-f]{6}$"
+                                          },
+                                          "accent": {
+                                            "type": "string",
+                                            "pattern": "^#[0-9a-f]{6}$"
+                                          },
+                                          "line": {
+                                            "type": "string",
+                                            "pattern": "^#[0-9a-f]{6}$"
+                                          }
+                                        },
+                                        "required": [
+                                          "paper",
+                                          "ink",
+                                          "primary",
+                                          "tint",
+                                          "accent",
+                                          "line"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "name",
+                                      "roles"
                                     ],
                                     "additionalProperties": false
                                   }
@@ -36112,6 +36905,44 @@
                         "brand": {
                           "type": "string",
                           "pattern": "^#[0-9a-f]{6}$"
+                        },
+                        "roles": {
+                          "type": "object",
+                          "properties": {
+                            "paper": {
+                              "type": "string",
+                              "pattern": "^#[0-9a-f]{6}$"
+                            },
+                            "ink": {
+                              "type": "string",
+                              "pattern": "^#[0-9a-f]{6}$"
+                            },
+                            "primary": {
+                              "type": "string",
+                              "pattern": "^#[0-9a-f]{6}$"
+                            },
+                            "tint": {
+                              "type": "string",
+                              "pattern": "^#[0-9a-f]{6}$"
+                            },
+                            "accent": {
+                              "type": "string",
+                              "pattern": "^#[0-9a-f]{6}$"
+                            },
+                            "line": {
+                              "type": "string",
+                              "pattern": "^#[0-9a-f]{6}$"
+                            }
+                          },
+                          "required": [
+                            "paper",
+                            "ink",
+                            "primary",
+                            "tint",
+                            "accent",
+                            "line"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
@@ -37586,6 +38417,65 @@
                                 "brand"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "roles"
+                                },
+                                "name": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 40,
+                                  "pattern": "\\S"
+                                },
+                                "roles": {
+                                  "type": "object",
+                                  "properties": {
+                                    "paper": {
+                                      "type": "string",
+                                      "pattern": "^#[0-9a-f]{6}$"
+                                    },
+                                    "ink": {
+                                      "type": "string",
+                                      "pattern": "^#[0-9a-f]{6}$"
+                                    },
+                                    "primary": {
+                                      "type": "string",
+                                      "pattern": "^#[0-9a-f]{6}$"
+                                    },
+                                    "tint": {
+                                      "type": "string",
+                                      "pattern": "^#[0-9a-f]{6}$"
+                                    },
+                                    "accent": {
+                                      "type": "string",
+                                      "pattern": "^#[0-9a-f]{6}$"
+                                    },
+                                    "line": {
+                                      "type": "string",
+                                      "pattern": "^#[0-9a-f]{6}$"
+                                    }
+                                  },
+                                  "required": [
+                                    "paper",
+                                    "ink",
+                                    "primary",
+                                    "tint",
+                                    "accent",
+                                    "line"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "name",
+                                "roles"
+                              ],
+                              "additionalProperties": false
                             }
                           ]
                         },
@@ -38544,6 +39434,65 @@
                                   "required": [
                                     "kind",
                                     "brand"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "const": "roles"
+                                    },
+                                    "name": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 40,
+                                      "pattern": "\\S"
+                                    },
+                                    "roles": {
+                                      "type": "object",
+                                      "properties": {
+                                        "paper": {
+                                          "type": "string",
+                                          "pattern": "^#[0-9a-f]{6}$"
+                                        },
+                                        "ink": {
+                                          "type": "string",
+                                          "pattern": "^#[0-9a-f]{6}$"
+                                        },
+                                        "primary": {
+                                          "type": "string",
+                                          "pattern": "^#[0-9a-f]{6}$"
+                                        },
+                                        "tint": {
+                                          "type": "string",
+                                          "pattern": "^#[0-9a-f]{6}$"
+                                        },
+                                        "accent": {
+                                          "type": "string",
+                                          "pattern": "^#[0-9a-f]{6}$"
+                                        },
+                                        "line": {
+                                          "type": "string",
+                                          "pattern": "^#[0-9a-f]{6}$"
+                                        }
+                                      },
+                                      "required": [
+                                        "paper",
+                                        "ink",
+                                        "primary",
+                                        "tint",
+                                        "accent",
+                                        "line"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "name",
+                                    "roles"
                                   ],
                                   "additionalProperties": false
                                 }

@@ -531,6 +531,14 @@ export interface components {
                     | "custom"
                   custom?: string
                   brand?: string
+                  roles?: {
+                    paper: string
+                    ink: string
+                    primary: string
+                    tint: string
+                    accent: string
+                    line: string
+                  }
                 }
               }
             | {
@@ -1305,6 +1313,14 @@ export interface components {
                 | "custom"
               custom?: string
               brand?: string
+              roles?: {
+                paper: string
+                ink: string
+                primary: string
+                tint: string
+                accent: string
+                line: string
+              }
             }
           }
         | {
@@ -1655,6 +1671,14 @@ export interface components {
                     | "custom"
                   custom?: string
                   brand?: string
+                  roles?: {
+                    paper: string
+                    ink: string
+                    primary: string
+                    tint: string
+                    accent: string
+                    line: string
+                  }
                 }
               }
             | {
@@ -2027,6 +2051,14 @@ export interface components {
               | "custom"
             custom?: string
             brand?: string
+            roles?: {
+              paper: string
+              ink: string
+              primary: string
+              tint: string
+              accent: string
+              line: string
+            }
           } | null
         }
       | {
@@ -2380,6 +2412,14 @@ export interface components {
                     | "custom"
                   custom?: string
                   brand?: string
+                  roles?: {
+                    paper: string
+                    ink: string
+                    primary: string
+                    tint: string
+                    accent: string
+                    line: string
+                  }
                 }
               }
             | {
@@ -2811,6 +2851,19 @@ export interface components {
             kind: "brand"
             brand: string
           }
+        | {
+            /** @constant */
+            kind: "roles"
+            name: string
+            roles: {
+              paper: string
+              ink: string
+              primary: string
+              tint: string
+              accent: string
+              line: string
+            }
+          }
       pages: {
         /** @enum {string} */
         page:
@@ -3151,6 +3204,19 @@ export interface components {
                 kind: "brand"
                 brand: string
               }
+            | {
+                /** @constant */
+                kind: "roles"
+                name: string
+                roles: {
+                  paper: string
+                  ink: string
+                  primary: string
+                  tint: string
+                  accent: string
+                  line: string
+                }
+              }
           pages: {
             /** @enum {string} */
             page:
@@ -3444,6 +3510,19 @@ export interface components {
                 /** @constant */
                 kind: "brand"
                 brand: string
+              }
+            | {
+                /** @constant */
+                kind: "roles"
+                name: string
+                roles: {
+                  paper: string
+                  ink: string
+                  primary: string
+                  tint: string
+                  accent: string
+                  line: string
+                }
               }
           pages: {
             /** @enum {string} */
@@ -4030,6 +4109,14 @@ export interface components {
                                       | "custom"
                                     custom?: string
                                     brand?: string
+                                    roles?: {
+                                      paper: string
+                                      ink: string
+                                      primary: string
+                                      tint: string
+                                      accent: string
+                                      line: string
+                                    }
                                   }
                                 }
                               | {
@@ -4392,6 +4479,14 @@ export interface components {
                                       | "custom"
                                     custom?: string
                                     brand?: string
+                                    roles?: {
+                                      paper: string
+                                      ink: string
+                                      primary: string
+                                      tint: string
+                                      accent: string
+                                      line: string
+                                    }
                                   }
                                 }
                               | {
@@ -5232,6 +5327,14 @@ export interface components {
                 | "custom"
               custom?: string
               brand?: string
+              roles?: {
+                paper: string
+                ink: string
+                primary: string
+                tint: string
+                accent: string
+                line: string
+              }
             }
           }
         | {
@@ -5788,6 +5891,14 @@ export interface components {
                       | "custom"
                     custom?: string
                     brand?: string
+                    roles?: {
+                      paper: string
+                      ink: string
+                      primary: string
+                      tint: string
+                      accent: string
+                      line: string
+                    }
                   }
                 }
               | {
@@ -6063,6 +6174,19 @@ export interface components {
                             /** @constant */
                             kind: "brand"
                             brand: string
+                          }
+                        | {
+                            /** @constant */
+                            kind: "roles"
+                            name: string
+                            roles: {
+                              paper: string
+                              ink: string
+                              primary: string
+                              tint: string
+                              accent: string
+                              line: string
+                            }
                           }
                       pages: {
                         /** @enum {string} */
@@ -6357,6 +6481,19 @@ export interface components {
                             /** @constant */
                             kind: "brand"
                             brand: string
+                          }
+                        | {
+                            /** @constant */
+                            kind: "roles"
+                            name: string
+                            roles: {
+                              paper: string
+                              ink: string
+                              primary: string
+                              tint: string
+                              accent: string
+                              line: string
+                            }
                           }
                       pages: {
                         /** @enum {string} */
@@ -8225,6 +8362,14 @@ export interface components {
               | "custom"
             custom?: string
             brand?: string
+            roles?: {
+              paper: string
+              ink: string
+              primary: string
+              tint: string
+              accent: string
+              line: string
+            }
           }
         }
       | {
@@ -9346,6 +9491,19 @@ export interface components {
                       kind: "brand"
                       brand: string
                     }
+                  | {
+                      /** @constant */
+                      kind: "roles"
+                      name: string
+                      roles: {
+                        paper: string
+                        ink: string
+                        primary: string
+                        tint: string
+                        accent: string
+                        line: string
+                      }
+                    }
                 pages: {
                   /** @enum {string} */
                   page:
@@ -9639,6 +9797,19 @@ export interface components {
                       /** @constant */
                       kind: "brand"
                       brand: string
+                    }
+                  | {
+                      /** @constant */
+                      kind: "roles"
+                      name: string
+                      roles: {
+                        paper: string
+                        ink: string
+                        primary: string
+                        tint: string
+                        accent: string
+                        line: string
+                      }
                     }
                 pages: {
                   /** @enum {string} */
@@ -10373,6 +10544,14 @@ export interface components {
                 | "custom"
               custom?: string
               brand?: string
+              roles?: {
+                paper: string
+                ink: string
+                primary: string
+                tint: string
+                accent: string
+                line: string
+              }
             }
           }
         | {
@@ -10777,6 +10956,19 @@ export interface components {
                   kind: "brand"
                   brand: string
                 }
+              | {
+                  /** @constant */
+                  kind: "roles"
+                  name: string
+                  roles: {
+                    paper: string
+                    ink: string
+                    primary: string
+                    tint: string
+                    accent: string
+                    line: string
+                  }
+                }
             pages: {
               /** @enum {string} */
               page:
@@ -11070,6 +11262,19 @@ export interface components {
                   /** @constant */
                   kind: "brand"
                   brand: string
+                }
+              | {
+                  /** @constant */
+                  kind: "roles"
+                  name: string
+                  roles: {
+                    paper: string
+                    ink: string
+                    primary: string
+                    tint: string
+                    accent: string
+                    line: string
+                  }
                 }
             pages: {
               /** @enum {string} */
