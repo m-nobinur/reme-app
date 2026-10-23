@@ -119,6 +119,7 @@ const services = (overrides: Partial<TrayServices> = {}): TrayServices => ({
   drawLogos: never,
   logoRounds: never,
   keepLogo: never,
+  logoPalettes: never,
   imageUrl: (id) => SCENES[Number(id.slice(-2)) % SCENES.length] ?? "",
   ...overrides,
 })

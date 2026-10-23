@@ -3,6 +3,7 @@ import type {
   AskDesignOutput,
   DrawLogosRequest,
   KeptLogo,
+  LogoPalettes,
   LogoRound,
   LogoRounds,
   PaletteFromImage,
@@ -23,6 +24,8 @@ export type TrayServices = {
   reviewPhotos: (assetIds: string[]) => Promise<ReviewedPhotos>
   /** `POST /palettes/from-image`: the palette in a picture, which is not stored. */
   paletteFromImage: (file: File) => Promise<PaletteFromImage>
+  /** `POST /palettes/from-logo`: the kept logo read into palettes, held per logo. */
+  logoPalettes: (assetId: string) => Promise<LogoPalettes>
   /**
    * `POST /logos`: starts a round of logos and answers it as it starts. A
    * round asked for before its wait is over throws with `retryAfter`, the

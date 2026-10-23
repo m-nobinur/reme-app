@@ -40,6 +40,12 @@ const OFFERED = [
 const [paper = "", tint = "", primary = "", ink = ""] =
   OFFERED[0]?.swatches ?? []
 
+/** The palettes the fake logo reads into: six of the presets, by their own names. */
+const FROM_LOGO = OFFERED.slice(4, 10).map(({ label, swatches }) => {
+  const [p = "", t = "", b = "", i = ""] = swatches
+  return { name: label, stops: { paper: p, tint: t, primary: b, ink: i } }
+})
+
 /** A made-up logo, one per layout a round draws, on a clear background. */
 const LOGOS = [
   `<path d="M12 44h24l-3 18H15z" fill="${primary}"/><path d="M18 44c0-8 12-8 12 0" fill="none" stroke="${ink}" stroke-width="3"/><text x="44" y="57" font-family="system-ui" font-weight="700" font-size="14" fill="${ink}">Mop &amp; Pail</text>`,
@@ -112,6 +118,7 @@ const fakes = (
       return later({ rounds: [...rounds] })
     },
     keepLogo: () => later({ asset: KEPT }),
+    logoPalettes: () => later({ palettes: FROM_LOGO }),
     imageUrl: (id) => LOGOS[Number(id.at(-1))] ?? LOGOS[0] ?? "",
     ...overrides,
   }
@@ -412,6 +419,32 @@ const STATES: State[] = [
     start: {
       index: PALETTE,
       answers: { palette: { choice: OFFERED[9]?.id ?? "" } },
+    },
+  },
+  {
+    title: "Palette, built from the logo",
+    start: { index: PALETTE, answers: { logo: { logo: KEPT } } },
+  },
+  {
+    title: "Palette, from the logo, a surprise picked",
+    start: {
+      index: PALETTE,
+      answers: {
+        logo: { logo: KEPT },
+        palette: { palette: FROM_LOGO[5] as (typeof FROM_LOGO)[number] },
+      },
+    },
+  },
+  {
+    title: "Palette, reading the logo",
+    start: { index: PALETTE, answers: { logo: { logo: KEPT } } },
+    services: { logoPalettes: () => new Promise(() => undefined) },
+  },
+  {
+    title: "Palette, the logo could not be read",
+    start: { index: PALETTE, answers: { logo: { logo: KEPT } } },
+    services: {
+      logoPalettes: () => Promise.reject(new Error("Not read")),
     },
   },
   {

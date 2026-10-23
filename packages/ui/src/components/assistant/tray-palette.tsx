@@ -1,22 +1,23 @@
-import { ImageIcon } from "@phosphor-icons/react"
+import { ImageIcon, ShuffleIcon } from "@phosphor-icons/react"
 import {
   type PaletteFromImage,
   UPLOAD_MAX_BYTES,
   UPLOAD_TYPES,
 } from "@workspace/contracts"
 import {
+  ACCENT_RING,
   DropTile,
   Swatches,
   sentence,
   TRAY_TILE,
 } from "@workspace/ui/components/assistant/question-tray"
 import { useTrayServices } from "@workspace/ui/components/assistant/tray-services"
-import { buttonVariants } from "@workspace/ui/components/button"
+import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { Skeleton } from "@workspace/ui/components/skeleton"
 import { FIELD_ERROR } from "@workspace/ui/lib/card"
 import { sizeText, typesText } from "@workspace/ui/lib/upload"
 import { cn } from "@workspace/ui/lib/utils"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 /** Why a picture cannot be read, before it is sent, or null when it can. */
 function refusal(file: File) {
@@ -150,4 +151,164 @@ function PalettePicture({
   )
 }
 
-export { PalettePicture }
+/** Whether two palettes are the same colours under the same name. */
+const samePalette = (a: PaletteFromImage, b: PaletteFromImage) =>
+  a.name === b.name &&
+  a.stops.paper === b.stops.paper &&
+  a.stops.primary === b.stops.primary
+
+/** The palettes a logo page shows at once; the rest wait for Surprise me. */
+const LOGO_SHOWN = 4
+
+type LogoRead =
+  | { state: "none" }
+  | { state: "reading" }
+  | { state: "failed"; retry: () => void }
+  | { state: "ready"; palettes: PaletteFromImage[] }
+
+/**
+ * The kept logo's palettes, asked for the moment a logo is kept, so they
+ * are usually ready by the palette page. The api holds them per logo, so a
+ * reload asks again for nothing. "none" without a logo or services.
+ */
+function useLogoPalettes(assetId: string | undefined): LogoRead {
+  const services = useTrayServices()
+  const [read, setRead] = useState<{
+    id: string
+    palettes: PaletteFromImage[] | null
+  } | null>(null)
+  const [tries, setTries] = useState(0)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a retry bumps tries to ask again for the same logo
+  useEffect(() => {
+    if (!assetId || !services) return
+    let live = true
+    services
+      .logoPalettes(assetId)
+      .then(({ palettes }) => live && setRead({ id: assetId, palettes }))
+      .catch(() => live && setRead({ id: assetId, palettes: null }))
+    return () => {
+      live = false
+    }
+  }, [assetId, services, tries])
+  if (!assetId || !services) return { state: "none" }
+  if (read?.id !== assetId) return { state: "reading" }
+  return read.palettes
+    ? { state: "ready", palettes: read.palettes }
+    : {
+        state: "failed",
+        retry: () => {
+          setRead(null)
+          setTries((n) => n + 1)
+        },
+      }
+}
+
+/** The logo palette an answer picked: the palette itself, or its name as a reload brings it back. */
+function logoPick(
+  answer: { palette: PaletteFromImage } | { own: string } | object | undefined,
+  palettes: readonly PaletteFromImage[]
+) {
+  if (!answer) return undefined
+  if ("palette" in answer)
+    return palettes.find((each) => samePalette(each, answer.palette))
+  if ("own" in answer) return palettes.find((each) => each.name === answer.own)
+  return undefined
+}
+
+/**
+ * The palette page's options when the business has a logo: palettes built
+ * from it, four at once, the colours alone as the preset tiles show them.
+ * Surprise me picks one of the others read from the same logo, which takes
+ * the first place, so every suggestion stays in the logo's colours.
+ */
+function LogoPalettes({
+  read,
+  picked,
+  group,
+  label,
+  onPick,
+}: {
+  read: Extract<LogoRead, { state: "reading" | "ready" }>
+  picked: PaletteFromImage | undefined
+  group: string
+  label: string
+  onPick: (palette: PaletteFromImage) => void
+}) {
+  if (read.state === "reading") {
+    return (
+      <div className="flex flex-col gap-2" role="status">
+        <div className="grid grid-cols-1 gap-3 min-[380px]:grid-cols-2">
+          {Array.from({ length: LOGO_SHOWN }, (_, at) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: placeholders with no identity
+            <Skeleton className="h-10 rounded-xl" key={at} />
+          ))}
+        </div>
+        <span className="text-muted-foreground text-sm">
+          Reading the colours in your logo
+        </span>
+      </div>
+    )
+  }
+  const { palettes } = read
+  const first = palettes.slice(0, LOGO_SHOWN)
+  const shown =
+    picked && !first.includes(picked) ? [picked, ...first.slice(0, -1)] : first
+  const others = palettes.filter((each) => each !== picked)
+  const surprise = () => {
+    const lucky = others[Math.floor(Math.random() * others.length)]
+    if (lucky) onPick(lucky)
+  }
+  return (
+    <>
+      <p className="text-muted-foreground text-sm">Built from your logo</p>
+      <div
+        aria-label={label}
+        className="grid grid-cols-1 gap-3 min-[380px]:grid-cols-2"
+        role="radiogroup"
+      >
+        {shown.map((palette) => (
+          <label
+            className={cn(
+              TRAY_TILE,
+              "gap-0 overflow-hidden p-0 has-[:checked]:ring-2 has-[:checked]:ring-foreground"
+            )}
+            key={`${palette.name}${palette.stops.primary}`}
+          >
+            <input
+              checked={palette === picked}
+              className="sr-only"
+              name={group}
+              onChange={() => onPick(palette)}
+              type="radio"
+              value={palette.name}
+            />
+            <Swatches
+              colors={[
+                palette.stops.paper,
+                palette.stops.tint,
+                palette.stops.primary,
+                palette.stops.ink,
+              ]}
+            />
+            <span className="sr-only">{palette.name}</span>
+          </label>
+        ))}
+      </div>
+      {others.length > 0 ? (
+        <Button
+          className={cn("self-start", ACCENT_RING)}
+          onClick={surprise}
+          size="sm"
+          type="button"
+          variant="ghost"
+        >
+          <ShuffleIcon aria-hidden />
+          Surprise me
+        </Button>
+      ) : null}
+    </>
+  )
+}
+
+export type { LogoRead }
+export { LogoPalettes, logoPick, PalettePicture, samePalette, useLogoPalettes }

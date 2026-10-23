@@ -12,13 +12,20 @@ import {
   type AskDesignOutput,
   FONT_PAIRS,
   PALETTES,
+  type PaletteFromImage,
   type PaletteStops,
 } from "@workspace/contracts"
 import {
   type LogoStart,
   TrayLogo,
 } from "@workspace/ui/components/assistant/tray-logo"
-import { PalettePicture } from "@workspace/ui/components/assistant/tray-palette"
+import {
+  LogoPalettes,
+  logoPick,
+  PalettePicture,
+  samePalette,
+  useLogoPalettes,
+} from "@workspace/ui/components/assistant/tray-palette"
 import {
   heldPhotosAnswer,
   TrayPhotos,
@@ -1055,6 +1062,11 @@ function QuestionTray({
         "palette" in each ? [each.palette] : []
       )[0] ?? null
   )
+  const logoQuestion = questions.find((each) => each.visual === "logo")
+  const logoAnswer = logoQuestion && answers[logoQuestion.id]
+  const fromLogo = useLogoPalettes(
+    logoAnswer && "logo" in logoAnswer ? logoAnswer.logo.id : undefined
+  )
   // The logo page's own primary button (Design my logo), while it has one.
   const [logoSubmit, setLogoSubmit] = useState<TrayFrameProps["submit"]>()
   const focusComposer = useFocusComposer()
@@ -1063,7 +1075,20 @@ function QuestionTray({
   if (!question) return null
   const name = businessName?.trim() || "Your business"
   const palettes = offeredPalettes(questions, answers)
-  const { stops } = palettes[0]
+  const paletteQuestion = questions.find((each) => each.visual === "palette")
+  const paletteAnswer = paletteQuestion && answers[paletteQuestion.id]
+  const logoPalettes = fromLogo.state === "ready" ? fromLogo.palettes : []
+  const pickedFromLogo = logoPick(paletteAnswer, logoPalettes)
+  // The previews take the logo's palette picked, else its first until
+  // another is picked.
+  const previewPalette =
+    pickedFromLogo ??
+    (paletteAnswer && !("skipped" in paletteAnswer)
+      ? undefined
+      : logoPalettes[0])
+  const stops = previewPalette
+    ? pictureStops(previewPalette.stops)
+    : palettes[0].stops
   const total = questions.length
   const last = index === total - 1
   const answer = answers[question.id]
@@ -1123,6 +1148,10 @@ function QuestionTray({
     if (lucky) pick(lucky.id)
   }
   const ownPage = question.visual === "logo" || question.visual === "photos"
+  // With a logo the palettes come from it; the presets are the fallback.
+  const logoLed =
+    question.visual === "palette" &&
+    (fromLogo.state === "reading" || fromLogo.state === "ready")
 
   const own = answer && "own" in answer ? answer.own : ""
   const multiple = question.card.multiple
@@ -1194,7 +1223,28 @@ function QuestionTray({
           }}
         />
       ) : null}
-      {!ownPage && question.card.options.length > 0 ? (
+      {logoLed ? (
+        <LogoPalettes
+          group={`${id}-${question.id}`}
+          label={question.question ?? "Choose one"}
+          onPick={(palette) => set({ palette })}
+          picked={pickedFromLogo}
+          read={fromLogo}
+        />
+      ) : null}
+      {question.visual === "palette" && fromLogo.state === "failed" ? (
+        <p className="text-muted-foreground text-sm">
+          I couldn't read the colours in your logo just now.{" "}
+          <button
+            className="underline underline-offset-2 hover:text-foreground"
+            onClick={fromLogo.retry}
+            type="button"
+          >
+            Try again
+          </button>
+        </p>
+      ) : null}
+      {!ownPage && !logoLed && question.card.options.length > 0 ? (
         // biome-ignore lint/a11y/useAriaPropsSupportedByRole: group and radiogroup both take a label; the rule cannot read a role chosen at runtime
         <div
           aria-label={question.question ?? "Choose one"}
@@ -1281,21 +1331,33 @@ function QuestionTray({
       ) : null}
       {question.visual === "palette" ? (
         <>
-          <Button
-            className={cn("self-start", ACCENT_RING)}
-            onClick={surprise}
-            size="sm"
-            type="button"
-            variant="ghost"
-          >
-            <ShuffleIcon aria-hidden />
-            Surprise me
-          </Button>
+          {logoLed ? null : (
+            <Button
+              className={cn("self-start", ACCENT_RING)}
+              onClick={surprise}
+              size="sm"
+              type="button"
+              variant="ghost"
+            >
+              <ShuffleIcon aria-hidden />
+              Surprise me
+            </Button>
+          )}
           <PalettePicture
-            checked={answer !== undefined && "palette" in answer}
+            checked={
+              answer !== undefined &&
+              "palette" in answer &&
+              picture !== null &&
+              samePalette(answer.palette, picture)
+            }
             group={`${id}-${question.id}`}
             onPick={(palette) => set({ palette })}
-            read={picture}
+            // A logo palette picked is the logo's, never a picture's.
+            read={
+              picture && !logoPick({ palette: picture }, logoPalettes)
+                ? picture
+                : null
+            }
             reading={start?.reading}
             setRead={setPicture}
           />
@@ -1310,7 +1372,8 @@ function QuestionTray({
           maxLength={200}
           onChange={(event) => write(event.currentTarget.value)}
           placeholder={other.placeholder}
-          value={own}
+          // A logo palette brought back by its name is a pick, not words.
+          value={pickedFromLogo ? "" : own}
         />
       ) : null}
     </TrayFrame>
