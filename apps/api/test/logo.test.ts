@@ -155,6 +155,9 @@ describe("the logo prompt", () => {
     expect(monogram).not.toContain('company name "Bright Homes"')
     expect(of("lockup")).toContain('company name "Bright Homes"')
     expect(of("emblem")).toContain('company name "Bright Homes"')
+    const wordmark = of("wordmark")
+    expect(wordmark).toContain('company name "Bright Homes" as the whole logo')
+    expect(wordmark).not.toContain("purely graphic symbol")
     expect(initialsOf("Smith & Sons Cleaning Co")).toBe("SSC")
   })
 

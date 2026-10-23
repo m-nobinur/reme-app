@@ -39,6 +39,14 @@ import monogramMascot from "@workspace/ui/assets/logo-examples/monogram-mascot.w
 import monogramMinimal from "@workspace/ui/assets/logo-examples/monogram-minimal.webp"
 import monogramRetro from "@workspace/ui/assets/logo-examples/monogram-retro.webp"
 import monogramThreeD from "@workspace/ui/assets/logo-examples/monogram-three_d.webp"
+import wordmarkGeometric from "@workspace/ui/assets/logo-examples/wordmark-geometric.webp"
+import wordmarkGradient from "@workspace/ui/assets/logo-examples/wordmark-gradient.webp"
+import wordmarkHandDrawn from "@workspace/ui/assets/logo-examples/wordmark-hand_drawn.webp"
+import wordmarkLuxury from "@workspace/ui/assets/logo-examples/wordmark-luxury.webp"
+import wordmarkMascot from "@workspace/ui/assets/logo-examples/wordmark-mascot.webp"
+import wordmarkMinimal from "@workspace/ui/assets/logo-examples/wordmark-minimal.webp"
+import wordmarkRetro from "@workspace/ui/assets/logo-examples/wordmark-retro.webp"
+import wordmarkThreeD from "@workspace/ui/assets/logo-examples/wordmark-three_d.webp"
 
 /**
  * The example picture for a logo type in a style: the layout and look the
@@ -63,6 +71,14 @@ const EXAMPLES: Record<`${LogoType}_${LogoStyle}`, ArrayBuffer> = {
   icon_luxury: iconLuxury,
   icon_retro: iconRetro,
   icon_three_d: iconThreeD,
+  wordmark_minimal: wordmarkMinimal,
+  wordmark_geometric: wordmarkGeometric,
+  wordmark_gradient: wordmarkGradient,
+  wordmark_mascot: wordmarkMascot,
+  wordmark_hand_drawn: wordmarkHandDrawn,
+  wordmark_luxury: wordmarkLuxury,
+  wordmark_retro: wordmarkRetro,
+  wordmark_three_d: wordmarkThreeD,
   monogram_minimal: monogramMinimal,
   monogram_geometric: monogramGeometric,
   monogram_gradient: monogramGradient,
