@@ -152,6 +152,10 @@ export function turnMoment(
   return is(named(ctx.assistant), rest)
 }
 
+/** A turn a reload cut off, still running: its reply comes when it lands. */
+export const resumingLine = (ctx: CopyContext) =>
+  is(named(ctx.assistant), "still on your last message")
+
 /** Writing a reply after tools ran. */
 export const writingBack = (ctx: CopyContext) =>
   is(named(ctx.assistant), "writing back")
