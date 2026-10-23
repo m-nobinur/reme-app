@@ -102,7 +102,7 @@ it("marks a stopped job and asks what happened", () => {
     NOW
   )
   expect(summary(rows).at(-1)).toBe(
-    "google|failed|The Google connection stopped. Ellie is looking into it|Ask what happened"
+    "google|failed|The Google connection stopped. Ask Ellie to try again.|Ask what happened"
   )
 })
 

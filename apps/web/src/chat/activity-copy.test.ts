@@ -410,7 +410,7 @@ describe("segment copy", () => {
     expect(segmentTitle(failed, ctx)).toBe("The domain connection stopped")
     expect(
       segmentLine(failed, ctx, { why: "Cloudflare did not answer." })
-    ).toBe("Cloudflare did not answer. Ellie is looking into it")
+    ).toBe("Cloudflare did not answer. Ask Ellie to try again")
     expect(segmentLine(failed, { orgId: "org-1" })).toBe("Looking into it")
   })
 
@@ -475,7 +475,7 @@ describe("page lines", () => {
       "Verified, pages sent. No data yet"
     )
     expect(standingLine(at("domain", "failed"), ctx)).toBe(
-      "The domain connection stopped. Ellie is looking into it"
+      "The domain connection stopped. Ask Ellie to try again."
     )
     expect(
       standingLine(at("domain", "failed"), { orgId: "o", assistant: null })

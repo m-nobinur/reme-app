@@ -415,7 +415,7 @@ describe("the first run", () => {
     ])
     const website = panel?.journey[1]
     expect(website?.title).toBe("The website build stopped")
-    expect(website?.line).toBe("Ellie is looking into it")
+    expect(website?.line).toBe("Ask Ellie to try again")
     expect(website?.steps[4]).toMatchObject({ label: "Checking", state: "now" })
     expect(panel?.line.lead).toBe("The website build stopped")
   })

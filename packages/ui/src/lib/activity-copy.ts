@@ -70,6 +70,10 @@ const named = (assistant?: string | null) => {
 const is = (assistant: string | null, rest: string) =>
   assistant ? `${assistant} is ${rest}` : cap(rest)
 
+/** What a stopped job leaves to the owner: nothing runs until they ask. */
+const askAgain = (assistant: string | null) =>
+  `Ask ${assistant ?? "your assistant"} to try again`
+
 /** A stable 32 bit hash (FNV-1a), so the same org always reads the same variant. */
 function hash(text: string) {
   let h = 0x811c9dc5
@@ -740,7 +744,7 @@ export function segmentLine(
   const n = namesOf(segment, ctx)
   const { state } = segment
   if (state === "failed") {
-    const next = is(n.assistant, "looking into it")
+    const next = askAgain(n.assistant)
     const why = cleanArg(extras.why, "text", 80)?.replace(/[.!]+$/, "")
     return why ? `${why}. ${next}` : next
   }
@@ -1015,7 +1019,7 @@ export function standingLine(
   const { kind, state } = segment
   if (state === "failed") {
     const noun = job(segment)?.noun ?? "setup"
-    return `The ${noun} stopped. ${is(named(ctx.assistant), "looking into it")}`
+    return `The ${noun} stopped. ${askAgain(named(ctx.assistant))}.`
   }
   if (state === "waiting") {
     return waitingRow(segment, extras.until) ?? "Waiting for you"
