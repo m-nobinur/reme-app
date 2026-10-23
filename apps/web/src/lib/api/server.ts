@@ -23,6 +23,7 @@ import { EMPTY_WORKSPACE, readWorkspace, waitingOnOwner } from "@/lib/attention"
 import { oneOf, record, text } from "@/lib/auth/input"
 import { orgIntentCookie } from "@/lib/auth/org-intent"
 import { seenAtOf, seenCookie } from "@/lib/notifications"
+import { settingUp } from "@/lib/onboarding"
 import { source } from "./source"
 import type {
   AttentionItem,
@@ -124,7 +125,8 @@ export const getWorkspaceFrame = createServerFn({ method: "GET" }).handler(
       return {
         active,
         orgPending: getCookie(orgIntentCookie()) !== undefined,
-        panelOpen: getCookie(PANEL_COOKIE) !== "closed",
+        // A business about to be made opens on its setup, panel and all.
+        panelOpen: true,
         railOpen: getCookie(RAIL_COOKIE) !== "closed",
         workspace: EMPTY_WORKSPACE,
         conversations: [],
@@ -144,7 +146,8 @@ export const getWorkspaceFrame = createServerFn({ method: "GET" }).handler(
     return {
       active,
       orgPending: false,
-      panelOpen: getCookie(PANEL_COOKIE) !== "closed",
+      // Setup opens with the panel whatever was left from another business.
+      panelOpen: getCookie(PANEL_COOKIE) !== "closed" || settingUp(workspace),
       railOpen: getCookie(RAIL_COOKIE) !== "closed",
       workspace,
       conversations,

@@ -121,3 +121,21 @@ it("never folds a panel the owner touched", () => {
   vi.advanceTimersByTime(FOLD_AFTER_MS * 3)
   expect(sent).toEqual([true])
 })
+
+it("never folds a panel it opened while setup is open", () => {
+  const setup = (now: ActivitySegment[] = []): Workspace => ({
+    ...read(now),
+    activity: {
+      journey: [{ ...segment("onboarding", "upcoming"), kind: "onboarding" }],
+      now,
+      waiting: [],
+      upcoming: [],
+      done: [],
+    },
+  })
+  panel.watch(setup())
+  panel.watch(setup([segment("website", "now")]))
+  panel.watch(setup())
+  vi.advanceTimersByTime(FOLD_AFTER_MS)
+  expect(sent).toEqual([true])
+})

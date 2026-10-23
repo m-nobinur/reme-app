@@ -1,6 +1,7 @@
 import type { PanelAuto } from "@workspace/ui/lib/panel"
 import { useEffect, useState } from "react"
 import type { Workspace } from "./api/types"
+import { settingUp } from "./onboarding"
 
 /** An automatic open waits this long after the owner closed the panel. */
 export const REOPEN_AFTER_MS = 60_000
@@ -45,7 +46,7 @@ export type AutoPanel = {
  * folds it again once the work is over. The owner's say wins: after they
  * close it, it stays closed for `REOPEN_AFTER_MS`, and a panel they opened
  * or closed themselves is never folded for them. It also stays open while
- * anything waits on the owner. The first read only sets what is already
+ * anything waits on the owner or setup is open. The first read only sets what is already
  * there, so a page load never opens it.
  */
 export function autoPanel(send: (open: boolean) => void): AutoPanel {
@@ -70,7 +71,10 @@ export function autoPanel(send: (open: boolean) => void): AutoPanel {
         ours = true
         send(true)
       }
-      const over = now.working.size === 0 && now.waiting.size === 0
+      const over =
+        now.working.size === 0 &&
+        now.waiting.size === 0 &&
+        !settingUp(workspace)
       if (ours && over) {
         // Kept running across reads, which come every few seconds.
         timer ??= setTimeout(() => {
