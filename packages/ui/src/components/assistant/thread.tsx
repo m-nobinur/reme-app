@@ -121,8 +121,8 @@ export const OWNER_QUICK_ACTIONS: readonly ThreadQuickAction[] = [
 ]
 
 /**
- * A mode the composer is in: a chip beside "+" names it, and its placeholder
- * replaces the thread's. `onClear` is the chip's ×.
+ * A mode the composer is in: its icon takes the place of "+", and its
+ * placeholder replaces the thread's. `onClear` is that icon's press.
  */
 export type ThreadMode = {
   label: string
@@ -695,8 +695,7 @@ const Composer: FC<{ autoFocus: boolean; expanded: boolean }> = ({
           expanded ? "flex-wrap items-center" : "items-end"
         )}
       >
-        <QuickActions input={input} />
-        <ComposerMode input={input} />
+        {mode ? <ComposerMode input={input} /> : <QuickActions input={input} />}
         <ComposerPrimitive.Input
           ref={input}
           placeholder={
@@ -771,33 +770,38 @@ const QuickActions: FC<{ input: RefObject<HTMLTextAreaElement | null> }> = ({
   )
 }
 
-/** The chip naming the composer's mode; its × leaves it and keeps focus in the composer. */
+/**
+ * The composer's mode in place of "+": its icon alone, named by its tooltip.
+ * Pressing it leaves the mode, and the × it turns into on hover says so;
+ * focus stays in the composer.
+ */
 const ComposerMode: FC<{ input: RefObject<HTMLTextAreaElement | null> }> = ({
   input,
 }) => {
   const { mode } = useContext(ThreadSettingsContext)
   if (!mode) return null
   return (
-    <span
+    <TooltipIconButton
+      className="group/mode m-0.5 size-8 rounded-full border-primary/30 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary [&_svg]:size-3.5"
       data-slot="aui_composer-mode"
-      className="inline-flex h-7 min-w-0 items-center gap-1.5 rounded-full bg-primary/10 pr-0.5 pl-2.5 font-medium text-primary text-xs [&_svg]:size-3.5 [&_svg]:shrink-0"
+      onClick={() => {
+        mode.onClear()
+        input.current?.focus()
+      }}
+      side="top"
+      size="icon"
+      tooltip={`${mode.label} mode. Press to leave it`}
+      type="button"
+      variant="outline"
     >
-      {mode.icon}
-      <span className="truncate">{mode.label}</span>
-      <Button
-        aria-label={`Leave ${mode.label.toLowerCase()} mode`}
-        className="rounded-full text-primary hover:bg-primary/15 hover:text-primary"
-        onClick={() => {
-          mode.onClear()
-          input.current?.focus()
-        }}
-        size="icon-xs"
-        type="button"
-        variant="ghost"
-      >
-        <XIcon aria-hidden />
-      </Button>
-    </span>
+      <span className="contents group-hover/mode:hidden group-focus-visible/mode:hidden">
+        {mode.icon}
+      </span>
+      <XIcon
+        aria-hidden
+        className="hidden group-hover/mode:block group-focus-visible/mode:block"
+      />
+    </TooltipIconButton>
   )
 }
 

@@ -167,26 +167,28 @@ test("a quick action keeps the owner's draft and adds to it", async ({
   await expect(input(page)).toBeFocused()
 })
 
-test("website change mode shows a chip beside +, and its × leaves the mode", async ({
+test("website change mode takes the place of +, and pressing it leaves the mode", async ({
   page,
 }) => {
   await open(page, "ThreadSiteChange")
-  const chip = page.locator('[data-slot="aui_composer-mode"]')
-  await expect(chip).toHaveText("Website change")
+  const mode = page.locator('[data-slot="aui_composer-mode"]')
+  await expect(mode).toHaveAccessibleName(
+    "Website change mode. Press to leave it"
+  )
+  await expect(page.getByRole("button", { name: "Quick actions" })).toHaveCount(
+    0
+  )
   await expect(input(page)).toHaveAttribute(
     "placeholder",
     "Describe what to change on your website…"
   )
-  // Beside "+", on its right.
-  const plus = await page
-    .getByRole("button", { name: "Quick actions" })
-    .boundingBox()
-  const box = await chip.boundingBox()
-  expect(box?.x).toBeGreaterThanOrEqual((plus?.x ?? 0) + (plus?.width ?? 0))
   await axe(page, "ThreadSiteChange")
 
-  await page.getByRole("button", { name: "Leave website change mode" }).click()
-  await expect(chip).toHaveCount(0)
+  await mode.click()
+  await expect(mode).toHaveCount(0)
+  await expect(
+    page.getByRole("button", { name: "Quick actions" })
+  ).toBeVisible()
   await expect(input(page)).toHaveAttribute(
     "placeholder",
     "Ask Ellie anything…"
