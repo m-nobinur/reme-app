@@ -25,6 +25,9 @@ const heading = (page: Page) => dialog(page).getByRole("heading").last()
 async function openSettings(page: Page) {
   await trigger(page).click()
   await expect(dialog(page)).toBeVisible()
+  // The transition starts only once the starting style comes off, a frame
+  // after the popup mounts; waited on before that, it is not yet running.
+  await expect(dialog(page)).not.toHaveAttribute("data-starting-style")
   await page.evaluate(() =>
     Promise.all(
       document.getAnimations().map((each) => each.finished.catch(() => null))
