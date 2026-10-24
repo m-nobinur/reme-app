@@ -44,7 +44,6 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@workspace/ui/components/sheet"
-import { Switch } from "@workspace/ui/components/switch"
 import { toggleTheme } from "@workspace/ui/components/theme-toggle"
 import { Hint } from "@workspace/ui/components/tooltip"
 import {
@@ -439,25 +438,6 @@ const workspaceCatalog: Entry[] = [
   { name: "SheetTrigger", render: () => <SheetSample /> },
   { name: "SheetContent", render: () => <SheetSample /> },
   { name: "SheetTitle", render: () => <SheetSample /> },
-  {
-    name: "Switch",
-    render: () => (
-      <div className="flex flex-col gap-3 text-sm">
-        {(
-          [
-            ["switch-email", "Email me when a quote comes in", true, false],
-            ["switch-text", "Text me as well", false, false],
-            ["switch-call", "Call me, not offered yet", false, true],
-          ] as const
-        ).map(([id, label, on, disabled]) => (
-          <div className="flex items-center gap-2" key={id}>
-            <Switch defaultChecked={on} disabled={disabled} id={id} />
-            <label htmlFor={id}>{label}</label>
-          </div>
-        ))}
-      </div>
-    ),
-  },
   { name: "DropdownMenu", render: () => <MenuSample /> },
   { name: "DropdownMenuTrigger", render: () => <MenuSample /> },
   { name: "DropdownMenuContent", render: () => <MenuSample /> },
