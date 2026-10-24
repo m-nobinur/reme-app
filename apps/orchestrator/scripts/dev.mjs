@@ -1,5 +1,6 @@
 /**
- * `vite dev`, pointed at the same database as everything else.
+ * `vite dev`, pointed at the same database as everything else, with the
+ * scheduler's minute cron fired locally.
  *
  * The binding has no local connection string in `wrangler.jsonc` on purpose:
  * one would be a password in a committed file, which R9 forbids. The Cloudflare
@@ -39,3 +40,17 @@ const vite = spawn(
   }
 )
 vite.on("exit", (code) => process.exit(code ?? 0))
+
+// workerd under vite fires no cron triggers, so nothing ran a due check-in
+// or reminder locally. This fires the scheduler's minute cron (src/schedule.ts)
+// on each minute through Miniflare's local route, as a deploy does. The
+// hourly sweep is left out: it deletes rows by age.
+const SCHEDULER = "http://localhost:3002/cdn-cgi/local/scheduled?cron=*+*+*+*+*"
+const tick = () => fetch(SCHEDULER).catch(() => undefined)
+setTimeout(
+  () => {
+    void tick()
+    setInterval(tick, 60_000)
+  },
+  60_000 - (Date.now() % 60_000)
+)
