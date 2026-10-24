@@ -24,12 +24,16 @@ export type ToolTimings = {
   reported_at: number
 }
 
-/**
- * The longest one Developer submission may run (its durability timeout). A
- * build that logs nothing for this long is stalled: no turn of the lead's is
- * still going.
- */
+/** The longest one Developer submission may run (its durability timeout). */
 export const LEAD_TURN_MS = 45 * 60 * 1000
+
+/**
+ * A build that logs nothing for this long is stalled, and its Developer is
+ * stopped and resumed. A working lead logs every model call and tool: no gap
+ * in 659 Developer events on staging reached a minute (2026-10-22), and its
+ * longest quiet tool is the five-minute photo wait.
+ */
+export const STALL_QUIET_MS = 10 * 60 * 1000
 
 /** Milliseconds since `started`, for a step body to return. */
 export const since = (started: number) => Date.now() - started

@@ -19,8 +19,10 @@ const {
   narrate,
   narrationOk,
   noteProblem,
+  noteResumed,
   readyNote,
   readyText,
+  resumedText,
   retryingText,
   stoppedText,
 } = await import("../src/retry.ts")
@@ -77,6 +79,8 @@ describe("what the owner reads", () => {
     ]),
     readyText("site.build", plan),
     readyText("site.revise", null),
+    resumedText("site.build"),
+    resumedText("site.revise"),
   ]
 
   it.each(lines)("%s", (line) => {
@@ -476,5 +480,43 @@ live("a failed owner build's retry", () => {
     expect(done).toHaveLength(1)
     expect(done[0]).toMatchObject({ next: "waiting_owner", attempt: 1 })
     expect(done[0]?.pages).toEqual(expect.arrayContaining(["Home"]))
+  })
+
+  it("notes every mid-build resume once, and says only a stall in the chat", async () => {
+    const orgId = await freshOrg(kit)
+    const made = await kit.withOrg({ orgId }, (db) =>
+      insertAssignment(db, orgId, "k4", true, {
+        kind: "site.build",
+        goal: "Build the site from the canonical facts.",
+        model: "A",
+        withhold: [],
+        lane: "full",
+        change_kind: null,
+      })
+    )
+    if (!("row" in made)) throw new Error("not created")
+    const ids = { orgId, assignmentId: made.row.id }
+    const resume = (attempt: number, reason: string) =>
+      noteResumed({}, kit, ids, { attempt, of: 2, reason })
+
+    // A replaced sandbox is over before the owner could notice.
+    expect(await resume(1, "sandbox.updating")).toBeNull()
+    // A stall is said; this org has no conversation to say it in.
+    expect(await resume(2, "developer.stalled")).toBe("none")
+    expect(await resume(2, "developer.stalled")).toBe("none")
+    expect(await notesOf(orgId, ids.assignmentId)).toEqual([
+      expect.objectContaining({
+        kind: "resumed",
+        attempt: 1,
+        cause: "service",
+      }),
+      expect.objectContaining({
+        kind: "resumed",
+        attempt: 2,
+        of: 2,
+        cause: "stalled",
+        next: "retrying",
+      }),
+    ])
   })
 })

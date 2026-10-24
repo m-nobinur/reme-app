@@ -111,6 +111,8 @@ type Session = {
   /** Operations already reported as interrupted, so one failure wakes the Workflow once. */
   interruptions: Set<string>
   budgetExhausted: boolean
+  /** The running delivery's abort signal: the stall watchdog's stop wakes the Workflow itself. */
+  signal?: AbortSignal
 }
 const sessions = new Map<string, Session>()
 
@@ -449,11 +451,12 @@ function render({ id }: AgentProps) {
     false
   )
 
-  useAgentStart(async ({ append, harness }) => {
+  useAgentStart(async ({ append, harness, signal }) => {
     // Every delivery is a new turn, so a turn a terminal tool ended reopens
     // here, and a failure that woke the Workflow before may wake it again.
     current.gate.open()
     current.interruptions.clear()
+    current.signal = signal
     if (askedForBuildRole && brief.role && !onBuildRole) {
       setOnBuildRole(true)
       current.tee.emit("model.switched", {
@@ -568,13 +571,19 @@ function render({ id }: AgentProps) {
 
   useResponseFinish(({ response }) => {
     // A turn that wakes the Workflow ends in an accepted report or a
-    // question, or woke it on the way (a failure, the budget). One that ends
-    // any other way, the lead giving up after refused reports or running out
-    // of turns, would leave the build waiting on a wake that never comes.
+    // question, or woke it on the way (a failure, the budget, the stall
+    // watchdog's stop). One that ends any other way, the lead giving up after
+    // refused reports or running out of turns, would leave the build waiting
+    // on a wake that never comes.
     const reported = response.toolCalls.some(
       (call) => !call.isError && WAKING_TOOLS.has(call.tool)
     )
-    if (reported || current.budgetExhausted || current.interruptions.size > 0)
+    if (
+      reported ||
+      current.budgetExhausted ||
+      current.interruptions.size > 0 ||
+      current.signal?.aborted
+    )
       current.tee.flush().catch(() => undefined)
     else wake(current, "unreported", "developer.no_report", "unreported")
   })

@@ -60,6 +60,8 @@ const { AgentInstanceExistsError } = vi.hoisted(() => {
   return { AgentInstanceExistsError: InstanceExists }
 })
 const dispatched: { message: unknown; photosSettled?: boolean }[] = []
+/** Each stop the stall watchdog asked of the Developer. */
+const aborted: string[] = []
 // Whether the photo step had settled when the Developer was dispatched,
 // whether it throws, and every event type the Workflow appended.
 const photoStep = vi.hoisted(() => ({
@@ -76,6 +78,9 @@ vi.mock("@workspace/facade", async (importOriginal) => ({
     dispatch: async (request: { message: unknown }) => {
       dispatched.push({ ...request, photosSettled: photoStep.settled })
       return { submissionId: "s" }
+    },
+    abort: async () => {
+      aborted.push("abort")
     },
   }),
 }))
@@ -344,6 +349,7 @@ vi.mock("../src/retry.ts", () => ({
     note: script.followUp ? { key: "k", text: "t" } : null,
   }),
   noteProblem: async () => undefined,
+  noteResumed: async () => undefined,
   postNote: async () => undefined,
   readyNote: async () => ({ key: "k", text: "t" }),
   sayReady: async () => undefined,
@@ -594,13 +600,18 @@ const paths: [string, Wake[], Setup, { outcome: string }][] = [
     {},
     { outcome: "failed" },
   ],
-  // A whole lead turn with nothing in the log: the build is failed as stalled.
-  ["developer went quiet", ["timeout"], {}, { outcome: "failed" }],
-  // The lead logged ten minutes ago, so it is still at work: wait again.
+  // Ten minutes with nothing in the log: the lead is stopped and resumed.
+  [
+    "developer went quiet",
+    ["timeout", completion],
+    {},
+    { outcome: "preview_ready" },
+  ],
+  // The lead logged four minutes ago, so it is still at work: wait again.
   [
     "developer still working past a wait",
     ["timeout", completion],
-    { quiet: [10 * 60 * 1000] },
+    { quiet: [4 * 60 * 1000] },
     { outcome: "preview_ready" },
   ],
   // The lead's turn ended with no accepted report: fail now, not later.
@@ -970,14 +981,29 @@ describe("a Developer that stops without a report", () => {
     expect(advanced.at(-1)).toEqual(["failed", "developer.start_failed"])
   })
 
-  it("fails as developer.stalled only once a whole lead turn has nothing in the log", async () => {
-    advanced.length = 0
-    // Forty minutes quiet: still inside a turn, so it waits again; the next
-    // check finds the full window empty.
-    script.quiet = [40 * 60 * 1000, 45 * 60 * 1000]
-    const { names, run } = drive(["timeout", "timeout"])
-    expect(await run()).toMatchObject({ outcome: "failed" })
+  it("stops and resumes a lead only once ten minutes have nothing in the log", async () => {
+    aborted.length = 0
+    dispatched.length = 0
+    // Eight minutes quiet: still at work, so it waits again; the next check
+    // finds the full window empty.
+    script.quiet = [8 * 60 * 1000, 10 * 60 * 1000]
+    const { names, run } = drive(["timeout", "timeout", completion])
+    expect(await run()).toMatchObject({ outcome: "preview_ready" })
     expect(names).toContain("developer 1.2")
+    expect(aborted).toEqual(["abort"])
+    const resumed = dispatched
+      .map((d) => d.message as { type?: string; body?: string })
+      .filter((m) => m.type === "run.interrupted")
+    expect(resumed.map((m) => JSON.parse(m.body ?? "{}"))).toEqual([
+      { reason: "developer.stalled" },
+    ])
+  })
+
+  it("fails as developer.stalled once a quiet lead has spent its resumes", async () => {
+    advanced.length = 0
+    expect(await drive(["timeout", "timeout", "timeout"]).run()).toMatchObject({
+      outcome: "failed",
+    })
     expect(advanced.at(-1)).toEqual(["failed", "developer.stalled"])
   })
 })

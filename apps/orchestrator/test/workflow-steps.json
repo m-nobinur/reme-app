@@ -150,9 +150,14 @@
       "developer",
       "developer 1",
       "quiet 1.1",
-      "fail stalled 1",
-      "destroy sandbox",
-      "retry"
+      "resume wait 1",
+      "resume run 1",
+      "developer 2",
+      "validating 2",
+      "a11y 2",
+      "gates 2",
+      "screenshots",
+      "keep warm"
     ],
     "developer still working past a wait": [
       "claim 1",

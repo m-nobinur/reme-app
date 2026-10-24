@@ -15,6 +15,7 @@ import {
   eq,
   events,
   failureCode,
+  type Posted,
   pgCode,
   postAssistantMessage,
   sql,
@@ -94,6 +95,10 @@ export function retryingText(
     ? "I'm fixing it from where it stopped"
     : "I'm starting it again"
   return `${subject(kind)} hit a problem${where}, so ${next}. Nothing for you to do: I'll say here when the draft is ready.`
+}
+
+export function resumedText(kind: string): string {
+  return `${subject(kind)} got stuck, so I've restarted it from where it stopped. Nothing for you to do: I'll say here when the draft is ready.`
 }
 
 export function stoppedText(kind: string, reason: string): string {
@@ -184,6 +189,8 @@ const NARRATE_TIMEOUT_MS = 8_000
 
 /** What happens next, by note, in the words the model must keep to. */
 const NEXT_WORDS: Record<Exclude<AgentNote["kind"], "problem">, string> = {
+  resumed:
+    "You have already restarted it from where it stopped, and it is working again. The owner need do nothing, and you will say here when the draft is ready.",
   retrying:
     "You have already started it again by yourself. The owner need do nothing, and you will say here when the draft is ready.",
   stopped:
@@ -384,6 +391,43 @@ export async function sayReady(
   note: Note
 ): Promise<void> {
   if (await reviewOpen(kit, ids)) await postNote(kit, ids.orgId, note)
+}
+
+/**
+ * A Developer started again mid-build: its note, and for an owner's build
+ * that went quiet long enough to be noticed, one line in the chat. Posted
+ * once and never retried, so a busy chat holds up nothing; a resume after a
+ * replaced sandbox is over too soon to tell. What the post did, or null.
+ */
+export async function noteResumed(
+  env: { OPENROUTER_API_KEY?: string },
+  kit: Tenancy,
+  ids: Ids,
+  resume: { attempt: number; of: number; reason: string }
+): Promise<Posted | null> {
+  const cause = buildFailure(resume.reason).cause
+  const note: AgentNote = {
+    kind: "resumed",
+    key: `site.resumed:${ids.assignmentId}:${resume.attempt}`,
+    assignment_id: ids.assignmentId,
+    attempt: resume.attempt,
+    of: resume.of,
+    cause,
+    next: "retrying",
+    failed: [],
+  }
+  await writeNote(kit, ids.orgId, note)
+  if (cause !== "stalled") return null
+  const { origin, kind } = await kit.withOrg({ orgId: ids.orgId }, (db) =>
+    creationChoices(db, ids)
+  )
+  if (origin !== "owner") return null
+  const text = await narrate(env, kit, ids.orgId, kind, note, resumedText(kind))
+  return postAssistantMessage(kit, {
+    orgId: ids.orgId,
+    key: note.key,
+    message: { text: [text] },
+  })
 }
 
 /** The plan with its drawn photos unset, so the retry's photo step draws and places them. */

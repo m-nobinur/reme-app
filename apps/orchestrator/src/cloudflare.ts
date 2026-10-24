@@ -76,6 +76,7 @@ import { retireOthers, type SweepCounts, sweepOrg } from "./retention.ts"
 import {
   afterFailure,
   noteProblem,
+  noteResumed,
   postNote,
   readyNote,
   sayReady,
@@ -113,7 +114,7 @@ import {
   TransitionError,
 } from "./state.ts"
 import { GIT, runAxe } from "./tail.ts"
-import { LEAD_TURN_MS, logTiming, since, type ToolTimings } from "./timing.ts"
+import { logTiming, STALL_QUIET_MS, since, type ToolTimings } from "./timing.ts"
 import { checkUptime, UPTIME_CRON } from "./uptime.ts"
 import { assignmentFacts, checkA11y, validateRevision } from "./validate.ts"
 
@@ -197,8 +198,15 @@ const withKit = async <T>(
   }
 }
 
-/** Reasons the turn gate names itself; any other interruption is the provider's. */
-const GATE_REASONS = new Set([REPEATING_FAILURE, SANDBOX_UPDATING])
+/** The watchdog's reason for a Developer that went quiet (`STALL_QUIET_MS`). */
+const DEVELOPER_STALLED = "developer.stalled"
+
+/** Reasons the turn gate or the watchdog names itself; any other interruption is the provider's. */
+const GATE_REASONS = new Set([
+  REPEATING_FAILURE,
+  SANDBOX_UPDATING,
+  DEVELOPER_STALLED,
+])
 
 /** Information round trips per assignment before the Workflow stops waiting. */
 const ROUNDS = 20
@@ -622,11 +630,11 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         woke = { payload: pending }
         pending = null
       } else {
-        // The watchdog: a wait that times out looks at the build's log, and
-        // a build that has logged nothing for a whole lead turn is stalled.
-        // A lead still working logs every model call and tool, so it waits
-        // again for what is left of the window.
-        let wait = LEAD_TURN_MS
+        // The watchdog: a wait that times out looks at the build's log. A
+        // lead still working logs every model call and tool, so it waits
+        // again for what is left of the window; one that logged nothing for
+        // all of it is stopped, and resumed below as an interrupted one.
+        let wait = STALL_QUIET_MS
         let got: { payload: DeveloperEvent } | null = null
         for (let n = 1; !got; n++) {
           try {
@@ -641,12 +649,20 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
                   lastEventAt(db, ids.assignmentId)
                 )
               )
-              return Date.now() - at
+              const quietMs = Date.now() - at
+              // Stopped in this step, so a replay never stops the resumed run.
+              if (quietMs >= STALL_QUIET_MS) {
+                await init(Developer, { id: ids.assignmentId }).abort()
+              }
+              return quietMs
             })
-            if (quiet >= LEAD_TURN_MS) {
-              return fail(`stalled ${round}`, "developer.stalled")
+            if (quiet >= STALL_QUIET_MS) {
+              got = {
+                payload: { kind: "interrupted", reason: DEVELOPER_STALLED },
+              }
+            } else {
+              wait = STALL_QUIET_MS - quiet
             }
-            wait = LEAD_TURN_MS - quiet
           }
         }
         woke = got
@@ -697,6 +713,15 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
               },
             },
           })
+          // After the resume is sent, and never failing it: a retried step's
+          // note is the same row and its chat line the same message.
+          await run((kit) =>
+            noteResumed(this.env, kit, ids, {
+              attempt: resumes,
+              of: RESUMES,
+              reason: payload.reason,
+            })
+          ).catch(() => undefined)
           return { resumed: resumes, fallback }
         })
         continue
