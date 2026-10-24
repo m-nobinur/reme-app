@@ -913,12 +913,16 @@ function TrayLogo({
                             style={{ backgroundColor: paper }}
                           />
                         ) : (
+                          // The image's alt names a landed design; a slot still
+                          // waiting needs a name of its own for its radio.
                           <Diffusing
                             className="aspect-square rounded-lg"
                             colors={colors.length > 0 ? colors : [stops[2]]}
                             delay={place * 1500}
                             paper={paper}
-                          />
+                          >
+                            <span className="sr-only">{`Design ${place + 1}`}</span>
+                          </Diffusing>
                         )}
                         {busy === variant?.id ? (
                           <SpinnerGapIcon
