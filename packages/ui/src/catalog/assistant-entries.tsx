@@ -2218,7 +2218,7 @@ const assistantCatalog = [
     name: "AskFact",
     render: () => (
       <TrayStates
-        height="h-[40rem]"
+        height="h-[50rem]"
         open={ASK_FACT_OPEN}
         settled={ASK_FACT_STATES}
       />
@@ -2571,7 +2571,7 @@ const assistantCatalog = [
   {
     name: "ChangeAskedUI",
     render: () => (
-      <FixtureThread height="h-[20rem]" messages={CHANGE_ASKED}>
+      <FixtureThread height="h-[26rem]" messages={CHANGE_ASKED}>
         <ChangeAskedUI />
       </FixtureThread>
     ),
