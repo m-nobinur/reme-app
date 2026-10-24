@@ -332,8 +332,9 @@ export const thumbnailOf = (assetId: string | null | undefined) =>
 
 /**
  * The pictures of one version the api serves, cut from the orchestrator's
- * screenshots of its home page: the first screen on a laptop, the screen
- * below it, the first screen on a phone, and the site's icon. They live
+ * screenshots: the home page's first screen on a laptop, a second page's
+ * (or, on an older build, the screen below the first), the home page's first
+ * screen on a phone, and the site's icon. They live
  * under the revision's own prefix, so they last exactly as long as the
  * revision does (retention deletes them with its files).
  */
@@ -353,7 +354,7 @@ export const REVISION_PICTURE_PATH = new RegExp(
  * The api's cuts, named in each link: the pictures are cached for good, so
  * a change to how the api cuts them bumps this, or a browser keeps the old.
  */
-const PICTURE_CUT = 2
+const PICTURE_CUT = 3
 
 /** One version's pictures as the app shows them, by name. */
 export const revisionPictures = (revisionId: string) =>

@@ -120,6 +120,17 @@ describe("GET /revisions/:id/:picture", () => {
     }
   })
 
+  it("takes a second page for the laptop's second picture where the build kept one", async () => {
+    keys.push(`sites/org-a/${rev}/screenshots/page-1440.png`)
+    try {
+      const response = await read(false, "laptop-2")
+      expect(response.headers.get("content-type")).toBe("image/png")
+      await response.arrayBuffer()
+    } finally {
+      keys.pop()
+    }
+  })
+
   it("is a 404 for another org's version and for a name it does not serve", async () => {
     const theirs = { orgId: "org-b" } as Owner
     expect((await read(true, "icon", theirs)).status).toBe(404)

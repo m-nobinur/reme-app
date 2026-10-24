@@ -272,18 +272,25 @@ export async function readPhoto(
 }
 
 /**
- * Where each picture is cut from, under the revision's prefix, and the size
- * it is served at: the home page's full-length shots, cut to their first
- * screen, and for the screen below the laptop's, the second of the
- * viewport-high pieces taken for the design critic (`cropKey`). A card shows
- * a laptop at most 576 px wide, so it is served at twice that.
+ * Where each picture is cut from, under the revision's prefix, the first
+ * file there winning, and the size it is served at: the home page's
+ * full-length shots, cut to their first screen; for the laptop's second
+ * picture, a second page's first screen, or on a build from before those
+ * were taken, the second of the viewport-high pieces taken for the design
+ * critic (`cropKey`). A card shows a laptop at most 576 px wide, so it is
+ * served at twice that.
  */
-const CUTS: Record<string, { key: string; width: number; height: number }> = {
-  laptop: { key: "screenshots/home-1440.png", width: 1200, height: 750 },
-  "laptop-2": { key: "critic/home-1440-2.jpg", width: 1200, height: 750 },
-  phone: { key: "screenshots/home-390.png", width: 390, height: 844 },
-  icon: { key: "dist/icon-192.png", width: 0, height: 0 },
-}
+const CUTS: Record<string, { keys: string[]; width: number; height: number }> =
+  {
+    laptop: { keys: ["screenshots/home-1440.png"], width: 1200, height: 750 },
+    "laptop-2": {
+      keys: ["screenshots/page-1440.png", "critic/home-1440-2.jpg"],
+      width: 1200,
+      height: 750,
+    },
+    phone: { keys: ["screenshots/home-390.png"], width: 390, height: 844 },
+    icon: { keys: ["dist/icon-192.png"], width: 0, height: 0 },
+  }
 
 /**
  * `GET /revisions/{revision id}/{picture}`: one version's home page as a
@@ -303,9 +310,11 @@ export async function readRevisionPicture(
   picture: string
 ): Promise<Response> {
   const cut = CUTS[picture]
-  const object =
-    cut &&
-    (await env.SITES.get(`sites/${owner.orgId}/${revisionId}/${cut.key}`))
+  let object: R2ObjectBody | null = null
+  for (const key of cut?.keys ?? []) {
+    object = await env.SITES.get(`sites/${owner.orgId}/${revisionId}/${key}`)
+    if (object) break
+  }
   if (!cut || !object) {
     return failure(404, {
       class: "resource",
@@ -320,7 +329,7 @@ export async function readRevisionPicture(
   }
   const stored = {
     ...headers,
-    "content-type": cut.key.endsWith(".jpg") ? "image/jpeg" : "image/png",
+    "content-type": object.key.endsWith(".jpg") ? "image/jpeg" : "image/png",
   }
   if (!cut.width) return new Response(object.body, { headers: stored })
   const [forShot, body] = object.body.tee()
