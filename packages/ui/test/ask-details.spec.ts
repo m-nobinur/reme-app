@@ -17,7 +17,7 @@ test("only the open asks show a tray; answered and skipped ones give way", async
   page,
 }) => {
   await open(page, "AskDetails")
-  await expect(pending(page)).toHaveCount(2)
+  await expect(pending(page)).toHaveCount(3)
   await expect(
     page.getByText("07700 900123 · sam@brightclean.example")
   ).toBeVisible()
@@ -31,7 +31,7 @@ test("the contact tray checks the phone, then starts the email from the sign-in"
 }) => {
   await open(page, "AskDetails")
   const contact = pending(page).nth(0)
-  await expect(contact.getByText("1 of 2")).toBeVisible()
+  await expect(contact.getByText("1 of 2", { exact: true })).toBeVisible()
   await contact.getByRole("button", { name: "Next", exact: true }).click()
   await expect(contact.getByRole("alert")).toHaveText([
     "Enter a valid number customers can ring.",
@@ -42,7 +42,7 @@ test("the contact tray checks the phone, then starts the email from the sign-in"
   await phone.fill("07700 900123")
   // Enter in the field moves on, as Next does.
   await page.keyboard.press("Enter")
-  await expect(contact.getByText("2 of 2")).toBeVisible()
+  await expect(contact.getByText("2 of 2", { exact: true })).toBeVisible()
   await expect(
     contact.getByRole("textbox", { name: "Email address" })
   ).toHaveValue("sam@brightclean.example")
@@ -61,12 +61,12 @@ test("the contact tray checks the phone, then starts the email from the sign-in"
   await expect(phone).toHaveValue("07700 900123")
 })
 
-test("the assistant tray asks for a name, pronouns and a tone, a page each", async ({
+test("the assistant tray asks for a name, pronouns, a look and a tone, a page each", async ({
   page,
 }) => {
   await open(page, "AskDetails")
   const assistant = pending(page).nth(1)
-  await expect(assistant.getByText("1 of 3")).toBeVisible()
+  await expect(assistant.getByText("1 of 4", { exact: true })).toBeVisible()
   await expect(
     assistant.getByRole("button", { name: "Skip all" })
   ).toBeVisible()
@@ -85,6 +85,10 @@ test("the assistant tray asks for a name, pronouns and a tone, a page each", asy
   await expect(pronouns.getByRole("radio", { name: "she/her" })).toBeChecked()
   await assistant.getByRole("button", { name: "Next", exact: true }).click()
   await expect(
+    assistant.getByRole("group", { name: "Look" }).getByRole("radio")
+  ).not.toHaveCount(0)
+  await assistant.getByRole("button", { name: "Next", exact: true }).click()
+  await expect(
     assistant.getByRole("group", { name: "Tone" }).getByRole("radio")
   ).toHaveCount(3)
   await expect(assistant.getByRole("button", { name: "Submit" })).toBeVisible()
@@ -97,8 +101,9 @@ test("Escape collapses the tray to its question and the count", async ({
   const contact = pending(page).nth(0)
   await contact.getByRole("textbox", { name: "Phone number" }).focus()
   await page.keyboard.press("Escape")
+  // The first docked tray: a broken ask's note carries the slot name too.
   const row = page
-    .locator('[data-slot="ask-details"]')
+    .locator('[data-slot="ask-details"] [data-slot="question-tray"]')
     .first()
     .getByRole("button", { expanded: false })
   await expect(row).toContainText("What number should customers ring?")
