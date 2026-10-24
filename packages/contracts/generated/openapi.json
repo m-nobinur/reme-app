@@ -1064,6 +1064,7 @@
             "type": "string",
             "enum": [
               "problem",
+              "resumed",
               "retrying",
               "stopped",
               "done"
@@ -19541,6 +19542,59 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "timing": {
+                          "type": "object",
+                          "properties": {
+                            "running_minutes": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "quiet_minutes": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "overdue": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "running_minutes",
+                            "quiet_minutes",
+                            "overdue"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "restarted": {
+                          "type": "object",
+                          "properties": {
+                            "minutes_ago": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "cause": {
+                              "type": "string",
+                              "enum": [
+                                "stalled",
+                                "unfinished",
+                                "unanswered",
+                                "service",
+                                "other"
+                              ]
+                            },
+                            "working": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "minutes_ago",
+                            "cause",
+                            "working"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
@@ -26181,6 +26235,59 @@
                     ],
                     "additionalProperties": false
                   }
+                },
+                "timing": {
+                  "type": "object",
+                  "properties": {
+                    "running_minutes": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "quiet_minutes": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "overdue": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "running_minutes",
+                    "quiet_minutes",
+                    "overdue"
+                  ],
+                  "additionalProperties": false
+                },
+                "restarted": {
+                  "type": "object",
+                  "properties": {
+                    "minutes_ago": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "cause": {
+                      "type": "string",
+                      "enum": [
+                        "stalled",
+                        "unfinished",
+                        "unanswered",
+                        "service",
+                        "other"
+                      ]
+                    },
+                    "working": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "minutes_ago",
+                    "cause",
+                    "working"
+                  ],
+                  "additionalProperties": false
                 }
               },
               "required": [

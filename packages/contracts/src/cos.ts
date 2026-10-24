@@ -90,6 +90,30 @@ export const CosWorkspace = z.strictObject({
           )
           .max(BUILD_ACTIVITY_MAX)
           .optional(),
+        /**
+         * While the pipeline works on it: whole minutes since it started,
+         * less the owner's plan reviews, and since it last logged any work.
+         * `overdue` is past the p95 of `expected_seconds` for its lane.
+         * Optional, as `progress`.
+         */
+        timing: z
+          .strictObject({
+            running_minutes: z.int().nonnegative(),
+            quiet_minutes: z.int().nonnegative(),
+            overdue: z.boolean(),
+          })
+          .optional(),
+        /**
+         * The last time the pipeline started its Developer again mid-build,
+         * and why; `working` once it has logged work since.
+         */
+        restarted: z
+          .strictObject({
+            minutes_ago: z.int().nonnegative(),
+            cause: BuildStopCause,
+            working: z.boolean(),
+          })
+          .optional(),
       })
     )
     .max(10),

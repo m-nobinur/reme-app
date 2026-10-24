@@ -297,7 +297,7 @@ export interface components {
     }
     AgentNote: {
       /** @enum {string} */
-      kind: "problem" | "retrying" | "stopped" | "done"
+      kind: "problem" | "resumed" | "retrying" | "stopped" | "done"
       key: string
       /** Format: uuid */
       assignment_id: string
@@ -5598,6 +5598,22 @@ export interface components {
                 total: number
                 now: boolean
               }[]
+              timing?: {
+                running_minutes: number
+                quiet_minutes: number
+                overdue: boolean
+              }
+              restarted?: {
+                minutes_ago: number
+                /** @enum {string} */
+                cause:
+                  | "stalled"
+                  | "unfinished"
+                  | "unanswered"
+                  | "service"
+                  | "other"
+                working: boolean
+              }
             }[]
             stopped?: {
               /** @enum {string} */
@@ -7561,6 +7577,17 @@ export interface components {
           total: number
           now: boolean
         }[]
+        timing?: {
+          running_minutes: number
+          quiet_minutes: number
+          overdue: boolean
+        }
+        restarted?: {
+          minutes_ago: number
+          /** @enum {string} */
+          cause: "stalled" | "unfinished" | "unanswered" | "service" | "other"
+          working: boolean
+        }
       }[]
       stopped?: {
         /** @enum {string} */

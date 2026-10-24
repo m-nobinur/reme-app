@@ -58,13 +58,14 @@ export const AGENT_NOTE = "agent.note"
 /**
  * One note from the pipeline about a build, written by its own steps:
  * - `problem`: a check failed and the Developer is fixing it (`attempt` of `of` repair rounds).
+ * - `resumed`: the Developer stopped mid-build and was started again from where it was (`attempt` of `of` resumes).
  * - `retrying`: the build failed on our side and `retry_id` starts it again.
  * - `stopped`: it could not finish; `next` says whether anything follows.
  * - `done`: the draft is ready to look at; `pages` names what was built.
  * `key` is the idempotency key the note and any chat post use.
  */
 export const AgentNote = z.strictObject({
-  kind: z.enum(["problem", "retrying", "stopped", "done"]),
+  kind: z.enum(["problem", "resumed", "retrying", "stopped", "done"]),
   key: z.string().min(1).max(120),
   assignment_id: Uuid,
   attempt: z.int().min(1).max(9),
