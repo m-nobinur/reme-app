@@ -165,6 +165,8 @@ export type ThreadProps = {
    * such as the card that says a build is ready. Announced when it appears.
    */
   after?: ReactNode
+  /** What waits on the owner, under the composer of an empty chat. */
+  updates?: ReactNode
   /**
    * Plays the conversation's opening message in the first time it is seen,
    * as a reply being written: the typing dot, then the words, then its
@@ -179,7 +181,10 @@ export type ThreadReveal = {
   seen: (messageId: string) => void
 }
 
-type ThreadSettings = Omit<ThreadProps, "components" | "autoFocus" | "after">
+type ThreadSettings = Omit<
+  ThreadProps,
+  "components" | "autoFocus" | "after" | "updates"
+>
 
 const EMPTY_COMPONENTS: ThreadComponents = {}
 const EMPTY_SETTINGS: ThreadSettings = {}
@@ -279,6 +284,7 @@ export const Thread: FC<ThreadProps> = ({
   quickActions,
   mode,
   after,
+  updates,
   reveal,
 }) => {
   // A stored conversation with nothing in it is as empty as a new chat, once
@@ -330,6 +336,7 @@ export const Thread: FC<ThreadProps> = ({
             autoFocus={autoFocus}
             isEmpty={isEmpty}
             stored={Boolean(stored)}
+            updates={updates}
           />
         </ComposerInputContext.Provider>
       </ThreadSettingsContext.Provider>
@@ -439,7 +446,8 @@ const ThreadRoot: FC<{
   autoFocus: boolean
   stored: boolean
   after: ReactNode
-}> = ({ isEmpty, autoFocus, stored, after }) => {
+  updates: ReactNode
+}> = ({ isEmpty, autoFocus, stored, after, updates }) => {
   const { Welcome = ThreadWelcome } = useContext(ThreadComponentsContext)
   // Where the question tray docks, above the composer; each question's call
   // sits in the transcript and draws itself here.
@@ -507,6 +515,7 @@ const ThreadRoot: FC<{
                 <div className="empty:hidden" ref={setTray} />
                 <Composer autoFocus={autoFocus} expanded={isEmpty} />
               </div>
+              {isEmpty ? updates : null}
               <AuiIf condition={(s) => isEmpty && s.composer.isEmpty}>
                 <ThreadSuggestions />
               </AuiIf>

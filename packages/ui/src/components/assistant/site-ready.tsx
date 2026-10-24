@@ -5,6 +5,7 @@ import {
   SpinnerGapIcon,
 } from "@phosphor-icons/react"
 import { useTraySlot } from "@workspace/ui/components/assistant/question-tray"
+import { UpdateRow } from "@workspace/ui/components/assistant/update-deck"
 import { Button } from "@workspace/ui/components/button"
 import {
   type Preview,
@@ -24,6 +25,7 @@ import { createPortal } from "react-dom"
  * optimistic: Publish waits for the server, and "approved" shows only once
  * the decision is recorded. Docked, it is held above the composer until the
  * site is published, as its first row, which opens the whole card.
+ * As a row, it is that row alone, for the new chat's updates.
  */
 export function SiteReady({
   title,
@@ -37,6 +39,7 @@ export function SiteReady({
   onApprove,
   onMakeChanges,
   docked = false,
+  row = false,
   className,
 }: {
   title: string
@@ -55,6 +58,8 @@ export function SiteReady({
   onMakeChanges: () => void
   /** The owner has written since it was put up: it sits above the composer. */
   docked?: boolean
+  /** Only its first row, unframed, for a deck of updates. */
+  row?: boolean
   className?: string
 }) {
   const id = useId()
@@ -65,7 +70,7 @@ export function SiteReady({
     <p
       className={cn(
         "flex items-center gap-2 text-muted-foreground text-sm",
-        inTray ? "p-3" : className
+        inTray || row ? "p-3" : className
       )}
       data-slot="site-ready"
     >
@@ -86,6 +91,48 @@ export function SiteReady({
       </span>
     </>
   )
+  const publish = (
+    <Button
+      className="relative shrink-0 overflow-visible"
+      disabled={pending}
+      onClick={onApprove}
+      size="sm"
+    >
+      {pending ? (
+        <SpinnerGapIcon aria-hidden className="animate-spin" />
+      ) : (
+        <RocketLaunchIcon aria-hidden />
+      )}
+      {pending ? "Publishing" : "Publish"}
+      {/* Waiting on the owner, like an unread mark. */}
+      {pending ? null : (
+        <span
+          aria-hidden
+          className="absolute -top-1 -right-1 size-2.5 rounded-full bg-foreground ring-2 ring-card"
+        />
+      )}
+    </Button>
+  )
+  const failed = error ? (
+    <p className="px-3 pb-3 text-[0.8125rem] text-destructive" role="alert">
+      {error}
+    </p>
+  ) : null
+  if (row) {
+    return approved ? (
+      done
+    ) : (
+      <div className="flex min-w-0 flex-1 flex-col" data-slot="site-ready-row">
+        <UpdateRow
+          action={publish}
+          icon={<SiteIcon src={pictures?.icon} />}
+          meta={meta}
+          title={title}
+        />
+        {failed}
+      </div>
+    )
+  }
   const shot = (
     <Shot
       alt="Your home page on a laptop"
@@ -120,26 +167,7 @@ export function SiteReady({
         ) : (
           name
         )}
-        <Button
-          className="relative shrink-0 overflow-visible"
-          disabled={pending}
-          onClick={onApprove}
-          size="sm"
-        >
-          {pending ? (
-            <SpinnerGapIcon aria-hidden className="animate-spin" />
-          ) : (
-            <RocketLaunchIcon aria-hidden />
-          )}
-          {pending ? "Publishing" : "Publish"}
-          {/* Waiting on the owner, like an unread mark. */}
-          {pending ? null : (
-            <span
-              aria-hidden
-              className="absolute -top-1 -right-1 size-2.5 rounded-full bg-foreground ring-2 ring-card"
-            />
-          )}
-        </Button>
+        {publish}
       </div>
       {inTray && !open ? null : (
         <>
@@ -166,11 +194,7 @@ export function SiteReady({
           </div>
         </>
       )}
-      {error ? (
-        <p className="px-3 pb-3 text-[0.8125rem] text-destructive" role="alert">
-          {error}
-        </p>
-      ) : null}
+      {failed}
     </article>
   )
   if (!inTray) return card

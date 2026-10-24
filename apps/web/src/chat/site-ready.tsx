@@ -29,14 +29,16 @@ const frame = getRouteApi("/app")
  * the panel's, which puts the composer in website change mode. Drawn in the
  * chat and on the Website page. `sentAt` is when the owner last wrote in the
  * chat; once that is after the review went up, the card docks above the
- * composer.
+ * composer. `row` draws only its first row, for the new chat's updates.
  */
 export function SiteReadyCard({
   className,
   sentAt = null,
+  row = false,
 }: {
   className?: string
   sentAt?: string | null
+  row?: boolean
 }) {
   const live = useLiveWorkspace()
   const { active } = frame.useLoaderData()
@@ -62,6 +64,7 @@ export function SiteReadyCard({
         approved
         className={className}
         docked={docked}
+        row={row}
         meta=""
         onApprove={() => undefined}
         onMakeChanges={requestChanges}
@@ -100,6 +103,7 @@ export function SiteReadyCard({
     <SiteReady
       className={className}
       docked={docked}
+      row={row}
       error={error}
       // Each message the owner sends closes an opened card, so the chat shows.
       key={sentAt}
@@ -117,11 +121,13 @@ export function SiteReadyCard({
 
 /** The ready card in the open conversation, which knows when the owner last wrote. */
 export function ChatSiteReadyCard() {
+  // An empty chat has it in its updates instead.
+  const empty = useAuiState((s) => s.thread.messages.length === 0)
   const sentAt = useAuiState((s) => {
     const at = s.thread.messages
       .filter((message) => message.role === "user")
       .at(-1)?.metadata.custom.createdAt
     return typeof at === "string" ? at : null
   })
-  return <SiteReadyCard className="mx-2" sentAt={sentAt} />
+  return empty ? null : <SiteReadyCard className="mx-2" sentAt={sentAt} />
 }

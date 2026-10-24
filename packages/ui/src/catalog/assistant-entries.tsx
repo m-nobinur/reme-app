@@ -45,6 +45,11 @@ import {
   ThreadPending,
 } from "@workspace/ui/components/assistant/thread-pending"
 import { TooltipIconButton } from "@workspace/ui/components/assistant/tooltip-icon-button"
+import {
+  UpdateDeck,
+  UpdateKindIcon,
+  UpdateRow,
+} from "@workspace/ui/components/assistant/update-deck"
 import { Button } from "@workspace/ui/components/button"
 import {
   Collapsible,
@@ -2400,6 +2405,70 @@ const assistantCatalog = [
         </div>
       )
     },
+  },
+  // A new chat's updates: the site to publish, a question and a reminder,
+  // one in front with the other two as edges under it.
+  {
+    name: "UpdateDeck",
+    render: () => (
+      <FixtureThread
+        height="h-[34rem]"
+        messages={[]}
+        settings={{
+          briefing: "Your first version is under way.",
+          updates: (
+            <UpdateDeck
+              updates={[
+                {
+                  id: "site",
+                  content: (
+                    <SiteReady
+                      meta="Not published · Today, 4:05 pm"
+                      onApprove={noop}
+                      onMakeChanges={noop}
+                      pictures={{
+                        laptop: KITCHEN,
+                        "laptop-2": KITCHEN,
+                        phone: KITCHEN,
+                        icon: ICON,
+                      }}
+                      preview="loading"
+                      row
+                      title="Brightclean website"
+                    />
+                  ),
+                },
+                {
+                  id: "question",
+                  content: (
+                    <UpdateRow
+                      action={
+                        <Button size="sm" variant="outline">
+                          Answer
+                        </Button>
+                      }
+                      icon={<UpdateKindIcon kind="question" />}
+                      meta="Sam asked"
+                      title="Which areas do you cover?"
+                    />
+                  ),
+                },
+                {
+                  id: "reminder",
+                  content: (
+                    <UpdateRow
+                      icon={<UpdateKindIcon kind="reminder" />}
+                      meta="Reminder"
+                      title="Call the window supplier"
+                    />
+                  ),
+                },
+              ]}
+            />
+          ),
+        }}
+      />
+    ),
   },
   {
     name: "RequestChange",

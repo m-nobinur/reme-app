@@ -255,3 +255,26 @@ test("a docked ready card is one row above the composer that opens in place", as
     docked.getByRole("button", { name: "Request changes" })
   ).toBeEnabled()
 })
+
+test("a new chat's updates are a deck of three that steps with its arrows", async ({
+  page,
+}) => {
+  await open(page, "UpdateDeck")
+  const deck = page.getByRole("region", { name: "Updates" })
+  await expect(deck.getByText("1/3")).toBeVisible()
+  await expect(
+    deck.getByRole("button", { name: "Publish", exact: true })
+  ).toBeVisible()
+  // Only the front one is there to read or press.
+  await expect(deck.getByText("Which areas do you cover?")).toBeHidden()
+  await deck.getByRole("button", { name: "Next update" }).click()
+  await expect(deck.getByText("2/3")).toBeVisible()
+  await expect(deck.getByText("Which areas do you cover?")).toBeVisible()
+  await expect(
+    deck.getByRole("button", { name: "Publish", exact: true })
+  ).toBeHidden()
+  await deck.getByRole("button", { name: "Previous update" }).click()
+  await deck.getByRole("button", { name: "Previous update" }).click()
+  await expect(deck.getByText("3/3")).toBeVisible()
+  await expect(deck.getByText("Call the window supplier")).toBeVisible()
+})

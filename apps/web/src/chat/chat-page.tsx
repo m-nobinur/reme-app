@@ -47,6 +47,7 @@ import { useConversationRuntime } from "./runtime"
 import { ChatSiteReadyCard } from "./site-ready"
 import { StillWorking } from "./still-working"
 import { trayServices } from "./tray-services"
+import { ChatUpdates } from "./updates"
 import { uploadPhotos } from "./upload"
 
 const frame = getRouteApi("/app")
@@ -238,6 +239,7 @@ export function ChatPage() {
                       quickActions={OWNER_QUICK_ACTIONS}
                       reveal={onboarding ? OPENING_REVEAL : undefined}
                       stored={id}
+                      updates={<ChatUpdates />}
                     />
                   </DomainPurchaseProvider>
                 </SaveDesignAnswerProvider>
