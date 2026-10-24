@@ -13,6 +13,7 @@ import {
   PushSubscribeRequest,
   RegistrantDetails,
   Reminder,
+  SetTimeZoneRequest,
   Timestamp,
   Uuid,
 } from "@workspace/contracts"
@@ -386,6 +387,13 @@ export const removePushSubscription = createServerFn({ method: "POST" })
   .validator((input: unknown) => ({ id: id(record(input).id) }))
   .handler(async ({ data }): Promise<WriteOutcome> => {
     return await source.unsubscribePush(data.id)
+  })
+
+/** The zone this browser keeps, for the org's check-ins, quiet hours and reminders. */
+export const syncTimeZone = createServerFn({ method: "POST" })
+  .validator((input: unknown) => SetTimeZoneRequest.parse(record(input)))
+  .handler(async ({ data }): Promise<void> => {
+    await source.setTimeZone(data.time_zone)
   })
 
 export const listConversations = createServerFn({ method: "GET" }).handler(

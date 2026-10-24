@@ -308,6 +308,8 @@ export type OwnerDataSource = {
     key: string
   ) => Promise<string | null>
   unsubscribePush: (id: string) => Promise<WriteOutcome>
+  /** The zone this browser keeps, for the org to take when it differs. */
+  setTimeZone: (zone: string) => Promise<void>
   /** A domain purchase's Checkout, or the api's refusal code. Keyed by `key`. */
   domainCheckout: (
     name: string,

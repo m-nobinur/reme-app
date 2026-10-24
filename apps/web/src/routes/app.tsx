@@ -59,6 +59,7 @@ import { OwnerSettings } from "@/lib/owner-settings"
 import { anchorOf } from "@/lib/reminders"
 import { tabBadge, useTabBadge } from "@/lib/tab-icon"
 import { requireOwner } from "@/lib/tenant"
+import { useSyncTimeZone } from "@/lib/time-zone"
 import { LiveWorkspaceProvider, useLiveWorkspaceState } from "@/lib/workspace"
 import {
   ChatLink,
@@ -180,6 +181,7 @@ function AppLayout() {
     seenAt,
   } = Route.useLoaderData()
   const live = useLiveWorkspaceState(workspace, readWorkspace)
+  useSyncTimeZone(active !== null)
   useTabBadge(
     avatarIcons(live.workspace?.assistantAvatar)?.large,
     tabBadge(live.workspace)

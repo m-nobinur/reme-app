@@ -731,6 +731,19 @@ async function unsubscribePush(id: string): Promise<WriteOutcome> {
   )
 }
 
+async function setTimeZone(zone: string): Promise<void> {
+  const response = await post(
+    "/time-zone",
+    { time_zone: zone },
+    crypto.randomUUID(),
+    "PUT"
+  )
+  // A refusal (an admin looking on, an unknown zone) leaves the org's zone as it was.
+  if (response.status >= 500) {
+    throw new Error(`apps/api answered ${response.status} for /time-zone`)
+  }
+}
+
 async function conversations(): Promise<Conversation[]> {
   const body = await get("/conversations")
   return body === null ? [] : ConversationList.parse(body).conversations
@@ -854,6 +867,7 @@ export const apiSource: OwnerDataSource = {
   pushKey,
   subscribePush,
   unsubscribePush,
+  setTimeZone,
   domainCheckout,
   domainStatus,
   googleConnect,
