@@ -331,15 +331,16 @@ export const thumbnailOf = (assetId: string | null | undefined) =>
     : null
 
 /**
- * The pictures of one version the api serves: its home page at each
- * screenshot width (390, 768, 1440, the orchestrator's `VIEWPORTS`) and its
- * icon. They live under the revision's own prefix, so they last exactly as
- * long as the revision does (retention deletes them with its files).
+ * The pictures of one version the api serves, cut from the orchestrator's
+ * screenshots of its home page: the first screen on a laptop, the screen
+ * below it, the first screen on a phone, and the site's icon. They live
+ * under the revision's own prefix, so they last exactly as long as the
+ * revision does (retention deletes them with its files).
  */
 export const REVISION_PICTURES = [
-  "home-390",
-  "home-768",
-  "home-1440",
+  "laptop",
+  "laptop-2",
+  "phone",
   "icon",
 ] as const
 
@@ -348,13 +349,14 @@ export const REVISION_PICTURE_PATH = new RegExp(
   `^/revisions/(${PHOTO_ID})/(${REVISION_PICTURES.join("|")})$`
 )
 
-/** One version's pictures as the app shows them: the home page at the three widths, smallest first, and the icon. */
-export const revisionPictures = (revisionId: string) => ({
-  screenshots: REVISION_PICTURES.slice(0, 3).map(
-    (name) => `/api/revisions/${revisionId}/${name}`
-  ),
-  icon: `/api/revisions/${revisionId}/icon`,
-})
+/** One version's pictures as the app shows them, by name. */
+export const revisionPictures = (revisionId: string) =>
+  Object.fromEntries(
+    REVISION_PICTURES.map((name) => [
+      name,
+      `/api/revisions/${revisionId}/${name}`,
+    ])
+  ) as Record<(typeof REVISION_PICTURES)[number], string>
 
 /**
  * One generated photo of a build while it is made: `drawing` until its slot

@@ -354,14 +354,14 @@ describe("lane and activity on a build", () => {
 
   it("serves a version's pictures at its own path, and nothing beside them", () => {
     const id = "0b9c4a1e-2f3d-4c5b-8a6e-7d8f9a0b1c2d"
-    const { screenshots, icon } = revisionPictures(id)
-    for (const src of [...screenshots, icon]) {
+    const pictures = revisionPictures(id)
+    for (const src of Object.values(pictures)) {
       expect(REVISION_PICTURE_PATH.test(src.replace(/^\/api/, "")), src).toBe(
         true
       )
     }
-    expect(screenshots.at(-1)).toBe(`/api/revisions/${id}/home-1440`)
-    for (const bad of ["home-1024", "icon.png", "../manifest.json", "dist/x"]) {
+    expect(pictures.laptop).toBe(`/api/revisions/${id}/laptop`)
+    for (const bad of ["home-1440", "icon.png", "../manifest.json", "dist/x"]) {
       expect(REVISION_PICTURE_PATH.test(`/revisions/${id}/${bad}`), bad).toBe(
         false
       )
