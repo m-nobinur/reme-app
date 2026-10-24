@@ -98,15 +98,15 @@ async function requestChange(
   if (!key) return keyMissing()
   const parsed = OwnerChangeRequest.safeParse(await readBody(request))
   if (!parsed.success) return invalid(parsed.error.issues)
-  const { text, change_kind, chat } = parsed.data
+  const { text, change_kind, chat: asked } = parsed.data
   const response = await startChange(env, kit, owner, text, key, change_kind)
-  if (chat && response.ok) {
+  if (asked && response.ok) {
     // The change has started: a note that cannot be posted must not undo it.
     await postChangeAsked(kit, {
       orgId: owner.orgId,
       key,
       text,
-      conversationId: chat.conversation_id,
+      conversationId: asked.conversation_id,
     }).catch((error: unknown) =>
       console.error(
         JSON.stringify({

@@ -90,8 +90,8 @@ describe("GET /revisions/:id/:picture", () => {
         : undefined,
     }) as unknown as Env
   const mine = { orgId: "org-a" } as Owner
-  const read = (images: boolean, picture: string, owner = mine) =>
-    readRevisionPicture(env(images), owner, rev, picture)
+  const read = (images: boolean, picture: string, as = mine) =>
+    readRevisionPicture(env(images), as, rev, picture)
 
   it("cuts each picture from the home page's shots, cached for good", async () => {
     for (const picture of ["laptop", "laptop-2", "phone"]) {
