@@ -3,8 +3,9 @@ import { open } from "./helpers"
 
 /**
  * Onboarding's opening message plays in the first time it is seen: the
- * typing dot a reply shows, then the words, then the card. It is never there
- * at first paint, and it is whole well inside two and a half seconds.
+ * typing dot a reply shows, then the words. It is never there at first paint,
+ * and it is whole well inside two and a half seconds. The business name it
+ * asks for is said in the composer, so no card follows.
  */
 
 const ENTRY = "ThreadReveal"
@@ -25,9 +26,7 @@ async function play(page: Page) {
   await root(page).getByRole("button", { name: "Play again" }).click()
 }
 
-test("the opening plays in: dot, then words, then the card", async ({
-  page,
-}) => {
+test("the opening plays in: dot, then words, and no card", async ({ page }) => {
   await play(page)
   // The first paint after it mounts has the dot and none of the words.
   await expect(dot(page)).toBeVisible()
@@ -39,9 +38,9 @@ test("the opening plays in: dot, then words, then the card", async ({
     OPENING.length
   )
   await expect(card(page)).toHaveCount(0)
-  // Whole, with its card, inside 2.5s of the press.
+  // Whole inside 2.5s of the press, and the answer goes in the composer.
   await expect(words(page)).toHaveText(OPENING, { timeout: 2500 })
-  await expect(card(page)).toBeVisible({ timeout: 500 })
+  await expect(card(page)).toHaveCount(0)
 })
 
 test("typing in the composer finishes the opening at once", async ({
@@ -50,7 +49,6 @@ test("typing in the composer finishes the opening at once", async ({
   await play(page)
   await root(page).getByLabel("Message input").fill("B")
   await expect(words(page)).toHaveText(OPENING, { timeout: 300 })
-  await expect(card(page)).toBeVisible()
 })
 
 test.describe("with reduced motion", () => {
