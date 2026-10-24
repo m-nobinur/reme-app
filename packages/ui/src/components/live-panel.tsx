@@ -1516,7 +1516,8 @@ function ComingUp({
       icon={icon}
       title={title}
     >
-      <ul className="flex flex-col divide-y divide-border">
+      {/* Under the heading's text, past its icon, so the rows read as the section's own. */}
+      <ul className="flex flex-col divide-y divide-border ps-6">
         {items.map((item) => (
           <li
             className="flex items-baseline justify-between gap-3 py-2 first:pt-0 last:pb-0"
