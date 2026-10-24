@@ -329,7 +329,7 @@ function StepDetail({
     case "fixing":
       return at === "now" ? (
         <p className={META}>
-          Putting right what the checks flagged, then checking again.
+          Fixing what the checks found, then checking again.
         </p>
       ) : null
     case "checking":

@@ -605,8 +605,7 @@ const JOBS: Record<JobKind, JobCopy> = {
         : ["Getting started"],
     done: (n) => [
       `${biz(n)} is set up`,
-      `${biz(n)} is all set`,
-      `${biz(n)} is ready to go`,
+      `Finished setting up ${n.business ?? "your business"}`,
     ],
     noun: "setup",
     pill: (n) => `getting to know ${n.business ?? "your business"}`,
@@ -617,10 +616,7 @@ const JOBS: Record<JobKind, JobCopy> = {
       is(n.assistant, "putting your website together"),
     ],
     next: () => ["Your website comes next", "Next, your website"],
-    done: () => [
-      "Your website is ready to look over",
-      "Your website is ready for a look",
-    ],
+    done: () => ["Your website is built", "Finished building your website"],
     noun: "website build",
     pill: () => "building your website",
   },
@@ -642,10 +638,7 @@ const JOBS: Record<JobKind, JobCopy> = {
       is(n.assistant, "updating your website"),
       is(n.assistant, "making your changes"),
     ],
-    done: () => [
-      "Your changes are ready to look over",
-      "Your changes are ready for a look",
-    ],
+    done: () => ["Your changes are made", "Finished making your changes"],
     noun: "update",
     pill: () => "updating your website",
   },
@@ -681,11 +674,11 @@ const JOBS: Record<JobKind, JobCopy> = {
 /** What a waiting segment waits for, after "waiting for". */
 const WAITING: Partial<Record<ActivitySegment["kind"], string>> = {
   onboarding: "your answer",
-  golive: "your approval",
+  golive: "you to publish",
   domain: "your DNS change",
   purchase: "your payment",
   google: "you to sign in",
-  review: "your approval",
+  review: "you to publish",
   question: "your answer",
 }
 
@@ -770,9 +763,7 @@ export function segmentLine(
       return step ?? (elapsed ? `${elapsed} so far` : null)
     }
     case "golive":
-      return waiting
-        ? "Your website is built and ready to publish"
-        : "Going live in a minute"
+      return waiting ? "Ready when you are" : "Going live in a minute"
     case "domain":
       return waiting
         ? `One change to make at ${cleanArg(extras.provider) ?? "your DNS provider"}`
@@ -905,7 +896,7 @@ export function stepLabel(segment: ActivitySegment, step: ActivityStep) {
     return ONBOARDING_ASKS[step.id]
   }
   if (segment.kind === "golive" && asked && step.id === "approval") {
-    return "Waiting for your approval"
+    return "Waiting for you to publish"
   }
   return STEP_LABELS[segment.kind]?.[step.id] ?? null
 }
@@ -960,15 +951,15 @@ export function rowLine(
       return title ? tidy(title) : "A reminder"
     case "checkin": {
       if (segment.state === "upcoming") {
-        return assistant ? `${assistant} checks in next` : "Next check-in"
+        return assistant ? `${assistant}'s next check-in` : "Next check-in"
       }
       const wrote = segment.steps.some(
         (s) => s.id === "message" && s.state === "done"
       )
       const who = assistant ?? "Your assistant"
       return wrote
-        ? `${who} checked in and wrote to you`
-        : `${who} checked in, nothing needed you`
+        ? `${who} checked in and messaged you`
+        : `${who} checked in, all clear`
     }
     case "purchase":
       if (segment.state === "upcoming") {

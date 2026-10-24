@@ -101,7 +101,7 @@ function Reminders() {
             Try again
           </Button>
         }
-        description="Reminders could not be loaded. Nothing was changed."
+        description="Couldn't load your reminders. Nothing was changed."
         icon={<ClockIcon />}
         role="alert"
         title="Something went wrong"
@@ -121,7 +121,7 @@ function Reminders() {
   return (
     <>
       <PageHeader
-        description={`What needs you now, and the reminders you or ${assistantOf(workspace)} wrote down, by when they are due.`}
+        description={`What needs you now, then reminders from you and ${assistantOf(workspace)}, soonest first.`}
         title="Reminders"
       />
 

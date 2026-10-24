@@ -157,29 +157,29 @@ it("words each rule and points it where it is acted on", () => {
   expect(needed).toEqual([
     {
       key: `approval-${APPROVAL}`,
-      title: "The new version is waiting for your review",
-      detail: "Closes today, 4:30 pm.",
+      title: "Your website is ready to publish",
+      detail: "Publish by today, 4:30 pm.",
       action: {
-        label: "Review the new version",
+        label: "Review and publish",
         focus: `approval-${APPROVAL}`,
       },
     },
     {
       key: `question-${REQUEST}`,
       title: "The Developer asked about weekday hours",
-      detail: "Open for more than 12 hours.",
+      detail: "Waiting for over 12 hours.",
       action: { label: "Answer in the panel", focus: `question-${REQUEST}` },
     },
     {
       key: `build-${BUILD}`,
-      title: "The new version is ready but not published",
-      detail: "Its preview has been ready for more than 12 hours.",
+      title: "Your changes aren't published yet",
+      detail: "Ready for over 12 hours.",
       action: { label: "Open in the panel", focus: `build-${BUILD}` },
     },
     {
       key: "facts",
       title: "Ellie still needs your phone number",
-      detail: "Your website is built from these. Tell Ellie in a chat.",
+      detail: "Your website uses these. Tell Ellie in a chat.",
       action: { label: "Tell Ellie", chat: true },
     },
   ])
@@ -206,7 +206,7 @@ it("words each rule and points it where it is acted on", () => {
     NOW
   ).needed
   expect(bare.map((each) => [each.title, each.detail])).toEqual([
-    ["The new version is waiting for your review", "Closes within a day."],
-    ["A question is waiting for your answer", "Open for more than 12 hours."],
+    ["Your website is ready to publish", "Publish within a day."],
+    ["A question is waiting for your answer", "Waiting for over 12 hours."],
   ])
 })

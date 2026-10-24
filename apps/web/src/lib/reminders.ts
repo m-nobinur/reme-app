@@ -128,14 +128,14 @@ const neededOf = (
     case "approval_expiring": {
       // Within a day of expiry, so the line always starts Today or Tomorrow.
       const closes = zone
-        ? `Closes ${dueLine(reminder.expires_at, zone, now).replace(/^T/, "t")}.`
-        : "Closes within a day."
+        ? `Publish by ${dueLine(reminder.expires_at, zone, now).replace(/^T/, "t")}.`
+        : "Publish within a day."
       return {
         key: `approval-${reminder.approval_id}`,
-        title: "The new version is waiting for your review",
+        title: "Your website is ready to publish",
         detail: closes,
         action: {
-          label: "Review the new version",
+          label: "Review and publish",
           focus: anchorOf.approval(reminder.approval_id),
         },
       }
@@ -147,7 +147,7 @@ const neededOf = (
         title: question
           ? `${question.raisedBy} asked about ${question.title.toLowerCase()}`
           : "A question is waiting for your answer",
-        detail: "Open for more than 12 hours.",
+        detail: "Waiting for over 12 hours.",
         action: {
           label: "Answer in the panel",
           focus: anchorOf.question(reminder.request_id),
@@ -157,8 +157,8 @@ const neededOf = (
     case "preview_unpublished":
       return {
         key: `build-${reminder.assignment_id}`,
-        title: "The new version is ready but not published",
-        detail: "Its preview has been ready for more than 12 hours.",
+        title: "Your changes aren't published yet",
+        detail: "Ready for over 12 hours.",
         action: {
           label: "Open in the panel",
           focus: anchorOf.build(reminder.assignment_id),
@@ -168,7 +168,7 @@ const neededOf = (
       return {
         key: "facts",
         title: `${leading(assistant)} still needs ${factsNeeded(reminder.keys)}`,
-        detail: `Your website is built from these. Tell ${assistant} in a chat.`,
+        detail: `Your website uses these. Tell ${assistant} in a chat.`,
         action: { label: `Tell ${assistant}`, chat: true },
       }
   }

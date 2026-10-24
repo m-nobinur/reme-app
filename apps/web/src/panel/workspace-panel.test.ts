@@ -109,7 +109,7 @@ const link = (name: string) =>
     (anchor) => anchor.textContent === name
   )
 
-it('sends "Continue getting started" to the onboarding conversation', async () => {
+it('sends "Finish setting up" to the onboarding conversation', async () => {
   loader.conversations = [
     {
       id: ONBOARDING,
@@ -118,7 +118,7 @@ it('sends "Continue getting started" to the onboarding conversation', async () =
     } as unknown as Conversation,
   ]
   await render()
-  const next = link("Continue getting started")
+  const next = link("Finish setting up")
   expect(next?.dataset.to).toBe("/app/c/$id")
   expect(JSON.parse(next?.dataset.params ?? "null")).toEqual({
     id: ONBOARDING,
@@ -169,7 +169,7 @@ it("says what finished today, and no waiting list when nothing waits", async () 
   await render()
   expect(container.textContent).toContain("Done today")
   expect(container.textContent).toContain(
-    "Your assistant checked in, nothing needed you"
+    "Your assistant checked in, all clear"
   )
   expect(container.textContent).not.toContain("Waiting on you")
 })
@@ -318,7 +318,7 @@ it("shows a reminder done at once, and puts it back when that fails", async () =
   await act(async () => write.reject(new Error("offline")))
   expect(row()?.getAttribute("data-state")).toBe("open")
   expect(row()?.querySelector('[role="alert"]')?.textContent).toBe(
-    "That did not go through. Try again."
+    "That didn't go through. Try again."
   )
   expect(live.refresh).not.toHaveBeenCalled()
 

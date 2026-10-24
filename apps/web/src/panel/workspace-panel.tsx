@@ -79,7 +79,7 @@ import { useFollowStep } from "./follow-step"
  * always what `/workspace` last said and never a guess about what a write did.
  */
 
-const FAILED = "That did not go through. Try again."
+const FAILED = "That didn't go through. Try again."
 
 /** Where a reminder can point: focusable by script, ringed from the keyboard. */
 const TARGET =
@@ -424,7 +424,7 @@ function Suggested({ suggestion }: { suggestion: Suggestion }) {
           params={{ id: suggestion.id }}
           to="/app/c/$id"
         >
-          Continue getting started
+          Finish setting up
         </Link>
       )
     case "start-website":
@@ -604,14 +604,12 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
   const tabList = useFocusAfterDone(upcoming)
   const activityTab = useRef<HTMLDivElement>(null)
   useFollowStep(activityTab)
-  const stale = failed
-    ? "This panel did not refresh. It tries again in a minute."
-    : null
+  const stale = failed ? "Couldn't refresh. Trying again in a minute." : null
 
   if (!workspace || !panel) {
     return (
       <WaitingOnYou
-        error={stale ?? "This panel did not load."}
+        error={stale ?? "Couldn't load this panel."}
         onRetry={refresh}
       />
     )

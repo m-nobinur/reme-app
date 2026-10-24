@@ -399,11 +399,8 @@ export function panelFor(input: PanelInput): Panel | null {
   if (approvals.length) {
     forOwner.push({
       tone,
-      lead:
-        approvals.length === 1
-          ? "A new version is ready"
-          : `${approvals.length} versions are ready`,
-      detail: "for your review",
+      lead: live ? "Your changes" : "Your website",
+      detail: live ? "are ready to publish" : "is ready to publish",
     })
   }
   const [question] = questions
@@ -438,7 +435,7 @@ export function panelFor(input: PanelInput): Panel | null {
       }
     }
     return workspace.open
-      ? { tone, lead: "Your first website", detail: "is under way" }
+      ? { tone, lead: "Your website", detail: "is in progress" }
       : { tone, lead: "Let's get your website started" }
   })()
 

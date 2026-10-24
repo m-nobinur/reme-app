@@ -700,7 +700,7 @@ const panelCatalog: Entry[] = [
         items={[
           {
             id: "checkin",
-            text: "Ellie checked in, nothing needed you",
+            text: "Ellie checked in, all clear",
             at: NOW_ISO,
           },
           {
@@ -887,11 +887,7 @@ const panelCatalog: Entry[] = [
   {
     name: "LiveLine waiting",
     render: () => (
-      <LiveLine
-        detail="for your review"
-        lead="A new version is ready"
-        tone="live"
-      />
+      <LiveLine detail="are ready to publish" lead="Your changes" tone="live" />
     ),
   },
   {
@@ -912,7 +908,7 @@ const panelCatalog: Entry[] = [
             { lead: "Ellie is building your website" },
             { lead: "Ellie is replying to a new enquiry" },
             { lead: "Ellie is drafting a quote" },
-            { lead: "A new version is ready", detail: "for your review" },
+            { lead: "Your changes", detail: "are ready to publish" },
           ]}
           tone="working"
         />
