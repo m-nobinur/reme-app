@@ -8,7 +8,7 @@ import type {
 import { describe, expect, it } from "vitest"
 import type { AttentionItem, Workspace } from "./api/types"
 import { EMPTY_WORKSPACE } from "./attention"
-import { type PanelInput, pageOf, panelFor } from "./panel"
+import { completedOf, type PanelInput, pageOf, panelFor } from "./panel"
 
 const ONBOARDING = "00000000-0000-4000-8000-00000000000a"
 const CHAT = "00000000-0000-4000-8000-00000000000b"
@@ -561,6 +561,28 @@ describe("later jobs", () => {
   it("opens the site once live, and offers nothing else", () => {
     expect(jobs?.suggestions).toEqual([
       { kind: "visit-site", host: HOST, url: URL_ },
+    ])
+  })
+})
+
+describe("completedOf", () => {
+  it("lists a first publish once, though the feed and the site's standing both hold it", () => {
+    const published = (id: string) =>
+      segment("golive", "done", along(GOLIVE_STEPS, GOLIVE_STEPS.length), {
+        id,
+        names: { host: HOST },
+      })
+    const rows = completedOf(
+      live({
+        activity: activity({
+          done: [published("golive")],
+          standing: [published("published")],
+        }),
+      }),
+      { orgId: ORG, assistant: "Ellie" }
+    )
+    expect(rows.map((row) => row.text)).toEqual([
+      `Website published at ${HOST}`,
     ])
   })
 })

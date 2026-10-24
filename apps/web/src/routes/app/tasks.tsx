@@ -33,6 +33,8 @@ const STATUS = {
 } as const
 
 type Task = {
+  /** Set for finished work, whose titles can repeat. */
+  id?: string
   title: string
   detail: string
   status: Status
@@ -134,6 +136,7 @@ function TasksPage() {
   const completed: Task[] =
     workspace && zone
       ? completedOf(workspace, ctx).map((each) => ({
+          id: each.id,
           title: each.text,
           detail: each.brief ?? "",
           status: "done",
@@ -165,7 +168,7 @@ function TasksPage() {
             </h2>
             <ul className="flex flex-col gap-2">
               {group.tasks.map((task) => (
-                <TaskRow key={`${task.title}${task.when ?? ""}`} task={task} />
+                <TaskRow key={task.id ?? task.title} task={task} />
               ))}
             </ul>
           </section>

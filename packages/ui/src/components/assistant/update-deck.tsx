@@ -5,7 +5,7 @@ import {
 } from "@workspace/ui/components/attention-card"
 import { Button } from "@workspace/ui/components/button"
 import { cn, META } from "@workspace/ui/lib/utils"
-import { type ReactNode, useEffect, useState } from "react"
+import { type ReactNode, useEffect, useRef, useState } from "react"
 
 export type Update = { id: string; content: ReactNode }
 
@@ -21,22 +21,29 @@ const LAYERS = ["inset-x-6 opacity-50", "inset-x-3 opacity-80"]
 /**
  * What waits on the owner, under a new chat's composer: the three that
  * matter most as a deck, one in front and the next two as edges under it.
- * The front one moves on by itself, slowly, and holds while the pointer or
- * focus is on the deck; the arrows step through it. Every update stays
+ * The front one moves on by itself, slowly, and holds while the pointer is
+ * on the deck or focus is in it; the arrows step through it. Every update stays
  * mounted, so one mid-publish keeps its state while another is in front.
  */
 export function UpdateDeck({ updates }: { updates: readonly Update[] }) {
   const deck = updates.slice(0, 3)
+  const root = useRef<HTMLElement>(null)
   const [at, setAt] = useState(0)
-  const [held, setHeld] = useState(false)
+  const [hovered, setHovered] = useState(false)
   const count = deck.length
   const front = count ? at % count : 0
   useEffect(() => {
-    if (held || count < 2) return
+    if (hovered || count < 2) return
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) return
-    const timer = setInterval(() => setAt((was) => was + 1), DWELL_MS)
+    const timer = setInterval(() => {
+      // Read at each turn, not from focus events: a focused card never goes
+      // inert, and a focused button that unmounts holds nothing.
+      if (!root.current?.contains(document.activeElement)) {
+        setAt((was) => was + 1)
+      }
+    }, DWELL_MS)
     return () => clearInterval(timer)
-  }, [held, count])
+  }, [hovered, count])
   if (!count) return null
   const step = (by: number) => setAt(front + by + count)
   return (
@@ -44,12 +51,9 @@ export function UpdateDeck({ updates }: { updates: readonly Update[] }) {
       aria-label="Updates"
       className="relative isolate"
       data-slot="update-deck"
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) setHeld(false)
-      }}
-      onFocus={() => setHeld(true)}
-      onPointerEnter={() => setHeld(true)}
-      onPointerLeave={() => setHeld(false)}
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+      ref={root}
       style={{ paddingBottom: `${(count - 1) * EDGE}rem` }}
     >
       {LAYERS.slice(3 - count).map((place, depth) => (

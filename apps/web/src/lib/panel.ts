@@ -229,6 +229,10 @@ const rowTitle = (workspace: Workspace, segment: ActivitySegment) =>
       null)
     : null
 
+/** One piece of work: a publish is listed by the feed and by where the site stands, under two ids. */
+const sameWork = (a: ActivitySegment, b: ActivitySegment) =>
+  a.id === b.id || (a.kind === "golive" && b.kind === "golive" && a.at === b.at)
+
 /**
  * Finished work, newest first, each once: the first run's finished
  * segments, the last day's, and where the site stands (its latest publish,
@@ -247,7 +251,7 @@ export function completedOf(
   ].filter(
     (segment, i, all) =>
       segment.state === "done" &&
-      all.findIndex((other) => other.id === segment.id) === i
+      all.findIndex((other) => sameWork(other, segment)) === i
   )
   return finished
     .sort((a, b) => Date.parse(b.at) - Date.parse(a.at))

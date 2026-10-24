@@ -648,21 +648,24 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
       ) : null}
     </Segment>
   )
+  const row = (each: SegmentView) => (
+    <div className="py-3" key={each.id}>
+      {segment(each)}
+    </div>
+  )
   const activity = (
     <>
+      {/* The first run, then every question and approval, never behind
+          "Show more": links and the pill focus them by their anchors. */}
       <WaitingOnYou
         error={stale}
         icon={PulseIcon}
-        limit={SHOWN.now}
+        limit={Math.max(SHOWN.now, panel.journey.length + panel.waiting.length)}
         onRetry={refresh}
         status={status}
         title="Now"
       >
-        {[...panel.journey, ...panel.now, ...panel.blocked].map((each) => (
-          <div className="py-3" key={each.id}>
-            {segment(each)}
-          </div>
-        ))}
+        {panel.journey.map(row)}
         {panel.waiting.map((item) =>
           item.kind === "approval" ? (
             <div
@@ -684,6 +687,7 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
             </div>
           ) : null
         )}
+        {[...panel.now, ...panel.blocked].map(row)}
       </WaitingOnYou>
       <ComingUp
         action={
