@@ -499,7 +499,7 @@ function PanelSegment({
       data-slot="panel-segment"
       data-state={folded ? "folded" : state}
     >
-      <div className="flex items-start gap-2">
+      <div className="flex items-start gap-1.5">
         <span aria-hidden className="mt-0.5 flex size-4 shrink-0">
           {folded ? (
             <CheckCircleIcon className="size-4 text-primary" weight="fill" />
@@ -561,8 +561,8 @@ function PanelSegment({
           inert={!shown}
         >
           <div className="min-h-0 overflow-hidden">
-            {/* Indented under the title, so the steps read as the segment's own. */}
-            <div className="flex flex-col gap-3 ps-6 pt-3">
+            {/* Set in a little from the header, so the steps read as the segment's own. */}
+            <div className="flex flex-col gap-3 ps-3 pt-2">
               <p aria-live="polite" className="sr-only">
                 {current && !done
                   ? `Now: ${current.said ?? current.label}.`
@@ -571,7 +571,7 @@ function PanelSegment({
               <ol aria-label="Steps" className="flex flex-col">
                 {shownSteps.map((step) => (
                   <li
-                    className="group relative flex gap-2 pb-3 last:pb-0"
+                    className="group relative flex gap-1.5 pb-3 last:pb-0"
                     data-state={step.state}
                     key={step.id}
                   >
