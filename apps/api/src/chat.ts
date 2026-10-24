@@ -24,7 +24,6 @@ import {
   newUlid,
   type OrgScopedDb,
   orgs,
-  recomputeOrgJobs,
   sql,
   type Tenancy,
 } from "@workspace/db"
@@ -158,6 +157,7 @@ import { notStarted } from "./onboarding-copy.ts"
 import { prepare, readPrepared } from "./onboarding-prepare.ts"
 import { type Pace, pace } from "./pacing.ts"
 import { ownerStaffId } from "./staff.ts"
+import { rememberZone } from "./time-zone.ts"
 import { readFacts } from "./workspace.ts"
 
 /**
@@ -711,23 +711,6 @@ async function gateAnswer(
 
 /** A typed reply already read, by Jev and code, with the state it was read on. */
 type Given = { onboarding: Onboarding; answer: Answer }
-
-/**
- * The org's time zone after a turn that carried the browser's. A new zone is
- * written and the org's recurring jobs move into it in the same transaction;
- * `next` is the earliest of them, for `lowerNextDue` after the commit.
- */
-async function rememberZone(
-  db: OrgScopedDb,
-  orgId: string,
-  browser: string | undefined
-): Promise<{ zone: string | null; next: Date | null }> {
-  const [org] = await db.select({ zone: orgs.timeZone }).from(orgs)
-  const held = org?.zone ?? null
-  if (!browser || browser === held) return { zone: held, next: null }
-  await db.update(orgs).set({ timeZone: browser }).where(eq(orgs.id, orgId))
-  return { zone: browser, next: await recomputeOrgJobs(db, browser) }
-}
 
 export async function chat(
   request: Request,

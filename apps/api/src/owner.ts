@@ -44,6 +44,7 @@ import { failure, invalid, keyMissing, readBody } from "./http.ts"
 import { drawLogos, keepLogo, readLogos } from "./logo.ts"
 import { pushRoute } from "./push.ts"
 import { reminderRoute } from "./reminders.ts"
+import { setTimeZone } from "./time-zone.ts"
 import { logoPalettes, paletteFromImage, reviewPhotos } from "./vision.ts"
 import { readActivity, readFacts, unchanged } from "./workspace.ts"
 import { readTaggedWorkspace } from "./workspace-tag.ts"
@@ -62,7 +63,7 @@ const LOGO_KEEP_PATH =
 
 /** The routes `ownerRoute` answers, for `index.ts` to resolve an org before. */
 export const OWNER_PATH =
-  /^\/(workspace|facts|assets(\/review)?|site\/media|photos\/[^/]+|revisions\/[^/]+\/[^/]+|logos(\/[^/]+\/keep)?|palettes\/from-(image|logo)|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback))?)?|reminders(\/[^/]+)?|memory(\/(undo|review))?|push\/(config|subscriptions(\/[^/]+)?)|domains\/[^/]+(\/checkout)?|google\/(connect|disconnect)|chat)$/
+  /^\/(workspace|facts|assets(\/review)?|site\/media|photos\/[^/]+|revisions\/[^/]+\/[^/]+|logos(\/[^/]+\/keep)?|palettes\/from-(image|logo)|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback))?)?|reminders(\/[^/]+)?|memory(\/(undo|review))?|push\/(config|subscriptions(\/[^/]+)?)|domains\/[^/]+(\/checkout)?|google\/(connect|disconnect)|time-zone|chat)$/
 
 async function setFacts(request: Request, kit: Tenancy, owner: Owner) {
   if (!idempotencyKey(request)) return keyMissing()
@@ -290,6 +291,9 @@ export async function ownerRoute(
   }
   if (pathname === "/google/disconnect" && method === "POST") {
     return disconnectGoogle(request, env, kit, owner)
+  }
+  if (pathname === "/time-zone" && method === "PUT") {
+    return setTimeZone(request, env, kit, owner)
   }
   if (pathname === "/chat" && method === "POST") {
     return chat(request, env, kit, owner, { waitUntil })
