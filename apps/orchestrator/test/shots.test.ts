@@ -29,8 +29,12 @@ const load = async () => {
   }
 }
 
-/** A browser whose home page is `heights[width]` px tall; records every screenshot and the page's loading step. */
-const browserOf = (heights: Record<number, number>) => {
+/** A browser whose home page is `heights[width]` px tall and whose menu links `linked` first; records every screenshot, the pages opened and the loading step. */
+const browserOf = (
+  heights: Record<number, number>,
+  linked: string | null = "/services/"
+) => {
+  const opened: string[] = []
   const shots: Shot[] = []
   const order: string[] = []
   /** The motion preference each width's page was opened with. */
@@ -39,6 +43,7 @@ const browserOf = (heights: Record<number, number>) => {
     shots,
     motion,
     order,
+    opened,
     browser: {
       newContext: async ({
         viewport,
@@ -48,7 +53,8 @@ const browserOf = (heights: Record<number, number>) => {
         reducedMotion?: string
       }) => ({
         newPage: async () => ({
-          goto: async () => {
+          goto: async (url: string) => {
+            opened.push(url)
             motion.push(reducedMotion)
           },
           evaluate: async (fn: { name: string }) => {
@@ -56,6 +62,7 @@ const browserOf = (heights: Record<number, number>) => {
               order.push("load")
               return undefined
             }
+            if (fn.name === "secondPage") return linked
             return heights[viewport.width]
           },
           screenshot: async (shot: Shot) => {
@@ -84,7 +91,10 @@ describe("the capture script", () => {
       "home-1440.png",
       "crop-1440-1.jpg",
       "crop-1440-2.jpg",
+      "page-1440.png",
     ])
+    // The second page is its first screen only.
+    expect(shots.at(-1)?.fullPage).toBeUndefined()
     const crops = shots.filter((s) => s.clip)
     expect(crops.every((s) => s.type === "jpeg" && s.quality === 70)).toBe(true)
     // No piece is taller than a screen, and the last one stops at the page's end.
@@ -119,12 +129,50 @@ describe("the capture script", () => {
   })
 })
 
+describe("the second page", () => {
+  it("opens the page the menu links at the laptop width only, and none when it links none", async () => {
+    const { shoot } = await load()
+    const linked = browserOf({ 390: 900, 768: 900, 1440: 900 })
+    await shoot(linked.browser, "http://x/", "/tmp", CROPS_MAX)
+    expect(linked.opened.filter((u) => u !== "http://x/")).toEqual([
+      "http://x/services/",
+    ])
+    const alone = browserOf({ 390: 900, 768: 900, 1440: 900 }, null)
+    await shoot(alone.browser, "http://x/", "/tmp", CROPS_MAX)
+    expect(alone.shots.some((s) => s.path.includes("page-"))).toBe(false)
+  })
+
+  it("picks a services page before the first link, and never the page it is on", async () => {
+    const { secondPage } = (await load()) as unknown as {
+      secondPage: () => string | null
+    }
+    const g = globalThis as Record<string, unknown>
+    const before = { document: g.document, location: g.location }
+    const links = (hrefs: string[]) => ({
+      querySelectorAll: () =>
+        hrefs.map((href) => ({ getAttribute: () => href })),
+    })
+    g.location = { pathname: "/", href: "http://x/", origin: "http://x" }
+    try {
+      g.document = links(["/", "/about/", "/our-services/", "https://y/z/"])
+      expect(secondPage()).toBe("/our-services/")
+      g.document = links(["/#top", "/about/"])
+      expect(secondPage()).toBe("/about/")
+      g.document = links(["/", "https://y/"])
+      expect(secondPage()).toBeNull()
+    } finally {
+      g.document = before.document
+      g.location = before.location
+    }
+  })
+})
+
 describe("motion in a capture", () => {
   it("opens every width with reduced motion, so no reveal is caught mid-fade", async () => {
     const { shoot } = await load()
     const { browser, motion } = browserOf({ 390: 900, 768: 900, 1440: 900 })
     await shoot(browser, "http://x/", "/tmp", CROPS_MAX)
-    expect(motion).toEqual(["reduce", "reduce", "reduce"])
+    expect(motion).toEqual(["reduce", "reduce", "reduce", "reduce"])
   })
 
   it("waits for clock-driven animations, and not for a scroll timeline", async () => {
@@ -181,7 +229,7 @@ describe("lazy images in a capture", () => {
     expect(order).toEqual([
       ...["load", "shot", "shot"],
       ...["load", "shot"],
-      ...["load", "shot", "shot"],
+      ...["load", "shot", "shot", "load", "shot"],
     ])
   })
 

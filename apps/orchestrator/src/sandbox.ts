@@ -4,6 +4,7 @@ import {
   CROP_WIDTHS,
   CROPS_MAX,
   cropKey,
+  PAGE_WIDTH,
   SHOTS_SCRIPT,
   VIEWPORTS,
 } from "./shots.ts"
@@ -454,7 +455,8 @@ export async function probe(env: Env, label: string): Promise<ProbeResult> {
 
 /**
  * The home page at three widths, from the build the sandbox still holds,
- * stored under the revision's prefix, and for the design critic its first
+ * stored under the revision's prefix, the first screen of a second page on
+ * a laptop for the review card, and for the design critic its first
  * viewport-height pieces per width (a full page is too tall for it). Taken after the preview is ready: the
  * owner's preview does not wait for them, and the review card shows them as
  * they land. Never throws; a screenshot that was not taken is a 404 the card
@@ -483,7 +485,7 @@ export async function takeScreenshots(
     ].join("; ")
     await sandbox.writeFile("/tmp/shots.mjs", SHOTS_SCRIPT)
     await sandbox.exec(
-      `cd ${SITE_ROOT} && rm -f /tmp/home-*.png /tmp/crop-*.png /tmp/crop-*.jpg; ${script}`,
+      `cd ${SITE_ROOT} && rm -f /tmp/home-*.png /tmp/page-*.png /tmp/crop-*.png /tmp/crop-*.jpg; ${script}`,
       { timeout: 120_000 }
     )
     const bytes = async (path: string) => {
@@ -500,6 +502,10 @@ export async function takeScreenshots(
         await env.SITES.put(`${prefix}screenshots/home-${w}.png`, full)
         taken++
       }
+    }
+    const page = await bytes(`/tmp/page-${PAGE_WIDTH}.png`)
+    if (page) {
+      await env.SITES.put(`${prefix}screenshots/page-${PAGE_WIDTH}.png`, page)
     }
     for (const w of CROP_WIDTHS) {
       const parts = await Promise.all(
