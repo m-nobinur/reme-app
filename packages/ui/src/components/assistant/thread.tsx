@@ -415,30 +415,53 @@ const AfterSlot: FC<{ children: ReactNode }> = ({ children }) => {
  * The footer docks over the end of the thread, and assistant-ui only follows
  * the bottom by itself when the viewport is not anchored to a turn, so a
  * tray that appears or grows under the last reply covers its last lines.
- * When the footer grows and the reader was at the bottom, scroll down by it.
+ * The space held below a pinned reply is sized once, so a footer that shrinks
+ * (a shorter tray step) or a viewport that resizes left it as blank under the
+ * reply, with Scroll to bottom over it. Either, with no run going, ends the
+ * pinned turn, as AfterSlot does. After any of them, a reader who was at the
+ * bottom is put back there.
  */
-function useKeepFooterClear(footer: HTMLElement | null) {
+const KeepFooterClear: FC<{ footer: HTMLElement | null }> = ({ footer }) => {
+  const store = useThreadViewportStore()
+  const aui = useAui()
   useEffect(() => {
     const viewport = footer?.closest<HTMLElement>(
       '[data-slot="aui_thread-viewport"]'
     )
     if (!footer || !viewport) return
+    const atBottom = () =>
+      viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop <= 4
+    // Read before a resize moves anything: scroll events come after it.
+    let pinned = atBottom()
+    const onScroll = () => {
+      pinned = atBottom()
+    }
     let height = footer.offsetHeight
+    let size = `${viewport.clientWidth}x${viewport.clientHeight}`
     const observer = new ResizeObserver(() => {
-      const grew = footer.offsetHeight - height
+      const shrank = footer.offsetHeight < height
+      const grew = footer.offsetHeight > height
       height = footer.offsetHeight
-      if (grew <= 0) return
-      const gap =
-        viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop
-      // The footer's growth lengthened the page by `grew`, so a reader who
-      // was at the bottom is now `grew` short of it.
-      if (gap <= grew + 4) {
+      const next = `${viewport.clientWidth}x${viewport.clientHeight}`
+      const resized = next !== size
+      size = next
+      if (!shrank && !grew && !resized) return
+      if ((shrank || resized) && !aui.thread().getState().isRunning) {
+        store.getState().setTopAnchorTurn(null)
+      }
+      if (pinned) {
         viewport.scrollTo({ top: viewport.scrollHeight, behavior: "instant" })
       }
     })
     observer.observe(footer)
-    return () => observer.disconnect()
-  }, [footer])
+    observer.observe(viewport)
+    viewport.addEventListener("scroll", onScroll, { passive: true })
+    return () => {
+      observer.disconnect()
+      viewport.removeEventListener("scroll", onScroll)
+    }
+  }, [footer, store, aui])
+  return null
 }
 
 const ThreadRoot: FC<{
@@ -453,7 +476,6 @@ const ThreadRoot: FC<{
   // sits in the transcript and draws itself here.
   const [tray, setTray] = useState<HTMLElement | null>(null)
   const [footer, setFooter] = useState<HTMLElement | null>(null)
-  useKeepFooterClear(footer)
 
   return (
     <TraySlotProvider value={tray}>
@@ -476,6 +498,7 @@ const ThreadRoot: FC<{
           className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll pe-(--panel-inset)"
         >
           <KeepTurnAnchor />
+          <KeepFooterClear footer={footer} />
           <div
             className={cn(
               "mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4",
