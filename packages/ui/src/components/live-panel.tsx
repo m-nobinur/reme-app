@@ -93,13 +93,13 @@ function PanelSection({
       className="flex flex-col gap-3 border-border not-first:border-t not-first:pt-4"
     >
       <div className="flex items-center justify-between gap-2">
-        <h2 className="flex items-center gap-1.5 font-semibold text-sm" id={id}>
+        <h2 className="flex items-center gap-1 font-semibold text-sm" id={id}>
           {Icon ? (
             <Icon aria-hidden className="size-4 text-muted-foreground" />
           ) : null}
           {title}
           {count ? (
-            <span className="rounded-full bg-muted px-1.5 font-medium text-[0.6875rem] text-muted-foreground tabular-nums leading-4">
+            <span className="ms-1 rounded-full bg-muted px-1.5 font-medium text-[0.6875rem] text-muted-foreground tabular-nums leading-4">
               {count}
             </span>
           ) : null}
@@ -499,7 +499,7 @@ function PanelSegment({
       data-slot="panel-segment"
       data-state={folded ? "folded" : state}
     >
-      <div className="flex items-start gap-1.5">
+      <div className="flex items-start gap-1">
         <span aria-hidden className="mt-0.5 flex size-4 shrink-0">
           {folded ? (
             <CheckCircleIcon className="size-4 text-primary" weight="fill" />
@@ -1517,7 +1517,7 @@ function ComingUp({
       title={title}
     >
       {/* Under the heading's text, past its icon, so the rows read as the section's own. */}
-      <ul className="flex flex-col divide-y divide-border ps-5.5">
+      <ul className="flex flex-col divide-y divide-border ps-5">
         {items.map((item) => (
           <li
             className="flex items-baseline justify-between gap-3 py-2 first:pt-0 last:pb-0"
