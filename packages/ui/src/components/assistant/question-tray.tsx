@@ -242,6 +242,7 @@ function DropTile({
   help,
   accept,
   multiple = false,
+  disabled,
   onFiles,
   icon,
   className,
@@ -251,6 +252,8 @@ function DropTile({
   help: string
   accept: readonly string[]
   multiple?: boolean
+  /** Shown dimmed by the caller; this takes the input out of the tab order too. */
+  disabled?: boolean
   onFiles: (files: File[]) => void
   icon: ReactNode
   className?: string
@@ -292,6 +295,7 @@ function DropTile({
         accept={accept.join(",")}
         aria-describedby={`${id}-help`}
         className="sr-only"
+        disabled={disabled}
         multiple={multiple}
         onChange={(event) => {
           onFiles(Array.from(event.currentTarget.files ?? []))

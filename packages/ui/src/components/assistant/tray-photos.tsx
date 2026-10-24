@@ -278,6 +278,7 @@ function TrayPhotos({
               <DropTile
                 accept={limits.accept}
                 className="min-h-40 flex-col justify-center text-center [&>span]:items-center"
+                disabled={Boolean(busy)}
                 help={`${typesText(limits.accept)}, up to ${sizeText(limits.max_bytes)} each. Sharp, well-lit shots work best.`}
                 icon={<UploadSimpleIcon />}
                 multiple={limits.max_files > 1}
