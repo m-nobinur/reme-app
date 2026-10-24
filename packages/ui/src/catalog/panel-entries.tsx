@@ -620,7 +620,8 @@ const panelCatalog: Entry[] = [
           steps: [
             stepAt("planning", "done"),
             stepAt("photos", "now", { count: { done: 2, total: 4 } }),
-            ...along(WEBSITE, 2).slice(2),
+            // The steps after photos, still to come.
+            ...along(WEBSITE, 1).slice(2),
           ],
         },
         {
