@@ -299,12 +299,16 @@ function StatusLine({
   bare?: boolean
 }) {
   const shown = useSettled({ kind, state, label }, delay)
+  // The words it mounted with: a line that loads finished, as a stored
+  // message's does, arrives still, and only a change wipes in.
+  const [first] = useState(label)
   const active = shown?.state === "working" || shown?.state === "waiting"
   const ticking = useClock(active && elapsed === undefined, since)
   if (!shown) return null
 
   const clock = elapsed ?? ticking
   const working = shown.state === "working"
+  const reveal = working || shown.label !== first
   const Icon =
     shown.state === "done"
       ? CheckCircleIcon
@@ -349,7 +353,10 @@ function StatusLine({
       >
         {/* The wipe holds its own mask, outside the one the shimmer sets. */}
         <span
-          className="inline-block motion-safe:animate-status-reveal"
+          className={cn(
+            "inline-block",
+            reveal && "motion-safe:animate-status-reveal"
+          )}
           key={shown.label}
         >
           <span
