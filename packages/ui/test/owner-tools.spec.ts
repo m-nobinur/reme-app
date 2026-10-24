@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright"
 import { expect, type Page, test } from "@playwright/test"
-import { open, WCAG } from "./helpers"
+import { open, settled, WCAG } from "./helpers"
 
 /**
  * Onboarding's two cards: a fact asked for with its own inputs, and the
@@ -15,9 +15,9 @@ test("a question shows its own inputs, the email filled in, Skip only where allo
   await open(page, "AskFact")
   const forms = asks(page).locator("form")
   await expect(forms).toHaveCount(2)
-  await expect(page.getByLabel("Email address")).toHaveValue(
-    "hello@brightclean.test"
-  )
+  await expect(
+    page.getByRole("textbox", { name: "Email address" })
+  ).toHaveValue("hello@brightclean.test")
   await expect(forms.nth(1).getByLabel("Opening time")).toHaveAttribute(
     "type",
     "time"
@@ -168,6 +168,7 @@ for (const theme of ["light", "dark"] as const) {
         page,
       }) => {
         await open(page, entry, width, theme)
+        await settled(page)
         const results = await new AxeBuilder({ page })
           .include(`[data-entry="${entry}"]`)
           .withTags(WCAG)

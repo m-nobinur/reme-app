@@ -20,8 +20,29 @@ export async function open(
   await expect(page.locator(`[data-entry="${entry}"]`)).toBeVisible()
 }
 
-/** Scans the whole page, and records each violation under `label` without stopping. */
+/**
+ * Waits for every finite animation to end, so contrast is read on settled
+ * colours and not mid-fade. A transition cut short rejects `finished`, which
+ * counts as settled; looping animations never end and are not waited on.
+ */
+export async function settled(page: Page) {
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter(
+          (animation) =>
+            animation.effect?.getTiming().iterations !==
+            Number.POSITIVE_INFINITY
+        )
+        .map((animation) => animation.finished.catch(() => null))
+    )
+  )
+}
+
+/** Scans the whole page once it has settled, and records each violation under `label` without stopping. */
 export async function axe(page: Page, label: string) {
+  await settled(page)
   const results = await new AxeBuilder({ page }).withTags(WCAG).analyze()
   expect
     .soft(
