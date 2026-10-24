@@ -11,20 +11,18 @@ import {
   GlobeIcon,
   ImageIcon,
   MinusCircleIcon,
-  PaintBrushIcon,
   RocketLaunchIcon,
   SpinnerGapIcon,
   WarningCircleIcon,
 } from "@phosphor-icons/react"
-import {
-  type ApprovalTarget,
-  type AssignmentState,
-  type AvatarId,
-  type Blueprint,
-  type BuildActivity,
-  type BuildPhoto,
-  type DecisionRequest,
-  GOAL_MAX,
+import type {
+  ApprovalTarget,
+  AssignmentState,
+  AvatarId,
+  Blueprint,
+  BuildActivity,
+  BuildPhoto,
+  DecisionRequest,
 } from "@workspace/contracts"
 import { AssistantAvatar } from "@workspace/ui/components/assistant-avatar"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
@@ -743,10 +741,6 @@ function WaitingOnYou({
   )
 }
 
-/** A change note's text box, for a review and for the live site alike. */
-const NOTE =
-  "min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base outline-none transition-[color,box-shadow] placeholder:text-muted-foreground focus-visible:border-field-focus disabled:opacity-50 md:text-sm"
-
 const pending = (busy: boolean, idle: string, working: string) =>
   busy ? working : idle
 
@@ -1146,7 +1140,7 @@ function PreviewLink({
     <a
       className={cn(
         buttonVariants({
-          variant: "ghost",
+          variant: iconOnly ? "outline" : "ghost",
           size: iconOnly ? "icon-sm" : "sm",
         }),
         "shrink-0"
@@ -1375,73 +1369,38 @@ function ShotStack({
 
 /**
  * A version ready to publish, in the panel, under the step that waits on
- * it: the site and Preview, the version as a stack of screenshots,
- * then Approve and publish, which sends exactly the revision the approval is
- * bound to, and Request changes, which opens a note in place.
+ * it: the version as a stack of screenshots, then Approve and publish, which
+ * sends exactly the revision the approval is bound to, and Preview.
  */
 function ApprovalItem({
   target,
   title,
-  meta,
   pictures,
   preview,
   onApprove,
-  onAskForChanges,
   onRetryPreview,
-  pending: busy = null,
+  pending: busy = false,
   error = null,
-  defaultAsking = false,
 }: {
   target: ApprovalTarget
+  /** The site's name, which names the card for a screen reader. */
   title: string
-  meta: string
   pictures: VersionPictures | null
   preview: Preview | "loading" | "error"
   onApprove: (decision: DecisionRequest) => void
-  onAskForChanges: (text: string) => void
   /** Reads the preview again after it could not be read. */
   onRetryPreview?: (() => Promise<void>) | undefined
-  pending?: "approve" | "change" | null
+  pending?: boolean
   error?: string | null
-  /** Open on the change note, for the catalog. */
-  defaultAsking?: boolean
 }) {
-  const id = useId()
   const decision = approvalDecision(target, "approved")
-  const [opened, setOpened] = useState(defaultAsking)
-  // A change in flight keeps its note on screen until the build is read
-  // again.
-  const asking = opened || busy === "change"
-  const note = useRef<HTMLTextAreaElement>(null)
-  const pressed = useRef(false)
-  useEffect(() => {
-    if (opened && pressed.current) note.current?.focus()
-    pressed.current = false
-  }, [opened])
-
-  const send = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const text = note.current?.value.trim() ?? ""
-    if (text) onAskForChanges(text)
-  }
-
   return (
     <article
-      aria-labelledby={`${id}-title`}
+      aria-label={title}
       className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3"
       data-revision={decision?.revision_id}
       data-slot="approval-item"
     >
-      <div className="flex items-center gap-2.5">
-        <SiteIcon className="size-8" src={pictures?.icon} />
-        <div className="flex min-w-0 flex-1 flex-col">
-          <h3 className="font-medium text-sm" id={`${id}-title`}>
-            {title}
-          </h3>
-          <p className={META}>{meta}</p>
-        </div>
-        <PreviewLink iconOnly onRetry={onRetryPreview} preview={preview} />
-      </div>
       <ShotStack
         pictures={pictures}
         url={typeof preview === "object" ? preview.url : null}
@@ -1449,56 +1408,19 @@ function ApprovalItem({
       <div className="flex gap-2">
         <Button
           className="flex-1"
-          disabled={!decision || busy !== null}
+          disabled={!decision || busy}
           onClick={() => decision && onApprove(decision)}
           size="sm"
         >
-          {busy === "approve" ? (
+          {busy ? (
             <SpinnerGapIcon aria-hidden className="animate-spin" />
           ) : (
             <RocketLaunchIcon aria-hidden />
           )}
-          {pending(busy === "approve", "Approve and publish", "Publishing")}
+          {pending(busy, "Approve and publish", "Publishing")}
         </Button>
-        <Button
-          aria-expanded={asking}
-          aria-label="Request changes"
-          disabled={busy !== null}
-          onClick={() => {
-            pressed.current = true
-            setOpened(!opened)
-          }}
-          size="icon-sm"
-          title="Request changes"
-          variant="outline"
-        >
-          <PaintBrushIcon aria-hidden />
-        </Button>
+        <PreviewLink iconOnly onRetry={onRetryPreview} preview={preview} />
       </div>
-      {asking ? (
-        <form className="flex flex-col gap-2" onSubmit={send}>
-          <label className="font-medium text-sm" htmlFor={`${id}-change`}>
-            What should change?
-          </label>
-          <textarea
-            className={NOTE}
-            disabled={busy !== null}
-            id={`${id}-change`}
-            maxLength={GOAL_MAX}
-            name="change"
-            ref={note}
-            required
-          />
-          <Button
-            className="self-start"
-            disabled={busy !== null}
-            size="sm"
-            type="submit"
-          >
-            {pending(busy === "change", "Send changes", "Sending")}
-          </Button>
-        </form>
-      ) : null}
       {error ? (
         <p className="text-[0.8125rem] text-destructive" role="alert">
           {error}

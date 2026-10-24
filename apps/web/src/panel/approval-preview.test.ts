@@ -34,9 +34,7 @@ const render = (extra: object) =>
   mount(
     createElement(ApprovalItem, {
       title: "Brightclean website",
-      meta: "Not published",
       onApprove: () => undefined,
-      onAskForChanges: () => undefined,
       target: REVISION,
       pictures: {
         laptop: "a.png",

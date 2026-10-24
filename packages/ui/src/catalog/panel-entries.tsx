@@ -126,9 +126,7 @@ const question = (spec: AnswerSpec, title: string, extra = {}) => (
 
 const approval = (extra = {}) => (
   <ApprovalItem
-    meta="Not published · Today, 4:05 pm"
     onApprove={noop}
-    onAskForChanges={noop}
     pictures={PICTURES}
     preview={PREVIEW}
     target={REVISION}
@@ -786,15 +784,7 @@ const panelCatalog: Entry[] = [
   },
   {
     name: "ApprovalItem pending",
-    render: () => approval({ pending: "approve" }),
-  },
-  {
-    name: "ApprovalItem asking",
-    render: () => approval({ defaultAsking: true }),
-  },
-  {
-    name: "ApprovalItem change pending",
-    render: () => approval({ pending: "change" }),
+    render: () => approval({ pending: true }),
   },
   {
     name: "ApprovalItem error",

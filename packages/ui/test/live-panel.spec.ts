@@ -71,15 +71,15 @@ test("closing time cannot be set before opening time", async ({ page }) => {
   await expect(page.getByLabel("Closing time")).toHaveAttribute("min", "08:00")
 })
 
-test("an approval names the site and no version or id beside Approve and publish", async ({
+test("an approval is named for the site and shows no version or id", async ({
   page,
 }) => {
   await open(page, "ApprovalItem", 400)
   const approve = page.getByRole("button", { name: "Approve and publish" })
   await expect(approve).toBeEnabled()
-  await expect(page.getByText("Brightclean", { exact: true })).toBeVisible()
+  await expect(page.getByRole("article", { name: "Brightclean" })).toBeVisible()
   await expect(page.getByText(/2f41c9ab|ID |Version \d/)).toHaveCount(0)
-  // The front screenshot only: the ones behind and the icon are decoration.
+  // The front screenshot only: the ones behind are decoration.
   await expect(page.getByRole("img")).toHaveCount(1)
   await expect(page.getByRole("link", { name: /Preview/ })).toHaveAttribute(
     "target",
@@ -102,15 +102,6 @@ test("a preview still loading is a skeleton, never a spinner", async ({
   await open(page, "ApprovalItem loading", 400)
   await expect(page.locator('[data-slot="skeleton"]')).toHaveCount(1)
   await expect(page.getByRole("link")).toHaveCount(0)
-})
-
-test("Request changes opens a note in place, focused", async ({ page }) => {
-  await open(page, "ApprovalItem", 400)
-  const ask = page.getByRole("button", { name: "Request changes" })
-  await ask.click()
-  await expect(ask).toHaveAttribute("aria-expanded", "true")
-  await expect(page.getByLabel("What should change?")).toBeFocused()
-  await expect(page.getByRole("dialog")).toHaveCount(0)
 })
 
 test("Stop asks once, in place, and offers to keep building", async ({
@@ -224,14 +215,6 @@ test("a Stop in flight keeps the question up, with its buttons disabled", async 
   await expect(
     page.getByRole("button", { name: "Keep building" })
   ).toBeDisabled()
-})
-
-test("a change in flight keeps its note up", async ({ page }) => {
-  await open(page, "ApprovalItem change pending", 400)
-  await expect(page.getByLabel("What should change?")).toBeDisabled()
-  await expect(page.getByRole("button", { name: "Sending" })).toBeDisabled()
-  // Nothing on the page took focus on its own.
-  await expect(page.locator("body")).toBeFocused()
 })
 
 test("the site thumbnail holds its space while it loads, and a broken one leaves the text", async ({

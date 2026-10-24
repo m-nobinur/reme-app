@@ -53,7 +53,6 @@ import {
 } from "react"
 import {
   answerQuestion,
-  askForChanges,
   cancelBuild,
   completeReminder,
   decideApproval,
@@ -70,7 +69,6 @@ import {
   type Suggestion,
 } from "@/lib/panel"
 import { anchorOf, noteOf, upcomingNotes } from "@/lib/reminders"
-import { versionMeta } from "@/lib/site-ready"
 import { useLiveWorkspace } from "@/lib/workspace"
 import { useFollowStep } from "./follow-step"
 
@@ -217,21 +215,16 @@ export const liveThumbnail = (live: Workspace["liveRevision"]): Thumbnail =>
 
 export function Decidable({
   item,
-  live = null,
   refresh,
   announce,
 }: {
   item: Approval
-  /** The version live now, which says whether this one is the first. */
-  live?: number | null
   refresh: Refresh
   announce: Announce
 }) {
-  const { pending, error, run } = useWrite<"approve" | "change">(refresh)
+  const { pending, error, run } = useWrite<"approve">(refresh)
   const [preview, retryPreview] = usePreview(item.request.assignment_id)
   const business = useSiteName()
-  const [keys] = useState(attemptKeys)
-  const { id: conversationId } = useParams({ strict: false })
 
   const approve = (decision: DecisionRequest) =>
     void run("approve", async () => {
@@ -249,27 +242,12 @@ export function Decidable({
       return { done: true }
     })
 
-  const change = (text: string) =>
-    void run("change", async () => {
-      const outcome = await askForChanges({
-        data: { text, key: keys.key(text), chat: { conversationId } },
-      })
-      if (outcome.done) {
-        keys.done()
-        announce("Sent. A new version replaces this one.")
-      }
-      return outcome
-    })
-
   return (
     <ApprovalItem
       error={error}
-      // The step above says it waits; the card names the site and its state.
-      meta={versionMeta(live, item.raisedAt, null)}
       onApprove={approve}
-      onAskForChanges={change}
       onRetryPreview={retryPreview}
-      pending={pending}
+      pending={pending !== null}
       pictures={
         item.request.target.kind === "revision"
           ? revisionPictures(item.request.target.revision_id)
@@ -658,7 +636,6 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
           <Decidable
             announce={setStatus}
             item={panel.review}
-            live={live}
             refresh={refresh}
           />
         </div>
@@ -691,12 +668,7 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
               key={item.id}
               tabIndex={-1}
             >
-              <Decidable
-                announce={setStatus}
-                item={item}
-                live={live}
-                refresh={refresh}
-              />
+              <Decidable announce={setStatus} item={item} refresh={refresh} />
             </div>
           ) : item.kind === "question" ? (
             <div

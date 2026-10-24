@@ -230,11 +230,9 @@ it("disables Approve for anything but a revision", () => {
         createElement(ApprovalItem, {
           target: generated,
           title: "t",
-          meta: "m",
           pictures: null,
           preview: "loading",
           onApprove: noop,
-          onAskForChanges: noop,
         })
       )
       // The attribute, not the class: every button's class names `disabled:`.
