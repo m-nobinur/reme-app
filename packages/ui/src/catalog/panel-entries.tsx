@@ -69,9 +69,19 @@ const page = (width: number) =>
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${width * 1.4}" viewBox="0 0 30 42"><rect width="30" height="6" fill-opacity=".45"/><rect x="3" y="10" width="18" height="3" fill-opacity=".7"/><rect x="3" y="16" width="24" height="1.5" fill-opacity=".3"/><rect x="3" y="19" width="22" height="1.5" fill-opacity=".3"/><rect x="3" y="22" width="16" height="1.5" fill-opacity=".3"/></svg>`
   )}`
 
-const PREVIEW = {
-  url: "https://preview.example.invalid/",
-  screenshots: [page(390), page(768), page(1440)],
+const PREVIEW = { url: "https://preview.example.invalid/" }
+
+/** The site's mark as the starter draws it: its initial in a rounded square, grey by opacity alone. */
+export const ICON = `data:image/svg+xml,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill-opacity=".25"/><text x="16" y="22" font-family="sans-serif" font-size="17" font-weight="600" fill-opacity=".8" text-anchor="middle">B</text></svg>`
+)}`
+
+/** A version's pictures: the drawn page on a laptop, twice, and on a phone, and its icon. */
+const PICTURES = {
+  laptop: page(1440),
+  "laptop-2": page(1440),
+  phone: page(390),
+  icon: ICON,
 }
 
 /** A next step as `apps/web` draws it: an outline button, link or not. */
@@ -119,9 +129,10 @@ const approval = (extra = {}) => (
     meta="Not published · Today, 4:05 pm"
     onApprove={noop}
     onAskForChanges={noop}
+    pictures={PICTURES}
     preview={PREVIEW}
     target={REVISION}
-    title="Brightclean website"
+    title="Brightclean"
     {...extra}
   />
 )
@@ -771,7 +782,7 @@ const panelCatalog: Entry[] = [
   { name: "ApprovalItem", render: () => approval() },
   {
     name: "ApprovalItem loading",
-    render: () => approval({ preview: "loading" }),
+    render: () => approval({ preview: "loading", pictures: null }),
   },
   {
     name: "ApprovalItem pending",

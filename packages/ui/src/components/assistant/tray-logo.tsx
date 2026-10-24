@@ -43,6 +43,7 @@ import {
   useTrayServices,
 } from "@workspace/ui/components/assistant/tray-services"
 import { Button } from "@workspace/ui/components/button"
+import { Diffusing } from "@workspace/ui/components/diffusing"
 import { Input } from "@workspace/ui/components/input"
 import { FIELD_ERROR } from "@workspace/ui/lib/card"
 import { checkPhotos, sizeText, typesText } from "@workspace/ui/lib/upload"
@@ -208,52 +209,6 @@ function Dots({ colors }: { colors: readonly string[] }) {
           style={{ backgroundColor: color }}
         />
       ))}
-    </span>
-  )
-}
-
-/**
- * A design still drawing: the chosen colours as soft light under a grain,
- * drifting and sharpening while it waits. Still under reduced motion.
- */
-function Diffusing({
-  colors,
-  paper,
-  delay,
-}: {
-  colors: readonly string[]
-  paper: string
-  delay: number
-}) {
-  const id = useId()
-  const [first = paper, second = first] = colors
-  return (
-    <span
-      aria-hidden
-      className="relative block aspect-square overflow-hidden rounded-lg"
-      style={{ backgroundColor: paper }}
-    >
-      <span
-        className="absolute -inset-1/4 opacity-60 blur-xl motion-safe:animate-logo-diffuse"
-        style={{
-          animationDelay: `${-delay}ms`,
-          backgroundImage: `radial-gradient(circle at 35% 35%, ${first}, transparent 55%), radial-gradient(circle at 65% 70%, ${second}, transparent 55%)`,
-        }}
-      />
-      <svg
-        className="absolute inset-0 size-full opacity-30 mix-blend-multiply"
-        role="presentation"
-      >
-        <filter id={id}>
-          <feTurbulence
-            baseFrequency="0.85"
-            numOctaves="2"
-            stitchTiles="stitch"
-            type="fractalNoise"
-          />
-        </filter>
-        <rect filter={`url(#${id})`} height="100%" width="100%" />
-      </svg>
     </span>
   )
 }
@@ -959,6 +914,7 @@ function TrayLogo({
                           />
                         ) : (
                           <Diffusing
+                            className="aspect-square rounded-lg"
                             colors={colors.length > 0 ? colors : [stops[2]]}
                             delay={place * 1500}
                             paper={paper}

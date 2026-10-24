@@ -49,6 +49,7 @@ import { Route as ApiPhotosIdRouteImport } from './routes/api.photos.$id'
 import { Route as AppConversationIndexRouteImport } from './routes/app/_conversation/index'
 import { Route as AppDomainsReturnRouteImport } from './routes/app/domains.return'
 import { Route as ApiLogosIdKeepRouteImport } from './routes/api.logos.$id.keep'
+import { Route as ApiRevisionsIdPictureRouteImport } from './routes/api.revisions.$id.$picture'
 import { Route as AppConversationCIdRouteImport } from './routes/app/_conversation/c.$id'
 
 const IndexRoute = IndexRouteImport.update({
@@ -250,6 +251,11 @@ const ApiLogosIdKeepRoute = ApiLogosIdKeepRouteImport.update({
   path: '/$id/keep',
   getParentRoute: () => ApiLogosRoute,
 } as any)
+const ApiRevisionsIdPictureRoute = ApiRevisionsIdPictureRouteImport.update({
+  id: '/api/revisions/$id/$picture',
+  path: '/api/revisions/$id/$picture',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppConversationCIdRoute = AppConversationCIdRouteImport.update({
   id: '/c/$id',
   path: '/c/$id',
@@ -296,6 +302,7 @@ export interface FileRoutesByFullPath {
   '/app/domains/return': typeof AppDomainsReturnRoute
   '/app/': typeof AppConversationIndexRoute
   '/api/logos/$id/keep': typeof ApiLogosIdKeepRoute
+  '/api/revisions/$id/$picture': typeof ApiRevisionsIdPictureRoute
   '/app/c/$id': typeof AppConversationCIdRoute
 }
 export interface FileRoutesByTo {
@@ -337,6 +344,7 @@ export interface FileRoutesByTo {
   '/api/photos/$id': typeof ApiPhotosIdRoute
   '/app/domains/return': typeof AppDomainsReturnRoute
   '/api/logos/$id/keep': typeof ApiLogosIdKeepRoute
+  '/api/revisions/$id/$picture': typeof ApiRevisionsIdPictureRoute
   '/app/c/$id': typeof AppConversationCIdRoute
 }
 export interface FileRoutesById {
@@ -381,6 +389,7 @@ export interface FileRoutesById {
   '/app/domains/return': typeof AppDomainsReturnRoute
   '/app/_conversation/': typeof AppConversationIndexRoute
   '/api/logos/$id/keep': typeof ApiLogosIdKeepRoute
+  '/api/revisions/$id/$picture': typeof ApiRevisionsIdPictureRoute
   '/app/_conversation/c/$id': typeof AppConversationCIdRoute
 }
 export interface FileRouteTypes {
@@ -425,6 +434,7 @@ export interface FileRouteTypes {
     | '/app/domains/return'
     | '/app/'
     | '/api/logos/$id/keep'
+    | '/api/revisions/$id/$picture'
     | '/app/c/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -466,6 +476,7 @@ export interface FileRouteTypes {
     | '/api/photos/$id'
     | '/app/domains/return'
     | '/api/logos/$id/keep'
+    | '/api/revisions/$id/$picture'
     | '/app/c/$id'
   id:
     | '__root__'
@@ -509,6 +520,7 @@ export interface FileRouteTypes {
     | '/app/domains/return'
     | '/app/_conversation/'
     | '/api/logos/$id/keep'
+    | '/api/revisions/$id/$picture'
     | '/app/_conversation/c/$id'
   fileRoutesById: FileRoutesById
 }
@@ -538,6 +550,7 @@ export interface RootRouteChildren {
   ApiPalettesFromImageRoute: typeof ApiPalettesFromImageRoute
   ApiPalettesFromLogoRoute: typeof ApiPalettesFromLogoRoute
   ApiPhotosIdRoute: typeof ApiPhotosIdRoute
+  ApiRevisionsIdPictureRoute: typeof ApiRevisionsIdPictureRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -822,6 +835,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiLogosIdKeepRouteImport
       parentRoute: typeof ApiLogosRoute
     }
+    '/api/revisions/$id/$picture': {
+      id: '/api/revisions/$id/$picture'
+      path: '/api/revisions/$id/$picture'
+      fullPath: '/api/revisions/$id/$picture'
+      preLoaderRoute: typeof ApiRevisionsIdPictureRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/app/_conversation/c/$id': {
       id: '/app/_conversation/c/$id'
       path: '/c/$id'
@@ -928,6 +948,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPalettesFromImageRoute: ApiPalettesFromImageRoute,
   ApiPalettesFromLogoRoute: ApiPalettesFromLogoRoute,
   ApiPhotosIdRoute: ApiPhotosIdRoute,
+  ApiRevisionsIdPictureRoute: ApiRevisionsIdPictureRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

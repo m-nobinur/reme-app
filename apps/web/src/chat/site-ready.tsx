@@ -1,4 +1,5 @@
 import { getRouteApi } from "@tanstack/react-router"
+import { revisionPictures } from "@workspace/contracts"
 import { SiteReady } from "@workspace/ui/components/assistant/site-ready"
 import { useState } from "react"
 import { decideApproval } from "@/lib/api/server"
@@ -52,6 +53,7 @@ export function SiteReadyCard({ className }: { className?: string }) {
         meta=""
         onApprove={() => undefined}
         onMakeChanges={requestChanges}
+        pictures={null}
         preview="loading"
         title={title}
       />
@@ -91,6 +93,7 @@ export function SiteReadyCard({ className }: { className?: string }) {
       onMakeChanges={requestChanges}
       onRetryPreview={retryPreview}
       pending={pending}
+      pictures={revisionPictures(review.revisionId)}
       preview={preview}
       title={title}
     />

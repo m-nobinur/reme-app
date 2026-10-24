@@ -1,6 +1,8 @@
 import {
   ArrowSquareOutIcon,
   CaretDownIcon,
+  CaretLeftIcon,
+  CaretRightIcon,
   ChatCircleDotsIcon,
   CheckCircleIcon,
   CheckIcon,
@@ -9,7 +11,7 @@ import {
   GlobeIcon,
   ImageIcon,
   MinusCircleIcon,
-  PencilSimpleIcon,
+  PaintBrushIcon,
   RocketLaunchIcon,
   SpinnerGapIcon,
   WarningCircleIcon,
@@ -26,6 +28,7 @@ import {
 } from "@workspace/contracts"
 import { AssistantAvatar } from "@workspace/ui/components/assistant-avatar"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
+import { Diffusing } from "@workspace/ui/components/diffusing"
 import { Field } from "@workspace/ui/components/field"
 import { Skeleton } from "@workspace/ui/components/skeleton"
 import { StatusIcon } from "@workspace/ui/components/status-line"
@@ -747,7 +750,15 @@ const NOTE =
 const pending = (busy: boolean, idle: string, working: string) =>
   busy ? working : idle
 
-function Retry({ onRetry }: { onRetry: () => Promise<void> }) {
+function Retry({
+  onRetry,
+  label = "Try again",
+  busyLabel = "Trying again",
+}: {
+  onRetry: () => Promise<void>
+  label?: string
+  busyLabel?: string
+}) {
   const [busy, setBusy] = useState(false)
   return (
     <Button
@@ -760,7 +771,7 @@ function Retry({ onRetry }: { onRetry: () => Promise<void> }) {
       size="sm"
       variant="outline"
     >
-      {pending(busy, "Try again", "Trying again")}
+      {pending(busy, label, busyLabel)}
     </Button>
   )
 }
@@ -987,219 +998,312 @@ function approvalDecision(
     : null
 }
 
-/** A signed preview: the page, and its home page at three widths. */
-type Preview = { url: string; screenshots: string[] }
+/** A signed preview of a version: the page to open. */
+type Preview = { url: string }
 
-/** The laptop width of a preview's screenshots, the one a card shows. */
-const LAPTOP = 2
+/** One version's pictures: its home page's first screen on a laptop, the screen below, its first screen on a phone, and its icon. */
+type VersionPictures = Record<"laptop" | "laptop-2" | "phone" | "icon", string>
 
 /** Screenshots land about 10 s after the preview does; look again every 5 s for half a minute. */
 const SHOT_RETRY_MS = 5000
 const SHOT_TRIES = 6
 
+/** The light a screenshot drifts in while it waits: the brand, faint, on the muted tile. */
+const SHOT_LIGHT = [
+  "color-mix(in oklab, var(--primary) 45%, transparent)",
+  "color-mix(in oklab, var(--muted-foreground) 30%, transparent)",
+]
+
 /**
- * The home page on a laptop. Until the image exists it is a quiet block of
- * the same size, never a broken image; a screenshot still missing after the
- * last look tells the caller.
+ * A screenshot of a version's home page. Until the image exists it is soft
+ * light drifting on a muted tile, never a broken image, and it fades in once
+ * it loads; still missing after the last look, it says there is no preview.
+ * No `src` yet is a wait that never gives up.
  */
 function Shot({
   src,
-  onGiveUp,
+  alt = "",
+  className,
 }: {
   src: string | undefined
-  onGiveUp: () => void
+  alt?: string
+  /** Its shape: the ratio and corners of where it sits. */
+  className?: string
 }) {
   const [tries, setTries] = useState(0)
   const [failed, setFailed] = useState(false)
   const [loaded, setLoaded] = useState(false)
+  const gaveUp = failed && tries + 1 >= SHOT_TRIES
   // A failed look waits before the next: a 404 comes back at once, and
   // retrying on it straight away spent every look in about a second.
   useEffect(() => {
-    if (loaded || !failed) return
-    if (tries + 1 >= SHOT_TRIES) {
-      onGiveUp()
-      return
-    }
+    if (loaded || !failed || tries + 1 >= SHOT_TRIES) return
     const timer = setTimeout(() => {
       setFailed(false)
       setTries(tries + 1)
     }, SHOT_RETRY_MS)
     return () => clearTimeout(timer)
-  }, [loaded, failed, tries, onGiveUp])
+  }, [loaded, failed, tries])
   return (
-    <div className="relative aspect-[16/9] bg-muted">
-      {loaded ? null : <Skeleton className="absolute inset-0 rounded-none" />}
-      <img
-        alt="Your home page on a laptop"
-        className={cn(
-          "size-full object-cover object-top",
-          !loaded && "invisible"
-        )}
-        height={180}
-        // A fresh element per look, so the browser asks again.
-        key={tries}
-        loading="lazy"
-        onError={() => setFailed(true)}
-        onLoad={() => setLoaded(true)}
-        ref={loadedWhenCached(setLoaded)}
-        src={src}
-        width={320}
+    <span
+      className={cn("relative block overflow-hidden bg-muted", className)}
+      data-slot="shot"
+    >
+      {loaded ? null : (
+        <Diffusing
+          className="absolute inset-0"
+          colors={SHOT_LIGHT}
+          motion="motion-safe:animate-shot-drift"
+          paper="var(--muted)"
+        >
+          {gaveUp && alt ? (
+            <span className={META}>No preview to show yet</span>
+          ) : null}
+        </Diffusing>
+      )}
+      {src && !gaveUp ? (
+        <img
+          alt={alt}
+          className={cn(
+            "relative size-full object-cover object-top transition-opacity duration-300 motion-reduce:transition-none",
+            loaded ? "opacity-100" : "opacity-0"
+          )}
+          height={250}
+          // A fresh element per look, so the browser asks again.
+          key={tries}
+          loading="lazy"
+          onError={() => setFailed(true)}
+          onLoad={() => setLoaded(true)}
+          ref={loadedWhenCached(setLoaded)}
+          src={src}
+          width={400}
+        />
+      ) : null}
+    </span>
+  )
+}
+
+/** The built site's own icon, or a globe until it loads and if it never does. */
+function SiteIcon({
+  src,
+  className,
+}: {
+  src: string | undefined
+  className?: string
+}) {
+  const [broken, setBroken] = useState<string | null>(null)
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        // A quarter round, the starter's own icon outline, so its corners never show past it.
+        "grid size-9 shrink-0 place-items-center overflow-hidden rounded-[25%] bg-primary/10 text-primary",
+        className
+      )}
+    >
+      {src && src !== broken ? (
+        <img
+          alt=""
+          className="size-full object-cover"
+          onError={() => setBroken(src)}
+          src={src}
+        />
+      ) : (
+        <GlobeIcon className="size-1/2" />
+      )}
+    </span>
+  )
+}
+
+/** Preview, opening the version in a new tab; a read that failed can be tried again. */
+function PreviewLink({
+  preview,
+  onRetry,
+  iconOnly = false,
+}: {
+  preview: Preview | "loading" | "error"
+  onRetry?: (() => Promise<void>) | undefined
+  /** The icon alone, named for a screen reader and on hover. */
+  iconOnly?: boolean
+}) {
+  if (preview === "loading") {
+    return (
+      <Skeleton
+        className={cn("h-8 shrink-0 rounded-md", iconOnly ? "w-8" : "w-22")}
       />
+    )
+  }
+  if (preview === "error") {
+    return onRetry ? (
+      <Retry
+        busyLabel="Reading it again"
+        label="Retry preview"
+        onRetry={onRetry}
+      />
+    ) : null
+  }
+  return (
+    <a
+      className={cn(
+        buttonVariants({
+          variant: "ghost",
+          size: iconOnly ? "icon-sm" : "sm",
+        }),
+        "shrink-0"
+      )}
+      href={preview.url}
+      rel="noopener noreferrer"
+      target="_blank"
+      title={iconOnly ? "Preview" : undefined}
+    >
+      <span className={iconOnly ? "sr-only" : undefined}>Preview</span>
+      <span className="sr-only"> (opens in a new tab)</span>
+      <ArrowSquareOutIcon aria-hidden />
+    </a>
+  )
+}
+
+/** The deck's cards, the home page first. */
+const SLIDES = [
+  { picture: "laptop", alt: "Your home page" },
+  { picture: "laptop-2", alt: "Further down your home page" },
+  { picture: "phone", alt: "Your home page on a phone" },
+] as const
+
+/** Where a card sits by how far back it is: raised, narrower and dimmer the further back, so only its top edge shows. */
+const DEPTH = [
+  "z-30 opacity-100",
+  "z-20 -translate-y-2 scale-[0.94] opacity-70",
+  "z-10 -translate-y-4 scale-[0.88] opacity-40",
+]
+
+/** A round control at the deck's side: quiet until it is hovered where there is a pointer, always there on touch. Centred by its margins, since a pressed button nudges its own translate. */
+const ARROW =
+  "absolute inset-y-0 z-40 my-auto size-7 rounded-full bg-background/60 shadow-sm backdrop-blur-sm transition-opacity focus-visible:opacity-100 motion-reduce:transition-none pointer-fine:opacity-0 pointer-fine:group-hover/stack:opacity-100"
+
+/** A phone around its screenshot, on the card's muted ground. */
+function PhoneMock({ src, alt }: { src: string | undefined; alt: string }) {
+  return (
+    // Clear of the dots along the card's foot.
+    <span className="grid size-full place-items-center bg-muted pt-2.5 pb-7">
+      <span className="aspect-[390/844] h-full overflow-hidden rounded-[0.9rem] border-[3px] border-foreground/80 bg-background shadow-md">
+        <Shot alt={alt} className="size-full" src={src} />
+      </span>
+    </span>
+  )
+}
+
+/**
+ * The version as a small deck: the home page in front, the screen below it
+ * and the home page on a phone edging out behind. The arrows at its sides
+ * move a card to the front, which grows into place while the one it
+ * replaces settles to the back; the dots say where it is. The front card
+ * opens the preview once there is one.
+ */
+function ShotStack({
+  pictures,
+  url,
+}: {
+  pictures: VersionPictures | null
+  url: string | null
+}) {
+  const [front, setFront] = useState(0)
+  const step = (by: number) =>
+    setFront((at) => (at + by + SLIDES.length) % SLIDES.length)
+  return (
+    <div className="group/stack relative pt-4" data-slot="shot-stack">
+      <div className="relative aspect-[16/10]">
+        {SLIDES.map((slide, at) => {
+          const depth = (at - front + SLIDES.length) % SLIDES.length
+          const shown = depth === 0
+          const src = pictures?.[slide.picture]
+          const alt = shown ? slide.alt : ""
+          const card =
+            slide.picture === "phone" ? (
+              <PhoneMock alt={alt} src={src} />
+            ) : (
+              <Shot alt={alt} className="size-full" src={src} />
+            )
+          return (
+            <div
+              aria-hidden={!shown}
+              className={cn(
+                "absolute inset-0 origin-top overflow-hidden rounded-lg border border-border bg-muted shadow-sm transition-[transform,opacity] duration-300 ease-out motion-reduce:transition-none",
+                DEPTH[depth]
+              )}
+              inert={!shown}
+              key={slide.picture}
+            >
+              {url && shown ? (
+                // The same preview as the link above it, so a screen reader hears it once.
+                <a
+                  className="block size-full"
+                  href={url}
+                  rel="noopener noreferrer"
+                  tabIndex={-1}
+                  target="_blank"
+                >
+                  {card}
+                </a>
+              ) : (
+                card
+              )}
+            </div>
+          )
+        })}
+        <Button
+          aria-label="The previous picture"
+          className={cn(ARROW, "left-1.5")}
+          onClick={() => step(-1)}
+          size="icon-xs"
+          variant="ghost"
+        >
+          <CaretLeftIcon aria-hidden />
+        </Button>
+        <Button
+          aria-label="The next picture"
+          className={cn(ARROW, "right-1.5")}
+          onClick={() => step(1)}
+          size="icon-xs"
+          variant="ghost"
+        >
+          <CaretRightIcon aria-hidden />
+        </Button>
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 bottom-1.5 z-40 flex justify-center"
+        >
+          <span className="flex items-center gap-1.5 rounded-full bg-background/60 px-2 py-[5px] backdrop-blur-sm">
+            {SLIDES.map((slide, at) => (
+              <span
+                className={cn(
+                  "h-1.5 rounded-full transition-all duration-300 motion-reduce:transition-none",
+                  at === front ? "w-3 bg-foreground" : "w-1.5 bg-foreground/40"
+                )}
+                key={slide.picture}
+              />
+            ))}
+          </span>
+        </div>
+        <p aria-live="polite" className="sr-only">
+          {SLIDES[front]?.alt}
+        </p>
+      </div>
     </div>
   )
 }
 
 /**
- * A version waiting for the owner, as one compact card: what it is, a
- * preview, then Publish and Request changes side by side. With `shot`, the
- * home page sits under the header and opens the preview too. A preview that
- * could not be read says so and can be read again, with no link implied.
- */
-function VersionCard({
-  title,
-  meta,
-  preview,
-  onRetryPreview,
-  shot = false,
-  onPublish,
-  onRequestChanges,
-  requesting,
-  revision,
-  pending: busy = null,
-  error = null,
-  children,
-}: {
-  title: string
-  meta: string
-  preview: Preview | "loading" | "error"
-  /** Reads the preview again after it could not be read. */
-  onRetryPreview?: (() => Promise<void>) | undefined
-  /** Show the home page on a laptop under the header. */
-  shot?: boolean
-  /** Null when there is no revision this card can publish. */
-  onPublish: (() => void) | null
-  onRequestChanges: () => void
-  /** Whether a change note is open under the buttons. */
-  requesting?: boolean | undefined
-  /** The revision Publish sends, on the card for a reader to check, never printed. */
-  revision?: string | undefined
-  pending?: "approve" | "change" | null
-  error?: string | null
-  /** Under the buttons: the change note, where the card has one. */
-  children?: ReactNode
-}) {
-  const id = useId()
-  const ready = typeof preview === "object" ? preview : null
-  // Keyed by the preview, so a fresh read shows its own screenshot.
-  const [broken, setBroken] = useState<Preview | null>(null)
-  return (
-    <article
-      aria-labelledby={`${id}-title`}
-      className="flex flex-col gap-3 overflow-hidden rounded-xl border border-border bg-card p-3"
-      data-revision={revision}
-      data-slot="version-card"
-    >
-      <div className="flex items-center gap-3">
-        {/* The site's mark on the wide card; the panel's narrow one keeps its width for the name. */}
-        {shot ? (
-          <span
-            aria-hidden
-            className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"
-          >
-            <GlobeIcon className="size-5" />
-          </span>
-        ) : null}
-        <div className="flex min-w-0 flex-1 flex-col">
-          <h3 className="font-medium text-sm" id={`${id}-title`}>
-            {title}
-          </h3>
-          <p className={META}>{meta}</p>
-        </div>
-        {ready ? (
-          <a
-            className={cn(
-              buttonVariants({ variant: "ghost", size: "sm" }),
-              "shrink-0"
-            )}
-            href={ready.url}
-            rel="noopener noreferrer"
-            target="_blank"
-          >
-            Preview
-            <span className="sr-only"> (opens in a new tab)</span>
-            <ArrowSquareOutIcon aria-hidden />
-          </a>
-        ) : preview === "loading" ? (
-          <Skeleton className="h-8 w-20 rounded-md" />
-        ) : null}
-      </div>
-      {shot && ready && broken !== ready ? (
-        // The same preview as the link above, so a screen reader hears it once.
-        <a
-          className="-mx-3 block border-border border-y"
-          href={ready.url}
-          rel="noopener noreferrer"
-          tabIndex={-1}
-          target="_blank"
-        >
-          <Shot
-            onGiveUp={() => setBroken(ready)}
-            src={ready.screenshots[LAPTOP]}
-          />
-        </a>
-      ) : null}
-      {preview === "error" ? (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <p className={META}>
-            The preview isn't available yet. Try again in a moment.
-          </p>
-          {onRetryPreview ? <Retry onRetry={onRetryPreview} /> : null}
-        </div>
-      ) : null}
-      {/* Each as wide as its words, then sharing what is left, so the two stay on one line in the panel. */}
-      <div className="flex flex-wrap gap-2 *:flex-auto">
-        <Button
-          disabled={!onPublish || busy !== null}
-          onClick={() => onPublish?.()}
-          size="sm"
-        >
-          {busy === "approve" ? (
-            <SpinnerGapIcon aria-hidden className="animate-spin" />
-          ) : (
-            <RocketLaunchIcon aria-hidden />
-          )}
-          {pending(busy === "approve", "Publish", "Publishing")}
-        </Button>
-        <Button
-          aria-expanded={requesting}
-          disabled={busy !== null}
-          onClick={onRequestChanges}
-          size="sm"
-          variant="outline"
-        >
-          <PencilSimpleIcon aria-hidden />
-          Request changes
-        </Button>
-      </div>
-      {children}
-      {error ? (
-        <p className="text-[0.8125rem] text-destructive" role="alert">
-          {error}
-        </p>
-      ) : null}
-    </article>
-  )
-}
-
-/**
- * A version ready to publish, in the panel: the version card, whose Publish
- * sends exactly the revision the approval is bound to, and whose Request
- * changes opens a note in place.
+ * A version ready to publish, in the panel, under the step that waits on
+ * it: the site and Preview, the version as a stack of screenshots,
+ * then Approve and publish, which sends exactly the revision the approval is
+ * bound to, and Request changes, which opens a note in place.
  */
 function ApprovalItem({
   target,
   title,
   meta,
+  pictures,
   preview,
   onApprove,
   onAskForChanges,
@@ -1211,6 +1315,7 @@ function ApprovalItem({
   target: ApprovalTarget
   title: string
   meta: string
+  pictures: VersionPictures | null
   preview: Preview | "loading" | "error"
   onApprove: (decision: DecisionRequest) => void
   onAskForChanges: (text: string) => void
@@ -1241,21 +1346,55 @@ function ApprovalItem({
   }
 
   return (
-    <VersionCard
-      error={error}
-      meta={meta}
-      onPublish={decision ? () => onApprove(decision) : null}
-      onRequestChanges={() => {
-        pressed.current = true
-        setOpened(!opened)
-      }}
-      onRetryPreview={onRetryPreview}
-      pending={busy}
-      preview={preview}
-      requesting={asking}
-      revision={decision?.revision_id}
-      title={title}
+    <article
+      aria-labelledby={`${id}-title`}
+      className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3"
+      data-revision={decision?.revision_id}
+      data-slot="approval-item"
     >
+      <div className="flex items-center gap-2.5">
+        <SiteIcon className="size-8 rounded-md" src={pictures?.icon} />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <h3 className="font-medium text-sm" id={`${id}-title`}>
+            {title}
+          </h3>
+          <p className={META}>{meta}</p>
+        </div>
+        <PreviewLink iconOnly onRetry={onRetryPreview} preview={preview} />
+      </div>
+      <ShotStack
+        pictures={pictures}
+        url={typeof preview === "object" ? preview.url : null}
+      />
+      <div className="flex gap-2">
+        <Button
+          className="flex-1"
+          disabled={!decision || busy !== null}
+          onClick={() => decision && onApprove(decision)}
+          size="sm"
+        >
+          {busy === "approve" ? (
+            <SpinnerGapIcon aria-hidden className="animate-spin" />
+          ) : (
+            <RocketLaunchIcon aria-hidden />
+          )}
+          {pending(busy === "approve", "Approve and publish", "Publishing")}
+        </Button>
+        <Button
+          aria-expanded={asking}
+          aria-label="Request changes"
+          disabled={busy !== null}
+          onClick={() => {
+            pressed.current = true
+            setOpened(!opened)
+          }}
+          size="icon-sm"
+          title="Request changes"
+          variant="outline"
+        >
+          <PaintBrushIcon aria-hidden />
+        </Button>
+      </div>
       {asking ? (
         <form className="flex flex-col gap-2" onSubmit={send}>
           <label className="font-medium text-sm" htmlFor={`${id}-change`}>
@@ -1280,7 +1419,12 @@ function ApprovalItem({
           </Button>
         </form>
       ) : null}
-    </VersionCard>
+      {error ? (
+        <p className="text-[0.8125rem] text-destructive" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </article>
   )
 }
 
@@ -1441,9 +1585,8 @@ type Thumbnail = { src: string } | "loading" | null
  * The site as it stands: the version that is live, a link to it and, beside
  * the link, "Request changes", which the app answers by putting the chat's
  * composer into website change mode. The host is the link's title rather
- * than its text, since a long one would not fit. The thumbnail is the
- * panel's only image, at a fixed ratio so nothing moves when it arrives; one
- * that fails to load leaves the text alone.
+ * than its text, since a long one would not fit. The thumbnail holds its
+ * ratio while it loads, so nothing moves when it arrives.
  */
 function YourWebsite({
   host,
@@ -1460,34 +1603,17 @@ function YourWebsite({
   /** Starts a change to the live site in the chat. */
   onRequestChanges?: (() => void) | undefined
 }) {
-  const [broken, setBroken] = useState<string | null>(null)
-  // Once a screenshot has shown, a newer one loads behind it: the browser
-  // keeps painting the old image until the new one is ready.
-  const [loaded, setLoaded] = useState(false)
   const shot = live ? thumbnail : null
   const change = live && onRequestChanges
   return (
     <div className="flex flex-col gap-3" data-slot="your-website">
-      {shot === "loading" ? (
-        <Skeleton className="aspect-[16/10] w-full rounded-md" />
-      ) : shot && shot.src !== broken ? (
-        <div className="relative aspect-[16/10] w-full">
-          {loaded ? null : <Skeleton className="absolute inset-0 rounded-md" />}
-          <img
-            alt="Your website's home page on a laptop"
-            className={cn(
-              "size-full rounded-md border border-border object-cover object-top",
-              !loaded && "invisible"
-            )}
-            height={200}
-            loading="lazy"
-            onError={() => setBroken(shot.src)}
-            onLoad={() => setLoaded(true)}
-            ref={loadedWhenCached(setLoaded)}
-            src={shot.src}
-            width={320}
-          />
-        </div>
+      {shot ? (
+        <Shot
+          alt="Your website's home page on a laptop"
+          className="aspect-[16/10] w-full rounded-md border border-border"
+          key={shot === "loading" ? "loading" : shot.src}
+          src={shot === "loading" ? undefined : shot.src}
+        />
       ) : null}
       <p className="flex items-center gap-2 text-sm">
         <span
@@ -1637,7 +1763,7 @@ function NextSteps({ children }: { children?: ReactNode }) {
   )
 }
 
-export type { Preview, SegmentStep, Thumbnail }
+export type { Preview, SegmentStep, Thumbnail, VersionPictures }
 export {
   AnswerInputs,
   ApprovalItem,
@@ -1647,13 +1773,15 @@ export {
   NextSteps,
   PanelSection,
   PanelSegment,
+  PreviewLink,
   QuestionItem,
   ReminderList,
   ReminderNote,
+  Shot,
+  SiteIcon,
   StageDetail,
   StopBuild,
   stageWord,
-  VersionCard,
   WaitingOnYou,
   YourWebsite,
 }

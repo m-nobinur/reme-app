@@ -156,6 +156,7 @@
   /* A logo still drawing: its colours drift and sharpen. A drawn one lands
      from a blur. The logo page holds both still under reduced motion. */
   --animate-logo-diffuse: logo-diffuse 6s ease-in-out infinite alternate;
+  --animate-shot-drift: shot-drift 7s ease-in-out infinite alternate;
   /* The floating panel asking for a look: its ring glows twice, then rests. */
   --animate-panel-nudge: panel-nudge 1.4s ease-in-out 2;
   /* The conversation's reading type, sized per viewport by `--chat-size`. A
@@ -480,6 +481,18 @@
     to {
       filter: blur(14px) saturate(1);
       transform: scale(1) rotate(25deg);
+    }
+  }
+  /* A screenshot still loading: its light wanders across the tile. */
+  @keyframes shot-drift {
+    0% {
+      transform: translate(-14%, -10%) scale(1.1);
+    }
+    50% {
+      transform: translate(12%, 4%) scale(1.3);
+    }
+    100% {
+      transform: translate(-2%, 12%) scale(1.15);
     }
   }
   /* Base UI measures the panel and publishes the height; the Radix variable the

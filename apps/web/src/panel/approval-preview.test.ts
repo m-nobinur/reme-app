@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { ApprovalItem, VersionCard } from "@workspace/ui/components/live-panel"
+import { ApprovalItem } from "@workspace/ui/components/live-panel"
 import { act, createElement } from "react"
 import { createRoot } from "react-dom/client"
 import { afterEach, expect, it, vi } from "vitest"
@@ -38,6 +38,12 @@ const render = (extra: object) =>
       onApprove: () => undefined,
       onAskForChanges: () => undefined,
       target: REVISION,
+      pictures: {
+        laptop: "a.png",
+        "laptop-2": "b.png",
+        phone: "c.png",
+        icon: "i.png",
+      },
       preview: "error",
       ...extra,
     })
@@ -45,47 +51,34 @@ const render = (extra: object) =>
 
 const approve = (container: HTMLElement) =>
   [...container.querySelectorAll("button")].find(
-    (b) => b.textContent === "Publish"
+    (b) => b.textContent === "Approve and publish"
   )
 
-it("says a preview that could not be read is not available yet, and reads it again", async () => {
+it("offers to read a preview that could not be read again, with no link implied", async () => {
   const onRetryPreview = vi.fn(async () => undefined)
   const container = await render({ preview: "error", onRetryPreview })
-  expect(container.textContent).toContain(
-    "The preview isn't available yet. Try again in a moment."
-  )
-  // No link is implied where there is none.
-  expect(container.textContent).not.toContain("Open the preview")
   expect(container.querySelector("a")).toBeNull()
   const again = [...container.querySelectorAll("button")].find(
-    (b) => b.textContent === "Try again"
+    (b) => b.textContent === "Retry preview"
   )
   await act(async () => again?.click())
   expect(onRetryPreview).toHaveBeenCalledOnce()
   expect(approve(container)?.disabled).toBe(false)
 })
 
-it("keeps the preview link when only the home page screenshot fails to load", async () => {
-  const container = await mount(
-    createElement(VersionCard, {
-      title: "Brightclean website",
-      meta: "Not published",
-      onPublish: () => undefined,
-      onRequestChanges: () => undefined,
-      shot: true,
-      preview: {
-        url: "https://preview-acme-v4.example.net/open?t=x",
-        screenshots: ["a.png", "b.png", "c.png"],
-      },
-    })
-  )
+it("keeps the preview link when the screenshot never loads, and says there is none to show", async () => {
+  const container = await render({
+    preview: { url: "https://preview-acme-v4.example.net/open?t=x" },
+  })
+  const front = () =>
+    container.querySelector<HTMLImageElement>('img[alt="Your home page"]')
   // Screenshots land after the preview, so a failed one is looked at again
   // every 5 s; only after every look fails does the card give up on it.
   vi.useFakeTimers()
   try {
-    for (let look = 0; look < 6 && container.querySelector("img"); look++) {
+    for (let look = 0; look < 6 && front(); look++) {
       await act(async () => {
-        container.querySelector("img")?.dispatchEvent(new Event("error"))
+        front()?.dispatchEvent(new Event("error"))
       })
       await act(async () => {
         vi.advanceTimersByTime(5000)
@@ -94,9 +87,12 @@ it("keeps the preview link when only the home page screenshot fails to load", as
   } finally {
     vi.useRealTimers()
   }
-  expect(container.querySelector("img")).toBeNull()
+  expect(front()).toBeNull()
+  expect(container.textContent).toContain("No preview to show yet")
   const links = container.querySelectorAll('a[href^="https://preview-acme-v4"]')
-  expect(links).toHaveLength(1)
-  expect(links[0]?.textContent).toContain("Preview")
+  expect(links).toHaveLength(2)
+  expect(
+    [...links].filter((link) => link.getAttribute("tabindex") !== "-1")
+  ).toHaveLength(1)
   expect(approve(container)?.disabled).toBe(false)
 })

@@ -208,20 +208,19 @@ test("the ready card sits at the end of the thread and never claims an approval 
 }) => {
   await open(page, "SiteReady")
   const cards = page.locator('[data-slot="site-ready"]')
-  await expect(cards).toHaveCount(4)
+  await expect(cards).toHaveCount(6)
   const ready = cards.nth(0)
   await expect(
-    ready.getByRole("heading", { name: "Your website is ready." })
+    ready.getByRole("heading", { name: "Brightclean website" })
   ).toBeVisible()
+  await expect(ready.getByRole("button", { name: "Publish" })).toBeEnabled()
   await expect(
-    ready.getByRole("button", { name: "Approve and publish" })
+    ready.getByRole("button", { name: "Request changes" })
   ).toBeEnabled()
-  await expect(
-    ready.getByRole("button", { name: "Ask for changes" })
-  ).toBeEnabled()
-  await expect(
-    ready.getByRole("button", { name: "See the preview" })
-  ).toBeVisible()
+  await expect(ready.getByRole("link", { name: /Preview/ })).toHaveAttribute(
+    "target",
+    "_blank"
+  )
   // Inside the live region after the last message, so it is read out.
   await expect(
     page.locator('[aria-live="polite"] [data-slot="site-ready"]')
@@ -230,7 +229,9 @@ test("the ready card sits at the end of the thread and never claims an approval 
     cards.nth(1).getByRole("button", { name: "Publishing" })
   ).toBeDisabled()
   await expect(cards.nth(2).getByRole("alert")).toContainText("newer version")
-  await expect(cards.nth(3)).toHaveText(
+  await expect(cards.nth(3).getByRole("link")).toHaveCount(0)
+  await expect(cards.nth(4).getByRole("link")).toHaveCount(0)
+  await expect(cards.nth(5)).toHaveText(
     "Approved. Your website is being published."
   )
 })

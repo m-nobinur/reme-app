@@ -44,7 +44,6 @@ it("reads a preview that failed again when the owner asks, and then offers it", 
     .mockRejectedValueOnce(new Error("503"))
     .mockResolvedValueOnce({
       url: "https://preview-acme-v4.example.net/open?t=x",
-      screenshots: ["a.png", "b.png", "c.png"],
     })
   const container = document.createElement("div")
   document.body.appendChild(container)
@@ -58,12 +57,13 @@ it("reads a preview that failed again when the owner asks, and then offers it", 
       })
     )
   )
-  await vi.waitFor(() =>
-    expect(container.textContent).toContain("isn't available yet")
-  )
-  const again = [...container.querySelectorAll("button")].find(
-    (b) => b.textContent === "Try again"
-  )
+  const again = await vi.waitFor(() => {
+    const button = [...container.querySelectorAll("button")].find(
+      (b) => b.textContent === "Retry preview"
+    )
+    expect(button).toBeDefined()
+    return button
+  })
   await act(async () => again?.click())
   await vi.waitFor(() =>
     expect(

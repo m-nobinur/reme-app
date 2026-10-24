@@ -83,7 +83,9 @@ it("decides the way the panel does, and reads the workspace again", async () => 
     [...container.querySelectorAll("button")].find(
       (each) => each.textContent === name
     )
-  expect(button("Ask for changes")).toBeDefined()
+  expect(
+    container.querySelector('button[aria-label="Request changes"]')
+  ).not.toBeNull()
   await act(async () => button("Approve and publish")?.click())
   expect(button("Publishing")?.disabled).toBe(true)
   expect(server.decideApproval).toHaveBeenCalledWith({

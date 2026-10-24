@@ -771,7 +771,7 @@ export function segmentLine(
     }
     case "golive":
       return waiting
-        ? "Approve it and it goes live in a minute"
+        ? "Your website is built and ready to publish"
         : "Going live in a minute"
     case "domain":
       return waiting
@@ -891,7 +891,7 @@ const ONBOARDING_ASKS: Readonly<Record<string, string>> = {
 /**
  * A step's label. The website's step at work says what it is doing, with
  * its count ("Writing the pages, 3 of 6"); an onboarding step being asked is
- * its question; every other step, and one in a segment that stopped, is its
+ * its question, and the approval waited on says so; every other step, and one in a segment that stopped, is its
  * name.
  * Null for a step the table does not know, which the panel leaves out.
  */
@@ -903,6 +903,9 @@ export function stepLabel(segment: ActivitySegment, step: ActivityStep) {
   const asked = step.state === "now" || step.state === "waiting"
   if (segment.kind === "onboarding" && asked && ONBOARDING_ASKS[step.id]) {
     return ONBOARDING_ASKS[step.id]
+  }
+  if (segment.kind === "golive" && asked && step.id === "approval") {
+    return "Waiting for your approval"
   }
   return STEP_LABELS[segment.kind]?.[step.id] ?? null
 }

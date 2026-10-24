@@ -379,9 +379,9 @@ describe("the first run", () => {
     const [, website, golive] = panel?.journey ?? []
     expect(website?.state).toBe("done")
     expect(golive?.title).toMatch(/^(Putting|Taking) your website live$/)
-    expect(golive?.line).toBe("Approve it and it goes live in a minute")
+    expect(golive?.line).toBe("Your website is built and ready to publish")
     expect(golive?.steps.map((each) => [each.label, each.state])).toEqual([
-      ["Your approval", "waiting"],
+      ["Waiting for your approval", "waiting"],
       ["Publishing", "next"],
       ["Checking it loads", "next"],
     ])

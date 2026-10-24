@@ -71,13 +71,16 @@ test("closing time cannot be set before opening time", async ({ page }) => {
   await expect(page.getByLabel("Closing time")).toHaveAttribute("min", "08:00")
 })
 
-test("an approval names no version or id beside Publish", async ({ page }) => {
+test("an approval names the site and no version or id beside Approve and publish", async ({
+  page,
+}) => {
   await open(page, "ApprovalItem", 400)
-  const approve = page.getByRole("button", { name: "Publish" })
+  const approve = page.getByRole("button", { name: "Approve and publish" })
   await expect(approve).toBeEnabled()
-  await expect(page.getByText("Brightclean website")).toBeVisible()
+  await expect(page.getByText("Brightclean", { exact: true })).toBeVisible()
   await expect(page.getByText(/2f41c9ab|ID |Version \d/)).toHaveCount(0)
-  await expect(page.getByRole("img")).toHaveCount(0)
+  // The front screenshot only: the ones behind and the icon are decoration.
+  await expect(page.getByRole("img")).toHaveCount(1)
   await expect(page.getByRole("link", { name: /Preview/ })).toHaveAttribute(
     "target",
     "_blank"
@@ -88,7 +91,9 @@ test("an approval with no revision to publish cannot be approved", async ({
   page,
 }) => {
   await open(page, "ApprovalItem unbound", 400)
-  await expect(page.getByRole("button", { name: "Publish" })).toBeDisabled()
+  await expect(
+    page.getByRole("button", { name: "Approve and publish" })
+  ).toBeDisabled()
 })
 
 test("a preview still loading is a skeleton, never a spinner", async ({
@@ -154,12 +159,19 @@ test("a waiting step offers no link: the answer goes in the chat", async ({
   )
 })
 
-test("the approve button shows a visible focus ring from the keyboard", async ({
+test("the screenshots step through the deck, and the approve button shows a focus ring from the keyboard", async ({
   page,
 }) => {
   await open(page, "ApprovalItem", 400)
-  const approve = page.getByRole("button", { name: "Publish" })
-  await page.getByRole("link", { name: /Preview/ }).focus()
+  const approve = page.getByRole("button", { name: "Approve and publish" })
+  const front = page.getByRole("img")
+  await expect(front).toHaveAccessibleName("Your home page")
+  await page.getByRole("button", { name: "The next picture" }).click()
+  await expect(front).toHaveAccessibleName("Further down your home page")
+  await page.getByRole("button", { name: "The previous picture" }).click()
+  await page.getByRole("button", { name: "The previous picture" }).click()
+  await expect(front).toHaveAccessibleName("Your home page on a phone")
+  await page.getByRole("button", { name: "The next picture" }).focus()
   await page.keyboard.press("Tab")
   await expect(approve).toBeFocused()
   const ring = await approve.evaluate(
@@ -218,7 +230,7 @@ test("a change in flight keeps its note up", async ({ page }) => {
   await expect(page.locator("body")).toBeFocused()
 })
 
-test("the site thumbnail holds its space, and a broken one leaves the text", async ({
+test("the site thumbnail holds its space while it loads, and a broken one leaves the text", async ({
   page,
 }) => {
   const entry = (name: string) => page.locator(`[data-entry="${name}"]`)
@@ -231,12 +243,11 @@ test("the site thumbnail holds its space, and a broken one leaves the text", asy
 
   await open(page, "YourWebsite loading", 400)
   await expect(
-    entry("YourWebsite loading").locator('[data-slot="skeleton"]')
+    entry("YourWebsite loading").locator('[data-slot="diffusing"]')
   ).toBeVisible()
 
   await open(page, "YourWebsite screenshot failed", 400)
   const failed = entry("YourWebsite screenshot failed")
-  await expect(failed.getByRole("img")).toHaveCount(0)
   await expect(failed.getByText("Your website is live")).toBeVisible()
 })
 
@@ -380,12 +391,13 @@ test("an approval whose preview fails still says what the owner can do, and lets
 }) => {
   await open(page, "ApprovalItem preview unavailable", 400)
   const entry = page.locator('[data-entry="ApprovalItem preview unavailable"]')
-  await expect(entry).toContainText(
-    "The preview isn't available yet. Try again in a moment."
-  )
   await expect(entry.getByRole("link")).toHaveCount(0)
-  await expect(entry.getByRole("button", { name: "Try again" })).toBeEnabled()
-  await expect(entry.getByRole("button", { name: "Publish" })).toBeEnabled()
+  await expect(
+    entry.getByRole("button", { name: "Retry preview" })
+  ).toBeEnabled()
+  await expect(
+    entry.getByRole("button", { name: "Approve and publish" })
+  ).toBeEnabled()
 })
 
 for (const theme of ["light", "dark"] as const) {

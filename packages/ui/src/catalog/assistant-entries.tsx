@@ -63,6 +63,7 @@ import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 import { FACT_INPUTS } from "@workspace/ui/lib/answer"
 import { BROKEN } from "@workspace/ui/lib/tool-state"
 import { type ReactNode, useState } from "react"
+import { ICON } from "./panel-entries"
 import { INPUT as ASK_DESIGN_INPUT } from "./tray-entries"
 
 /**
@@ -2351,10 +2352,13 @@ const assistantCatalog = [
       const ready = {
         title: "Brightclean website",
         meta: "Not published · Today, 4:05 pm",
-        preview: {
-          url: "https://preview.example.invalid/",
-          screenshots: [KITCHEN, KITCHEN, KITCHEN],
+        pictures: {
+          laptop: KITCHEN,
+          "laptop-2": KITCHEN,
+          phone: KITCHEN,
+          icon: ICON,
         },
+        preview: { url: "https://preview.example.invalid/" },
         onApprove: noop,
         onMakeChanges: noop,
       }
@@ -2384,6 +2388,7 @@ const assistantCatalog = [
               error="A newer version replaced that one. Check the latest before you decide."
             />
             <SiteReady {...ready} preview="error" />
+            <SiteReady {...ready} pictures={null} preview="loading" />
             <SiteReady {...ready} approved />
           </div>
         </div>

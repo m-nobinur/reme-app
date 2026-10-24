@@ -6,11 +6,12 @@ import {
   useParams,
   useRouter,
 } from "@tanstack/react-router"
-import type {
-  AvatarId,
-  BuildSummary,
-  DecisionRequest,
-  Reminder,
+import {
+  type AvatarId,
+  type BuildSummary,
+  type DecisionRequest,
+  type Reminder,
+  revisionPictures,
 } from "@workspace/contracts"
 import { ShowFoldedQuestion } from "@workspace/ui/components/assistant/question-tray"
 import { AssistantAvatar } from "@workspace/ui/components/assistant-avatar"
@@ -69,8 +70,7 @@ import {
   type Suggestion,
 } from "@/lib/panel"
 import { anchorOf, noteOf, upcomingNotes } from "@/lib/reminders"
-import { versionMeta, versionTitle } from "@/lib/site-ready"
-import { followThumbnail } from "@/lib/thumbnail"
+import { versionMeta } from "@/lib/site-ready"
 import { useLiveWorkspace } from "@/lib/workspace"
 import { useFollowStep } from "./follow-step"
 
@@ -211,28 +211,9 @@ export function usePreview(
   return [preview, retry]
 }
 
-/**
- * The live site's thumbnail, read when the live revision changes and again
- * before its links expire. Loading from the first render when a site is
- * live, so the skeleton holds the space from the server's HTML on.
- */
-export function useLiveThumbnail(live: Workspace["liveRevision"]): Thumbnail {
-  const [thumbnail, setThumbnail] = useState<Thumbnail>(live ? "loading" : null)
-  const [follower] = useState(() =>
-    followThumbnail({
-      read: (assignmentId) => getPreview({ data: { assignmentId } }),
-      // A newer revision's link is read behind the last screenshot, which
-      // stays until the new one is there.
-      onChange: (next) =>
-        setThumbnail((last) =>
-          next === "loading" && last && last !== "loading" ? last : next
-        ),
-    })
-  )
-  useEffect(() => follower.show(live), [follower, live])
-  useEffect(() => follower.stop, [follower])
-  return thumbnail
-}
+/** The live site's thumbnail: its home page on a laptop, served by its revision. */
+export const liveThumbnail = (live: Workspace["liveRevision"]): Thumbnail =>
+  live ? { src: revisionPictures(live.revisionId).laptop } : null
 
 export function Decidable({
   item,
@@ -249,7 +230,6 @@ export function Decidable({
   const { pending, error, run } = useWrite<"approve" | "change">(refresh)
   const [preview, retryPreview] = usePreview(item.request.assignment_id)
   const business = useSiteName()
-  const zone = useBrowserZone()
   const [keys] = useState(attemptKeys)
   const { id: conversationId } = useParams({ strict: false })
 
@@ -284,14 +264,20 @@ export function Decidable({
   return (
     <ApprovalItem
       error={error}
-      meta={versionMeta(live, item.raisedAt, zone)}
+      // The step above says it waits; the card names the site and its state.
+      meta={versionMeta(live, item.raisedAt, null)}
       onApprove={approve}
       onAskForChanges={change}
       onRetryPreview={retryPreview}
       pending={pending}
+      pictures={
+        item.request.target.kind === "revision"
+          ? revisionPictures(item.request.target.revision_id)
+          : null
+      }
       preview={preview}
       target={item.request.target}
-      title={versionTitle(business)}
+      title={business ?? "Your website"}
     />
   )
 }
@@ -635,7 +621,7 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
   const zone = useBrowserZone()
   const [status, setStatus] = useAnnouncement(workspace)
   const [tab, setTab] = useState<Tab>("activity")
-  const thumbnail = useLiveThumbnail(workspace?.liveRevision ?? null)
+  const thumbnail = liveThumbnail(workspace?.liveRevision ?? null)
   const upcoming = upcomingNotes(workspace?.reminderNotes ?? [])
   const tabList = useFocusAfterDone(upcoming)
   const activityTab = useRef<HTMLDivElement>(null)

@@ -38,8 +38,8 @@ import {
 import { useLiveWorkspace } from "@/lib/workspace"
 import { photoActions, replaceLogo } from "@/panel/photo-actions"
 import {
+  liveThumbnail,
   useBrowserZone,
-  useLiveThumbnail,
   useRequestChanges,
 } from "@/panel/workspace-panel"
 
@@ -211,7 +211,7 @@ function Pictures({ workspace }: { workspace: Workspace }) {
 function Website() {
   const { active } = frame.useLoaderData()
   const { workspace, refresh } = useLiveWorkspace()
-  const thumbnail = useLiveThumbnail(workspace?.liveRevision ?? null)
+  const thumbnail = liveThumbnail(workspace?.liveRevision ?? null)
   const requestChanges = useRequestChanges()
   const zone = useBrowserZone()
 

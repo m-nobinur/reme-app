@@ -21,6 +21,7 @@ import {
   PushConfig,
   PushSubscribed,
   type PushSubscribeRequest,
+  REVISION_PICTURES,
   type RegistrantDetails,
   SiteMedia,
   StaffDirectory,
@@ -572,7 +573,6 @@ async function preview(assignmentId: string): Promise<PreviewLinks | null> {
   return {
     revisionId: link.revision_id,
     url: link.url,
-    screenshots: link.screenshots,
     expiresAt: link.expires_at,
   }
 }
@@ -870,6 +870,11 @@ export const apiSource: OwnerDataSource = {
   // The api answers once every byte is in, which a slow line takes a while to send.
   assets: (upload) => multipart("/assets", upload, UPLOAD_TIMEOUT_MS),
   photo: (assetId) => call(`/photos/${segment(assetId)}`),
+  // Only the names the api serves, so nothing else rides in the path.
+  revisionPicture: async (revisionId, picture) =>
+    (REVISION_PICTURES as readonly string[]).includes(picture)
+      ? call(`/revisions/${segment(revisionId)}/${picture}`)
+      : new Response(null, { status: 404 }),
   reviewPhotos: (raw, key) =>
     call("/assets/review", {
       method: "POST",

@@ -754,7 +754,7 @@ it("deletes the account with DELETE and one key, and words the refusals", async 
   await expect(apiSource.deleteAccount()).rejects.toThrow()
 })
 
-it("reads a build's preview and its three screenshots", async () => {
+it("reads a build's preview link, leaving its screenshots to the revision's own path", async () => {
   const link = {
     revision_id: REVISION,
     url: "https://preview.example.invalid/?t=a",
@@ -767,7 +767,6 @@ it("reads a build's preview and its three screenshots", async () => {
   expect(await apiSource.preview(ASSIGNMENT)).toEqual({
     revisionId: REVISION,
     url: link.url,
-    screenshots: link.screenshots,
     expiresAt: EXPIRES,
   })
 })

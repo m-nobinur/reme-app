@@ -147,12 +147,11 @@ export type Workspace = {
 /** A poll's answer: the workspace, or that it has not changed since `etag`. */
 export type WorkspacePoll = Workspace | "unchanged"
 
-/** A signed preview of one revision: the page and its three screenshots. */
+/** A signed preview of one revision: the page to open. */
 export type PreviewLinks = {
   revisionId: string
   url: string
-  screenshots: string[]
-  /** When the signed URLs stop working. */
+  /** When the signed URL stops working. */
   expiresAt: string
 }
 
@@ -377,6 +376,14 @@ export type OwnerDataSource = {
    * `apps/api`'s `GET /photos/:id` answers. Null when there is no session.
    */
   photo: (assetId: string) => Promise<Response | null>
+  /**
+   * One version's home page or icon, answered as `apps/api`'s
+   * `GET /revisions/:id/:picture` answers. Null when there is no session.
+   */
+  revisionPicture: (
+    revisionId: string,
+    picture: string
+  ) => Promise<Response | null>
   /**
    * The design tray's photos read against the photo needs, the JSON body as
    * the owner sent it, answered as `apps/api`'s `POST /assets/review`
