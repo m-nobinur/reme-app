@@ -1166,7 +1166,7 @@ function PreviewLink({
 /** The deck's cards, the home page first. */
 const SLIDES = [
   { picture: "laptop", alt: "Your home page" },
-  { picture: "laptop-2", alt: "Further down your home page" },
+  { picture: "laptop-2", alt: "Another page of your website" },
   { picture: "phone", alt: "Your home page on a phone" },
 ] as const
 
@@ -1181,17 +1181,30 @@ const ARROW =
   "absolute inset-y-0 z-10 my-auto size-7 rounded-full bg-background/60 shadow-sm backdrop-blur-sm transition-opacity focus-visible:opacity-100 motion-reduce:transition-none pointer-fine:opacity-0 pointer-fine:group-hover/stack:opacity-100"
 
 /**
- * A phone holding the screenshot, whole and upright on the card: a thin
+ * A phone holding the screenshot, whole and upright on the card: a hairline
  * black bezel inside a fine metal edge, large rounded corners, a camera
  * island over the screen, the action and volume keys on the left and the
- * power key on the right. Its proportions are a current phone's, 0.48 wide
- * to tall.
+ * power key on the right, at a current phone's proportions, 0.48 wide to
+ * tall. Behind it, the same screenshot blurred into soft colour under a
+ * faint glow of the brand, so the phone sits in light, not on a flat tile. The bezel is in pixels: a percentage
+ * padding would be a share of the card's width, not the phone's.
  */
 function PhoneMock({ src, alt }: { src: string | undefined; alt: string }) {
   const key = "absolute w-0.5 bg-device ring-1 ring-foreground/15"
   return (
-    <span className="relative block size-full bg-muted">
-      <span className="absolute top-[4%] left-1/2 aspect-[48/100] h-[82%] -translate-x-1/2 rounded-[17%/8.2%] bg-device p-[2.6%] shadow-xl ring-1 ring-foreground/25">
+    <span className="relative block size-full overflow-hidden bg-muted">
+      {src ? (
+        <img
+          alt=""
+          className="absolute inset-0 size-full scale-125 object-cover opacity-35 blur-2xl"
+          src={src}
+        />
+      ) : null}
+      <span
+        aria-hidden
+        className="absolute inset-0 bg-[radial-gradient(55%_65%_at_50%_45%,color-mix(in_oklab,var(--primary)_28%,transparent),transparent_75%)]"
+      />
+      <span className="absolute top-[4%] left-1/2 aspect-[48/100] h-[82%] -translate-x-1/2 rounded-[17%/8.2%] bg-device p-[2.5px] shadow-2xl ring-1 ring-foreground/25">
         <span
           aria-hidden
           className={cn(key, "top-[16%] -left-0.5 h-[4%] rounded-l-sm")}
@@ -1208,11 +1221,11 @@ function PhoneMock({ src, alt }: { src: string | undefined; alt: string }) {
           aria-hidden
           className={cn(key, "top-[26%] -right-0.5 h-[11%] rounded-r-sm")}
         />
-        <span className="relative block size-full overflow-hidden rounded-[14.5%/7%] bg-background">
+        <span className="relative block size-full overflow-hidden rounded-[15.5%/7.4%] bg-background">
           <Shot alt={alt} className="size-full" src={src} />
           <span
             aria-hidden
-            className="absolute top-[2%] left-1/2 h-[3.6%] w-[31%] -translate-x-1/2 rounded-full bg-device"
+            className="absolute top-[2%] left-1/2 h-[3.4%] w-[30%] -translate-x-1/2 rounded-full bg-device"
           />
         </span>
       </span>
