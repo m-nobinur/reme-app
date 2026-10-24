@@ -146,6 +146,7 @@ import {
   PushSubscribed,
   PushSubscribeRequest,
   ScheduledJob,
+  SetTimeZoneRequest,
 } from "./schedule.ts"
 import {
   ConnectGoogleInput,
@@ -314,6 +315,7 @@ export const contracts = {
   ScheduledJob,
   SearchTotals,
   SetFactsRequest,
+  SetTimeZoneRequest,
   SiteFields,
   SiteMedia,
   SitePointer,

@@ -37725,6 +37725,20 @@
         ],
         "additionalProperties": false
       },
+      "SetTimeZoneRequest": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "time_zone": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_+/-]{0,63}$"
+          }
+        },
+        "required": [
+          "time_zone"
+        ],
+        "additionalProperties": false
+      },
       "SiteFields": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",

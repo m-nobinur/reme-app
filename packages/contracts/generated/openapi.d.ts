@@ -10779,6 +10779,9 @@ export interface components {
           }
       )[]
     }
+    SetTimeZoneRequest: {
+      time_zone: string
+    }
     SiteFields: {
       [key: string]:
         | {

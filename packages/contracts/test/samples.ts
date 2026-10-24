@@ -1279,6 +1279,7 @@ export const samples: Record<ContractName, unknown> = {
       action: { kind: "open", url: "https://brightclean.example" },
     },
   },
+  SetTimeZoneRequest: { time_zone: "Asia/Dhaka" },
   SetFactsRequest: {
     facts: [
       { key: "business.phone", value: { e164: "+15550142" } },

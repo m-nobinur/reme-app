@@ -115,7 +115,7 @@ export const Proactivity = z.enum(["off", "low", "default", "high"])
 
 /**
  * The `orgs` columns that time depends on. `time_zone` is null until the
- * first chat turn reports the browser's zone. Quiet hours default to 21:00
+ * browser first reports its zone, on loading the app or in a chat turn. Quiet hours default to 21:00
  * to 08:00 and may cross midnight, so `quiet_start` after `quiet_end` is
  * normal; equal values mean no quiet hours.
  */
@@ -126,6 +126,13 @@ export const OrgSchedule = z.strictObject({
   proactivity: Proactivity,
 })
 
+/**
+ * `PUT /time-zone`: the zone the owner's browser keeps, sent when the app
+ * loads, so the org's zone is right before the first chat turn and follows
+ * the owner when they move. Answered 204, the same zone again included.
+ */
+export const SetTimeZoneRequest = z.strictObject({ time_zone: TimeZone })
+
 export type JobKind = z.infer<typeof JobKind>
 export type ScheduledJob = z.infer<typeof ScheduledJob>
 export type JobRun = z.infer<typeof JobRun>
@@ -135,3 +142,4 @@ export type PushSubscribed = z.infer<typeof PushSubscribed>
 export type PushConfig = z.infer<typeof PushConfig>
 export type Proactivity = z.infer<typeof Proactivity>
 export type OrgSchedule = z.infer<typeof OrgSchedule>
+export type SetTimeZoneRequest = z.infer<typeof SetTimeZoneRequest>
