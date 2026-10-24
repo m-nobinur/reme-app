@@ -2104,8 +2104,7 @@ function ConversationSample({ stored }: { stored?: string }) {
         messages={[]}
         {...(stored ? { stored } : {})}
         settings={{
-          briefing:
-            "Your website is live. A new version is ready for you to approve.",
+          briefing: "Your website is live. A new version is ready to publish.",
         }}
         suggestions={SUGGESTIONS}
       />
@@ -2601,8 +2600,7 @@ const assistantCatalog = [
         isDisabled={false}
         messages={[]}
         settings={{
-          briefing:
-            "Your website is live. A new version is ready for you to approve.",
+          briefing: "Your website is live. A new version is ready to publish.",
         }}
         suggestions={SUGGESTIONS}
       />

@@ -63,16 +63,20 @@ export function briefingOf(
   const approvals = attention.filter((item) => item.kind === "approval").length
   const questions = attention.filter((item) => item.kind === "question")
 
+  // A first version waiting on Publish is still an open build, but it is
+  // ready, not under way; the updates under the composer carry Publish.
   const site = live
     ? "Your website is live."
-    : building
-      ? "Your first version is being built."
-      : open
-        ? "Your first version is under way."
-        : "You have no website yet."
+    : approval
+      ? "Your first version is ready."
+      : building
+        ? "Your first version is being built."
+        : open
+          ? "Your first version is under way."
+          : "You have no website yet."
 
   // Each reminder rule sharpens the line for its own kind, so one line never
-  // says the same thing twice: a closing review replaces "ready to approve",
+  // says the same thing twice: a closing review replaces "ready to publish",
   // an old question replaces the question count.
   const expiring = derivedReminders
     .flatMap((reminder) =>
@@ -95,19 +99,19 @@ export function briefingOf(
 
   let next: string | null = null
   if (expiring) {
-    next = `Your review of the new version expires ${due(expiring.expires_at, now)}.`
-  } else if (approval) {
+    next = `Publish ${live ? "the new version" : "it"} by ${due(expiring.expires_at, now)}.`
+  } else if (approval && live) {
     next =
       approvals === 1
-        ? "A new version is ready for you to approve."
-        : `${approvals} versions are ready for you to approve.`
+        ? "A new version is ready to publish."
+        : `${approvals} versions are ready to publish.`
   } else if (waiting) {
     next = `${waiting.raisedBy}'s question about ${waiting.title.toLowerCase()} is still waiting on you.`
   } else if (questions.length === 1) {
     next = `${questions[0]?.raisedBy} has one question for you.`
   } else if (questions.length > 1) {
     next = `${questions.length} questions are waiting on you.`
-  } else if (unpublished) {
+  } else if (unpublished && !approval) {
     next = "A new version is ready but not published."
   } else if (facts) {
     next = `${leading(assistantOf(workspace))} still needs ${factsNeeded(facts.keys)}.`

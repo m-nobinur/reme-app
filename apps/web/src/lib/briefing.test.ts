@@ -112,7 +112,7 @@ it("puts an approval before a question, and keeps to four suggestions", () => {
     })
   )
   expect(briefing.line).toBe(
-    "Your website is live. A new version is ready for you to approve."
+    "Your website is live. A new version is ready to publish."
   )
   expect(prompts(briefing)).toEqual([
     "What changed in the new version?",
@@ -127,9 +127,7 @@ it("counts approvals when there is more than one", () => {
     ORG,
     workspace({ open: true, attention: [approval(1), approval(2)] })
   )
-  expect(briefing.line).toBe(
-    "Your first version is under way. 2 versions are ready for you to approve."
-  )
+  expect(briefing.line).toBe("Your first version is ready.")
   expect(prompts(briefing)).toEqual(["What changed in the new version?"])
 })
 
@@ -181,10 +179,10 @@ it("names the day and time a review closes, in the browser's time zone", () => {
       NOW
     ).line
   expect(line(at(2, 9))).toBe(
-    "Your website is live. Your review of the new version expires tomorrow at 09:00."
+    "Your website is live. Publish the new version by tomorrow at 09:00."
   )
   expect(line(at(1, 15))).toBe(
-    "Your website is live. Your review of the new version expires today at 15:00."
+    "Your website is live. Publish the new version by today at 15:00."
   )
 })
 
@@ -211,7 +209,7 @@ it("reads the review's local day even where UTC is on another", () => {
       new Date("2026-10-01T22:30:00.000Z")
     )
     expect(briefing.line).toBe(
-      "Your first version is under way. Your review of the new version expires tomorrow at 00:30."
+      "Your first version is ready. Publish it by tomorrow at 00:30."
     )
   } finally {
     process.env.TZ = zone
@@ -276,7 +274,7 @@ it("puts an unpublished version after reviews and questions", () => {
       NOW
     ).line
   expect(lineOf({ attention: [approval(5)] })).toBe(
-    "Your website is live. A new version is ready for you to approve."
+    "Your website is live. A new version is ready to publish."
   )
   expect(lineOf({ attention: [question("The Developer")] })).toBe(
     "Your website is live. The Developer has one question for you."
@@ -293,9 +291,7 @@ it("puts an unpublished version after reviews and questions", () => {
         },
       ],
     })
-  ).toMatch(
-    /^Your website is live\. Your review of the new version expires today at /
-  )
+  ).toMatch(/^Your website is live\. Publish the new version by today at /)
 })
 
 it("lists the facts the assistant still needs, after anything waiting on the owner", () => {
@@ -316,5 +312,5 @@ it("lists the facts the assistant still needs, after anything waiting on the own
       workspace({ live: 2, attention: [approval(3)], derivedReminders: facts }),
       NOW
     ).line
-  ).toBe("Your website is live. A new version is ready for you to approve.")
+  ).toBe("Your website is live. A new version is ready to publish.")
 })
