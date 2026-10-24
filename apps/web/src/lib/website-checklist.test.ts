@@ -114,7 +114,7 @@ it("sends the owner to the approval before the first publish, and waits on go-li
     NOW
   )
   expect(summary(waiting)[0]).toBe(
-    "published|waiting|Waiting for you to publish|Review it"
+    "published|waiting|Waiting for your approval to publish|Review it"
   )
   expect(summary(waiting).at(-1)).toBe(
     "google|next|Connect it once your website is live|-"

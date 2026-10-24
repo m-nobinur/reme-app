@@ -1,4 +1,5 @@
 import type {
+  Activity,
   ActivitySegment,
   ActivityStep,
   BuildSummary,
@@ -6,6 +7,7 @@ import type {
 } from "@workspace/contracts"
 import {
   type CopyContext,
+  completedBrief,
   pillLine,
   rowLine,
   type StatusKind,
@@ -45,8 +47,11 @@ export type Suggestion =
   | { kind: "start-website" }
   | { kind: "visit-site"; host: string; url: string }
 
-/** Something with a time: what is coming up, or what finished today. */
+/** Something with a time: what is coming up, or what finished. */
 export type Timed = { id: string; text: string; at: string }
+
+/** Finished work, with a one-line brief for the Tasks page. */
+export type Completed = Timed & { brief: string | null }
 
 export type Line = {
   tone: "working" | "live" | "idle"
@@ -92,7 +97,7 @@ export type Panel = {
    * when there are two or more: the header gives each a turn. Else `[line]`.
    */
   lines: Line[]
-  /** The first run: up to three finished segments as one-liners, then the one under way. */
+  /** The first run's segment under way; what finished is in `done`. */
   journey: SegmentView[]
   now: SegmentView[]
   /** Jobs waiting on the owner (a DNS change, a payment, a sign-in), as segments. */
@@ -103,10 +108,8 @@ export type Panel = {
   review: Approval | null
   /** Reminders, renewals and the next check-in, soonest first. */
   upcoming: Timed[]
-  /** What finished in the last day, newest first. */
+  /** What finished, newest first. */
   done: Timed[]
-  /** Coming up sits above Waiting on you while one segment is under way, so it stays in view. */
-  upcomingFirst: boolean
   /** The top segment's next action, and the site once live. */
   suggestions: Suggestion[]
 }
@@ -128,16 +131,13 @@ export type PanelInput = {
   zone: string | null
 }
 
-const NO_ACTIVITY = {
+const NO_ACTIVITY: Activity = {
   journey: [],
   now: [],
   waiting: [],
   upcoming: [],
   done: [],
 }
-
-/** The most finished journey segments kept above the one under way. */
-const DONE_KEPT = 3
 
 /** Reviews and questions are answered from `attention`, so their segments are not drawn twice. */
 const ANSWERED_IN_PANEL: ReadonlySet<ActivitySegment["kind"]> = new Set([
@@ -216,6 +216,56 @@ function remindersSentence(
     : `${ahead.length} reminders, none with a time set.`
 }
 
+/** A reminder row is its own title, which only the workspace holds. */
+const rowTitle = (workspace: Workspace, segment: ActivitySegment) =>
+  segment.kind === "reminder"
+    ? (workspace.reminderNotes.find(
+        (note) => segment.id === `reminder:${note.id}`
+      )?.title ??
+      workspace.attention.find(
+        (item) =>
+          item.kind === "reminder" && segment.id === `reminder:${item.id}`
+      )?.title ??
+      null)
+    : null
+
+/**
+ * Finished work, newest first, each once: the first run's finished
+ * segments, the last day's, and where the site stands (its latest publish,
+ * domains, Google), which keeps older work in view.
+ */
+export function completedOf(
+  workspace: Workspace,
+  ctx: CopyContext
+): Completed[] {
+  const activity = workspace.activity ?? NO_ACTIVITY
+  const finished = [
+    ...activity.done,
+    // Latest first, so a tie in time still reads newest first.
+    ...[...activity.journey].reverse(),
+    ...(activity.standing ?? []),
+  ].filter(
+    (segment, i, all) =>
+      segment.state === "done" &&
+      all.findIndex((other) => other.id === segment.id) === i
+  )
+  return finished
+    .sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
+    .flatMap((segment) => {
+      const text = rowLine(segment, ctx, rowTitle(workspace, segment))
+      return text
+        ? [
+            {
+              id: segment.id,
+              text,
+              at: segment.at,
+              brief: completedBrief(segment, ctx),
+            },
+          ]
+        : []
+    })
+}
+
 const running = (segment: ActivitySegment | undefined) =>
   segment?.state === "now" ||
   segment?.state === "waiting" ||
@@ -283,17 +333,14 @@ export function panelFor(input: PanelInput): Panel | null {
     }
   }
 
-  // The journey: what finished stays above as one-liners, three at most,
-  // then the segment under way. A segment not yet started shows only once
-  // the one before it is done, so nothing claims to run before it does.
+  // The journey: the segment under way, its finished ones under Completed.
+  // A segment not yet started shows only once the one before it is done, so
+  // nothing claims to run before it does.
   const { journey } = activity
   const at = journey.findIndex((segment) => segment.state !== "done")
-  const finished = at === -1 ? journey : journey.slice(0, at)
   const next = at === -1 ? undefined : journey[at]
   const current =
     next && (next.state !== "upcoming" || at > 0) ? next : undefined
-  const kept = finished.slice(-DONE_KEPT)
-  const older = finished.slice(0, -DONE_KEPT)
 
   // The approvals page lists every review itself, so the panel leaves them
   // to it rather than draw each one twice.
@@ -320,21 +367,9 @@ export function panelFor(input: PanelInput): Panel | null {
     (segment) => !ANSWERED_IN_PANEL.has(segment.kind)
   )
 
-  // A reminder row is its own title, which only the workspace holds.
-  const titleOf = (segment: ActivitySegment) =>
-    segment.kind === "reminder"
-      ? (workspace.reminderNotes.find(
-          (note) => segment.id === `reminder:${note.id}`
-        )?.title ??
-        attention.find(
-          (item) =>
-            item.kind === "reminder" && segment.id === `reminder:${item.id}`
-        )?.title ??
-        null)
-      : null
   const rows = (segments: ActivitySegment[]): Timed[] =>
     segments.flatMap((segment) => {
-      const text = rowLine(segment, ctx, titleOf(segment))
+      const text = rowLine(segment, ctx, rowTitle(workspace, segment))
       return text ? [{ id: segment.id, text, at: segment.at }] : []
     })
   // Times wait for the reader's zone, so the server's HTML and the first
@@ -352,14 +387,7 @@ export function panelFor(input: PanelInput): Panel | null {
         )
       )
     : []
-  const done = zone
-    ? rows([
-        ...activity.done,
-        ...older.filter(
-          (segment) => !activity.done.some((each) => each.id === segment.id)
-        ),
-      ])
-    : []
+  const done = zone ? completedOf(workspace, ctx) : []
 
   // Where the panel has something to say. Getting started belongs to the
   // chat and, while it runs, the Website page; every other page shows the
@@ -455,19 +483,16 @@ export function panelFor(input: PanelInput): Panel | null {
     suggestions.push({ kind: "visit-site", host, url })
   }
 
-  const nowViews = activity.now.map(view)
-  const shownJourney = [...kept, ...(current ? [current] : [])].map(view)
   return {
     line,
     lines: turns.length > 1 ? turns : [line],
-    journey: shownJourney,
-    now: nowViews,
+    journey: current ? [view(current)] : [],
+    now: activity.now.map(view),
     blocked: blocked.map(view),
     waiting,
     review,
     upcoming,
     done,
-    upcomingFirst: nowViews.length + (running(current) ? 1 : 0) === 1,
     suggestions,
   }
 }

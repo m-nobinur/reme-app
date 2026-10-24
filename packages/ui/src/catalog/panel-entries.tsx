@@ -11,11 +11,11 @@ import {
   ComingUp,
   LiveLine,
   NextSteps,
-  PanelSection,
   PanelSegment,
   QuestionItem,
   ReminderList,
   ReminderNote,
+  SECTION_ACTION,
   StageDetail,
   StopBuild,
   WaitingOnYou,
@@ -393,20 +393,22 @@ function SamplePanel() {
         <TabsTrigger value="website">Website</TabsTrigger>
       </TabsList>
       <TabsContent keepMounted value="activity">
-        <PanelSection title="Now">
+        <WaitingOnYou limit={3} title="Now">
           {segment({
             id: "change",
             kind: "change",
             state: "now",
             steps: along(["understanding", "making", "checking", "ready"], 2),
           })}
-        </PanelSection>
-        <WaitingOnYou>
           {target(
             "question-sample",
             question({ kind: "fact", key: "hours.weekday" }, "Weekday hours")
           )}
           {target("approval-sample", approval())}
+          {target(
+            "question-more",
+            question({ kind: "fact", key: "business.phone" }, "Phone number")
+          )}
         </WaitingOnYou>
         <ComingUp
           items={[
@@ -416,6 +418,18 @@ function SamplePanel() {
               at: EXPIRES,
             },
           ]}
+        />
+        <ComingUp
+          action={
+            <a className={SECTION_ACTION} href="#tasks">
+              View all
+            </a>
+          }
+          items={[
+            { id: "website", text: "Website built", at: STARTED },
+            { id: "setup", text: "Brightclean set up", at: STARTED },
+          ]}
+          title="Completed"
         />
       </TabsContent>
       <TabsContent value="reminders">
@@ -454,39 +468,37 @@ const panelCatalog: Entry[] = [
     ),
   },
   {
-    // The Activity tab on Home with nothing waiting: what finished today,
-    // and the site.
+    // The Activity tab on Home with nothing waiting: what finished, and
+    // the site.
     name: "Panel caught up",
     render: () => (
       <div className="flex max-w-88 flex-col gap-6">
         <ComingUp
+          action={
+            <a className={SECTION_ACTION} href="#tasks">
+              View all
+            </a>
+          }
           items={[
             {
               id: "golive",
-              text: "Brightclean is live at brightclean-demo.example.invalid",
+              text: "Website published at brightclean-demo.example.invalid",
               at: STARTED,
             },
           ]}
-          title="Done today"
+          title="Completed"
         />
         {liveSteps}
       </div>
     ),
   },
   {
-    // The first run: getting started folded to one line, the website under
-    // way, and what is coming up kept in view under it.
+    // The first run: the website under way in Now, what is coming up, and
+    // getting started under Completed.
     name: "Panel first run",
     render: () => (
       <div className="flex max-w-88 flex-col gap-6">
-        <div className="flex flex-col gap-4">
-          {segment({
-            id: "onboarding",
-            kind: "onboarding",
-            state: "done",
-            steps: ONBOARDING_STEPS("done"),
-            names: BUSINESS,
-          })}
+        <WaitingOnYou title="Now">
           {segment(
             {
               id: "website",
@@ -503,7 +515,7 @@ const panelCatalog: Entry[] = [
               children: <StopBuild onStop={noop} state="implementing" />,
             }
           )}
-        </div>
+        </WaitingOnYou>
         <ComingUp
           items={[
             {
@@ -517,6 +529,15 @@ const panelCatalog: Entry[] = [
               at: "2026-10-05T09:00:00.000Z",
             },
           ]}
+        />
+        <ComingUp
+          action={
+            <a className={SECTION_ACTION} href="#tasks">
+              View all
+            </a>
+          }
+          items={[{ id: "setup", text: "Brightclean set up", at: STARTED }]}
+          title="Completed"
         />
       </div>
     ),
@@ -632,7 +653,8 @@ const panelCatalog: Entry[] = [
       }),
   },
   {
-    // The first version's review is the going-live segment's first step.
+    // The first version's review stands for the going-live segment's one
+    // step, as `apps/web` draws it.
     name: "PanelSegment going live",
     render: () =>
       segment(
@@ -640,7 +662,7 @@ const panelCatalog: Entry[] = [
           id: "golive",
           kind: "golive",
           state: "waiting",
-          steps: along(["approval", "publishing", "loads"], 0, "waiting"),
+          steps: [],
           names: BUSINESS,
         },
         { children: approval() }
@@ -694,7 +716,7 @@ const panelCatalog: Entry[] = [
       }),
   },
   {
-    name: "ComingUp done today",
+    name: "ComingUp completed",
     render: () => (
       <ComingUp
         items={[
@@ -705,11 +727,11 @@ const panelCatalog: Entry[] = [
           },
           {
             id: "domain",
-            text: "brightclean.example.invalid is live",
+            text: "Brightclean.example.invalid connected",
             at: STARTED,
           },
         ]}
-        title="Done today"
+        title="Completed"
       />
     ),
   },

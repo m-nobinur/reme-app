@@ -145,7 +145,7 @@ it('reads the workspace again on "Try again"', async () => {
   expect(refresh).toHaveBeenCalledOnce()
 })
 
-it("says what finished today, and no waiting list when nothing waits", async () => {
+it("says what finished, and no Now list when nothing waits", async () => {
   live.workspace = {
     ...EMPTY_WORKSPACE,
     live: 2,
@@ -167,11 +167,11 @@ it("says what finished today, and no waiting list when nothing waits", async () 
     },
   }
   await render()
-  expect(container.textContent).toContain("Done today")
+  expect(container.textContent).toContain("Completed")
   expect(container.textContent).toContain(
     "Your assistant checked in, all clear"
   )
-  expect(container.textContent).not.toContain("Waiting on you")
+  expect(container.textContent).not.toContain("Now")
 })
 
 const note = (id: string, title: string, due_at: string | null): Reminder => ({

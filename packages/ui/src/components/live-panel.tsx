@@ -3,7 +3,6 @@ import {
   CaretDownIcon,
   CaretLeftIcon,
   CaretRightIcon,
-  ChatCircleDotsIcon,
   CheckCircleIcon,
   CheckIcon,
   CircleIcon,
@@ -65,26 +64,40 @@ import {
  * imports no router and no client.
  */
 
+/** A section's way to the rest of its list, beside its heading. */
+const SECTION_ACTION =
+  "text-[0.8125rem] text-muted-foreground underline-offset-4 outline-none transition-colors hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline"
+
+/** Sections after the first are set off by a hairline. */
 function PanelSection({
   title,
   count,
+  action,
   children,
 }: {
   title: string
   count?: number
+  /** A link or button to the rest of the list, at the heading's end. */
+  action?: ReactNode
   children: ReactNode
 }) {
   const id = useId()
   return (
-    <section aria-labelledby={id} className="flex flex-col gap-2">
-      <h2 className="flex items-baseline gap-2 font-semibold text-sm" id={id}>
-        {title}
-        {count ? (
-          <span className="font-normal text-muted-foreground tabular-nums">
-            {count}
-          </span>
-        ) : null}
-      </h2>
+    <section
+      aria-labelledby={id}
+      className="flex flex-col gap-2 border-border not-first:border-t not-first:pt-5"
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <h2 className="flex items-baseline gap-2 font-semibold text-sm" id={id}>
+          {title}
+          {count ? (
+            <span className="font-normal text-muted-foreground tabular-nums">
+              {count}
+            </span>
+          ) : null}
+        </h2>
+        {action}
+      </div>
       {children}
     </section>
   )
@@ -409,11 +422,7 @@ function StepMark({ step, failed }: { step: SegmentStep; failed: boolean }) {
     case "now":
       return <StatusIcon className="text-foreground/80" kind={step.kind} />
     case "waiting":
-      return step.kind === "question" ? (
-        <StatusIcon className="text-foreground/80" kind="question" />
-      ) : (
-        <ChatCircleDotsIcon className="size-4 animate-status-fade text-foreground/80 motion-reduce:animate-none" />
-      )
+      return <StatusIcon className="text-foreground/80" kind="waiting" />
     case "skipped":
       return <MinusCircleIcon className="size-4 text-muted-foreground" />
     default:
@@ -489,7 +498,7 @@ function PanelSegment({
             // owner included; still once it is upcoming.
             <StatusIcon
               className="text-primary"
-              kind={icon}
+              kind={state === "waiting" ? "waiting" : icon}
               still={state !== "now" && state !== "waiting"}
             />
           )}
@@ -696,24 +705,32 @@ function StopBuild({
 /* Waiting on you ------------------------------------------------------ */
 
 /**
- * Questions and approvals, one per list row, answered in place. `status`
- * is the last thing the owner did, announced politely; `error` says the
- * list could not be read and is shown above whatever was read before. With
- * nothing in it and nothing to say, it renders nothing.
+ * Work under way and what waits on the owner, one per list row, answered in
+ * place. The first `limit` show; the rest open in place, and an item stays
+ * until it is done. `status` is the last thing the owner did, announced
+ * politely; `error` says the list could not be read and is shown above
+ * whatever was read before. With nothing in it and nothing to say, it
+ * renders nothing.
  */
 function WaitingOnYou({
   children,
+  title = "Waiting on you",
+  limit = Number.POSITIVE_INFINITY,
   status = null,
   error = null,
   onRetry,
 }: {
   children?: ReactNode
+  title?: string
+  limit?: number
   status?: string | null
   error?: string | null
   /** Read the list again now, offered when it did not load. */
   onRetry?: () => Promise<void>
 }) {
+  const [all, setAll] = useState(false)
   const items = Children.toArray(children).filter(isValidElement)
+  const hidden = all ? 0 : Math.max(0, items.length - limit)
   // Only there when something waits: with nothing, the last thing the owner
   // did stays said, and there is no heading over an empty list.
   if (!items.length && !error) {
@@ -724,14 +741,28 @@ function WaitingOnYou({
     ) : null
   }
   return (
-    <PanelSection count={items.length} title="Waiting on you">
+    <PanelSection
+      action={
+        hidden ? (
+          <button
+            className={SECTION_ACTION}
+            onClick={() => setAll(true)}
+            type="button"
+          >
+            Show {hidden} more
+          </button>
+        ) : null
+      }
+      count={items.length}
+      title={title}
+    >
       <p className="text-sm empty:hidden" role="status">
         {status}
       </p>
       {error ? <p className={META}>{error}</p> : null}
       {items.length ? (
         <ul className="flex flex-col divide-y divide-border">
-          {items.map((item) => (
+          {items.slice(0, items.length - hidden).map((item) => (
             <li key={item.key}>{item}</li>
           ))}
         </ul>
@@ -1442,14 +1473,17 @@ function ComingUp({
   items,
   title = "Coming up",
   zone,
+  action,
 }: {
   items: { id: string; text: string; at: string }[]
   title?: string
   zone?: string | null
+  /** The way to the whole list, when these are only the first. */
+  action?: ReactNode
 }) {
   if (items.length === 0) return null
   return (
-    <PanelSection title={title}>
+    <PanelSection action={action} title={title}>
       <ul className="flex flex-col divide-y divide-border">
         {items.map((item) => (
           <li className="flex flex-col py-2" key={item.id}>
@@ -1779,6 +1813,7 @@ export {
   QuestionItem,
   ReminderList,
   ReminderNote,
+  SECTION_ACTION,
   Shot,
   SiteIcon,
   StageDetail,

@@ -20,6 +20,7 @@ import {
   ReadingIcon,
   SetupIcon,
   ThinkingIcon,
+  WaitingIcon,
   WritingIcon,
 } from "@workspace/ui/components/status-icons"
 import {
@@ -74,7 +75,7 @@ const KINDS: Record<
   reminder: { Icon: BellIcon, motion: "origin-top animate-status-swing" },
   payment: { Icon: CreditCardIcon, motion: "animate-status-fade" },
   publishing: { Icon: RocketLaunchIcon, motion: "animate-status-lift" },
-  waiting: { Icon: HourglassMediumIcon, motion: "" },
+  waiting: { Drawn: WaitingIcon },
 }
 
 /**

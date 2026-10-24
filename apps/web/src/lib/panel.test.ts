@@ -299,7 +299,7 @@ describe("the first run", () => {
     expect(panel?.suggestions).toEqual([{ kind: "onboarding", id: ONBOARDING }])
   })
 
-  it("folds onboarding to one ticked line and opens the website", () => {
+  it("moves finished onboarding to Completed and opens the website", () => {
     const panel = firstRun(
       [
         onboarding(8, "done"),
@@ -318,20 +318,15 @@ describe("the first run", () => {
       ],
       { builds: [build("implementing", "build-first")] }
     )
-    const [setup, website, ...rest] = panel?.journey ?? []
+    const [website, ...rest] = panel?.journey ?? []
     // Going live is not shown before the website is done.
     expect(rest).toEqual([])
-    expect(setup?.state).toBe("done")
-    expect([
-      "Fixture Clean is set up",
-      "Finished setting up Fixture Clean",
-    ]).toContain(setup?.title)
-    // The working title, kept while a segment that just finished folds.
-    expect([
-      "Getting Fixture Clean ready",
-      "Setting up Fixture Clean",
-    ]).toContain(setup?.working)
-    expect(setup?.line).toBeNull()
+    expect(panel?.done).toEqual([
+      expect.objectContaining({
+        text: "Fixture Clean set up",
+        brief: "Services, service area, customers and 5 more",
+      }),
+    ])
 
     expect(website?.state).toBe("now")
     expect([
@@ -353,8 +348,6 @@ describe("the first run", () => {
       tone: "working",
       lead: "Ellie is building your website",
     })
-    // Now holds one segment, so Coming up is kept in view above the rest.
-    expect(panel?.upcomingFirst).toBe(true)
   })
 
   it("puts the review in going live, not in Waiting on you", () => {
@@ -375,10 +368,14 @@ describe("the first run", () => {
         attention: [review],
       }
     )
-    const [, website, golive] = panel?.journey ?? []
-    expect(website?.state).toBe("done")
-    expect(golive?.title).toMatch(/^(Putting|Taking) your website live$/)
-    expect(golive?.line).toBe("Ready when you are")
+    const [golive, ...rest] = panel?.journey ?? []
+    expect(rest).toEqual([])
+    expect(panel?.done.map((item) => item.text)).toEqual([
+      "Website built",
+      "Fixture Clean set up",
+    ])
+    expect(golive?.title).toBe("Your website is ready")
+    expect(golive?.line).toBe("Waiting for your approval to publish")
     expect(golive?.steps.map((each) => [each.label, each.state])).toEqual([
       ["Waiting for you to publish", "waiting"],
       ["Publishing", "next"],
@@ -386,7 +383,9 @@ describe("the first run", () => {
     ])
     expect(panel?.review).toBe(review)
     expect(panel?.waiting).toEqual([])
-    expect(panel?.line.lead).toBe("Ellie is waiting for you to publish")
+    expect(panel?.line.lead).toBe(
+      "Ellie is waiting for your approval to publish"
+    )
 
     // On the approvals page the review is the page's, not the segment's.
     const approvals = panelFor(
@@ -412,7 +411,7 @@ describe("the first run", () => {
       onboarding(8, "done"),
       segment("website", "failed", along(WEBSITE_STEPS, 4), BUSINESS),
     ])
-    const website = panel?.journey[1]
+    const website = panel?.journey[0]
     expect(website?.title).toBe("The website build stopped")
     expect(website?.line).toBe("Ask Ellie to try again")
     expect(website?.steps[4]).toMatchObject({ label: "Checking", state: "now" })
@@ -427,7 +426,7 @@ describe("the first run", () => {
       onboarding(8, "done"),
       segment("website", "now", steps, BUSINESS),
     ])
-    const [planning, photos, writing] = panel?.journey[1]?.steps ?? []
+    const [planning, photos, writing] = panel?.journey[0]?.steps ?? []
     expect(writing?.label).toBe("Writing the pages, 2 of 6")
     expect(writing?.said).toBe("Writing the pages")
     // A step with no count has nothing to leave out.
@@ -563,8 +562,6 @@ describe("later jobs", () => {
     expect(jobs?.suggestions).toEqual([
       { kind: "visit-site", host: HOST, url: URL_ },
     ])
-    // One segment in Now: Coming up is kept above Waiting on you.
-    expect(jobs?.upcomingFirst).toBe(true)
   })
 })
 
@@ -654,7 +651,7 @@ describe("coming up and done today", () => {
   it("says what finished today, a quiet check-in too", () => {
     const done = at(ROUTES.home)?.done.map((item) => item.text)
     expect(done?.[0]).toBe("Ellie checked in, all clear")
-    expect(done?.[1]).toMatch(/^Fixture\.example\.invalid is (live|working)$/)
+    expect(done?.[1]).toBe("Fixture.example.invalid connected")
   })
 
   it("says no time until the reader's zone is known", () => {

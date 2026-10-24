@@ -587,6 +587,8 @@ type JobCopy = {
   title: (n: Names) => readonly string[]
   /** The title while the job has not begun, when it differs from `title`. */
   next?: (n: Names) => readonly string[]
+  /** The title while it waits on the owner, when it differs from `title`. */
+  waiting?: (n: Names) => readonly string[]
   done: (n: Names) => readonly string[]
   /** What stopped, after "The" and before "stopped". */
   noun: string
@@ -623,6 +625,7 @@ const JOBS: Record<JobKind, JobCopy> = {
   golive: {
     title: () => ["Putting your website live", "Taking your website live"],
     next: () => ["Then it goes live", "Then your website goes live"],
+    waiting: () => ["Your website is ready"],
     done: (n) =>
       n.host
         ? [
@@ -674,11 +677,11 @@ const JOBS: Record<JobKind, JobCopy> = {
 /** What a waiting segment waits for, after "waiting for". */
 const WAITING: Partial<Record<ActivitySegment["kind"], string>> = {
   onboarding: "your answer",
-  golive: "you to publish",
+  golive: "your approval to publish",
   domain: "your DNS change",
   purchase: "your payment",
   google: "you to sign in",
-  review: "you to publish",
+  review: "your approval to publish",
   question: "your answer",
 }
 
@@ -707,6 +710,9 @@ export function segmentTitle(segment: ActivitySegment, ctx: CopyContext) {
   if (segment.state === "failed") return `The ${copy.noun} stopped`
   if (segment.state === "upcoming" && copy.next) {
     return pick(ctx, `${segment.kind}:next`, copy.next(n))
+  }
+  if (segment.state === "waiting" && copy.waiting) {
+    return pick(ctx, `${segment.kind}:waiting`, copy.waiting(n))
   }
   const done = segment.state === "done"
   return pick(
@@ -763,7 +769,9 @@ export function segmentLine(
       return step ?? (elapsed ? `${elapsed} so far` : null)
     }
     case "golive":
-      return waiting ? "Ready when you are" : "Going live in a minute"
+      return waiting
+        ? "Waiting for your approval to publish"
+        : "Going live in a minute"
     case "domain":
       return waiting
         ? `One change to make at ${cleanArg(extras.provider) ?? "your DNS provider"}`
@@ -934,11 +942,27 @@ export const stepKind = (
       ? "question"
       : segmentKind(segment)
 
+/** A finished job as a Completed row: what got done, in a few words. */
+const COMPLETED: Record<JobKind, (n: Names) => string> = {
+  onboarding: (n) => `${biz(n)} set up`,
+  website: () => "Website built",
+  golive: (n) =>
+    n.host ? `Website published at ${n.host}` : "Website published",
+  change: () => "Website changes made",
+  domain: (n) => `${cap(domain(n))} connected`,
+  purchase: (n) => `${cap(domain(n))} registered`,
+  google: () => "Connected to Google",
+}
+
+/** The check-in sent the owner a message. */
+const wroteToOwner = (segment: ActivitySegment) =>
+  segment.steps.some((s) => s.id === "message" && s.state === "done")
+
 /**
- * A one-line row in Coming up or Done today. A reminder is its own title,
+ * A one-line row in Coming up or Completed. A reminder is its own title,
  * which is the owner's text; a check-in says whether it needed the owner; a
- * bought domain's renewal names the domain; a finished job is its done
- * title. Null for a segment with nothing to say as a row.
+ * bought domain's renewal names the domain; a finished job says what got
+ * done. Null for a segment with nothing to say as a row.
  */
 export function rowLine(
   segment: ActivitySegment,
@@ -946,6 +970,9 @@ export function rowLine(
   title?: string | null
 ): string | null {
   const assistant = named(ctx.assistant)
+  if (segment.state === "done" && Object.hasOwn(COMPLETED, segment.kind)) {
+    return COMPLETED[segment.kind as JobKind](namesOf(segment, ctx))
+  }
   switch (segment.kind) {
     case "reminder":
       return title ? tidy(title) : "A reminder"
@@ -953,11 +980,8 @@ export function rowLine(
       if (segment.state === "upcoming") {
         return assistant ? `${assistant}'s next check-in` : "Next check-in"
       }
-      const wrote = segment.steps.some(
-        (s) => s.id === "message" && s.state === "done"
-      )
       const who = assistant ?? "Your assistant"
-      return wrote
+      return wroteToOwner(segment)
         ? `${who} checked in and messaged you`
         : `${who} checked in, all clear`
     }
@@ -969,6 +993,67 @@ export function rowLine(
       return segmentTitle(segment, ctx)
     default:
       return segmentTitle(segment, ctx)
+  }
+}
+
+/** "Services, service area and customers", or "…, customers and 4 more". */
+const listed = (labels: string[]) => {
+  const words = labels.map((label, i) => (i ? label.toLowerCase() : label))
+  if (words.length > 3) {
+    return `${words.slice(0, 3).join(", ")} and ${words.length - 3} more`
+  }
+  return words.length > 1
+    ? `${words.slice(0, -1).join(", ")} and ${words.at(-1)}`
+    : (words[0] ?? "")
+}
+
+/**
+ * A finished row's one-line brief, for the Tasks page: what it covered or
+ * what it means for the owner. Null when the row says it all.
+ */
+export function completedBrief(
+  segment: ActivitySegment,
+  ctx: CopyContext
+): string | null {
+  const n = namesOf(segment, ctx)
+  const total = (id: string) =>
+    segment.steps.find((s) => s.id === id)?.count?.total
+  switch (segment.kind) {
+    case "onboarding": {
+      const labels = segment.steps.flatMap((s) =>
+        s.state === "done" ? (STEP_LABELS.onboarding?.[s.id] ?? []) : []
+      )
+      return labels.length ? listed(labels) : null
+    }
+    case "website": {
+      const pages = total("writing")
+      const photos = total("photos")
+      const made = [
+        pages ? plural(pages, "page") : null,
+        photos ? plural(photos, "photo") : null,
+      ].filter((part) => part !== null)
+      return made.length
+        ? `${made.join(" and ")}, checked and ready`
+        : "Planned, written and checked"
+    }
+    case "golive":
+      return `Anyone can now visit ${n.host ?? "your website"}`
+    case "change":
+      return cleanArg(segment.step, "text", 60) ?? "Made and checked"
+    case "domain":
+      return `Your website now loads at ${n.domain ?? "your domain"}`
+    case "purchase":
+      return "Registered in your name"
+    case "google":
+      return "Your pages were sent to Google"
+    case "checkin":
+      return wroteToOwner(segment)
+        ? "Sent you a message in the chat"
+        : "Nothing needed you"
+    case "reminder":
+      return "Marked done"
+    default:
+      return null
   }
 }
 

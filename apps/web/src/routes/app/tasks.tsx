@@ -3,21 +3,26 @@ import {
   CircleHalfIcon,
   CircleIcon,
 } from "@phosphor-icons/react"
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute, getRouteApi } from "@tanstack/react-router"
 import { PageHeader } from "@workspace/ui/components/app-shell"
 import { Badge } from "@workspace/ui/components/badge"
+import { formatDateTime } from "@workspace/ui/lib/format"
 import { cn, META } from "@workspace/ui/lib/utils"
 import { assistantOf, leading } from "@/lib/briefing"
+import { completedOf } from "@/lib/panel"
 import { useLiveWorkspace } from "@/lib/workspace"
+import { useBrowserZone } from "@/panel/workspace-panel"
 
 /**
- * What the assistant is helping the owner set up. The tasks below are
- * examples: nothing stores or tracks a task yet, so the workspace gives this
- * page only the assistant's name.
+ * What the assistant is helping the owner set up. Completed is real, read
+ * from the workspace's activity, and the panel's Completed links here. The
+ * tasks below it are examples: nothing stores or tracks a task yet.
  */
 export const Route = createFileRoute("/app/tasks")({
   component: TasksPage,
 })
+
+const frame = getRouteApi("/app")
 
 type Status = "done" | "active" | "waiting"
 
@@ -33,6 +38,8 @@ type Task = {
   status: Status
   /** Why it cannot start yet, when another task has to finish first. */
   after?: string
+  /** When it finished, said in the reader's zone. */
+  when?: string | null
 }
 
 /** The tasks, worded with what the owner calls their assistant. */
@@ -105,6 +112,7 @@ function TaskRow({ task }: { task: Task }) {
           {task.detail}
         </p>
         {task.after ? <p className={META}>Starts after {task.after}.</p> : null}
+        {task.when ? <p className={META}>{task.when}</p> : null}
       </div>
       <Badge variant={task.status === "active" ? "default" : "secondary"}>
         {status.label}
@@ -114,22 +122,50 @@ function TaskRow({ task }: { task: Task }) {
 }
 
 function TasksPage() {
-  const assistant = assistantOf(useLiveWorkspace().workspace)
+  const { workspace } = useLiveWorkspace()
+  const { active } = frame.useLoaderData()
+  const zone = useBrowserZone()
+  const assistant = assistantOf(workspace)
+  const ctx = {
+    orgId: active?.id ?? "",
+    assistant: workspace?.assistantName ?? null,
+  }
+  // Times wait for the reader's zone, as the panel's do.
+  const completed: Task[] =
+    workspace && zone
+      ? completedOf(workspace, ctx).map((each) => ({
+          title: each.text,
+          detail: each.brief ?? "",
+          status: "done",
+          when: formatDateTime(each.at, zone),
+        }))
+      : []
+  const groups = [
+    ...(completed.length
+      ? [{ id: "completed", title: "Completed", tasks: completed }]
+      : []),
+    ...groupsOf(assistant),
+  ]
   return (
     <>
       <PageHeader
-        description={`What ${assistant} is helping you set up, in the order it happens.`}
+        description={`What ${assistant} has done and is helping you set up.`}
         title="Tasks"
       />
       <div className="flex flex-col gap-8">
-        {groupsOf(assistant).map((group) => (
-          <section aria-labelledby={`tasks-${group.id}`} key={group.id}>
+        {groups.map((group) => (
+          <section
+            aria-labelledby={`tasks-${group.id}`}
+            className="scroll-mt-6"
+            id={group.id}
+            key={group.id}
+          >
             <h2 className="mb-3 font-semibold text-sm" id={`tasks-${group.id}`}>
               {group.title}
             </h2>
             <ul className="flex flex-col gap-2">
               {group.tasks.map((task) => (
-                <TaskRow key={task.title} task={task} />
+                <TaskRow key={`${task.title}${task.when ?? ""}`} task={task} />
               ))}
             </ul>
           </section>

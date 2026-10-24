@@ -427,7 +427,7 @@ describe("segment copy", () => {
       expect(segmentTitle(segment(kind, "now"), { orgId: "org-1" })).toBeNull()
     }
     expect(waitingRow(segment("review", "waiting"), "11:50")).toBe(
-      "Waiting for you to publish, until 11:50"
+      "Waiting for your approval to publish, until 11:50"
     )
   })
 })

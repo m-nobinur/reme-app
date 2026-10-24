@@ -21,12 +21,12 @@ import {
   ComingUp,
   LiveLine,
   NextSteps,
-  PanelSection,
   PanelSegment,
   type Preview,
   QuestionItem,
   ReminderList,
   ReminderNote,
+  SECTION_ACTION,
   type SegmentStep,
   StageDetail,
   StopBuild,
@@ -80,6 +80,9 @@ import { useFollowStep } from "./follow-step"
  */
 
 const FAILED = "That didn't go through. Try again."
+
+/** How many of each Activity list show before the rest: in place for Now, on their own page for the others. */
+const SHOWN = { now: 3, upcoming: 4, done: 3 } as const
 
 /** Where a reminder can point: focusable by script, ringed from the keyboard. */
 const TARGET =
@@ -622,8 +625,15 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
       ? tab
       : "activity"
 
+  // The first version's review says the going-live segment's one step itself.
   const segment = (each: SegmentView) => (
-    <Segment key={each.id} refresh={refresh} segment={each}>
+    <Segment
+      key={each.id}
+      refresh={refresh}
+      segment={
+        each.kind === "golive" && panel.review ? { ...each, steps: [] } : each
+      }
+    >
       {/* The first version's review is the going-live segment's first step. */}
       {each.kind === "golive" && panel.review ? (
         <div
@@ -640,20 +650,16 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
       ) : null}
     </Segment>
   )
-  const comingUp = <ComingUp items={panel.upcoming} zone={zone} />
   const activity = (
     <>
-      {panel.journey.length ? (
-        <div className="flex flex-col gap-4">{panel.journey.map(segment)}</div>
-      ) : null}
-      {panel.now.length ? (
-        <PanelSection title="Now">
-          <div className="flex flex-col gap-4">{panel.now.map(segment)}</div>
-        </PanelSection>
-      ) : null}
-      {panel.upcomingFirst ? comingUp : null}
-      <WaitingOnYou error={stale} onRetry={refresh} status={status}>
-        {panel.blocked.map((each) => (
+      <WaitingOnYou
+        error={stale}
+        limit={SHOWN.now}
+        onRetry={refresh}
+        status={status}
+        title="Now"
+      >
+        {[...panel.journey, ...panel.now, ...panel.blocked].map((each) => (
           <div className="py-3" key={each.id}>
             {segment(each)}
           </div>
@@ -680,8 +686,27 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
           ) : null
         )}
       </WaitingOnYou>
-      {panel.upcomingFirst ? null : comingUp}
-      <ComingUp items={panel.done} title="Done today" zone={zone} />
+      <ComingUp
+        action={
+          panel.upcoming.length > SHOWN.upcoming ? (
+            <Link className={SECTION_ACTION} to="/app/reminders">
+              View all
+            </Link>
+          ) : null
+        }
+        items={panel.upcoming.slice(0, SHOWN.upcoming)}
+        zone={zone}
+      />
+      <ComingUp
+        action={
+          <Link className={SECTION_ACTION} hash="completed" to="/app/tasks">
+            View all
+          </Link>
+        }
+        items={panel.done.slice(0, SHOWN.done)}
+        title="Completed"
+        zone={zone}
+      />
       <NextSteps>
         {panel.suggestions.map((suggestion) => (
           <Suggested key={suggestion.kind} suggestion={suggestion} />
