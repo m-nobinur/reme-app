@@ -473,6 +473,13 @@ export function useBrowserZone(): string | null {
   return useSyncExternalStore(noSubscription, browserZone, () => null)
 }
 
+/** The current minute, which re-renders its reader as it turns, so elapsed and relative times move while the workspace holds still. */
+const everyMinute = (tick: () => void) => {
+  const timer = setInterval(tick, 60_000)
+  return () => clearInterval(timer)
+}
+const thisMinute = () => Math.floor(Date.now() / 60_000) * 60_000
+
 /** A written reminder with its own Done, shown done while the write runs. */
 export function Completable({
   note,
@@ -563,6 +570,7 @@ export function usePanel(workspace: Workspace | null): Panel | null {
   const route = useMatches({ select: (matches) => matches.at(-1)?.routeId })
   const { id } = useParams({ strict: false })
   const zone = useBrowserZone()
+  const minute = useSyncExternalStore(everyMinute, thisMinute, thisMinute)
   if (!workspace) return null
   return panelFor({
     route,
@@ -572,7 +580,7 @@ export function usePanel(workspace: Workspace | null): Panel | null {
     business: active?.name ?? null,
     conversations,
     names,
-    now: new Date(),
+    now: new Date(minute),
     zone,
   })
 }
