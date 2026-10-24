@@ -32,6 +32,19 @@ for (const theme of ["light", "dark"] as const) {
     for (const width of WIDTHS) {
       for (const entry of ENTRIES) {
         await open(page, entry, width, theme)
+        // A segment fades in; contrast is read once it has, not mid-fade.
+        await page.evaluate(() =>
+          Promise.all(
+            document
+              .getAnimations()
+              .filter(
+                (animation) =>
+                  animation.effect?.getTiming().iterations !==
+                  Number.POSITIVE_INFINITY
+              )
+              .map((animation) => animation.finished.catch(() => null))
+          )
+        )
         const results = await new AxeBuilder({ page })
           .withTags(WCAG)
           .include(`[data-entry="${entry}"]`)
