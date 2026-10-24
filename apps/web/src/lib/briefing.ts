@@ -60,20 +60,20 @@ export function briefingOf(
   }
   const { live, building, open, attention, derivedReminders } = workspace
   const approval = attention.find((item) => item.kind === "approval")
-  const approvals = attention.filter((item) => item.kind === "approval").length
+  const assistant = leading(assistantOf(workspace))
   const questions = attention.filter((item) => item.kind === "question")
 
-  // A first version waiting on Publish is still an open build, but it is
-  // ready, not under way; the updates under the composer carry Publish.
+  // A site waiting on Publish is still an open build, but it is ready; the
+  // updates under the composer carry Publish.
   const site = live
     ? "Your website is live."
     : approval
-      ? "Your first version is ready."
+      ? "Your website is ready to go live."
       : building
-        ? "Your first version is being built."
+        ? `${assistant} is building your website.`
         : open
-          ? "Your first version is under way."
-          : "You have no website yet."
+          ? "Your website is in progress."
+          : "You don't have a website yet."
 
   // Each reminder rule sharpens the line for its own kind, so one line never
   // says the same thing twice: a closing review replaces "ready to publish",
@@ -99,24 +99,21 @@ export function briefingOf(
 
   let next: string | null = null
   if (expiring) {
-    next = `Publish ${live ? "the new version" : "it"} by ${due(expiring.expires_at, now)}.`
+    next = `Publish ${live ? "your latest changes" : "it"} by ${due(expiring.expires_at, now)}.`
   } else if (approval && live) {
-    next =
-      approvals === 1
-        ? "A new version is ready to publish."
-        : `${approvals} versions are ready to publish.`
+    next = "Your latest changes are ready to publish."
   } else if (waiting) {
-    next = `${waiting.raisedBy}'s question about ${waiting.title.toLowerCase()} is still waiting on you.`
+    next = `${waiting.raisedBy} is still waiting for your answer about ${waiting.title.toLowerCase()}.`
   } else if (questions.length === 1) {
-    next = `${questions[0]?.raisedBy} has one question for you.`
+    next = `${questions[0]?.raisedBy} has a question for you.`
   } else if (questions.length > 1) {
-    next = `${questions.length} questions are waiting on you.`
+    next = `You have ${questions.length} questions to answer.`
   } else if (unpublished && !approval) {
-    next = "A new version is ready but not published."
+    next = "Your latest changes aren't published yet."
   } else if (facts) {
-    next = `${leading(assistantOf(workspace))} still needs ${factsNeeded(facts.keys)}.`
+    next = `${assistant} still needs ${factsNeeded(facts.keys)}.`
   } else if (building && live) {
-    next = "A change is being built."
+    next = `${assistant} is working on your changes.`
   }
 
   // What waits on the owner first, then the build, then what to do next.
@@ -125,16 +122,22 @@ export function briefingOf(
   const fresh = !live && !open && !approval
   const suggestions: string[] = []
   if (approval) {
-    suggestions.push("What changed in the new version?")
+    suggestions.push(
+      live ? "What did you change?" : "What's on my new website?"
+    )
   }
   if (questions.length > 0) {
     suggestions.push("What do you need from me?")
   }
   if (unpublished && !approval) {
-    suggestions.push("Why is the new version not live yet?")
+    suggestions.push("Why aren't my changes live yet?")
   }
   if (building) {
-    suggestions.push("How is the build going?")
+    suggestions.push(
+      live
+        ? "How are my changes coming along?"
+        : "How's my website coming along?"
+    )
   }
   if (fresh) {
     suggestions.push("Build my website")
@@ -154,7 +157,7 @@ export function briefingOf(
   }
   if (live) {
     suggestions.push(
-      "What is on my website now?",
+      "What's on my website now?",
       "I want to change something on my website",
       "Set a reminder for me"
     )

@@ -26,7 +26,7 @@ it("says nothing without an organisation or a workspace to read", () => {
 
 it("offers the first build to an owner with no site", () => {
   const briefing = briefingOf(ORG, workspace())
-  expect(briefing.line).toBe("You have no website yet.")
+  expect(briefing.line).toBe("You don't have a website yet.")
   expect(prompts(briefing)).toEqual([
     "Build my website",
     "Let me tell you about my business",
@@ -69,7 +69,7 @@ it("does not list every missing fact in one suggestion", () => {
 
 it("offers a live site's owner a look, a change and a reminder", () => {
   expect(prompts(briefingOf(ORG, workspace({ live: 3 })))).toEqual([
-    "What is on my website now?",
+    "What's on my website now?",
     "I want to change something on my website",
     "Set a reminder for me",
   ])
@@ -81,11 +81,11 @@ it("names who asked when one question waits on a live site", () => {
     workspace({ live: 3, attention: [question("The Developer")] })
   )
   expect(briefing.line).toBe(
-    "Your website is live. The Developer has one question for you."
+    "Your website is live. The Developer has a question for you."
   )
   expect(prompts(briefing)).toEqual([
     "What do you need from me?",
-    "What is on my website now?",
+    "What's on my website now?",
     "I want to change something on my website",
     "Set a reminder for me",
   ])
@@ -97,7 +97,7 @@ it("counts questions when there is more than one", () => {
     workspace({ live: 2, attention: [question("A"), question("B")] })
   )
   expect(briefing.line).toBe(
-    "Your website is live. 2 questions are waiting on you."
+    "Your website is live. You have 2 questions to answer."
   )
 })
 
@@ -112,42 +112,44 @@ it("puts an approval before a question, and keeps to four suggestions", () => {
     })
   )
   expect(briefing.line).toBe(
-    "Your website is live. A new version is ready to publish."
+    "Your website is live. Your latest changes are ready to publish."
   )
   expect(prompts(briefing)).toEqual([
-    "What changed in the new version?",
+    "What did you change?",
     "What do you need from me?",
-    "How is the build going?",
-    "What is on my website now?",
+    "How are my changes coming along?",
+    "What's on my website now?",
   ])
 })
 
-it("counts approvals when there is more than one", () => {
+it("calls a first site with versions waiting ready to go live", () => {
   const briefing = briefingOf(
     ORG,
     workspace({ open: true, attention: [approval(1), approval(2)] })
   )
-  expect(briefing.line).toBe("Your first version is ready.")
-  expect(prompts(briefing)).toEqual(["What changed in the new version?"])
+  expect(briefing.line).toBe("Your website is ready to go live.")
+  expect(prompts(briefing)).toEqual(["What's on my new website?"])
 })
 
-it("says a first build is under way, and a later one is a change", () => {
+it("says a first build is the website, and a later one is changes", () => {
   const first = briefingOf(ORG, workspace({ building: true, open: true }))
-  expect(first.line).toBe("Your first version is being built.")
-  expect(prompts(first)).toEqual(["How is the build going?"])
+  expect(first.line).toBe("Your assistant is building your website.")
+  expect(prompts(first)).toEqual(["How's my website coming along?"])
 
   const later = briefingOf(
     ORG,
     workspace({ live: 5, building: true, open: true })
   )
-  expect(later.line).toBe("Your website is live. A change is being built.")
+  expect(later.line).toBe(
+    "Your website is live. Your assistant is working on your changes."
+  )
 })
 
 it("never offers a build while a first one is open but not working", () => {
   // Paused, waiting on an answer or ready for review: a build exists, so the
   // owner has a site on the way, and "Build my website" would start another.
   const briefing = briefingOf(ORG, workspace({ open: true }))
-  expect(briefing.line).toBe("Your first version is under way.")
+  expect(briefing.line).toBe("Your website is in progress.")
   expect(prompts(briefing)).not.toContain("Build my website")
 })
 
@@ -179,10 +181,10 @@ it("names the day and time a review closes, in the browser's time zone", () => {
       NOW
     ).line
   expect(line(at(2, 9))).toBe(
-    "Your website is live. Publish the new version by tomorrow at 09:00."
+    "Your website is live. Publish your latest changes by tomorrow at 09:00."
   )
   expect(line(at(1, 15))).toBe(
-    "Your website is live. Publish the new version by today at 15:00."
+    "Your website is live. Publish your latest changes by today at 15:00."
   )
 })
 
@@ -209,7 +211,7 @@ it("reads the review's local day even where UTC is on another", () => {
       new Date("2026-10-01T22:30:00.000Z")
     )
     expect(briefing.line).toBe(
-      "Your first version is ready. Publish it by tomorrow at 00:30."
+      "Your website is ready to go live. Publish it by tomorrow at 00:30."
     )
   } finally {
     process.env.TZ = zone
@@ -232,7 +234,7 @@ it("nudges about a question that has waited, naming it, in place of the count", 
     NOW
   )
   expect(briefing.line).toBe(
-    "Your website is live. The Developer's question about weekday hours is still waiting on you."
+    "Your website is live. The Developer is still waiting for your answer about weekday hours."
   )
 })
 
@@ -252,9 +254,9 @@ it("says a finished version was never published", () => {
     NOW
   )
   expect(briefing.line).toBe(
-    "Your website is live. A new version is ready but not published."
+    "Your website is live. Your latest changes aren't published yet."
   )
-  expect(prompts(briefing)[0]).toBe("Why is the new version not live yet?")
+  expect(prompts(briefing)[0]).toBe("Why aren't my changes live yet?")
 })
 
 it("puts an unpublished version after reviews and questions", () => {
@@ -274,10 +276,10 @@ it("puts an unpublished version after reviews and questions", () => {
       NOW
     ).line
   expect(lineOf({ attention: [approval(5)] })).toBe(
-    "Your website is live. A new version is ready to publish."
+    "Your website is live. Your latest changes are ready to publish."
   )
   expect(lineOf({ attention: [question("The Developer")] })).toBe(
-    "Your website is live. The Developer has one question for you."
+    "Your website is live. The Developer has a question for you."
   )
   expect(
     lineOf({
@@ -291,7 +293,7 @@ it("puts an unpublished version after reviews and questions", () => {
         },
       ],
     })
-  ).toMatch(/^Your website is live\. Publish the new version by today at /)
+  ).toMatch(/^Your website is live\. Publish your latest changes by today at /)
 })
 
 it("lists the facts the assistant still needs, after anything waiting on the owner", () => {
@@ -304,7 +306,7 @@ it("lists the facts the assistant still needs, after anything waiting on the own
   expect(
     briefingOf(ORG, workspace({ derivedReminders: facts }), NOW).line
   ).toBe(
-    "You have no website yet. Your assistant still needs your phone number and weekday hours."
+    "You don't have a website yet. Your assistant still needs your phone number and weekday hours."
   )
   expect(
     briefingOf(
@@ -312,5 +314,5 @@ it("lists the facts the assistant still needs, after anything waiting on the own
       workspace({ live: 2, attention: [approval(3)], derivedReminders: facts }),
       NOW
     ).line
-  ).toBe("Your website is live. A new version is ready to publish.")
+  ).toBe("Your website is live. Your latest changes are ready to publish.")
 })

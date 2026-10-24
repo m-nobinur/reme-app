@@ -2104,7 +2104,8 @@ function ConversationSample({ stored }: { stored?: string }) {
         messages={[]}
         {...(stored ? { stored } : {})}
         settings={{
-          briefing: "Your website is live. A new version is ready to publish.",
+          briefing:
+            "Your website is live. Your latest changes are ready to publish.",
         }}
         suggestions={SUGGESTIONS}
       />
@@ -2414,7 +2415,7 @@ const assistantCatalog = [
         height="h-[34rem]"
         messages={[]}
         settings={{
-          briefing: "Your first version is ready.",
+          briefing: "Your website is ready to go live.",
           updates: (
             <UpdateDeck
               updates={[
@@ -2600,7 +2601,8 @@ const assistantCatalog = [
         isDisabled={false}
         messages={[]}
         settings={{
-          briefing: "Your website is live. A new version is ready to publish.",
+          briefing:
+            "Your website is live. Your latest changes are ready to publish.",
         }}
         suggestions={SUGGESTIONS}
       />
