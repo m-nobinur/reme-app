@@ -98,7 +98,7 @@ export function retryingText(
 }
 
 export function resumedText(kind: string): string {
-  return `${subject(kind)} got stuck, so I've restarted it from where it stopped. Nothing for you to do: I'll say here when the draft is ready.`
+  return `${subject(kind)} got stuck, so I restarted it from where it left off. Nothing for you to do: I'll say here when the draft is ready.`
 }
 
 export function stoppedText(kind: string, reason: string): string {
@@ -190,7 +190,7 @@ const NARRATE_TIMEOUT_MS = 8_000
 /** What happens next, by note, in the words the model must keep to. */
 const NEXT_WORDS: Record<Exclude<AgentNote["kind"], "problem">, string> = {
   resumed:
-    "You have already restarted it from where it stopped, and it is working again. The owner need do nothing, and you will say here when the draft is ready.",
+    "You already restarted it from where it left off, and it is back at work. Nothing is needed from the owner, and you will tell them here when the draft is ready.",
   retrying:
     "You have already started it again by yourself. The owner need do nothing, and you will say here when the draft is ready.",
   stopped:
