@@ -93,7 +93,7 @@ function PanelSection({
       className="flex flex-col gap-3 border-border not-first:border-t not-first:pt-4"
     >
       <div className="flex items-center justify-between gap-2">
-        <h2 className="flex items-center gap-2 font-semibold text-sm" id={id}>
+        <h2 className="flex items-center gap-1.5 font-semibold text-sm" id={id}>
           {Icon ? (
             <Icon aria-hidden className="size-4 text-muted-foreground" />
           ) : null}
@@ -1517,7 +1517,7 @@ function ComingUp({
       title={title}
     >
       {/* Under the heading's text, past its icon, so the rows read as the section's own. */}
-      <ul className="flex flex-col divide-y divide-border ps-6">
+      <ul className="flex flex-col divide-y divide-border ps-5.5">
         {items.map((item) => (
           <li
             className="flex items-baseline justify-between gap-3 py-2 first:pt-0 last:pb-0"
