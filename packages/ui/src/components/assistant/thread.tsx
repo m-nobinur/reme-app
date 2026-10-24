@@ -514,8 +514,9 @@ const ThreadRoot: FC<{
               <div className="flex flex-col gap-2">
                 <div className="empty:hidden" ref={setTray} />
                 <Composer autoFocus={autoFocus} expanded={isEmpty} />
+                {/* The same gap as the tray above the composer. */}
+                {isEmpty ? updates : null}
               </div>
-              {isEmpty ? updates : null}
               <AuiIf condition={(s) => isEmpty && s.composer.isEmpty}>
                 <ThreadSuggestions />
               </AuiIf>

@@ -2414,7 +2414,7 @@ const assistantCatalog = [
         height="h-[34rem]"
         messages={[]}
         settings={{
-          briefing: "Your first version is under way.",
+          briefing: "Your first version is ready.",
           updates: (
             <UpdateDeck
               updates={[
