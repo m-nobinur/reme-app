@@ -72,7 +72,10 @@ test("a choice of two answers on one tap, with no Submit", async ({ page }) => {
   await expect(
     build.getByRole("button", { name: "Yes, build it for me" })
   ).toBeVisible()
-  await expect(build).toHaveAccessibleName("Shall I build your website?")
+  // The card's frame is the region the question names.
+  await expect(build.getByRole("region")).toHaveAccessibleName(
+    "Shall I build your website?"
+  )
 })
 
 test("a colour card shows four, brings in four others, and takes a picked colour", async ({
@@ -81,8 +84,8 @@ test("a colour card shows four, brings in four others, and takes a picked colour
   await open(page, "AskChoice")
   const card = pending(page).nth(2)
   const first = await shownIds(card)
-  expect(first).toEqual(["ocean", "lagoon", "sunset", "damson"])
-  await card.getByText("Ocean", { exact: true }).click()
+  expect(first).toEqual(["mint", "mist_teal", "garden", "stone_sage"])
+  await card.getByText("Mint", { exact: true }).click()
   await card.getByRole("button", { name: "Show other colours" }).click()
   const second = await shownIds(card)
   expect(second).toHaveLength(4)
@@ -147,12 +150,12 @@ test("a reviewed quote form gives way to the owner's reply", async ({
 }) => {
   await open(page, "ReviewQuoteForm")
   await expect(page.locator('[data-slot="aui_user-message-root"]')).toHaveText([
-    /Use this form/,
+    /Looks good/,
     /Ask about luggage too/,
   ])
   const done = page
     .locator('[data-slot="review-quote-form"]')
-    .filter({ hasNot: page.getByRole("button", { name: "Use this form" }) })
+    .filter({ hasNot: page.getByRole("button", { name: "Looks good" }) })
   // One overtaken by a typed message leaves nothing; a broken one says so.
   await expect(done).toHaveCount(1)
   await expect(done.nth(0)).toContainText("did not come through")
