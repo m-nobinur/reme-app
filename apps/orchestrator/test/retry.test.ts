@@ -81,6 +81,7 @@ describe("what the owner reads", () => {
     readyText("site.revise", null),
     resumedText("site.build"),
     resumedText("site.revise"),
+    resumedText("site.build", true),
   ]
 
   it.each(lines)("%s", (line) => {
