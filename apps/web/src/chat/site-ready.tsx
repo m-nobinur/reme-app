@@ -101,6 +101,8 @@ export function SiteReadyCard({
       className={className}
       docked={docked}
       error={error}
+      // Each message the owner sends closes an opened card, so the chat shows.
+      key={sentAt}
       meta={versionMeta(live.workspace?.live ?? null, review.at, zone)}
       onApprove={() => void approve()}
       onMakeChanges={requestChanges}
