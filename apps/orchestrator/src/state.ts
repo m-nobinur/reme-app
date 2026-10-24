@@ -61,12 +61,15 @@ const ENTERED_FROM: Record<AssignmentState, readonly AssignmentState[]> = {
   repairing: ["implementing", "validating", "preview_ready"],
   paused: [],
   // A fourth gate failure cannot enter `repairing`, so it ends here directly.
+  // A question that goes unanswered, or whose site was lost before its
+  // checkpoint, ends the build from where it waits.
   failed: [
     "planning",
     "repairing",
     "validating",
     "implementing",
     "preview_ready",
+    "blocked_on_information",
   ],
   cancelled: [],
 }

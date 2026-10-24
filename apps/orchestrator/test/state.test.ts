@@ -141,7 +141,7 @@ const NEXT: Record<AssignmentState, AssignmentState[]> = {
   revising: ["validating"],
   release_candidate: ["published"],
   published: [],
-  blocked_on_information: ["implementing"],
+  blocked_on_information: ["implementing", "failed"],
   blocked_on_approval: ["release_candidate"],
   repairing: ["implementing", "failed"],
   paused: [],
