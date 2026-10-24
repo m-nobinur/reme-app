@@ -5,7 +5,6 @@ import {
   CaretRightIcon,
   ChatCircleDotsIcon,
   CheckCircleIcon,
-  CheckIcon,
   CircleIcon,
   ClockIcon,
   GlobeIcon,
@@ -329,7 +328,11 @@ function StepDetail({
               key={item.label}
             >
               {item.done ? (
-                <CheckIcon aria-hidden className="size-3 text-primary" />
+                <CheckCircleIcon
+                  aria-hidden
+                  className="size-3 text-primary"
+                  weight="fill"
+                />
               ) : null}
               {item.label}
               {item.done ? <span className="sr-only"> (written)</span> : null}
