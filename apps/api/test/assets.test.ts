@@ -58,6 +58,7 @@ describe("GET /revisions/:id/:picture", () => {
   const keys = [
     `sites/org-a/${rev}/screenshots/home-1440.png`,
     `sites/org-a/${rev}/screenshots/home-390.png`,
+    `sites/org-a/${rev}/critic/home-1440-2.jpg`,
     `sites/org-a/${rev}/dist/icon-192.png`,
   ]
   const asked: unknown[] = []
@@ -89,36 +90,40 @@ describe("GET /revisions/:id/:picture", () => {
         : undefined,
     }) as unknown as Env
   const mine = { orgId: "org-a" } as Owner
+  const read = (images: boolean, picture: string, owner = mine) =>
+    readRevisionPicture(env(images), owner, rev, picture)
 
-  it("cuts a screenshot to its first screen, at most 1200 wide, cached for good", async () => {
-    for (const picture of ["home-1440", "home-390"]) {
-      const response = await readRevisionPicture(env(true), mine, rev, picture)
+  it("cuts each picture from the home page's shots, cached for good", async () => {
+    for (const picture of ["laptop", "laptop-2", "phone"]) {
+      const response = await read(true, picture)
       expect(response.headers.get("content-type")).toBe("image/webp")
       expect(response.headers.get("cache-control")).toContain("immutable")
       await response.arrayBuffer()
     }
+    const cover = { fit: "cover", gravity: "top" }
     expect(asked).toEqual([
-      { width: 1200, height: 750, fit: "cover", gravity: "top" },
-      { width: 390, height: 244, fit: "cover", gravity: "top" },
+      { width: 1200, height: 750, ...cover },
+      { width: 1200, height: 750, ...cover },
+      { width: 390, height: 844, ...cover },
     ])
   })
 
-  it("serves the icon and, with no binding, the screenshot as stored", async () => {
-    for (const picture of ["icon", "home-1440"]) {
-      const response = await readRevisionPicture(env(false), mine, rev, picture)
-      expect(response.headers.get("content-type")).toBe("image/png")
+  it("serves the icon, and with no binding each picture as stored", async () => {
+    for (const [picture, type] of [
+      ["icon", "image/png"],
+      ["laptop", "image/png"],
+      ["laptop-2", "image/jpeg"],
+    ]) {
+      const response = await read(false, picture as string)
+      expect(response.headers.get("content-type")).toBe(type)
       expect((await response.arrayBuffer()).byteLength).toBe(9)
     }
   })
 
-  it("is a 404 for another org's version and for one not shot yet", async () => {
+  it("is a 404 for another org's version and for a name it does not serve", async () => {
     const theirs = { orgId: "org-b" } as Owner
-    expect(
-      (await readRevisionPicture(env(true), theirs, rev, "icon")).status
-    ).toBe(404)
-    expect(
-      (await readRevisionPicture(env(true), mine, rev, "home-768")).status
-    ).toBe(404)
+    expect((await read(true, "icon", theirs)).status).toBe(404)
+    expect((await read(true, "manifest")).status).toBe(404)
   })
 })
 

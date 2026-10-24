@@ -271,19 +271,30 @@ export async function readPhoto(
   })
 }
 
-/** The widest a version's screenshot is served: a card shows it at most 576 px wide, at twice that for a sharp screen. */
-const SHOT_WIDTH = 1200
+/**
+ * Where each picture is cut from, under the revision's prefix, and the size
+ * it is served at: the home page's full-length shots, cut to their first
+ * screen, and for the screen below the laptop's, the second of the
+ * viewport-high pieces taken for the design critic (`cropKey`). A card shows
+ * a laptop at most 576 px wide, so it is served at twice that.
+ */
+const CUTS: Record<string, { key: string; width: number; height: number }> = {
+  laptop: { key: "screenshots/home-1440.png", width: 1200, height: 750 },
+  "laptop-2": { key: "critic/home-1440-2.jpg", width: 1200, height: 750 },
+  phone: { key: "screenshots/home-390.png", width: 390, height: 844 },
+  icon: { key: "dist/icon-192.png", width: 0, height: 0 },
+}
 
 /**
- * `GET /revisions/{revision id}/{picture}`: one version's home page at a
- * screenshot width, or its icon, read from the revision's own prefix in the
+ * `GET /revisions/{revision id}/{picture}`: one version's home page as a
+ * card shows it, or its icon, read from the revision's own prefix in the
  * site bucket. Like `readPhoto`, the key starts with the session's org (a
  * site's id is its org's), so another org's revision is a plain 404, and a
  * revision never changes, so the answer is cached for good, privately.
  *
- * A screenshot is the whole page; the cards show its first screen, so it is
- * cut to that, 16:10 from the top, as a WebP. Without the Images binding, or
- * if it refuses the bytes, the original is served instead.
+ * Each screenshot is cut from the top to its size, as a WebP. Without the
+ * Images binding, or if it refuses the bytes, the stored file is served as
+ * it is. A page too short for a second screen has none: 404.
  */
 export async function readRevisionPicture(
   env: Env,
@@ -291,13 +302,11 @@ export async function readRevisionPicture(
   revisionId: string,
   picture: string
 ): Promise<Response> {
-  const base = `sites/${owner.orgId}/${revisionId}/`
-  const object = await env.SITES.get(
-    picture === "icon"
-      ? `${base}dist/icon-192.png`
-      : `${base}screenshots/${picture}.png`
-  )
-  if (!object) {
+  const cut = CUTS[picture]
+  const object =
+    cut &&
+    (await env.SITES.get(`sites/${owner.orgId}/${revisionId}/${cut.key}`))
+  if (!cut || !object) {
     return failure(404, {
       class: "resource",
       code: "picture.not_found",
@@ -309,14 +318,16 @@ export async function readRevisionPicture(
     "cache-control": "private, max-age=31536000, immutable",
     "x-content-type-options": "nosniff",
   }
-  const png = { ...headers, "content-type": "image/png" }
-  if (picture === "icon") return new Response(object.body, { headers: png })
-  const width = Math.min(Number(picture.slice("home-".length)), SHOT_WIDTH)
+  const stored = {
+    ...headers,
+    "content-type": cut.key.endsWith(".jpg") ? "image/jpeg" : "image/png",
+  }
+  if (!cut.width) return new Response(object.body, { headers: stored })
   const [forShot, body] = object.body.tee()
   const shot = await env.IMAGES?.input(forShot)
     .transform({
-      width,
-      height: Math.round((width * 10) / 16),
+      width: cut.width,
+      height: cut.height,
       fit: "cover",
       gravity: "top",
     })
@@ -326,7 +337,7 @@ export async function readRevisionPicture(
     ? new Response(shot.image(), {
         headers: { ...headers, "content-type": shot.contentType() },
       })
-    : new Response(body, { headers: png })
+    : new Response(body, { headers: stored })
 }
 
 /** One placed picture, as a build's `site.photos` event lists it. */
