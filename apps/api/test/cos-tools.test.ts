@@ -779,26 +779,32 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       expect(await versions()).toBe(before)
     })
 
-    it("starts a change whose text never touches contact, dropping the contact the model added", async () => {
-      const before = await phoneNow()
-      const turn = await turnOf(me, ['Change the hero to say "Spotless homes"'])
-      const stub = creating(me)
-      const output = kept(
-        "request_change",
-        await requestChange(
-          context(me, stub),
-          {
-            text: 'Change the hero to say "Spotless homes"',
-            change_kind: "copy",
-            contact: { phone: "+447700900222", email: "made@up.example" },
-          },
-          crypto.randomUUID(),
-          turn
+    it.each([
+      'Change the hero to say "Spotless homes"',
+      "Don't call us a family firm, just say we're local",
+    ])(
+      "starts a change whose text never touches contact, dropping the contact the model added: %s",
+      async (text) => {
+        const before = await phoneNow()
+        const turn = await turnOf(me, [text])
+        const stub = creating(me)
+        const output = kept(
+          "request_change",
+          await requestChange(
+            context(me, stub),
+            {
+              text,
+              change_kind: "copy",
+              contact: { phone: "+447700900222", email: "made@up.example" },
+            },
+            crypto.randomUUID(),
+            turn
+          )
         )
-      )
-      expect(output).toMatchObject({ outcome: "started" })
-      expect(await phoneNow()).toEqual(before)
-    })
+        expect(output).toMatchObject({ outcome: "started" })
+        expect(await phoneNow()).toEqual(before)
+      }
+    )
 
     it.each([
       ["phone", { phone: "+441174960199" }],

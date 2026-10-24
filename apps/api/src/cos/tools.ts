@@ -432,8 +432,12 @@ export async function getPreview(
   })
 }
 
-/** Words or marks that put a change text near a phone or an email. */
-const ABOUT_CONTACT = /phone|number|mobile|call|e-?mail|contact|@|\d{3}/i
+/**
+ * Words or marks that put a change text near a phone or an email. "Call"
+ * only as in "call us on": "don't call us a family firm" is not about one.
+ */
+const ABOUT_CONTACT =
+  /phone|number|mobile|\bcall (?:us |me )?(?:on|at)\b|\bring\b|e-?mail|contact|@|\d{3}/i
 
 const untyped = (what: string) =>
   failure(400, {
