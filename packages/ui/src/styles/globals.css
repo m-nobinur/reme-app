@@ -540,16 +540,23 @@
 
 /* An open question in the tray takes the focus: the earlier conversation
    steps back until it is answered or folded away. The newest message, which
-   asks it, stays as it is: dimming the reply just read made every turn blink. */
-[data-slot="aui_message-group"] > * {
-  transition: opacity 300ms ease;
+   asks it, stays as it is: dimming the reply just read made every turn blink.
+   It steps back in colour, not opacity: its text tokens turn muted, so its
+   text keeps the muted token's contrast and text already muted stays. */
+@media (prefers-reduced-motion: no-preference) {
+  /* Zero specificity, so a part's own transition still wins. */
+  [data-slot="aui_message-group"] :where(*) {
+    transition: color 300ms ease;
+  }
 }
 [data-slot="aui_thread-viewport"]:has(
     [data-slot="question-tray"]:not([data-collapsed])
   )
   [data-slot="aui_message-group"]
   > :not(:last-child) {
-  opacity: 0.55;
+  --chat-foreground: var(--muted-foreground);
+  --foreground: var(--muted-foreground);
+  color: var(--foreground);
 }
 
 @layer base {
