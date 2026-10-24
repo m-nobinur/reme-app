@@ -15,6 +15,7 @@ import {
 import {
   QuestionTray,
   type QuestionTrayStart,
+  ShowFoldedQuestion,
 } from "@workspace/ui/components/assistant/question-tray"
 import {
   type TrayServices,
@@ -514,13 +515,11 @@ const STATES: State[] = [
   { title: "Phone width, photos", start: { index: 4 }, width: PHONE },
 ]
 
-const trayCatalog: CatalogEntry[] = (
-  ["QuestionTray", "TrayFrame"] as const
-).map((name) => ({
-  name,
-  render: () => (
+/** Each state's tray, under its title; `name` keeps each entry's logo brief its own. */
+function States({ name, states }: { name: string; states: readonly State[] }) {
+  return (
     <div className="flex flex-col gap-10">
-      {STATES.map(({ title, start, input, rounds, services, width }) => (
+      {states.map(({ title, start, input, rounds, services, width }) => (
         <section
           className={`flex max-w-2xl flex-col gap-3 ${width ?? ""}`}
           key={title}
@@ -545,7 +544,58 @@ const trayCatalog: CatalogEntry[] = (
         </section>
       ))}
     </div>
+  )
+}
+
+/** The states titled `titles`, for a part drawn in only some of them. */
+const only = (...titles: string[]) =>
+  STATES.filter((state) => titles.includes(state.title))
+
+const trayCatalog: CatalogEntry[] = [
+  ...(["QuestionTray", "TrayFrame"] as const).map((name) => ({
+    name,
+    render: () => <States name={name} states={STATES} />,
+  })),
+  // The logo page's parts, and the services it draws designs with.
+  ...(
+    [
+      "TrayLogo",
+      "TrayServicesProvider",
+      "Ways",
+      "Fold",
+      "Summary",
+      "DropTile",
+      "RadioTile",
+    ] as const
+  ).map((name) => ({
+    name,
+    render: () => <States name={name} states={only("Logo, upload")} />,
+  })),
+  // The palette page's parts, its own and those built from the logo.
+  ...(["PalettePicture", "Swatches", "Surprise", "LogoPalettes"] as const).map(
+    (name) => ({
+      name,
+      render: () => (
+        <States
+          name={name}
+          states={only(
+            "Palette, nothing picked",
+            "Palette, built from the logo"
+          )}
+        />
+      ),
+    })
   ),
-}))
+  {
+    // Only there while a tray is folded, as the waiting line and the panel show it.
+    name: "ShowFoldedQuestion",
+    render: () => (
+      <div className="flex flex-col gap-3">
+        <ShowFoldedQuestion className="self-start text-sm" />
+        <States name="ShowFoldedQuestion" states={only("Collapsed")} />
+      </div>
+    ),
+  },
+]
 
 export { trayCatalog }

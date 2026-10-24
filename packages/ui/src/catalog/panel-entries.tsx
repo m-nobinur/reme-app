@@ -609,8 +609,11 @@ const panelCatalog: Entry[] = [
         names: BUSINESS,
       }),
   },
-  {
-    name: "PanelSegment website photos",
+  // A segment, and what each of its stages decided or made.
+  ...(
+    ["PanelSegment website photos", "PanelSegment", "StageDetail"] as const
+  ).map((name) => ({
+    name,
     render: () =>
       segment(
         {
@@ -634,7 +637,7 @@ const panelCatalog: Entry[] = [
           children: <StopBuild onStop={noop} state="implementing" />,
         }
       ),
-  },
+  })),
   {
     // A stage that does not apply stays in the list, skipped.
     name: "PanelSegment website skipped",
@@ -843,14 +846,15 @@ const panelCatalog: Entry[] = [
         target: { kind: "domain", hostname: "brightclean.example.invalid" },
       }),
   },
-  {
-    name: "WaitingOnYou",
+  // The section every panel list sits in.
+  ...(["WaitingOnYou", "PanelSection"] as const).map((name) => ({
+    name,
     render: () => (
       <WaitingOnYou status="Published v3.">
         {question({ kind: "fact", key: "business.phone" }, "Phone number")}
       </WaitingOnYou>
     ),
-  },
+  })),
   {
     name: "WaitingOnYou error",
     render: () => (
@@ -972,8 +976,9 @@ const panelCatalog: Entry[] = [
       </div>
     ),
   },
-  {
-    name: "YourWebsite",
+  // The screenshot, and the light it drifts on until it loads.
+  ...(["YourWebsite", "Shot", "Diffusing"] as const).map((name) => ({
+    name,
     render: () => (
       <YourWebsite
         host="brightclean-demo.example.invalid"
@@ -982,7 +987,7 @@ const panelCatalog: Entry[] = [
         thumbnail={THUMBNAIL}
       />
     ),
-  },
+  })),
   {
     name: "YourWebsite loading",
     render: () => (

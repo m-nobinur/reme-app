@@ -2143,6 +2143,21 @@ function TooltipSample() {
   )
 }
 
+/** A first version ready to review, with its pictures and a preview. */
+const READY = {
+  title: "Brightclean website",
+  meta: "Not published · Today, 4:05 pm",
+  pictures: {
+    laptop: KITCHEN,
+    "laptop-2": KITCHEN,
+    phone: KITCHEN,
+    icon: ICON,
+  },
+  preview: { url: "https://preview.example.invalid/" },
+  onApprove: noop,
+  onMakeChanges: noop,
+}
+
 const assistantCatalog = [
   { name: "Collapsible", render: () => <CollapsibleSample /> },
   { name: "CollapsibleTrigger", render: () => <CollapsibleSample /> },
@@ -2354,62 +2369,56 @@ const assistantCatalog = [
   // ready and approved.
   {
     name: "SiteReady",
-    render: () => {
-      const ready = {
-        title: "Brightclean website",
-        meta: "Not published · Today, 4:05 pm",
-        pictures: {
-          laptop: KITCHEN,
-          "laptop-2": KITCHEN,
-          phone: KITCHEN,
-          icon: ICON,
-        },
-        preview: { url: "https://preview.example.invalid/" },
-        onApprove: noop,
-        onMakeChanges: noop,
-      }
-      return (
-        <div className="flex flex-col gap-6">
-          <FixtureThread
-            height="h-[34rem]"
-            messages={[
-              ask("Can you add a line about pets?"),
-              {
-                content: [
-                  {
-                    text: "Noted. I will add it once the first version is ready.",
-                    type: "text",
-                  },
-                ],
-                role: "assistant",
-                status: DONE,
-              },
-            ]}
-            settings={{ after: <SiteReady {...ready} /> }}
+    render: () => (
+      <div className="flex flex-col gap-6">
+        <FixtureThread
+          height="h-[34rem]"
+          messages={[
+            ask("Can you add a line about pets?"),
+            {
+              content: [
+                {
+                  text: "Noted. I will add it once the first version is ready.",
+                  type: "text",
+                },
+              ],
+              role: "assistant",
+              status: DONE,
+            },
+          ]}
+          settings={{ after: <SiteReady {...READY} /> }}
+        />
+        <FixtureThread
+          height="h-[34rem]"
+          messages={[ask("Hi")]}
+          settings={{ after: <SiteReady {...READY} docked /> }}
+        />
+        <div className="flex max-w-xl flex-col gap-6">
+          <SiteReady {...READY} pending />
+          <SiteReady
+            {...READY}
+            error="A newer version replaced that one. Check the latest before you decide."
           />
-          <FixtureThread
-            height="h-[34rem]"
-            messages={[ask("Hi")]}
-            settings={{ after: <SiteReady {...ready} docked /> }}
-          />
-          <div className="flex max-w-xl flex-col gap-6">
-            <SiteReady {...ready} pending />
-            <SiteReady
-              {...ready}
-              error="A newer version replaced that one. Check the latest before you decide."
-            />
-            <SiteReady {...ready} preview="error" />
-            <SiteReady {...ready} pictures={null} preview="loading" />
-            <SiteReady {...ready} approved />
-          </div>
+          <SiteReady {...READY} preview="error" />
+          <SiteReady {...READY} pictures={null} preview="loading" />
+          <SiteReady {...READY} approved />
         </div>
-      )
-    },
+      </div>
+    ),
   },
+  // The ready card's own parts: the site's icon and the way to its preview.
+  ...(["SiteIcon", "PreviewLink"] as const).map((name) => ({
+    name,
+    render: () => (
+      <div className="max-w-xl">
+        <SiteReady {...READY} />
+      </div>
+    ),
+  })),
   // A new chat's updates: the site to publish, a question and a reminder,
-  // one in front with the other two as edges under it.
-  {
-    name: "UpdateDeck",
+  // one in front with the other two as edges under it, each a row of its own.
+  ...(["UpdateDeck", "UpdateRow", "UpdateKindIcon"] as const).map((name) => ({
+    name,
     render: () => (
       <FixtureThread
         height="h-[34rem]"
@@ -2469,7 +2478,7 @@ const assistantCatalog = [
         }}
       />
     ),
-  },
+  })),
   {
     name: "RequestChange",
     render: () => (

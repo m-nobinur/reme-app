@@ -1,6 +1,8 @@
 import {
+  StatusIcon,
   type StatusKind,
   StatusLine,
+  ToolStatus,
 } from "@workspace/ui/components/status-line"
 import type { ReactNode } from "react"
 
@@ -37,6 +39,51 @@ const Stack = ({ children }: { children: ReactNode }) => (
 )
 
 const statusLineCatalog: Entry[] = [
+  // The icon alone, as the panel's rows draw it beside their own words, held
+  // still; the drawn icons are the kinds that have one of their own.
+  ...(
+    [
+      "StatusIcon",
+      "ReadingIcon",
+      "ThinkingIcon",
+      "SetupIcon",
+      "QuestionIcon",
+      "PlanningIcon",
+      "BuildingIcon",
+      "PhotosIcon",
+      "WritingIcon",
+      "PolishingIcon",
+    ] as const
+  ).map((name) => ({
+    name,
+    render: () => (
+      <Stack>
+        {(Object.keys(KIND_LABELS) as StatusKind[]).map((kind) => (
+          <p className="flex items-center gap-2" key={kind}>
+            <StatusIcon kind={kind} still />
+            {KIND_LABELS[kind]}
+          </p>
+        ))}
+      </Stack>
+    ),
+  })),
+  {
+    // A tool's line, worded from the copy table by the tool's name.
+    name: "ToolStatus",
+    render: () => (
+      <Stack>
+        {(["working", "failed", "stopped"] as const).map((state) => (
+          <ToolStatus
+            announce={false}
+            delay={0}
+            key={state}
+            state={state}
+            tool="get_workspace"
+          />
+        ))}
+      </Stack>
+    ),
+  },
   {
     name: "StatusLine",
     render: () => (
