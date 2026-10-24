@@ -107,7 +107,7 @@ test("the empty state opens on the briefing and what to ask", async ({
     page.getByRole("heading", { name: "What should we do today?" })
   ).toBeVisible()
   await expect(page.locator('[data-slot="aui_thread-briefing"]')).toHaveText(
-    "Your website is live. A new version is ready for you to approve."
+    "Your website is live. Your latest changes are ready to publish."
   )
   await expect(input(page)).toHaveAttribute(
     "placeholder",
