@@ -73,14 +73,27 @@ export const ASK_CHIEF_DESCRIPTION = [
   `For ${FactValueKey.options.join(", ")} the answer has a fixed shape: send answer_schema {"type":"object"} and no options.`,
   `For any other key the owner answers in text: answer_schema is exactly {"type":"string"}, optionally with "maxLength" (1 to ${ANSWER_TEXT_MAX}) and "format":"email", and no other keyword or object wrapper.`,
   `options is a closed list of literal values the owner picks exactly as written, at most ${OPTIONS_MAX}, each valid under answer_schema, and only when the answer is a choice among known values. Never put an instruction, a question, an empty string or "null" in it.`,
+  "Ask only about the business. The build, its files and its tools are yours: never ask the owner to fix them.",
 ].join("\n")
+
+/**
+ * Words that put a question about our build in front of the owner: a path,
+ * git, a commit hash, the sandbox. Logged 2026-10-25, after a lost container:
+ * "The workspace at /workspace/site is now empty and is not a git repository".
+ */
+const INTERNALS =
+  /\/(?:workspace|opt|tmp)\b|\bgit\b|\brepository\b|\bsandbox\b|\bcontainer\b|\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b/i
 
 /** Why `ask_chief` refuses this question, for the model to read; null when it may be asked. */
 export function refuseQuestion(q: {
   field: string
+  why?: string
   answer_schema?: unknown
   options?: string[] | null
 }): string | null {
+  if (q.why && INTERNALS.test(q.why)) {
+    return "Ask the owner only about their business. A problem with the build, its files or its tools is not theirs to fix: carry on, or stop and say so in your report."
+  }
   const options = q.options ?? []
   if (isFactKey(q.field)) {
     return options.length

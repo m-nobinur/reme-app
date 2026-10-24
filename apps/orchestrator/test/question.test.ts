@@ -41,6 +41,22 @@ describe("the questions ask_chief refuses", () => {
     }
   })
 
+  it("refuses a question about our build, and takes one about the business", () => {
+    const ask = { field: "business.tagline", answer_schema: { type: "string" } }
+    expect(
+      refuseQuestion({
+        ...ask,
+        why: "The workspace at /workspace/site is now empty and is not a git repository. Please restore it from commit 683bbe8.",
+      })
+    ).toMatch(/business/)
+    expect(
+      refuseQuestion({
+        ...ask,
+        why: "Can you confirm the wording for your insurance cover?",
+      })
+    ).toBeNull()
+  })
+
   it("refuses options on a FactValue key, and takes it without", () => {
     const ask = { field: "business.email", answer_schema: { type: "object" } }
     expect(
