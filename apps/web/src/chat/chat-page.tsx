@@ -44,7 +44,7 @@ import { saveDesignAnswer } from "./design"
 import { domainPurchase } from "./domain-purchase"
 import { asked, missingConversations, startsNewChat, tailOf } from "./history"
 import { useConversationRuntime } from "./runtime"
-import { SiteReadyCard } from "./site-ready"
+import { ChatSiteReadyCard } from "./site-ready"
 import { StillWorking } from "./still-working"
 import { trayServices } from "./tray-services"
 import { uploadPhotos } from "./upload"
@@ -224,7 +224,7 @@ export function ChatPage() {
                       after={
                         <>
                           <StillWorking />
-                          <SiteReadyCard className="mx-2" />
+                          <ChatSiteReadyCard />
                           <BuildStopped />
                         </>
                       }

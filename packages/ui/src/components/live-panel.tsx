@@ -1261,7 +1261,7 @@ function ShotStack({
   const step = (by: number) =>
     setFront((at) => (at + by + SLIDES.length) % SLIDES.length)
   return (
-    <div className="group/stack relative pt-4" data-slot="shot-stack">
+    <div className="group/stack relative isolate pt-4" data-slot="shot-stack">
       {BEHIND.map((place, depth) => {
         const slide = SLIDES[(front + depth + 1) % SLIDES.length] ?? SLIDES[0]
         return (

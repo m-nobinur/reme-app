@@ -235,3 +235,23 @@ test("the ready card sits at the end of the thread and never claims an approval 
     "Approved. Your website is being published."
   )
 })
+
+test("a docked ready card is one row above the composer that opens in place", async ({
+  page,
+}) => {
+  await open(page, "SiteReady")
+  const docked = page.locator('[data-slot="site-ready-docked"]')
+  await expect(docked).toHaveCount(1)
+  await expect(
+    docked.getByRole("button", { name: "Publish", exact: true })
+  ).toBeEnabled()
+  await expect(docked.getByRole("img", { name: /home page/ })).toHaveCount(0)
+  const row = docked.getByRole("button", { name: /Brightclean website/ })
+  await expect(row).toHaveAttribute("aria-expanded", "false")
+  await row.click()
+  await expect(row).toHaveAttribute("aria-expanded", "true")
+  await expect(docked.getByRole("img", { name: /home page/ })).toBeVisible()
+  await expect(
+    docked.getByRole("button", { name: "Request changes" })
+  ).toBeEnabled()
+})

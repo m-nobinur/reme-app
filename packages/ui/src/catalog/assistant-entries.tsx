@@ -2344,8 +2344,9 @@ const assistantCatalog = [
       />
     ),
   },
-  // At the end of an open thread, then its other states on their own:
-  // approving, refused, preview not ready and approved.
+  // At the end of an open thread, docked once the owner has written since,
+  // then its other states on their own: approving, refused, preview not
+  // ready and approved.
   {
     name: "SiteReady",
     render: () => {
@@ -2380,6 +2381,11 @@ const assistantCatalog = [
               },
             ]}
             settings={{ after: <SiteReady {...ready} /> }}
+          />
+          <FixtureThread
+            height="h-[34rem]"
+            messages={[ask("Hi")]}
+            settings={{ after: <SiteReady {...ready} docked /> }}
           />
           <div className="flex max-w-xl flex-col gap-6">
             <SiteReady {...ready} pending />

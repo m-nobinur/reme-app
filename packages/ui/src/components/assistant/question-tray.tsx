@@ -78,6 +78,9 @@ const SlotContext = createContext<HTMLElement | null>(null)
 /** The element above the composer the tray docks into, set by the thread. */
 export const TraySlotProvider = SlotContext.Provider
 
+/** That element, or null outside a thread. */
+export const useTraySlot = () => useContext(SlotContext)
+
 /**
  * How to open the docked question again while the owner has it folded, for
  * the line where its call sits and for the activity panel; null while it is
