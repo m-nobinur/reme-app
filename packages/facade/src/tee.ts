@@ -10,6 +10,26 @@ import { monotonicFactory } from "ulid"
 const ulid = /* @__PURE__ */ monotonicFactory()
 
 /**
+ * The longest one sink call may take. Flushes run one after another, so a
+ * write that never settles (a Durable Object request cut off mid-query,
+ * measured locally 2026-10-25) held every later event back, and the
+ * Developer's `report_complete`, which awaits a flush, never woke its
+ * Workflow. Past this the call counts as failed and the next flush retries.
+ */
+export const SINK_TIMEOUT_MS = 15_000
+
+function bounded<T>(call: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error("event sink timed out")),
+      SINK_TIMEOUT_MS
+    )
+  })
+  return Promise.race([call, late]).finally(() => clearTimeout(timer))
+}
+
+/**
  * The write path the facade is handed (architect ruling 2). Two operations
  * and no more: the last seq a session holds, and an append of rows that
  * must be contiguous with it. `apps/orchestrator` implements it over
@@ -141,7 +161,7 @@ export function createTee(options: {
         pending = []
         try {
           if (last === null) {
-            last = (await sink.lastSeq(ids.session_id)) ?? -1
+            last = (await bounded(sink.lastSeq(ids.session_id))) ?? -1
             // It did commit: numbering it again would collide on every retry.
             if (unsure && last >= unsure.seq) batch.splice(0, unsure.rows)
             unsure = null
@@ -149,7 +169,7 @@ export function createTee(options: {
           let seq = last
           const rows = batch.map((r) => ({ ...r, seq: ++seq }))
           try {
-            await sink.append(rows)
+            await bounded(sink.append(rows))
           } catch (error) {
             unsure = { rows: rows.length, seq }
             throw error
