@@ -375,9 +375,9 @@ describe("the first run", () => {
       "Fixture Clean set up",
     ])
     expect(golive?.title).toBe("Your website is ready")
-    expect(golive?.line).toBe("Waiting for your approval to publish")
+    expect(golive?.line).toBeNull()
     expect(golive?.steps.map((each) => [each.label, each.state])).toEqual([
-      ["Waiting for you to publish", "waiting"],
+      ["Waiting for your approval to publish", "waiting"],
       ["Publishing", "next"],
       ["Checking it loads", "next"],
     ])

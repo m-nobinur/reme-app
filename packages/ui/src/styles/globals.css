@@ -152,7 +152,6 @@
   --animate-icon-dash: icon-dash 1.2s linear infinite;
   --animate-icon-rock: icon-rock 1.8s ease-in-out infinite;
   --animate-icon-blink: icon-blink 1.8s ease-in-out infinite;
-  --animate-icon-typing: icon-typing 1.4s ease-in-out infinite;
   --animate-icon-draw: icon-draw 2.4s ease-in-out infinite both;
   --animate-icon-rise: icon-rise 2.4s ease-in-out infinite;
   --animate-icon-twinkle: icon-twinkle 1.6s ease-in-out infinite both;
@@ -386,18 +385,6 @@
   @keyframes icon-blink {
     50% {
       opacity: 0.25;
-    }
-  }
-  @keyframes icon-typing {
-    0%,
-    60%,
-    100% {
-      opacity: 0.35;
-      transform: translateY(0);
-    }
-    30% {
-      opacity: 1;
-      transform: translateY(-1.5px);
     }
   }
   /* A tick drawn, held, then rubbed out for the next round. */

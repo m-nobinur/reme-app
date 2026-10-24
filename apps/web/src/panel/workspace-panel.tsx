@@ -1,4 +1,9 @@
-import { ArrowSquareOutIcon, ChatCircleTextIcon } from "@phosphor-icons/react"
+import {
+  ArrowSquareOutIcon,
+  ChatCircleTextIcon,
+  CheckCircleIcon,
+  PulseIcon,
+} from "@phosphor-icons/react"
 import {
   getRouteApi,
   Link,
@@ -82,7 +87,7 @@ import { useFollowStep } from "./follow-step"
 const FAILED = "That didn't go through. Try again."
 
 /** How many of each Activity list show before the rest: in place for Now, on their own page for the others. */
-const SHOWN = { now: 3, upcoming: 4, done: 3 } as const
+const SHOWN = { now: 3, upcoming: 4, done: 5 } as const
 
 /** Where a reminder can point: focusable by script, ringed from the keyboard. */
 const TARGET =
@@ -625,15 +630,8 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
       ? tab
       : "activity"
 
-  // The first version's review says the going-live segment's one step itself.
   const segment = (each: SegmentView) => (
-    <Segment
-      key={each.id}
-      refresh={refresh}
-      segment={
-        each.kind === "golive" && panel.review ? { ...each, steps: [] } : each
-      }
-    >
+    <Segment key={each.id} refresh={refresh} segment={each}>
       {/* The first version's review is the going-live segment's first step. */}
       {each.kind === "golive" && panel.review ? (
         <div
@@ -654,6 +652,7 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
     <>
       <WaitingOnYou
         error={stale}
+        icon={PulseIcon}
         limit={SHOWN.now}
         onRetry={refresh}
         status={status}
@@ -694,15 +693,20 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
             </Link>
           ) : null
         }
+        count={panel.upcoming.length}
         items={panel.upcoming.slice(0, SHOWN.upcoming)}
         zone={zone}
       />
       <ComingUp
         action={
-          <Link className={SECTION_ACTION} hash="completed" to="/app/tasks">
-            View all
-          </Link>
+          panel.done.length > SHOWN.done ? (
+            <Link className={SECTION_ACTION} hash="completed" to="/app/tasks">
+              View all
+            </Link>
+          ) : null
         }
+        count={panel.done.length}
+        icon={CheckCircleIcon}
         items={panel.done.slice(0, SHOWN.done)}
         title="Completed"
         zone={zone}
@@ -735,7 +739,12 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
       </TabsList>
       {/* Kept mounted, so a half-written answer or an open Stop question
           survives a look at another tab. */}
-      <TabsContent keepMounted ref={activityTab} value="activity">
+      <TabsContent
+        className="gap-4"
+        keepMounted
+        ref={activityTab}
+        value="activity"
+      >
         {activity}
       </TabsContent>
       {upcoming.length ? (

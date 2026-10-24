@@ -769,9 +769,8 @@ export function segmentLine(
       return step ?? (elapsed ? `${elapsed} so far` : null)
     }
     case "golive":
-      return waiting
-        ? "Waiting for your approval to publish"
-        : "Going live in a minute"
+      // Waiting, its one step says what it waits for.
+      return waiting ? null : "Going live in a minute"
     case "domain":
       return waiting
         ? `One change to make at ${cleanArg(extras.provider) ?? "your DNS provider"}`
@@ -904,7 +903,7 @@ export function stepLabel(segment: ActivitySegment, step: ActivityStep) {
     return ONBOARDING_ASKS[step.id]
   }
   if (segment.kind === "golive" && asked && step.id === "approval") {
-    return "Waiting for you to publish"
+    return "Waiting for your approval to publish"
   }
   return STEP_LABELS[segment.kind]?.[step.id] ?? null
 }

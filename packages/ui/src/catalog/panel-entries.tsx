@@ -1,4 +1,8 @@
-import { ArrowSquareOutIcon } from "@phosphor-icons/react"
+import {
+  ArrowSquareOutIcon,
+  CheckCircleIcon,
+  PulseIcon,
+} from "@phosphor-icons/react"
 import {
   type ActivitySegment,
   type ApprovalTarget,
@@ -392,8 +396,8 @@ function SamplePanel() {
         </TabsTrigger>
         <TabsTrigger value="website">Website</TabsTrigger>
       </TabsList>
-      <TabsContent keepMounted value="activity">
-        <WaitingOnYou limit={3} title="Now">
+      <TabsContent className="gap-4" keepMounted value="activity">
+        <WaitingOnYou icon={PulseIcon} limit={3} title="Now">
           {segment({
             id: "change",
             kind: "change",
@@ -429,6 +433,7 @@ function SamplePanel() {
             { id: "website", text: "Website built", at: STARTED },
             { id: "setup", text: "Brightclean set up", at: STARTED },
           ]}
+          icon={CheckCircleIcon}
           title="Completed"
         />
       </TabsContent>
@@ -486,6 +491,7 @@ const panelCatalog: Entry[] = [
               at: STARTED,
             },
           ]}
+          icon={CheckCircleIcon}
           title="Completed"
         />
         {liveSteps}
@@ -498,7 +504,7 @@ const panelCatalog: Entry[] = [
     name: "Panel first run",
     render: () => (
       <div className="flex max-w-88 flex-col gap-6">
-        <WaitingOnYou title="Now">
+        <WaitingOnYou icon={PulseIcon} title="Now">
           {segment(
             {
               id: "website",
@@ -537,6 +543,7 @@ const panelCatalog: Entry[] = [
             </a>
           }
           items={[{ id: "setup", text: "Brightclean set up", at: STARTED }]}
+          icon={CheckCircleIcon}
           title="Completed"
         />
       </div>
@@ -653,8 +660,7 @@ const panelCatalog: Entry[] = [
       }),
   },
   {
-    // The first version's review stands for the going-live segment's one
-    // step, as `apps/web` draws it.
+    // The first version's review is the going-live segment's first step.
     name: "PanelSegment going live",
     render: () =>
       segment(
@@ -662,7 +668,7 @@ const panelCatalog: Entry[] = [
           id: "golive",
           kind: "golive",
           state: "waiting",
-          steps: [],
+          steps: along(["approval", "publishing", "loads"], 0, "waiting"),
           names: BUSINESS,
         },
         { children: approval() }
@@ -731,6 +737,7 @@ const panelCatalog: Entry[] = [
             at: STARTED,
           },
         ]}
+        icon={CheckCircleIcon}
         title="Completed"
       />
     ),

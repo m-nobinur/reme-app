@@ -100,27 +100,6 @@ export function QuestionIcon({ className, animated }: DrawnIconProps) {
   )
 }
 
-/** Waiting on the owner: a speech bubble whose three dots rise in turn, like someone about to reply. */
-export function WaitingIcon({ className, animated }: DrawnIconProps) {
-  return (
-    <Svg className={className}>
-      <path d="M7.49 19.79A9 9 0 1 0 4.21 16.51L3.04 20.01a.75.75 0 0 0 .95.95z" />
-      {[8, 12, 16].map((cx, i) => (
-        <circle
-          className={moving(animated, "animate-icon-typing")}
-          cx={cx}
-          cy={12}
-          fill="currentColor"
-          key={cx}
-          r={1.1}
-          stroke="none"
-          style={animated ? { animationDelay: `${i * 0.2}s` } : undefined}
-        />
-      ))}
-    </Svg>
-  )
-}
-
 /** Planning: a clipboard whose three ticks are checked off in turn. */
 export function PlanningIcon({ className, animated }: DrawnIconProps) {
   const rows = [9.5, 13.5, 17.5]

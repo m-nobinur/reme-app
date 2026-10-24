@@ -83,3 +83,20 @@ export function duration(ms: number): string {
   const minutes = Math.floor(seconds / 60)
   return minutes ? `${minutes} min ${seconds % 60} s` : `${seconds} s`
 }
+
+/** Whole days, hours or minutes, said short: `3 days`, `2 hr`, `25 min`. */
+const span = (minutes: number) => {
+  if (minutes < 60) return `${minutes} min`
+  if (minutes < 24 * 60) return `${Math.floor(minutes / 60)} hr`
+  const days = Math.floor(minutes / (24 * 60))
+  return `${days} day${days === 1 ? "" : "s"}`
+}
+
+/** How far off a time is, as a row says it: `in 25 min`, `2 hr ago`, `just now`. */
+export function relativeTime(value: string, now = Date.now()): string | null {
+  const ms = Date.parse(value) - now
+  if (Number.isNaN(ms)) return null
+  const minutes = Math.floor(Math.abs(ms) / 60_000)
+  if (minutes < 1) return ms > 0 ? "in a minute" : "just now"
+  return ms > 0 ? `in ${span(minutes)}` : `${span(minutes)} ago`
+}

@@ -3,6 +3,7 @@ import {
   CaretDownIcon,
   CaretLeftIcon,
   CaretRightIcon,
+  ChatCircleDotsIcon,
   CheckCircleIcon,
   CheckIcon,
   CircleIcon,
@@ -10,6 +11,7 @@ import {
   GlobeIcon,
   ImageIcon,
   MinusCircleIcon,
+  type Icon as PhosphorIcon,
   RocketLaunchIcon,
   SpinnerGapIcon,
   WarningCircleIcon,
@@ -43,7 +45,7 @@ import {
   paletteName,
   paletteStops,
 } from "@workspace/ui/lib/blueprint"
-import { formatDateTime } from "@workspace/ui/lib/format"
+import { formatDateTime, relativeTime } from "@workspace/ui/lib/format"
 import { cn, META } from "@workspace/ui/lib/utils"
 import {
   Children,
@@ -71,11 +73,14 @@ const SECTION_ACTION =
 /** Sections after the first are set off by a hairline. */
 function PanelSection({
   title,
+  icon: Icon,
   count,
   action,
   children,
 }: {
   title: string
+  /** A quiet mark before the heading. */
+  icon?: PhosphorIcon
   count?: number
   /** A link or button to the rest of the list, at the heading's end. */
   action?: ReactNode
@@ -85,13 +90,16 @@ function PanelSection({
   return (
     <section
       aria-labelledby={id}
-      className="flex flex-col gap-2 border-border not-first:border-t not-first:pt-5"
+      className="flex flex-col gap-3 border-border not-first:border-t not-first:pt-4"
     >
-      <div className="flex items-baseline justify-between gap-2">
-        <h2 className="flex items-baseline gap-2 font-semibold text-sm" id={id}>
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="flex items-center gap-2 font-semibold text-sm" id={id}>
+          {Icon ? (
+            <Icon aria-hidden className="size-4 text-muted-foreground" />
+          ) : null}
           {title}
           {count ? (
-            <span className="font-normal text-muted-foreground tabular-nums">
+            <span className="rounded-full bg-muted px-1.5 font-medium text-[0.6875rem] text-muted-foreground tabular-nums leading-4">
               {count}
             </span>
           ) : null}
@@ -422,7 +430,11 @@ function StepMark({ step, failed }: { step: SegmentStep; failed: boolean }) {
     case "now":
       return <StatusIcon className="text-foreground/80" kind={step.kind} />
     case "waiting":
-      return <StatusIcon className="text-foreground/80" kind="waiting" />
+      return step.kind === "question" ? (
+        <StatusIcon className="text-foreground/80" kind="question" />
+      ) : (
+        <ChatCircleDotsIcon className="size-4 animate-status-fade text-foreground/80 motion-reduce:animate-none" />
+      )
     case "skipped":
       return <MinusCircleIcon className="size-4 text-muted-foreground" />
     default:
@@ -487,7 +499,7 @@ function PanelSegment({
       data-slot="panel-segment"
       data-state={folded ? "folded" : state}
     >
-      <div className="flex items-start gap-2.5">
+      <div className="flex items-start gap-2">
         <span aria-hidden className="mt-0.5 flex size-4 shrink-0">
           {folded ? (
             <CheckCircleIcon className="size-4 text-primary" weight="fill" />
@@ -498,7 +510,7 @@ function PanelSegment({
             // owner included; still once it is upcoming.
             <StatusIcon
               className="text-primary"
-              kind={state === "waiting" ? "waiting" : icon}
+              kind={icon}
               still={state !== "now" && state !== "waiting"}
             />
           )}
@@ -550,7 +562,7 @@ function PanelSegment({
         >
           <div className="min-h-0 overflow-hidden">
             {/* Indented under the title, so the steps read as the segment's own. */}
-            <div className="flex flex-col gap-3 ps-6.5 pt-3">
+            <div className="flex flex-col gap-3 ps-6 pt-3">
               <p aria-live="polite" className="sr-only">
                 {current && !done
                   ? `Now: ${current.said ?? current.label}.`
@@ -559,7 +571,7 @@ function PanelSegment({
               <ol aria-label="Steps" className="flex flex-col">
                 {shownSteps.map((step) => (
                   <li
-                    className="group relative flex gap-2.5 pb-3 last:pb-0"
+                    className="group relative flex gap-2 pb-3 last:pb-0"
                     data-state={step.state}
                     key={step.id}
                   >
@@ -715,6 +727,7 @@ function StopBuild({
 function WaitingOnYou({
   children,
   title = "Waiting on you",
+  icon,
   limit = Number.POSITIVE_INFINITY,
   status = null,
   error = null,
@@ -722,6 +735,7 @@ function WaitingOnYou({
 }: {
   children?: ReactNode
   title?: string
+  icon?: PhosphorIcon
   limit?: number
   status?: string | null
   error?: string | null
@@ -754,6 +768,7 @@ function WaitingOnYou({
         ) : null
       }
       count={items.length}
+      {...(icon ? { icon } : {})}
       title={title}
     >
       <p className="text-sm empty:hidden" role="status">
@@ -763,7 +778,10 @@ function WaitingOnYou({
       {items.length ? (
         <ul className="flex flex-col divide-y divide-border">
           {items.slice(0, items.length - hidden).map((item) => (
-            <li key={item.key}>{item}</li>
+            // The list's ends sit on the heading and the next section, not padded off them.
+            <li className="first:*:pt-0 last:*:pb-0" key={item.key}>
+              {item}
+            </li>
           ))}
         </ul>
       ) : null}
@@ -1465,32 +1483,50 @@ function ApprovalItem({
 
 /**
  * Things with a time, in the order given: what closes or is due next under
- * "Coming up", or what just happened under another title. Times are in
- * `zone` once the reader's is known, UTC before. Nothing renders when the
- * list is empty.
+ * "Coming up", or what just happened under another title. Each row says how
+ * far off it is ("in 25 min", "2 hr ago") beside its text; the exact time,
+ * in `zone` once the reader's is known, is its tooltip. Nothing renders when
+ * the list is empty.
  */
 function ComingUp({
   items,
   title = "Coming up",
+  icon = ClockIcon,
+  count,
   zone,
   action,
 }: {
   items: { id: string; text: string; at: string }[]
   title?: string
+  icon?: PhosphorIcon
+  /** How many there are in all, when `items` are only the first. */
+  count?: number
   zone?: string | null
   /** The way to the whole list, when these are only the first. */
   action?: ReactNode
 }) {
   if (items.length === 0) return null
   return (
-    <PanelSection action={action} title={title}>
+    <PanelSection
+      action={action}
+      count={count ?? items.length}
+      icon={icon}
+      title={title}
+    >
       <ul className="flex flex-col divide-y divide-border">
         {items.map((item) => (
-          <li className="flex flex-col py-2" key={item.id}>
-            <span className="wrap-break-word text-sm">{item.text}</span>
-            <span className={META}>
-              {formatDateTime(item.at, zone ?? undefined)}
-            </span>
+          <li
+            className="flex items-baseline justify-between gap-3 py-2 first:pt-0 last:pb-0"
+            key={item.id}
+          >
+            <span className="wrap-break-word min-w-0 text-sm">{item.text}</span>
+            <time
+              className={cn(META, "shrink-0 tabular-nums")}
+              dateTime={item.at}
+              title={formatDateTime(item.at, zone ?? undefined) ?? undefined}
+            >
+              {relativeTime(item.at)}
+            </time>
           </li>
         ))}
       </ul>
