@@ -705,6 +705,7 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
             </Link>
           ) : null
         }
+        ahead={false}
         count={panel.done.length}
         icon={CheckCircleIcon}
         items={panel.done.slice(0, SHOWN.done)}

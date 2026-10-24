@@ -433,6 +433,7 @@ function SamplePanel() {
             { id: "website", text: "Website built", at: STARTED },
             { id: "setup", text: "Brightclean set up", at: STARTED },
           ]}
+          ahead={false}
           icon={CheckCircleIcon}
           title="Completed"
         />
@@ -491,6 +492,7 @@ const panelCatalog: Entry[] = [
               at: STARTED,
             },
           ]}
+          ahead={false}
           icon={CheckCircleIcon}
           title="Completed"
         />
@@ -543,6 +545,7 @@ const panelCatalog: Entry[] = [
             </a>
           }
           items={[{ id: "setup", text: "Brightclean set up", at: STARTED }]}
+          ahead={false}
           icon={CheckCircleIcon}
           title="Completed"
         />
@@ -737,6 +740,7 @@ const panelCatalog: Entry[] = [
             at: STARTED,
           },
         ]}
+        ahead={false}
         icon={CheckCircleIcon}
         title="Completed"
       />

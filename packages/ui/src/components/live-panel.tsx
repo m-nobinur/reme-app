@@ -1495,6 +1495,7 @@ function ComingUp({
   count,
   zone,
   action,
+  ahead = true,
 }: {
   items: { id: string; text: string; at: string }[]
   title?: string
@@ -1504,6 +1505,8 @@ function ComingUp({
   zone?: string | null
   /** The way to the whole list, when these are only the first. */
   action?: ReactNode
+  /** Times still to come: one that has passed is due now, never "ago". */
+  ahead?: boolean
 }) {
   if (items.length === 0) return null
   return (
@@ -1525,7 +1528,9 @@ function ComingUp({
               dateTime={item.at}
               title={formatDateTime(item.at, zone ?? undefined) ?? undefined}
             >
-              {relativeTime(item.at)}
+              {ahead && Date.parse(item.at) <= Date.now()
+                ? "due now"
+                : relativeTime(item.at)}
             </time>
           </li>
         ))}
