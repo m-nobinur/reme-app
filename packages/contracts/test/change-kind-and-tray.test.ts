@@ -14,6 +14,8 @@ import {
   ChangeKind,
   OwnerChangeRequest,
   PHOTO_PATH,
+  REVISION_PICTURE_PATH,
+  revisionPictures,
   thumbnailOf,
   WorkspaceStatus,
 } from "../src/owner.ts"
@@ -348,6 +350,22 @@ describe("lane and activity on a build", () => {
       expect(thumbnailOf(bad), String(bad)).toBeNull()
     }
     expect(PHOTO_PATH.test(`/photos/${id}/x`)).toBe(false)
+  })
+
+  it("serves a version's pictures at its own path, and nothing beside them", () => {
+    const id = "0b9c4a1e-2f3d-4c5b-8a6e-7d8f9a0b1c2d"
+    const { screenshots, icon } = revisionPictures(id)
+    for (const src of [...screenshots, icon]) {
+      expect(REVISION_PICTURE_PATH.test(src.replace(/^\/api/, "")), src).toBe(
+        true
+      )
+    }
+    expect(screenshots.at(-1)).toBe(`/api/revisions/${id}/home-1440`)
+    for (const bad of ["home-1024", "icon.png", "../manifest.json", "dist/x"]) {
+      expect(REVISION_PICTURE_PATH.test(`/revisions/${id}/${bad}`), bad).toBe(
+        false
+      )
+    }
   })
 
   it("refuses a lane nobody runs", () => {

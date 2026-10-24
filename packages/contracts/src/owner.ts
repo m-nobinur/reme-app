@@ -331,6 +331,32 @@ export const thumbnailOf = (assetId: string | null | undefined) =>
     : null
 
 /**
+ * The pictures of one version the api serves: its home page at each
+ * screenshot width (390, 768, 1440, the orchestrator's `VIEWPORTS`) and its
+ * icon. They live under the revision's own prefix, so they last exactly as
+ * long as the revision does (retention deletes them with its files).
+ */
+export const REVISION_PICTURES = [
+  "home-390",
+  "home-768",
+  "home-1440",
+  "icon",
+] as const
+
+/** The path the api serves them at: `GET /revisions/{revision id}/{picture}`. */
+export const REVISION_PICTURE_PATH = new RegExp(
+  `^/revisions/(${PHOTO_ID})/(${REVISION_PICTURES.join("|")})$`
+)
+
+/** One version's pictures as the app shows them: the home page at the three widths, smallest first, and the icon. */
+export const revisionPictures = (revisionId: string) => ({
+  screenshots: REVISION_PICTURES.slice(0, 3).map(
+    (name) => `/api/revisions/${revisionId}/${name}`
+  ),
+  icon: `/api/revisions/${revisionId}/icon`,
+})
+
+/**
  * One generated photo of a build while it is made: `drawing` until its slot
  * settles, then `made` with its thumbnail, or `fallback` when no model drew it
  * and its section uses its text layout. `alt` is the plan's, null once a
