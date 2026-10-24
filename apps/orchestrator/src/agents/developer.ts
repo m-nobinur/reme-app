@@ -116,14 +116,25 @@ const sessions = new Map<string, Session>()
 
 // One tee and one budget guard per conversation, found by the instance id
 // every event and interception carries. Registered once per isolate.
-observe((observation, ctx) => {
+observe(observed)
+
+export function observed(...[observation, ctx]: Parameters<Observer>) {
+  // A submission that throws outside any turn (its container not running
+  // yet, measured locally 2026-10-25) settles with no operation event, so
+  // nothing else would wake the Workflow before its 45 minute watchdog.
+  const o = observation as { type?: string; operation?: string }
+  if (o.type === "submission_recovery" && o.operation === "process_submission")
+    return unstarted.has(ctx.id)
+      ? undefined
+      : tell(ctx.id, "interrupted", SANDBOX_UPDATING)
   const found = sessions.get(ctx.id)
   if (!found) return
   found.tee.subscriber(observation)
   // Typed void | Promise<void>, but the budget guard's observer is synchronous.
   void found.budget.instrumentation.observe(observation, ctx)
   interrupted(found, observation)
-})
+}
+type Observer = Parameters<typeof observe>[0]
 
 /**
  * A run that ends in an error (a provider stream that breaks, measured on
@@ -325,22 +336,27 @@ export function Developer(props: AgentProps) {
   try {
     return render(props)
   } catch (error) {
-    startFailed(props.id, error)
+    unstarted.add(props.id)
+    tell(props.id, "start_failed", String(error).slice(0, 300))
     throw error
   }
 }
 
-function startFailed(id: string, error: unknown) {
-  const reason = String(error).slice(0, 300)
+/** Instances whose render threw: their failed submission is already told. */
+const unstarted = new Set<string>()
+
+/** A failure no turn reports: logged first, then the Workflow is woken with it. */
+function tell(
+  id: string,
+  kind: "start_failed" | "interrupted",
+  reason: string
+) {
   const found = sessions.get(id)
-  found?.tee.emit("developer.start_failed", { reason })
+  found?.tee.emit(`developer.${kind}`, { reason })
   Promise.resolve(found?.tee.flush())
     .then(() => workflow(id))
     .then((instance) =>
-      instance.sendEvent({
-        type: "developer",
-        payload: { kind: "start_failed", reason },
-      })
+      instance.sendEvent({ type: "developer", payload: { kind, reason } })
     )
     .catch(() => undefined)
 }
