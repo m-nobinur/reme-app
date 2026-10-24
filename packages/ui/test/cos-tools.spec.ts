@@ -3,48 +3,37 @@ import { expect, test } from "@playwright/test"
 import { open, WCAG } from "./helpers"
 
 /**
- * The Chief of Staff's tools in every state: reads as quiet lines that open
- * onto what they found, and cards that wait for the owner's yes. None shows
+ * The Chief of Staff's tools in every state: reads as quiet lines, with the
+ * reply saying what they found, and cards that wait for the owner's yes. None shows
  * a tool name, an id, raw output or the api's model-facing error text.
  */
 
 const WIRE =
   /get_|_question|_reminder|call_|approval_|unknown_outcome|tool_failed|[{}]/
 
-test("reads say what they looked at, and open onto what they found", async ({
+test("reads say what they looked at, and a finished one is its line alone", async ({
   page,
 }) => {
   await open(page, "CosReads")
   const entry = page.locator('[data-entry="CosReads"]')
+  await expect(entry.locator('[data-slot="cos-read-workspace"]')).toHaveText([
+    "Checking where things stand",
+    "Checked where things stand",
+    "Couldn't check where things stand, try again in a moment",
+  ])
+  await expect(entry.locator('[data-slot="cos-read-facts"]')).toHaveText([
+    "Found your details",
+    "Stopped looking up your details",
+  ])
+  // A refused preview reads as checked too; the reply says what came back.
+  await expect(entry.locator('[data-slot="cos-read-preview"]')).toHaveText([
+    "Checked the preview",
+    "Checked the preview",
+  ])
+  // The reply says what a read found, so nothing opens onto the raw result.
   await expect(
-    entry.locator('[data-slot="cos-read-workspace"] [role="status"]')
-  ).toHaveText("Checking where things stand")
-  await expect(entry).toContainText(
-    "Couldn't check where things stand, try again in a moment"
-  )
-  await expect(entry).toContainText("Stopped looking up your details")
-
-  await entry
-    .getByRole("button", { name: "Checked where things stand" })
-    .click()
-  const workspace = entry.locator('[data-slot="cos-read-workspace"] dl')
-  await expect(workspace).toContainText("Live")
-  await expect(workspace).toContainText("Add Saturday hours, 9 to 1.")
-  await expect(workspace).toContainText("Building")
-  await expect(workspace).toContainText("A question about service area")
-  await expect(workspace).toContainText("A new version to review by")
-  await expect(workspace).toContainText("Tagline")
-
-  await entry.getByRole("button", { name: "Found your details" }).click()
-  await expect(entry.locator('[data-slot="cos-read-facts"] dl')).toContainText(
-    "Weekday hours08:00 to 18:00"
-  )
-  // Two previews: one ready, one refused, under the same line.
-  const previews = entry.getByRole("button", { name: "Checked the preview" })
-  await previews.nth(0).click()
-  await expect(entry).toContainText("It shows under Your website.")
-  await previews.nth(1).click()
-  await expect(entry).toContainText("That build is not in your workspace.")
+    entry.locator('[data-slot^="cos-read-"]').getByRole("button")
+  ).toHaveCount(0)
   await expect(entry).not.toContainText("No assignment with that id")
   expect(await entry.innerText()).not.toMatch(WIRE)
 })
