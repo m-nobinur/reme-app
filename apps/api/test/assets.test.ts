@@ -6,7 +6,13 @@ import {
 } from "@workspace/contracts"
 import { type Tenancy, tenancy } from "@workspace/db"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { cleanName, readPhoto, sniff, uploadKey } from "../src/assets.ts"
+import {
+  cleanName,
+  readPhoto,
+  readRevisionPicture,
+  sniff,
+  uploadKey,
+} from "../src/assets.ts"
 import type { Owner } from "../src/changes.ts"
 import { owner, stubOrchestrator } from "./owner-fixture.ts"
 import { stubJwksFetch } from "./sealed-session.ts"
@@ -44,6 +50,75 @@ describe("an uploaded photo's type and name", () => {
     )
     expect(cleanName("   ", "image/webp")).toBe("photo.webp")
     expect(cleanName(`${"a".repeat(300)}.png`, "image/png")).toHaveLength(104)
+  })
+})
+
+describe("GET /revisions/:id/:picture", () => {
+  const rev = "3e4f5a6b-7c8d-4e9f-8a1b-2c3d4e5f6a7b"
+  const keys = [
+    `sites/org-a/${rev}/screenshots/home-1440.png`,
+    `sites/org-a/${rev}/screenshots/home-390.png`,
+    `sites/org-a/${rev}/dist/icon-192.png`,
+  ]
+  const asked: unknown[] = []
+  const env = (images: boolean) =>
+    ({
+      SITES: {
+        get: async (key: string) =>
+          keys.includes(key)
+            ? { key, body: new Blob([new Uint8Array(9)]).stream() }
+            : null,
+      },
+      IMAGES: images
+        ? {
+            input: (stream: ReadableStream) => {
+              void stream.cancel()
+              const handle = {
+                transform: (t: unknown) => {
+                  asked.push(t)
+                  return handle
+                },
+                output: async () => ({
+                  image: () => new Blob([new Uint8Array(1)]).stream(),
+                  contentType: () => "image/webp",
+                }),
+              }
+              return handle
+            },
+          }
+        : undefined,
+    }) as unknown as Env
+  const mine = { orgId: "org-a" } as Owner
+
+  it("cuts a screenshot to its first screen, at most 1200 wide, cached for good", async () => {
+    for (const picture of ["home-1440", "home-390"]) {
+      const response = await readRevisionPicture(env(true), mine, rev, picture)
+      expect(response.headers.get("content-type")).toBe("image/webp")
+      expect(response.headers.get("cache-control")).toContain("immutable")
+      await response.arrayBuffer()
+    }
+    expect(asked).toEqual([
+      { width: 1200, height: 750, fit: "cover", gravity: "top" },
+      { width: 390, height: 244, fit: "cover", gravity: "top" },
+    ])
+  })
+
+  it("serves the icon and, with no binding, the screenshot as stored", async () => {
+    for (const picture of ["icon", "home-1440"]) {
+      const response = await readRevisionPicture(env(false), mine, rev, picture)
+      expect(response.headers.get("content-type")).toBe("image/png")
+      expect((await response.arrayBuffer()).byteLength).toBe(9)
+    }
+  })
+
+  it("is a 404 for another org's version and for one not shot yet", async () => {
+    const theirs = { orgId: "org-b" } as Owner
+    expect(
+      (await readRevisionPicture(env(true), theirs, rev, "icon")).status
+    ).toBe(404)
+    expect(
+      (await readRevisionPicture(env(true), mine, rev, "home-768")).status
+    ).toBe(404)
   })
 })
 

@@ -271,6 +271,64 @@ export async function readPhoto(
   })
 }
 
+/** The widest a version's screenshot is served: a card shows it at most 576 px wide, at twice that for a sharp screen. */
+const SHOT_WIDTH = 1200
+
+/**
+ * `GET /revisions/{revision id}/{picture}`: one version's home page at a
+ * screenshot width, or its icon, read from the revision's own prefix in the
+ * site bucket. Like `readPhoto`, the key starts with the session's org (a
+ * site's id is its org's), so another org's revision is a plain 404, and a
+ * revision never changes, so the answer is cached for good, privately.
+ *
+ * A screenshot is the whole page; the cards show its first screen, so it is
+ * cut to that, 16:10 from the top, as a WebP. Without the Images binding, or
+ * if it refuses the bytes, the original is served instead.
+ */
+export async function readRevisionPicture(
+  env: Env,
+  owner: Owner,
+  revisionId: string,
+  picture: string
+): Promise<Response> {
+  const base = `sites/${owner.orgId}/${revisionId}/`
+  const object = await env.SITES.get(
+    picture === "icon"
+      ? `${base}dist/icon-192.png`
+      : `${base}screenshots/${picture}.png`
+  )
+  if (!object) {
+    return failure(404, {
+      class: "resource",
+      code: "picture.not_found",
+      message: "That version has no such picture yet.",
+      detail: {},
+    })
+  }
+  const headers = {
+    "cache-control": "private, max-age=31536000, immutable",
+    "x-content-type-options": "nosniff",
+  }
+  const png = { ...headers, "content-type": "image/png" }
+  if (picture === "icon") return new Response(object.body, { headers: png })
+  const width = Math.min(Number(picture.slice("home-".length)), SHOT_WIDTH)
+  const [forShot, body] = object.body.tee()
+  const shot = await env.IMAGES?.input(forShot)
+    .transform({
+      width,
+      height: Math.round((width * 10) / 16),
+      fit: "cover",
+      gravity: "top",
+    })
+    .output({ format: "image/webp", quality: 80 })
+    .catch(() => null)
+  return shot
+    ? new Response(shot.image(), {
+        headers: { ...headers, "content-type": shot.contentType() },
+      })
+    : new Response(body, { headers: png })
+}
+
 /** One placed picture, as a build's `site.photos` event lists it. */
 type PlacedSlot = {
   id: string
