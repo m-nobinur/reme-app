@@ -356,11 +356,15 @@ describe("lane and activity on a build", () => {
     const id = "0b9c4a1e-2f3d-4c5b-8a6e-7d8f9a0b1c2d"
     const pictures = revisionPictures(id)
     for (const src of Object.values(pictures)) {
-      expect(REVISION_PICTURE_PATH.test(src.replace(/^\/api/, "")), src).toBe(
-        true
-      )
+      const { pathname } = new URL(src, "https://app.example")
+      expect(
+        REVISION_PICTURE_PATH.test(pathname.replace(/^\/api/, "")),
+        src
+      ).toBe(true)
     }
-    expect(pictures.laptop).toBe(`/api/revisions/${id}/laptop`)
+    expect(pictures.laptop).toMatch(
+      new RegExp(`^/api/revisions/${id}/laptop\\?cut=\\d+$`)
+    )
     for (const bad of ["home-1440", "icon.png", "../manifest.json", "dist/x"]) {
       expect(REVISION_PICTURE_PATH.test(`/revisions/${id}/${bad}`), bad).toBe(
         false

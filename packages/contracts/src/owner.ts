@@ -349,12 +349,18 @@ export const REVISION_PICTURE_PATH = new RegExp(
   `^/revisions/(${PHOTO_ID})/(${REVISION_PICTURES.join("|")})$`
 )
 
+/**
+ * The api's cuts, named in each link: the pictures are cached for good, so
+ * a change to how the api cuts them bumps this, or a browser keeps the old.
+ */
+const PICTURE_CUT = 2
+
 /** One version's pictures as the app shows them, by name. */
 export const revisionPictures = (revisionId: string) =>
   Object.fromEntries(
     REVISION_PICTURES.map((name) => [
       name,
-      `/api/revisions/${revisionId}/${name}`,
+      `/api/revisions/${revisionId}/${name}?cut=${PICTURE_CUT}`,
     ])
   ) as Record<(typeof REVISION_PICTURES)[number], string>
 
