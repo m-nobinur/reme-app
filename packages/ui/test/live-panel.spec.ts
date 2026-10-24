@@ -171,7 +171,11 @@ test("the screenshots step through the deck, and the approve button shows a focu
   await page.getByRole("button", { name: "The previous picture" }).click()
   await page.getByRole("button", { name: "The previous picture" }).click()
   await expect(front).toHaveAccessibleName("Your home page on a phone")
-  await page.getByRole("button", { name: "The next picture" }).focus()
+  await page
+    .getByRole("button", { name: "Further down your home page" })
+    .click()
+  await expect(front).toHaveAccessibleName("Further down your home page")
+  await page.getByRole("button", { name: "Your home page on a phone" }).focus()
   await page.keyboard.press("Tab")
   await expect(approve).toBeFocused()
   const ring = await approve.evaluate(

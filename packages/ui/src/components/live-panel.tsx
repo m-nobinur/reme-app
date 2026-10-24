@@ -1170,35 +1170,78 @@ const SLIDES = [
   { picture: "phone", alt: "Your home page on a phone" },
 ] as const
 
-/** Where a card sits by how far back it is: raised, narrower and dimmer the further back, so only its top edge shows. */
-const DEPTH = [
-  "z-30 opacity-100",
+/** The cards edging out behind the front one, by how far back: raised, narrower and dimmer, so only a top edge shows. */
+const BEHIND = [
   "z-20 -translate-y-2 scale-[0.94] opacity-70",
   "z-10 -translate-y-4 scale-[0.88] opacity-40",
 ]
 
 /** A round control at the deck's side: quiet until it is hovered where there is a pointer, always there on touch. Centred by its margins, since a pressed button nudges its own translate. */
 const ARROW =
-  "absolute inset-y-0 z-40 my-auto size-7 rounded-full bg-background/60 shadow-sm backdrop-blur-sm transition-opacity focus-visible:opacity-100 motion-reduce:transition-none pointer-fine:opacity-0 pointer-fine:group-hover/stack:opacity-100"
+  "absolute inset-y-0 z-10 my-auto size-7 rounded-full bg-background/60 shadow-sm backdrop-blur-sm transition-opacity focus-visible:opacity-100 motion-reduce:transition-none pointer-fine:opacity-0 pointer-fine:group-hover/stack:opacity-100"
 
-/** A phone around its screenshot, on the card's muted ground. */
+/**
+ * A phone holding the screenshot, whole and upright on the card: a thin
+ * black bezel inside a fine metal edge, large rounded corners, a camera
+ * island over the screen, the action and volume keys on the left and the
+ * power key on the right. Its proportions are a current phone's, 0.48 wide
+ * to tall.
+ */
 function PhoneMock({ src, alt }: { src: string | undefined; alt: string }) {
+  const key = "absolute w-0.5 bg-device ring-1 ring-foreground/15"
   return (
-    // Clear of the dots along the card's foot.
-    <span className="grid size-full place-items-center bg-muted pt-2.5 pb-7">
-      <span className="aspect-[390/844] h-full overflow-hidden rounded-[0.9rem] border-[3px] border-foreground/80 bg-background shadow-md">
-        <Shot alt={alt} className="size-full" src={src} />
+    <span className="relative block size-full bg-muted">
+      <span className="absolute top-[4%] left-1/2 aspect-[48/100] h-[82%] -translate-x-1/2 rounded-[17%/8.2%] bg-device p-[2.6%] shadow-xl ring-1 ring-foreground/25">
+        <span
+          aria-hidden
+          className={cn(key, "top-[16%] -left-0.5 h-[4%] rounded-l-sm")}
+        />
+        <span
+          aria-hidden
+          className={cn(key, "top-[23%] -left-0.5 h-[7%] rounded-l-sm")}
+        />
+        <span
+          aria-hidden
+          className={cn(key, "top-[32%] -left-0.5 h-[7%] rounded-l-sm")}
+        />
+        <span
+          aria-hidden
+          className={cn(key, "top-[26%] -right-0.5 h-[11%] rounded-r-sm")}
+        />
+        <span className="relative block size-full overflow-hidden rounded-[14.5%/7%] bg-background">
+          <Shot alt={alt} className="size-full" src={src} />
+          <span
+            aria-hidden
+            className="absolute top-[2%] left-1/2 h-[3.6%] w-[31%] -translate-x-1/2 rounded-full bg-device"
+          />
+        </span>
       </span>
     </span>
   )
 }
 
+/** One card's face: the screenshot, or the phone holding it. */
+function SlideFace({
+  slide,
+  src,
+  alt,
+}: {
+  slide: (typeof SLIDES)[number]
+  src: string | undefined
+  alt: string
+}) {
+  return slide.picture === "phone" ? (
+    <PhoneMock alt={alt} src={src} />
+  ) : (
+    <Shot alt={alt} className="size-full" src={src} />
+  )
+}
+
 /**
- * The version as a small deck: the home page in front, the screen below it
- * and the home page on a phone edging out behind. The arrows at its sides
- * move a card to the front, which grows into place while the one it
- * replaces settles to the back; the dots say where it is. The front card
- * opens the preview once there is one.
+ * The version as a small deck: the home page in front, the cards to come
+ * edging out behind. The arrows at its sides and the dots under it move to
+ * another card, which slides into the front; the front card opens the
+ * preview once there is one.
  */
 function ShotStack({
   pictures,
@@ -1212,45 +1255,60 @@ function ShotStack({
     setFront((at) => (at + by + SLIDES.length) % SLIDES.length)
   return (
     <div className="group/stack relative pt-4" data-slot="shot-stack">
-      <div className="relative aspect-[16/10]">
-        {SLIDES.map((slide, at) => {
-          const depth = (at - front + SLIDES.length) % SLIDES.length
-          const shown = depth === 0
-          const src = pictures?.[slide.picture]
-          const alt = shown ? slide.alt : ""
-          const card =
-            slide.picture === "phone" ? (
-              <PhoneMock alt={alt} src={src} />
-            ) : (
-              <Shot alt={alt} className="size-full" src={src} />
+      {BEHIND.map((place, depth) => {
+        const slide = SLIDES[(front + depth + 1) % SLIDES.length] ?? SLIDES[0]
+        return (
+          <div
+            aria-hidden
+            className={cn(
+              "absolute inset-x-0 top-4 aspect-[16/10] origin-top overflow-hidden rounded-lg border border-border bg-muted",
+              place
+            )}
+            key={place}
+          >
+            <SlideFace alt="" slide={slide} src={pictures?.[slide.picture]} />
+          </div>
+        )
+      })}
+      <div className="relative z-30 aspect-[16/10] overflow-hidden rounded-lg border border-border bg-muted shadow-sm">
+        <div
+          className="flex size-full transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+          style={{ transform: `translateX(-${front * 100}%)` }}
+        >
+          {SLIDES.map((slide, at) => {
+            const shown = at === front
+            const face = (
+              <SlideFace
+                alt={shown ? slide.alt : ""}
+                slide={slide}
+                src={pictures?.[slide.picture]}
+              />
             )
-          return (
-            <div
-              aria-hidden={!shown}
-              className={cn(
-                "absolute inset-0 origin-top overflow-hidden rounded-lg border border-border bg-muted shadow-sm transition-[transform,opacity] duration-300 ease-out motion-reduce:transition-none",
-                DEPTH[depth]
-              )}
-              inert={!shown}
-              key={slide.picture}
-            >
-              {url && shown ? (
-                // The same preview as the link above it, so a screen reader hears it once.
-                <a
-                  className="block size-full"
-                  href={url}
-                  rel="noopener noreferrer"
-                  tabIndex={-1}
-                  target="_blank"
-                >
-                  {card}
-                </a>
-              ) : (
-                card
-              )}
-            </div>
-          )
-        })}
+            return (
+              <div
+                aria-hidden={!shown}
+                className="size-full shrink-0"
+                inert={!shown}
+                key={slide.picture}
+              >
+                {url && shown ? (
+                  // The same preview as the link above it, so a screen reader hears it once.
+                  <a
+                    className="block size-full"
+                    href={url}
+                    rel="noopener noreferrer"
+                    tabIndex={-1}
+                    target="_blank"
+                  >
+                    {face}
+                  </a>
+                ) : (
+                  face
+                )}
+              </div>
+            )
+          })}
+        </div>
         <Button
           aria-label="The previous picture"
           className={cn(ARROW, "left-1.5")}
@@ -1269,26 +1327,35 @@ function ShotStack({
         >
           <CaretRightIcon aria-hidden />
         </Button>
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0 bottom-1.5 z-40 flex justify-center"
-        >
-          <span className="flex items-center gap-1.5 rounded-full bg-background/60 px-2 py-[5px] backdrop-blur-sm">
+        <div className="absolute inset-x-0 bottom-1.5 z-10 flex justify-center">
+          {/* Each dot's button is 20 px wide and 24 px from the next: a target a finger can hit, in a pill that stays small. */}
+          <div className="flex gap-1 rounded-full bg-background/60 px-1 backdrop-blur-sm">
             {SLIDES.map((slide, at) => (
-              <span
-                className={cn(
-                  "h-1.5 rounded-full transition-all duration-300 motion-reduce:transition-none",
-                  at === front ? "w-3 bg-foreground" : "w-1.5 bg-foreground/40"
-                )}
+              <button
+                aria-label={slide.alt}
+                aria-pressed={at === front}
+                className="group/dot grid h-4 w-5 place-items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 key={slide.picture}
-              />
+                onClick={() => setFront(at)}
+                type="button"
+              >
+                <span
+                  aria-hidden
+                  className={cn(
+                    "h-1.5 rounded-full transition-all duration-300 motion-reduce:transition-none",
+                    at === front
+                      ? "w-3 bg-foreground"
+                      : "w-1.5 bg-foreground/40 group-hover/dot:bg-foreground/70"
+                  )}
+                />
+              </button>
             ))}
-          </span>
+          </div>
         </div>
-        <p aria-live="polite" className="sr-only">
-          {SLIDES[front]?.alt}
-        </p>
       </div>
+      <p aria-live="polite" className="sr-only">
+        {SLIDES[front]?.alt}
+      </p>
     </div>
   )
 }
@@ -1353,7 +1420,7 @@ function ApprovalItem({
       data-slot="approval-item"
     >
       <div className="flex items-center gap-2.5">
-        <SiteIcon className="size-8 rounded-md" src={pictures?.icon} />
+        <SiteIcon className="size-8" src={pictures?.icon} />
         <div className="flex min-w-0 flex-1 flex-col">
           <h3 className="font-medium text-sm" id={`${id}-title`}>
             {title}

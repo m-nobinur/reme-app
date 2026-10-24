@@ -46,6 +46,13 @@
   }
 }
 
+/* A phone's body, for the mockup a version's phone screenshot sits in: near
+   black in both themes; its metal edge is a ring, which parts it from a dark
+   card. */
+:root {
+  --device: oklch(0.16 0 0);
+}
+
 /* Sections rise into place as they scroll in. Pure CSS, so it costs no script
    and does nothing where scroll timelines are unsupported or motion is off. */
 @utility reveal {
@@ -92,6 +99,7 @@
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
   --color-muted: var(--muted);
+  --color-device: var(--device);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
