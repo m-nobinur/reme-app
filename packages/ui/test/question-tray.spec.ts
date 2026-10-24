@@ -4,15 +4,22 @@ import { axe, open } from "./helpers"
 /**
  * The question tray: a native radio group the keyboard walks, Enter for Next,
  * Escape to collapse, and the last question's Build my site. Each state in the
- * catalog entry is its own tray, so the first one is driven here.
+ * catalog entry is its own tray under its own title.
  */
 
 const tray = (page: import("@playwright/test").Page, n: number) =>
   page.locator('[data-slot="question-tray"]').nth(n)
 
+/** The tray of the catalog state titled `title`. */
+const state = (page: import("@playwright/test").Page, title: string) =>
+  page
+    .locator("section")
+    .filter({ has: page.locator(`:scope > h3:text-is("${title}")`) })
+    .locator('[data-slot="question-tray"]')
+
 test("arrow keys pick and Enter moves on", async ({ page }) => {
   await open(page, "QuestionTray")
-  const first = tray(page, 0)
+  const first = state(page, "Palette, nothing picked")
   await expect(first.getByRole("radiogroup")).toHaveCount(1)
   await expect(
     first.getByRole("button", { name: "Next", exact: true })
@@ -22,7 +29,7 @@ test("arrow keys pick and Enter moves on", async ({ page }) => {
   await page.keyboard.press("ArrowRight")
   await expect(first.getByRole("radio").nth(1)).toBeChecked()
   await page.keyboard.press("Enter")
-  await expect(first.getByText("2 of 4", { exact: true })).toBeVisible()
+  await expect(first.getByText("3 of 6", { exact: true })).toBeVisible()
   await expect(first.getByRole("radiogroup")).toHaveAccessibleName(
     "Which lettering do you prefer?"
   )
@@ -44,7 +51,7 @@ test("a card of many ticks several with Space, in order, and none is unanswered"
   page,
 }) => {
   await open(page, "QuestionTray")
-  const pages = tray(page, 5)
+  const pages = state(page, "Pages, several ticked")
   const group = pages.getByRole("group", {
     name: "Which pages should the site have, besides Home and Request a quote?",
   })
@@ -82,19 +89,20 @@ test("the tray is named by its question, and collapsed by its question too", asy
   page,
 }) => {
   await open(page, "QuestionTray")
-  await expect(tray(page, 0)).toHaveAccessibleName(
+  await expect(state(page, "Palette, nothing picked")).toHaveAccessibleName(
     "Which colour palette feels right for Mop & Pail Cleaning?"
   )
-  await expect(tray(page, 6)).toHaveAccessibleName(
-    "Which lettering do you prefer?"
-  )
-  await expect(tray(page, 6).getByText("2 of 4")).toBeVisible()
+  const collapsed = state(page, "Collapsed")
+  await expect(collapsed).toHaveAccessibleName("Which lettering do you prefer?")
+  await expect(collapsed.getByText("3 of 6", { exact: true })).toBeVisible()
 })
 
 test("the last question reads Build my site", async ({ page }) => {
   await open(page, "QuestionTray")
   await expect(
-    tray(page, 4).getByRole("button", { name: "Build my site" })
+    state(page, "Last question, own words typed").getByRole("button", {
+      name: "Build my site",
+    })
   ).toBeEnabled()
 })
 
