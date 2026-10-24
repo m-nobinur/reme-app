@@ -115,18 +115,26 @@ type Session = {
 const sessions = new Map<string, Session>()
 
 // One tee and one budget guard per conversation, found by the instance id
-// every event and interception carries. Registered once per isolate.
-observe(observed)
+// every event and interception carries. One subscriber per isolate: a module
+// evaluated again (vite reloading it in dev) replaces it, never adds a second.
+const OBSERVER = Symbol.for("reme.developer.observer")
+const held = globalThis as { [OBSERVER]?: () => void }
+held[OBSERVER]?.()
+held[OBSERVER] = observe(observed)
 
 export function observed(...[observation, ctx]: Parameters<Observer>) {
   // A submission that throws outside any turn (its container not running
   // yet, measured locally 2026-10-25) settles with no operation event, so
   // nothing else would wake the Workflow before its 45 minute watchdog.
-  const o = observation as { type?: string; operation?: string }
+  const o = observation as {
+    type?: string
+    operation?: string
+    submissionId?: string
+  }
   if (o.type === "submission_recovery" && o.operation === "process_submission")
     return unstarted.has(ctx.id)
       ? undefined
-      : tell(ctx.id, "interrupted", SANDBOX_UPDATING)
+      : tell(ctx.id, "interrupted", SANDBOX_UPDATING, o.submissionId)
   const found = sessions.get(ctx.id)
   if (!found) return
   found.tee.subscriber(observation)
@@ -349,14 +357,18 @@ const unstarted = new Set<string>()
 function tell(
   id: string,
   kind: "start_failed" | "interrupted",
-  reason: string
+  reason: string,
+  key?: string
 ) {
   const found = sessions.get(id)
   found?.tee.emit(`developer.${kind}`, { reason })
   Promise.resolve(found?.tee.flush())
     .then(() => workflow(id))
     .then((instance) =>
-      instance.sendEvent({ type: "developer", payload: { kind, reason } })
+      instance.sendEvent({
+        type: "developer",
+        payload: { kind, reason, ...(key ? { key } : {}) },
+      })
     )
     .catch(() => undefined)
 }

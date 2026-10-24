@@ -83,6 +83,7 @@ describe("a Developer submission that fails outside a turn", () => {
   const failed = {
     type: "submission_recovery",
     operation: "process_submission",
+    submissionId: "sub_1",
   }
 
   it("wakes the Workflow to resume on a fresh sandbox", async () => {
@@ -92,7 +93,11 @@ describe("a Developer submission that fails outside a turn", () => {
       expect(sent).toEqual([
         {
           type: "developer",
-          payload: { kind: "interrupted", reason: "sandbox.updating" },
+          payload: {
+            kind: "interrupted",
+            reason: "sandbox.updating",
+            key: "sub_1",
+          },
         },
       ])
     )

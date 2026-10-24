@@ -994,6 +994,19 @@ describe("an interrupted Developer run", () => {
       .filter((m) => m.type === "run.interrupted")
       .map((m) => m.attributes ?? {})
 
+  // A failure told by two isolates, or an event delivered twice, resumes once:
+  // the repeats would otherwise spend the budget and fail a working build.
+  it("resumes once for one failure told three times", async () => {
+    dispatched.length = 0
+    advanced.length = 0
+    const told = {
+      payload: { kind: "interrupted", reason: "sandbox.updating", key: "s" },
+    } as Wake
+    const { run } = drive([told, told, told, completion])
+    expect(await run()).toMatchObject({ outcome: "preview_ready" })
+    expect(resumes()).toEqual([{ attempt: "1" }])
+  })
+
   it("fails as provider.unavailable after two resumes, the second on the fallback model", async () => {
     dispatched.length = 0
     advanced.length = 0

@@ -151,7 +151,8 @@ type DeveloperEvent =
       timings?: ToolTimings
     }
   | { kind: "budget"; cap_usd: number; spent_usd: number }
-  | { kind: "interrupted"; reason: string }
+  /** `key` names the failure, so a second wake for it resumes nothing. */
+  | { kind: "interrupted"; reason: string; key?: string }
   | { kind: "unreported"; reason: string }
   | { kind: "start_failed"; reason: string }
 
@@ -609,6 +610,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
     // The nanoclaw pair (§8.3): the tools wake this Workflow with an id, the
     // Workflow answers the Developer with a new submission.
     let resumes = 0
+    const resumedFor = new Set<string>()
     let looks = 0
     let asked: Fix[] = []
     let shotsOf: { revision_id: string; taken: number; ms: number } | null =
@@ -662,6 +664,10 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         return fail(`start ${round}`, "developer.start_failed")
       }
       if (payload.kind === "interrupted") {
+        // One failure told twice (a second isolate, a redelivered event) is one
+        // resume, not two: a repeat would spend the resume budget for nothing.
+        if (payload.key && resumedFor.has(payload.key)) continue
+        if (payload.key) resumedFor.add(payload.key)
         const reason = GATE_REASONS.has(payload.reason)
           ? payload.reason
           : "provider.unavailable"
