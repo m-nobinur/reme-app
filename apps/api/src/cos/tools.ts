@@ -1,6 +1,8 @@
 import {
+  AGENT_NOTE,
   type AnswerQuestionInput,
   type AnswerQuestionOutput,
+  BuildStopCause,
   BuildSummary,
   type BuyDomainInput,
   BuyDomainOutput,
@@ -35,6 +37,8 @@ import {
   type RemoveDomainOutput,
   RequestChangeOutput,
   type ReviewFactKey,
+  TERMINAL_STATES,
+  type WorkspaceStatus,
 } from "@workspace/contracts"
 import {
   assignments,
@@ -158,6 +162,59 @@ function optionsOf(requestId: string, options: string[] | null) {
 /** A domain the org still holds. */
 const live = sql`${domains.state} <> 'removed'`
 
+/** A Developer started again mid-build (the orchestrator's `noteResumed`). */
+const resumed = sql`e.type = ${AGENT_NOTE} and e.payload->>'kind' = 'resumed'`
+
+/** When a build last logged work and was last resumed, in epoch milliseconds. */
+type Life = {
+  work_ms: number | null
+  resumed_ms: number | null
+  cause: string | null
+}
+
+/** The states the pipeline works in, where how long a build has run means something. */
+const WORKING = new Set<string>([
+  "briefing",
+  "planning",
+  "implementing",
+  "validating",
+  "repairing",
+  "revising",
+])
+
+const wholeMinutes = (ms: number) => Math.max(0, Math.floor(ms / 60_000))
+
+/**
+ * How long a build the pipeline is working on has run, how long since it
+ * last logged work, and its last mid-build restart. The clock leaves out the
+ * owner's plan reviews, as the panel's does.
+ */
+export function paceOf(
+  build: Pick<BuildSummary, "state" | "lane" | "created_at" | "review_ms">,
+  life: Life | undefined,
+  expected: WorkspaceStatus["expected_seconds"],
+  now: number
+): Pick<CosWorkspace["builds"][number], "timing" | "restarted"> {
+  if (!WORKING.has(build.state)) return {}
+  const started = Date.parse(build.created_at)
+  const running = wholeMinutes(now - started - (build.review_ms ?? 0))
+  const longest = expected?.[build.lane ?? "full"].p95
+  return {
+    timing: {
+      running_minutes: running,
+      quiet_minutes: wholeMinutes(now - (life?.work_ms ?? started)),
+      overdue: longest !== undefined && running * 60 > longest,
+    },
+    ...(life?.resumed_ms != null && {
+      restarted: {
+        minutes_ago: wholeMinutes(now - life.resumed_ms),
+        cause: BuildStopCause.catch("other").parse(life.cause),
+        working: (life.work_ms ?? 0) > life.resumed_ms,
+      },
+    }),
+  }
+}
+
 export async function getWorkspace(
   ctx: ToolContext,
   _input: Empty
@@ -177,10 +234,11 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
   /** The open reminders with a time, soonest first, for a conversation's first turn. */
   reminders: Opening["reminders"]
 }> {
-  const [{ status, facts }, rows, { lines: profile }, reports, repairs] =
+  const now = new Date()
+  const [{ status, facts }, rows, { lines: profile }, reports, repairs, lives] =
     await kit.withOrg({ orgId: owner.orgId }, (db) =>
       Promise.all([
-        statusWithFacts(db, env, new Date()),
+        statusWithFacts(db, env, now),
         db
           .select({
             name: domains.name,
@@ -198,6 +256,10 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
         ),
         db.execute<{ assignment_id: string; rounds: number }>(
           sql`select assignment_id, count(*)::int as rounds from events where type = 'assignment.state_changed' and payload->>'to' = 'repairing' and occurred_at > now() - interval '24 hours' group by assignment_id`
+        ),
+        // Each open build's last logged work and last resume, for its pace.
+        db.execute<Life & { assignment_id: string }>(
+          sql`select e.assignment_id, (extract(epoch from max(e.occurred_at) filter (where e.type <> ${AGENT_NOTE})) * 1000)::float8 as work_ms, (extract(epoch from max(e.occurred_at) filter (where ${resumed})) * 1000)::float8 as resumed_ms, (array_agg(e.payload->>'cause' order by e.event_id desc) filter (where ${resumed}))[1] as cause from events e join assignments a on a.id = e.assignment_id where a.kind in ('site.build', 'site.revise') and a.state not in ${TERMINAL_STATES} group by e.assignment_id`
         ),
       ])
     )
@@ -238,6 +300,12 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
           total: step.total,
           now: step.now === true,
         })),
+      ...paceOf(
+        b,
+        [...lives].find((l) => l.assignment_id === b.assignment_id),
+        status.expected_seconds,
+        now.getTime()
+      ),
     })),
     stopped: status.attention
       .flatMap((item) =>

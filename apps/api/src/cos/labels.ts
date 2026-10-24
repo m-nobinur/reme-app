@@ -59,6 +59,18 @@ const STOPPED: Record<BuildStopCause, string> = {
   other: "something went wrong on our side",
 }
 
+/** Why the pipeline started a build's Developer again mid-build. */
+const RESTARTED: Record<BuildStopCause, string> = {
+  stalled: "it stopped making progress",
+  unfinished: "its tools kept failing",
+  unanswered: "it was waiting on the owner",
+  service: "a service it relies on dropped out",
+  other: "something went wrong on our side",
+}
+
+/** Quiet minutes that are still work, such as the wait for the photos; past them the model hears. */
+const QUIET_MINUTES = 3
+
 const CHECK_WORDS: Record<GateName, string> = {
   build: "the site would not build",
   types: "the code checks",
@@ -104,6 +116,20 @@ export function workspaceLabels(workspace: CosWorkspace) {
         (p) =>
           `${p.step}${p.total > 1 ? `: ${p.done} of ${p.total}` : ""}${p.now ? " (now)" : p.done >= p.total ? " (done)" : ""}`
       ),
+      ...(b.timing && {
+        running_minutes: b.timing.running_minutes,
+        ...(b.timing.overdue && { longer_than_usual: true }),
+        ...(b.timing.quiet_minutes >= QUIET_MINUTES && {
+          minutes_since_last_work: b.timing.quiet_minutes,
+        }),
+      }),
+      ...(b.restarted && {
+        restarted: {
+          minutes_ago: b.restarted.minutes_ago,
+          why: RESTARTED[b.restarted.cause],
+          working_again: b.restarted.working,
+        },
+      }),
     })),
     stopped_recently: (stopped ?? []).map((s) => ({
       why: STOPPED[s.cause],

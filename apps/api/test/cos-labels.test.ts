@@ -92,6 +92,39 @@ describe("the workspace the CoS reads", () => {
     })
   })
 
+  it("says how long a build has run, a long quiet and a restart, in plain words", () => {
+    const [build] = WORKSPACE.builds
+    if (!build) throw new Error("no build")
+    const read = (b: Partial<typeof build>) =>
+      (
+        dumped({ ...WORKSPACE, builds: [{ ...build, ...b }] }) as {
+          builds: Record<string, unknown>[]
+        }
+      ).builds[0]
+    expect(
+      read({
+        timing: { running_minutes: 38, quiet_minutes: 12, overdue: true },
+        restarted: { minutes_ago: 2, cause: "stalled", working: true },
+      })
+    ).toMatchObject({
+      running_minutes: 38,
+      longer_than_usual: true,
+      minutes_since_last_work: 12,
+      restarted: {
+        minutes_ago: 2,
+        why: "it stopped making progress",
+        working_again: true,
+      },
+    })
+    // A short quiet is still work, and a build on time says nothing of it.
+    const onTime = read({
+      timing: { running_minutes: 4, quiet_minutes: 2, overdue: false },
+    })
+    expect(onTime).toMatchObject({ running_minutes: 4 })
+    expect(onTime).not.toHaveProperty("longer_than_usual")
+    expect(onTime).not.toHaveProperty("minutes_since_last_work")
+  })
+
   it("holds no id or hash outside a ref", () => {
     const text = JSON.stringify(withoutRefs(dumped(WORKSPACE)))
     expect(text).not.toMatch(

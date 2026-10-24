@@ -41,6 +41,7 @@ import {
   getFacts,
   getPreview,
   getWorkspace,
+  paceOf,
   recordReview,
   removeDomain,
   requestChange,
@@ -113,6 +114,58 @@ const deadline = (ms: number) => {
   return () => spy.mockRestore()
 }
 const never = () => new Promise<Response>(() => undefined)
+
+describe("a build's pace", () => {
+  const now = Date.parse("2026-10-25T01:00:00.000Z")
+  const ago = (minutes: number) => now - minutes * 60_000
+  const build = {
+    state: "implementing" as const,
+    lane: "full" as const,
+    created_at: new Date(ago(40)).toISOString(),
+    review_ms: 2 * 60_000,
+  }
+  const expected = {
+    full: { p50: 420, p95: 900 },
+    quick: { p50: 15, p95: 45 },
+  }
+
+  it("counts the minutes run without the owner's reviews, and the quiet since the last work", () => {
+    const life = { work_ms: ago(12), resumed_ms: null, cause: null }
+    expect(paceOf(build, life, expected, now)).toEqual({
+      timing: { running_minutes: 38, quiet_minutes: 12, overdue: true },
+    })
+    expect(
+      paceOf(
+        { ...build, created_at: new Date(ago(10)).toISOString() },
+        undefined,
+        expected,
+        now
+      )
+    ).toEqual({
+      timing: { running_minutes: 8, quiet_minutes: 10, overdue: false },
+    })
+  })
+
+  it("names the last restart, and whether the build has worked since", () => {
+    const life = { work_ms: ago(1), resumed_ms: ago(3), cause: "stalled" }
+    expect(paceOf(build, life, expected, now).restarted).toEqual({
+      minutes_ago: 3,
+      cause: "stalled",
+      working: true,
+    })
+    expect(
+      paceOf(build, { ...life, work_ms: ago(14), cause: "x" }, expected, now)
+        .restarted
+    ).toEqual({ minutes_ago: 3, cause: "other", working: false })
+  })
+
+  it("says nothing of a build waiting on the owner or with no usual time", () => {
+    expect(
+      paceOf({ ...build, state: "awaiting_review" }, undefined, expected, now)
+    ).toEqual({})
+    expect(paceOf(build, undefined, undefined, now).timing?.overdue).toBe(false)
+  })
+})
 
 describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
   const kit: Tenancy = tenancy(url as string, { max: 2 })
@@ -349,6 +402,33 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       await s.blocked(asking, request.request_id, 4)
       const output = kept("get_workspace", await getWorkspace(context(me), {}))
       expect(output.questions[0]?.why).toBe("x".repeat(499))
+    })
+
+    it("says how long a working build has run, its quiet and its last restart", async () => {
+      const s = seed(kit, me)
+      const working = await s.assignment("implementing")
+      await s.event(working, "runtime.turn", {}, 0.25)
+      await s.event(
+        working,
+        "agent.note",
+        { kind: "resumed", cause: "stalled" },
+        0.1
+      )
+      const paceNow = async () =>
+        kept("get_workspace", await getWorkspace(context(me), {})).builds.find(
+          (b) => b.assignment_id === working
+        )
+      // The note is not work: the build has been quiet since the turn.
+      expect(await paceNow()).toMatchObject({
+        timing: { running_minutes: 0, quiet_minutes: 15, overdue: false },
+        restarted: { minutes_ago: 6, cause: "stalled", working: false },
+      })
+      await s.event(working, "runtime.turn", {})
+      expect(await paceNow()).toMatchObject({
+        timing: { quiet_minutes: 0 },
+        restarted: { working: true },
+      })
+      await s.state(working, "cancelled")
     })
 
     it("shows another org nothing of this one's", async () => {
