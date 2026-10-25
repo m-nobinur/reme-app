@@ -7,6 +7,7 @@ import {
   JEV,
   jev,
   jevApproval,
+  jevReading,
   matched,
   phrased,
   readReply,
@@ -407,5 +408,90 @@ describe("a typed reply over an open card", () => {
         throw new Error("down")
       })
     ).toBeNull()
+  })
+})
+
+describe("the reading of a typed message", () => {
+  afterEach(() => vi.restoreAllMocks())
+  const read = (choice: string, confidence: number) =>
+    fake({
+      answers: { reading: { type: "choice", choice, confidence } },
+      usage: { cost: 0.00002 },
+    })
+  const sentOf = (sent: { init: RequestInit }[]) =>
+    JSON.parse(sent[0]?.init.body as string) as {
+      state: Record<string, string>
+      questions: { reading: { criteria: Record<string, string> } }
+    }
+  const asked = "Who should build your website?"
+
+  it("names what a sure reading says the message does", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined)
+    const answer = read("answer", 0.97)
+    expect(await jevReading("k", asked, "you do it", answer.fetchImpl)).toBe(
+      "answer"
+    )
+    expect(sentOf(answer.sent).state).toEqual({
+      assistant_asked: asked,
+      owner_said: "you do it",
+    })
+    const again = "I want to change it again"
+    expect(
+      await jevReading("k", asked, again, read("change", 0.95).fetchImpl)
+    ).toBe("change")
+    const price = "What do you charge?"
+    expect(
+      await jevReading("k", null, price, read("question", 0.93).fetchImpl)
+    ).toBe("question")
+  })
+
+  it("offers no answer with no question waiting, and never takes one", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined)
+    const { fetchImpl, sent } = read("answer", 0.99)
+    expect(await jevReading("k", null, "Mostly couples", fetchImpl)).toBeNull()
+    const body = sentOf(sent)
+    expect(body.state).toEqual({ owner_said: "Mostly couples" })
+    expect(Object.keys(body.questions.reading.criteria)).toEqual([
+      "change",
+      "question",
+      "other",
+    ])
+  })
+
+  it("reads as unsure below the bar, on other, or on a shape it does not know", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined)
+    for (const [choice, confidence] of [
+      ["change", 0.6],
+      ["other", 0.99],
+      ["reschedule", 0.99],
+    ] as const) {
+      expect(
+        await jevReading("k", asked, "hmm", read(choice, confidence).fetchImpl)
+      ).toBeNull()
+    }
+    expect(await jevReading("k", asked, "hmm", fake({}).fetchImpl)).toBeNull()
+  })
+
+  it("reads as unsure on a non-200 or a slow answer, one log line each", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined)
+    expect(
+      await jevReading("k", asked, "hmm", fake({ error: "x" }, 500).fetchImpl)
+    ).toBeNull()
+    expect(JSON.parse(log.mock.calls.at(-1)?.[0] as string)).toMatchObject({
+      code: "reading.jev",
+      reading: null,
+      error: "status 500",
+    })
+    const slow = ((_url: string, init: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        init.signal?.addEventListener("abort", () =>
+          reject(init.signal?.reason)
+        )
+      })) as unknown as typeof fetch
+    expect(await jevReading("k", asked, "hmm", slow)).toBeNull()
+    expect(JSON.parse(log.mock.calls.at(-1)?.[0] as string).error).toBe(
+      "timeout"
+    )
+    expect(log).toHaveBeenCalledTimes(2)
   })
 })

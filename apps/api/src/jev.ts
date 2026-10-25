@@ -1,4 +1,4 @@
-import { AskChoiceInput } from "@workspace/contracts"
+import { AskChoiceInput, MessageReading } from "@workspace/contracts"
 import { scrub } from "@workspace/facade/tee"
 import type { ToolPart } from "./chat.ts"
 
@@ -353,4 +353,54 @@ export async function jevApproval(
     })
   )
   return verdict
+}
+
+/**
+ * What a typed message is doing, for the waiting line only: Jev decides
+ * nothing about the turn. `asked` is the question waiting, null when none
+ * is, so the message cannot be read as its answer. Null when unsure, on an
+ * error, a non-200 or the time limit. One log line per call.
+ */
+export async function jevReading(
+  apiKey: string,
+  asked: string | null,
+  said: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<MessageReading | null> {
+  const began = Date.now()
+  const { body, error } = await ask(
+    apiKey,
+    asked ? { assistant_asked: asked, owner_said: said } : { owner_said: said },
+    {
+      reading: {
+        type: "choice",
+        instructions: "What is the owner's message mainly doing?",
+        criteria: {
+          ...(asked ? { answer: "It answers the assistant's question" } : {}),
+          change: "It asks to change something already set, chosen or written",
+          question: "It asks the assistant a question",
+          other: "It does something else, or it is unclear",
+        },
+      },
+    },
+    fetchImpl
+  )
+  const { choice, confidence } = body?.answers?.reading ?? {}
+  const read = MessageReading.safeParse(choice)
+  const reading =
+    read.success &&
+    num(confidence) >= JEV.sure &&
+    (asked || read.data !== "answer")
+      ? read.data
+      : null
+  console.log(
+    JSON.stringify({
+      code: "reading.jev",
+      ms: Date.now() - began,
+      reading,
+      error,
+      cost_usd: costOf(body),
+    })
+  )
+  return reading
 }
