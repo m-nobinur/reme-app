@@ -1020,15 +1020,18 @@ const SHOT_LIGHT = [
  * A screenshot of a version's home page. Until the image exists it is soft
  * light drifting on a muted tile, never a broken image, and it fades in once
  * it loads; still missing after the last look, it says there is no preview.
- * No `src` yet is a wait that never gives up.
+ * No `src` yet is a wait that never gives up. With `still`, the wait is that
+ * node on the tile, motionless, and the picture fades in over it.
  */
 function Shot({
   src,
   alt = "",
+  still,
   className,
 }: {
   src: string | undefined
   alt?: string
+  still?: ReactNode
   /** Its shape: the ratio and corners of where it sits. */
   className?: string
 }) {
@@ -1046,21 +1049,26 @@ function Shot({
     }, SHOT_RETRY_MS)
     return () => clearTimeout(timer)
   }, [loaded, failed, tries])
+  const note =
+    gaveUp && alt ? <span className={META}>No preview to show yet</span> : null
   return (
     <span
       className={cn("relative block overflow-hidden bg-muted", className)}
       data-slot="shot"
     >
-      {loaded ? null : (
+      {still !== undefined ? (
+        <span className="absolute inset-0 flex flex-col items-center justify-center gap-1 p-3 text-center">
+          {still}
+          {note}
+        </span>
+      ) : loaded ? null : (
         <Diffusing
           className="absolute inset-0"
           colors={SHOT_LIGHT}
           motion="motion-safe:animate-shot-drift"
           paper="var(--muted)"
         >
-          {gaveUp && alt ? (
-            <span className={META}>No preview to show yet</span>
-          ) : null}
+          {note}
         </Diffusing>
       )}
       {src && !gaveUp ? (

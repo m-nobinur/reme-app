@@ -160,6 +160,11 @@ export function SiteReady({
       alt="Your home page on a laptop"
       className="aspect-[16/10]"
       src={pictures?.laptop}
+      still={
+        <span aria-hidden className="font-medium text-muted-foreground text-sm">
+          {title}
+        </span>
+      }
     />
   )
   const card = approved ? (
