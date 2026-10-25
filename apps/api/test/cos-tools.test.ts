@@ -944,6 +944,24 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       })
     })
 
+    it("drops a claim that is only the change restated, and still starts the change", async () => {
+      const before = await proofNow()
+      const turn = await turnOf(me, [
+        "That build got stuck, please start the website again.",
+      ])
+      const output = kept(
+        "request_change",
+        await requestChange(
+          context(me, creating(me)),
+          { text: "Build the website again", proof: "Build the website again" },
+          crypto.randomUUID(),
+          turn
+        )
+      )
+      expect(output).toMatchObject({ outcome: "started" })
+      expect(await proofNow()).toEqual(before)
+    })
+
     it("refuses a claim with a word the owner never wrote, records nothing and starts nothing", async () => {
       const before = await proofNow()
       const turn = await turnOf(me, ["Say we're insured"])

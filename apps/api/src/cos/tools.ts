@@ -585,9 +585,18 @@ class ProofFull extends Error {}
 async function recordProof(
   { kit, owner }: Pick<ToolContext, "kit" | "owner">,
   sessionId: string,
-  { proof }: CosChangeRequest
+  { proof, text: change }: CosChangeRequest
 ): Promise<Response | null> {
   if (!proof) return null
+  // The change itself is not a claim about the business: logged 2026-10-25,
+  // "Build the website again" landed in the proof. Dropped, never refused, so
+  // the owner is not asked about it.
+  if (
+    inOwnersWords(proof, [change], false) &&
+    inOwnersWords(change, [proof], false)
+  ) {
+    return null
+  }
   const said = await ownerSaid({ kit, owner }, sessionId)
   if (!said.some((message) => statedIn(proof, message))) {
     return failure(400, {

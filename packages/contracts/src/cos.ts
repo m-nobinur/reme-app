@@ -193,7 +193,7 @@ export const CosChangeRequest = OwnerChangeRequest.extend({
     .max(300)
     .optional()
     .describe(
-      'What the owner states about the business in this change and wants the site to say, such as insurance, years trading or a guarantee, in their own words and as the site would write it: "Local and fully insured, with £5 million public liability". Money as £5 million, never "5 million pounds". Omit it when the change states nothing about the business.'
+      'What the owner states about the business in this change and wants the site to say, such as insurance, years trading or a guarantee, in their own words and as the site would write it: "Local and fully insured, with £5 million public liability". Money as £5 million, never "5 million pounds". Never the change itself ("Build the website again" is not a claim). Omit it when the change states nothing about the business.'
     ),
   contact: z
     .strictObject({
