@@ -1078,6 +1078,30 @@ export function designAnswer(
   return { kind: "design", facts, settled, ...(skip_all && { picked: true }) }
 }
 
+/**
+ * What the tray opens on, as facts: each question's own ticks, as one Looks
+ * good on every page states them. The planner keeps these for a question
+ * the owner left to it, as Pick for me keeps a details card's prefill.
+ */
+export function designPrefill(
+  part: ToolPart,
+  held: readonly Held[]
+): FactValue[] {
+  const tray = AskDesignInput.safeParse(part.input)
+  if (!tray.success) return []
+  const answers = Object.fromEntries(
+    tray.data.questions.flatMap(({ id, visual, card }) => {
+      const [first] = card.preselected
+      if (PAGES_OF_THEIR_OWN.includes(visual) || first === undefined) return []
+      return [
+        [id, card.multiple ? { choices: card.preselected } : { choice: first }],
+      ]
+    })
+  )
+  const answer = designAnswer(tray.data, { answers, skip_all: false }, held)
+  return answer?.kind === "design" ? answer.facts : []
+}
+
 type Step = {
   id: StepId
   done: (o: Onboarding) => boolean

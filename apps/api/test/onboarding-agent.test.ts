@@ -1,4 +1,5 @@
 import {
+  type AskDesignInput,
   type FactValue,
   OnboardingPlan,
   PERSONA_CARD,
@@ -14,6 +15,8 @@ import {
   call,
   cardAnswer,
   choiceCard,
+  designCard,
+  designPrefill,
   detailsCard,
   type Onboarding,
 } from "../src/onboarding.ts"
@@ -327,6 +330,121 @@ describe("the plan's checks", () => {
         s
       )[0]
     ).toMatch(/next step is ask_design/)
+  })
+
+  it("keeps the design tray open on words that answer part of it, and starts the build once the rest is left to the assistant", () => {
+    const o = atDesign(
+      without("site.template", "site.palette", "site.font", "site.pages")
+    )
+    const tray = designCard(o, counter())
+    const prefill = designPrefill(tray, o.facts)
+    expect(prefill.map((f) => f.key).sort()).toEqual([
+      "site.direction",
+      "site.font",
+      "site.pages",
+      "site.palette",
+    ])
+    const start = plan({
+      pending_card: "answered",
+      say: "That's everything I need. I've started on the website.",
+      next: { kind: "start_build" },
+    })
+    // The planner reads the ticks it keeps for what it is left.
+    expect(turnData(typed("skip", o, tray))).toContain(
+      `"waiting_card":{"card":"ask_design","prefill":${JSON.stringify(prefill)}}`
+    )
+    // The replies of 2026-10-26: one question answered, or one passed over.
+    for (const words of ["no logo, make one for me", "skip"]) {
+      expect(errorsOf(start, typed(words, o, tray)).join()).toMatch(
+        /design tray still asks site.palette, site.font, site.direction, site.pages/
+      )
+    }
+    const again = plan({
+      pending_card: "answered",
+      say: "I'll create a logo for you. Now the colours.",
+      next: { kind: "ask_design" } as Plan["next"],
+    })
+    const s = typed("no logo, make one for me", o, tray)
+    const shown = checkPlan(again, s)
+    if (!shown.ok) throw new Error(shown.errors.join("; "))
+    expect(shown.checked.after.closed).not.toContain("design")
+    expect(planParts(shown.checked, s, counter()).map((p) => p.type)).toEqual([
+      "text",
+      "tool-ask_design",
+    ])
+    // The rest left to the assistant: the tray's own ticks, as its choice.
+    const deferred = plan({
+      ...start,
+      facts: Object.fromEntries(prefill.map((f) => [f.key, f.value])),
+      chosen_for_owner: prefill.map((f) => f.key) as Plan["chosen_for_owner"],
+    })
+    const done = checkPlan(deferred, typed("dealer's choice", o, tray))
+    if (!done.ok) throw new Error(done.errors.join("; "))
+    expect(done.checked.chosen).toEqual(prefill)
+    // The owner's layout and the rest left to it.
+    const second = String(
+      (tray.input as AskDesignInput).questions.find(
+        (q) => q.id === "arrangement"
+      )?.card.options[1]?.id
+    )
+    const mixed = plan({
+      ...deferred,
+      facts: { ...deferred.facts, "site.direction": { id: second } },
+      chosen_for_owner: ["site.palette", "site.font", "site.pages"],
+    })
+    expect(
+      errorsOf(mixed, typed("the second layout, rest up to you", o, tray))
+    ).toEqual([])
+    // A choice of its own, not the tray's, is refused.
+    expect(
+      errorsOf(
+        plan({
+          ...deferred,
+          facts: {
+            ...deferred.facts,
+            "site.direction": { id: second },
+          },
+        }),
+        typed("dealer's choice", o, tray)
+      ).join()
+    ).toMatch(/site.direction was left to you/)
+  })
+
+  it("keeps the assistant card's own values for what the owner left to it, and a name to fit the pronouns they asked for", () => {
+    const o = onboarding(
+      without("assistant.name", "assistant.pronouns", "assistant.tone")
+    )
+    const card = detailsCard("assistant", o, counter())
+    const left = (facts: Plan["facts"], chosen: string[]) =>
+      errorsOf(
+        plan({
+          facts,
+          chosen_for_owner: chosen as Plan["chosen_for_owner"],
+          pending_card: "answered",
+        }),
+        typed("dealer's choice", o, card)
+      ).filter((e) => e.includes("was left to you"))
+    const asCome = {
+      "assistant.name": { name: "Reme" },
+      "assistant.pronouns": { id: "she_her" },
+      "assistant.tone": { id: "professional" },
+    } as Plan["facts"]
+    const all = ["assistant.name", "assistant.pronouns", "assistant.tone"]
+    expect(left(asCome, all)).toEqual([])
+    // Measured: "dealer's choice" and "elige tú" chose friendly.
+    expect(
+      left({ ...asCome, "assistant.tone": { id: "friendly" } }, all)
+    ).toEqual([
+      'assistant.tone was left to you: keep what the card holds, {"id":"professional"}',
+    ])
+    // "You choose, but make it a man": a man's name is the owner's ask.
+    const man = {
+      ...asCome,
+      "assistant.name": { name: "Arthur" },
+      "assistant.pronouns": { id: "he_him" },
+    } as Plan["facts"]
+    expect(left(man, ["assistant.name", "assistant.tone"])).toEqual([])
+    expect(left(man, all)).toHaveLength(2)
   })
 
   it("lets the plan choose the palettes shown first, from the pool, three or four of them", () => {

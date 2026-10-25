@@ -1,4 +1,5 @@
 import {
+  type AskDetailsInput,
   AskOpenInput,
   CHOICE_FACT_KEYS,
   type ChoiceStep,
@@ -57,6 +58,7 @@ import {
   currentStep,
   designCard,
   designDone,
+  designPrefill,
   detailsCard,
   detailsDone,
   factCard,
@@ -186,8 +188,8 @@ Onboarding, in this order (the checklist in the data says where you are; work on
 3. Then the phone number and email customers should use, on the ask_details contact card.
 4. You: your name, pronouns and tone on the ask_details assistant card.
 5. The website: say it turns visitors into enquiries through its Request a quote page, then ask whether to build it (ask_choice build_for_me). Some owners already have a website: say they can skip if so. If they skip, record site.build_mode "manual" and close warmly with answer_only in the same turn: connecting a website they already have is coming soon, so stay tuned; until then you help with enquiries, quotes and follow-ups, and you can build a site whenever they ask. Onboarding is over. Never offer a website builder.
-6. The design, last, in one tray of six questions (ask_design): the logo, the colours, the lettering, the page arrangement, the photos and the pages. The owner answers it on the tray and may leave any question to you but the logo, which they upload or have you create there; photos they don't send, you create. Their answer starts the build. There is no image library: never promise stock or hand-picked images.
-7. Start the build (start_build), when the owner settled the design in words instead of on the tray. It needs no approval and runs in the background: say it has started, that progress shows in the activity panel, that they can keep chatting, and that you'll tell them when the first draft is ready.
+6. The design, last, in one tray of six questions (ask_design): the logo, the colours, the lettering, the page arrangement, the photos and the pages. The owner answers it on the tray and may leave any question to you but the logo, which they upload or have you create there; photos they don't send, you create. Their answer starts the build. If their words answer only some of it, record what they answered (a logo or photos they don't have, you create), set pending_card "answered" and show the tray again (ask_design) for the rest; "skip" passes over the question they are on. There is no image library: never promise stock or hand-picked images.
+7. Start the build (start_build), when the owner settled the design in words instead of on the tray: every question answered, or the rest left to you ("you pick the rest", "dealer's choice"). It needs no approval and runs in the background: say it has started, that progress shows in the activity panel, that they can keep chatting, and that you'll tell them when the first draft is ready.
 
 How to write doing:
 - A few words the owner sees while you work, specific to this turn and this business: "Drafting quote questions for a window cleaner", "Setting up your contact card", "Looking at what you skipped". Sentence case, no full stop, under 50 characters.
@@ -217,7 +219,7 @@ Reading the owner:
 - Record only what they said. Never invent a phone number, an email, a service, a customer or a place. If a phone number or an email looks incomplete, don't record it: say so and ask again. Phone numbers are E.164, read for the UK unless they give a country code: a leading 0 drops after +44 ("07700 900123" is +447700900123), and 00 starts an international number ("00 1 206 555 0104" is +12065550104). A number that cannot be dialled that way is never recorded: ask them to check it.
 - The industry: category is the closest item of the list, or null when none is close; name is their trade in their words.
 - Choices have cards: the industry, whether you build the website, the layout, the colours, the lettering and the pages. Record one only when the owner typed over that choice's own card; otherwise leave it out, and its card asks it in turn. The industry is the exception: record it as soon as their words say what the business does.
-- If they leave a card's choice to you ("you pick"), choose what suits the business for that card, record it, list its key in chosen_for_owner, and tell them what you chose and that they can change it. Contact details and what the business does are never yours to choose.
+- If they leave a card's choice to you ("you pick"), keep what the card holds, its prefill in waiting_card, as Pick for me does, and change it only where their words ask ("make it a man"). Record it, list its key in chosen_for_owner, and tell them what you chose and that they can change it. Contact details and what the business does are never yours to choose.
 - A card used "with Pick for me" is the owner asking you to choose. The card holds your choice already, so record nothing for it: say what you went with in your own voice, as your decision, in one sentence ("I've gone with Reme, she/her, with a professional manner."). For the design tray, say you'll choose the rest as you build. Never say they picked it, and never name an avatar.
 - Record owner.preferred_name only when they say what they want to be called. A name in a greeting ("I'm Sophie") is not that. Never ask for it: the owner is called by owner_first_name, taken from their sign-in.
 - If their words answer only part of a card, record that part, set pending_card "answered", and ask the same card again for the rest.
@@ -666,7 +668,7 @@ export function typedOverForm(
 }
 
 /** The waiting card as the model reads it: what it asks, and its options. */
-function waiting(part: ToolPart | null) {
+function waiting(part: ToolPart | null, o: Onboarding) {
   if (!part) return null
   const input = part.input as Record<string, unknown>
   if (part.type === "tool-ask_choice") {
@@ -675,7 +677,7 @@ function waiting(part: ToolPart | null) {
       card: "ask_choice",
       step,
       options: (input.options as { id: string; label: string }[]).map(
-        (o) => `${o.id} (${o.label})`
+        (each) => `${each.id} (${each.label})`
       ),
     }
   }
@@ -688,6 +690,10 @@ function waiting(part: ToolPart | null) {
   }
   if (part.type === "tool-review_quote_form") {
     return { card: "review_quote_form", fields: input.fields }
+  }
+  if (part.type === "tool-ask_design") {
+    const prefill = designPrefill(part, o.facts).filter((f) => !has(o, f.key))
+    return { card: "ask_design", prefill }
   }
   return { card: part.type.slice("tool-".length) }
 }
@@ -722,7 +728,7 @@ export function turnData(s: PlanState): string {
     can_go_back_to: ReopenStep.options.filter((step) => stepDone(o, step)),
     facts: factsOf(o),
     owner_first_name: firstName(o.ownerName) || null,
-    waiting_card: s.input.kind === "message" ? waiting(s.pending) : null,
+    waiting_card: s.input.kind === "message" ? waiting(s.pending, o) : null,
     recent_conversation: transcriptOf(s.rows),
     owner_now:
       s.input.kind === "message"
@@ -916,6 +922,9 @@ export type Checked = {
 
 const CHOICE_KEYS = CHOICE_FACT_KEYS as readonly string[]
 
+const same = (a: unknown, b: unknown) =>
+  JSON.stringify(a, sortedKeys) === JSON.stringify(b, sortedKeys)
+
 /**
  * Checks a plan against the turn's state. Every problem is named in words
  * the model can act on, for its one retry. The checks are invariants of the
@@ -943,12 +952,7 @@ export function checkPlan(
   for (const [key, value] of Object.entries(plan.facts)) {
     if (value === undefined) continue
     // Restating what is held changes nothing, so it is never a problem.
-    if (
-      JSON.stringify(factValue(o.facts, key as FactValueKey), sortedKeys) ===
-      JSON.stringify(value, sortedKeys)
-    ) {
-      continue
-    }
+    if (same(factValue(o.facts, key as FactValueKey), value)) continue
     const parsed = FactValue.safeParse({ key, value })
     if (!parsed.success) {
       errors.push(
@@ -1060,6 +1064,36 @@ export function checkPlan(
         (plan.chosen_for_owner as readonly string[]).includes(f.key)) ||
       (f.key === "business.industry" && !wanted.includes(f.key))
   )
+  // A choice left to the assistant keeps what the card opened on, as Pick
+  // for me does; a name may follow pronouns the owner changed ("make it a man").
+  const prefill =
+    pending?.type === "tool-ask_design"
+      ? designPrefill(pending, o.facts)
+      : pending?.type === "tool-ask_details"
+        ? (pending.input as AskDetailsInput).prefill
+        : []
+  const opened = (key: string) => prefill.find((p) => p.key === key)?.value
+  const repronounced = facts.some(
+    (f) =>
+      f.key === "assistant.pronouns" &&
+      !chosen.includes(f) &&
+      !same(f.value, opened(f.key))
+  )
+  for (const f of chosen) {
+    const value = opened(f.key)
+    if (value === undefined || same(f.value, value)) continue
+    if (f.key === "assistant.name" && repronounced) continue
+    errors.push(
+      `${f.key} was left to you: keep what the card holds, ${JSON.stringify(value)}`
+    )
+  }
+  // Words over the tray settle it only once each of its questions is held,
+  // the owner's answer or the choice they left to you; until then the tray
+  // is shown again for the rest.
+  const trayOpen =
+    pending?.type === "tool-ask_design"
+      ? TRAY.filter((key) => !has(o, key) && !keys.has(key))
+      : []
   // Changes typed over a proposed quote form are proposed again in its
   // place, so the step stays open for the new proposal.
   const reproposed =
@@ -1075,6 +1109,7 @@ export function checkPlan(
       pending &&
       card &&
       !reproposed &&
+      trayOpen.length === 0 &&
       (verdict === "declined" || verdict === "answered")
         ? [...o.closed, card]
         : o.closed,
@@ -1084,6 +1119,16 @@ export function checkPlan(
   const held = (key: FactValueKey) => has(after, key)
   const next = plan.next
 
+  if (
+    trayOpen.length > 0 &&
+    verdict !== "unanswered" &&
+    next.kind !== "ask_design" &&
+    next.kind !== "reopen"
+  ) {
+    errors.push(
+      `the design tray still asks ${trayOpen.join(", ")}: record what the owner answered and show the tray again with ask_design; only if they left the rest to you, record the tray's prefill for each and list them in chosen_for_owner`
+    )
+  }
   if (endedNow && next.kind !== "answer_only") {
     errors.push(
       "the owner skipped the website, so onboarding is over: next must be answer_only"
