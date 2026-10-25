@@ -97,7 +97,7 @@ async function openOnboarding(db: OrgScopedDb): Promise<Open | null> {
  *
  * shortcut: `asked` is left out, as it reads the planner's steps from the
  * event log; an optional "Your customers" the owner deferred shows open
- * until they settle how customers reach them, then skipped.
+ * until they settle the quote questions, then skipped.
  */
 async function onboardingOf(
   db: OrgScopedDb,
