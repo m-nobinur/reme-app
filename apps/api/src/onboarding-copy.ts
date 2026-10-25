@@ -245,7 +245,7 @@ One more thing I can do: build a website for ${v.business}. Every page would poi
 ${ask}`,
       `Thanks${comma(v.owner)}.
 
-If ${v.business} needs a website, I can build it. It would have a Request a quote page, so customers describe the job and the enquiry comes to me ready for a quote. Already have one? Skip this for now.
+If ${v.business} needs a website, I can build it. It would have a Request a quote page, so customers describe the job and the enquiry comes to me ready for a quote. If you already have one, skip this and I'll stick to enquiries and quotes.
 
 ${ask}`,
     ]

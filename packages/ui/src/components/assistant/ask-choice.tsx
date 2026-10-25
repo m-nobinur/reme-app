@@ -50,7 +50,8 @@ const STEP_ASK: Record<AskChoiceInput["step"], string> = {
   industry: "What kind of work do you do?",
   pronouns: "Which pronouns should your assistant use?",
   tone: "How should your assistant sound?",
-  build_for_me: "Shall I build your website?",
+  // The message asks the question; the title says what it does not.
+  build_for_me: "You'll see it before it goes live",
   manual_builder: "Would you rather build it yourself?",
   template: "Which layout do you like?",
   palette: "Which colours feel right?",
