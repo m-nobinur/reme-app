@@ -9143,6 +9143,29 @@ export interface components {
           /** Format: uuid */
           id: string
         }[]
+        brief: {
+          description: string | ""
+          colors: string[]
+          /** @enum {string} */
+          type:
+            | "lockup"
+            | "icon"
+            | "wordmark"
+            | "monogram"
+            | "emblem"
+            | "abstract"
+          /** @enum {string} */
+          style:
+            | "minimal"
+            | "geometric"
+            | "gradient"
+            | "mascot"
+            | "hand_drawn"
+            | "luxury"
+            | "retro"
+            | "three_d"
+            | "surprise"
+        }
       }[]
       next_at?: string | null
     }
