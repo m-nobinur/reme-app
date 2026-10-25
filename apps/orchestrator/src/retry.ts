@@ -237,14 +237,16 @@ export const NARRATED_PER_HOUR = 6
 const NARRATE_TIMEOUT_MS = 8_000
 
 /** What happens next, by note, in the words the model must keep to. */
-const NEXT_WORDS: Record<Exclude<AgentNote["kind"], "problem">, string> = {
+const NEXT_WORDS: Record<
+  Exclude<AgentNote["kind"], "problem" | "done">,
+  string
+> = {
   resumed:
     "You already restarted it from where it left off, and it is back at work. Nothing is needed from the owner, and you will tell them here when the draft is ready.",
   retrying:
     "You have already started it again by yourself. The owner need do nothing, and you will say here when the draft is ready.",
   stopped:
     "Nothing more happens until the owner says try again or tells you what to change.",
-  done: "The owner can preview it, then approve it or tell you what to change.",
 }
 
 const narratePrompt = (name: string | null, tone: string | null) =>
@@ -290,7 +292,7 @@ export async function narrate(
   write: typeof writeText = writeText
 ): Promise<string> {
   const key = env.OPENROUTER_API_KEY
-  if (!key || note.kind === "problem") return template
+  if (!key || note.kind === "problem" || note.kind === "done") return template
   try {
     const known = await kit.withOrg({ orgId }, async (db) => {
       // shortcut: counts calls already logged, so lines narrated at the same moment can pass it by a few.
@@ -391,14 +393,10 @@ const reviewOpen = async (kit: Tenancy, ids: Ids) => {
 
 /**
  * The draft is ready: its `done` note and the ready line to post, while the
- * review it announces is still open. A step of its own, so a busy chat
- * retries the post and never the model call.
+ * review it announces is still open. The line is the template, with no model
+ * call in front of it: the owner is looking at the review already.
  */
-export async function readyNote(
-  env: { OPENROUTER_API_KEY?: string },
-  kit: Tenancy,
-  ids: Ids
-): Promise<Note | null> {
+export async function readyNote(kit: Tenancy, ids: Ids): Promise<Note | null> {
   const row = await reviewOpen(kit, ids)
   if (!row) return null
   const { retry_of, offer } = await kit.withOrg(
@@ -428,14 +426,7 @@ export async function readyNote(
   await writeNote(kit, ids.orgId, note)
   return {
     key: note.key,
-    text: await narrate(
-      env,
-      kit,
-      ids.orgId,
-      row.kind,
-      note,
-      readyText(row.kind, row.blueprint)
-    ),
+    text: readyText(row.kind, row.blueprint),
     ...(offer && { questions: offer }),
   }
 }

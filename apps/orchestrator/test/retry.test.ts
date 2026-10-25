@@ -519,15 +519,15 @@ live("a failed owner build's retry", () => {
     })
 
     // Not in review: no note, no line.
-    expect(await readyNote({}, kit, ids)).toBeNull()
+    expect(await readyNote(kit, ids)).toBeNull()
     await kit.withOrg({ orgId }, (db) =>
       db
         .update(assignments)
         .set({ state: "awaiting_review" })
         .where(eq(assignments.id, ids.assignmentId))
     )
-    const ready = await readyNote({}, kit, ids)
-    await readyNote({}, kit, ids)
+    const ready = await readyNote(kit, ids)
+    await readyNote(kit, ids)
     expect(ready?.key).toBe(`site.ready:${ids.assignmentId}`)
     expect(ready?.text).toMatch(/^Your website draft is ready, with /)
     const done = (await notesOf(orgId, ids.assignmentId)).filter(
@@ -588,7 +588,7 @@ live("a failed owner build's retry", () => {
         .set({ state: "awaiting_review" })
         .where(eq(assignments.id, ids.assignmentId))
     })
-    const ready = await readyNote({}, kit, ids)
+    const ready = await readyNote(kit, ids)
     expect(ready?.questions).toEqual({
       kind: "offer",
       assignment_id: ids.assignmentId,

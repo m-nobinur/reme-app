@@ -1115,7 +1115,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         if (reviewed) {
           try {
             const note = await step.do("ready note", () =>
-              run((kit) => readyNote(this.env, kit, ids))
+              run((kit) => readyNote(kit, ids))
             )
             if (note) {
               await step.do("say ready", SAY_RETRIES, () =>
