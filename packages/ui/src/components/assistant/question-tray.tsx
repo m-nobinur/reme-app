@@ -875,9 +875,12 @@ type TrayFrameProps = {
   onBack?: (() => void) | undefined
   onForward?: (() => void) | undefined
   skip?: { label: string; onSkip: () => void; disabled?: boolean } | undefined
+  /** Pick for me: the tray finishes at once, on its defaults for what is left. */
+  pick?: { onPick: () => void; disabled?: boolean } | undefined
   /**
    * The primary button. With `form` it submits that form, so Enter in a
-   * field submits too; without, Enter in a field presses it.
+   * field submits too; without, Enter in a field presses it. A step that
+   * acts differently passes its own label and action here.
    */
   submit?:
     | {
@@ -904,6 +907,7 @@ function TrayFrame({
   onBack,
   onForward,
   skip,
+  pick,
   submit,
   status,
   bodyRef: givenBody,
@@ -922,7 +926,7 @@ function TrayFrame({
   const count = paged ? `${page.index + 1} of ${page.total}` : null
   // A one-tap question has nothing under its options: no empty footer band,
   // and the body takes the card's own corners.
-  const footed = paged || status != null || skip || submit
+  const footed = paged || status != null || skip || pick || submit
   const bottom = footed
     ? "rounded-b-3xl"
     : "rounded-b-[calc(var(--composer-radius,var(--radius-4xl))-1px)]"
@@ -1155,6 +1159,17 @@ function TrayFrame({
                   variant="ghost"
                 >
                   {skip.label}
+                </Button>
+              ) : null}
+              {pick ? (
+                <Button
+                  className={ACCENT_RING}
+                  disabled={pick.disabled}
+                  onClick={pick.onPick}
+                  type="button"
+                  variant="secondary"
+                >
+                  Pick for me
                 </Button>
               ) : null}
               {submit ? (
