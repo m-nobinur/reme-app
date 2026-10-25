@@ -11,9 +11,9 @@ import type { Workspace, WorkspacePoll } from "./api/types"
 
 /**
  * The panel polls `/workspace`, cheaply, until a push channel replaces it:
- * every 3 s while a build is queued or runs (publishing included), backing
- * off to 5, 8 and 10 s while consecutive reads come back unchanged and
- * snapping back to 3 s on a change, a focus or an owner action; 30 s
+ * every 3 s while a build is queued or runs (publishing included), easing
+ * to 4 s while consecutive reads come back unchanged and snapping back to
+ * 3 s on a change, a focus or an owner action; 30 s
  * otherwise, 60 s after a failed read. A hidden tab with nothing in flight
  * does not poll; with a build in flight it keeps its pace, because a tab
  * can be hidden to the page and still be the one the owner is watching. A
@@ -23,8 +23,15 @@ import type { Workspace, WorkspacePoll } from "./api/types"
  */
 export const INTERVAL = { building: 3_000, idle: 30_000, error: 60_000 }
 
-/** The pace of a build in flight by the number of unchanged reads in a row; the last step holds. */
-export const BUILDING_BACKOFF = [INTERVAL.building, 5_000, 8_000, 10_000]
+/**
+ * The pace of a build in flight by the number of unchanged reads in a row; the
+ * last step holds. Capped at 4 s: at 10 s a ready draft reached the chat up to
+ * 20 s after the server had it (2026-10-25), and an unchanged read is a 304.
+ */
+export const BUILDING_BACKOFF = [INTERVAL.building, INTERVAL.building, 4_000]
+
+/** How long after a review opens the panel keeps a build's pace, for the ready line that follows it. */
+export const JUST_READY_MS = 60_000
 
 /** A read that has not answered by now counts as failed, so it cannot hold up every read behind it. */
 export const READ_LIMIT_MS = 20_000
@@ -77,7 +84,14 @@ export function startPolling({
   const schedule = () => {
     clearTimeout(timer)
     const busy =
-      current?.building || current?.builds.some((b) => b.state === "queued")
+      current?.building ||
+      current?.builds.some((b) => b.state === "queued") ||
+      // A review just opened: its ready line is posted a few seconds later.
+      current?.attention.some(
+        (item) =>
+          item.kind === "approval" &&
+          Date.now() - Date.parse(item.raisedAt) < JUST_READY_MS
+      )
     if (stopped || (page.hidden && !busy)) return
     const delay = failed
       ? INTERVAL.error
