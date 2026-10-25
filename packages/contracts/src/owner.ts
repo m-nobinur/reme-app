@@ -236,6 +236,11 @@ export const OwnerChangeRequest = z.strictObject({
   change_kind: ChangeKind.optional().describe(
     "How big the change is. copy: words only, such as a headline, a phone number or a button label. style: colours, fonts or spacing across the site. section: add, remove or rework one section or page. photo: replace, add or remove a picture. creative: a new look, new pages or anything unclear. Omit it when unsure."
   ),
+  label: Text(40)
+    .optional()
+    .describe(
+      'A short name for the change in the owner\'s terms, as the panel and the ready line say it after "updating": "your hero title", "your phone number", "the colours".'
+    ),
   chat: z
     .strictObject({ conversation_id: Uuid.optional() })
     .optional()
@@ -435,6 +440,8 @@ export const BuildSummary = z.strictObject({
   kind: z.enum(["site.build", "site.revise"]),
   state: AssignmentState,
   goal: z.string().min(1).max(GOAL_MAX),
+  /** A change's short name in the owner's terms, such as "your hero title"; absent on a first build or an older change. */
+  label: Text(40).optional(),
   /** The lane it runs in now: a quick edit that fell through reads `full`. */
   lane: BuildLane.optional(),
   /** A quick edit that could not be made quickly and moved to a fuller lane; the panel says so once. */
