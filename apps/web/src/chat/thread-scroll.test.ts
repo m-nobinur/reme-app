@@ -6,6 +6,7 @@ import {
 } from "@assistant-ui/react"
 import { AVATARS, PRONOUNS, TONES } from "@workspace/contracts"
 import { PersonaCardUI } from "@workspace/ui/components/assistant/persona-card"
+import { TrayFrame } from "@workspace/ui/components/assistant/question-tray"
 import { Thread } from "@workspace/ui/components/assistant/thread"
 import { act, createElement, useSyncExternalStore } from "react"
 import { createRoot, type Root } from "react-dom/client"
@@ -32,6 +33,8 @@ let layout: {
   clientHeight: number
   footer: number
   slot: number
+  /** The docked tray's content, when one is shown. */
+  content: number
   rows: Map<string, number>
 }
 
@@ -44,10 +47,42 @@ const group = (el: Element) =>
 const isSlot = (el: Element) =>
   el.parentElement?.getAttribute("data-slot") === "aui_message-group" &&
   el.getAttribute("aria-live") === "polite"
+const isWrapper = (el: Element): el is Element & { parentElement: Element } =>
+  el.parentElement !== null &&
+  isViewport(el.parentElement) &&
+  el.querySelector('[data-slot="aui_message-group"]') !== null
 const isReserve = (el: Element) =>
   el.hasAttribute("data-aui-top-anchor-reserve")
 const isFooter = (el: Element) =>
   el.classList.contains("aui-thread-viewport-footer")
+
+/**
+ * A question tray in the footer: its header and buttons, and a body that
+ * holds the height written to it and eases there over a few frames, as its
+ * CSS transition does.
+ */
+const TRAY_CHROME = 124
+const TRAY_EASE_FRAMES = 15
+const trayBody = new Map<Element, { shown: number; step: number }>()
+const isTrayBody = (el: Element) =>
+  el.id.endsWith("-body") && el.closest('[data-slot="question-tray"]') !== null
+const footerHeight = () => {
+  const body = [...trayBody.keys()].find((el) => el.isConnected)
+  return layout.footer + (body ? TRAY_CHROME + heightOf(body) : 0)
+}
+const easeTrayBodies = () => {
+  for (const [el, each] of trayBody) {
+    const target = Number.parseFloat((el as HTMLElement).style.height)
+    // Until a height is written, the body is as tall as its content.
+    if (Number.isNaN(target)) {
+      each.shown = layout.content
+      continue
+    }
+    const rest = Math.max(1, TRAY_EASE_FRAMES - each.step)
+    each.shown = Math.round(each.shown + (target - each.shown) / rest)
+    each.step = each.shown === target ? 0 : each.step + 1
+  }
+}
 
 const heightOf = (el: Element): number => {
   const id = el.getAttribute("data-message-id")
@@ -62,8 +97,22 @@ const heightOf = (el: Element): number => {
   if (isReserve(el))
     return Number.parseFloat((el as HTMLElement).style.height) || 0
   if (isSlot(el)) return layout.slot
-  if (isFooter(el)) return layout.footer
+  if (isFooter(el)) return footerHeight()
+  if (isTrayBody(el)) {
+    const each = trayBody.get(el) ?? { shown: layout.content, step: 0 }
+    trayBody.set(el, each)
+    return each.shown
+  }
+  if (el.parentElement && isTrayBody(el.parentElement)) return layout.content
   if (isViewport(el)) return layout.clientHeight
+  // The viewport's box of content (assistant-ui watches the viewport's
+  // children), as tall as everything in it, the held space too, and at least
+  // the viewport. A box with `display: contents` has no size to report.
+  if (isWrapper(el)) {
+    return el.classList.contains("contents")
+      ? 0
+      : Math.max(layout.clientHeight, contentHeight(el.parentElement))
+  }
   if (el.getAttribute("data-slot") === "aui_message-group") {
     return [...el.children].reduce((sum, child) => sum + heightOf(child), 0)
   }
@@ -101,7 +150,7 @@ const offsetOf = (el: Element): number => {
 
 const contentHeight = (viewport: Element) => {
   const box = viewport.querySelector('[data-slot="aui_message-group"]')
-  return (box ? heightOf(box) : 0) + layout.footer
+  return (box ? heightOf(box) : 0) + footerHeight()
 }
 const maxScroll = (viewport: Element) =>
   Math.max(0, contentHeight(viewport) - layout.clientHeight)
@@ -141,7 +190,7 @@ const rectOf = (el: Element) => {
   const natural = offsetOf(el) - readScroll(viewport)
   // Sticky to the bottom of the scroller.
   const top = isFooter(el)
-    ? Math.min(natural, layout.clientHeight - layout.footer)
+    ? Math.min(natural, layout.clientHeight - footerHeight())
     : natural
   return new DOMRect(0, top, 600, heightOf(el))
 }
@@ -331,6 +380,7 @@ async function frame() {
     const due = [...animation.values()]
     animation.clear()
     for (const callback of due) callback(clock)
+    easeTrayBodies()
     deliverResizes()
   })
   painted.push(ownerMessageTop())
@@ -406,7 +456,13 @@ const HISTORY = [
 
 let root: Root
 beforeEach(async () => {
-  layout = { clientHeight: 729, footer: 80, slot: 0, rows: new Map() }
+  layout = {
+    clientHeight: 729,
+    footer: 80,
+    slot: 0,
+    content: 0,
+    rows: new Map(),
+  }
   painted = []
   glide = false
   gliding.clear()
@@ -430,9 +486,14 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
-  await act(async () => root.unmount())
+  await act(async () => {
+    trayRoot?.unmount()
+    root.unmount()
+  })
+  trayRoot = undefined
   chat.remove()
   observers.clear()
+  trayBody.clear()
   unpatchLayout()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
@@ -712,5 +773,45 @@ it("logs no resize loop through a turn, a tray and the next send", async () => {
   }
   layout.clientHeight = 770
   await frames()
+  expect(loops).toBe(0)
+})
+
+/** The tray frame itself, docked above the composer on page `index` of 3. */
+async function showTray(index: number, content: number) {
+  layout.content = content
+  const slot = chat.querySelector<HTMLElement>(
+    ".aui-thread-viewport-footer div.empty\\:hidden"
+  )
+  if (!slot) throw new Error("no tray slot")
+  trayRoot ??= createRoot(slot)
+  await act(async () =>
+    trayRoot?.render(
+      createElement(TrayFrame, {
+        question: "How can customers reach you?",
+        page: { index, total: 3 },
+        collapsed: false,
+        onCollapsedChange: () => undefined,
+        onBack: () => undefined,
+        onForward: () => undefined,
+        // biome-ignore lint/correctness/noChildrenProp: the frame requires children as a prop, which createElement's rest argument does not satisfy
+        children: createElement("div", { key: index }, `Page ${index + 1}`),
+      })
+    )
+  )
+}
+let trayRoot: Root | undefined
+
+it("logs no resize loop as the tray eases to the next page", async () => {
+  await sendAndReply("u1")
+  await showTray(0, 187)
+  await frames(GLIDE_FRAMES * 2)
+  loops = 0
+  await showTray(1, 249)
+  await frames(TRAY_EASE_FRAMES + 4)
+  // The footer grew over those frames, a few pixels at a time.
+  expect(footerHeight()).toBe(80 + TRAY_CHROME + 249)
+  expect(loops).toBe(0)
+  await showTray(2, 120)
+  await frames(TRAY_EASE_FRAMES + 4)
   expect(loops).toBe(0)
 })
