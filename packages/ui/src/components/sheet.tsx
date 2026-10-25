@@ -32,7 +32,7 @@ function SheetContent({
       />
       <SheetPrimitive.Popup
         className={cn(
-          "fixed inset-y-0 z-50 flex h-full w-[min(20rem,calc(100vw-3rem))] flex-col bg-rail text-rail-foreground text-sm shadow-lg outline-none transition duration-200 ease-out data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:transition-none",
+          "fixed inset-y-0 z-50 flex h-full w-[min(20rem,calc(100vw-3rem))] flex-col bg-rail text-rail-foreground text-sm shadow-lg outline-none transition duration-enter data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:transition-none",
           side === "left"
             ? "left-0 border-border border-r data-ending-style:-translate-x-4 data-starting-style:-translate-x-4"
             : "right-0 border-border border-l data-ending-style:translate-x-4 data-starting-style:translate-x-4",

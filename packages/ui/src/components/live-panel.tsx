@@ -1358,7 +1358,7 @@ function ShotStack({
 
 /**
  * A version ready to publish, in the panel, under the step that waits on
- * it: the version as a stack of screenshots, then Approve and publish, which
+ * it: the version as a stack of screenshots, then Publish, which
  * sends exactly the revision the approval is bound to, and Preview.
  */
 function ApprovalItem({
@@ -1406,7 +1406,7 @@ function ApprovalItem({
           ) : (
             <RocketLaunchIcon aria-hidden />
           )}
-          {pending(busy, "Approve and publish", "Publishing")}
+          {pending(busy, "Publish", "Publishing")}
         </Button>
         <PreviewLink iconOnly onRetry={onRetryPreview} preview={preview} />
       </div>

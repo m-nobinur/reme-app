@@ -195,7 +195,7 @@ const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
       <TooltipIconButton tooltip="Copy" onClick={onCopy}>
         {!isCopied && <CopyIcon />}
         {isCopied && (
-          <CheckIcon className="zoom-in-50 fade-in animate-in duration-200 ease-out motion-reduce:animate-none" />
+          <CheckIcon className="zoom-in-50 fade-in animate-in duration-fast ease-standard motion-reduce:animate-none" />
         )}
       </TooltipIconButton>
     </div>

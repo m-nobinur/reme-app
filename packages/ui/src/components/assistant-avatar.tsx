@@ -137,19 +137,18 @@ function Portrait({
         {...image}
         className={cn(
           LAYER,
-          "transition-opacity duration-500",
+          "transition-opacity duration-slow",
           smiling ? "opacity-100" : "opacity-0"
         )}
         src={file(`${id}-smile`)}
       />
-      {/* Shuts quickly and opens a touch slower, as eyes do. */}
       <img
         alt=""
         {...image}
         className={cn(
           LAYER,
           "transition-opacity",
-          shut ? "opacity-100 duration-75" : "opacity-0 duration-100"
+          shut ? "opacity-100" : "opacity-0"
         )}
         src={file(`${id}-blink`)}
       />

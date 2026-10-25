@@ -102,7 +102,7 @@ const ARRIVAL = {
   ].map((step) =>
     cn(
       SPRING,
-      "scale-50 opacity-0 transition duration-300 group-hover/persona:scale-100 group-hover/persona:opacity-100 motion-reduce:scale-100",
+      "scale-50 opacity-0 transition duration-enter group-hover/persona:scale-100 group-hover/persona:opacity-100 motion-reduce:scale-100",
       step
     )
   ),
@@ -113,7 +113,7 @@ const ARRIVAL = {
   ].map((step) =>
     cn(
       SPRING,
-      "motion-safe:fade-in motion-safe:zoom-in-50 fill-mode-both duration-500 motion-safe:animate-in",
+      "motion-safe:fade-in motion-safe:zoom-in-50 fill-mode-both duration-slow ease-standard motion-safe:animate-in",
       step
     )
   ),
@@ -222,7 +222,7 @@ function PersonaStage({
       <span className="absolute inset-[22%] rounded-full ring-1 ring-border" />
       <span className="absolute bottom-[15%] left-1/2 h-[4%] w-[30%] -translate-x-1/2 rounded-[50%] bg-foreground/15 blur-md" />
       <Persona
-        className="motion-safe:fade-in motion-safe:zoom-in-95 absolute inset-[12%] size-[76%] fill-mode-both delay-200 duration-1000 motion-safe:animate-in"
+        className="motion-safe:fade-in motion-safe:zoom-in-95 absolute inset-[12%] size-[76%] fill-mode-both delay-200 duration-slow ease-standard motion-safe:animate-in"
         framing="full"
         greet={greet}
       />

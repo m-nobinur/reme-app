@@ -76,7 +76,7 @@ function SettingsContent({
       />
       <DialogPrimitive.Popup
         className={cn(
-          "fixed inset-0 z-50 flex bg-popover text-popover-foreground text-sm outline-none transition duration-200 ease-out data-ending-style:scale-[0.98] data-starting-style:scale-[0.98] data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:transition-none md:inset-auto md:top-1/2 md:left-1/2 md:h-[min(40rem,calc(100svh-4rem))] md:w-[min(56rem,calc(100vw-4rem))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-[1.875rem] md:border md:border-border md:shadow-lg",
+          "fixed inset-0 z-50 flex bg-popover text-popover-foreground text-sm outline-none transition duration-enter data-ending-style:scale-[0.98] data-starting-style:scale-[0.98] data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:transition-none md:inset-auto md:top-1/2 md:left-1/2 md:h-[min(40rem,calc(100svh-4rem))] md:w-[min(56rem,calc(100vw-4rem))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-[1.875rem] md:border md:border-border md:shadow-lg",
           className
         )}
         data-slot="settings-content"
