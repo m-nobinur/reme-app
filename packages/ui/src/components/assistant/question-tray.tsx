@@ -1414,11 +1414,14 @@ function QuestionTray({
       }
       submit={
         (logo && logoSubmit) || {
-          label: others
-            ? "Looks good"
-            : last || finishing
+          // The last page says what pressing it does; before it, Looks good
+          // keeps every pick made.
+          label:
+            last || finishing
               ? "Build my site"
-              : "Next",
+              : others
+                ? "Looks good"
+                : "Next",
           onSubmit: next,
           disabled: !ready,
         }

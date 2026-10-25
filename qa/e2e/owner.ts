@@ -260,8 +260,14 @@ export async function answerOnboarding(page: Page): Promise<void> {
         card.getByRole("button", { name: "Skip", exact: true }).click()
       )
     } else if (slot === "ask-design") {
-      // The design tray: the assistant chooses what the owner skips.
-      await step(() => card.getByRole("button", { name: "Skip all" }).click())
+      // The design tray opens on its picks made: the logo page, whose Looks
+      // good waits, disabled, for the logo the tray draws by itself to be
+      // kept, else the last page's Build my site.
+      const keep = card.getByRole("button", {
+        name: /^(Looks good|Build my site)$/,
+      })
+      await expect(keep).toBeEnabled({ timeout: 60_000 })
+      await step(() => keep.click())
     } else if (slot === "review-quote-form") {
       await step(() =>
         card.getByRole("button", { name: "Use this form" }).click()
