@@ -373,9 +373,10 @@ export const Thread: FC<ThreadProps> = ({
  * Keeps the turn the viewport pins at the top when the reply's id changes as
  * the run ends. While it waits the runtime shows a placeholder reply, and a
  * reply that arrives in one piece replaces it in the same update that ends
- * the run. assistant-ui 0.15.22 then drops the turn as stale and takes away
- * the space it held below the reply, so the view scrolled back up over the
- * previous reply. The turn moves to the reply that replaced the placeholder.
+ * the run. assistant-ui (still in 0.15.31) then drops the turn as stale and
+ * takes away the space it held below the reply, so the view scrolled back up
+ * over the previous reply. The turn moves to the reply that replaced the
+ * placeholder.
  */
 const KeepTurnAnchor: FC = () => {
   const viewport = useThreadViewportStore()
@@ -404,19 +405,20 @@ const KeepTurnAnchor: FC = () => {
 }
 
 /**
- * Keeps the end of the thread in view. assistant-ui follows the bottom by
- * itself only when the viewport is not anchored to a turn, and the space it
- * holds below a pinned reply is sized from the reply alone.
+ * Keeps the owner's message at the top until their next send, and the end of
+ * the thread in view. assistant-ui follows the bottom by itself only when the
+ * viewport is not anchored to a turn.
  *
- * - A footer that appears or grows (the tray) covered the last lines, and one
- *   that shrinks, or a viewport that resizes, left that space as blank under
- *   the reply with Scroll to bottom over it. Either, with no run going, ends
- *   the pinned turn, and a reader who was at the bottom is put back there.
+ * - The space assistant-ui holds below a pinned reply is measured here as
+ *   well, the moment anything under the owner's message resizes. The footer
+ *   sits in the scroll content, so a tray leaving, or the viewport growing,
+ *   left the content short and the browser clamped the scroll before
+ *   assistant-ui measured again a frame later: the owner's message dropped by
+ *   the tray's height, and the drop stayed.
+ * - A footer that appears or grows (the tray) under a reply that already
+ *   fills the view covers its last lines, so a reader at its end stays there.
  * - The after slot sits in the message group ahead of that space, so a card
- *   landing in it fills the space rather than landing below it and jumping
- *   up later. The space is measured again on any change to the viewport
- *   store, which a landing card makes. A card that shrinks or goes (the
- *   ready card on Approve), with no run going, ends the turn.
+ *   landing in it fills the space rather than landing below it.
  * - Between turns, what lands with no turn of the owner's (a message the
  *   assistant posted on its own, or a card in the slot) is followed: a reader
  *   at the bottom glides to it, and one who scrolled up is told instead.
@@ -448,8 +450,9 @@ const FollowBottom: FC<{
     )
     if (!footer || !after || !viewport) return
     const idle = () => !aui.thread().getState().isRunning
-    // assistant-ui's own rule (`isViewportAtBottom`), so the reader is at the
-    // bottom exactly when Scroll to bottom says so.
+    // The end of the scroll content, the footer in it. assistant-ui's
+    // `isViewportAtBottom` takes the footer's height as slack since 0.15.31,
+    // which suits a footer laid over the messages, not ours.
     const atBottom = () =>
       viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop <= 1
     // Read before a resize moves anything: scroll events come after it.
@@ -497,35 +500,52 @@ const FollowBottom: FC<{
         )
       })
     }
+    // assistant-ui's own sum (`computeTopAnchorReserve`), run before the
+    // frame paints instead of after it, so the two always agree. Gives the
+    // space that was held before.
+    const hold = () => {
+      const { element, targetConfig: clamp } = store.getState()
+      const { anchor } = element
+      const reserve = viewport.querySelector<HTMLElement>(
+        "[data-aui-top-anchor-reserve]"
+      )
+      if (!anchor || !clamp || !reserve) return 0
+      const held = reserve.offsetHeight
+      let top = 0
+      for (
+        let at: Element | null = anchor;
+        at instanceof HTMLElement && at !== viewport;
+        at = at.offsetParent
+      ) {
+        top += at.offsetTop
+      }
+      // A tall message is pinned with only its last lines in view.
+      if (anchor.offsetHeight > clamp.tallerThan) {
+        top += Math.max(0, anchor.offsetHeight - clamp.visibleHeight)
+      }
+      const space = top + viewport.clientHeight - (viewport.scrollHeight - held)
+      reserve.style.height = `${Math.max(0, space)}px`
+      return held
+    }
     let height = footer.offsetHeight
     let slot = after.offsetHeight
     let size = `${viewport.clientWidth}x${viewport.clientHeight}`
-    let windowSize = `${innerWidth}x${innerHeight}`
     const observer = new ResizeObserver(() => {
+      const held = hold()
       const shrank = footer.offsetHeight < height
       const grew = footer.offsetHeight > height
       height = footer.offsetHeight
       const next = `${viewport.clientWidth}x${viewport.clientHeight}`
       const resized = next !== size
       size = next
-      const shown = `${innerWidth}x${innerHeight}`
-      const moved = shown !== windowSize
-      windowSize = shown
       const landed = after.offsetHeight > slot
       slot = after.offsetHeight
-      // The owner's message stays at the top until they send the next one: a
-      // card docking, leaving or swapping under the reply resizes the footer
-      // and the viewport, and letting go of the turn then scrolled the
-      // transcript back to show the messages before it. Only the window
-      // itself resizing lets go.
-      if (moved && idle()) {
-        store.getState().setTopAnchorTurn(null)
-      } else if (landed) {
-        const { topAnchorTurn, setTopAnchorTurn } = store.getState()
-        setTopAnchorTurn(topAnchorTurn)
-        follow.current()
-      }
-      if ((shrank || grew || resized) && pinned) {
+      if (landed) follow.current()
+      // With the space held, the bottom is where the owner's message sits at
+      // the top, so this puts back what the clamp took. A tray growing over
+      // that space leaves the message where it is; one docking under a reply
+      // that already filled the view keeps the reader at its end.
+      if ((shrank || resized || (grew && !held)) && pinned) {
         viewport.scrollTo({ top: viewport.scrollHeight, behavior: "instant" })
       }
       // assistant-ui reads `isAtBottom` on a scroll, or on a resize that
@@ -1278,7 +1298,10 @@ const AssistantMessage: FC = () => {
       <div className="min-w-0">
         <div
           data-slot="aui_assistant-message-content"
-          className="wrap-break-word pe-2 text-chat text-chat-foreground"
+          // What follows words still typing in waits for them (the markdown
+          // reads running until its reveal catches up), so a card under them
+          // shows where it settles instead of sliding down as they grow.
+          className="wrap-break-word pe-2 text-chat text-chat-foreground [&>.aui-md[data-status=running]~*]:invisible"
           // A played-in message is read out once, whole, when it is done.
           aria-live={reveal.phase === "still" ? undefined : "polite"}
         >
