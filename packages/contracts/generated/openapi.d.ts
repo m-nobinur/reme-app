@@ -44,6 +44,7 @@ export interface components {
           business?: string
           host?: string
           domain?: string
+          change?: string
         }
         step?: string
         usual_seconds?: number
@@ -89,6 +90,7 @@ export interface components {
           business?: string
           host?: string
           domain?: string
+          change?: string
         }
         step?: string
         usual_seconds?: number
@@ -134,6 +136,7 @@ export interface components {
           business?: string
           host?: string
           domain?: string
+          change?: string
         }
         step?: string
         usual_seconds?: number
@@ -179,6 +182,7 @@ export interface components {
           business?: string
           host?: string
           domain?: string
+          change?: string
         }
         step?: string
         usual_seconds?: number
@@ -224,6 +228,7 @@ export interface components {
           business?: string
           host?: string
           domain?: string
+          change?: string
         }
         step?: string
         usual_seconds?: number
@@ -269,6 +274,7 @@ export interface components {
           business?: string
           host?: string
           domain?: string
+          change?: string
         }
         step?: string
         usual_seconds?: number
@@ -12173,6 +12179,7 @@ export interface components {
             business?: string
             host?: string
             domain?: string
+            change?: string
           }
           step?: string
           usual_seconds?: number
@@ -12218,6 +12225,7 @@ export interface components {
             business?: string
             host?: string
             domain?: string
+            change?: string
           }
           step?: string
           usual_seconds?: number
@@ -12263,6 +12271,7 @@ export interface components {
             business?: string
             host?: string
             domain?: string
+            change?: string
           }
           step?: string
           usual_seconds?: number
@@ -12308,6 +12317,7 @@ export interface components {
             business?: string
             host?: string
             domain?: string
+            change?: string
           }
           step?: string
           usual_seconds?: number
@@ -12353,6 +12363,7 @@ export interface components {
             business?: string
             host?: string
             domain?: string
+            change?: string
           }
           step?: string
           usual_seconds?: number
@@ -12398,6 +12409,7 @@ export interface components {
             business?: string
             host?: string
             domain?: string
+            change?: string
           }
           step?: string
           usual_seconds?: number

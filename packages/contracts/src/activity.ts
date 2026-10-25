@@ -57,6 +57,8 @@ export const ActivitySegment = z.strictObject({
       business: Text(120).optional(),
       host: Text(253).optional(),
       domain: Text(253).optional(),
+      /** A change at work: what it changes in the owner's terms, such as "your hero title". */
+      change: Text(40).optional(),
     })
     .optional(),
   /** A model-written line for "change" and "turn", cleaned: shown as data. */
