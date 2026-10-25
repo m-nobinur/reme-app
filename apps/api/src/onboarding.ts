@@ -610,8 +610,15 @@ const uploadsOf = (facts: readonly Held[]) =>
 export const logoOf = (facts: readonly Held[]) =>
   uploadsOf(facts).find((a) => a.use === "logo")
 
-/** A logo or photos page's card: its two ways, so every question reads alike. */
-const pageCard = (upload: string, create: string): AskChoiceInput => ({
+/**
+ * A logo or photos page's card: its two ways, so every question reads alike,
+ * opened on making one for the owner while the org holds none.
+ */
+const pageCard = (
+  upload: string,
+  create: string,
+  held: boolean
+): AskChoiceInput => ({
   // The card's shape needs a step; these pages stand in for no old card.
   step: "template",
   options: plain([
@@ -619,7 +626,7 @@ const pageCard = (upload: string, create: string): AskChoiceInput => ({
     { id: "create", label: create },
   ]),
   multiple: false,
-  preselected: [],
+  preselected: held ? [] : ["create"],
   other: null,
   skippable: false,
 })
@@ -636,8 +643,9 @@ const dropZone = (files: number) => ({
  * The design tray: six questions, with options drawn from the directions
  * that list the business's industry and seeded by org, so two cleaning
  * businesses do not see the same four. A question the org already answered
- * opens ticked, so a tray asked again starts where the owner left off; the
- * logo and photos pages open with what the org holds.
+ * opens ticked, so a tray asked again starts where the owner left off, and
+ * any other opens on its first option, so one Looks good keeps them all; the
+ * logo and photos pages open with what the org holds, else on making them.
  */
 export function designCard(o: Onboarding, newId: () => string): ToolPart {
   const directions = directionsFor(o)
@@ -688,7 +696,7 @@ export function designCard(o: Onboarding, newId: () => string): ToolPart {
     step,
     options,
     multiple: false,
-    preselected: ticked(held, options),
+    preselected: ticked(held ?? options[0]?.id, options),
     other: { label: "Write your own…", placeholder },
     skippable: true,
     ...(words ? { own: words } : {}),
@@ -746,7 +754,11 @@ export function designCard(o: Onboarding, newId: () => string): ToolPart {
           id: "logo",
           question: "Do you have a logo?",
           visual: "logo",
-          card: pageCard("Yes, I have my logo", "No, create one for me"),
+          card: pageCard(
+            "Yes, I have my logo",
+            "No, create one for me",
+            logo !== undefined
+          ),
           upload: dropZone(1),
           ...(logo ? { held: [logo] } : {}),
         },
@@ -793,7 +805,11 @@ export function designCard(o: Onboarding, newId: () => string): ToolPart {
           id: "photos",
           question: "Do you have photos of your work?",
           visual: "photos",
-          card: pageCard("Yes, I have photos", "No, create them for me"),
+          card: pageCard(
+            "Yes, I have photos",
+            "No, create them for me",
+            photos.length > 0
+          ),
           upload: dropZone(UPLOAD_MAX_FILES),
           ...(photos.length > 0 ? { held: photos } : {}),
         },

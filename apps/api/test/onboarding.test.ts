@@ -1437,7 +1437,13 @@ describe("the design tray", () => {
       ],
     })
     expect(input.questions[1]?.card.preselected).toEqual([palette])
-    expect(input.questions[2]?.card.preselected).toEqual([])
+    // One not answered yet opens on its first option, kept with Looks good.
+    expect(input.questions[2]?.card.preselected).toEqual(
+      ids(input, "lettering").slice(0, 1)
+    )
+    // With no logo or photos held, both open on making them.
+    expect(input.questions[0]?.card.preselected).toEqual(["create"])
+    expect(input.questions[4]?.card.preselected).toEqual(["create"])
   })
 
   it("opens on the owner's own words where the org wrote its own", () => {
@@ -1461,9 +1467,11 @@ describe("the design tray", () => {
       undefined,
       undefined,
     ])
-    // Pages, a card of many, opens on the usual ones.
-    for (const q of input.questions.filter((each) => each.id !== "pages"))
-      expect(q.card.preselected).toEqual([])
+    // Own words tick nothing; pages, a card of many, opens on the usual ones.
+    for (const id of ["palette", "lettering", "arrangement"])
+      expect(
+        input.questions.find((q) => q.id === id)?.card.preselected
+      ).toEqual([])
     // A hex code is held as the brand colour and comes back as the words;
     // pages' own words ride beside the ids they came with.
     const code = PALETTES[0]?.brand as string

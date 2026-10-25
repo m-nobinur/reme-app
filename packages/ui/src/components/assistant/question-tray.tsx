@@ -1216,8 +1216,11 @@ function QuestionTray({
         const logo = each.held?.[0]
         return logo ? [[each.id, { logo }]] : []
       }
+      // Photos opened on making them are an answer: the builder draws them.
       if (each.visual === "photos") {
-        const held = heldPhotosAnswer(each.held)
+        const held =
+          heldPhotosAnswer(each.held) ??
+          (first === "create" ? { photos: [], create: true } : undefined)
         return held ? [[each.id, held]] : []
       }
       if (own) return [[each.id, { own }]]
@@ -1324,9 +1327,14 @@ function QuestionTray({
     onFinish({ answers: sent, skip_all: skipAll || finishing })
     focusComposer()
   }
+  // Every question holds an answer, this one with `chosen`: one press keeps them.
+  const complete = (chosen = answer) =>
+    questions.every((each) =>
+      each.id === question.id ? chosen !== undefined : each.id in answers
+    )
   // Next, with the answer a page has only just set when it moves on itself.
   const onward = (chosen = answer) => {
-    if (last || finishing) finish(finishing, chosen)
+    if (last || finishing || complete(chosen)) finish(finishing, chosen)
     else go(index + 1, true, chosen)
   }
   const next = () => {
@@ -1396,10 +1404,20 @@ function QuestionTray({
               disabled: finishing && !ready,
             }
       }
-      status={finishing && !ready ? "A logo is all that is still needed" : null}
+      status={
+        finishing && !ready
+          ? "A logo is all that is still needed"
+          : complete()
+            ? "I'll build your site with these"
+            : null
+      }
       submit={
         (logo && logoSubmit) || {
-          label: last || finishing ? "Build my site" : "Next",
+          label: complete()
+            ? "Looks good"
+            : last || finishing
+              ? "Build my site"
+              : "Next",
           onSubmit: next,
           disabled: !ready,
         }
