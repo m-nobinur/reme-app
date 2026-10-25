@@ -44,6 +44,15 @@ export function pickLane(
 /** The event a copy change leaves its new words in, for the ready line. */
 export const QUICK_EDITED = "quick.edited"
 
+/** Told as a quick edit starts a step (edit, check, preview), so the panel's rows follow what it does. */
+const QUICK_STEP = "quick.step"
+
+/** The tail's steps that begin the next of those. */
+const NEXT_STEP: Record<string, string> = {
+  "astro check": "check",
+  "upload dist": "preview",
+}
+
 const QUICK: readonly ChangeKind[] = ["copy", "style", "section", "photo"]
 
 /** The kinds one model call can edit; `section` goes to the Developer at low effort. */
@@ -243,8 +252,19 @@ export async function quickEdit(input: {
     .exec(`cd ${SITE_ROOT} && git rev-parse HEAD`)
     .catch(() => ({ exitCode: 1, stdout: "", stderr: "" }))
   const base = head.exitCode === 0 ? head.stdout.trim() : ""
+  const told = (step: string) =>
+    kit.withOrg({ orgId: ids.orgId }, (db) =>
+      appendEvent(db, {
+        orgId: ids.orgId,
+        assignmentId: ids.assignmentId,
+        staffId: spec.staff_id,
+        type: QUICK_STEP,
+        payload: { step },
+      })
+    )
   try {
     if (!base) throw new Fell("disk: no site to edit")
+    await told("edit")
     let applied: {
       summary: string
       changed: Record<string, string>
@@ -318,7 +338,13 @@ export async function quickEdit(input: {
       await sandbox.writeFile(`${SITE_ROOT}/${path}`, content)
     }
     // One durable step holds this whole attempt, so the tail's steps run inline.
-    const inline: Steps = { do: (_name, fn) => fn() }
+    const inline: Steps = {
+      do: async (name, fn) => {
+        const step = NEXT_STEP[name]
+        if (step) await told(step)
+        return fn()
+      },
+    }
     const tail = await finishRevision({
       steps: inline,
       sandbox,
