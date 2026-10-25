@@ -9263,6 +9263,50 @@ export interface components {
           }
         | {
             /** @constant */
+            kind: "step"
+            /** @enum {string} */
+            step:
+              | "business.name"
+              | "business.phone"
+              | "business.email"
+              | "hours.weekday"
+              | "service_area.radius"
+              | "business.tagline"
+              | "business.industry"
+              | "business.offerings"
+              | "business.audience"
+              | "business.overview"
+              | "business.proof"
+              | "business.disclaimer"
+              | "service_area.text"
+              | "assistant.name"
+              | "assistant.pronouns"
+              | "assistant.tone"
+              | "owner.preferred_name"
+              | "site.build_mode"
+              | "site.template"
+              | "site.palette"
+              | "site.font"
+              | "site.direction"
+              | "site.pages"
+              | "industry"
+              | "pronouns"
+              | "tone"
+              | "build_for_me"
+              | "manual_builder"
+              | "template"
+              | "palette"
+              | "font"
+              | "pages"
+              | "contact"
+              | "assistant"
+              | "quote_form"
+              | "design"
+              | "upload"
+            answered: boolean
+          }
+        | {
+            /** @constant */
             kind: "fact"
             /** @enum {string} */
             key:
