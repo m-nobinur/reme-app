@@ -944,6 +944,27 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       })
     })
 
+    it.each([
+      ["Remove it", "Yes, remove it please."],
+      ["Please start again", "Please start again, it got stuck."],
+    ])(
+      "drops the instruction %s as a claim and still starts the change",
+      async (proof, said) => {
+        const before = await proofNow()
+        const output = kept(
+          "request_change",
+          await requestChange(
+            context(me, creating(me)),
+            { text: "Remove the stray text from the facts", proof },
+            crypto.randomUUID(),
+            await turnOf(me, [said])
+          )
+        )
+        expect(output).toMatchObject({ outcome: "started" })
+        expect(await proofNow()).toEqual(before)
+      }
+    )
+
     it("drops a claim that is only the change restated, and still starts the change", async () => {
       const before = await proofNow()
       const turn = await turnOf(me, [

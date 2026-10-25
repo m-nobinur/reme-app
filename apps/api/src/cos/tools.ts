@@ -569,6 +569,10 @@ export const statedIn = (proof: string, message: string) =>
   inOwnersWords(proof, [message], false) &&
   (!NEGATION.test(message) || NEGATION.test(proof))
 
+/** A line that asks for something rather than saying something about the business ("Remove it"). */
+const INSTRUCTION =
+  /^\s*(?:please\s+)?(?:add|build|change|delete|do|drop|fix|make|move|put|rebuild|redo|remove|replace|restart|show|start|stop|take|try|update|use|can|could|would|will)\b/i
+
 /** How long `business.proof` may grow: its fact's bound. */
 const PROOF_MAX = 600
 
@@ -588,12 +592,13 @@ async function recordProof(
   { proof, text: change }: CosChangeRequest
 ): Promise<Response | null> {
   if (!proof) return null
-  // The change itself is not a claim about the business: logged 2026-10-25,
-  // "Build the website again" landed in the proof. Dropped, never refused, so
-  // the owner is not asked about it.
+  // An instruction, or the change itself, is not a claim about the business:
+  // logged 2026-10-25, "Build the website again" and then "Remove it" landed
+  // in the proof. Dropped, never refused, so the owner is not asked about it.
   if (
-    inOwnersWords(proof, [change], false) &&
-    inOwnersWords(change, [proof], false)
+    INSTRUCTION.test(proof) ||
+    (inOwnersWords(proof, [change], false) &&
+      inOwnersWords(change, [proof], false))
   ) {
     return null
   }
