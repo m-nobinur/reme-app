@@ -1059,7 +1059,7 @@ bridge.post("/:id/answer", async (c) => {
       requestId,
       field,
       given: { value },
-      byOwner: Boolean(owner),
+      verifier: owner ? "owner" : "maker",
     })
     return { answer, nudge: true }
   })

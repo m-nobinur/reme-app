@@ -42,7 +42,7 @@ export async function recordAnswer(
     requestId,
     field,
     given,
-    byOwner,
+    verifier,
   }: {
     orgId: string
     assignment: { id: string; createdByStaffId: string }
@@ -50,20 +50,25 @@ export async function recordAnswer(
     field: string
     /** A value to write as the owner's word, or a current fact that already answers it. */
     given: { value: unknown } | { factId: string }
-    /** Verified by the org's root owner, as an answer the owner gave is. */
-    byOwner: boolean
+    /**
+     * Who vouches for a written value: the org's root owner when the owner
+     * answered, the build's maker for the console, none when the assistant
+     * took it from the owner's chat.
+     */
+    verifier: "owner" | "maker" | "none"
   }
 ): Promise<InformationAnswer> {
   let factId: string
   if ("factId" in given) {
     factId = given.factId
   } else {
-    const [root] = byOwner
-      ? await db
-          .select({ id: staff.id })
-          .from(staff)
-          .where(sql`${staff.kind} = 'human' and ${staff.managerId} is null`)
-      : []
+    const [root] =
+      verifier === "owner"
+        ? await db
+            .select({ id: staff.id })
+            .from(staff)
+            .where(sql`${staff.kind} = 'human' and ${staff.managerId} is null`)
+        : []
     const existing = await currentFact(db, field)
     factId = (
       await supersedeFact(db, {
@@ -74,7 +79,10 @@ export async function recordAnswer(
         provenance: {
           source: "owner_stated",
           confidence: 1,
-          verifiedByStaffId: root?.id ?? assignment.createdByStaffId,
+          verifiedByStaffId:
+            verifier === "none"
+              ? null
+              : (root?.id ?? assignment.createdByStaffId),
         },
       })
     ).factId
@@ -128,10 +136,10 @@ const folded = (text: string) =>
     .replace(/[.!?]+$/, "")
 
 /**
- * Whether the model's answer is the owner's own: a substring of one of
- * their messages, or for a choice, one option that a message names. A
- * paraphrase is refused, so nothing the owner never said is stored as
- * their word.
+ * Whether the model's answer is the owner's own: two words or more copied
+ * from one of their messages, or for a choice, one option that a message
+ * names. A paraphrase, or a lone "yes" lifted from any message, is refused,
+ * so nothing the owner never said is stored as their word.
  */
 export function quoted(
   answer: string,
@@ -140,18 +148,29 @@ export function quoted(
 ): boolean {
   const wanted = folded(answer)
   if (!wanted) return false
-  if (options?.length && !options.some((o) => folded(o) === wanted)) {
+  if (options?.length) {
+    if (!options.some((o) => folded(o) === wanted)) return false
+  } else if (wanted.split(" ").length < 2) {
     return false
   }
   return said.some((text) => folded(text).includes(wanted))
 }
 
-/** The owner's latest typed words, newest first, across their conversations. */
-async function ownerWords(db: OrgScopedDb): Promise<string[]> {
+/**
+ * The owner's latest typed words, newest first, from the day before this
+ * build started on: what they said about this site, not everything they
+ * ever told the assistant.
+ */
+async function ownerWords(
+  db: OrgScopedDb,
+  assignmentId: string
+): Promise<string[]> {
   const rows = await db.execute<{ text: string }>(sql`
     select p->>'text' as text
     from ${conversationMessages} m, jsonb_array_elements(m.content->'parts') p
     where m.content->>'role' = 'user' and p->>'type' = 'text'
+      and m.created_at > (select created_at - interval '1 day'
+        from ${assignments} where id = ${assignmentId})
     order by m.created_at desc
     limit ${OWNER_MESSAGES}`)
   return rows.map((r) => r.text.slice(0, 2000))
@@ -181,9 +200,9 @@ async function readChat(
       key,
       relayPrompt(voice.name, voice.tone),
       {
+        // Not `why`: the Developer's own text never steers what is read from the owner's chat.
         question: {
           about: data.request.field,
-          why: data.request.why,
           draft: data.request.question ?? null,
           options: data.request.options ?? null,
         },
@@ -245,11 +264,11 @@ export async function relayQuestion(
         requestId,
         field: request.field,
         given: { factId: held.id },
-        byOwner: false,
+        verifier: "none",
       })
       return { answered: true as const }
     }
-    return { request, row, said: await ownerWords(db) }
+    return { request, row, said: await ownerWords(db, assignmentId) }
   })
   if (!read) return null
   if ("answered" in read) return { answered: true }
@@ -286,7 +305,8 @@ export async function relayQuestion(
         requestId,
         field: request.field,
         given: { value },
-        byOwner: true,
+        // Their words, never confirmed as this answer: nobody vouches for it.
+        verifier: "none",
       })
     })
     return { answered: true }

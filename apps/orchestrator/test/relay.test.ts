@@ -22,6 +22,8 @@ describe("an answer the owner already gave", () => {
     expect(quoted("free street parking", said, null)).toBe(true)
     expect(quoted("Free street parking.", said, null)).toBe(true)
     expect(quoted("parking is available", said, null)).toBe(false)
+    // One word could be lifted from any message.
+    expect(quoted("parking", said, null)).toBe(false)
   })
 
   it("is one option, and only one they named", () => {
@@ -141,6 +143,8 @@ live("the relay", () => {
     )
     expect(stored?.value).toBe("free street parking outside")
     expect(stored?.provenanceSource).toBe("owner_stated")
+    // Their words, but they never confirmed them as this answer.
+    expect(stored?.verifiedByStaffId).toBeNull()
     expect(await b.answered()).toBe(stored?.id)
   })
 
