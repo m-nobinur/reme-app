@@ -88,6 +88,15 @@ it("names the input a fact's answer failed on", () => {
   ).toEqual({
     error: "Enter a valid number customers can ring.",
   })
+  // 00 is the international prefix: +1 with too few digits, never +44 0195.
+  expect(
+    answerValue(
+      { kind: "fact", key: "business.phone" },
+      form({ e164: "00195 899933" })
+    )
+  ).toEqual({
+    error: "Enter a valid number customers can ring.",
+  })
 })
 
 it("refuses a choice that is not one of the options", () => {
