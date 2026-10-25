@@ -1217,20 +1217,22 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       expect(stub.calls[0]?.request.headers.get("idempotency-key")).toBe(key)
     })
 
-    it("refuses while a question is open, without the binding", async () => {
+    it("steers the build waiting on an answer", async () => {
       const s = seed(kit, changes)
       const asking = await s.assignment("blocked_on_information")
-      const stub = creating(changes)
+      const stub = stubOrchestrator(() =>
+        Response.json(
+          { assignment_id: asking, submission_id: null },
+          { status: 202 }
+        )
+      )
       const response = await changes.call(
         stub,
         "/changes",
         json({ text: "Change the hero." })
       )
-      expect(response.status).toBe(409)
-      expect(ErrorEnvelope.parse(await response.json()).code).toBe(
-        "change.question_open"
-      )
-      expect(stub.calls).toHaveLength(0)
+      expect(response.status).toBe(202)
+      expect(paths(stub)).toEqual([`/assignments/${asking}/steer`])
       await s.state(asking, "cancelled")
     })
 
@@ -1692,16 +1694,19 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       )
       expect(panel.builds).toHaveLength(10)
       expect(panel.builds.map((b) => b.assignment_id)).not.toContain(asking)
-      const stub = creating(changes)
+      const stub = stubOrchestrator(() =>
+        Response.json(
+          { assignment_id: asking, submission_id: null },
+          { status: 202 }
+        )
+      )
       const response = await changes.call(
         stub,
         "/changes",
         json({ text: "Change the hero." })
       )
-      expect(ErrorEnvelope.parse(await response.json()).code).toBe(
-        "change.question_open"
-      )
-      expect(stub.calls).toHaveLength(0)
+      expect(response.status).toBe(202)
+      expect(paths(stub)).toEqual([`/assignments/${asking}/steer`])
       for (const id of [asking, ...queued]) await s.state(id, "cancelled")
     })
 

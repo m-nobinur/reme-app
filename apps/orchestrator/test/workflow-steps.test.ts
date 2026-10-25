@@ -267,6 +267,7 @@ vi.mock("../src/revise.ts", () => ({
 // The relay's bodies are driven in relay.test.ts; here the question is always the owner's.
 vi.mock("../src/relay.ts", () => ({
   askOwner: async () => "posted",
+  heldSteers: async () => [],
   relayQuestion: async () => ({ ask: "Do you have parking?" }),
 }))
 vi.mock("../src/quick.ts", () => ({

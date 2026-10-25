@@ -73,7 +73,7 @@ import {
   writePointer,
 } from "./publish.ts"
 import { quickEdit } from "./quick.ts"
-import { askOwner, relayQuestion } from "./relay.ts"
+import { askOwner, heldSteers, relayQuestion } from "./relay.ts"
 import { retireOthers, type SweepCounts, sweepOrg } from "./retention.ts"
 import {
   afterFailure,
@@ -1197,6 +1197,26 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             attributes: { field: fact.key },
           },
         })
+        // What the owner asked for while it waited, after the answer, as the
+        // steer route would have sent it.
+        const steers = await run((kit) =>
+          kit.withOrg({ orgId: ids.orgId }, (db) =>
+            heldSteers(db, ids.assignmentId)
+          )
+        )
+        for (const held of steers) {
+          await init(Developer, { id: ids.assignmentId }).dispatch({
+            idempotencyKey: `${ids.assignmentId}:held-${held.event_id}`,
+            message: held.owner
+              ? {
+                  kind: "signal",
+                  type: "site.change_requested",
+                  body: held.message,
+                  attributes: { taint: "untrusted_input" },
+                }
+              : { kind: "user", body: held.message },
+          })
+        }
         return { fact_id: fact.fact_id }
       })
     }

@@ -7,13 +7,16 @@ import {
 import {
   appendEvent,
   assignments,
+  assignmentTransitions,
   conversationMessages,
   currentFact,
   eq,
+  events,
   failureCode,
   type OrgScopedDb,
   type Posted,
   postAssistantMessage,
+  type SQL,
   sql,
   staff,
   supersedeFact,
@@ -363,4 +366,29 @@ export async function askOwner(
       },
     },
   })
+}
+
+/**
+ * The steers sent while this build waited on the owner, oldest first: the
+ * steer route holds them (app.ts), and the resume delivers them after the
+ * answer. Read once the build is back to work: between its latest move into
+ * `blocked_on_information` and the move after it, so a steer the route sent
+ * itself once the build was working again is not sent twice.
+ * shortcut: a retry of a held steer that lands after the resume is
+ * delivered again under the route's own key; key both alike if that shows.
+ */
+export function heldSteers(db: OrgScopedDb, assignmentId: string) {
+  const move = (
+    last: SQL
+  ) => sql`(select t.event_id from ${assignmentTransitions} t
+    where t.assignment_id = ${assignmentId}${last}
+    order by t.version desc limit 1)`
+  return db.execute<{ event_id: string; message: string; owner: boolean }>(sql`
+    select e.event_id, e.payload->>'message' as message,
+      'untrusted_input' = any(e.taint) as owner
+    from ${events} e
+    where e.assignment_id = ${assignmentId} and e.type = 'assignment.steered'
+      and e.event_id > ${move(sql` and t.to_state = 'blocked_on_information'`)}
+      and e.event_id < ${move(sql``)}
+    order by e.event_id`)
 }

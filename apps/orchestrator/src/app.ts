@@ -1172,13 +1172,16 @@ bridge.post("/:id/steer", async (c) => {
       }
       throw error
     }
+    const held = found.state === "blocked_on_information"
     const steered = await steerByKey(db, key)
     if (steered) {
       const same =
         steered.assignment_id === id &&
         steered.message === message &&
         canonical(steered.taint) === canonical(taint)
-      return same ? { replayed: true as const } : { reused: true as const }
+      return same
+        ? { replayed: true as const, held }
+        : { reused: true as const }
     }
     await appendEvent(db, {
       orgId,
@@ -1188,10 +1191,15 @@ bridge.post("/:id/steer", async (c) => {
       payload: { message, key_sha256: steerKeyHash(key) },
       taint,
     })
-    return { logged: true as const }
+    return { logged: true as const, held }
   })
   if ("missing" in result) return notFound(c, id)
   if ("reused" in result) return reused()
+  // A build waiting on the owner's answer gets the steer with that answer
+  // (cloudflare.ts `resume`), so its Developer never wakes mid-wait.
+  if (result.held) {
+    return c.json({ assignment_id: id, submission_id: null }, 202)
+  }
   // An owner's words reach the model the way a change request does: as a
   // tainted signal, never as a user turn (§28.3). The console's stay a turn.
   // Delivered under the same key, so flue admits it once and a replay gets
