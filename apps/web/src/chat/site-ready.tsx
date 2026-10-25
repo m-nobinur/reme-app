@@ -6,6 +6,7 @@ import { useState } from "react"
 import { decideApproval } from "@/lib/api/server"
 import { DECISION_REFUSED } from "@/lib/decision"
 import {
+  awaitsReadyLine,
   type ReadyReview,
   readyCard,
   readyForReview,
@@ -119,15 +120,33 @@ export function SiteReadyCard({
   )
 }
 
-/** The ready card in the open conversation, which knows when the owner last wrote. */
+/** When the newest message by `role` was written, or null. */
+const lastAt = (
+  messages: readonly {
+    role: string
+    metadata: { custom: Record<string, unknown> }
+  }[],
+  role: "user" | "assistant"
+) => {
+  const at = messages.filter((m) => m.role === role).at(-1)?.metadata
+    .custom.createdAt
+  return typeof at === "string" ? at : null
+}
+
+/**
+ * The ready card in the open conversation, which knows when the owner last
+ * wrote. A new review's card waits for the ready line, so the line lands
+ * above it instead of pushing it down (224 px, 2026-10-25). The workspace
+ * poll re-renders it, so no timer is needed.
+ */
 export function ChatSiteReadyCard() {
   // An empty chat has it in its updates instead.
   const empty = useAuiState((s) => s.thread.messages.length === 0)
-  const sentAt = useAuiState((s) => {
-    const at = s.thread.messages
-      .filter((message) => message.role === "user")
-      .at(-1)?.metadata.custom.createdAt
-    return typeof at === "string" ? at : null
-  })
-  return empty ? null : <SiteReadyCard className="mx-2" sentAt={sentAt} />
+  const sentAt = useAuiState((s) => lastAt(s.thread.messages, "user"))
+  const saidAt = useAuiState((s) => lastAt(s.thread.messages, "assistant"))
+  const review = readyForReview(useLiveWorkspace().workspace)
+  const waiting = awaitsReadyLine(review?.at ?? null, saidAt, Date.now())
+  return empty || waiting ? null : (
+    <SiteReadyCard className="mx-2" sentAt={sentAt} />
+  )
 }

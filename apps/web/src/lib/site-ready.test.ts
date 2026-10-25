@@ -1,6 +1,6 @@
-import { expect, it } from "vitest"
+import { describe, expect, it } from "vitest"
 import type { AttentionItem, Workspace } from "./api/types"
-import { readyCard, readyForReview } from "./site-ready"
+import { awaitsReadyLine, readyCard, readyForReview } from "./site-ready"
 
 const approval = (
   id: string,
@@ -80,4 +80,30 @@ it("drops the approved line once that version is live", () => {
   }
   expect(readyCard(null, v1, null)).toEqual({ kind: "approved", version: 1 })
   expect(readyCard(null, v1, 1)).toBeNull()
+})
+
+describe("awaitsReadyLine", () => {
+  const at = "2026-10-25T10:26:49Z"
+  const t = (iso: string) => Date.parse(iso)
+  it.each([
+    ["no review", null, null, t(at), false],
+    ["a new review with nothing said since", at, null, t(at) + 5_000, true],
+    [
+      "the ready line landed",
+      at,
+      "2026-10-25T10:27:00Z",
+      t(at) + 11_000,
+      false,
+    ],
+    [
+      "only a reply from before the review",
+      at,
+      "2026-10-25T10:26:27Z",
+      t(at) + 5_000,
+      true,
+    ],
+    ["past the wait, with no line", at, null, t(at) + 20_000, false],
+  ])("%s", (_case, reviewAt, saidAt, now, waits) => {
+    expect(awaitsReadyLine(reviewAt, saidAt, now)).toBe(waits)
+  })
 })

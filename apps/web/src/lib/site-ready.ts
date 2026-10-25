@@ -39,6 +39,23 @@ export function readyForReview(
   return newest
 }
 
+/** How long a new review's card waits for the ready line, which is written after the review opens. */
+const READY_LINE_MS = 20_000
+
+/**
+ * Whether the chat's card for a review raised `reviewAt` still waits for the
+ * ready line: nothing the assistant said since, and not past `READY_LINE_MS`,
+ * after which a line that could not be posted no longer holds the card.
+ */
+export const awaitsReadyLine = (
+  reviewAt: string | null,
+  saidAt: string | null,
+  now: number
+) =>
+  reviewAt !== null &&
+  !(saidAt && Date.parse(saidAt) >= Date.parse(reviewAt)) &&
+  now - Date.parse(reviewAt) < READY_LINE_MS
+
 /** A version card's title: the business's website. */
 export const versionTitle = (business: string | null | undefined) =>
   business ? `${business} website` : "Your website"
