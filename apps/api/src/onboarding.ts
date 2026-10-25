@@ -45,6 +45,7 @@ import DIRECTIONS from "@workspace/starter-site/directions.json"
 import type { Part, ToolPart } from "./chat.ts"
 import type { JevDecision } from "./jev.ts"
 import {
+  back,
   chose,
   firstName,
   hash,
@@ -53,6 +54,7 @@ import {
   opener,
   question,
   quoteForm,
+  quoteUnchanged,
   type RetryReason,
   retry,
   started,
@@ -124,6 +126,12 @@ export type Progress = {
    * replaced (template, palette, font, pages): it finishes on them.
    */
   oldDesign?: boolean
+  /**
+   * Steps a card asked before the latest card's step. One asked again is a
+   * return, after the owner went back to something else, so it is said in
+   * new words.
+   */
+  earlier?: readonly string[]
 }
 
 export type Onboarding = Progress & {
@@ -143,6 +151,12 @@ export type Onboarding = Progress & {
   asked?: Readonly<Record<string, number>>
   /** Business-specific lines written in the background, once they are ready. */
   prepared?: Prepared | null
+  /**
+   * This turn's quote form the owner asked to change, as they left it. Only
+   * a model can redraft it, so without one the script shows it again rather
+   * than moving on with the change unmade.
+   */
+  changing?: readonly QuoteField[]
 }
 
 /** What the background call writes for later steps (`onboarding-prepare.ts`). */
@@ -1200,9 +1214,25 @@ export function reopenCard(
 
 /** The parts of the next step, or the closing line for a skipped website once nothing is left. */
 export function onboardingStep(o: Onboarding, newId: () => string): Part[] {
+  // Never past a form the owner asked to change: it waits for their changes.
+  if (o.changing) {
+    return [
+      text(quoteUnchanged(voiceOf(o))),
+      call(
+        "tool-review_quote_form",
+        ReviewQuoteFormInput.parse({ fields: o.changing, note: null }),
+        newId
+      ),
+    ]
+  }
   const step = currentStep(o)
-  if (step) return step.ask(o, newId)
-  return [text(manualEnd(voiceOf(o)))]
+  if (!step) return [text(manualEnd(voiceOf(o)))]
+  const parts = step.ask(o, newId)
+  // A return to a step asked before is said in new words.
+  const returned = o.earlier?.includes(step.id) && back(step.id, voiceOf(o))
+  return returned && parts[0]?.type === "text"
+    ? [text(returned), ...parts.slice(1)]
+    : parts
 }
 
 /**
@@ -1273,7 +1303,13 @@ export function built(
  * `inferred`, and the next step says what was picked.
  */
 export type Answer =
-  | { kind: "facts"; facts: FactValue[]; chose?: string }
+  | {
+      kind: "facts"
+      facts: FactValue[]
+      chose?: string
+      /** A quote form the owner asked to change on its card, as they left it. */
+      changing?: readonly QuoteField[]
+    }
   /** The design tray's answers; `settled` once it is finished, not just answered so far. */
   | { kind: "design"; facts: FactValue[]; settled: boolean }
   | { kind: "passed"; step: StepId; builder?: boolean }
@@ -1293,6 +1329,9 @@ export function applied(o: Onboarding, answer: Answer): Onboarding {
         answer.kind === "design" && answer.settled
           ? [...o.closed, "design"]
           : o.closed,
+      ...(answer.kind === "facts" && answer.changing
+        ? { changing: answer.changing }
+        : {}),
     }
   }
   if (answer.kind === "passed") {
@@ -1532,7 +1571,14 @@ export function cardAnswer(
     const answer = ReviewQuoteFormOutput.safeParse(output)
     if (!answer.success) return null
     // Changes are the owner's words for the next proposal, so no fact yet.
-    if (answer.data.answer === "changes") return { kind: "facts", facts: [] }
+    if (answer.data.answer === "changes") {
+      const { fields } = part.input as ReviewQuoteFormInput
+      return {
+        kind: "facts",
+        facts: [],
+        changing: answer.data.fields ?? fields,
+      }
+    }
     if (contactFields(answer.data.fields).length > 0) return null
     const fact = FactValue.safeParse({
       key: "quote.form",
@@ -1873,6 +1919,7 @@ export function progressOf(rows: readonly ScriptRow[]): Progress {
   let builder: boolean | null = null
   let siteSkipped = false
   let old = false
+  const asked: string[] = []
   for (const row of rows) {
     if (row.type === "tool-request_change") {
       if (row.state === "output-available" || row.state === "output-denied") {
@@ -1889,6 +1936,7 @@ export function progressOf(rows: readonly ScriptRow[]): Progress {
             ? "design"
             : row.step
     if (!step) continue
+    asked.push(step)
     // A card after the website question means onboarding went on, so a
     // typed "no, let me change my name first" over it was not a skip.
     if (step !== "build_for_me" && step !== "manual_builder") {
@@ -1926,6 +1974,7 @@ export function progressOf(rows: readonly ScriptRow[]): Progress {
       }
     }
   }
+  const earlier = new Set(asked.filter((step) => step !== asked.at(-1)))
   return {
     passed: [...passed],
     closed: [...closed],
@@ -1933,5 +1982,6 @@ export function progressOf(rows: readonly ScriptRow[]): Progress {
     builder,
     ...(siteSkipped ? { siteSkipped } : {}),
     ...(old ? { oldDesign: true } : {}),
+    ...(earlier.size > 0 ? { earlier: [...earlier] } : {}),
   }
 }

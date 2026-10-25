@@ -101,7 +101,7 @@ import { VOICE, voiceProblems } from "./voice.ts"
 export const DEFAULT_ONBOARDING_MODEL = "google/gemini-3.8-flash"
 
 /** Bumped with any change to the instructions or the plan's schema. */
-export const PLANNER_VERSION = "onboarding-14"
+export const PLANNER_VERSION = "onboarding-15"
 
 /** Stream parts that show a call is alive but has written nothing yet. */
 const QUIET = new Set([
@@ -226,7 +226,7 @@ Your next move (next.kind):
 - ask_design: the design tray, with no options to write; the api builds every question from the business's industry. Ask it once, where the order says; the owner answers on the tray, and the build starts from that answer.
 - review_quote_form, start_build: as above.
 - answer_only: no new question, for a side question or the close of the manual path.
-- reopen: the owner wants to change or go back to something they already answered, in any words ("I want to set my assistant again", "can I change the phone number"). step is the one they mean, from can_go_back_to in the data; its card opens filled with what they gave. Say in one short sentence that here it is to change, nothing more. Once they answer it, carry on with the step you were on. Never tell them it can be changed later or in their settings: reopen it now. If they name a change without the card (a corrected phone number), record it as a correction instead.
+- reopen: the owner wants to change or go back to something they already answered, in any words ("I want to set my assistant again", "can I change the phone number"). step is the one they mean, from can_go_back_to in the data; its card opens filled with what they gave. Say in one short sentence that here it is to change, nothing more. If they answer it in words, show the change back before anything else: a quote form is proposed again with exactly their changes (pending_card declined, review_quote_form) for them to confirm; any other answer is recorded and named back in a few words. Once it is settled, carry on with the step you were on, in new words that note the return ("Now, back to how customers reach you"), never a sentence you already said. Never tell them it can be changed later or in their settings: reopen it now. If they name a change without the card (a corrected phone number), record it as a correction instead.
 - pending_card, when a card was waiting and the owner typed instead: "answered" if their words answered it (record its fact; for a quote form, they accept it as proposed), "declined" if they don't want to answer it, "unanswered" if they wrote about something else (use answer_only or reopen, and the card is shown again after). null when no card was waiting.
 - Never ask for what the facts hold. The checklist says what is missing and whether the build is ready.
 
@@ -783,8 +783,21 @@ export function sayProblems(
       "say thanks the owner for a correction, but nothing they said changed what was held"
     )
   }
+  const repeated = sentencesOf(say).find((s) => context.said?.has(s))
+  if (repeated) {
+    problems.push(
+      `say repeats "${repeated}", which you already said; coming back to a step, say it in new words that note the return, such as "Now, back to how customers reach you"`
+    )
+  }
   return problems
 }
+
+/** A message's sentences of `ECHO_WORDS` words or more, as words only, for comparing. */
+const sentencesOf = (message: string) =>
+  message
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => wordsOf(s).join(" "))
+    .filter((s) => s.split(" ").length >= ECHO_WORDS)
 
 /** What `sayProblems` knows of the turn beyond the message itself. */
 type SayContext = {
@@ -794,6 +807,8 @@ type SayContext = {
   corrected?: boolean
   /** Whether the owner has named the assistant, so "Reme" is an internal. */
   assistantNamed?: boolean
+  /** The longer sentences the assistant has already said in the recent rows, which say must not repeat. */
+  said?: ReadonlySet<string>
 }
 
 /** Thanks for a correction, in the forms the planner wrote it. */
@@ -843,6 +858,13 @@ function sayContext(plan: OnboardingPlan, s: PlanState): SayContext {
     }),
     // An assistant the owner called Reme may say its own name.
     assistantNamed: Boolean(name) && name?.toLowerCase() !== "reme",
+    said: new Set(
+      s.rows
+        .filter((r) => r.role === "assistant")
+        .flatMap((r) =>
+          r.parts.flatMap((p) => (p.type === "text" ? sentencesOf(p.text) : []))
+        )
+    ),
   }
 }
 

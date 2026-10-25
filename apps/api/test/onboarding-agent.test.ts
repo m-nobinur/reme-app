@@ -909,6 +909,53 @@ describe("going back to a step", () => {
     })
   })
 
+  it("redrafts a reopened quote form from the owner's words and shows it for a yes", () => {
+    // Observed 2026-10-25: "seperate number of rooms" on the reopened form.
+    const o = atWebsite()
+    const form = call(
+      "tool-review_quote_form",
+      { fields: FIELDS, note: null },
+      counter()
+    )
+    const words = typedOverForm(form, {
+      answer: "changes",
+      text: "seperate number of rooms",
+    })
+    if (!words) throw new Error("not read as words")
+    const s = typed(words.text, o, words.form)
+    const redrafted = [...FIELDS, { ...(FIELDS[1] as object), key: "rooms" }]
+    const checked = checkPlan(
+      plan({
+        pending_card: "declined",
+        say: "Rooms are a question of their own now. Does this look right?",
+        next: { kind: "review_quote_form", fields: redrafted, note: null },
+      }),
+      s
+    )
+    if (!checked.ok) throw new Error(checked.errors.join("; "))
+    expect(planParts(checked.checked, s, counter())[1]).toMatchObject({
+      type: "tool-review_quote_form",
+      state: "input-available",
+      input: { fields: redrafted },
+    })
+  })
+
+  it("comes back to a step in new words, never a sentence already said", () => {
+    const asked =
+      "I have a good picture of Regal Rides now. How should customers get in touch?"
+    const s: PlanState = {
+      ...typed("Looks good", onboarding(without("business.phone"))),
+      rows: [{ role: "assistant", parts: [{ type: "text", text: asked }] }],
+    }
+    const back = (say: string) =>
+      errorsOf(
+        plan({ say, next: { kind: "ask_details", step: "contact" } }),
+        s
+      ).filter((e) => e.includes("which you already said"))
+    expect(back(asked)).toHaveLength(1)
+    expect(back("Now, back to how customers reach Regal Rides.")).toEqual([])
+  })
+
   it("refuses to reopen a step not answered yet", () => {
     const o = onboarding([
       ...without("business.phone", "business.email"),
@@ -1351,7 +1398,11 @@ describe("a planned turn", () => {
 
     // Changes come back as the owner's words, and a new proposal follows.
     const changes = { answer: "changes", text: "Add the date" }
-    expect(cardAnswer(card, changes, [])).toEqual({ kind: "facts", facts: [] })
+    expect(cardAnswer(card, changes, [])).toEqual({
+      kind: "facts",
+      facts: [],
+      changing: FIELDS,
+    })
     const dated = [
       ...FIELDS,
       {

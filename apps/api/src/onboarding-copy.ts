@@ -298,6 +298,38 @@ export function question(step: Asked, v: Voice): string {
   return say(v, pick(v, step, QUESTIONS[step](v)))
 }
 
+/** A step asked again after the owner went back to another, in words that note the return. */
+const BACK: Partial<Record<Asked, (v: Voice) => string>> = {
+  "business.name": () =>
+    "Now, back to your business's name. What should customers know it by?",
+  industry: (v) =>
+    `Back to what ${v.business} does. Which of these comes closest?`,
+  "business.offerings": (v) =>
+    `Back to the services now. Which ones do customers come to ${v.business} for?`,
+  "service_area.text": () =>
+    "Now, back to where you work. Which town are you based in, and how far will you travel?",
+  "business.audience": () =>
+    "Back to your customers now. Who do you most like working for? You can skip this one.",
+  "business.proof": (v) =>
+    `Back to what sets ${v.business} apart. Years trading, accreditations or a guarantee all help, and you can skip this one.`,
+  quote_form: () =>
+    "Back to quotes now. What do you need to know from a customer before you can quote a job?",
+  contact: (v) =>
+    `Now, back to how customers reach ${v.business}. Check the phone number and email below.`,
+  assistant: () =>
+    "Back to me now. Check my name, pronouns and tone below, and change anything you like.",
+  build_for_me: (v) =>
+    `Now, back to the website. Would you like me to build one for ${v.business}?`,
+  design: (v) =>
+    `Back to the look of ${v.business}. The questions below pick up where you left off.`,
+}
+
+/** The step's question as a return, or null for a step with no such line. */
+export function back(step: string, v: Voice): string | null {
+  const line = isAsked(step) ? BACK[step]?.(v) : undefined
+  return line ? say(v, line) : null
+}
+
 /** The quote requirements, for when no model can draft them: a short list the owner confirms or changes. */
 export function quoteForm(v: Voice): string {
   return say(
@@ -306,6 +338,17 @@ export function quoteForm(v: Voice): string {
       `Here's a starting point for what I'll ask each customer before a quote. Keep it, or tell me what to change.`,
       `I've drafted what ${v.business} needs to know before a quote. Say if anything is missing.`,
       `Here's a short list to start from. Confirm it, or tell me what you always ask first.`,
+    ])
+  )
+}
+
+/** A quote form the owner asked to change when no model could redraft it: shown again as they left it. */
+export function quoteUnchanged(v: Voice): string {
+  return say(
+    v,
+    pick(v, "quote_unchanged", [
+      "I couldn't make that change to the questions just now, so here they are as they stand. Tell me again what you'd like different, or confirm them.",
+      "Sorry, I didn't manage to redo the questions just then. Here they are as they are: say again what to change, or confirm them below.",
     ])
   )
 }
