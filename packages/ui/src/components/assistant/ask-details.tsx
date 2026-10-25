@@ -37,12 +37,13 @@ import { type FocusEvent, type FormEvent, useId, useRef, useState } from "react"
  * so a phone is typed the way the owner writes it and sent as E.164. Every
  * field is needed and checked as the owner leaves its page; nothing is sent
  * until the last one reads. Every page stays in the form, hidden, so going
- * back finds what was typed, and a reload resumes on the page reached. Once
- * answered or skipped it shows nothing: the owner's reply after it says what
- * they gave.
+ * back finds what was typed, and a reload resumes on the page reached. The
+ * assistant's pages also offer Pick for me, which sends at once with the
+ * prefill for anything left empty. Once answered or skipped it shows nothing:
+ * the owner's reply after it says what they gave.
  */
 
-type Answer = { answer: "stated"; facts: FactValue[] } | { answer: "skipped" }
+type Answer = { answer: "stated"; facts: FactValue[] }
 
 const PICKS = {
   "assistant.pronouns": {
@@ -285,10 +286,8 @@ function DetailsTray({
   })
   // Where this tab left off, else the first page without an answer: a name
   // the owner typed in the chat comes back filled, so the card opens past it.
-  // With every page filled it opens on the first, and Looks good on any page
-  // keeps them all.
+  // With every page filled it opens on the first.
   const firstOpen = keys.findIndex((each) => prefilled(input, each) === null)
-  const filled = firstOpen < 0
   const [page, setPage] = useState(
     Object.keys(draft.values).length > 0
       ? Math.min(draft.page, keys.length - 1)
@@ -310,7 +309,6 @@ function DetailsTray({
   const formRef = useRef<HTMLFormElement>(null)
   const key = keys[page] ?? keys[0]
   const last = page === keys.length - 1
-  const several = keys.length > 1
 
   /** What every field holds now, by name. */
   const values = () =>
@@ -372,10 +370,8 @@ function DetailsTray({
     setProblem("error" in result ? result.error : null)
   }
 
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    if (!(last || filled)) return forward()
-    const held = values()
+  /** Every key's fact from `held`, else the page of the first one wrong. */
+  const send = (held: Record<string, string>) => {
     const facts: FactValue[] = []
     for (const [at, each] of keys.entries()) {
       const result = read(each, held)
@@ -385,6 +381,29 @@ function DetailsTray({
     // The draft stays: a refused answer reopens the card with it.
     onAnswer({ answer: "stated", facts })
   }
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (last) send(values())
+    else forward()
+  }
+  // What the owner set, and the prefill for any field left empty.
+  const pickForMe = () =>
+    send({
+      ...Object.fromEntries(
+        keys.flatMap((each) => {
+          const value = prefilled(input, each)
+          return isPick(each)
+            ? [[each, String(value?.id ?? "")]]
+            : FACT_INPUTS[each].fields.map((field) => [
+                field.name,
+                String(value?.[field.name] ?? ""),
+              ])
+        })
+      ),
+      ...Object.fromEntries(
+        Object.entries(values()).filter(([, value]) => value.trim())
+      ),
+    })
 
   return (
     <TrayFrame
@@ -393,17 +412,10 @@ function DetailsTray({
       onCollapsedChange={setCollapsed}
       onForward={last ? undefined : forward}
       page={{ index: page, total: keys.length }}
+      pick={input.step === "assistant" ? { onPick: pickForMe } : undefined}
       question={askOf(key)}
-      skip={
-        input.skippable
-          ? {
-              label: several ? "Skip all" : "Skip",
-              onSkip: () => onAnswer({ answer: "skipped" }),
-            }
-          : undefined
-      }
       submit={{
-        label: filled ? "Looks good" : last ? "Submit" : "Next",
+        label: last ? "Looks good" : "Next",
         form: `${id}-form`,
       }}
     >

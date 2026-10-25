@@ -1212,7 +1212,7 @@ type QuestionTrayProps = {
   toolCallId: string
   /** An answer, as the owner leaves its question. Store it; a reload resumes after it. */
   onAnswer?: (id: string, answer: Answer) => void
-  /** Build my site or Skip all. */
+  /** Looks good or Pick for me. */
   onFinish: (output: AskDesignOutput) => void
   start?: Start
   /** The business's name, which the lettering previews are set in. */
@@ -1223,9 +1223,9 @@ type QuestionTrayProps = {
 /**
  * The design questions of a build, one page each: the options as a native
  * radio group, or checkboxes on a question that takes several, Write your
- * own, and Next, which reads Build my site on the last. Answers are code's:
+ * own, and Next, which reads Looks good on the last. Answers are code's:
  * `onAnswer` gets each one as the owner leaves its question, `onFinish` the
- * `AskDesignOutput` on Build my site or Skip all.
+ * `AskDesignOutput` on Looks good or Pick for me.
  */
 function QuestionTray({
   input,
@@ -1337,8 +1337,8 @@ function QuestionTray({
     settle(skipping, chosen)
     setIndex(to)
   }
-  // The logo cannot be skipped: Skip all without one opens its page, whose
-  // primary button then finishes the skip.
+  // The logo cannot be skipped: Pick for me without one opens its page, whose
+  // primary button then finishes.
   const finish = (skipAll: boolean, chosen = answer) => {
     const now = settle(!skipAll, chosen)
     const logo = questions.findIndex(
@@ -1360,15 +1360,11 @@ function QuestionTray({
     onFinish({ answers: sent, skip_all: skipAll || finishing })
     focusComposer()
   }
-  // Every other question holds an answer: one press keeps them all, once
-  // this one has its own (`chosen`), such as a logo still drawing.
-  const others = questions.every(
-    (each) => each.id === question.id || each.id in answers
-  )
-  const complete = (chosen = answer) => others && chosen !== undefined
+  const complete =
+    answer !== undefined && questions.every((each) => each.id in answers)
   // Next, with the answer a page has only just set when it moves on itself.
   const onward = (chosen = answer) => {
-    if (last || finishing || complete(chosen)) finish(finishing, chosen)
+    if (last || finishing) finish(finishing, chosen)
     else go(index + 1, true, chosen)
   }
   const next = () => {
@@ -1427,34 +1423,18 @@ function QuestionTray({
       onCollapsedChange={setCollapsed}
       onForward={last || !ready ? undefined : () => go(index + 1, true)}
       page={{ index, total }}
+      pick={{ onPick: () => finish(true), disabled: finishing && !ready }}
       question={question.question ?? "Choose one"}
-      // The logo cannot be skipped, so its page offers no Skip all.
-      skip={
-        logo
-          ? undefined
-          : {
-              label: "Skip all",
-              onSkip: () => finish(true),
-              disabled: finishing && !ready,
-            }
-      }
       status={
         finishing && !ready
           ? "A logo is all that is still needed"
-          : complete()
+          : last && complete
             ? "I'll build your site with these"
             : null
       }
       submit={
         (logo && logoSubmit) || {
-          // The last page says what pressing it does; before it, Looks good
-          // keeps every pick made.
-          label:
-            last || finishing
-              ? "Build my site"
-              : others
-                ? "Looks good"
-                : "Next",
+          label: last || finishing ? "Looks good" : "Next",
           onSubmit: next,
           disabled: !ready,
         }

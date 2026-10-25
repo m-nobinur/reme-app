@@ -1547,9 +1547,29 @@ const TRAY = row(COS, "msg_owner", {
   ],
 })
 
-/** The design tray, open, in a conversation that has reached it. */
-async function openTray() {
-  stored = { messages: [OWNER_ROW, TRAY] }
+const PERSONA = [
+  { key: "assistant.name", value: { name: "Reme" } },
+  { key: "assistant.pronouns", value: { id: "she_her" } },
+  { key: "assistant.avatar", value: { id: "she_1" } },
+  { key: "assistant.tone", value: { id: "professional" } },
+]
+
+const PERSONA_TRAY = row(COS, "msg_owner", {
+  role: "assistant",
+  parts: [
+    { type: "step-start" },
+    {
+      type: "tool-ask_details",
+      toolCallId: "call_persona",
+      state: "input-available",
+      input: { step: "assistant", prefill: PERSONA, skippable: false },
+    },
+  ],
+})
+
+/** A tray, open, in a conversation that has reached it: the design one unless told. */
+async function openTray(tray: unknown = TRAY) {
+  stored = { messages: [OWNER_ROW, tray] }
   const container = document.createElement("div")
   document.body.appendChild(container)
   const root = createRoot(container)
@@ -1572,11 +1592,11 @@ const pick = (container: HTMLElement, label: string) =>
     option?.querySelector("input")?.click()
   })
 
-it("the design tray's last answer is saved before Build my site is sent, and a refused send keeps the pick", async () => {
+it("the design tray's last answer is saved before Looks good is sent, and a refused send keeps the pick", async () => {
   const chat = await openTray()
   let saved: () => void = () => undefined
   turns.push(
-    // The save of the last answer, still running when the owner has pressed Build.
+    // The save of the last answer, still running when the owner has pressed Looks good.
     () =>
       new Promise<Response>((resolve) => {
         saved = () => resolve(new Response(null, { status: 200 }))
@@ -1584,7 +1604,7 @@ it("the design tray's last answer is saved before Build my site is sent, and a r
     refusal(409, "chat.busy", BUSY)
   )
   await pick(chat, "Everything")
-  await press(chat, "Build my site")
+  await press(chat, "Looks good")
   await vi.waitFor(() => expect(sent).toHaveLength(1))
   // Both at once is what made the api answer chat.busy.
   await new Promise((resolve) => setTimeout(resolve, 100))
@@ -1600,7 +1620,7 @@ it("the design tray's last answer is saved before Build my site is sent, and a r
       ],
     },
   })
-  // The refusal reopens the tray with the pick still in it, and Build goes again.
+  // The refusal reopens the tray with the pick still in it, and Looks good goes again.
   await vi.waitFor(() =>
     expect(chat.querySelector('[role="alert"]')?.textContent).toContain(BUSY)
   )
@@ -1618,13 +1638,41 @@ it("the design tray's last answer is saved before Build my site is sent, and a r
         })
       )
   )
-  await press(chat, "Build my site")
+  await press(chat, "Looks good")
   // The save of the answer, then the whole tray again, as before.
   await vi.waitFor(() => expect(sent).toHaveLength(4))
   const turn = (n: number) => (sent[n] as { turn: object }).turn
   expect(turn(3)).toMatchObject({
     results: (turn(1) as { results: object }).results,
     reply: { text: "Everything" },
+  })
+})
+
+it("the assistant tray opens on the defaults, ticked, says Next before the last page, and Pick for me keeps them", async () => {
+  const chat = await openTray(PERSONA_TRAY)
+  const checked = (value: string) =>
+    chat.querySelector<HTMLInputElement>(`input[value="${value}"]`)?.checked
+  expect(chat.querySelector<HTMLInputElement>("input[type=text]")?.value).toBe(
+    "Reme"
+  )
+  expect([
+    checked("she_her"),
+    checked("she_1"),
+    checked("professional"),
+  ]).toEqual([true, true, true])
+  expect(() => button(chat, "Looks good")).toThrow()
+  await press(chat, "Next")
+  turns.push(() =>
+    Promise.resolve(
+      new Response(frames({ type: "finish" }), {
+        headers: { "content-type": "text/event-stream" },
+      })
+    )
+  )
+  await press(chat, "Pick for me")
+  await vi.waitFor(() => expect(sent).toHaveLength(1))
+  expect(sent[0]).toMatchObject({
+    turn: { results: [{ output: { answer: "stated", facts: PERSONA } }] },
   })
 })
 
@@ -1675,7 +1723,7 @@ it("shows the whole reply when the tab is hidden while it streams", async () => 
     slowReply
   )
   await pick(chat, "Everything")
-  await press(chat, "Build my site")
+  await press(chat, "Looks good")
   await vi.waitFor(() => expect(sent).toHaveLength(2))
   // The reply streams for about 540 ms; the gate's loaded container needs far more.
   await vi.waitFor(
