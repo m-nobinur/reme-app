@@ -463,6 +463,19 @@ const PERSONA: [FactValue, FactValue, FactValue, FactValue] = [
   { key: "assistant.tone", value: { id: "professional" } },
 ]
 
+/** Pick for me left every assistant field as it comes, rather than keeping some the owner set. */
+const asCome = (card: PersonaCard) => {
+  const held: Record<string, unknown> = {
+    "assistant.name": { name: card.name },
+    "assistant.pronouns": { id: card.pronouns },
+    "assistant.avatar": { id: card.avatar },
+    "assistant.tone": { id: card.tone },
+  }
+  return PERSONA.every(
+    ({ key, value }) => JSON.stringify(held[key]) === JSON.stringify(value)
+  )
+}
+
 /**
  * A details card: the step's facts together, each one the org holds filled
  * in, the sign-in email offered as the business's until one is held, and
@@ -1933,7 +1946,11 @@ export function withChoice(
     ? personaIntro(
         v,
         persona.data,
-        answer?.kind === "facts" && answer.persona === "picked"
+        answer?.kind !== "facts" || answer.persona !== "picked"
+          ? "stated"
+          : asCome(persona.data)
+            ? "picked"
+            : "kept"
       )
     : answer?.kind === "design"
       ? answer.picked && pickedLook(v)

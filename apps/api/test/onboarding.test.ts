@@ -1123,6 +1123,30 @@ describe("Pick for me, answered by the script", () => {
     expect(intros.size).toBe(3)
   })
 
+  it("says it chose everything only when nothing was set, and keeps the owner's own picks", () => {
+    const asCome: FactValue[] = [
+      { key: "assistant.name", value: { name: "Reme" } },
+      { key: "assistant.pronouns", value: { id: "she_her" } },
+      { key: "assistant.avatar", value: { id: "she_1" } },
+      { key: "assistant.tone", value: { id: "professional" } },
+    ]
+    for (const orgId of ORGS) {
+      const picked = persona(
+        { answer: "stated", facts: asCome, skip_all: true },
+        orgId
+      )
+      const line = (picked.parts[0] as { text: string }).text
+      expect(line).toMatch(/gone with|Leave it with me|Happy to choose/)
+      // The professional tone keeps no contraction, "Here's" included.
+      expect(line).not.toMatch(/'s\b|I'm|I'll|I've/)
+      // Maya, set by the owner before Pick for me, stays and is not claimed.
+      const kept = persona({ answer: "stated", facts, skip_all: true }, orgId)
+      const said = (kept.parts[0] as { text: string }).text
+      expect(said).toMatch(/kept|stay as they are|picked the rest/)
+      expect(said).toMatch(/Maya/)
+    }
+  })
+
   it("says the design tray left to it is chosen as it builds, then the build's news with no summary", () => {
     const pending: ToolPart = {
       type: "tool-request_change",

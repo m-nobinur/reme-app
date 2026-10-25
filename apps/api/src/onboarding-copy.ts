@@ -94,6 +94,7 @@ const TONE: Record<ToneId, [RegExp, string][]> = {
     [/\bthat's\b/gi, "that is"],
     [/\bwhat's\b/gi, "what is"],
     [/\bthere's\b/gi, "there is"],
+    [/\bhere's\b/gi, "here is"],
   ],
   casual: [
     [/\bWould you like\b/g, "Want"],
@@ -409,29 +410,36 @@ export function chose(v: Voice, what: string): string {
 /**
  * The assistant introducing who it is now, just above its persona card and
  * before the next question: what it chose when the owner pressed Pick for
- * me, or the owner's own choice welcomed.
+ * me, what it filled in around the owner's own picks, or the owner's own
+ * choice welcomed.
  */
 export function personaIntro(
   v: Voice,
   p: PersonaCard,
-  picked: boolean
+  how: "stated" | "picked" | "kept"
 ): string {
   const pronouns = PRONOUNS.find((each) => each.id === p.pronouns)?.label
   const tone = TONES.find((each) => each.id === p.tone)?.label.toLowerCase()
   const who = `${p.name}, ${pronouns}, with a ${tone} manner`
   return say(
     v,
-    picked
+    how === "picked"
       ? pick(v, "picked_persona", [
           `I've gone with ${who}, and you can change any of it whenever you like. Here's how I'll come across:`,
           `Leave it with me. I'll be ${who}, and here's how that looks:`,
-          `Happy to choose. I'm ${who} from now on. Here's a preview:`,
+          `Happy to choose. I'll be ${who}. Here's a preview:`,
         ])
-      : pick(v, "persona_intro", [
-          `From now on I'm ${p.name}, your business assistant. Here's how I'll come across:`,
-          `${p.name} it is. I'll look after ${v.business} from here on, and this is how I'll introduce myself:`,
-          `Thanks${comma(v.owner)}. I'm ${p.name}, your assistant for ${v.business} from now on. Here's a preview:`,
-        ])
+      : how === "kept"
+        ? pick(v, "kept_persona", [
+            `I've kept your choices and filled in the rest, so I'm ${who}. Here's how I'll come across:`,
+            `Your picks stay as they are, and I've chosen the rest: I'll be ${who}. Here's a preview:`,
+            `Done. I kept what you chose and picked the rest, so I'm ${who}. This is how I'll come across:`,
+          ])
+        : pick(v, "persona_intro", [
+            `From now on I'm ${p.name}, your business assistant. Here's how I'll come across:`,
+            `${p.name} it is. I'll look after ${v.business} from here on, and this is how I'll introduce myself:`,
+            `Thanks${comma(v.owner)}. I'm ${p.name}, your assistant for ${v.business} from now on. Here's a preview:`,
+          ])
   )
 }
 
