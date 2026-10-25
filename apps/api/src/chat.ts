@@ -11,6 +11,7 @@ import {
   ErrorEnvelope,
   type FactRecord,
   type MemoryChip,
+  type MessageReading,
   ONBOARDING_STATUS,
   OnboardingPlan,
   type OnboardingStatus,
@@ -109,6 +110,7 @@ import {
   type JevDecision,
   jev,
   jevApproval,
+  jevReading,
   matched,
   readReply,
   type Verdict,
@@ -119,7 +121,6 @@ import {
   buildCall,
   built,
   cardAnswer,
-  currentStep,
   decided as decidedAnswer,
   designCard,
   factValue,
@@ -613,6 +614,13 @@ export type ChatDeps = {
    * key. Tests pass one.
    */
   approval?: ((card: string, reply: string) => Promise<Verdict | null>) | null
+  /**
+   * What a typed message is doing, for the waiting line only: left out, Jev
+   * on OpenRouter when the api holds a key. Tests pass one.
+   */
+  reading?:
+    | ((asked: string | null, said: string) => Promise<MessageReading | null>)
+    | null
 }
 
 /** What a turn is, read before its lock: whether onboarding runs, and the card it waits on. */
@@ -771,6 +779,20 @@ export async function chat(
         ? (card: ToolPart, asked: string, reply: string) =>
             jev(env.OPENROUTER_API_KEY as string, card, asked, reply)
         : null
+  const readingOf =
+    deps.reading !== undefined
+      ? deps.reading
+      : env.OPENROUTER_API_KEY
+        ? (asked: string | null, said: string) =>
+            jevReading(env.OPENROUTER_API_KEY as string, asked, said)
+        : null
+  // A typed message's general waiting line, read beside the whole turn and
+  // never waited for: a real line or the reply's words make it moot.
+  const reading =
+    turn.kind === "message" && readingOf
+      ? readingOf(ahead.card && ahead.asked ? ahead.asked : null, turn.text)
+      : null
+  reading?.catch(() => undefined)
   const approvalOf =
     deps.approval !== undefined
       ? deps.approval
@@ -999,6 +1021,7 @@ export async function chat(
       modelId: plannerId,
       price: planPrice as NonNullable<typeof planPrice>,
       gate: racing,
+      reading,
       waitUntil,
       committed: () => void prepareLater(new Response(null)),
     })
@@ -1026,6 +1049,7 @@ export async function chat(
     newId,
     waitUntil,
     how,
+    reading,
   })
 }
 
@@ -1453,6 +1477,7 @@ type Answering = {
   waitUntil: (promise: Promise<unknown>) => void
   /** What paces a reply the script writes in the model's place. */
   how: Pace
+  reading: Promise<MessageReading | null> | null
 }
 
 /**
@@ -1534,6 +1559,7 @@ async function startModel(
     newMessageId: a.newId,
     lead: tail ? settledLead(messages, tail.id) : answeredChunk(a.opened.typed),
     chip: a.opened.chip,
+    reading: a.reading,
     rows,
     // The stream's reader ends after `closeRun`, so the turn is closed here.
     waitUntil: (reading) =>
@@ -2310,6 +2336,8 @@ type Planning = {
   price: NonNullable<ReturnType<typeof priceOf>>
   /** Jev's reading of a typed reply, still on its way while the planner runs. */
   gate: Promise<Gate | null> | null
+  /** Jev's reading of what a typed message is doing, for the waiting line. */
+  reading: Promise<MessageReading | null> | null
   /** Where the stream's reader goes after the response: `ctx.waitUntil`. */
   waitUntil: (promise: Promise<unknown>) => void
   /** Called once the turn's rows have committed. */
@@ -2470,24 +2498,19 @@ function planned(job: PlanJob, p: Planning): Response {
 
 /**
  * The step a planned turn is on, for the waiting line before the planner
- * writes: the card just answered, else the card or step a typed message
- * replies to. Null for a step no line names (the build).
+ * writes: the card just answered. Null for a typed message, whose step a
+ * card in view only guesses, and for a step no line names.
  */
 export function stepStatus(s: PlanState): OnboardingStatus | null {
-  const card = s.input.kind === "card" ? s.input.card : s.pending
+  if (s.input.kind !== "card") return null
+  const { card } = s.input
   const about =
-    card?.type === "tool-ask_open" ? (card.input as AskOpenInput).about : null
-  const step = !card
-    ? currentStep(s.onboarding)?.id
-    : about === "quote.form"
-      ? "quote_form"
-      : (about ?? stepOf(card))
-  const on = OnboardingStep.safeParse(step)
+    card.type === "tool-ask_open" ? (card.input as AskOpenInput).about : null
+  const on = OnboardingStep.safeParse(
+    about === "quote.form" ? "quote_form" : (about ?? stepOf(card))
+  )
   return on.success
-    ? {
-        on: { kind: "step", step: on.data, answered: s.input.kind === "card" },
-        facts: [],
-      }
+    ? { on: { kind: "step", step: on.data, answered: true }, facts: [] }
     : null
 }
 
@@ -2502,12 +2525,18 @@ async function plannedTurn(
   const continued =
     turn.kind === "results" && !turn.reply ? (job.tail?.id ?? null) : null
   write({ type: "start", messageId: continued ?? p.rowId })
-  // The waiting line names the step at once; the plan's own lines follow.
+  // The waiting line names an answered card's step at once; the plan's own
+  // lines follow.
+  const status = (data: OnboardingStatus) =>
+    write({ type: ONBOARDING_STATUS, data, transient: true })
   const on = stepStatus(job.state)
-  if (on) write({ type: ONBOARDING_STATUS, data: on, transient: true })
+  if (on) status(on)
   let stepOpen = false
   let textOpen = false
+  // A plan's line or word has shown: a general line would be a step back.
+  let real = false
   const say = (delta: string) => {
+    real = true
     if (!stepOpen) write({ type: "start-step" })
     if (!textOpen) write({ type: "text-start", id: "text" })
     stepOpen = textOpen = true
@@ -2519,6 +2548,11 @@ async function plannedTurn(
   // has shown, or the planner is done, Jev is ignored.
   const stop = new AbortController()
   let planning = true
+  void p.reading?.then((about) => {
+    if (about && planning && !real) {
+      status({ on: { kind: "reading", about }, facts: [] })
+    }
+  })
   // Facts written before the message, as a shown word does, keep the plan.
   let early = false
   let gate = null as Gate | null
@@ -2548,8 +2582,10 @@ async function plannedTurn(
     say,
     stop.signal,
     {
-      send: (status) =>
-        write({ type: ONBOARDING_STATUS, data: status, transient: true }),
+      send: (line) => {
+        real = true
+        status(line)
+      },
       // Written again, as a no-op, with the turn's rows; a failure here
       // only leaves them to that write.
       commit: async (checked) => {

@@ -3,6 +3,7 @@ import {
   CosToolName,
   type CosTurn,
   type MemoryChip,
+  type MessageReading,
   ONBOARDING_STATUS,
   type OnboardingStatus,
 } from "@workspace/contracts"
@@ -88,9 +89,18 @@ type StreamTurn = {
   lead: UIMessageChunk[]
   /** Memory changes not yet shown: the reply's first part, in the stream, the log and the row. */
   chip: MemoryChip | null
+  /** Jev's reading of a typed message, for the waiting line while the model thinks. */
+  reading: Promise<MessageReading | null> | null
   rows: Rows
   waitUntil: (promise: Promise<unknown>) => void
 }
+
+/** A transient status chunk: the waiting line, never stored. */
+const status = (on: OnboardingStatus["on"]): UIMessageChunk => ({
+  type: ONBOARDING_STATUS,
+  data: { on, facts: [] } satisfies OnboardingStatus,
+  transient: true,
+})
 
 /** The turn fell back before any content: nothing was streamed. */
 export type FellBack = { fallback: true; state: RunState }
@@ -127,6 +137,11 @@ export async function streamTurn(
 ): Promise<Response | FellBack> {
   const { run } = input
   const started = Date.now()
+  // Taken only if it lands before the first content: it never holds the turn.
+  let reading = null as MessageReading | null
+  void input.reading?.then((about) => {
+    reading = about
+  })
   let settleEnd: (end: Ended) => void = () => undefined
   const ended = new Promise<Ended>((resolve) => {
     settleEnd = resolve
@@ -242,9 +257,14 @@ export async function streamTurn(
 
   let queued = [...head]
   const [start, ...rest] = queued
+  // The general line fills a model's silent thinking; once it writes or a
+  // heading comes, that line is the real one.
+  const thinking = head.at(-1)?.type.startsWith("reasoning-")
+  const general =
+    reading && thinking ? [status({ kind: "reading", about: reading })] : []
   queued =
     start?.type === "start"
-      ? [start, ...(chip ? [chip] : []), ...input.lead, ...rest]
+      ? [start, ...(chip ? [chip] : []), ...input.lead, ...general, ...rest]
       : queued
   // A message the history does not hold yet gets its row at the close.
   const fresh =
@@ -256,14 +276,7 @@ export async function streamTurn(
   // never sees it, as a chunk or as a provider's data on one: only each
   // thought's heading, as a transient status.
   const think = thoughtHeadings((text) =>
-    queued.push({
-      type: ONBOARDING_STATUS,
-      data: {
-        on: { kind: "thinking", text },
-        facts: [],
-      } satisfies OnboardingStatus,
-      transient: true,
-    })
+    queued.push(status({ kind: "thinking", text }))
   )
   const body = new ReadableStream<UIMessageChunk>({
     async pull(controller) {

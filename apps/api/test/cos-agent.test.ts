@@ -8,6 +8,7 @@ import {
   CosTurn,
   CreateReminderRequest,
   ONBOARDING_STATUS,
+  type OnboardingStatus,
   TOOL_FAILED,
   TOOL_UNKNOWN,
   toolErrorKind,
@@ -2672,6 +2673,40 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     ) as { state: string }
     expect(part.state).toBe("output-error")
     expect((await turnsOf(id)).at(-1)?.outcome).toBe("answered")
+  })
+
+  it("says what a typed message does while the model thinks, until a heading comes, and never once it writes", async () => {
+    const id = await conversation(me)
+    const statuses = (chunks: { type: string; data?: unknown }[]) =>
+      chunks.flatMap((c) =>
+        c.type === ONBOARDING_STATUS ? [(c.data as OnboardingStatus).on] : []
+      )
+    const asked: (string | null)[] = []
+    const thinking = await turn(me, typed(id, "Can we move it to Saturday?"), {
+      model: scripted(
+        reasoned(
+          "**Weighing The Saturday Slot**\nCheck the hours.",
+          said("Yes.")
+        )
+      ).model,
+      reading: async (held) => {
+        asked.push(held)
+        return "change"
+      },
+    })
+    expect(thinking.response.status, thinking.text).toBe(200)
+    // No question waits after onboarding, so the message is never an answer.
+    expect(asked).toEqual([null])
+    expect(statuses(thinking.chunks)).toEqual([
+      { kind: "reading", about: "change" },
+      { kind: "thinking", text: "Weighing the Saturday slot" },
+    ])
+    const writing = await turn(me, typed(id, "What do you charge?"), {
+      model: scripted(said("From £40.")).model,
+      reading: async () => "question",
+    })
+    expect(writing.response.status, writing.text).toBe(200)
+    expect(statuses(writing.chunks)).toEqual([])
   })
 
   it("keeps reasoning in the log but out of the owner's stream and rows, and sends it back with an approval", async () => {
