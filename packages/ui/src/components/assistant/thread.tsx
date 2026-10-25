@@ -56,14 +56,10 @@ import { LogoMark } from "@workspace/ui/components/logo"
 import { StatusLine } from "@workspace/ui/components/status-line"
 import { ComposerInputContext } from "@workspace/ui/hooks/use-composer-input"
 import { useCycle } from "@workspace/ui/hooks/use-cycle"
-import { useOnboardingStatus } from "@workspace/ui/hooks/use-onboarding-status"
+import { useOnboardingWait } from "@workspace/ui/hooks/use-onboarding-status"
 import {
-  onboardingKind,
-  onboardingLine,
-  STILL_ON_IT_AFTER,
-  THINKING_AFTER,
-  turnKind,
-  turnMoment,
+  WORKING_AFTER,
+  waitingLine,
   writingBack,
 } from "@workspace/ui/lib/activity-copy"
 import { SHOW_DELAY_MS } from "@workspace/ui/lib/status-line"
@@ -1205,44 +1201,25 @@ const TypingIndicator: FC<{ immediate?: boolean }> = ({
   const shown = useAuiState(
     (s) => !immediate && showsProgress(s.message.parts, COS_QUIET)
   )
-  const status = useOnboardingStatus()
+  const { status, seconds } = useOnboardingWait()
   const toolsRan = useAuiState((s) =>
     s.message.parts.some((part) => part.type === "tool-call")
   )
-  // The line moves on at fixed times, so what it says stays true: more
-  // time has passed.
-  const [seconds, setSeconds] = useState(0)
-  useEffect(() => {
-    const timers = [THINKING_AFTER, STILL_ON_IT_AFTER].map((at) =>
-      setTimeout(() => setSeconds(at), at * 1000)
-    )
-    return () => {
-      for (const timer of timers) clearTimeout(timer)
-    }
-  }, [])
   if (shown) return null
   const ctx = { orgId: "", assistant }
+  const { kind, label } =
+    !status && (immediate || toolsRan)
+      ? { kind: "writing" as const, label: writingBack(ctx) }
+      : waitingLine(status, seconds, ctx)
   return (
     <span data-slot="aui_assistant-message-indicator">
       <StatusLine
         // The first beat of a turn is the dots alone: the same words every
         // turn read as a script.
-        bare={!status && !immediate && !toolsRan && seconds < THINKING_AFTER}
+        bare={!status && !immediate && !toolsRan && seconds < WORKING_AFTER}
         delay={immediate ? 0 : SHOW_DELAY_MS}
-        kind={
-          status
-            ? onboardingKind(status)
-            : immediate || toolsRan
-              ? "writing"
-              : turnKind(seconds)
-        }
-        label={
-          status
-            ? onboardingLine(status)
-            : immediate || toolsRan
-              ? writingBack(ctx)
-              : turnMoment(seconds, ctx)
-        }
+        kind={kind}
+        label={label}
       />
     </span>
   )

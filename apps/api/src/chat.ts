@@ -1,4 +1,5 @@
 import {
+  type AskOpenInput,
   BuildQuestionsPart,
   BuildSummary,
   CARD_ANSWERED,
@@ -12,6 +13,8 @@ import {
   type MemoryChip,
   ONBOARDING_STATUS,
   OnboardingPlan,
+  type OnboardingStatus,
+  OnboardingStep,
   PERSONA_CARD,
   type PersonaCard,
   RequestChangeOutput,
@@ -116,6 +119,7 @@ import {
   buildCall,
   built,
   cardAnswer,
+  currentStep,
   decided as decidedAnswer,
   designCard,
   factValue,
@@ -130,6 +134,7 @@ import {
   progressOf,
   type ScriptRow,
   ended as scriptEnded,
+  stepOf,
   text as textPart,
   trayOption,
   typedAnswer,
@@ -2463,6 +2468,29 @@ function planned(job: PlanJob, p: Planning): Response {
   })
 }
 
+/**
+ * The step a planned turn is on, for the waiting line before the planner
+ * writes: the card just answered, else the card or step a typed message
+ * replies to. Null for a step no line names (the build).
+ */
+export function stepStatus(s: PlanState): OnboardingStatus | null {
+  const card = s.input.kind === "card" ? s.input.card : s.pending
+  const about =
+    card?.type === "tool-ask_open" ? (card.input as AskOpenInput).about : null
+  const step = !card
+    ? currentStep(s.onboarding)?.id
+    : about === "quote.form"
+      ? "quote_form"
+      : (about ?? stepOf(card))
+  const on = OnboardingStep.safeParse(step)
+  return on.success
+    ? {
+        on: { kind: "step", step: on.data, answered: s.input.kind === "card" },
+        facts: [],
+      }
+    : null
+}
+
 async function plannedTurn(
   job: PlanJob,
   p: Planning,
@@ -2474,6 +2502,9 @@ async function plannedTurn(
   const continued =
     turn.kind === "results" && !turn.reply ? (job.tail?.id ?? null) : null
   write({ type: "start", messageId: continued ?? p.rowId })
+  // The waiting line names the step at once; the plan's own lines follow.
+  const on = stepStatus(job.state)
+  if (on) write({ type: ONBOARDING_STATUS, data: on, transient: true })
   let stepOpen = false
   let textOpen = false
   const say = (delta: string) => {
