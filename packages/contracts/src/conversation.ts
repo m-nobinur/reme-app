@@ -172,6 +172,8 @@ export const BuildQuestion = z.strictObject({
   input: QuestionInput,
   skippable: z.boolean(),
   answer: QuestionAnswer.optional(),
+  /** The fact an offer's answer is stored as. The server's only, never shown. */
+  field: z.string().min(1).max(100).optional(),
 })
 
 /**

@@ -50,6 +50,7 @@ import {
   sql,
   type Tenancy,
 } from "@workspace/db"
+import { settleCard } from "../build-questions.ts"
 import {
   type Bridged,
   bridge,
@@ -710,16 +711,18 @@ const reviewElsewhere = () =>
   })
 
 /**
- * The owner's answer, sent through the orchestrator's `/answer` keyed by the
- * approval. The id is looked up only to find the build that asked, which
+ * The owner's answer, taken from what they said in the chat with no card to
+ * approve it (their words are their yes), sent through the orchestrator's
+ * `/answer` under `key`, and written onto the chat's card for the question
+ * so it folds. The id is looked up only to find the build that asked, which
  * the bridge's path needs; an id the org never asked, another org's
  * included, is refused here and never reaches the orchestrator. Which
  * question may be answered is the orchestrator's to say, as on the owner's
  * route: it refuses any but the one the build waits on. A retry is replayed
  * by what it says, not by its key: the same request id with the same value
  * gets the stored receipt, even after the build has moved on to a newer
- * question, and another value gets 409 `answer.already_given`. The approval
- * id still goes as the idempotency key, for the bridge's own logs.
+ * question, and another value gets 409 `answer.already_given`. `key`
+ * goes as the idempotency key, for the bridge's own logs.
  *
  * The value goes as the orchestrator reads it for the question's field: a
  * fact's inner value, for a fact the question names, or the owner's text.
@@ -732,7 +735,7 @@ const reviewElsewhere = () =>
 export async function answerQuestion(
   { env, kit, owner }: ToolContext,
   input: AnswerQuestionInput,
-  approvalId: string
+  key: string
 ): Promise<AnswerQuestionOutput> {
   const [asked] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
     db
@@ -761,12 +764,29 @@ export async function answerQuestion(
   const answered = relay(
     await bridge(env, owner, `/${asked.assignmentId}/answer`, {
       body: { request_id: input.request_id, value: fact ? fact.value : value },
-      key: approvalId,
+      key,
     }),
     InformationAnswer.parse
   )
   if (!answered.ok) return refused(answered)
   const receipt = InformationAnswer.parse(await answered.json())
+  // The card asking it folds as answered. The build has its answer already,
+  // so a card that cannot be written is logged and never fails the tool.
+  await kit
+    .withOrg({ orgId: owner.orgId }, (db) =>
+      settleCard(db, input.request_id, {
+        kind: "value",
+        value: fact ? fact.value : (value as string),
+      })
+    )
+    .catch((error: unknown) =>
+      console.error(
+        JSON.stringify({
+          code: "cos.question_card_failed",
+          error: failureCode(error),
+        })
+      )
+    )
   return { outcome: "answered", request_id: receipt.request_id }
 }
 

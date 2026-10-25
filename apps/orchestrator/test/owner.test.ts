@@ -86,6 +86,7 @@ const { OwnerApi } = await import("../src/cloudflare.ts")
 const { default: consoleApp } = await import("../src/app.ts")
 const { requestReview } = await import("../src/publish.ts")
 const { advance, cancel } = await import("../src/state.ts")
+const { heldSteers } = await import("../src/relay.ts")
 const { kit, previewed, stateOf } = await import("./site.ts")
 
 /**
@@ -266,6 +267,36 @@ live("an owner starting a build", () => {
         attributes: { taint: "untrusted_input" },
       },
       { kind: "user", body: "Use the brand blue" },
+    ])
+  })
+
+  it("holds a steer while the build waits on the owner, for the resume to deliver", async () => {
+    const { orgId } = await ownerOrg(kit)
+    const ids = await newAssignment(kit, orgId)
+    for (const to of ["briefing", "planning", "implementing"] as const) {
+      await advance(kit, ids, to)
+    }
+    await advance(kit, ids, "blocked_on_information", {
+      payload: { request_id: crypto.randomUUID() },
+    })
+    dispatched.length = 0
+    const steer = (message: string) =>
+      owner(orgId, `/${ids.assignmentId}/steer`, { message })
+    const held = await steer("Add our opening hours")
+    expect(held.status).toBe(202)
+    expect(dispatched).toHaveLength(0)
+    await advance(kit, ids, "implementing")
+    // Once it works again a steer goes straight to it, and is not held.
+    expect((await steer("Make the header green")).status).toBe(202)
+    expect(dispatched).toHaveLength(1)
+    const steers = await kit.withOrg({ orgId }, (db) =>
+      heldSteers(db, ids.assignmentId)
+    )
+    expect(steers).toEqual([
+      expect.objectContaining({
+        message: "Add our opening hours",
+        owner: true,
+      }),
     ])
   })
 

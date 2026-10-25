@@ -259,7 +259,7 @@ type ChangeRoute =
   | { route: "steer"; assignment_id: string }
   | {
       route: "refuse"
-      reason: "question_open" | "build_busy"
+      reason: "build_busy"
       assignment_id: string
     }
   | {
@@ -284,11 +284,12 @@ const STEERABLE: readonly AssignmentState[] = [
 ]
 
 /**
- * Where an owner's change goes, from the site's state alone. A question
- * blocks everything, since the answer is what the build is waiting for. A
- * build waiting on a decision the orchestrator would take now (a review in
- * date, or one the sweep parked) is replaced: its review is turned down, or
- * before the site is live the change revises that draft instead. A
+ * Where an owner's change goes, from the site's state alone. A build
+ * waiting on the owner's answer takes the change as a steer, which reaches
+ * its Developer once the answer resumes it. A build waiting on a decision
+ * the orchestrator would take now (a review in date, or one the sweep
+ * parked) is replaced: its review is turned down, or before the site is
+ * live the change revises that draft instead. A
  * build parked on its budget is replaced by cancelling it. A working build
  * takes the change as a steer. A build settling on its own (queued,
  * previewed, publishing, paused from the console, or a review that expired
@@ -298,13 +299,7 @@ const STEERABLE: readonly AssignmentState[] = [
  */
 export function routeChange(site: ChangeInput): ChangeRoute {
   const asking = site.builds.find((b) => b.state === "blocked_on_information")
-  if (asking) {
-    return {
-      route: "refuse",
-      reason: "question_open",
-      assignment_id: asking.assignment_id,
-    }
-  }
+  if (asking) return { route: "steer", assignment_id: asking.assignment_id }
   const rebuild = site.live ? "site.revise" : "site.build"
   for (const build of site.builds) {
     const review = site.reviews.find(
@@ -585,10 +580,7 @@ export async function startChange(
       return failure(409, {
         class: "validation",
         code: `change.${route.reason}`,
-        message:
-          route.reason === "question_open"
-            ? "A build is waiting on your answer. Answer it first."
-            : "A build is finishing. Try again once it settles.",
+        message: "A build is finishing. Try again once it settles.",
         detail: { assignment_id: route.assignment_id },
       })
     case "steer": {

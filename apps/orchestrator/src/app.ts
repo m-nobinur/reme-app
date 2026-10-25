@@ -34,7 +34,6 @@ import {
   staff,
   steerByKey,
   steerKeyHash,
-  supersedeFact,
   type Tenancy,
   tenancy,
   toAssignment,
@@ -79,6 +78,7 @@ import {
 } from "./publish.ts"
 import { answers } from "./question.ts"
 import { pickLane } from "./quick.ts"
+import { recordAnswer } from "./relay.ts"
 import { holdDraft, publishedSource } from "./revise.ts"
 import { endSandbox, endSite, probe } from "./sandbox.ts"
 import { connectGoogle } from "./search.ts"
@@ -1085,41 +1085,13 @@ bridge.post("/:id/answer", async (c) => {
     const question = { ...waited.request, field }
     const value = tried.find((v) => answers(question, v))
     if (value === undefined) return { invalid: field }
-    const [root] = owner
-      ? await db
-          .select({ id: staff.id })
-          .from(staff)
-          .where(sql`${staff.kind} = 'human' and ${staff.managerId} is null`)
-      : []
-    const [existing] = await db
-      .select({ factType: facts.factType })
-      .from(facts)
-      .where(sql`${facts.key} = ${field} and ${facts.validTo} is null`)
-    const written = await supersedeFact(db, {
+    const answer = await recordAnswer(db, {
       orgId,
-      key: field,
-      factType: existing?.factType ?? field.split(".")[0] ?? "answer",
-      value,
-      provenance: {
-        source: "owner_stated",
-        confidence: 1,
-        verifiedByStaffId: root?.id ?? row.createdByStaffId,
-      },
-    })
-    const answer = InformationAnswer.parse({
-      answer_id: crypto.randomUUID(),
-      org_id: orgId,
-      assignment_id: id,
-      request_id: requestId,
-      fact_id: written.factId,
-      answered_at: new Date().toISOString(),
-    })
-    await appendEvent(db, {
-      orgId,
-      assignmentId: id,
-      staffId: row.createdByStaffId,
-      type: "information.answered",
-      payload: answer,
+      assignment: row,
+      requestId,
+      field,
+      given: { value },
+      verifier: owner ? "owner" : "maker",
     })
     return { answer, nudge: true }
   })
@@ -1232,13 +1204,16 @@ bridge.post("/:id/steer", async (c) => {
       }
       throw error
     }
+    const held = found.state === "blocked_on_information"
     const steered = await steerByKey(db, key)
     if (steered) {
       const same =
         steered.assignment_id === id &&
         steered.message === message &&
         canonical(steered.taint) === canonical(taint)
-      return same ? { replayed: true as const } : { reused: true as const }
+      return same
+        ? { replayed: true as const, held }
+        : { reused: true as const }
     }
     await appendEvent(db, {
       orgId,
@@ -1248,10 +1223,15 @@ bridge.post("/:id/steer", async (c) => {
       payload: { message, key_sha256: steerKeyHash(key) },
       taint,
     })
-    return { logged: true as const }
+    return { logged: true as const, held }
   })
   if ("missing" in result) return notFound(c, id)
   if ("reused" in result) return reused()
+  // A build waiting on the owner's answer gets the steer with that answer
+  // (cloudflare.ts `resume`), so its Developer never wakes mid-wait.
+  if (result.held) {
+    return c.json({ assignment_id: id, submission_id: null }, 202)
+  }
   // An owner's words reach the model the way a change request does: as a
   // tainted signal, never as a user turn (§28.3). The console's stay a turn.
   // Delivered under the same key, so flue admits it once and a replay gets

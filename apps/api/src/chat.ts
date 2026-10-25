@@ -1,4 +1,5 @@
 import {
+  BuildQuestionsPart,
   BuildSummary,
   CARD_ANSWERED,
   ChatRequest,
@@ -1619,9 +1620,20 @@ async function unloggedPosts(db: OrgScopedDb, id: string) {
   return rows.map((row) => ({
     id: row.id,
     role: row.role,
-    parts: row.parts.filter(
-      (p) => p.type === "step-start" || p.type === "text"
-    ),
+    parts: row.parts.flatMap((p): Part[] => {
+      if (p.type === "step-start" || p.type === "text") return [p]
+      // A card's questions, as the words the owner read, so a typed answer is recognised.
+      const asked = BuildQuestionsPart.safeParse(p).data?.data.questions
+      return asked
+        ? [
+            {
+              type: "text",
+              text: `On a card I asked: ${asked.map((q) => q.text).join(" ")}`,
+              state: "done",
+            },
+          ]
+        : []
+    }),
   }))
 }
 

@@ -4,7 +4,9 @@ import {
   AskChiefInput,
   answers,
   askedOptions,
+  inputOf,
   OPTIONS_MAX,
+  questionOk,
   refuseQuestion,
 } from "../src/question.ts"
 
@@ -135,6 +137,7 @@ describe("the questions ask_chief refuses", () => {
       AskChiefInput.safeParse({
         field: "business.parking",
         why: "The contact page names parking.",
+        question: "Is there parking near you for customers?",
         answer_schema: { type: "string" },
         options,
         blocking: true,
@@ -183,6 +186,50 @@ describe("the questions ask_chief refuses", () => {
         answer_schema: { type: "string", maxLength: 200 },
       })
     ).toBeNull()
+  })
+})
+
+describe("the question the owner reads", () => {
+  const ask = { field: "business.parking", answer_schema: { type: "string" } }
+
+  it("refuses a field label, a name or a dash, and takes a plain question", () => {
+    for (const question of [
+      "business.proof?",
+      "Years trading, accreditations, guarantees",
+      "The Developer needs your hours: what are they?",
+      "Parking - is there any?",
+      "Is there parking? And is it free?",
+    ]) {
+      expect(questionOk(question)).toBe(false)
+      expect(refuseQuestion({ ...ask, question })).toMatch(/plain question/)
+    }
+    expect(questionOk("Is there parking near you for customers?")).toBe(true)
+  })
+
+  it("refuses a key the owner picks rather than types", () => {
+    expect(refuseQuestion({ field: "site.pages" })).toMatch(/own pick/)
+  })
+
+  it("gives each question the card's input", () => {
+    expect(inputOf({ field: "business.phone", answer_schema: {} })).toEqual({
+      kind: "fact",
+      key: "business.phone",
+    })
+    expect(
+      inputOf({ ...ask, options: ["Street parking", "A car park"] })
+    ).toEqual({ kind: "choice", options: ["Street parking", "A car park"] })
+    // An instruction stored as an option is no choice, as `answers` reads it.
+    expect(inputOf({ ...ask, options: ["null"] })).toEqual({
+      kind: "text",
+      maxLength: 500,
+      email: false,
+    })
+    expect(
+      inputOf({
+        field: "business.bookings_email",
+        answer_schema: { type: "string", format: "email", maxLength: 254 },
+      })
+    ).toEqual({ kind: "text", maxLength: 254, email: true })
   })
 })
 

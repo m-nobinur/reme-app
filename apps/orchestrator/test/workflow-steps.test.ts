@@ -264,6 +264,12 @@ vi.mock("../src/revise.ts", () => ({
     return ""
   },
 }))
+// The relay's bodies are driven in relay.test.ts; here the question is always the owner's.
+vi.mock("../src/relay.ts", () => ({
+  askOwner: async () => "posted",
+  heldSteers: async () => [],
+  relayQuestion: async () => ({ ask: "Do you have parking?" }),
+}))
 vi.mock("../src/quick.ts", () => ({
   quickEdit: async () =>
     script.quickDone
@@ -517,6 +523,13 @@ const paths: [string, Wake[], Setup, { outcome: string }][] = [
     "information round trip",
     [information, completion],
     { looks: [unanswered] },
+    { outcome: "preview_ready" },
+  ],
+  // The owner's own build asks them, takes the answer and opens its review.
+  [
+    "owner question, then a ready draft",
+    [information, completion],
+    { origin: "owner", looks: [unanswered] },
     { outcome: "preview_ready" },
   ],
   // A nudge for an earlier question, or a repeat: one more look, then a wait.
@@ -932,6 +945,7 @@ describe("the assignment Workflow's step names", () => {
         "build",
         "owner build",
         "information round trip",
+        "owner question, then a ready draft",
         "gate failure repaired",
         "gate failure ends failed",
         "owner build failed, then retried",

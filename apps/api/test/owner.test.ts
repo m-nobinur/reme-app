@@ -45,7 +45,7 @@ describe("routeChange, row by row", () => {
     }
   })
 
-  it("refuses while a question is open, ahead of everything else", () => {
+  it("steers the build waiting on an answer, ahead of everything else", () => {
     expect(
       routeChange(
         site({
@@ -57,7 +57,7 @@ describe("routeChange, row by row", () => {
           reviews: [{ assignment_id: A, revision_id: R }],
         })
       )
-    ).toEqual({ route: "refuse", reason: "question_open", assignment_id: B })
+    ).toEqual({ route: "steer", assignment_id: B })
   })
 
   it("revises the owner's draft before the site is live, and turns down a review on a live site", () => {

@@ -60,10 +60,89 @@ export class PoolExhaustedError extends Error {
   }
 }
 
+/** How long one file call into the sandbox may take. */
+export const FILE_CALL_MS = 60_000
+/** A command's deadline when it sets no timeout of its own: just under the stall watchdog. */
+export const EXEC_CALL_MS = 9 * 60_000
+/** Past a command's own timeout, how long its call may take to come back. */
+export const EXEC_GRACE_MS = 30_000
+
+/** A sandbox call that ran out of time. */
+export class SandboxCallTimeout extends Error {
+  constructor(call: string, ms: number) {
+    super(`sandbox ${call} gave no answer in ${ms} ms`)
+    this.name = "SandboxCallTimeout"
+  }
+}
+
+/** `call` within `ms`, tried once more when the first attempt runs out of time. */
+export async function withDeadline<T>(
+  call: () => Promise<T>,
+  ms: number,
+  name: string
+): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const late = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new SandboxCallTimeout(name, ms)), ms)
+    })
+    try {
+      return await Promise.race([call(), late])
+    } catch (error) {
+      if (!(error instanceof SandboxCallTimeout) || attempt === 2) throw error
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+}
+
+const FILE_CALLS: ReadonlySet<PropertyKey> = new Set([
+  "readFile",
+  "writeFile",
+  "exists",
+  "mkdir",
+])
+
+type Call = (...args: unknown[]) => Promise<unknown>
+
+/**
+ * The stub with a deadline and one retry on every command and file call,
+ * whoever makes it: the Developer's tools through flue's adapter, the build
+ * tail and the Workflow's own steps. A call that never settles (a readFile
+ * in the upload, 2026-10-23; a page write, 2026-10-25) otherwise held the
+ * build until the stall watchdog, and every restart hung the same way. A
+ * command's deadline is its own timeout plus `EXEC_GRACE_MS`. Anything else
+ * on the stub passes through.
+ */
+export function bounded<S extends object>(stub: S): S {
+  return new Proxy(stub, {
+    get(target, name) {
+      const call = (target as Record<PropertyKey, unknown>)[name]
+      if (name === "exec") {
+        return (command: unknown, options?: { timeout?: number }) =>
+          withDeadline(
+            () => (call as Call).call(target, command, options),
+            (options?.timeout ?? EXEC_CALL_MS) + EXEC_GRACE_MS,
+            "exec"
+          )
+      }
+      if (FILE_CALLS.has(name)) {
+        return (...args: unknown[]) =>
+          withDeadline(
+            () => (call as Call).apply(target, args),
+            FILE_CALL_MS,
+            String(name)
+          )
+      }
+      return call
+    },
+  })
+}
+
 // `wrangler types` cannot see the class behind the binding, so the namespace
 // arrives untyped and is narrowed here, once.
 export const sandboxFor = (env: Env, id: string) =>
-  (env.SANDBOX as DurableObjectNamespace<RemeSandbox>).getByName(id)
+  bounded((env.SANDBOX as DurableObjectNamespace<RemeSandbox>).getByName(id))
 
 /**
  * The site's sandbox as the build tail reads it (`tail.ts`), for a step that
