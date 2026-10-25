@@ -1069,7 +1069,11 @@ function TrayLogo({
         </p>
       ) : null}
       {/* The api will not settle the tray without a logo, so Pick for me waits for one. */}
-      {picking && !answer && (latest?.status === "failed" || error) ? (
+      {picking && !answer && shownPath === "upload" ? (
+        <p className="pt-1 text-muted-foreground text-sm" role="status">
+          I need your logo file to finish. Add it here and I'll do the rest.
+        </p>
+      ) : picking && !answer && (latest?.status === "failed" || error) ? (
         <p className="pt-1 text-muted-foreground text-sm" role="status">
           I need a logo to finish. Try the designs again, or upload yours.
         </p>
