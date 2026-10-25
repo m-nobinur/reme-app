@@ -565,11 +565,15 @@ describe("an answer on a card", () => {
     expect(cardAnswer(card, { answer: "stated", facts }, [])).toEqual({
       kind: "facts",
       facts,
+      persona: "stated",
     })
+    expect(
+      cardAnswer(card, { answer: "stated", facts, skip_all: true }, [])
+    ).toMatchObject({ persona: "picked" })
     // Part of the card is an answer too; the step asks again for the rest.
     expect(
       cardAnswer(card, { answer: "stated", facts: facts.slice(0, 1) }, [])
-    ).toEqual({ kind: "facts", facts: facts.slice(0, 1) })
+    ).toEqual({ kind: "facts", facts: facts.slice(0, 1), persona: "stated" })
     for (const output of [
       { answer: "stated", facts: [PHONE] },
       { answer: "stated", facts: [facts[0], facts[0]] },
@@ -1059,6 +1063,92 @@ describe("a reply Jev read", () => {
     for (const step of ["industry", "contact", "build_for_me"] as const) {
       expect(decided(cardFor(step), { kind: "defer" }, start())).toBeNull()
     }
+  })
+})
+
+describe("Pick for me, answered by the script", () => {
+  const PERSONA = {
+    type: "data-persona",
+    data: {
+      name: "Maya",
+      pronouns: "she_her",
+      avatar: "she_1",
+      tone: "friendly",
+    },
+  }
+  const facts = FACTS.assistant as FactValue[]
+  const persona = (output: object, orgId = ORG) => {
+    const at = start({ orgId, facts: ALL_BEFORE("assistant") })
+    const meant = cardAnswer(cardFor("assistant"), output, []) ?? undefined
+    const next = applied(at, meant as NonNullable<typeof meant>)
+    const step = onboardingStep(next, counter())
+    return { step, parts: withChoice(meant, next, step) }
+  }
+  // Enough orgs to meet every wording of each line.
+  const ORGS = Array.from({ length: 12 }, (_, i) => `${ORG.slice(0, -2)}${i}0`)
+
+  it("says who the assistant chose to be, then the next question with no thanks, then the persona", () => {
+    const leads = new Set<string>()
+    for (const orgId of ORGS) {
+      const { step, parts } = persona(
+        { answer: "stated", facts, skip_all: true },
+        orgId
+      )
+      const [lead, card, ...rest] = parts
+      const [line, next] = (lead as { text: string }).text.split("\n\n")
+      expect(line).toMatch(/Maya, she\/her, with a friendly manner/)
+      // The next question follows at once: no "Maya it is!" or "Thanks, Probe."
+      expect(next).not.toMatch(/Maya|Thanks/)
+      expect(next).toMatch(/website/)
+      expect(card).toEqual(PERSONA)
+      expect(rest).toEqual(step.slice(1))
+      leads.add(next as string)
+    }
+    expect(leads.size).toBe(3)
+    // The owner's own answer keeps the thanks, shows the persona and no line about choosing.
+    const own = persona({ answer: "stated", facts })
+    expect(own.parts).toEqual([own.step[0], PERSONA, ...own.step.slice(1)])
+    expect((own.step[0] as { text: string }).text).toMatch(
+      /^(Maya|Thanks|I'm Maya)/
+    )
+  })
+
+  it("says the design tray left to it is chosen as it builds, then the build's news with no summary", () => {
+    const pending: ToolPart = {
+      type: "tool-request_change",
+      toolCallId: "c1",
+      state: "input-available",
+      input: { text: ONBOARDING_GOAL },
+    }
+    const output = {
+      outcome: "started" as const,
+      build: {
+        assignment_id: ORG,
+        kind: "site.build" as const,
+        state: "queued" as const,
+        goal: ONBOARDING_GOAL,
+        revision: null,
+        created_at: "2026-09-26T09:30:00.000Z",
+        updated_at: "2026-09-26T09:30:00.000Z",
+      },
+    }
+    const tray = { kind: "design" as const, facts: [], settled: true }
+    for (const orgId of ORGS) {
+      const o = start({ orgId, facts: ALL_BEFORE("design") })
+      const answer = { ...tray, picked: true as const }
+      const next = applied(o, answer)
+      const step = built(next, pending, output)
+      const parts = withChoice(answer, next, step)
+      expect(parts.slice(0, 2)).toEqual(step.slice(0, 2))
+      const [line, news] = (parts[2] as { text: string }).text.split("\n\n")
+      expect(line).toMatch(/as I build/)
+      expect(news).not.toMatch(/everything/)
+      expect(news).toMatch(/website|build/)
+    }
+    // Answered by the owner: no line, and the summary stays.
+    const o = start({ facts: ALL_BEFORE("design") })
+    const own = built(applied(o, tray), pending, output)
+    expect(withChoice(tray, applied(o, tray), own)).toEqual(own)
   })
 })
 
@@ -1947,13 +2037,14 @@ describe("the design tray", () => {
       kind: "design",
       facts: [{ key: "site.direction", value: { id: "builder" } }],
       settled: true,
+      picked: true,
     })
     expect(
       designAnswer(input(), { answers: {}, skip_all: true }, [
         UPLOADS,
         { key: "site.direction", value: { id: "calm_daylight" } },
       ])
-    ).toEqual({ kind: "design", facts: [], settled: true })
+    ).toEqual({ kind: "design", facts: [], settled: true, picked: true })
     const answered = pick(
       { palette: { skipped: true }, lettering: { skipped: true } },
       true
