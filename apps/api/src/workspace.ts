@@ -467,6 +467,10 @@ export async function readBuilds(
       retryOf: sql<
         string | null
       >`(select e.payload->>'retry_of' from events e where e.assignment_id = assignments.id and e.type = 'assignment.created' limit 1)`,
+      // A change's short name, which the orchestrator trims to 40 characters.
+      label: sql<
+        string | null
+      >`(select e.payload->>'label' from events e where e.assignment_id = assignments.id and e.type = 'assignment.created' limit 1)`,
       // QE4: the quick lane handed the change on, to the Developer or on to
       // the build model. The orchestrator logs each, and the row's lane is
       // only where it started.
@@ -530,6 +534,7 @@ export async function readBuilds(
       kind: row.kind as BuildSummary["kind"],
       state: row.state,
       goal: row.goal,
+      ...(row.label ? { label: row.label } : {}),
       lane,
       ...(fellThrough ? { fell_through: true } : {}),
       ...(row.retryOf ? { retry: true as const } : {}),
