@@ -25,6 +25,7 @@ import {
   readSiteMedia,
   uploadAssets,
 } from "./assets.ts"
+import { answerQuestions } from "./build-questions.ts"
 import {
   bridge,
   holds,
@@ -63,7 +64,7 @@ const LOGO_KEEP_PATH =
 
 /** The routes `ownerRoute` answers, for `index.ts` to resolve an org before. */
 export const OWNER_PATH =
-  /^\/(workspace|facts|assets(\/review)?|site\/media|photos\/[^/]+|revisions\/[^/]+\/[^/]+|logos(\/[^/]+\/keep)?|palettes\/from-(image|logo)|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback))?)?|reminders(\/[^/]+)?|memory(\/(undo|review))?|push\/(config|subscriptions(\/[^/]+)?)|domains\/[^/]+(\/checkout)?|google\/(connect|disconnect)|time-zone|chat)$/
+  /^\/(workspace|facts|assets(\/review)?|site\/media|photos\/[^/]+|revisions\/[^/]+\/[^/]+|logos(\/[^/]+\/keep)?|palettes\/from-(image|logo)|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback|questions))?)?|reminders(\/[^/]+)?|memory(\/(undo|review))?|push\/(config|subscriptions(\/[^/]+)?)|domains\/[^/]+(\/checkout)?|google\/(connect|disconnect)|time-zone|chat)$/
 
 async function setFacts(request: Request, kit: Tenancy, owner: Owner) {
   if (!idempotencyKey(request)) return keyMissing()
@@ -307,6 +308,11 @@ export async function ownerRoute(
   const [, noun, id = "", action = ""] = pathname.split("/")
   if (noun === "builds") {
     return buildAction(request, env, kit, owner, id, action)
+  }
+  if (noun === "conversations" && action === "questions") {
+    return method === "POST"
+      ? answerQuestions(request, env, kit, owner, id)
+      : null
   }
   if (noun === "conversations") {
     return conversationRoute(request, kit, owner, id, action)
