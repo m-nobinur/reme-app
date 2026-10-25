@@ -1173,10 +1173,11 @@ function PreviewLink({
   iconOnly?: boolean
 }) {
   if (preview === "loading") {
+    // Faded in late, so a read that comes back quickly shows no placeholder.
     return (
-      <Skeleton
-        className={cn("h-8 shrink-0 rounded-md", iconOnly ? "w-8" : "w-22")}
-      />
+      <div className="fade-in shrink-0 animate-in fill-mode-backwards delay-300">
+        <Skeleton className={cn("h-8 rounded-md", iconOnly ? "w-8" : "w-22")} />
+      </div>
     )
   }
   if (preview === "error") {
