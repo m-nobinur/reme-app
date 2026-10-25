@@ -259,6 +259,7 @@ export function changeSegment(
       state === "done"
         ? (build.ready_at ?? build.updated_at)
         : build.created_at,
+    ...(build.label && { names: { change: build.label } }),
     ...usualFor(state, build, expected),
   }
 }
