@@ -190,6 +190,12 @@ function ChatHistory({
         onKeyDown={(event) => {
           if (event.key === "ArrowRight") setOpen(true)
         }}
+        // A link opens on Enter only. Base UI clicks a non-button trigger on
+        // Space, so a sentence typed while focus sat here opened the previous
+        // conversation at its first space (2026-10-25).
+        onKeyUp={(event) => {
+          if (event.key === " ") event.preventBaseUIHandler()
+        }}
         onPointerLeave={() => {
           pressed.current = false
         }}

@@ -396,6 +396,33 @@ it("a change asked for in the panel reads as one resolved line", async () => {
   )
 })
 
+it("typing with focus on a link goes to the composer, and Space opens nothing", async () => {
+  const start = FIXTURE.histories.start as {
+    messages: { id: string; parent_id: string | null; content: unknown }[]
+  }
+  const container = await open({ messages: start.messages.slice(0, 1) })
+  const link = document.createElement("a")
+  link.href = "/elsewhere"
+  container.appendChild(link)
+  link.focus()
+  const key = new KeyboardEvent("keydown", {
+    key: "H",
+    bubbles: true,
+    cancelable: true,
+  })
+  await act(async () => {
+    link.dispatchEvent(key)
+  })
+  const composer = container.querySelector("textarea")
+  expect(key.defaultPrevented).toBe(true)
+  expect(document.activeElement).toBe(composer)
+  expect(composer?.value).toBe("H")
+  const space = new KeyboardEvent("keydown", { key: " ", bubbles: true })
+  link.focus()
+  link.dispatchEvent(space)
+  expect(document.activeElement).toBe(link)
+})
+
 it("every message keeps the time it was sent, as a reload shows it", async () => {
   vi.useFakeTimers({ toFake: ["Date"] })
   try {

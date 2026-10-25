@@ -798,6 +798,7 @@ const Composer: FC<{ autoFocus: boolean; expanded: boolean }> = ({
   useEffect(() => {
     if (mode) input.current?.focus()
   }, [mode, input])
+  useTypeToComposer(input)
   return (
     <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
       {/* No ring, only a lighter edge: the composer holds focus whenever the
@@ -882,6 +883,53 @@ const QuickActions: FC<{ input: RefObject<HTMLTextAreaElement | null> }> = ({
       </DropdownMenuContent>
     </DropdownMenu>
   )
+}
+
+/**
+ * Typing with focus outside any field goes to the composer: focus moves
+ * there on the key that starts it, and that key's character is typed in it. Without it,
+ * focus left on a link or a closed card ate the words, and on 2026-10-25 a
+ * sentence typed with focus on the rail's Chat link opened another
+ * conversation. Space alone on a control stays the control's own.
+ */
+function useTypeToComposer(input: RefObject<HTMLTextAreaElement | null>) {
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (
+        event.key.length !== 1 ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey
+      )
+        return
+      const target = event.target as HTMLElement | null
+      if (!target || target === input.current) return
+      if (
+        target.closest(
+          "input, textarea, select, [contenteditable], [role=dialog], [role=menu], [role=listbox]"
+        )
+      )
+        return
+      if (event.key === " " && target !== document.body) return
+      const field = input.current
+      if (!field || field.disabled) return
+      // Typed here, not left to the key: a key whose focus moved mid-press
+      // can drop its character. insertText keeps the editor's undo and
+      // fires the input event React reads.
+      event.preventDefault()
+      field.focus()
+      if (document.execCommand?.("insertText", false, event.key)) return
+      field.setRangeText(
+        event.key,
+        field.selectionStart,
+        field.selectionEnd,
+        "end"
+      )
+      field.dispatchEvent(new Event("input", { bubbles: true }))
+    }
+    document.addEventListener("keydown", onKey)
+    return () => document.removeEventListener("keydown", onKey)
+  }, [input])
 }
 
 /**
