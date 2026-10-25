@@ -316,7 +316,7 @@ it("Pick for me after Yes keeps the upload and waits for the logo", async () => 
   expect(tray.header()).toBe("Your logo")
   expect(tray.container.textContent).toContain("Drop your logo here")
   expect(tray.container.textContent).toContain(
-    "A logo is all that is still needed"
+    "I need your logo file to finish"
   )
   await act(async () => undefined)
   expect(fake.kept).toEqual([])
