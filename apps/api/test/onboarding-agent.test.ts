@@ -2,6 +2,7 @@ import {
   type FactValue,
   OnboardingPlan,
   type OnboardingPlan as Plan,
+  SKIP_REPLY,
 } from "@workspace/contracts"
 import { convertArrayToReadableStream, MockLanguageModelV4 } from "ai/test"
 import { describe, expect, it } from "vitest"
@@ -909,6 +910,68 @@ describe("going back to a step", () => {
     })
   })
 
+  it("redrafts a reopened quote form from the owner's words and shows it for a yes", () => {
+    // Observed 2026-10-25: "seperate number of rooms" on the reopened form.
+    const o = atWebsite()
+    const form = call(
+      "tool-review_quote_form",
+      { fields: FIELDS, note: null },
+      counter()
+    )
+    const words = typedOverForm(form, {
+      answer: "changes",
+      text: "seperate number of rooms",
+    })
+    if (!words) throw new Error("not read as words")
+    const s = typed(words.text, o, words.form)
+    const redrafted = [
+      ...FIELDS,
+      {
+        key: "rooms",
+        label: "Number of rooms",
+        type: "number" as const,
+        required: false,
+        hint: null,
+        options: null,
+      },
+    ]
+    const checked = checkPlan(
+      plan({
+        pending_card: "declined",
+        say: "Rooms are a question of their own now. Does this look right?",
+        next: { kind: "review_quote_form", fields: redrafted, note: null },
+      }),
+      s
+    )
+    if (!checked.ok) throw new Error(checked.errors.join("; "))
+    expect(planParts(checked.checked, s, counter())[1]).toMatchObject({
+      type: "tool-review_quote_form",
+      state: "input-available",
+      input: { fields: redrafted },
+    })
+  })
+
+  it("comes back to a step in new words, never a sentence already said", () => {
+    const asked =
+      "I have a good picture of Regal Rides now. How should customers get in touch?"
+    const s: PlanState = {
+      ...typed("Looks good", onboarding(without("business.phone"))),
+      rows: [
+        {
+          role: "assistant",
+          parts: [{ type: "text", text: asked, state: "done" }],
+        },
+      ],
+    }
+    const back = (say: string) =>
+      errorsOf(
+        plan({ say, next: { kind: "ask_details", step: "contact" } }),
+        s
+      ).filter((e) => e.includes("which you already said"))
+    expect(back(asked)).toHaveLength(1)
+    expect(back("Now, back to how customers reach Regal Rides.")).toEqual([])
+  })
+
   it("refuses to reopen a step not answered yet", () => {
     const o = onboarding([
       ...without("business.phone", "business.email"),
@@ -1351,7 +1414,11 @@ describe("a planned turn", () => {
 
     // Changes come back as the owner's words, and a new proposal follows.
     const changes = { answer: "changes", text: "Add the date" }
-    expect(cardAnswer(card, changes, [])).toEqual({ kind: "facts", facts: [] })
+    expect(cardAnswer(card, changes, [])).toEqual({
+      kind: "facts",
+      facts: [],
+      changing: FIELDS,
+    })
     const dated = [
       ...FIELDS,
       {
@@ -1467,7 +1534,23 @@ describe("a question in words", () => {
     expect(card).toMatchObject({
       type: "tool-ask_open",
       state: "input-available",
-      input: { about: "business.audience" },
+      input: { about: "business.audience", skippable: true },
+    })
+  })
+
+  it("marks only an optional question as one the owner may skip", () => {
+    const o = onboarding(without("service_area.text", "business.phone"))
+    const s = typed("We do weddings", o)
+    const checked = checkPlan(
+      plan({
+        say: "Where are you based?",
+        next: { kind: "ask_open", about: "service_area.text" },
+      }),
+      s
+    )
+    if (!checked.ok) throw new Error(checked.errors.join("; "))
+    expect(planParts(checked.checked, s, counter())[1]).toMatchObject({
+      input: { about: "service_area.text", skippable: false },
     })
   })
 
@@ -1515,6 +1598,37 @@ describe("a question in words", () => {
       facts: [],
     })
     expect(cardAnswer(card, { answer: "stated" }, [])).toBeNull()
+  })
+
+  it("reads the Skip this one message as a skip at every optional question", () => {
+    for (const key of ["business.audience", "business.proof"] as const) {
+      const o = onboarding(without(key, "business.phone"))
+      for (const card of [
+        call("tool-ask_open", { about: key }, counter()),
+        call(
+          "tool-ask_fact",
+          { key, skippable: true, prefill: null },
+          counter()
+        ),
+      ]) {
+        const s = typed(SKIP_REPLY, o, card)
+        const skip = `the owner tapped Skip on ${key}: set pending_card declined, record nothing for it and move on`
+        expect(
+          errorsOf(
+            plan({
+              pending_card: "answered",
+              facts: { [key]: { text: SKIP_REPLY } },
+            }),
+            s
+          ),
+          card.type
+        ).toContain(skip)
+        expect(
+          errorsOf(plan({ pending_card: "declined" }), s),
+          card.type
+        ).not.toContain(skip)
+      }
+    }
   })
 })
 

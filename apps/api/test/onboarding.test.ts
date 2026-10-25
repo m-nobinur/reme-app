@@ -8,6 +8,7 @@ import {
   INDUSTRIES,
   PALETTES,
   PaletteId,
+  SKIP_REPLY,
   TONES,
   type ToneId,
 } from "@workspace/contracts"
@@ -47,11 +48,13 @@ import {
   withChoice,
 } from "../src/onboarding.ts"
 import {
+  back,
   chose,
   manualEnd,
   opener,
   question,
   quoteForm,
+  quoteUnchanged,
   retry,
   started,
   type Voice,
@@ -739,9 +742,31 @@ describe("an answer on a card", () => {
       kind: "facts",
       facts: [{ key: "quote.form", value: { fields } }],
     })
+    // Changes keep the form as the owner left it on the card.
     expect(
       cardAnswer(review, { answer: "changes", text: "Add the date" }, [])
-    ).toEqual({ kind: "facts", facts: [] })
+    ).toEqual({ kind: "facts", facts: [], changing: fields })
+    const optional = fields.map((f) => ({ ...f, required: false }))
+    expect(
+      cardAnswer(
+        review,
+        { answer: "changes", text: "Split the rooms", fields: optional },
+        []
+      )
+    ).toMatchObject({ changing: optional })
+    // With no model to redraft it, the script shows the form again rather
+    // than moving on (observed 2026-10-25 on a reopened, confirmed form).
+    const held = start({ facts: ALL_BEFORE("contact") })
+    const changed = cardAnswer(
+      review,
+      { answer: "changes", text: "seperate number of rooms" },
+      []
+    )
+    if (!changed) throw new Error("refused")
+    expect(onboardingStep(applied(held, changed), counter())).toMatchObject([
+      { type: "text", text: quoteUnchanged(voiceOf(held)) },
+      { type: "tool-review_quote_form", input: { fields, note: null } },
+    ])
     for (const contact of [
       { key: "email", type: "text", label: "Where to reply" },
       { key: "details", type: "tel", label: "Best number" },
@@ -1022,11 +1047,13 @@ describe("a reply Jev read", () => {
     expect(decided(cardFor("assistant"), { kind: "defer" }, named)).toEqual({
       kind: "facts",
       facts: [
-        { key: "assistant.pronouns", value: { id: "they_them" } },
-        { key: "assistant.avatar", value: { id: "reme" } },
-        { key: "assistant.tone", value: { id: "friendly" } },
+        { key: "assistant.pronouns", value: { id: "she_her" } },
+        { key: "assistant.avatar", value: { id: "she_1" } },
+        { key: "assistant.tone", value: { id: "professional" } },
       ],
-      chose: expect.any(String),
+      chose: expect.stringContaining(
+        "she/her, a face to match and a professional tone"
+      ),
     })
     // What the business does, its contact details and the build are the owner's.
     for (const step of ["industry", "contact", "build_for_me"] as const) {
@@ -1067,6 +1094,7 @@ describe("the progress a conversation's cards hold", () => {
       closed: ["business.audience", "upload", "manual_builder"],
       offered: false,
       builder: false,
+      earlier: ["business.audience", "upload"],
     })
     expect(
       progressOf([
@@ -1155,6 +1183,47 @@ describe("the progress a conversation's cards hold", () => {
       ]).passed
     ).toEqual([])
   })
+
+  it("passes an optional question on the Skip this one message, typed or talked over", () => {
+    for (const key of ["business.audience", "business.proof"] as const) {
+      for (const card of [
+        factCard(start(), key, counter()),
+        call("tool-ask_open", { about: key }, counter()),
+      ]) {
+        expect(typedAnswer(card, SKIP_REPLY), card.type).toEqual({
+          kind: "passed",
+          step: key,
+        })
+      }
+      expect(
+        progressOf([
+          row({ step: key, state: "output-error", reply: SKIP_REPLY }),
+        ]).passed
+      ).toEqual([key])
+    }
+  })
+
+  it("asks a step in new words when the owner comes back to it from another", () => {
+    // Observed 2026-10-25: the contact card, a reopened quote form, then the
+    // contact question again word for word.
+    const contact = { type: "tool-ask_details", step: "contact" }
+    const progress = progressOf([
+      row({ ...contact, state: "output-error", reply: "Change the quote" }),
+      row({ type: "tool-review_quote_form", answer: "confirmed" }),
+    ])
+    expect(progress.earlier).toEqual(["contact"])
+    const o = start({ ...progress, facts: ALL_BEFORE("contact") })
+    const [said, card] = onboardingStep(o, counter())
+    expect(said).toMatchObject({ text: back("contact", voiceOf(o)) })
+    expect((said as { text: string }).text).not.toBe(
+      question("contact", voiceOf(o))
+    )
+    expect(card).toMatchObject({ input: { step: "contact" } })
+    // The latest card's own step is no return: a part answer asks as before.
+    expect(progressOf([row({ ...contact, answer: "stated" })]).earlier).toBe(
+      undefined
+    )
+  })
 })
 
 /** Many org ids, so every wording of every line comes up. */
@@ -1194,7 +1263,12 @@ const lines = (v: Voice): [string, string][] => [
       (id) => id !== "upload" && id !== "build" && id !== "manual_builder"
     ) as Exclude<StepId, "upload" | "build" | "manual_builder">[]
   ).map((id): [string, string] => [id, question(id, v)]),
+  ...STEPS.flatMap(({ id }): [string, string][] => {
+    const line = back(id, v)
+    return line ? [[`back ${id}`, line]] : []
+  }),
   ["default_quote_form", quoteForm(v)],
+  ["quote_unchanged", quoteUnchanged(v)],
   ["started", started(v, true)],
   ["manual_end", manualEnd(v)],
   ["chose", chose(v, "the Ocean colours")],
@@ -1938,24 +2012,24 @@ describe("the assistant card's name ideas", () => {
     expect(ideas(start({ prepared }))).toEqual(["Poppy", "Theo"])
   })
 
-  it("opens filled with the assistant as it comes, the org's own picks first", () => {
+  it("opens filled with Reme, she/her, the first she/her face and professional, the org's own picks first", () => {
     const prefill = (o: Onboarding) =>
       AskDetailsInput.parse(detailsCard("assistant", o, counter()).input)
         .prefill
     expect(prefill(start())).toEqual([
       { key: "assistant.name", value: { name: "Reme" } },
-      { key: "assistant.pronouns", value: { id: "they_them" } },
-      { key: "assistant.avatar", value: { id: "reme" } },
-      { key: "assistant.tone", value: { id: "friendly" } },
+      { key: "assistant.pronouns", value: { id: "she_her" } },
+      { key: "assistant.avatar", value: { id: "she_1" } },
+      { key: "assistant.tone", value: { id: "professional" } },
     ])
     const named = start({
       facts: [{ key: "assistant.name", value: { name: "Maya" } }],
     })
     expect(prefill(named).map((fact) => fact.value)).toEqual([
       { name: "Maya" },
-      { id: "they_them" },
-      { id: "reme" },
-      { id: "friendly" },
+      { id: "she_her" },
+      { id: "she_1" },
+      { id: "professional" },
     ])
   })
 })
