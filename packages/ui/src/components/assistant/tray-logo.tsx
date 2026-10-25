@@ -250,6 +250,8 @@ function TrayLogo({
   )
   const [focus, setFocus] = useState<Part | null>(null)
   const [rounds, setRounds] = useState<LogoRound[]>([])
+  // Whether the rounds drawn before have been read, so none is drawn twice.
+  const [loaded, setLoaded] = useState(false)
   const [nextAt, setNextAt] = useState<number | null>(null)
   const [at, setAt] = useState<number | null>(null)
   const [changes, setChanges] = useState<string | null>(start?.changes ?? null)
@@ -277,6 +279,7 @@ function TrayLogo({
           if (!live) return
           setRounds(drawn.rounds)
           setNextAt(drawn.next_at ? Date.parse(drawn.next_at) : null)
+          setLoaded(true)
         })
         .catch(() => undefined)
     const timer = drawing ? setInterval(read, 2500) : undefined
@@ -429,6 +432,30 @@ function TrayLogo({
       setBusy(null)
     }
   }
+
+  // With no logo held the page opens on making one: one round starts by
+  // itself from the filled brief, and its first design is kept as it lands,
+  // so Looks good takes it. A pick or an upload in the meantime wins. A page
+  // the catalog opens in a given state stays in it.
+  const auto = useRef<"draw" | "keep" | "done">(
+    first === "create" && !answer && !start ? "draw" : "done"
+  )
+  // biome-ignore lint/correctness/useExhaustiveDependencies: steps on the rounds read, once each
+  useEffect(() => {
+    if (!loaded || auto.current === "done") return
+    if (auto.current === "draw") {
+      auto.current = "keep"
+      if (rounds.length === 0) {
+        void draw({})
+        return
+      }
+    }
+    const [landed] = rounds
+    if (!landed || landed.status === "drawing") return
+    auto.current = "done"
+    const [design] = landed.variants
+    if (design && !answer && path === "create") void keep(design.id)
+  }, [loaded, rounds])
 
   // A new round starts from the picked design, wherever it was drawn.
   const redesign = () => {
@@ -909,7 +936,7 @@ function TrayLogo({
                           <img
                             alt={`Design ${place + 1}`}
                             // Lands from a blur, as tw-animate-css draws it.
-                            className="motion-safe:fade-in aspect-square w-full rounded-lg object-contain p-2 duration-600 ease-out motion-safe:animate-in motion-safe:blur-in-md"
+                            className="motion-safe:fade-in aspect-square w-full rounded-lg object-contain p-2 duration-slow ease-standard motion-safe:animate-in motion-safe:blur-in-md"
                             key={variant.id}
                             src={services.imageUrl(variant.id)}
                             style={{ backgroundColor: paper }}
@@ -1063,7 +1090,7 @@ function CustomColours({
           // biome-ignore lint/a11y/noStaticElementInteractions: only listens for focus leaving the colour's own fields
           <div
             className={cn(
-              "group/colour flex min-w-6 flex-1 items-center justify-center transition-[flex] duration-200 ease-out motion-reduce:transition-none",
+              "group/colour flex min-w-6 flex-1 items-center justify-center transition-[flex] duration-fast ease-standard motion-reduce:transition-none",
               !alone &&
                 (editing === place
                   ? OPEN_COLOUR
@@ -1239,7 +1266,7 @@ function Cycling({
         <img
           alt=""
           className={cn(
-            "absolute inset-0 size-full object-contain transition-[opacity,scale,filter] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none",
+            "absolute inset-0 size-full object-contain transition-[opacity,scale,filter] duration-slow ease-standard motion-reduce:transition-none",
             place === shown
               ? "scale-100 opacity-100 blur-[0px]"
               : "scale-110 opacity-0 blur-[4px]"

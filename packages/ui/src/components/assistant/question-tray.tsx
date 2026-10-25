@@ -165,7 +165,7 @@ function Docked({
         <div
           data-slot={name}
           ref={ref}
-          className="motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-2 duration-250 ease-out motion-safe:animate-in"
+          className="motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-2 duration-enter ease-standard motion-safe:animate-in"
         >
           {children}
         </div>,
@@ -326,7 +326,7 @@ function Fold({ open, children }: { open: boolean; children: ReactNode }) {
   return (
     <div
       className={cn(
-        "-mx-1 grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none",
+        "-mx-1 grid transition-[grid-template-rows,opacity] duration-enter ease-standard motion-reduce:transition-none",
         open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
       )}
       inert={!open}
@@ -1079,7 +1079,7 @@ function TrayFrame({
                 instead, the ones in a folded section stretched the thread
                 and the composer slid as it scrolled. */}
             <div
-              className="relative min-h-0 overflow-y-auto rounded-b-3xl bg-(--body) transition-[height] duration-200 ease-out motion-reduce:transition-none"
+              className="relative min-h-0 overflow-y-auto rounded-b-3xl bg-(--body) transition-[height] duration-enter ease-standard motion-reduce:transition-none"
               id={`${id}-body`}
               onScroll={measure}
               ref={bodyRef}
@@ -1327,11 +1327,12 @@ function QuestionTray({
     onFinish({ answers: sent, skip_all: skipAll || finishing })
     focusComposer()
   }
-  // Every question holds an answer, this one with `chosen`: one press keeps them.
-  const complete = (chosen = answer) =>
-    questions.every((each) =>
-      each.id === question.id ? chosen !== undefined : each.id in answers
-    )
+  // Every other question holds an answer: one press keeps them all, once
+  // this one has its own (`chosen`), such as a logo still drawing.
+  const others = questions.every(
+    (each) => each.id === question.id || each.id in answers
+  )
+  const complete = (chosen = answer) => others && chosen !== undefined
   // Next, with the answer a page has only just set when it moves on itself.
   const onward = (chosen = answer) => {
     if (last || finishing || complete(chosen)) finish(finishing, chosen)
@@ -1413,11 +1414,14 @@ function QuestionTray({
       }
       submit={
         (logo && logoSubmit) || {
-          label: complete()
-            ? "Looks good"
-            : last || finishing
+          // The last page says what pressing it does; before it, Looks good
+          // keeps every pick made.
+          label:
+            last || finishing
               ? "Build my site"
-              : "Next",
+              : others
+                ? "Looks good"
+                : "Next",
           onSubmit: next,
           disabled: !ready,
         }
