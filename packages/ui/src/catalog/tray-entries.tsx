@@ -5,6 +5,7 @@ import {
   CALM_PALETTES,
   FIXED_PAGES,
   LOGO_VARIANTS,
+  type LogoBrief,
   type LogoRound,
   PAGES,
   PALETTES,
@@ -61,10 +62,24 @@ const LOGOS = [
 const variant = (at: number) => ({
   id: `00000000-0000-4000-8000-00000000000${at}`,
 })
+/** A brief set to the colours of the made-up logos, and what the api holds for it. */
+const PICKED = {
+  description: "",
+  colours: { custom: [primary, ink] },
+  type: "emblem" as const,
+  style: "hand_drawn" as const,
+}
+const DRAWN: LogoBrief = {
+  description: "",
+  colors: [primary.toLowerCase(), ink.toLowerCase()],
+  type: "emblem",
+  style: "hand_drawn",
+}
 const ROUND: LogoRound = {
   round: 1,
   status: "ready",
   variants: [0, 1, 2, 3].map(variant),
+  brief: DRAWN,
 }
 const KEPT: Asset = {
   id: variant(0).id,
@@ -96,11 +111,12 @@ const fakes = (
         name: "Van blue",
         stops: { paper, tint, primary, ink },
       }),
-    drawLogos: () => {
+    drawLogos: ({ brief }) => {
       const round: LogoRound = {
         round: rounds.length + 1,
         status: "drawing",
         variants: [],
+        brief,
       }
       rounds.push(round)
       started = round.round
@@ -118,7 +134,7 @@ const fakes = (
       }
       return later({ rounds: [...rounds] })
     },
-    keepLogo: () => later({ asset: KEPT }),
+    keepLogo: (id) => later({ asset: { ...KEPT, id } }),
     logoPalettes: () => later({ palettes: FROM_LOGO }),
     imageUrl: (id) => LOGOS[Number(id.at(-1))] ?? LOGOS[0] ?? "",
     ...overrides,
@@ -303,21 +319,20 @@ export const INPUT: AskDesignInput = {
   ],
 }
 
-/** The tray with the logo page opening on one of its paths. */
-const logoOn = (path: "upload" | "create"): AskDesignInput => ({
+/** The tray as the api opens it with no logo held: create ticked, so a round draws as it opens. */
+const create: AskDesignInput = {
   questions: INPUT.questions.map((each) =>
     each.visual === "logo"
-      ? { ...each, card: { ...each.card, preselected: [path] } }
+      ? { ...each, card: { ...each.card, preselected: ["create"] } }
       : each
   ),
-})
+}
 
 const LOGO = 0
 const PALETTE = 1
 const LETTERING = 2
 const PHONE = "max-w-[22.5rem]"
 const SECOND: LogoRound = { ...ROUND, round: 2 }
-const create = logoOn("create")
 
 type State = {
   title: string
@@ -331,61 +346,75 @@ type State = {
 }
 
 const STATES: State[] = [
-  { title: "Logo, nothing chosen" },
-  { title: "Logo, upload", input: logoOn("upload") },
+  // No start: designs draw behind the question; No shows them, the first picked.
+  { title: "Logo, nothing chosen", input: create },
+  { title: "Logo, upload", start: { logo: { path: "upload" } } },
   {
     title: "Logo, uploaded and kept",
-    input: logoOn("upload"),
-    start: { index: LOGO, answers: { logo: { logo: KEPT } } },
+    start: {
+      index: LOGO,
+      answers: { logo: { logo: KEPT } },
+      logo: { path: "upload" },
+    },
   },
-  // No start: the page draws its first round by itself and keeps a design.
-  { title: "Logo, create: drawn by itself", input: create },
+  {
+    title: "Logo, no logo: the first design picked",
+    start: { logo: { path: "create", brief: PICKED } },
+    rounds: [ROUND],
+  },
   {
     title: "Logo, create: how it should look and colours",
-    input: create,
-    start: { logo: { brief: UNSET } },
+    start: { logo: { path: "create", brief: UNSET } },
   },
   {
     title: "Logo, create: own colours",
-    input: create,
-    start: { logo: { brief: { ...UNSET, colours: { custom: [primary] } } } },
+    start: {
+      logo: {
+        path: "create",
+        brief: { ...UNSET, colours: { custom: [primary] } },
+      },
+    },
   },
   {
     title: "Logo, create: colours picked, logo type next",
-    input: create,
-    start: { logo: { brief: COLOURED } },
+    start: { logo: { path: "create", brief: COLOURED } },
   },
   {
     title: "Logo, create: type picked, style next",
-    input: create,
-    start: { logo: { brief: TYPED } },
+    start: { logo: { path: "create", brief: TYPED } },
   },
   {
     title: "Logo, create: ready to design",
-    input: create,
-    start: { logo: { brief: STYLED } },
+    start: { logo: { path: "create", brief: STYLED } },
   },
   {
     title: "Logo, create: surprise me picked",
-    input: create,
-    start: { logo: { brief: { ...TYPED, style: "surprise" } } },
+    start: {
+      logo: { path: "create", brief: { ...TYPED, style: "surprise" } },
+    },
   },
   {
     title: "Logo, drawing",
-    start: { logo: { brief: STYLED } },
-    rounds: [{ round: 1, status: "drawing", variants: [variant(0)] }],
-  },
-  {
-    title: "Logo, designs to pick from",
-    start: { logo: { brief: STYLED } },
-    rounds: [ROUND],
+    start: { logo: { path: "create", brief: PICKED } },
+    rounds: [
+      { round: 1, status: "drawing", variants: [variant(0)], brief: DRAWN },
+    ],
   },
   {
     title: "Logo, a design picked",
     start: {
       index: LOGO,
       answers: { logo: { logo: KEPT } },
-      logo: { brief: STYLED },
+      logo: { path: "create", brief: PICKED },
+    },
+    rounds: [ROUND],
+  },
+  {
+    title: "Logo, a setting changed: Design for me",
+    start: {
+      index: LOGO,
+      answers: { logo: { logo: KEPT } },
+      logo: { path: "create", brief: { ...PICKED, style: "retro" } },
     },
     rounds: [ROUND],
   },
@@ -394,7 +423,11 @@ const STATES: State[] = [
     start: {
       index: LOGO,
       answers: { logo: { logo: KEPT } },
-      logo: { brief: STYLED, changes: "Make the bucket smaller" },
+      logo: {
+        path: "create",
+        brief: PICKED,
+        changes: "Make the bucket smaller",
+      },
     },
     rounds: [ROUND],
   },
@@ -403,21 +436,33 @@ const STATES: State[] = [
     start: {
       index: LOGO,
       answers: { logo: { logo: KEPT } },
-      logo: { brief: STYLED, changes: "Try a rounder badge" },
+      logo: { path: "create", brief: PICKED, changes: "Try a rounder badge" },
+    },
+    rounds: [ROUND, SECOND],
+    services: waiting([ROUND, SECOND], 299),
+  },
+  {
+    title: "Logo, a setting changed while the next round waits",
+    start: {
+      index: LOGO,
+      answers: { logo: { logo: KEPT } },
+      logo: { path: "create", brief: { ...PICKED, type: "monogram" } },
     },
     rounds: [ROUND, SECOND],
     services: waiting([ROUND, SECOND], 299),
   },
   {
     title: "Logo, redesign refused for now",
-    start: { logo: { brief: STYLED, changes: "Warmer colours" } },
+    start: {
+      logo: { path: "create", brief: PICKED, changes: "Warmer colours" },
+    },
     rounds: [ROUND, SECOND],
     services: refused,
   },
   {
     title: "Logo, a second round failed",
-    start: { logo: { brief: STYLED } },
-    rounds: [ROUND, { round: 2, status: "failed", variants: [] }],
+    start: { logo: { path: "create", brief: PICKED } },
+    rounds: [ROUND, { round: 2, status: "failed", variants: [], brief: DRAWN }],
   },
   { title: "Palette, nothing picked", start: { index: PALETTE } },
   {
@@ -511,19 +556,17 @@ const STATES: State[] = [
   { title: "Phone width, logo", width: PHONE },
   {
     title: "Phone width, logo type",
-    input: create,
-    start: { logo: { brief: COLOURED } },
+    start: { logo: { path: "create", brief: COLOURED } },
     width: PHONE,
   },
   {
     title: "Phone width, logo style",
-    input: create,
-    start: { logo: { brief: STYLED } },
+    start: { logo: { path: "create", brief: STYLED } },
     width: PHONE,
   },
   {
     title: "Phone width, logo designs",
-    start: { index: LOGO, logo: { brief: STYLED } },
+    start: { index: LOGO, logo: { path: "create", brief: PICKED } },
     rounds: [ROUND],
     width: PHONE,
   },

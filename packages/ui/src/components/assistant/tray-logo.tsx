@@ -52,13 +52,16 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react"
 
 /**
  * The logo question's page in the design tray, the first question and one
- * that cannot be skipped. It opens one section at a time, and a settled one
- * folds into a summary row that reopens it: do they have a logo; if so the
- * upload, else a few words on the look, the colours, the logo type and a
- * style. Design my logo draws a round of three, saved by the api, so a reload
- * reads the rounds back. Picking a design keeps it as the logo and answers
- * the question; Change my logo draws another round from the picked one,
- * after the wait the api sets between rounds.
+ * that cannot be skipped. It asks first whether they have a logo, nothing
+ * picked. Yes opens the upload. With no logo held, a round of three is drawn
+ * from the filled brief as the page opens, so No shows its designs with the
+ * first picked; above them the brief folds into summary rows (a few words on
+ * the look, the colours, the logo type and a style) that reopen it. Changing
+ * the brief turns the tray's primary into Design for me, which draws a round
+ * from it. Rounds are saved by the api, so a reload reads them back. Picking
+ * a design keeps it as the logo and answers the question; Change my logo
+ * draws another round from the picked one, after the wait the api sets
+ * between rounds.
  */
 
 /** The logo question's answer: the logo kept. */
@@ -145,6 +148,12 @@ const hex = (text: string) => {
   return /^#[0-9a-f]{6}$/.test(colour) ? colour : null
 }
 
+const sameBrief = (a: LogoBrief, b: LogoBrief) =>
+  a.description === b.description &&
+  a.type === b.type &&
+  a.style === b.style &&
+  a.colors.join() === b.colors.join()
+
 /** How long a wait has left, as Redesign says it. */
 export const waitText = (seconds: number) =>
   seconds >= 86_400
@@ -182,6 +191,7 @@ type Brief = {
 
 /** Where the catalog opens the page. */
 export type LogoStart = {
+  path?: "upload" | "create"
   brief?: Partial<Brief>
   /** The change field open, with these words. */
   changes?: string
@@ -223,23 +233,24 @@ function TrayLogo({
   palettes,
   setSubmit,
   start,
+  picking = false,
 }: TrayPageProps<LogoAnswer> & {
   /** The palettes the tray offers, the site's own first. */
   palettes: readonly OfferedPalette[]
   /** Sets the tray's primary button while this page has its own; undefined hands it back. */
   setSubmit: (submit: TrayFrameProps["submit"]) => void
   start?: LogoStart | undefined
+  /** Pick for me was pressed: with no logo yet, No and its first design. */
+  picking?: boolean | undefined
 }) {
   const id = useId()
   const services = useTrayServices()
   const [first] = question.card.preselected
-  const [path, setPath] = useState<"upload" | "create" | null>(
-    first === "upload" || first === "create" ? first : null
-  )
+  const [path, setPath] = useState(start?.path ?? null)
   const { draft: brief, keep: setBrief } = useTabDraft<Brief>(
     `logo-brief:${toolCallId}`,
-    // Opened filled, the site's own colours first, so Design my logo is
-    // one press; every part still changes.
+    // Opened filled, the site's own colours first, so the first round needs
+    // no answer; every part still changes.
     {
       description: "",
       colours: { palette: 0 },
@@ -255,7 +266,6 @@ function TrayLogo({
   const [nextAt, setNextAt] = useState<number | null>(null)
   const [at, setAt] = useState<number | null>(null)
   const [changes, setChanges] = useState<string | null>(start?.changes ?? null)
-  const [kept, setKept] = useState<string | null>(answer?.logo.id ?? null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [file, setFile] = useState<{ file: File; url: string } | null>(null)
@@ -309,8 +319,16 @@ function TrayLogo({
   const accept = question.upload?.accept ?? []
   const maxBytes = question.upload?.max_bytes ?? 0
   const paper = stops[0]
+  // A kept design or upload says which way was taken before a reload, once
+  // the rounds are read; nothing is picked for the owner otherwise.
+  const kept = answer?.logo.id ?? null
+  const keptDrawn = rounds.some((each) =>
+    each.variants.some((variant) => variant.id === kept)
+  )
+  const held = loaded ? (keptDrawn ? "create" : "upload") : null
+  // Pick for me with no logo yet takes a drawn design, whatever was chosen.
   const shownPath =
-    path ?? (rounds.length > 0 ? "create" : answer ? "upload" : null)
+    picking && !answer ? "create" : (path ?? (answer ? held : null))
   const round = at === null ? latest : rounds[at]
   const shownAt = at ?? rounds.length - 1
   const [uploadOption, createOption] = question.card.options
@@ -330,6 +348,19 @@ function TrayLogo({
     style: brief.style !== null,
   }
   const briefReady = settled.colours && settled.type && settled.style
+  // The brief as the api takes it, once every part is set.
+  const wanted: LogoBrief | null =
+    brief.type && brief.style && colors.length > 0
+      ? {
+          description: brief.description.trim(),
+          colors,
+          type: brief.type,
+          style: brief.style,
+        }
+      : null
+  // Changed since the newest round was drawn, so that round no longer shows it.
+  const changed =
+    wanted !== null && latest !== undefined && !sameBrief(wanted, latest.brief)
   // The first brief section still to answer, or the last.
   const limit = Math.max(
     BRIEF_PARTS.findIndex((part) => !settled[part]),
@@ -363,7 +394,6 @@ function TrayLogo({
       const stored = assets[0]
       if (!stored) throw new Error("The logo did not upload. Try again.")
       const { asset } = await services.keepLogo(stored.id)
-      setKept(null)
       onAnswer({ logo: asset })
       setFile(null)
     } catch (failure) {
@@ -385,21 +415,20 @@ function TrayLogo({
     void send(chosen)
   }
 
+  /** Starts a round from the brief as it stands; true once it has started. */
   const draw = async (extra: { changes?: string; base?: string }) => {
-    if (!services) return setError(NO_SERVICES)
-    if (!brief.type || !brief.style || colors.length === 0) return
+    if (!services) {
+      setError(NO_SERVICES)
+      return false
+    }
+    if (!wanted) return false
     asked.current = extra
     setError(null)
     setBusy("draw")
     try {
       const started = await services.drawLogos({
         tool_call_id: toolCallId,
-        brief: {
-          description: brief.description.trim(),
-          colors,
-          type: brief.type,
-          style: brief.style,
-        },
+        brief: wanted,
         ...extra,
       })
       setRounds((now) => [
@@ -409,10 +438,12 @@ function TrayLogo({
       setAt(null)
       setChanges(null)
       setFocus(null)
+      return true
     } catch (failure) {
       const wait = retryAfter(failure)
       if (wait) setNextAt(Date.now() + wait * 1000)
       setError(sentence(failure, "The designs did not start. Try again."))
+      return false
     } finally {
       setBusy(null)
     }
@@ -424,7 +455,6 @@ function TrayLogo({
     setBusy(variant)
     try {
       const { asset } = await services.keepLogo(variant)
-      setKept(variant)
       onAnswer({ logo: asset })
     } catch (failure) {
       setError(sentence(failure, "That design was not saved. Try again."))
@@ -433,41 +463,34 @@ function TrayLogo({
     }
   }
 
-  // With no logo held the page opens on making one: one round starts by
-  // itself from the filled brief, and its first design is kept as it lands,
-  // so Looks good takes it. A pick or an upload in the meantime wins. A page
-  // the catalog opens in a given state stays in it.
-  const auto = useRef<"draw" | "keep" | "done">(
-    first === "create" && !answer && !start ? "draw" : "done"
-  )
-  // biome-ignore lint/correctness/useExhaustiveDependencies: steps on the rounds read, once each
+  // With no logo held (the api ticks create) one round starts as the page
+  // opens, from the filled brief, before the owner says whether they have a
+  // logo, so No has designs at once. A page the catalog opens in a given
+  // state stays in it.
+  const auto = useRef(first === "create" && !answer && !start)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once, when the rounds drawn before are read
   useEffect(() => {
-    if (!loaded || auto.current === "done") return
-    if (auto.current === "draw") {
-      auto.current = "keep"
-      if (rounds.length === 0) {
-        void draw({})
-        return
-      }
+    if (!loaded || !auto.current) return
+    auto.current = false
+    if (rounds.length === 0) void draw({})
+  }, [loaded])
+
+  // On No the newest round's first design is the pick, as it lands, until
+  // the owner picks another. A failed keep waits for the owner.
+  const [firstDesign] = latest?.status === "ready" ? latest.variants : []
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keep is a fresh closure each render
+  useEffect(() => {
+    if (create && firstDesign && !keptDrawn && busy === null && !error) {
+      void keep(firstDesign.id)
     }
-    const [landed] = rounds
-    if (!landed || landed.status === "drawing") return
-    auto.current = "done"
-    const [design] = landed.variants
-    if (design && !answer && path === "create") void keep(design.id)
-  }, [loaded, rounds])
+  }, [create, firstDesign, keptDrawn, busy, error])
 
   // A new round starts from the picked design, wherever it was drawn.
   const redesign = () => {
     const words = changes?.trim()
-    const base = rounds.some((each) =>
-      each.variants.some((variant) => variant.id === kept)
-    )
-      ? (kept ?? undefined)
-      : undefined
     void draw({
       ...(words ? { changes: words } : {}),
-      ...(base ? { base } : {}),
+      ...(keptDrawn && kept ? { base: kept } : {}),
     })
   }
 
@@ -495,8 +518,6 @@ function TrayLogo({
   }
   const custom = colours && "custom" in colours ? colours.custom : null
 
-  const firstRound = create && rounds.length === 0
-
   // The section that opens comes into view once its fold has eased open.
   const page = useRef<HTMLDivElement>(null)
   const shownTop = useRef(top)
@@ -513,26 +534,32 @@ function TrayLogo({
     return () => clearTimeout(timer)
   }, [top])
 
-  // Before the first round the tray's primary button is Design my logo; a
-  // layout effect, so the tray never paints Next in its place.
+  // With no round yet, or a brief changed since the newest, the tray's
+  // primary is Design for me while rounds are left; a layout effect, so the
+  // tray never paints Next in its place.
+  const designFirst =
+    create && rounds.length < LOGO_ROUNDS_MAX && (!latest || changed)
   const design = useRef(() => undefined as undefined)
   design.current = () => {
-    // A logo kept before is set aside until a design is picked.
-    if (answer) onAnswer(undefined)
-    void draw({})
+    // The pick is set aside once the round starts; its first design follows.
+    void draw({}).then((started) => {
+      if (started && answer) onAnswer(undefined)
+    })
   }
-  const designDisabled = !briefReady || busy !== null
+  const designDisabled = !briefReady || busy !== null || left > 0
   const designBusy = busy === "draw"
+  const designLabel =
+    left > 0 ? `Design for me ${waitText(left)}` : "Design for me"
   useLayoutEffect(() => {
     setSubmit(
-      firstRound
+      designFirst
         ? {
             label: (
               <>
                 {designBusy ? (
                   <SpinnerGapIcon aria-hidden className="animate-spin" />
                 ) : null}
-                Design my logo
+                {designLabel}
               </>
             ),
             onSubmit: () => design.current(),
@@ -540,7 +567,7 @@ function TrayLogo({
           }
         : undefined
     )
-  }, [firstRound, designBusy, designDisabled, setSubmit])
+  }, [designFirst, designBusy, designDisabled, designLabel, setSubmit])
   useLayoutEffect(() => () => setSubmit(undefined), [setSubmit])
 
   return (
@@ -559,6 +586,8 @@ function TrayLogo({
             setPath(way)
             setFocus(null)
             setError(null)
+            // Yes sets a drawn design aside: the logo is the one they upload.
+            if (way === "upload" && keptDrawn) onAnswer(undefined)
           }}
           // A tap on the one already chosen folds the pair again.
           onRepick={() => setFocus(null)}
