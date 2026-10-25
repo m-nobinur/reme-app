@@ -935,9 +935,11 @@ describe("the assignment Workflow's step names", () => {
     expect([...names, "ready note", "say ready"]).toEqual(
       expected["owner build"]
     )
-    // Any other refusal is still final.
+    // Any other refusal is still final: the build ends failed, not stranded.
     script.reviewRefusal = "revision.not_preview"
-    await expect(drive([completion]).run()).rejects.toThrow()
+    advanced.length = 0
+    expect(await drive([completion]).run()).toMatchObject({ outcome: "failed" })
+    expect(advanced.at(-1)).toEqual(["failed", "workflow.errored"])
     script.reviewRefusal = null
   })
 
@@ -1003,6 +1005,14 @@ describe("a Developer that stops without a report", () => {
       outcome: "failed",
     })
     expect(advanced.at(-1)).toEqual(["failed", "developer.start_failed"])
+  })
+
+  it("ends failed as workflow.errored when any step runs out of retries", async () => {
+    advanced.length = 0
+    expect(await drive([], [], ["planning"]).run()).toMatchObject({
+      outcome: "failed",
+    })
+    expect(advanced.at(-1)).toEqual(["failed", "workflow.errored"])
   })
 
   it("stops and resumes a lead only once ten minutes have nothing in the log", async () => {

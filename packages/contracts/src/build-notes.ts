@@ -35,6 +35,7 @@ export const BUILD_FAILURES = {
   "sandbox.updating": { cause: "service", retry: "same_plan" },
   "sandbox.site_lost": { cause: "service", retry: "same_plan" },
   "pool.exhausted": { cause: "service", retry: "same_plan" },
+  "workflow.errored": { cause: "service", retry: "same_plan" },
   "information.unanswered": { cause: "unanswered", retry: null },
   "blueprint.undecided": { cause: "unanswered", retry: null },
 } as const satisfies Record<
@@ -51,6 +52,9 @@ export function buildFailure(reason: string | null): {
     ? BUILD_FAILURES[reason as keyof typeof BUILD_FAILURES]
     : { cause: "other", retry: null }
 }
+
+/** A build whose Workflow threw past its steps' retries. */
+export const WORKFLOW_ERRORED = "workflow.errored"
 
 /** The `events` type a note is stored under. */
 export const AGENT_NOTE = "agent.note"

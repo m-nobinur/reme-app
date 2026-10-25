@@ -11,6 +11,7 @@ import {
   buildFailure,
   type ChangeKind,
   siteUrl,
+  WORKFLOW_ERRORED,
 } from "@workspace/contracts"
 import {
   appendEvent,
@@ -228,6 +229,52 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
   AssignmentParams
 > {
   async run(event: WorkflowEvent<AssignmentParams>, step: WorkflowStep) {
+    try {
+      return await this.build(event, step)
+    } catch (error) {
+      // A step out of retries ends the Workflow. Without this the build reads
+      // as at work for ever (2026-10-25: a reload mid-build); it ends failed,
+      // gives up its sandbox and gets the usual retry and chat line instead.
+      const ids = {
+        orgId: event.payload.org_id,
+        assignmentId: event.payload.assignment_id,
+      }
+      const run = <T>(fn: (kit: Tenancy) => Promise<T>) => withKit(this.env, fn)
+      const ended = await step
+        .do("fail errored", () =>
+          run((kit) =>
+            advance(kit, ids, "failed", { reason: WORKFLOW_ERRORED })
+          )
+        )
+        .then(() => true)
+        .catch(() => false)
+      if (!ended) throw error
+      await step
+        .do("destroy sandbox errored", async () => {
+          await endSandbox(this.env, ids)
+          return { destroyed: ids.assignmentId }
+        })
+        .catch(() => null)
+      const { note } = await step
+        .do("retry errored", () =>
+          run((kit) => afterFailure(this.env, kit, ids))
+        )
+        .catch(() => ({ note: null }))
+      if (note) {
+        await step
+          .do("say errored", SAY_RETRIES, () =>
+            run((kit) => postNote(kit, ids.orgId, note))
+          )
+          .catch(() => null)
+      }
+      return { outcome: "failed" as const }
+    }
+  }
+
+  private async build(
+    event: WorkflowEvent<AssignmentParams>,
+    step: WorkflowStep
+  ) {
     const ids = {
       orgId: event.payload.org_id,
       assignmentId: event.payload.assignment_id,
