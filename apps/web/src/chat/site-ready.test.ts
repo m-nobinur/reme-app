@@ -65,3 +65,25 @@ it("moves into the tray as the same card and closes on a new message", async () 
   await act(async () => root.unmount())
   expect(tray.childElementCount).toBe(0)
 })
+
+it("holds its picture's place with the site's name, still", async () => {
+  const chat = document.createElement("div")
+  document.body.appendChild(chat)
+  const root = createRoot(chat)
+  await act(async () =>
+    root.render(
+      createElement(SiteReady, {
+        meta: "Ready now",
+        onApprove: () => undefined,
+        onMakeChanges: () => undefined,
+        pictures: null,
+        preview: "loading",
+        title: "Sparkle website",
+      })
+    )
+  )
+  const shot = chat.querySelector("[data-slot=shot]")
+  expect(shot?.textContent).toBe("Sparkle website")
+  expect(shot?.querySelector("[data-slot=diffusing]")).toBeNull()
+  await act(async () => root.unmount())
+})

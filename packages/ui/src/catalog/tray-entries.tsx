@@ -429,29 +429,6 @@ const STATES: State[] = [
     rounds: [ROUND],
   },
   {
-    title: "Logo, changing the picked design",
-    start: {
-      index: DESIGNS,
-      answers: { logo: { logo: KEPT } },
-      logo: {
-        path: "create",
-        brief: PICKED,
-        changes: "Make the bucket smaller",
-      },
-    },
-    rounds: [ROUND],
-  },
-  {
-    title: "Logo, waiting for the next round",
-    start: {
-      index: DESIGNS,
-      answers: { logo: { logo: KEPT } },
-      logo: { path: "create", brief: PICKED, changes: "Try a rounder badge" },
-    },
-    rounds: [ROUND, SECOND],
-    services: waiting([ROUND, SECOND], 299),
-  },
-  {
     title: "Logo, a setting changed while the next round waits",
     start: {
       index: DESIGNS,
@@ -464,7 +441,7 @@ const STATES: State[] = [
   {
     title: "Logo, redesign refused for now",
     start: {
-      logo: { path: "create", brief: PICKED, changes: "Warmer colours" },
+      logo: { path: "create", brief: { ...PICKED, style: "retro" } },
     },
     rounds: [ROUND, SECOND],
     services: refused,

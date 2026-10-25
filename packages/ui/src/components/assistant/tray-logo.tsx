@@ -44,7 +44,6 @@ import {
 } from "@workspace/ui/components/assistant/tray-services"
 import { Button } from "@workspace/ui/components/button"
 import { Diffusing } from "@workspace/ui/components/diffusing"
-import { Input } from "@workspace/ui/components/input"
 import { FIELD_ERROR } from "@workspace/ui/lib/card"
 import { checkPhotos, sizeText, typesText } from "@workspace/ui/lib/upload"
 import { cn } from "@workspace/ui/lib/utils"
@@ -61,9 +60,8 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react"
  * a style) that reopen it. Changing the brief turns the tray's primary and
  * its forward arrow into Redesign my logo, which draws a round from it.
  * Rounds are saved by the api, so a reload reads them back. Picking a design
- * keeps it as the logo and answers the question; Change my logo draws
- * another round from the picked one, after the wait the api sets between
- * rounds.
+ * keeps it as the logo and answers the question; another round comes after
+ * the wait the api sets between rounds.
  */
 
 /** The logo question's answer: the logo kept. */
@@ -198,8 +196,6 @@ type Brief = {
 export type LogoStart = {
   path?: LogoPath
   brief?: Partial<Brief>
-  /** The change field open, with these words. */
-  changes?: string
 }
 
 const BRIEF_PARTS = ["look", "colours", "type", "style"] as const
@@ -273,14 +269,11 @@ function TrayLogo({
   const [loaded, setLoaded] = useState(false)
   const [nextAt, setNextAt] = useState<number | null>(null)
   const [at, setAt] = useState<number | null>(null)
-  const [changes, setChanges] = useState<string | null>(start?.changes ?? null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [file, setFile] = useState<{ file: File; url: string } | null>(null)
   const [, tick] = useState(0)
   const replace = useRef<HTMLInputElement>(null)
-  // What the last round asked for beyond the brief, so Try again repeats it.
-  const asked = useRef<{ changes?: string; base?: string }>({})
 
   const latest = rounds.at(-1)
   const drawing = latest?.status === "drawing"
@@ -419,27 +412,24 @@ function TrayLogo({
   }
 
   /** Starts a round from the brief as it stands; true once it has started. */
-  const draw = async (extra: { changes?: string; base?: string }) => {
+  const draw = async () => {
     if (!services) {
       setError(NO_SERVICES)
       return false
     }
     if (!wanted) return false
-    asked.current = extra
     setError(null)
     setBusy("draw")
     try {
       const started = await services.drawLogos({
         tool_call_id: toolCallId,
         brief: wanted,
-        ...extra,
       })
       setRounds((now) => [
         ...now.filter((each) => each.round !== started.round),
         started,
       ])
       setAt(null)
-      setChanges(null)
       setFocus(null)
       return true
     } catch (failure) {
@@ -475,7 +465,7 @@ function TrayLogo({
   useEffect(() => {
     if (!loaded || !auto.current) return
     auto.current = false
-    if (rounds.length === 0) void draw({})
+    if (rounds.length === 0) void draw()
   }, [loaded])
 
   // On No the newest round's first design is the pick, as it lands, until
@@ -487,15 +477,6 @@ function TrayLogo({
       void keep(firstDesign.id)
     }
   }, [create, firstDesign, keptDrawn, busy, error])
-
-  // A new round starts from the picked design, wherever it was drawn.
-  const redesign = () => {
-    const words = changes?.trim()
-    void draw({
-      ...(words ? { changes: words } : {}),
-      ...(keptDrawn && kept ? { base: kept } : {}),
-    })
-  }
 
   // Random and Custom stay open to roll again or edit; a palette folds and the type opens.
   const setColours = (next: Colours, then: Part = "colours") => {
@@ -546,7 +527,7 @@ function TrayLogo({
   const design = useRef(() => undefined as undefined)
   design.current = () => {
     // The pick is set aside once the round starts; its first design follows.
-    void draw({}).then((started) => {
+    void draw().then((started) => {
       if (started && answer) onAnswer(undefined)
     })
   }
@@ -648,7 +629,7 @@ function TrayLogo({
                 <Button
                   className={ACCENT_RING}
                   disabled={busy === "draw"}
-                  onClick={() => void draw(asked.current)}
+                  onClick={() => void draw()}
                   size="sm"
                   type="button"
                   variant="outline"
@@ -721,61 +702,6 @@ function TrayLogo({
                 That is all the rounds for this logo. Pick one, or upload your
                 own.
               </p>
-            ) : round.status === "ready" && changes === null ? (
-              <Button
-                className={cn("self-start", ACCENT_RING)}
-                onClick={() => setChanges("")}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                Change my logo
-              </Button>
-            ) : round.status === "ready" && changes !== null ? (
-              <div className="flex @md:flex-row flex-col gap-2">
-                <Input
-                  aria-label="What should change?"
-                  autoComplete="off"
-                  autoFocus={start?.changes === undefined}
-                  className={cn("@md:flex-1 shrink-0", TRAY_FIELD)}
-                  maxLength={300}
-                  onChange={(event) => setChanges(event.currentTarget.value)}
-                  onKeyDown={(event) => {
-                    // Enter redesigns here, not the tray's Next.
-                    if (event.key !== "Enter") return
-                    event.preventDefault()
-                    event.stopPropagation()
-                    if (left <= 0 && busy === null && briefReady) redesign()
-                  }}
-                  placeholder={
-                    kept
-                      ? "What should change in the one you picked?"
-                      : "What should change?"
-                  }
-                  value={changes}
-                />
-                <div className="flex gap-2">
-                  <Button
-                    className={cn("tabular-nums", ACCENT_RING)}
-                    disabled={left > 0 || busy !== null || !briefReady}
-                    onClick={redesign}
-                    type="button"
-                  >
-                    {busy === "draw" ? (
-                      <SpinnerGapIcon aria-hidden className="animate-spin" />
-                    ) : null}
-                    {left > 0 ? `Redesign ${waitText(left)}` : "Redesign"}
-                  </Button>
-                  <Button
-                    className={ACCENT_RING}
-                    onClick={() => setChanges(null)}
-                    type="button"
-                    variant="ghost"
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </div>
             ) : null}
           </div>
         ) : null}
