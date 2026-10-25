@@ -162,6 +162,8 @@ export type Onboarding = Progress & {
    * than moving on with the change unmade.
    */
   changing?: readonly QuoteField[]
+  /** This turn's answer was the assistant's pick: a line says so (`withChoice`), so the next words leave out their acknowledgement. */
+  picked?: boolean
 }
 
 /** What the background call writes for later steps (`onboarding-prepare.ts`). */
@@ -227,6 +229,7 @@ export function voiceOf(o: Onboarding): Voice {
       direction?.custom ?? factValue(o.facts, "site.font")?.custom ?? null,
     ownColour: palette?.brand ?? palette?.custom ?? null,
     services: o.prepared?.services_phrase ?? null,
+    picked: o.picked === true,
   }
 }
 
@@ -1339,6 +1342,9 @@ export function applied(o: Onboarding, answer: Answer): Onboarding {
       ...(answer.kind === "facts" && answer.changing
         ? { changing: answer.changing }
         : {}),
+      ...((answer.kind === "facts"
+        ? answer.chose || answer.persona === "picked"
+        : answer.picked) && { picked: true }),
     }
   }
   if (answer.kind === "passed") {

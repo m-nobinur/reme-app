@@ -40,6 +40,8 @@ export type Voice = {
   ownColour: string | null
   /** The services as a short phrase written in the background, such as "your wedding cars". */
   services: string | null
+  /** The assistant just picked for the owner and said so, so a line leaves out its acknowledgement. */
+  picked?: boolean
 }
 
 /** FNV-1a over UTF-16 units: stable across isolates and deploys. */
@@ -239,20 +241,15 @@ Before the website, let's settle who I am on your team. Choose the name I'll go 
   // Phase 2 to 3: the new identity, then the website and the quote page.
   build_for_me: (v) => {
     const ask = `Would you like me to build a website for ${v.business}?`
+    const thanks = (line: string) => (v.picked ? "" : `${line}\n\n`)
     return [
-      `${v.assistant ? `${v.assistant} it is!` : `Thanks${comma(v.owner)}.`}
-
-I can also build ${v.business} a website, with a Request a quote page that sends each enquiry straight to me with the details you need to reply. If you already have a site, choose Skip for now.
+      `${thanks(v.assistant ? `${v.assistant} it is!` : `Thanks${comma(v.owner)}.`)}I can also build ${v.business} a website, with a Request a quote page that sends each enquiry straight to me with the details you need to reply. If you already have a site, choose Skip for now.
 
 ${ask}`,
-      `${v.assistant ? `I'm ${v.assistant} from now on${comma(v.owner)}.` : `Thanks${comma(v.owner)}.`}
-
-One more thing I can do: build a website for ${v.business}. Every page would point visitors to Request a quote, and each enquiry would reach me with what you need to quote the job. If you already have a site, just skip this.
+      `${thanks(v.assistant ? `I'm ${v.assistant} from now on${comma(v.owner)}.` : `Thanks${comma(v.owner)}.`)}One more thing I can do: build a website for ${v.business}. Every page would point visitors to Request a quote, and each enquiry would reach me with what you need to quote the job. If you already have a site, just skip this.
 
 ${ask}`,
-      `Thanks${comma(v.owner)}.
-
-If ${v.business} needs a website, I can build it. It would have a Request a quote page, so customers describe the job and the enquiry comes to me ready for a quote. If you already have one, skip this and I'll stick to enquiries and quotes.
+      `${thanks(`Thanks${comma(v.owner)}.`)}If ${v.business} needs a website, I can build it. It would have a Request a quote page, so customers describe the job and the enquiry comes to me ready for a quote. If you already have one, skip this and I'll stick to enquiries and quotes.
 
 ${ask}`,
     ]
@@ -267,10 +264,8 @@ ${ask}`,
     `We'll start with the overall layout. Which one suits ${v.business} best?`,
   ],
   palette: (v) => [
-    v.template
-      ? `${v.template} it is. Which colours feel right for ${v.business}?`
-      : `Thanks, I'll keep your notes in mind. Which colours feel right for ${v.business}?`,
-    `Noted. Now for colour. Which of these palettes fits ${v.business}?`,
+    `${v.picked ? "" : v.template ? `${v.template} it is. ` : "Thanks, I'll keep your notes in mind. "}Which colours feel right for ${v.business}?`,
+    `${v.picked ? "" : "Noted. "}Now for colour. Which of these palettes fits ${v.business}?`,
   ],
   font: (v) =>
     [
@@ -291,6 +286,7 @@ ${ask}`,
 
 /** The palette the owner just chose, said back before the next question. */
 function colourNoted(v: Voice): string {
+  if (v.picked) return ""
   if (v.palette) return `${v.palette} it is. `
   if (!v.ownColour) return ""
   return v.ownColour.startsWith("#")
@@ -365,10 +361,8 @@ export function started(v: Voice, uploaded: boolean): string {
   return say(
     v,
     pick(v, "started", [
-      `That's everything I need: ${services(v)}, your style${uploaded ? " and your photos" : ""}.
-
-I've started building the website for ${v.business} in the background. You'll see progress in the activity panel, and there's no need to wait: keep chatting or ask me anything while it runs. I'll let you know as soon as the first draft is ready.`,
-      `That's everything, thank you${comma(v.owner)}. I'm starting on the website for ${v.business} now.
+      `${v.picked ? "" : `That's everything I need: ${services(v)}, your style${uploaded ? " and your photos" : ""}.\n\n`}I've started building the website for ${v.business} in the background. You'll see progress in the activity panel, and there's no need to wait: keep chatting or ask me anything while it runs. I'll let you know as soon as the first draft is ready.`,
+      `${v.picked ? "" : `That's everything, thank you${comma(v.owner)}. `}I'm starting on the website for ${v.business} now.
 
 It builds in the background, and you can follow along in the activity panel. There's no need to sit and watch. Ask me anything in the meantime, and I'll tell you the moment the first draft is ready.`,
       `All set. The build for ${v.business} is under way.
