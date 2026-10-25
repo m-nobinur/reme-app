@@ -97,6 +97,21 @@ describe("the waiting line as a turn goes on", () => {
     expect(line()).toBe("Ellie is still working on it")
   })
 
+  it("shows each thought's heading as it comes, after the step, until the planner's own line", async () => {
+    await send({ kind: "step", step: "business.offerings", answered: false })
+    expect(line()).toBe("Looking at your services")
+    await send({ kind: "thinking", text: "Evaluating service models" })
+    expect(line()).toBe("Evaluating service models")
+    await wait(5)
+    await send({ kind: "thinking", text: "Prioritising recurring revenue" })
+    expect(line()).toBe("Prioritising recurring revenue")
+    await wait(12)
+    expect(line()).toBe("Ellie is still working on it")
+    await send({ kind: "doing", text: "Checking your services" })
+    await send({ kind: "thinking", text: "Weighing the options" })
+    expect(line()).toBe("Checking your services")
+  })
+
   it("with no status, goes from reading to longer than usual, never thinking", async () => {
     expect(line()).toBe("Ellie is reading your message")
     await wait(4)

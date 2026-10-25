@@ -188,8 +188,8 @@ export function turnMoment(elapsedSeconds: number, ctx: CopyContext) {
 }
 
 /**
- * A turn's line before its first word: its latest onboarding status while
- * it is fresh, then how long it has stood, so the words change only when
+ * A turn's line before its first word: its latest status (an onboarding
+ * step, or the heading of the thought the model is on) while it is fresh, then how long it has stood, so the words change only when
  * something did.
  */
 export const waitingLine = (
@@ -632,7 +632,7 @@ const NEXT_LINE: Record<
 }
 
 export const onboardingLine = (on: OnboardingStatus["on"]) =>
-  on.kind === "doing"
+  on.kind === "doing" || on.kind === "thinking"
     ? on.text
     : on.kind === "step"
       ? stepLine(on.step, on.answered)
@@ -655,13 +655,15 @@ const NEXT_KIND: Record<
   answer_only: "writing",
 }
 
-/** The icon for `onboardingLine`: a reply being read, a fact noted down, or the move being made ready. */
+/** The icon for `onboardingLine`: a reply being read, a thought, a fact noted down, or the move being made ready. */
 export const onboardingKind = (on: OnboardingStatus["on"]): StatusKind =>
   on.kind === "next"
     ? NEXT_KIND[on.next]
-    : on.kind === "step" && !on.answered
-      ? "reading"
-      : "planning"
+    : on.kind === "thinking"
+      ? "thinking"
+      : on.kind === "step" && !on.answered
+        ? "reading"
+        : "planning"
 
 // ---------------------------------------------------------------------------
 // Segments: a title, a line under it and a done title, with the business and

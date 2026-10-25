@@ -7,9 +7,10 @@ import {
 import { useEffect, useState, useSyncExternalStore } from "react"
 
 /**
- * What the onboarding planner is on in the turn in flight, from its
- * `ONBOARDING_STATUS` parts, for the waiting line. One chat streams at a
- * time, so one value for the page; null between turns.
+ * What the turn in flight is on, from its `ONBOARDING_STATUS` parts, for the
+ * waiting line: the onboarding planner's step or line, or the heading of the
+ * thought the model is on in any chat. One chat streams at a time, so one
+ * value for the page; null between turns.
  */
 let latest: OnboardingStatus["on"] | null = null
 const listeners = new Set<() => void>()
