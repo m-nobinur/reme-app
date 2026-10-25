@@ -328,9 +328,14 @@ const create: AskDesignInput = {
   ),
 }
 
+/** The logo's two pages, whether they have one and then its designs or upload. */
 const LOGO = 0
-const PALETTE = 1
-const LETTERING = 2
+const DESIGNS = 1
+const PALETTE = 2
+const LETTERING = 3
+const LAYOUT = 4
+const PHOTOS = 5
+const PAGES_ASKED = 6
 const PHONE = "max-w-[22.5rem]"
 const SECOND: LogoRound = { ...ROUND, round: 2 }
 
@@ -348,11 +353,16 @@ type State = {
 const STATES: State[] = [
   // No start: designs draw behind the question; No shows them, the first picked.
   { title: "Logo, nothing chosen", input: create },
+  {
+    title: "Logo, back on the question, No picked",
+    start: { index: LOGO, logo: { path: "create", brief: PICKED } },
+    rounds: [ROUND],
+  },
   { title: "Logo, upload", start: { logo: { path: "upload" } } },
   {
     title: "Logo, uploaded and kept",
     start: {
-      index: LOGO,
+      index: DESIGNS,
       answers: { logo: { logo: KEPT } },
       logo: { path: "upload" },
     },
@@ -403,7 +413,7 @@ const STATES: State[] = [
   {
     title: "Logo, a design picked",
     start: {
-      index: LOGO,
+      index: DESIGNS,
       answers: { logo: { logo: KEPT } },
       logo: { path: "create", brief: PICKED },
     },
@@ -412,7 +422,7 @@ const STATES: State[] = [
   {
     title: "Logo, a setting changed: Redesign my logo",
     start: {
-      index: LOGO,
+      index: DESIGNS,
       answers: { logo: { logo: KEPT } },
       logo: { path: "create", brief: { ...PICKED, style: "retro" } },
     },
@@ -421,7 +431,7 @@ const STATES: State[] = [
   {
     title: "Logo, changing the picked design",
     start: {
-      index: LOGO,
+      index: DESIGNS,
       answers: { logo: { logo: KEPT } },
       logo: {
         path: "create",
@@ -434,7 +444,7 @@ const STATES: State[] = [
   {
     title: "Logo, waiting for the next round",
     start: {
-      index: LOGO,
+      index: DESIGNS,
       answers: { logo: { logo: KEPT } },
       logo: { path: "create", brief: PICKED, changes: "Try a rounder badge" },
     },
@@ -444,7 +454,7 @@ const STATES: State[] = [
   {
     title: "Logo, a setting changed while the next round waits",
     start: {
-      index: LOGO,
+      index: DESIGNS,
       answers: { logo: { logo: KEPT } },
       logo: { path: "create", brief: { ...PICKED, type: "monogram" } },
     },
@@ -523,17 +533,20 @@ const STATES: State[] = [
   { title: "Lettering, may be skipped", start: { index: LETTERING } },
   {
     title: "Arrangement, picked",
-    start: { index: 3, answers: { arrangement: { choice: "dark_rows" } } },
+    start: { index: LAYOUT, answers: { arrangement: { choice: "dark_rows" } } },
   },
-  { title: "Photos, nothing yet", start: { index: 4 } },
+  { title: "Photos, nothing yet", start: { index: PHOTOS } },
   {
     title: "Last question, own words typed",
-    start: { index: 5, answers: { pages: { own: "A page for our prices" } } },
+    start: {
+      index: PAGES_ASKED,
+      answers: { pages: { own: "A page for our prices" } },
+    },
   },
   {
     title: "Pages, several ticked",
     start: {
-      index: 5,
+      index: PAGES_ASKED,
       answers: { pages: { choices: ["services", "gallery", "faq"] } },
     },
   },
@@ -566,7 +579,7 @@ const STATES: State[] = [
   },
   {
     title: "Phone width, logo designs",
-    start: { index: LOGO, logo: { path: "create", brief: PICKED } },
+    start: { index: DESIGNS, logo: { path: "create", brief: PICKED } },
     rounds: [ROUND],
     width: PHONE,
   },
@@ -576,8 +589,8 @@ const STATES: State[] = [
     start: { index: LETTERING },
     width: PHONE,
   },
-  { title: "Phone width, layout", start: { index: 3 }, width: PHONE },
-  { title: "Phone width, photos", start: { index: 4 }, width: PHONE },
+  { title: "Phone width, layout", start: { index: LAYOUT }, width: PHONE },
+  { title: "Phone width, photos", start: { index: PHOTOS }, width: PHONE },
 ]
 
 /** Each state's tray, under its title; `name` keeps each entry's logo brief its own. */
@@ -634,7 +647,16 @@ const trayCatalog: CatalogEntry[] = [
     ] as const
   ).map((name) => ({
     name,
-    render: () => <States name={name} states={only("Logo, upload")} />,
+    render: () => (
+      <States
+        name={name}
+        states={only(
+          "Logo, nothing chosen",
+          "Logo, upload",
+          "Logo, a design picked"
+        )}
+      />
+    ),
   })),
   // The palette page's parts, its own and those built from the logo.
   ...(["PalettePicture", "Swatches", "Surprise", "LogoPalettes"] as const).map(

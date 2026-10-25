@@ -15,6 +15,7 @@ import {
   type PaletteStops,
 } from "@workspace/contracts"
 import {
+  type LogoPath,
   type LogoStart,
   TrayLogo,
 } from "@workspace/ui/components/assistant/tray-logo"
@@ -46,6 +47,7 @@ import {
 import { layoutLook, PICK_FOR_ME } from "@workspace/ui/lib/tool-state"
 import { cn } from "@workspace/ui/lib/utils"
 import {
+  Activity,
   type ComponentProps,
   createContext,
   type KeyboardEvent,
@@ -1197,6 +1199,7 @@ function TrayFrame({
 
 /** Where a tray starts, when it does not start fresh. The catalog draws every state with it. */
 type Start = {
+  /** The page, counted from the end when negative, as `at` counts. */
   index?: number
   collapsed?: boolean
   answers?: Record<string, Answer>
@@ -1221,9 +1224,11 @@ type QuestionTrayProps = {
 }
 
 /**
- * The design questions of a build, one page each: the options as a native
- * radio group, or checkboxes on a question that takes several, Write your
- * own, and Next, which reads Looks good on the last. Answers are code's:
+ * The design questions of a build, one page each, and two for the logo:
+ * whether they have one, then the upload or the designs. A page shows the
+ * options as a native radio group, or checkboxes on a question that takes
+ * several, Write your own, and Next, which reads Looks good on the last.
+ * Answers are code's:
  * `onAnswer` gets each one as the owner leaves its question, `onFinish` the
  * `AskDesignOutput` on Looks good or Pick for me.
  */
@@ -1237,6 +1242,14 @@ function QuestionTray({
   className,
 }: QuestionTrayProps) {
   const { questions } = input
+  const pages = questions.flatMap((each) =>
+    each.visual === "logo"
+      ? [
+          { question: each, choice: true },
+          { question: each, choice: false },
+        ]
+      : [{ question: each, choice: false }]
+  )
   const id = useId()
   // Options the api opened ticked, and own words it holds, are answers
   // already given, so a reload resumes on the first question without one.
@@ -1267,16 +1280,27 @@ function QuestionTray({
     answers: Record<string, Answer>
     index: number
     picture: PaletteFromImage | null
+    logoPath?: LogoPath | null
   } | null>(`design:${toolCallId}`, null)
   const [answers, setAnswers] = useState(
     start?.answers ?? { ...ticked, ...saved?.answers }
   )
-  const firstOpen = questions.findIndex((each) => !(each.id in answers))
-  const [index, setIndex] = useState(
-    start?.index ??
-      saved?.index ??
-      (firstOpen < 0 ? questions.length - 1 : firstOpen)
+  // Whether they have a logo, the logo's first page; the tray holds it, so
+  // the second page knows its way before it paints.
+  const [logoPath, setLogoPath] = useState(
+    start?.logo?.path ?? saved?.logoPath ?? null
   )
+  const firstOpen = pages.findIndex(
+    (each) =>
+      !(each.question.id in answers) && !(each.choice && logoPath !== null)
+  )
+  const [index, setIndex] = useState(() => {
+    const at =
+      start?.index ??
+      saved?.index ??
+      (firstOpen < 0 ? pages.length - 1 : firstOpen)
+    return at < 0 ? pages.length + at : at
+  })
   const [collapsed, setCollapsed] = useState(start?.collapsed ?? false)
   const [finishing, setFinishing] = useState(false)
   // A palette read from a picture stays offered when another is picked.
@@ -1289,8 +1313,8 @@ function QuestionTray({
   )
   // biome-ignore lint/correctness/useExhaustiveDependencies: saved on change only
   useEffect(() => {
-    save({ answers, index, picture })
-  }, [answers, index, picture])
+    save({ answers, index, picture, logoPath })
+  }, [answers, index, picture, logoPath])
   const logoQuestion = questions.find((each) => each.visual === "logo")
   const logoAnswer = logoQuestion && answers[logoQuestion.id]
   const fromLogo = useLogoPalettes(
@@ -1300,8 +1324,9 @@ function QuestionTray({
   const [logoSubmit, setLogoSubmit] = useState<TrayFrameProps["submit"]>()
   const focusComposer = useFocusComposer()
 
-  const question = questions[index]
-  if (!question) return null
+  const step = pages[index]
+  if (!step) return null
+  const { question, choice } = step
   const name = businessName?.trim() || "Your business"
   const palettes = offeredPalettes(questions, answers)
   const paletteQuestion = questions.find((each) => each.visual === "palette")
@@ -1317,17 +1342,22 @@ function QuestionTray({
   const stops = previewPalette
     ? pictureStops(previewPalette.stops)
     : palettes[0].stops
-  const total = questions.length
+  const total = pages.length
   const last = index === total - 1
   const answer = answers[question.id]
   const skippable = question.card.skippable
-  const ready = answer !== undefined || skippable
+  // The logo's first page is answered by the way picked, or a logo held.
+  const ready = answer !== undefined || (choice ? logoPath !== null : skippable)
+  const designs = pages.findIndex(
+    (each) => each.question.visual === "logo" && !each.choice
+  )
   const other = question.card.other
 
   /** Hands the current answer on, and returns the answers with it. */
   const settle = (skipping: boolean, chosen = answer) => {
     const given = chosen ?? (skipping && skippable ? { skipped: true } : null)
-    if (!given) return answers
+    // The logo's first page sends nothing: its answer is the second's.
+    if (!given || choice) return answers
     const now = { ...answers, [question.id]: given } as typeof answers
     onAnswer?.(question.id, given as Answer)
     setAnswers(now)
@@ -1337,15 +1367,20 @@ function QuestionTray({
     settle(skipping, chosen)
     setIndex(to)
   }
-  // The logo cannot be skipped: Pick for me without one opens its page, whose
-  // primary button then finishes.
+  // The logo cannot be skipped: Pick for me without one opens its designs,
+  // or the upload on Yes, and the logo kept there finishes. A logo brief
+  // changed since its designs is the owner's too: it is drawn first.
   const finish = (skipAll: boolean, chosen = answer) => {
+    if (logo && logoSubmit && !logoSubmit.disabled) {
+      setIndex(designs)
+      setFinishing(true)
+      logoSubmit.onSubmit?.()
+      return
+    }
     const now = settle(!skipAll, chosen)
-    const logo = questions.findIndex(
-      (each) => each.visual === "logo" && !(each.id in now)
-    )
-    if (logo >= 0) {
-      setIndex(logo)
+    if (logoQuestion && !(logoQuestion.id in now)) {
+      setLogoPath((way) => way ?? "create")
+      setIndex(designs)
       setFinishing(true)
       return
     }
@@ -1415,6 +1450,8 @@ function QuestionTray({
     set(words.trim() ? { own: words } : undefined)
 
   const logo = question.visual === "logo"
+  // The designs page's own primary, which the forward arrow follows too.
+  const designsSubmit = logo && !choice ? logoSubmit : undefined
 
   return (
     <TrayFrame
@@ -1423,10 +1460,20 @@ function QuestionTray({
       hint={multiple ? "Pick any that fit" : null}
       onBack={index === 0 ? undefined : () => go(index - 1, false)}
       onCollapsedChange={setCollapsed}
-      onForward={last || !ready ? undefined : () => go(index + 1, true)}
+      onForward={
+        designsSubmit
+          ? designsSubmit.disabled
+            ? undefined
+            : designsSubmit.onSubmit
+          : last || !ready
+            ? undefined
+            : () => go(index + 1, true)
+      }
       page={{ index, total }}
       pick={{ onPick: () => finish(true), disabled: finishing && !ready }}
-      question={question.question ?? "Choose one"}
+      question={
+        logo && !choice ? "Your logo" : (question.question ?? "Choose one")
+      }
       status={
         finishing && !ready
           ? "A logo is all that is still needed"
@@ -1435,7 +1482,7 @@ function QuestionTray({
             : null
       }
       submit={
-        (logo && logoSubmit) || {
+        designsSubmit || {
           label: last || finishing ? "Looks good" : "Next",
           onSubmit: next,
           disabled: !ready,
@@ -1443,16 +1490,27 @@ function QuestionTray({
       }
     >
       {question.visual === "font_pair" && <PreviewFaces />}
-      {logo ? (
-        <TrayLogo
-          {...page}
-          answer={answer && "logo" in answer ? answer : undefined}
-          onAnswer={set}
-          palettes={palettes}
-          picking={finishing}
-          setSubmit={setLogoSubmit}
-          start={start?.logo}
-        />
+      {logoQuestion ? (
+        // Kept while other pages show, so going back finds the logo page as
+        // it was left, its designs drawn, with nothing read again first.
+        <Activity mode={logo ? "visible" : "hidden"}>
+          <TrayLogo
+            {...page}
+            answer={logoAnswer && "logo" in logoAnswer ? logoAnswer : undefined}
+            onAnswer={set}
+            onPath={(way) => {
+              setLogoPath(way)
+              setIndex(designs)
+            }}
+            palettes={palettes}
+            path={logoPath}
+            picking={finishing}
+            question={logoQuestion}
+            setSubmit={setLogoSubmit}
+            start={start?.logo}
+            step={choice ? "choice" : "designs"}
+          />
+        </Activity>
       ) : null}
       {question.visual === "photos" ? (
         <TrayPhotos

@@ -87,7 +87,7 @@ const AskDesign: ToolCallMessagePartComponent = (props) => {
           sent.current
             ? {
                 answers: sent.current.answers,
-                index: view.input.questions.length - 1,
+                index: -1,
               }
             : undefined
         }

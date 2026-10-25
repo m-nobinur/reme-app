@@ -260,12 +260,12 @@ export async function answerOnboarding(page: Page): Promise<void> {
         card.getByRole("button", { name: "Skip", exact: true }).click()
       )
     } else if (slot === "ask-design") {
-      // The design tray opens on the logo question, nothing picked. No shows
-      // the designs drawn as it opened and keeps the first as it lands; Pick
-      // for me then sends that logo and the picks already made.
+      // The design tray opens on whether they have a logo, nothing picked.
+      // No moves on to the designs drawn as it opened and keeps the first as
+      // it lands; Pick for me then sends that logo and the picks already made.
       const no = card.getByRole("radio", { name: /^No, create one for me/ })
       if (await no.isVisible()) {
-        if (!(await no.isChecked())) await step(() => no.check())
+        await step(() => no.click())
         await expect(
           card
             .getByRole("radiogroup", { name: "Logo designs" })
