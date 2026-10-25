@@ -165,7 +165,7 @@ function Docked({
         <div
           data-slot={name}
           ref={ref}
-          className="motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-2 duration-250 ease-out motion-safe:animate-in"
+          className="motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-2 duration-enter ease-standard motion-safe:animate-in"
         >
           {children}
         </div>,
@@ -326,7 +326,7 @@ function Fold({ open, children }: { open: boolean; children: ReactNode }) {
   return (
     <div
       className={cn(
-        "-mx-1 grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none",
+        "-mx-1 grid transition-[grid-template-rows,opacity] duration-enter ease-standard motion-reduce:transition-none",
         open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
       )}
       inert={!open}
@@ -1079,7 +1079,7 @@ function TrayFrame({
                 instead, the ones in a folded section stretched the thread
                 and the composer slid as it scrolled. */}
             <div
-              className="relative min-h-0 overflow-y-auto rounded-b-3xl bg-(--body) transition-[height] duration-200 ease-out motion-reduce:transition-none"
+              className="relative min-h-0 overflow-y-auto rounded-b-3xl bg-(--body) transition-[height] duration-enter ease-standard motion-reduce:transition-none"
               id={`${id}-body`}
               onScroll={measure}
               ref={bodyRef}

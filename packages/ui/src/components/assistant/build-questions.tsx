@@ -109,7 +109,7 @@ function BuildQuestionsPart({ data }: { data: BuildQuestions }) {
       <Docked name="build-questions" settled>
         {/* It fades for the last 250 ms of its `FOLDED_MS`. */}
         <div
-          className="motion-safe:fade-out-0 rounded-[var(--composer-radius,var(--radius-4xl))] border border-border bg-card px-5 py-3 motion-safe:animate-out motion-safe:fill-mode-forwards motion-safe:delay-1250 motion-safe:duration-250"
+          className="motion-safe:fade-out-0 rounded-[var(--composer-radius,var(--radius-4xl))] border border-border bg-card px-5 py-3 motion-safe:animate-out motion-safe:fill-mode-forwards motion-safe:delay-1250 motion-safe:duration-enter"
           role="status"
         >
           <Done>Thanks, that's everything I needed.</Done>

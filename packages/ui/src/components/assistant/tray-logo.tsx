@@ -936,7 +936,7 @@ function TrayLogo({
                           <img
                             alt={`Design ${place + 1}`}
                             // Lands from a blur, as tw-animate-css draws it.
-                            className="motion-safe:fade-in aspect-square w-full rounded-lg object-contain p-2 duration-600 ease-out motion-safe:animate-in motion-safe:blur-in-md"
+                            className="motion-safe:fade-in aspect-square w-full rounded-lg object-contain p-2 duration-slow ease-standard motion-safe:animate-in motion-safe:blur-in-md"
                             key={variant.id}
                             src={services.imageUrl(variant.id)}
                             style={{ backgroundColor: paper }}
@@ -1090,7 +1090,7 @@ function CustomColours({
           // biome-ignore lint/a11y/noStaticElementInteractions: only listens for focus leaving the colour's own fields
           <div
             className={cn(
-              "group/colour flex min-w-6 flex-1 items-center justify-center transition-[flex] duration-200 ease-out motion-reduce:transition-none",
+              "group/colour flex min-w-6 flex-1 items-center justify-center transition-[flex] duration-fast ease-standard motion-reduce:transition-none",
               !alone &&
                 (editing === place
                   ? OPEN_COLOUR
@@ -1266,7 +1266,7 @@ function Cycling({
         <img
           alt=""
           className={cn(
-            "absolute inset-0 size-full object-contain transition-[opacity,scale,filter] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none",
+            "absolute inset-0 size-full object-contain transition-[opacity,scale,filter] duration-slow ease-standard motion-reduce:transition-none",
             place === shown
               ? "scale-100 opacity-100 blur-[0px]"
               : "scale-110 opacity-0 blur-[4px]"
