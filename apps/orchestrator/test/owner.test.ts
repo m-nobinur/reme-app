@@ -46,16 +46,20 @@ vi.mock("../src/agents/developer.ts", () => ({ Developer: {} }))
 // seen before with the same submission gets its first receipt back and
 // delivers nothing, and with any other submission throws
 // `SubmissionConflictError`, as flue does.
-const { dispatched, admitted, attempts } = vi.hoisted(() => ({
+const { dispatched, admitted, attempts, developer } = vi.hoisted(() => ({
   dispatched: [] as { message: unknown; idempotencyKey?: string }[],
   admitted: new Map<string, { message: string; submissionId: string }>(),
   /** Every dispatch call, admitted or not. */
   attempts: { count: 0 },
+  /** Whether the build's Developer exists, as `getAgentInstance` reads it. */
+  developer: { exists: true },
 }))
 vi.mock("@workspace/facade", async (importOriginal) => {
   const real = await importOriginal<typeof import("@workspace/facade")>()
   return {
     ...real,
+    getAgentInstance: async (_agent: unknown, id: string) =>
+      developer.exists ? { id, uid: "uid-1" } : null,
     init: () => ({
       dispatch: async (request: {
         message: unknown
@@ -298,6 +302,35 @@ live("an owner starting a build", () => {
         owner: true,
       }),
     ])
+  })
+
+  it("refuses a steer with no Developer to reach, and never makes one", async () => {
+    const { orgId } = await ownerOrg(kit)
+    const ids = await newAssignment(kit, orgId)
+    for (const to of ["briefing", "planning", "implementing"] as const) {
+      await advance(kit, ids, to)
+    }
+    dispatched.length = 0
+    developer.exists = false
+    try {
+      const steered = await owner(orgId, `/${ids.assignmentId}/steer`, {
+        message: "Make the header green",
+      })
+      expect(steered.status).toBe(409)
+      expect(await steered.json()).toMatchObject({ code: "steer.not_running" })
+    } finally {
+      developer.exists = true
+    }
+    expect(dispatched).toHaveLength(0)
+    const logged = await kit.withOrg({ orgId }, (db) =>
+      db
+        .select()
+        .from(events)
+        .where(
+          sql`${events.assignmentId} = ${ids.assignmentId} and ${events.type} = 'assignment.steered'`
+        )
+    )
+    expect(logged).toHaveLength(0)
   })
 
   it("delivers a steer once for its key, and gives a retry the same receipt", async () => {

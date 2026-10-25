@@ -43,7 +43,12 @@ import {
   toSiteRevision,
   waitedOn,
 } from "@workspace/db"
-import { canonical, init, SubmissionConflictError } from "@workspace/facade"
+import {
+  canonical,
+  getAgentInstance,
+  init,
+  SubmissionConflictError,
+} from "@workspace/facade"
 import {
   PREVIEW_TTL_S,
   SCREENSHOTS,
@@ -1190,6 +1195,10 @@ bridge.post("/:id/steer", async (c) => {
     })
   }
   const taint: TaintLabel[] = byOwner(c) ? ["untrusted_input"] : []
+  // A build with no Developer (the quick lane's one call, or one not yet
+  // admitted) has nothing to steer. An unconditional send created one with no
+  // brief, whose submission failed at render and was recovered again and again.
+  const uid = (await getAgentInstance(Developer, id))?.uid
   const reused = () =>
     failure(c, 409, {
       class: "validation",
@@ -1215,6 +1224,7 @@ bridge.post("/:id/steer", async (c) => {
       throw error
     }
     const held = found.state === "blocked_on_information"
+    if (!held && !uid) return { idle: true as const }
     const steered = await steerByKey(db, key)
     if (steered) {
       const same =
@@ -1237,6 +1247,15 @@ bridge.post("/:id/steer", async (c) => {
   })
   if ("missing" in result) return notFound(c, id)
   if ("reused" in result) return reused()
+  if ("idle" in result) {
+    return failure(c, 409, {
+      class: "validation",
+      code: "steer.not_running",
+      message:
+        "This build is finishing and takes no more changes. Try again once it is ready.",
+      detail: {},
+    })
+  }
   // A build waiting on the owner's answer gets the steer with that answer
   // (cloudflare.ts `resume`), so its Developer never wakes mid-wait.
   if (result.held) {
@@ -1248,7 +1267,8 @@ bridge.post("/:id/steer", async (c) => {
   // the first receipt back without a second turn.
   let receipt: { submissionId: string }
   try {
-    receipt = await init(Developer, { id }).dispatch({
+    // Continues that incarnation only, so a Developer gone since is never made anew.
+    receipt = await init(Developer, { id, uid }).dispatch({
       message: byOwner(c)
         ? {
             kind: "signal",
