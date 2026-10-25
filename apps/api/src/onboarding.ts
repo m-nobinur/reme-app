@@ -477,30 +477,36 @@ const asCome = (card: PersonaCard) => {
 }
 
 /**
- * A details card: the step's facts together, each one the org holds filled
- * in, the sign-in email offered as the business's until one is held, and
- * the assistant as it comes where nothing is held.
+ * What a details card opens on: the step's facts, each one the org holds
+ * filled in, the sign-in email offered as the business's until one is held,
+ * and the assistant as it comes where nothing is held. Pick for me sends
+ * exactly this, tapped or typed.
  */
-export const detailsCard = (
-  step: DetailsStep,
-  o: Onboarding,
-  newId: () => string
-) => {
+const prefillOf = (step: DetailsStep, o: Onboarding): FactValue[] => {
   const held = DETAILS_KEYS[step].flatMap((key) => {
     const value = factValue(o.facts, key)
-    return value === undefined ? [] : [{ key, value }]
+    // A held key's own value: the pairing the compiler cannot follow through a loop.
+    return value === undefined ? [] : [{ key, value } as FactValue]
   })
   const email = FactValue.safeParse({
     key: "business.email",
     value: { address: o.ownerEmail ?? "" },
   })
   const unheld = (fact: FactValue) => !has(o, fact.key)
-  const prefill =
-    step === "contact"
-      ? !has(o, "business.email") && email.success
-        ? [...held, email.data]
-        : held
-      : [...held, ...PERSONA.filter(unheld)]
+  return step === "contact"
+    ? !has(o, "business.email") && email.success
+      ? [...held, email.data]
+      : held
+    : [...held, ...PERSONA.filter(unheld)]
+}
+
+/** A details card, opened on what `prefillOf` gives. */
+export const detailsCard = (
+  step: DetailsStep,
+  o: Onboarding,
+  newId: () => string
+) => {
+  const prefill = prefillOf(step, o)
   // Names written for this business, when the background call has them.
   const ideas = step === "assistant" ? o.prepared?.assistant_names : undefined
   return call(
@@ -1815,18 +1821,14 @@ export function again(
  */
 function pickFor(part: ToolPart, o: Onboarding): Answer | null {
   const step = stepOf(part)
-  const [name, pronouns, face, tone] = PERSONA
+  // The assistant's card answers as its Pick for me button does: the owner's own kept, the rest as the card opens.
+  if (step === "assistant") {
+    return { kind: "facts", facts: prefillOf(step, o), persona: "picked" }
+  }
   const palette = firstPalettes(o.orgId)[0] as PaletteId
   const font = FONTS[0]?.id
   // Each pick, and how the assistant names it to the owner.
   const picks: Partial<Record<StepId, [FactValue, string][]>> = {
-    // The defaults the assistant card opens on.
-    assistant: [
-      [name, "the name Reme"],
-      [pronouns, "she/her"],
-      [face, "a face to match"],
-      [tone, "a professional tone"],
-    ],
     template: [
       [
         { key: "site.template", value: { id: "classic" } },

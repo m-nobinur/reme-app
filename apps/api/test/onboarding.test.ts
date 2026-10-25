@@ -1041,24 +1041,23 @@ describe("a reply Jev read", () => {
     expect((parts[0] as { text: string }).text).toMatch(
       /colours[\s\S]*\n\nNext question\?$/
     )
-    // The assistant's details: only what the owner has not said.
-    const named = start({
-      facts: [
-        ...ALL_BEFORE("assistant"),
-        { key: "assistant.name", value: { name: "Maya" } },
-      ],
-    })
-    expect(decided(cardFor("assistant"), { kind: "defer" }, named)).toEqual({
-      kind: "facts",
-      facts: [
-        { key: "assistant.pronouns", value: { id: "she_her" } },
-        { key: "assistant.avatar", value: { id: "she_1" } },
-        { key: "assistant.tone", value: { id: "professional" } },
-      ],
-      chose: expect.stringContaining(
-        "she/her, a face to match and a professional tone"
-      ),
-    })
+    // The assistant's details answer as Pick for me does: the owner's own kept, the rest as the card opens.
+    const maya: FactValue = { key: "assistant.name", value: { name: "Maya" } }
+    for (const held of [[], [maya]]) {
+      const now = start({ facts: [...ALL_BEFORE("assistant"), ...held] })
+      const card = detailsCard("assistant", now, counter())
+      const button = cardAnswer(
+        card,
+        {
+          answer: "stated",
+          facts: AskDetailsInput.parse(card.input).prefill,
+          skip_all: true,
+        },
+        []
+      )
+      expect(button).toMatchObject({ persona: "picked" })
+      expect(decided(card, { kind: "defer" }, now)).toEqual(button)
+    }
     // What the business does, its contact details and the build are the owner's.
     for (const step of ["industry", "contact", "build_for_me"] as const) {
       expect(decided(cardFor(step), { kind: "defer" }, start())).toBeNull()
