@@ -137,6 +137,7 @@ import {
   ended as scriptEnded,
   stepOf,
   text as textPart,
+  trayLogoPath,
   trayOption,
   typedAnswer,
   voiceOf,
@@ -2002,7 +2003,8 @@ async function answer(
     // the facts are stated, and the next save rebuilds them all.
     const ticked = designCard(
       withAnswer(onboarding, meant),
-      () => call.toolCallId
+      () => call.toolCallId,
+      trayLogoPath(call)
     )
     await swapTail(db, id, tail, {
       ...tail.content,
