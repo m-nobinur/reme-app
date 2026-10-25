@@ -315,6 +315,7 @@ describe("the first run", () => {
             BUSINESS
           ),
           usual_seconds: 360,
+          late_seconds: 600,
         },
         segment("golive", "upcoming", along(GOLIVE_STEPS, -1), BUSINESS),
       ],
@@ -360,7 +361,7 @@ describe("the first run", () => {
       "Ellie is writing your pages",
       "Ellie is writing your website",
     ]).toContain(website?.title)
-    expect(website?.line).toBe("4 minutes so far, usually about 6 minutes")
+    expect(website?.line).toBe("4 minutes so far, about 6 to 10 minutes")
     expect(website?.steps.map((each) => [each.label, each.state])).toEqual([
       ["Planning", "done"],
       ["Photos", "skipped"],

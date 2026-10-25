@@ -128,9 +128,27 @@ export function cleanArg(
 export const elapsedText = (seconds: number) =>
   seconds < 60 ? "Under a minute" : plural(Math.floor(seconds / 60), "minute")
 
-/** How long a build usually takes, as the chat says it: "usually about 6 minutes". */
-const usualText = (seconds: number) =>
-  `usually ${seconds < 60 ? "under a minute" : `about ${plural(Math.round(seconds / 60), "minute")}`}`
+/**
+ * How long a build takes, as a range in whole minutes rounded outward: the
+ * lane's p50 is the low end and its p95 the high ("about 6 to 10 minutes").
+ * Once the time passes the top, the range moves up to start above it, never
+ * quoting a time already gone.
+ */
+export function rangeText(
+  usualSeconds: number,
+  lateSeconds: number,
+  elapsedSeconds?: number
+) {
+  let low = Math.max(1, Math.floor(usualSeconds / 60))
+  let high = Math.max(low + 1, Math.ceil(lateSeconds / 60))
+  const longer = elapsedSeconds !== undefined && elapsedSeconds > high * 60
+  if (longer) {
+    const width = Math.max(2, high - low)
+    low = Math.floor(elapsedSeconds / 60) + 1
+    high = low + width
+  }
+  return { text: `about ${low} to ${high} minutes`, longer }
+}
 
 // ---------------------------------------------------------------------------
 // Moments: the assistant's own lines, which name her.
@@ -605,6 +623,8 @@ type JobKind =
 type Names = {
   assistant: string | null
   business: string | null
+  /** What a change changes, in the owner's terms: "your hero title". */
+  change: string | null
   host: string | null
   domain: string | null
 }
@@ -663,13 +683,10 @@ const JOBS: Record<JobKind, JobCopy> = {
     pill: () => "putting your website live",
   },
   change: {
-    title: (n) => [
-      is(n.assistant, "updating your website"),
-      is(n.assistant, "making your changes"),
-    ],
+    title: (n) => [is(n.assistant, `updating ${n.change ?? "your website"}`)],
     done: () => ["Your changes are made", "Finished making your changes"],
     noun: "update",
-    pill: () => "updating your website",
+    pill: (n) => `updating ${n.change ?? "your website"}`,
   },
   domain: {
     title: (n) => [
@@ -744,6 +761,7 @@ const namesOf = (segment: ActivitySegment, ctx: CopyContext): Names => {
   return {
     assistant: named(ctx.assistant),
     business: cleanArg(n?.business, "text", 60),
+    change: cleanArg(n?.change, "text", 40),
     host: cleanArg(n?.host, "domain"),
     domain: cleanArg(n?.domain, "domain"),
   }
@@ -812,21 +830,27 @@ export function segmentLine(
     extras.elapsedSeconds === undefined
       ? null
       : `${elapsedText(extras.elapsedSeconds)} so far`
-  const late =
-    segment.late_seconds !== undefined &&
-    extras.elapsedSeconds !== undefined &&
-    extras.elapsedSeconds > segment.late_seconds
-  // The time so far, then what can be said of it: a restart, past the lane's
-  // p95, or the usual time the chat quotes too. Nothing it cannot back.
+  const range =
+    segment.usual_seconds === undefined
+      ? null
+      : rangeText(
+          segment.usual_seconds,
+          // An api older than the late time: the high end is half again.
+          segment.late_seconds ?? segment.usual_seconds * 1.5,
+          extras.elapsedSeconds
+        )
+  // The time so far, then what can be said of it: a restart or the lane's
+  // range. Past the range's top the range alone says it, as it has to grow.
+  // Nothing it cannot back.
   const said = segment.restarted
     ? `${n.assistant ?? "your assistant"} restarted it`
-    : late
-      ? "taking longer than usual"
-      : segment.usual_seconds === undefined
-        ? null
-        : usualText(segment.usual_seconds)
+    : (range?.text ?? null)
   const timing =
-    elapsed && said ? `${elapsed}, ${said}` : (elapsed ?? (said && cap(said)))
+    range?.longer && !segment.restarted
+      ? `Taking a little longer, ${said}`
+      : elapsed && said
+        ? `${elapsed}, ${said}`
+        : (elapsed ?? (said && cap(said)))
   switch (segment.kind as JobKind) {
     // The question at work says enough; no count of what is left.
     case "onboarding":
