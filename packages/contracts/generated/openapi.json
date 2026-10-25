@@ -31905,12 +31905,73 @@
                     ],
                     "additionalProperties": false
                   }
+                },
+                "brief": {
+                  "type": "object",
+                  "properties": {
+                    "description": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300,
+                          "pattern": "\\S"
+                        },
+                        {
+                          "type": "string",
+                          "const": ""
+                        }
+                      ]
+                    },
+                    "colors": {
+                      "minItems": 1,
+                      "maxItems": 5,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^#[0-9a-f]{6}$"
+                      }
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "lockup",
+                        "icon",
+                        "wordmark",
+                        "monogram",
+                        "emblem",
+                        "abstract"
+                      ]
+                    },
+                    "style": {
+                      "type": "string",
+                      "enum": [
+                        "minimal",
+                        "geometric",
+                        "gradient",
+                        "mascot",
+                        "hand_drawn",
+                        "luxury",
+                        "retro",
+                        "three_d",
+                        "surprise"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "description",
+                    "colors",
+                    "type",
+                    "style"
+                  ],
+                  "additionalProperties": false
                 }
               },
               "required": [
                 "round",
                 "status",
-                "variants"
+                "variants",
+                "brief"
               ],
               "additionalProperties": false
             }

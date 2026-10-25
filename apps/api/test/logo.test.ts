@@ -535,6 +535,7 @@ describe("a round as the owner sees it", () => {
         round: 1,
         status: "ready",
         variants: [{ id: empty.planned[0] }],
+        brief,
       })
     )
     // A round drawn when a round was four still reads under the contract.
