@@ -1697,6 +1697,10 @@ export async function planTurn(
     out.shown += words
     onSay(words)
   }
+  // A build's message waits for its outcome; a settled persona's card sits
+  // inside the message. The parts carry either, paced.
+  const paced = ({ plan, after }: Checked) =>
+    plan.next.kind === "start_build" || personaOf(s, after).length > 0
   const tell = (part: OnboardingStatus) => {
     if (!cancel?.aborted) status?.send(part)
   }
@@ -1774,7 +1778,7 @@ export async function planTurn(
           },
           facts: written.filter(isPlanFactKey),
         })
-        if (next.kind === "start_build") {
+        if (paced(checked.checked)) {
           gate = "shut"
           return
         }
@@ -1913,8 +1917,8 @@ export async function planTurn(
       const checked = checkPlan(read.plan, s)
       const said = read.plan.say.trim()
       if (checked.ok && said.startsWith(out.shown)) {
-        // A build's message waits for its outcome, unless some of it is read.
-        if (out.shown || read.plan.next.kind !== "start_build") {
+        // A held message waits for its parts, unless some of it is read.
+        if (out.shown || !paced(checked.checked)) {
           show(said.slice(out.shown.length))
         }
         calls.push({
@@ -1956,7 +1960,7 @@ export async function planTurn(
   }
   const kept = last && !cancel?.aborted ? salvaged(last, s, out.shown) : null
   if (kept) {
-    show(kept.plan.say.slice(out.shown.length))
+    if (out.shown || !paced(kept)) show(kept.plan.say.slice(out.shown.length))
     return { ok: true, checked: kept, calls, ...out }
   }
   return { ok: false, reason: "invalid", calls, ...out }

@@ -2876,9 +2876,11 @@ async function commitPlan(
 ): Promise<Staged | null> {
   const facts = await planFacts(db, held, job, outcome.checked.plan, p)
   if (!facts) return null
-  const { answered, state, c } = facts
+  const { answered, c } = facts
   const { turn } = p.request
-  const parts = planParts(c, state, p.newId)
+  // The turn's own start, not `state`: facts written mid-stream are already
+  // in that read, which would hide what this turn changed.
+  const parts = planParts(c, job.state, p.newId)
   // A build's message goes after its outcome, unless it already streamed.
   const step =
     outcome.shown && parts[0]?.type !== "text"

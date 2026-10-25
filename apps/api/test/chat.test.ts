@@ -9,6 +9,7 @@ import {
   type FactValue,
   ONBOARDING_STATUS,
   type OnboardingStatus,
+  PERSONA_CARD,
   StaffDirectory,
 } from "@workspace/contracts"
 import {
@@ -3213,6 +3214,69 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       expect(kinds.length).toBeGreaterThan(0)
       expect(kinds).not.toContain("step")
       expect(kinds).not.toContain("reading")
+    }, 60_000)
+
+    it("shows the persona card when words settle it, though its facts were written mid-stream", async () => {
+      const who = await owner(kit, url as string, "chat-persona-words")
+      await who.call(stubOrchestrator(), "/facts", {
+        method: "POST",
+        headers: { "idempotency-key": crypto.randomUUID() },
+        body: JSON.stringify({
+          facts: [
+            ...UP_TO_PHOTOS.filter(
+              (f) =>
+                !f.key.startsWith("site.") && !f.key.startsWith("assistant.")
+            ),
+            QUOTE_FORM,
+          ],
+        }),
+      })
+      const ask = planner([
+        plan({
+          say: "What should I be called?",
+          next: { kind: "ask_details", step: "assistant" },
+        }),
+      ])
+      const man = planner([
+        plan({
+          facts: {
+            "assistant.name": { name: "Oliver" },
+            "assistant.pronouns": { id: "he_him" },
+            "assistant.tone": { id: "professional" },
+          },
+          chosen_for_owner: ["assistant.name", "assistant.tone"],
+          pending_card: "answered",
+          say: "I've gone with Oliver, he/him.\n\nShall I build your website?",
+          next: {
+            kind: "ask_choice",
+            step: "build_for_me",
+            preselected: [],
+            initial: [],
+          },
+        }),
+      ])
+      const id = await talker(who).onboarding()
+      await talker(who, undefined, { planner: ask.model }).turn(id, {
+        turn: { kind: "message", message_id: "u_persona_0", text: "Hello" },
+      })
+      const done = await talker(who, undefined, { planner: man.model }).turn(
+        id,
+        {
+          turn: {
+            kind: "message",
+            message_id: "u_persona_1",
+            text: "you choose, but make it a man",
+          },
+        }
+      )
+      expect(
+        (await factsOf(who)).find((f) => f.key === "assistant.pronouns")?.value
+      ).toEqual({ id: "he_him" })
+      expect(
+        done.after.parts
+          .filter((p) => p.type !== "step-start")
+          .map((p) => p.type)
+      ).toEqual(["text", PERSONA_CARD, "text", "tool-ask_choice"])
     }, 60_000)
 
     it("keeps what the owner read when the provider fails after it, and lets the script finish the turn", async () => {
