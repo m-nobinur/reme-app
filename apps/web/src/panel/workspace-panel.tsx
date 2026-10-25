@@ -18,10 +18,7 @@ import {
   type Reminder,
   revisionPictures,
 } from "@workspace/contracts"
-import {
-  ShowFoldedQuestion,
-  useDockedQuestion,
-} from "@workspace/ui/components/assistant/question-tray"
+import { useDockedQuestion } from "@workspace/ui/components/assistant/question-tray"
 import { AssistantAvatar } from "@workspace/ui/components/assistant-avatar"
 import { buttonVariants } from "@workspace/ui/components/button"
 import {
@@ -320,22 +317,9 @@ function Stoppable({
   )
 }
 
-/**
- * A segment's steps, with what the website's stages decided and made under
- * them, and a way back to a question the owner folded in the chat under the
- * step that waits on it.
- */
+/** A segment's steps, with what the website's stages decided and made under them. */
 function stepsOf({ kind, steps, build }: SegmentView): SegmentStep[] {
-  if (kind !== "website" || !build) {
-    return steps.map((step) =>
-      step.state === "waiting"
-        ? {
-            ...step,
-            detail: <ShowFoldedQuestion className="self-start text-xs" />,
-          }
-        : step
-    )
-  }
+  if (kind !== "website" || !build) return steps
   return steps.map((step) => ({
     ...step,
     detail: (
