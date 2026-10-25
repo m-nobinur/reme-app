@@ -250,6 +250,8 @@ function TrayLogo({
   )
   const [focus, setFocus] = useState<Part | null>(null)
   const [rounds, setRounds] = useState<LogoRound[]>([])
+  // Whether the rounds drawn before have been read, so none is drawn twice.
+  const [loaded, setLoaded] = useState(false)
   const [nextAt, setNextAt] = useState<number | null>(null)
   const [at, setAt] = useState<number | null>(null)
   const [changes, setChanges] = useState<string | null>(start?.changes ?? null)
@@ -277,6 +279,7 @@ function TrayLogo({
           if (!live) return
           setRounds(drawn.rounds)
           setNextAt(drawn.next_at ? Date.parse(drawn.next_at) : null)
+          setLoaded(true)
         })
         .catch(() => undefined)
     const timer = drawing ? setInterval(read, 2500) : undefined
@@ -429,6 +432,29 @@ function TrayLogo({
       setBusy(null)
     }
   }
+
+  // With no logo held the page opens on making one: one round starts by
+  // itself from the filled brief, and its first design is kept as it lands,
+  // so Looks good takes it. A pick or an upload in the meantime wins.
+  const auto = useRef<"draw" | "keep" | "done">(
+    first === "create" && !answer ? "draw" : "done"
+  )
+  // biome-ignore lint/correctness/useExhaustiveDependencies: steps on the rounds read, once each
+  useEffect(() => {
+    if (!loaded || auto.current === "done") return
+    if (auto.current === "draw") {
+      auto.current = "keep"
+      if (rounds.length === 0) {
+        void draw({})
+        return
+      }
+    }
+    const [landed] = rounds
+    if (!landed || landed.status === "drawing") return
+    auto.current = "done"
+    const [design] = landed.variants
+    if (design && !answer && path === "create") void keep(design.id)
+  }, [loaded, rounds])
 
   // A new round starts from the picked design, wherever it was drawn.
   const redesign = () => {

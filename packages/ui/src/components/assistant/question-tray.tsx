@@ -1327,11 +1327,12 @@ function QuestionTray({
     onFinish({ answers: sent, skip_all: skipAll || finishing })
     focusComposer()
   }
-  // Every question holds an answer, this one with `chosen`: one press keeps them.
-  const complete = (chosen = answer) =>
-    questions.every((each) =>
-      each.id === question.id ? chosen !== undefined : each.id in answers
-    )
+  // Every other question holds an answer: one press keeps them all, once
+  // this one has its own (`chosen`), such as a logo still drawing.
+  const others = questions.every(
+    (each) => each.id === question.id || each.id in answers
+  )
+  const complete = (chosen = answer) => others && chosen !== undefined
   // Next, with the answer a page has only just set when it moves on itself.
   const onward = (chosen = answer) => {
     if (last || finishing || complete(chosen)) finish(finishing, chosen)
@@ -1413,7 +1414,7 @@ function QuestionTray({
       }
       submit={
         (logo && logoSubmit) || {
-          label: complete()
+          label: others
             ? "Looks good"
             : last || finishing
               ? "Build my site"
