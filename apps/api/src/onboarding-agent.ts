@@ -556,11 +556,11 @@ function cardInput(card: ToolPart, output: unknown) {
   return cardLine({ ...card, state: "output-available", output })
 }
 
-/** The facts as one object, by key. */
+/** The facts as one object, by key. A held record carries more than its key and value, which the strict schema refuses. */
 const factsOf = (o: Onboarding) =>
   Object.fromEntries(
-    o.facts.flatMap((f) =>
-      FactValue.safeParse(f).success ? [[f.key, f.value]] : []
+    o.facts.flatMap(({ key, value }) =>
+      FactValue.safeParse({ key, value }).success ? [[key, value]] : []
     )
   )
 

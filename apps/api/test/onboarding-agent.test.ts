@@ -640,6 +640,24 @@ describe("what the planner reads and how often it asks", () => {
     })
   })
 
+  it("sends the facts it holds, read from full fact records", () => {
+    const record = {
+      fact_id: "01JFACT0000000000000000000",
+      key: "business.phone",
+      value: { e164: "+447700900123" },
+      provenance: "owner_stated",
+      updated_at: "2026-10-26T09:00:00.000Z",
+    }
+    const o = { ...onboarding(), facts: [record] } as unknown as Onboarding
+    const json = JSON.parse(
+      (turnData(typed("hello", o)).split("\n")[2] as string).replace(
+        /\\u003c/g,
+        "<"
+      )
+    ) as { facts: unknown }
+    expect(json.facts).toEqual({ "business.phone": { e164: "+447700900123" } })
+  })
+
   it("never holds the build for optional details, and asks who the customers are once", () => {
     expect(
       buildMissing(
