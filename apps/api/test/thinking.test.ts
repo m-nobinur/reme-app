@@ -18,6 +18,10 @@ describe("a thought's heading as the waiting line", () => {
     expect(thoughtLine("Checking SEO And Prize Size")).toBe(
       "Checking SEO and prize size"
     )
+    // Sentence case keeps its capitals: they are names.
+    expect(thoughtLine("Checking Bramble Window Care's hours")).toBe(
+      "Checking Bramble Window Care's hours"
+    )
   })
 
   it("drops a heading that says anything internal or runs long", () => {

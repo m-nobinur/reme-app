@@ -45,13 +45,14 @@ export function thoughtLine(heading: string): string | null {
     return null
   }
   // Gemini writes Title Case; a word in capitals, a day and a month keep it.
-  const words = text
-    .split(" ")
-    .map((word, i) =>
-      i > 0 && /^[A-Z][a-z]+(['’]s)?$/.test(word) && !CALENDAR.test(word)
-        ? word.toLowerCase()
-        : word
-    )
+  // A heading already in sentence case keeps its capitals, which are names.
+  const split = text.split(" ")
+  const title = split.length > 1 && split.every((word) => /^[A-Z]/.test(word))
+  const words = split.map((word, i) =>
+    title && i > 0 && /^[A-Z][a-z]+(['’]s)?$/.test(word) && !CALENDAR.test(word)
+      ? word.toLowerCase()
+      : word
+  )
   const line = british(words.join(" "))
   const cased = line.charAt(0).toUpperCase() + line.slice(1)
   return cased.length <= PLAN_DOING_MAX ? cased : null
