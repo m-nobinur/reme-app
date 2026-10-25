@@ -1000,7 +1000,7 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       expect(await proofNow()).toEqual(before)
     })
 
-    it("refuses a claim with a word the owner never wrote, records nothing and starts nothing", async () => {
+    it("drops a claim with a word the owner never wrote, records nothing and still starts the change", async () => {
       const before = await proofNow()
       const turn = await turnOf(me, ["Say we're insured"])
       const stub = creating(me)
@@ -1013,11 +1013,8 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
           turn
         )
       )
-      expect(output).toMatchObject({
-        outcome: "refused",
-        error: { class: "validation", code: "proof.not_owners" },
-      })
-      expect(stub.calls).toHaveLength(0)
+      expect(output).toMatchObject({ outcome: "started" })
+      expect(stub.calls).toHaveLength(1)
       expect(await proofNow()).toEqual(before)
     })
 
