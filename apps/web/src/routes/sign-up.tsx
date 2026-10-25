@@ -12,9 +12,11 @@ import { PasswordField } from "@workspace/ui/components/password-field"
 import { SubmitButton } from "@workspace/ui/components/submit-button"
 import { PASSWORD_POLICY } from "@workspace/ui/lib/password-policy"
 import { signUp } from "@/lib/auth/actions"
+import { leaveIfSignedIn } from "@/lib/auth/signed-in"
 import { useSubmit } from "@/lib/auth/use-submit"
 
 export const Route = createFileRoute("/sign-up")({
+  loader: leaveIfSignedIn,
   head: () => ({ meta: [{ title: "Create your account · Reme" }] }),
   component: SignUp,
 })

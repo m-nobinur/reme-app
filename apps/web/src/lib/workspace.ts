@@ -183,6 +183,19 @@ export function startPolling({
   }
 }
 
+/**
+ * What the panel shows after the frame loader read again. A read that failed
+ * (`null`) keeps the workspace already on screen, marked stale, rather than
+ * blanking the panel until the next poll.
+ */
+export const afterFrameRead = (
+  kept: Workspace | null,
+  read: Workspace | null
+) => ({
+  workspace: read ?? kept,
+  failed: read === null,
+})
+
 type Live = {
   workspace: Workspace | null
   /** The last read failed; what is shown is the read before it. */
@@ -238,8 +251,10 @@ export function useLiveWorkspaceState(
   useEffect(() => {
     if (adopted.current === initial) return
     adopted.current = initial
-    poller.current?.adopt(initial)
-    setState({ workspace: initial, failed: initial === null })
+    setState((now) => afterFrameRead(now.workspace, initial))
+    // A failed frame read has nothing to adopt: read the poll again now.
+    if (initial) poller.current?.adopt(initial)
+    else void poller.current?.refresh()
   }, [initial])
 
   const refresh = useCallback(
