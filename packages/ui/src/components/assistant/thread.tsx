@@ -31,7 +31,9 @@ import {
   ThumbsUpIcon,
   XIcon,
 } from "@phosphor-icons/react"
+import { SKIP_REPLY } from "@workspace/contracts"
 import { OWNER_CARDS } from "@workspace/ui/components/assistant/approval"
+import { waitsToSkip } from "@workspace/ui/components/assistant/ask-open"
 import { COS_QUIET } from "@workspace/ui/components/assistant/cos-tools"
 import { MarkdownText } from "@workspace/ui/components/assistant/markdown-text"
 import { TraySlotProvider } from "@workspace/ui/components/assistant/question-tray"
@@ -612,6 +614,7 @@ const ThreadRoot: FC<{
             >
               <ThreadScrollToBottom unseen={unseen} />
               <div className="flex flex-col gap-2">
+                <SkipThisOne />
                 <div className="empty:hidden" ref={setTray} />
                 <Composer autoFocus={autoFocus} expanded={isEmpty} />
                 {/* The same gap as the tray above the composer. */}
@@ -736,6 +739,31 @@ const ThreadWelcome: FC = () => {
         </p>
       ) : null}
     </div>
+  )
+}
+
+/**
+ * Skip this one, above the composer while an optional question asked in
+ * words waits: a tap says so as the owner's message. A required one has none.
+ */
+const SkipThisOne: FC = () => {
+  const aui = useAui()
+  const sendable = useSendable()
+  const waiting = useAuiState(
+    (s) => !s.thread.isRunning && waitsToSkip(s.thread.messages.at(-1)?.parts)
+  )
+  if (!waiting || !sendable) return null
+  return (
+    <Button
+      className="self-start rounded-full text-muted-foreground"
+      data-slot="skip-this-one"
+      onClick={() => aui.thread().append(SKIP_REPLY)}
+      size="sm"
+      type="button"
+      variant="outline"
+    >
+      Skip this one
+    </Button>
   )
 }
 

@@ -1568,7 +1568,7 @@ const PERSONA_TRAY = row(COS, "msg_owner", {
 })
 
 /** A tray, open, in a conversation that has reached it: the design one unless told. */
-async function openTray(tray: unknown = TRAY) {
+async function openTray(tray: unknown = TRAY, shown = "question-tray") {
   stored = { messages: [OWNER_ROW, tray] }
   const container = document.createElement("div")
   document.body.appendChild(container)
@@ -1576,12 +1576,54 @@ async function openTray(tray: unknown = TRAY) {
   mounted.push({ root, container })
   await act(async () => root.render(createElement(Chat)))
   await vi.waitFor(() =>
-    expect(
-      container.querySelector('[data-slot="question-tray"]')
-    ).not.toBeNull()
+    expect(container.querySelector(`[data-slot="${shown}"]`)).not.toBeNull()
   )
   return container
 }
+
+const askOpen = (input: object) =>
+  row(COS, "msg_owner", {
+    role: "assistant",
+    parts: [
+      { type: "step-start" },
+      {
+        type: "text",
+        text: "Who are your ideal customers? You can skip this.",
+      },
+      {
+        type: "tool-ask_open",
+        toolCallId: "call_open",
+        state: "input-available",
+        input,
+      },
+    ],
+  })
+
+it("an optional question asked in words offers Skip this one, which says so as the owner", async () => {
+  const chat = await openTray(
+    askOpen({ about: "business.audience", skippable: true }),
+    "skip-this-one"
+  )
+  turns.push(() =>
+    Promise.resolve(
+      new Response(frames({ type: "finish" }), {
+        headers: { "content-type": "text/event-stream" },
+      })
+    )
+  )
+  await press(chat, "Skip this one")
+  await vi.waitFor(() => expect(sent).toHaveLength(1))
+  expect(JSON.stringify(sent[0])).toContain("I'd like to skip this question.")
+})
+
+it("a required question asked in words offers no Skip this one", async () => {
+  const chat = await openTray(
+    askOpen({ about: "business.offerings" }),
+    "aui_composer-shell"
+  )
+  await vi.waitFor(() => expect(chat.textContent).toContain("ideal customers"))
+  expect(chat.querySelector('[data-slot="skip-this-one"]')).toBeNull()
+})
 
 /** Picks an option of the open tray. */
 const pick = (container: HTMLElement, label: string) =>
