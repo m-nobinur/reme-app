@@ -27,6 +27,8 @@ import {
   PALETTES,
   type PaletteFromImage,
   PaletteId,
+  PERSONA_CARD,
+  PersonaCard,
   PRONOUNS,
   type QuoteField,
   type ReopenStep,
@@ -53,6 +55,8 @@ import {
   manualEnd,
   notStarted,
   opener,
+  pickedLook,
+  pickedPersona,
   question,
   quoteForm,
   quoteUnchanged,
@@ -1049,7 +1053,7 @@ export function designAnswer(
   ) {
     state("site.direction", { id: "builder" })
   }
-  return { kind: "design", facts, settled }
+  return { kind: "design", facts, settled, ...(skip_all && { picked: true }) }
 }
 
 type Step = {
@@ -1310,9 +1314,11 @@ export type Answer =
       chose?: string
       /** A quote form the owner asked to change on its card, as they left it. */
       changing?: readonly QuoteField[]
+      /** The assistant's card answered on the card, `picked` with Pick for me: the reply shows the persona. */
+      persona?: "stated" | "picked"
     }
-  /** The design tray's answers; `settled` once it is finished, not just answered so far. */
-  | { kind: "design"; facts: FactValue[]; settled: boolean }
+  /** The design tray's answers; `settled` once it is finished, not just answered so far, `picked` with Pick for me. */
+  | { kind: "design"; facts: FactValue[]; settled: boolean; picked?: true }
   | { kind: "passed"; step: StepId; builder?: boolean }
   | { kind: "retry"; reason: RetryReason }
 
@@ -1401,7 +1407,13 @@ function detailsAnswer(input: AskDetailsInput, output: unknown): Answer | null {
   ) {
     return null
   }
-  return { kind: "facts", facts: answer.data.facts }
+  return {
+    kind: "facts",
+    facts: answer.data.facts,
+    ...(input.step === "assistant" && {
+      persona: answer.data.skip_all ? "picked" : "stated",
+    }),
+  }
 }
 
 /** A card's phone must be one that rings: never stored, the card asks again. */
@@ -1884,18 +1896,53 @@ export function decided(
     : null
 }
 
-/** The next step's parts, after a line saying what the assistant picked, when it picked. */
+/** The persona the `assistant.*` facts settle, as the card part a reply shows, or null while one is missing. */
+export function personaPart(
+  o: Onboarding
+): Extract<Part, { type: typeof PERSONA_CARD }> | null {
+  const card = PersonaCard.safeParse({
+    name: factValue(o.facts, "assistant.name")?.name,
+    pronouns: factValue(o.facts, "assistant.pronouns")?.id,
+    avatar: factValue(o.facts, "assistant.avatar")?.id,
+    tone: factValue(o.facts, "assistant.tone")?.id,
+  })
+  return card.success ? { type: PERSONA_CARD, data: card.data } : null
+}
+
+/**
+ * The next step's parts: its first words led by a line saying what the
+ * assistant picked, when it picked, and the persona under them when the
+ * answer came on the assistant's card.
+ */
 export function withChoice(
   answer: Answer | undefined,
   o: Onboarding,
   step: Part[]
 ): Part[] {
-  if (answer?.kind !== "facts" || !answer.chose) return step
-  const line = chose(voiceOf(o), answer.chose)
-  const [lead, ...rest] = step
-  return lead?.type === "text"
-    ? [text(`${line}\n\n${lead.text}`), ...rest]
-    : [text(line), ...step]
+  const v = voiceOf(o)
+  const persona =
+    answer?.kind === "facts" && answer.persona ? personaPart(o) : null
+  const line =
+    answer?.kind === "design"
+      ? answer.picked && pickedLook(v)
+      : answer?.kind === "facts" && answer.chose
+        ? chose(v, answer.chose)
+        : answer?.kind === "facts" &&
+          answer.persona === "picked" &&
+          persona &&
+          pickedPersona(v, persona.data)
+  const at = step.findIndex((p) => p.type === "text")
+  const lead = step[at]
+  const shown = persona ? [persona] : []
+  if (lead?.type !== "text") {
+    return [...(line ? [text(line)] : []), ...shown, ...step]
+  }
+  return [
+    ...step.slice(0, at),
+    line ? text(`${line}\n\n${lead.text}`) : lead,
+    ...shown,
+    ...step.slice(at + 1),
+  ]
 }
 
 /** One card of the conversation, as `readScript` reads it. */

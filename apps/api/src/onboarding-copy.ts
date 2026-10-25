@@ -1,4 +1,11 @@
-import type { IndustryId, PronounId, ToneId } from "@workspace/contracts"
+import {
+  type IndustryId,
+  type PersonaCard,
+  PRONOUNS,
+  type PronounId,
+  TONES,
+  type ToneId,
+} from "@workspace/contracts"
 import type { StepId } from "./onboarding.ts"
 
 /**
@@ -401,6 +408,33 @@ export function chose(v: Voice, what: string): string {
       `Happy to choose for you. I've gone with ${what} for now, and you can change it whenever you like.`,
       `Leave it with me. I've picked ${what}, and it's easy to change later.`,
       `No problem, I've chosen ${what}. You can always change it later.`,
+    ])
+  )
+}
+
+/** Who the assistant became when the owner pressed Pick for me on its card, said before the next question. */
+export function pickedPersona(v: Voice, p: PersonaCard): string {
+  const pronouns = PRONOUNS.find((each) => each.id === p.pronouns)?.label
+  const tone = TONES.find((each) => each.id === p.tone)?.label.toLowerCase()
+  const who = `${p.name}, ${pronouns}, with a ${tone} manner`
+  return say(
+    v,
+    pick(v, "picked_persona", [
+      `I've gone with ${who}. You can change any of it whenever you like.`,
+      `Leave it with me: I'll be ${who}. It's easy to change later.`,
+      `Happy to choose. I'm ${who}, and you can change that any time.`,
+    ])
+  )
+}
+
+/** The design tray left to the assistant with Pick for me, said before the build starts. */
+export function pickedLook(v: Voice): string {
+  return say(
+    v,
+    pick(v, "picked_look", [
+      "Leave the rest of the look with me. I'll choose it as I build.",
+      "I'll pick the rest of the design as I build, and you can change any of it once you see the draft.",
+      "Happy to choose the rest. I'll settle the look as I build.",
     ])
   )
 }

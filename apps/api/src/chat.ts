@@ -1847,11 +1847,7 @@ async function advance(
   newId: () => string
 ): Promise<Part[]> {
   const next = reply ? withAnswer(onboarding, reply) : onboarding
-  const step = withChoice(
-    reply,
-    next,
-    nextStep({ onboarding: next, message: null, newId })
-  )
+  const step = nextStep({ onboarding: next, message: null, newId })
   const build = buildCall(step)
   if (reply?.kind === "facts" || reply?.kind === "design") {
     const source =
@@ -1874,7 +1870,8 @@ async function advance(
       )
     }
   }
-  if (!build) return step
+  // What the assistant picked leads the reply, a build's outcome included.
+  if (!build) return withChoice(reply, next, step)
   const output = await changed(
     env,
     kit,
@@ -1884,7 +1881,7 @@ async function advance(
     `onboarding:${id}`
   )
   if (output instanceof Response) throw new Refusal(output)
-  return built(next, build, output)
+  return withChoice(reply, next, built(next, build, output))
 }
 
 /** The tail's call this turn names, or a response saying why not. */

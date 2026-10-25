@@ -13,8 +13,6 @@ import {
   type OnboardingStatus,
   PAGES,
   PALETTES,
-  PERSONA_CARD,
-  PersonaCard,
   PLAN_DOING_MAX,
   PLAN_FACT_KEYS,
   PLANNER_TURN_MS,
@@ -68,6 +66,7 @@ import {
   ONBOARDING_GOAL,
   type Onboarding,
   oldDesign,
+  personaPart,
   reopenCard,
   stepDone,
   stepOf,
@@ -1828,13 +1827,8 @@ function personaOf(s: PlanState, o: Onboarding): Part[] {
   ) {
     return []
   }
-  const card = PersonaCard.safeParse({
-    name: factValue(o.facts, "assistant.name")?.name,
-    pronouns: factValue(o.facts, "assistant.pronouns")?.id,
-    avatar: factValue(o.facts, "assistant.avatar")?.id,
-    tone: factValue(o.facts, "assistant.tone")?.id,
-  })
-  return card.success ? [{ type: PERSONA_CARD, data: card.data }] : []
+  const part = personaPart(o)
+  return part ? [part] : []
 }
 
 /**

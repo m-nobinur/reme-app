@@ -565,11 +565,15 @@ describe("an answer on a card", () => {
     expect(cardAnswer(card, { answer: "stated", facts }, [])).toEqual({
       kind: "facts",
       facts,
+      persona: "stated",
     })
+    expect(
+      cardAnswer(card, { answer: "stated", facts, skip_all: true }, [])
+    ).toMatchObject({ persona: "picked" })
     // Part of the card is an answer too; the step asks again for the rest.
     expect(
       cardAnswer(card, { answer: "stated", facts: facts.slice(0, 1) }, [])
-    ).toEqual({ kind: "facts", facts: facts.slice(0, 1) })
+    ).toEqual({ kind: "facts", facts: facts.slice(0, 1), persona: "stated" })
     for (const output of [
       { answer: "stated", facts: [PHONE] },
       { answer: "stated", facts: [facts[0], facts[0]] },
@@ -1059,6 +1063,77 @@ describe("a reply Jev read", () => {
     for (const step of ["industry", "contact", "build_for_me"] as const) {
       expect(decided(cardFor(step), { kind: "defer" }, start())).toBeNull()
     }
+  })
+})
+
+describe("Pick for me, answered by the script", () => {
+  const PERSONA = {
+    type: "data-persona",
+    data: {
+      name: "Maya",
+      pronouns: "she_her",
+      avatar: "she_1",
+      tone: "friendly",
+    },
+  }
+  const persona = (output: object) => {
+    const at = start({ facts: ALL_BEFORE("assistant") })
+    const meant = cardAnswer(cardFor("assistant"), output, []) ?? undefined
+    const next = applied(at, meant as NonNullable<typeof meant>)
+    return { step: onboardingStep(next, counter()), meant, next }
+  }
+
+  it("says who the assistant chose to be, then shows the persona over the next card", () => {
+    const facts = FACTS.assistant as FactValue[]
+    const { step, meant, next } = persona({
+      answer: "stated",
+      facts,
+      skip_all: true,
+    })
+    const [lead, card, ...rest] = withChoice(meant, next, step)
+    expect((lead as { text: string }).text).toMatch(
+      /Maya, she\/her, with a friendly manner[\s\S]*\n\n[\s\S]*build a website/
+    )
+    expect(card).toEqual(PERSONA)
+    expect(rest).toEqual(step.slice(1))
+    // The owner's own answer shows the persona with no line about choosing.
+    const own = persona({ answer: "stated", facts })
+    expect(withChoice(own.meant, own.next, own.step)).toEqual([
+      own.step[0],
+      PERSONA,
+      ...own.step.slice(1),
+    ])
+  })
+
+  it("says the design tray left to it is chosen as it builds, before the build's line", () => {
+    const o = start({ facts: ALL_BEFORE("design") })
+    const pending: ToolPart = {
+      type: "tool-request_change",
+      toolCallId: "c1",
+      state: "input-available",
+      input: { text: ONBOARDING_GOAL },
+    }
+    const step = built(o, pending, {
+      outcome: "started",
+      build: {
+        assignment_id: ORG,
+        kind: "site.build",
+        state: "queued",
+        goal: ONBOARDING_GOAL,
+        revision: null,
+        created_at: "2026-09-26T09:30:00.000Z",
+        updated_at: "2026-09-26T09:30:00.000Z",
+      },
+    })
+    const tray = { kind: "design" as const, facts: [], settled: true }
+    const parts = withChoice({ ...tray, picked: true }, o, step)
+    expect(parts.slice(0, 2)).toEqual(step.slice(0, 2))
+    const said = (parts[2] as { text: string }).text
+    expect(said.split("\n\n")[0]).toMatch(/as I build/)
+    expect(said.endsWith(`\n\n${(step[2] as { text: string }).text}`)).toBe(
+      true
+    )
+    expect(withChoice(tray, o, step)).toEqual(step)
   })
 })
 
@@ -1947,13 +2022,14 @@ describe("the design tray", () => {
       kind: "design",
       facts: [{ key: "site.direction", value: { id: "builder" } }],
       settled: true,
+      picked: true,
     })
     expect(
       designAnswer(input(), { answers: {}, skip_all: true }, [
         UPLOADS,
         { key: "site.direction", value: { id: "calm_daylight" } },
       ])
-    ).toEqual({ kind: "design", facts: [], settled: true })
+    ).toEqual({ kind: "design", facts: [], settled: true, picked: true })
     const answered = pick(
       { palette: { skipped: true }, lettering: { skipped: true } },
       true
