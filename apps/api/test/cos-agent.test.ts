@@ -18,6 +18,7 @@ import {
   emailMessageId,
   eq,
   events,
+  facts,
   failureCode,
   postAssistantMessage,
   postOwnerEmail,
@@ -144,6 +145,22 @@ vi.mock("../src/cos/history.ts", async (importOriginal) => {
       cut()
       return real.readSessionSince(...args)
     },
+  }
+})
+
+/**
+ * A change that sets a new phone or email is the one still shown on a card,
+ * so the card tests here stand in for that check: every change is carded
+ * unless a test turns it off.
+ */
+const contact = vi.hoisted(() => ({ carded: true }))
+
+vi.mock("../src/cos/tools.ts", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../src/cos/tools.ts")>()
+  return {
+    ...real,
+    newContact: async (...args: Parameters<typeof real.newContact>) =>
+      contact.carded ? { phone: "+447700900123" } : real.newContact(...args),
   }
 })
 
@@ -298,10 +315,15 @@ describe("the CoS's instructions", () => {
     )
   })
 
-  it("tell the model a started change already has the owner's yes", () => {
+  it("tell the model the owner's words are the yes and to speak of the work as its own", () => {
     expect(INSTRUCTIONS).toMatch(
-      /request_change comes back with outcome "started", the owner already said yes and the build has started[^\n]*Never ask them to approve it again/
+      /request_change in the owner's own words, one change per call, as soon as the owner asks for it: never ask them to confirm it first/
     )
+    expect(INSTRUCTIONS).toMatch(
+      /request_change comes back with outcome "started"[^\n]*never say queued[^\n]*Never ask them to approve it/
+    )
+    expect(INSTRUCTIONS).toContain('"I\'m putting your site together"')
+    expect(INSTRUCTIONS).not.toMatch(/such as "It's/)
   })
 })
 
@@ -2068,6 +2090,51 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     const after = await tailOf(me, id)
     expect(after.id).toBe(tail.id)
     expect(plain(await replay(tail, done.chunks))).toStrictEqual(plain(after))
+  })
+
+  it("starts a change the owner typed with no card, keyed by its turn and call, and drops a contact it carried", async () => {
+    contact.carded = false
+    try {
+      const id = await conversation(me)
+      const stub = orchestrator()
+      const { model, sent } = scripted(
+        calls({
+          id: "call_rc",
+          tool: "request_change",
+          input: {
+            text: "Add a Saturday slot.",
+            contact: { phone: "+447700900123" },
+          },
+        }),
+        said("I've started your change.")
+      )
+      const done = await turn(
+        me,
+        typed(id, "Add a Saturday slot."),
+        { model },
+        stub
+      )
+      expect(done.response.status, done.text).toBe(200)
+      expect(
+        done.chunks.filter((c) => c.type === "tool-approval-request")
+      ).toHaveLength(0)
+      expect(stub.calls).toHaveLength(1)
+      const [turnRow] = await turnsOf(id)
+      expect(stub.calls[0]?.request.headers.get("idempotency-key")).toBe(
+        `${turnRow?.turn_id}:call_rc`
+      )
+      expect(JSON.stringify(sent[1]?.prompt)).toContain('"outcome":"started"')
+      // The text never names a phone, so the number was never the owner's to set.
+      const phones = await kit.withOrg({ orgId: me.orgId }, (db) =>
+        db
+          .select()
+          .from(facts)
+          .where(sql`${facts.value}->>'e164' = '+447700900123'`)
+      )
+      expect(phones).toHaveLength(0)
+    } finally {
+      contact.carded = true
+    }
   })
 
   it("lets the next turn finish an approved change a dead turn ran, once, under its own token", async () => {

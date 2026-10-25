@@ -450,19 +450,14 @@ const untyped = (what: string) =>
   })
 
 /**
- * A new phone or email the owner typed in full, recorded as their fact
- * before the change starts, so the build reads the number the owner gave and
- * the content gate agrees with the site. The model proposes the value; it is
- * recorded only when the owner's own messages in `sessionId` hold the digits
- * or the address, so a number the model made up never becomes a fact. The
- * change text, which the owner reads on the card, must name it too.
- * Null when there is nothing to record or it is recorded, else the refusal.
+ * The phone and email in `input` the business does not hold yet: what a yes
+ * on the change would record, so the change shows its card. Null when there
+ * is none, or the change text never touches contact.
  */
-async function recordContact(
+export async function newContact(
   { kit, owner }: Pick<ToolContext, "kit" | "owner">,
-  sessionId: string,
   { contact, text }: CosChangeRequest
-): Promise<Response | null> {
+): Promise<{ phone?: string; email?: string } | null> {
   if (!contact?.phone && !contact?.email) return null
   // The owner approves the change text, which is all the card shows. A text
   // that never touches contact cannot depend on one, so a contact the model
@@ -474,15 +469,12 @@ async function recordContact(
     console.log(JSON.stringify({ code: "cos.contact_dropped" }))
     return null
   }
-  const [log, rows] = await kit.withOrg({ orgId: owner.orgId }, async (db) => [
-    await readSession(db, sessionId),
-    await readFacts(db),
-  ])
   // A value the business already holds is no change: the model restates the
   // current phone and email on unrelated changes (staging, 2026-10-22), and
   // refusing those asked the owner for the same yes twice.
   let heldPhone: string | undefined
   let heldEmail: string | undefined
+  const rows = await kit.withOrg({ orgId: owner.orgId }, readFacts)
   for (const fact of toCosFacts(rows).output.facts) {
     if (fact.key === "business.phone") heldPhone = fact.value.e164
     if (fact.key === "business.email") heldEmail = fact.value.address
@@ -492,7 +484,30 @@ async function recordContact(
     contact.email?.toLowerCase() === heldEmail?.toLowerCase()
       ? undefined
       : contact.email
-  if (!phone && !email) return null
+  return phone || email ? { phone, email } : null
+}
+
+/**
+ * A new phone or email the owner typed in full, recorded as their fact
+ * before the change starts, so the build reads the number the owner gave and
+ * the content gate agrees with the site. The model proposes the value; it is
+ * recorded only when the owner's own messages in `sessionId` hold the digits
+ * or the address, so a number the model made up never becomes a fact. The
+ * change text, which the owner reads on the card, must name it too.
+ * Null when there is nothing to record or it is recorded, else the refusal.
+ */
+async function recordContact(
+  { kit, owner }: Pick<ToolContext, "kit" | "owner">,
+  sessionId: string,
+  input: CosChangeRequest
+): Promise<Response | null> {
+  const fresh = await newContact({ kit, owner }, input)
+  if (!fresh) return null
+  const { phone, email } = fresh
+  const { text } = input
+  const log = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+    readSession(db, sessionId)
+  )
   const said = log
     .flatMap((e) => {
       const m =
