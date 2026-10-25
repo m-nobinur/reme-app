@@ -223,7 +223,10 @@ describe("change", () => {
 
   it("carries its lane's usual time while at work, the one the chat quotes, and none once it waits or is done", () => {
     const expected = EXPECTED_SECONDS
-    const at = (b: BuildSummary, site = LIVE) => {
+    const at = (
+      b: BuildSummary,
+      site: typeof LIVE | typeof NOT_LIVE = LIVE
+    ) => {
       const a = view({ site, builds: [b], expected })
       return [...a.journey, ...a.now, ...a.waiting, ...a.done].find(
         (seg) => seg.kind === "change" || seg.kind === "website"
@@ -233,9 +236,7 @@ describe("change", () => {
       expected.quick.p50
     )
     expect(at(build("validating"))).toBe(expected.full.p50)
-    expect(at(build("implementing"), { ...LIVE, live: null })).toBe(
-      expected.full.p50
-    )
+    expect(at(build("implementing"), NOT_LIVE)).toBe(expected.full.p50)
     expect(at(build("blocked_on_information", { activity: [] }))).toBe(
       undefined
     )
