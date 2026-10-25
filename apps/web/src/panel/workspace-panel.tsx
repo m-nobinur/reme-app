@@ -626,6 +626,17 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
           />
         </div>
       ) : null}
+      {/* Setup is done and no build runs (a first build was stopped): its
+          one next action, asked in the chat as the Website page asks it. */}
+      {each.kind === "website" && each.state === "upcoming" ? (
+        <Link
+          className={cn(NEXT_STEP, "self-start")}
+          state={() => ({ chat: crypto.randomUUID(), ask: "Build my website" })}
+          to="/app"
+        >
+          Create my website
+        </Link>
+      ) : null}
     </Segment>
   )
   const row = (each: SegmentView) => (

@@ -502,6 +502,9 @@ function PanelSegment({
   // list, and a rail fading out below says there are more.
   const shownSteps = steps.filter((step) => step.state !== "next")
   const more = shownSteps.length < steps.length
+  const acts = Children.toArray(children).length > 0
+  // Nothing begun and nothing to do draws no body: a rail alone is an empty block.
+  const body = shownSteps.length > 0 || acts
   return (
     <section
       aria-labelledby={`${id}-title`}
@@ -540,7 +543,7 @@ function PanelSegment({
           </h3>
           {line && !done ? <p className={META}>{line}</p> : null}
         </div>
-        {done || steps.length === 0 ? null : (
+        {done || !body ? null : (
           <button
             aria-controls={`${id}-steps`}
             aria-expanded={open}
@@ -559,7 +562,7 @@ function PanelSegment({
           </button>
         )}
       </div>
-      {steps.length || children ? (
+      {body ? (
         // Folds by its row's height, so the motion is the same for any list.
         <div
           aria-hidden={!shown}
@@ -578,53 +581,55 @@ function PanelSegment({
                   ? `Now: ${current.said ?? current.label}.`
                   : ""}
               </p>
-              <ol aria-label="Steps" className="flex flex-col">
-                {shownSteps.map((step) => (
-                  <li
-                    className="group relative flex gap-1.5 pb-3 last:pb-0"
-                    data-state={step.state}
-                    key={step.id}
-                  >
-                    {/* The rail between markers, quiet, ticked off as steps finish. */}
-                    <span
-                      aria-hidden
-                      className={cn(
-                        "absolute top-5 bottom-0.5 left-[7.5px] w-px group-last:hidden",
-                        step.state === "done" ? "bg-primary/45" : "bg-border"
-                      )}
-                    />
-                    <span aria-hidden className="mt-px flex size-4 shrink-0">
-                      <StepMark failed={failed} step={step} />
-                    </span>
-                    <div className="flex min-w-0 flex-1 flex-col gap-2">
-                      <p className="flex min-w-0 items-baseline gap-1.5 text-[0.8125rem]">
-                        <span
-                          className={cn(
-                            "min-w-0 truncate",
-                            (step.state === "next" ||
-                              step.state === "skipped") &&
-                              "text-muted-foreground"
-                          )}
-                        >
-                          {step.label}
-                          {step.state === "skipped" ? ` · ${SKIPPED}` : null}
-                          <span className="sr-only">
-                            {STEP_SAID[step.state]}
+              {shownSteps.length ? (
+                <ol aria-label="Steps" className="flex flex-col">
+                  {shownSteps.map((step) => (
+                    <li
+                      className="group relative flex gap-1.5 pb-3 last:pb-0"
+                      data-state={step.state}
+                      key={step.id}
+                    >
+                      {/* The rail between markers, quiet, ticked off as steps finish. */}
+                      <span
+                        aria-hidden
+                        className={cn(
+                          "absolute top-5 bottom-0.5 left-[7.5px] w-px group-last:hidden",
+                          step.state === "done" ? "bg-primary/45" : "bg-border"
+                        )}
+                      />
+                      <span aria-hidden className="mt-px flex size-4 shrink-0">
+                        <StepMark failed={failed} step={step} />
+                      </span>
+                      <div className="flex min-w-0 flex-1 flex-col gap-2">
+                        <p className="flex min-w-0 items-baseline gap-1.5 text-[0.8125rem]">
+                          <span
+                            className={cn(
+                              "min-w-0 truncate",
+                              (step.state === "next" ||
+                                step.state === "skipped") &&
+                                "text-muted-foreground"
+                            )}
+                          >
+                            {step.label}
+                            {step.state === "skipped" ? ` · ${SKIPPED}` : null}
+                            <span className="sr-only">
+                              {STEP_SAID[step.state]}
+                            </span>
                           </span>
-                        </span>
-                      </p>
-                      {step.state === "done" || step.state === "skipped"
-                        ? null
-                        : step.detail}
-                    </div>
-                  </li>
-                ))}
-                {more && !Children.toArray(children).length ? (
-                  <li aria-hidden className="relative h-5">
-                    <span className="absolute inset-y-0 left-[7.5px] w-px bg-linear-to-b from-border to-transparent" />
-                  </li>
-                ) : null}
-              </ol>
+                        </p>
+                        {step.state === "done" || step.state === "skipped"
+                          ? null
+                          : step.detail}
+                      </div>
+                    </li>
+                  ))}
+                  {more && !acts ? (
+                    <li aria-hidden className="relative h-5">
+                      <span className="absolute inset-y-0 left-[7.5px] w-px bg-linear-to-b from-border to-transparent" />
+                    </li>
+                  ) : null}
+                </ol>
+              ) : null}
               {children}
             </div>
           </div>

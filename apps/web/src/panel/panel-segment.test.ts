@@ -141,3 +141,25 @@ it("draws no details under a finished step", async () => {
   expect(container.textContent).not.toContain("Warm editorial")
   expect(container.textContent).toContain("3 of 8")
 })
+
+it("draws nothing under a job not begun, and only its action when it has one", async () => {
+  const upcoming = steps("now").map((step) => ({
+    ...step,
+    state: "next" as const,
+  }))
+  const next = {
+    state: "upcoming" as const,
+    title: "Your website comes next",
+    steps: upcoming,
+  }
+  await show(next)
+  expect(container.querySelector('[id$="-steps"]')).toBeNull()
+  expect(caret()).toBeNull()
+
+  await show({
+    ...next,
+    children: createElement("a", { href: "/app" }, "Create my website"),
+  })
+  expect(container.querySelector("ol")).toBeNull()
+  expect(container.textContent).toContain("Create my website")
+})
