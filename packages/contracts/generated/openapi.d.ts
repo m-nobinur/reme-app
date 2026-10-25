@@ -3237,6 +3237,7 @@ export interface components {
         | "failed"
         | "cancelled"
       goal: string
+      label?: string
       /** @enum {string} */
       lane?: "full" | "quick"
       fell_through?: boolean
@@ -6281,6 +6282,7 @@ export interface components {
                     | "failed"
                     | "cancelled"
                   goal: string
+                  label?: string
                   /** @enum {string} */
                   lane?: "full" | "quick"
                   fell_through?: boolean
@@ -9314,6 +9316,8 @@ export interface components {
        * @enum {string}
        */
       change_kind?: "copy" | "style" | "section" | "photo" | "creative"
+      /** @description A short name for the change in the owner's terms, as the panel and the ready line say it after "updating": "your hero title", "your phone number", "the colours". */
+      label?: string
       /** @description Set when the owner wrote the words in the panel: once the change starts they are also posted in this conversation, or in the newest one when none is named. */
       chat?: {
         /** Format: uuid */
@@ -9672,6 +9676,7 @@ export interface components {
               | "failed"
               | "cancelled"
             goal: string
+            label?: string
             /** @enum {string} */
             lane?: "full" | "quick"
             fell_through?: boolean
@@ -11229,6 +11234,7 @@ export interface components {
           | "failed"
           | "cancelled"
         goal: string
+        label?: string
         /** @enum {string} */
         lane?: "full" | "quick"
         fell_through?: boolean
