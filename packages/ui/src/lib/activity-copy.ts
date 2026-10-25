@@ -819,9 +819,7 @@ export function segmentLine(
   // The time so far, then what can be said of it: a restart, past the lane's
   // p95, or the usual time the chat quotes too. Nothing it cannot back.
   const said = segment.restarted
-    ? n.assistant
-      ? `${n.assistant} restarted it`
-      : "restarted once"
+    ? `${n.assistant ?? "your assistant"} restarted it`
     : late
       ? "taking longer than usual"
       : segment.usual_seconds === undefined

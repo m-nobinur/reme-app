@@ -479,7 +479,7 @@ describe("segment copy", () => {
       segmentLine(segment("change", "now", { restarted: true }), {
         orgId: "org-1",
       })
-    ).toBe("Restarted once")
+    ).toBe("Your assistant restarted it")
     expect(
       segmentLine(segment("domain", "waiting"), ctx, { provider: "Cloudflare" })
     ).toBe("One change to make at Cloudflare")
