@@ -139,48 +139,6 @@
     }
   },
   {
-    "id": "deepseek/deepseek-v4.1-flash-1017",
-    "name": "DeepSeek: DeepSeek V4.1 Flash 1017",
-    "api": "openai-completions",
-    "baseUrl": "https://openrouter.ai/api/v1",
-    "provider": "openrouter",
-    "reasoning": true,
-    "input": ["text", "image"],
-    "cost": {
-      "input": 0.63,
-      "output": 2.52,
-      "cacheRead": 0.08,
-      "cacheWrite": 0
-    },
-    "contextWindow": 1040000,
-    "maxTokens": 131072,
-    "compat": {
-      "thinkingFormat": "openrouter",
-      "openRouterRouting": {
-        "max_price": {
-          "prompt": 0.63,
-          "completion": 2.52
-        },
-        "ignore": [
-          "alibaba",
-          "baidu",
-          "deepseek",
-          "minimax",
-          "moonshotai",
-          "nex-agi",
-          "seed",
-          "siliconflow",
-          "stepfun",
-          "streamlake",
-          "tencent",
-          "xiaomi",
-          "z-ai"
-        ],
-        "data_collection": "deny"
-      }
-    }
-  },
-  {
     "id": "google/gemini-3.8-flash",
     "name": "Google: Gemini 3.8 Flash",
     "api": "openai-completions",

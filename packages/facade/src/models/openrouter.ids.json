@@ -5,6 +5,5 @@
   "anthropic/claude-sonnet-5.5",
   "anthropic/claude-haiku-5.5",
   "google/gemini-3.8-flash",
-  "openai/gpt-6.1-sol",
-  "deepseek/deepseek-v4.1-flash-1017"
+  "openai/gpt-6.1-sol"
 ]
