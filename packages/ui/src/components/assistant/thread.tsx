@@ -652,55 +652,62 @@ const ThreadRoot: FC<{
             onBelow={setBelow}
             onUnseen={setUnseen}
           />
-          <div
-            className={cn(
-              "mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4",
-              isEmpty && "justify-center"
-            )}
-          >
-            {isEmpty ? (
-              <Welcome />
-            ) : (
-              // The welcome carries the page's heading; a conversation has
-              // its title in the top bar, and this names the page for a
-              // screen reader.
-              <h1 className="sr-only">Conversation</h1>
-            )}
-            <HistoryLoading stored={stored} />
-
-            {/* The space assistant-ui holds below a pinned reply goes last,
-                after the slot. An empty slot's margin takes back its gap. */}
+          {/* assistant-ui watches the viewport's children. Holding the space
+              under a reply (FollowBottom) resizes the box that holds the
+              whole transcript, inside that observer's round, and the browser
+              logs a ResizeObserver loop. A box with no layout never changes
+              size, so the one that does is not watched. */}
+          <div className="contents">
             <div
-              data-slot="aui_message-group"
-              className="flex flex-col gap-y-6 has-[>:not(:empty)]:mb-14 [&>[data-aui-top-anchor-reserve]]:order-last"
-            >
-              <ThreadMessages />
-              {/* Always in the page, so a card that appears in it is read out. */}
-              <div aria-live="polite" className="empty:-mt-6" ref={setSlot}>
-                {after}
-              </div>
-            </div>
-
-            <ThreadPrimitive.ViewportFooter
-              ref={setFooter}
               className={cn(
-                "aui-thread-viewport-footer flex flex-col gap-4 overflow-visible bg-background pb-4 md:pb-6",
-                !isEmpty &&
-                  "sticky bottom-0 mt-auto rounded-t-(--composer-radius)"
+                "mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4",
+                isEmpty && "justify-center"
               )}
             >
-              <ThreadScrollToBottom below={below} unseen={unseen} />
-              <div className="flex flex-col gap-2">
-                <SkipThisOne />
-                <div className="empty:hidden" ref={setTray} />
-                <Composer autoFocus={autoFocus} expanded={isEmpty} />
-                {/* The same gap as the tray above the composer. */}
-                {isEmpty ? updates : null}
+              {isEmpty ? (
+                <Welcome />
+              ) : (
+                // The welcome carries the page's heading; a conversation has
+                // its title in the top bar, and this names the page for a
+                // screen reader.
+                <h1 className="sr-only">Conversation</h1>
+              )}
+              <HistoryLoading stored={stored} />
+
+              {/* The space assistant-ui holds below a pinned reply goes last,
+                after the slot. An empty slot's margin takes back its gap. */}
+              <div
+                data-slot="aui_message-group"
+                className="flex flex-col gap-y-6 has-[>:not(:empty)]:mb-14 [&>[data-aui-top-anchor-reserve]]:order-last"
+              >
+                <ThreadMessages />
+                {/* Always in the page, so a card that appears in it is read out. */}
+                <div aria-live="polite" className="empty:-mt-6" ref={setSlot}>
+                  {after}
+                </div>
               </div>
-              <AuiIf condition={(s) => isEmpty && s.composer.isEmpty}>
-                <ThreadSuggestions />
-              </AuiIf>
-            </ThreadPrimitive.ViewportFooter>
+
+              <ThreadPrimitive.ViewportFooter
+                ref={setFooter}
+                className={cn(
+                  "aui-thread-viewport-footer flex flex-col gap-4 overflow-visible bg-background pb-4 md:pb-6",
+                  !isEmpty &&
+                    "sticky bottom-0 mt-auto rounded-t-(--composer-radius)"
+                )}
+              >
+                <ThreadScrollToBottom below={below} unseen={unseen} />
+                <div className="flex flex-col gap-2">
+                  <SkipThisOne />
+                  <div className="empty:hidden" ref={setTray} />
+                  <Composer autoFocus={autoFocus} expanded={isEmpty} />
+                  {/* The same gap as the tray above the composer. */}
+                  {isEmpty ? updates : null}
+                </div>
+                <AuiIf condition={(s) => isEmpty && s.composer.isEmpty}>
+                  <ThreadSuggestions />
+                </AuiIf>
+              </ThreadPrimitive.ViewportFooter>
+            </div>
           </div>
         </ThreadPrimitive.Viewport>
       </ThreadPrimitive.Root>
