@@ -223,9 +223,6 @@ const ThreadSettingsContext = createContext<ThreadSettings>(EMPTY_SETTINGS)
 // a new mode or briefing then redrew the whole transcript.
 const ThreadRevealContext = createContext<ThreadReveal | undefined>(undefined)
 
-// Module level, so the message list keeps its memo when the thread re-renders.
-const renderMessage = () => <ThreadMessage />
-
 // Startup exposes a loading placeholder thread; treat it as a new chat so
 // the composer mounts centered. Loads after startup keep the docked layout.
 const isNewChatView = (s: AssistantState) =>
@@ -428,7 +425,8 @@ const FollowBottom: FC<{
   footer: HTMLElement | null
   after: HTMLElement | null
   onUnseen: (unseen: boolean) => void
-}> = ({ footer, after, onUnseen }) => {
+  onBelow: (below: boolean) => void
+}> = ({ footer, after, onUnseen, onBelow }) => {
   const store = useThreadViewportStore()
   const aui = useAui()
   const follow = useRef<() => void>(() => undefined)
@@ -461,12 +459,21 @@ const FollowBottom: FC<{
     // lands while the tray is still growing (its height eases) reads short of
     // the bottom, and taking that as "not pinned" stopped the follow there,
     // 12 px up with nothing below.
+    // Whether the end of the transcript is out of sight under the composer.
+    // The space held below a pinned reply is room to scroll with nothing in
+    // it, and Scroll to bottom over blank space took the reader nowhere.
+    const below = () =>
+      onBelow(
+        after.getBoundingClientRect().bottom >
+          footer.getBoundingClientRect().top + 1
+      )
     const onScroll = () => {
       const { scrollTop: top, scrollHeight: height } = viewport
       if (top < last.top && height === last.height) pinned = false
       else if (atBottom()) pinned = true
       last = { top, height }
       if (pinned) onUnseen(false)
+      below()
     }
     // A frame on, once the space below the reply is measured again.
     follow.current = () => {
@@ -526,13 +533,16 @@ const FollowBottom: FC<{
     observer.observe(footer)
     observer.observe(viewport)
     observer.observe(after)
+    // The transcript outgrowing the space held below the reply.
+    if (after.parentElement) observer.observe(after.parentElement)
     viewport.addEventListener("scroll", onScroll, { passive: true })
+    below()
     return () => {
       observer.disconnect()
       viewport.removeEventListener("scroll", onScroll)
       follow.current = () => undefined
     }
-  }, [footer, after, store, aui, onUnseen])
+  }, [footer, after, store, aui, onUnseen, onBelow])
   return null
 }
 
@@ -550,6 +560,7 @@ const ThreadRoot: FC<{
   const [footer, setFooter] = useState<HTMLElement | null>(null)
   const [slot, setSlot] = useState<HTMLElement | null>(null)
   const [unseen, setUnseen] = useState(false)
+  const [below, setBelow] = useState(false)
 
   return (
     <TraySlotProvider value={tray}>
@@ -572,7 +583,12 @@ const ThreadRoot: FC<{
           className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll pe-(--panel-inset)"
         >
           <KeepTurnAnchor />
-          <FollowBottom after={slot} footer={footer} onUnseen={setUnseen} />
+          <FollowBottom
+            after={slot}
+            footer={footer}
+            onBelow={setBelow}
+            onUnseen={setUnseen}
+          />
           <div
             className={cn(
               "mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4",
@@ -595,9 +611,7 @@ const ThreadRoot: FC<{
               data-slot="aui_message-group"
               className="flex flex-col gap-y-6 has-[>:not(:empty)]:mb-14 [&>[data-aui-top-anchor-reserve]]:order-last"
             >
-              <ThreadPrimitive.Messages>
-                {renderMessage}
-              </ThreadPrimitive.Messages>
+              <ThreadMessages />
               {/* Always in the page, so a card that appears in it is read out. */}
               <div aria-live="polite" className="empty:-mt-6" ref={setSlot}>
                 {after}
@@ -612,7 +626,7 @@ const ThreadRoot: FC<{
                   "sticky bottom-0 mt-auto rounded-t-(--composer-radius)"
               )}
             >
-              <ThreadScrollToBottom unseen={unseen} />
+              <ThreadScrollToBottom below={below} unseen={unseen} />
               <div className="flex flex-col gap-2">
                 <SkipThisOne />
                 <div className="empty:hidden" ref={setTray} />
@@ -642,6 +656,38 @@ const ThreadMessage: FC = () => {
       {role === "user" ? <UserMessage /> : <AssistantMessageComponent />}
     </>
   )
+}
+
+// Module level, so each row keeps its memo when the thread re-renders.
+const MESSAGE_COMPONENTS = { Message: ThreadMessage }
+
+/**
+ * Each row's key, space separated: a reply's is the message before it, not
+ * its own id. While a turn waits the runtime shows a placeholder reply under
+ * an id of its own, and the reply that streams in carries the server's, so
+ * keyed by id the row was torn down and mounted again on every reply.
+ */
+export const rowKeys = (messages: readonly { id: string; role: string }[]) =>
+  messages
+    .map((message, index) =>
+      message.role === "assistant"
+        ? `reply:${messages[index - 1]?.id ?? ""}`
+        : message.id
+    )
+    .join(" ")
+
+const ThreadMessages: FC = () => {
+  const keys = useAuiState((s) => rowKeys(s.thread.messages))
+  if (!keys) return null
+  return keys
+    .split(" ")
+    .map((key, index) => (
+      <ThreadPrimitive.MessageByIndex
+        components={MESSAGE_COMPONENTS}
+        index={index}
+        key={key}
+      />
+    ))
 }
 
 /** The day a stored message was written, from the `createdAt` the server puts in `metadata.custom`. */
@@ -695,10 +741,16 @@ const localDay = (at: string | null): number | null => {
 // It shows only after a short delay: on each send the viewport leaves the
 // bottom for the moment it takes to glide the sent message up, and without
 // the delay the button blinked on every send. Something that landed while the
-// owner read further up makes it a "New message" pill.
-const ThreadScrollToBottom: FC<{ unseen: boolean }> = ({ unseen }) => {
-  const className =
-    "aui-thread-scroll-to-bottom absolute -top-12 z-10 self-center rounded-full transition-[opacity,visibility] delay-500 disabled:invisible disabled:opacity-0 disabled:delay-0 motion-reduce:transition-none"
+// owner read further up makes it a "New message" pill. Nothing below the
+// composer but held space hides it too.
+const ThreadScrollToBottom: FC<{ unseen: boolean; below: boolean }> = ({
+  unseen,
+  below,
+}) => {
+  const className = cn(
+    "aui-thread-scroll-to-bottom absolute -top-12 z-10 self-center rounded-full transition-[opacity,visibility] delay-500 disabled:invisible disabled:opacity-0 disabled:delay-0 motion-reduce:transition-none",
+    !below && "invisible opacity-0 delay-0"
+  )
   return (
     <ThreadPrimitive.ScrollToBottom
       behavior="smooth"
@@ -1208,7 +1260,9 @@ const AssistantMessage: FC = () => {
   const ACTION_BAR_HEIGHT = `min-h-7.5 ${ACTION_BAR_PT}`
 
   const reveal = useReveal()
-  const writing = reveal.phase === "typing" || reveal.phase === "writing"
+  const running = useAuiState((s) => s.message.status?.type === "running")
+  const writing =
+    running || reveal.phase === "typing" || reveal.phase === "writing"
 
   return (
     <MessagePrimitive.Root
@@ -1275,11 +1329,17 @@ const AssistantMessage: FC = () => {
           <MessageError />
         </div>
 
+        {/* Its space is held from the start, but nothing under the words
+            shows (or counts as moving) until the reply is done. */}
         <div
           data-slot="aui_assistant-message-footer"
-          className={cn("flex items-center gap-2", ACTION_BAR_HEIGHT)}
+          className={cn(
+            "flex items-center gap-2",
+            ACTION_BAR_HEIGHT,
+            writing && "invisible"
+          )}
         >
-          <MessageTime held={writing} />
+          <MessageTime />
           {/* A message of cards alone has no words to rate. */}
           <AuiIf
             condition={(s) =>
@@ -1332,14 +1392,13 @@ const Feedback: FC = () => {
  * owns the history, so a regenerated or rewritten turn would only ever exist
  * on this screen. They show on hover or focus rather than through `autohide`,
  * which unmounts them until the pointer arrives, so a keyboard could never
- * reach them and a touch screen never see them.
+ * reach them and a touch screen never see them. Nor `hideWhenRunning`: it
+ * took every reply's thumbs down on each send and drew them all again when
+ * the turn ended. The reply being written hides its own footer.
  */
 const AssistantActionBar: FC = () => {
   return (
-    <ActionBarPrimitive.Root
-      hideWhenRunning
-      className="aui-assistant-action-bar-root flex gap-1 text-muted-foreground opacity-0 transition-opacity duration-150 focus-within:opacity-100 group-hover/message:opacity-100 [@media(hover:none)]:opacity-100"
-    >
+    <ActionBarPrimitive.Root className="aui-assistant-action-bar-root flex gap-1 text-muted-foreground opacity-0 transition-opacity duration-150 focus-within:opacity-100 group-hover/message:opacity-100 [@media(hover:none)]:opacity-100">
       <Feedback />
     </ActionBarPrimitive.Root>
   )
@@ -1355,19 +1414,11 @@ const LOCAL_TIME = new Intl.DateTimeFormat("en-GB", {
   hour12: true,
 })
 
-/**
- * Held back, in its place, while the reply is still being written, so
- * nothing under the words moves but the words.
- */
-const MessageTime: FC<{ held?: boolean }> = ({ held = false }) => {
+const MessageTime: FC = () => {
   const at = useAuiState((s) => sentAt(s.message))
-  const running = useAuiState((s) => s.message.status?.type === "running")
   return (
     <time
-      className={cn(
-        "text-[0.6875rem] text-muted-foreground tabular-nums",
-        (running || held) && "invisible"
-      )}
+      className="text-[0.6875rem] text-muted-foreground tabular-nums"
       dateTime={at}
     >
       {LOCAL_TIME.format(new Date(at))}

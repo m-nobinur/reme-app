@@ -3,7 +3,6 @@ import {
   CalendarBlankIcon,
   CalendarDotsIcon,
   CaretCircleDownIcon,
-  CheckCircleIcon,
   CheckSquareIcon,
   EnvelopeSimpleIcon,
   HashIcon,
@@ -43,8 +42,8 @@ import { useEffect, useState } from "react"
  * not. A click on either switches it, and a pill's remove button shows on
  * hover or focus. Anything else is said in the chat: words typed while the
  * pills wait answer them (`quoteChanges` carries the pills as the owner left
- * them), and "Looks good" confirms. Confirmed, it says what was saved, since
- * the words above it pointed at the pills; changed, the next proposal does.
+ * them), and "Looks good" confirms. Answered, it draws nothing: the reply
+ * says what was saved, or the next proposal shows what changed.
  */
 
 const TYPE_ICON: Record<QuoteDraft[number]["field"]["type"], Icon> = {
@@ -156,24 +155,6 @@ const ReviewQuoteForm: ToolCallMessagePartComponent = (props) => {
     }
   }, [pending, toolCallId, draft])
 
-  if (view.state === "answered") {
-    if (view.output.answer !== "confirmed") return null
-    const asked = view.output.fields.map((field) => field.label).join(", ")
-    return (
-      <p
-        className="flex items-start gap-2 pt-3 text-muted-foreground text-sm"
-        data-slot="review-quote-form"
-      >
-        <CheckCircleIcon
-          aria-hidden
-          className="mt-0.5 size-4 shrink-0 text-primary"
-        />
-        {asked
-          ? `Saved. Before a quote I'll ask each customer for ${asked}, as well as their name, email and phone.`
-          : "Saved. Before a quote I'll ask each customer for their name, email and phone."}
-      </p>
-    )
-  }
   if (!pending) {
     return (
       <TrayNote
