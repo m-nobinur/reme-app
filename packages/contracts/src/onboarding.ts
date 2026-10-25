@@ -494,6 +494,8 @@ export const LogoRound = z.strictObject({
   round: z.int().min(1).max(LOGO_ROUNDS_MAX),
   status: z.enum(["drawing", "ready", "failed"]),
   variants: z.array(z.strictObject({ id: Uuid })).max(LOGO_VARIANTS),
+  /** What the round was drawn from, so the tray can tell when the owner has changed it since. */
+  brief: LogoBrief,
 })
 
 /**

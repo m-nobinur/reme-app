@@ -161,6 +161,7 @@ export function roundView(manifest: Manifest, now = Date.now()): LogoRound {
     status,
     // A round drawn when a round was four keeps its first `LOGO_VARIANTS`.
     variants: manifest.variants.slice(0, LOGO_VARIANTS).map((id) => ({ id })),
+    brief: manifest.brief,
   }
 }
 

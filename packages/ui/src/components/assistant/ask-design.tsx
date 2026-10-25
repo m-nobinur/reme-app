@@ -15,7 +15,7 @@ import { createContext, useContext, useRef } from "react"
 /**
  * The design questions of onboarding, in the question tray. An answer is
  * sent as the owner leaves its question (`SaveDesignAnswer`), so a reload
- * resumes after it; Build my site and Skip all answer the call. Once
+ * resumes after it; Looks good and Pick for me answer the call. Once
  * answered the call shows nothing: the owner's reply after it says what they
  * picked.
  */
@@ -40,7 +40,7 @@ const AskDesign: ToolCallMessagePartComponent = (props) => {
   const messageId = useAuiState((s) => s.message.id)
   const conversationId = useAuiState((s) => s.threadListItem.remoteId)
   // The api runs one turn per conversation and answers a second at the same
-  // moment `chat.busy`, so the saves go one after another and Build my site
+  // moment `chat.busy`, so the saves go one after another and Looks good
   // waits for the last. What was sent stays here: a refused send reopens the
   // tray, and the owner's answers must still be in it.
   const saving = useRef<Promise<unknown>>(Promise.resolve())
