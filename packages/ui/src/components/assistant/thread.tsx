@@ -425,7 +425,8 @@ const FollowBottom: FC<{
   footer: HTMLElement | null
   after: HTMLElement | null
   onUnseen: (unseen: boolean) => void
-}> = ({ footer, after, onUnseen }) => {
+  onBelow: (below: boolean) => void
+}> = ({ footer, after, onUnseen, onBelow }) => {
   const store = useThreadViewportStore()
   const aui = useAui()
   const follow = useRef<() => void>(() => undefined)
@@ -458,12 +459,21 @@ const FollowBottom: FC<{
     // lands while the tray is still growing (its height eases) reads short of
     // the bottom, and taking that as "not pinned" stopped the follow there,
     // 12 px up with nothing below.
+    // Whether the end of the transcript is out of sight under the composer.
+    // The space held below a pinned reply is room to scroll with nothing in
+    // it, and Scroll to bottom over blank space took the reader nowhere.
+    const below = () =>
+      onBelow(
+        after.getBoundingClientRect().bottom >
+          footer.getBoundingClientRect().top + 1
+      )
     const onScroll = () => {
       const { scrollTop: top, scrollHeight: height } = viewport
       if (top < last.top && height === last.height) pinned = false
       else if (atBottom()) pinned = true
       last = { top, height }
       if (pinned) onUnseen(false)
+      below()
     }
     // A frame on, once the space below the reply is measured again.
     follow.current = () => {
@@ -523,13 +533,16 @@ const FollowBottom: FC<{
     observer.observe(footer)
     observer.observe(viewport)
     observer.observe(after)
+    // The transcript outgrowing the space held below the reply.
+    if (after.parentElement) observer.observe(after.parentElement)
     viewport.addEventListener("scroll", onScroll, { passive: true })
+    below()
     return () => {
       observer.disconnect()
       viewport.removeEventListener("scroll", onScroll)
       follow.current = () => undefined
     }
-  }, [footer, after, store, aui, onUnseen])
+  }, [footer, after, store, aui, onUnseen, onBelow])
   return null
 }
 
@@ -547,6 +560,7 @@ const ThreadRoot: FC<{
   const [footer, setFooter] = useState<HTMLElement | null>(null)
   const [slot, setSlot] = useState<HTMLElement | null>(null)
   const [unseen, setUnseen] = useState(false)
+  const [below, setBelow] = useState(false)
 
   return (
     <TraySlotProvider value={tray}>
@@ -569,7 +583,12 @@ const ThreadRoot: FC<{
           className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll pe-(--panel-inset)"
         >
           <KeepTurnAnchor />
-          <FollowBottom after={slot} footer={footer} onUnseen={setUnseen} />
+          <FollowBottom
+            after={slot}
+            footer={footer}
+            onBelow={setBelow}
+            onUnseen={setUnseen}
+          />
           <div
             className={cn(
               "mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4",
@@ -607,7 +626,7 @@ const ThreadRoot: FC<{
                   "sticky bottom-0 mt-auto rounded-t-(--composer-radius)"
               )}
             >
-              <ThreadScrollToBottom unseen={unseen} />
+              <ThreadScrollToBottom below={below} unseen={unseen} />
               <div className="flex flex-col gap-2">
                 <SkipThisOne />
                 <div className="empty:hidden" ref={setTray} />
@@ -722,10 +741,16 @@ const localDay = (at: string | null): number | null => {
 // It shows only after a short delay: on each send the viewport leaves the
 // bottom for the moment it takes to glide the sent message up, and without
 // the delay the button blinked on every send. Something that landed while the
-// owner read further up makes it a "New message" pill.
-const ThreadScrollToBottom: FC<{ unseen: boolean }> = ({ unseen }) => {
-  const className =
-    "aui-thread-scroll-to-bottom absolute -top-12 z-10 self-center rounded-full transition-[opacity,visibility] delay-500 disabled:invisible disabled:opacity-0 disabled:delay-0 motion-reduce:transition-none"
+// owner read further up makes it a "New message" pill. Nothing below the
+// composer but held space hides it too.
+const ThreadScrollToBottom: FC<{ unseen: boolean; below: boolean }> = ({
+  unseen,
+  below,
+}) => {
+  const className = cn(
+    "aui-thread-scroll-to-bottom absolute -top-12 z-10 self-center rounded-full transition-[opacity,visibility] delay-500 disabled:invisible disabled:opacity-0 disabled:delay-0 motion-reduce:transition-none",
+    !below && "invisible opacity-0 delay-0"
+  )
   return (
     <ThreadPrimitive.ScrollToBottom
       behavior="smooth"
