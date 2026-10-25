@@ -1611,10 +1611,14 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
 
     it("keeps a refused cancel as the card's answer, so the retry calls nothing", async () => {
       const { who, me, id, body } = await carded("chat-not-cancelled")
-      // An open review, so the yes replaces it.
+      // A live site with an open review, so the yes replaces it; before the
+      // first publish a change revises the draft instead.
       const s = seed(kit, who)
+      const live = await s.assignment("published")
+      const served = await s.revision(live, 1)
+      await s.deployment(served, await s.approval(live, served, 1, true))
       const reviewing = await s.assignment("awaiting_review")
-      await s.approval(reviewing, await s.revision(reviewing, 1), 72)
+      await s.approval(reviewing, await s.revision(reviewing, 2), 72)
       const refusal = (code: string) =>
         Response.json(
           {
