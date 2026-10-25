@@ -136,6 +136,13 @@ export async function checkBuild(
   )
 }
 
+const pageSlug = (page: string) =>
+  page === "home"
+    ? "index"
+    : page === "service"
+      ? "services/[slug]"
+      : page.replaceAll("_", "-")
+
 /**
  * The approved Blueprint's pages are fixed: each is in the build, at the path
  * its starter file serves (`service_area` is `service-area/`), so a lead that
@@ -145,12 +152,7 @@ export function checkPlannedPages(
   plan: Pick<Blueprint, "pages">,
   files: Record<string, string>
 ): GateResult | null {
-  const slug = (page: string) =>
-    page === "home"
-      ? "index"
-      : page === "service"
-        ? "services/[slug]"
-        : page.replaceAll("_", "-")
+  const slug = pageSlug
   // `service` is one page per service under services/; the services page's
   // links to each are the links gate's to check.
   const servicePages = Object.keys(files).filter((f) =>
@@ -169,6 +171,36 @@ export function checkPlannedPages(
     "build",
     `the Blueprint plans ${missing.join(", ")} and the build has no page for ${missing.length > 1 ? "them" : "it"}: restore ${missing.map((page) => `src/pages/${slug(page)}.astro`).join(", ")}${missing.includes("service") ? " (it builds a page for each service with a name)" : ""}. Every planned page stays, whatever the facts`,
     first
+  )
+}
+
+/**
+ * A planned gallery is on its page: the owner picked it and the plan holds it,
+ * so a build that draws nothing (its photo paths or alt text unset) fails and
+ * the repair sets them. Other planned sections can render empty by design (a
+ * review section without reviews), so only the gallery, which exists only
+ * with the owner's photos, is checked. Null when none is missing.
+ */
+export function checkPlannedSections(
+  plan: Pick<Blueprint, "pages">,
+  built: readonly { file: string; html: string }[]
+): GateResult | null {
+  const drawn = (page: string) => {
+    const file = page === "home" ? "index.html" : `${pageSlug(page)}/index.html`
+    const html = built.find((b) => b.file === file)?.html ?? ""
+    return /<section\b[^>]*\bclass="(?:[^"]*\s)?gallery[\s"]/.test(html)
+  }
+  const first = plan.pages.find(
+    ({ page, sections }) =>
+      page !== "service" &&
+      sections.some((s) => s.kind === "gallery") &&
+      !drawn(page)
+  )
+  if (!first) return null
+  return fail(
+    "build",
+    `the Blueprint plans a gallery on ${first.page} and the build shows none: it renders only when site.photo1Src to site.photo3Src name the owner's photos and photo1Alt to photo3Alt say what each shows. Set them in src/site-config.ts and keep the gallery section on the page`,
+    first.page
   )
 }
 
@@ -580,7 +612,11 @@ export async function runGates(input: {
   ])
   const pages = built.map((each) => each.page)
   const gap = input.plan
-    ? checkPlannedPages(input.plan, parsed.data.files)
+    ? (checkPlannedPages(input.plan, parsed.data.files) ??
+      checkPlannedSections(
+        input.plan,
+        built.map(({ page, html }) => ({ file: page.file, html }))
+      ))
     : null
   return [
     build.passed && gap ? gap : build,
