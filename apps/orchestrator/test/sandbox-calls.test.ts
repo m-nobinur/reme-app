@@ -10,12 +10,14 @@ import {
 /** A stand-in stub whose calls hang the first `hangs` times, then answer. */
 function stub(hangs: number) {
   const calls: string[] = []
-  const answer = (name: string, value: unknown) => () => {
-    calls.push(name)
-    return calls.filter((c) => c === name).length <= hangs
-      ? new Promise(() => undefined)
-      : Promise.resolve(value)
-  }
+  const answer =
+    (name: string, value: unknown) =>
+    (..._args: unknown[]) => {
+      calls.push(name)
+      return calls.filter((c) => c === name).length <= hangs
+        ? new Promise(() => undefined)
+        : Promise.resolve(value)
+    }
   return {
     calls,
     sandbox: bounded({
@@ -69,7 +71,7 @@ describe("a sandbox call that never answers", () => {
   it("never retries a call that failed for another reason, and passes the rest through", async () => {
     let tries = 0
     const sandbox = bounded({
-      readFile: async () => {
+      readFile: async (_path: string) => {
         tries++
         throw new Error("no such file")
       },
