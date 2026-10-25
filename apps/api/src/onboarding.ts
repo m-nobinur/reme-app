@@ -1845,7 +1845,7 @@ export function again(
   return [
     text(why),
     part.type === "tool-ask_design"
-      ? designCard(o, newId)
+      ? designCard(o, newId, trayLogoPath(part))
       : call(part.type, part.input, newId),
   ]
 }
