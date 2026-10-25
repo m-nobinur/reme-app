@@ -447,12 +447,22 @@ const FollowBottom: FC<{
     )
     if (!footer || !after || !viewport) return
     const idle = () => !aui.thread().getState().isRunning
+    // assistant-ui's own rule (`isViewportAtBottom`), so the reader is at the
+    // bottom exactly when Scroll to bottom says so.
     const atBottom = () =>
-      viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop <= 4
+      viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop <= 1
     // Read before a resize moves anything: scroll events come after it.
     let pinned = atBottom()
+    let last = { top: viewport.scrollTop, height: viewport.scrollHeight }
+    // Only the reader scrolling up lets go of the bottom. A scroll event that
+    // lands while the tray is still growing (its height eases) reads short of
+    // the bottom, and taking that as "not pinned" stopped the follow there,
+    // 12 px up with nothing below.
     const onScroll = () => {
-      pinned = atBottom()
+      const { scrollTop: top, scrollHeight: height } = viewport
+      if (top < last.top && height === last.height) pinned = false
+      else if (atBottom()) pinned = true
+      last = { top, height }
       if (pinned) onUnseen(false)
     }
     // A frame on, once the space below the reply is measured again.
@@ -500,6 +510,12 @@ const FollowBottom: FC<{
       if ((shrank || grew || resized) && pinned) {
         viewport.scrollTo({ top: viewport.scrollHeight, behavior: "instant" })
       }
+      // assistant-ui reads `isAtBottom` on a scroll, or on a resize that
+      // changes the whole-pixel scrollHeight. A scroll to where it already
+      // was fires no event, and a sub-pixel change of the tray skips its
+      // resize, so Scroll to bottom stayed up 0.5 px from the bottom. Its
+      // scroll handler reads the geometry as it is now.
+      viewport.dispatchEvent(new Event("scroll"))
     })
     observer.observe(footer)
     observer.observe(viewport)
