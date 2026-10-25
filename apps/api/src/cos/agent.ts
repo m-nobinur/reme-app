@@ -5,7 +5,7 @@ import {
   type ChatRequest,
   COS_TOOLS,
   type CosApproval,
-  type CosChangeRequest,
+  CosChangeRequest,
   type CosPrefix,
   type CosStep,
   type CosToolName,
@@ -813,6 +813,34 @@ export function cleanedChange({ step, ...rest }: CosChangeRequest) {
   return clean ? { ...rest, step: clean } : rest
 }
 
+/** The fields of a change the server can do without: the panel's line, the change's name, a claim. */
+const SPARE = ["step", "label", "proof"] as const
+
+/**
+ * A `request_change` call refused by its schema only for a spare field,
+ * with that field dropped, so the change starts on this call rather than
+ * after the model sees the error and sends it again. Null for any other.
+ */
+export function repairedChange<T extends { toolName: string; input: string }>(
+  call: T
+): T | null {
+  if (call.toolName !== "request_change") return null
+  let input: Record<string, unknown>
+  try {
+    input = JSON.parse(call.input)
+  } catch {
+    return null
+  }
+  for (const key of SPARE) {
+    if (!CosChangeRequest.shape[key].safeParse(input[key]).success) {
+      delete input[key]
+    }
+  }
+  return CosChangeRequest.safeParse(input).success
+    ? { ...call, input: JSON.stringify(input) }
+    : null
+}
+
 /** `request_change`'s input without `step`, the panel's line, which the tool never reads. */
 export function withoutStep(input: unknown): unknown {
   const { step: _step, ...rest } = input as { step?: string }
@@ -1179,6 +1207,7 @@ export function cosAgent(
     // The `step` the panel shows is cleaned before the call is logged, so the
     // part holds what the owner may read; the tool body never gets it.
     experimental_refineToolInput: { request_change: cleanedChange },
+    repairToolCall: async ({ toolCall }) => repairedChange(toolCall),
     // The instructions and tools come first and never change, and only the
     // turn's context and the owner's newest message follow the history, so
     // each call repeats the last one's prefix. Both keys name the
