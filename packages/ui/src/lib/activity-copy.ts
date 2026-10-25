@@ -807,6 +807,8 @@ type LineExtras = {
   provider?: string
   /** What stopped, for a failed segment. */
   why?: string
+  /** A change's build row at work, such as "Checking the page". */
+  doing?: string
 }
 
 /** The muted line under a segment's title, or null when it has none (done, upcoming). */
@@ -856,8 +858,14 @@ export function segmentLine(
     case "onboarding":
       return null
     case "website":
-    case "change":
       return cleanArg(segment.step, "text", 60) ?? timing
+    case "change": {
+      // The step it is on, with the range beside it.
+      const doing = cleanArg(segment.step ?? extras.doing, "text", 60)
+      return doing && range
+        ? `${doing}, ${range.longer ? "taking a little longer, " : ""}${range.text}`
+        : (doing ?? timing)
+    }
     case "golive":
       // Waiting, its one step says what it waits for.
       return waiting ? null : "Going live in a minute"

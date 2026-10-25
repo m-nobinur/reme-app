@@ -468,6 +468,20 @@ describe("segment copy", () => {
     expect(
       segmentLine(segment("website", "now", { usual_seconds: 360 }), ctx)
     ).toBe("About 6 to 9 minutes")
+    // A change names the step it is on, with the range beside it.
+    const doing = "Checking the page"
+    expect(segmentLine(segment("change", "now", quick), ctx, { doing })).toBe(
+      "Checking the page, about 1 to 2 minutes"
+    )
+    expect(
+      segmentLine(segment("change", "now", quick), ctx, {
+        doing,
+        elapsedSeconds: 130,
+      })
+    ).toBe("Checking the page, taking a little longer, about 3 to 5 minutes")
+    expect(segmentLine(segment("change", "now"), ctx, { doing })).toBe(
+      "Checking the page"
+    )
     expect(segmentLine(segment("website", "now"), ctx)).toBeNull()
     expect(
       segmentLine(

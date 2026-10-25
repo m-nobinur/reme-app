@@ -306,6 +306,7 @@ export function panelFor(input: PanelInput): Panel | null {
               (each) => segment.id === `change:${each.assignment_id}`
             ) ?? null)
           : null
+    const doing = build?.activity?.find((row) => row.now)?.label
     return {
       id: segment.id,
       kind: segment.kind,
@@ -316,6 +317,7 @@ export function panelFor(input: PanelInput): Panel | null {
       line: segmentLine(segment, ctx, {
         ...(elapsedSeconds === undefined ? {} : { elapsedSeconds }),
         ...(until ? { until } : {}),
+        ...(doing ? { doing } : {}),
       }),
       steps: segment.steps.flatMap((step) => {
         const label = stepLabel(
