@@ -41,6 +41,9 @@ export function pickLane(
   return { lane: quick ? "quick" : "full", change_kind: change }
 }
 
+/** The event a copy change leaves its new words in, for the ready line. */
+export const QUICK_EDITED = "quick.edited"
+
 const QUICK: readonly ChangeKind[] = ["copy", "style", "section", "photo"]
 
 /** The kinds one model call can edit; `section` goes to the Developer at low effort. */
@@ -127,6 +130,21 @@ export function quickPrompt(
 }
 
 /**
+ * The new wording of a one-edit copy change, for the ready line: the quoted
+ * string in the edit or the text itself, only when it reads as plain words
+ * an owner would recognise. Null for code, a long block or several edits.
+ */
+export function wordsOf(edits: readonly { newText: string }[]): string | null {
+  const [only] = edits
+  if (edits.length !== 1 || !only) return null
+  const quoted = /"([^"\n]+)"/.exec(only.newText)?.[1]
+  const plain = (quoted ?? only.newText)
+    .trim()
+    .replace(/^["'`]+|["'`,.]+$/g, "")
+  return /^[\p{L}\p{N} ,.'’&!?£%-]{3,80}$/u.test(plain) ? plain : null
+}
+
+/**
  * The model's reply applied to the files it may touch: every edit for a
  * file in one `applyEdits` batch, so a refusal writes nothing. Returns the
  * changed files and the summary; throws with a message the retry can read.
@@ -135,7 +153,11 @@ export function applyQuick(
   kind: OneCallKind,
   files: Record<string, string>,
   reply: string
-): { summary: string; changed: Record<string, string> } {
+): {
+  summary: string
+  changed: Record<string, string>
+  words: string | null
+} {
   // A reply may wrap its JSON in a fence; the object is what counts.
   const json = reply.slice(reply.indexOf("{"), reply.lastIndexOf("}") + 1)
   let raw: unknown
@@ -170,7 +192,11 @@ export function applyQuick(
       "The edits changed nothing. Make the change the request asks for."
     )
   }
-  return { summary: parsed.data.summary, changed }
+  return {
+    summary: parsed.data.summary,
+    changed,
+    words: kind === "copy" ? wordsOf(parsed.data.edits) : null,
+  }
 }
 
 /** Why a quick attempt handed the change on, for the log and the fall-through. */
@@ -225,6 +251,8 @@ export async function quickEdit(input: {
       /** Files written already, as bytes (a picture). */
       written?: string[]
       photos?: PhotosEvent
+      /** The new wording of a copy change, for the ready line. */
+      words?: string | null
     } | null = null
     let attempts = 0
     let error = ""
@@ -334,6 +362,19 @@ export async function quickEdit(input: {
         taint: ["inferred"],
       })
     )
+    if (applied.words) {
+      const { words } = applied
+      await kit.withOrg({ orgId: ids.orgId }, (db) =>
+        appendEvent(db, {
+          orgId: ids.orgId,
+          assignmentId: ids.assignmentId,
+          staffId: spec.staff_id,
+          type: QUICK_EDITED,
+          payload: { words },
+          taint: ["inferred"],
+        })
+      )
+    }
     // The new slot list, for the review card and the next "Try another".
     if (applied.photos) {
       const photos = applied.photos

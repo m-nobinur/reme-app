@@ -88,6 +88,13 @@ describe("what the owner reads", () => {
     ]),
     readyText("site.build", plan),
     readyText("site.revise", null),
+    readyText("site.revise", null, { label: "your hero title" }),
+    readyText(
+      "site.revise",
+      null,
+      { label: "your hero title", words: "Professional home cleaning" },
+      "b"
+    ),
     resumedText("site.build"),
     resumedText("site.revise"),
   ]
@@ -113,6 +120,33 @@ describe("what the owner reads", () => {
     )
     expect(readyText("site.build", null)).toBe(
       "Your website draft is ready. Preview it, then approve it or tell me what to change."
+    )
+  })
+})
+
+describe("a change's ready line", () => {
+  const change = { label: "your hero title" }
+
+  it("names the change, and quotes the new words of a copy change", () => {
+    expect(readyText("site.revise", null, change, "c")).toBe(
+      "I've updated your hero title. Have a look, and publish when you're happy."
+    )
+    expect(
+      readyText("site.revise", null, { ...change, words: "Clean homes" }, "b")
+    ).toBe(
+      "I've updated your hero title: Clean homes. Have a look, and publish when you're happy."
+    )
+  })
+
+  it("reads the same for the same change and varies between changes", () => {
+    const line = (seed: string) => readyText("site.revise", null, change, seed)
+    expect(line("a")).toBe(line("a"))
+    expect(new Set(["a", "b", "c"].map(line)).size).toBeGreaterThan(1)
+  })
+
+  it("falls back to the plain line when there is no label", () => {
+    expect(readyText("site.revise", null, {}, "a")).toMatch(
+      /^Your website changes are ready/
     )
   })
 })

@@ -5,6 +5,7 @@ import {
   type BuildQuestion,
   type BuildQuestions,
   type BuildStopCause,
+  BuildSummary,
   buildFailure,
   CompletionReport,
   type GateName,
@@ -31,6 +32,7 @@ import { creationChoices, failureReason, lastReport } from "./brief.ts"
 import { eventKey } from "./domain-flow.ts"
 import { logSpend, replyOf, writeText } from "./heartbeat-write.ts"
 import { inputOf, refuseQuestion } from "./question.ts"
+import { QUICK_EDITED } from "./quick.ts"
 import { workKey } from "./sandbox.ts"
 import { type Ids, REPAIR_LIMIT, repairsSoFar } from "./state.ts"
 
@@ -128,10 +130,45 @@ function plannedPages(blueprint: unknown) {
   return { named, each: pages.includes("service") }
 }
 
-/** The ready line: the planned pages by the names the owner picked them by. */
-export function readyText(kind: string, blueprint: unknown): string {
+/** What a change says about itself: the owner's short name for it, and the new words of a copy change. */
+export type Change = { label?: string; words?: string }
+
+/** The same assignment always reads the same wording, so a replayed step posts what the first did. */
+const pick = <T>(seed: string, variants: readonly T[]) =>
+  variants[
+    [...seed].reduce((sum, char) => sum + (char.codePointAt(0) ?? 0), 0) %
+      variants.length
+  ] as T
+
+/**
+ * The ready line: a change names itself by its label, with its new words when
+ * a copy change made them; a first build names the planned pages by the names
+ * the owner picked them by.
+ */
+export function readyText(
+  kind: string,
+  blueprint: unknown,
+  { label, words }: Change = {},
+  seed = ""
+): string {
   if (kind === "site.revise") {
-    return "Your website changes are ready. Preview them, then approve them or tell me what to change."
+    if (!label) {
+      return "Your website changes are ready. Preview them, then approve them or tell me what to change."
+    }
+    const next = "Have a look, and publish when you're happy."
+    return pick(
+      seed,
+      words
+        ? [
+            `I've updated ${label}: ${words}. ${next}`,
+            `I've changed ${label} to "${words}". ${next}`,
+          ]
+        : [
+            `I've updated ${label}. ${next}`,
+            `All done, I've updated ${label}. ${next}`,
+            `I've made the change to ${label}. ${next}`,
+          ]
+    )
   }
   const next = "Preview it, then approve it or tell me what to change."
   const { named, each } = plannedPages(blueprint)
@@ -184,6 +221,26 @@ async function offerOf(
   return questions.length > 0
     ? { kind: "offer", assignment_id: assignmentId, questions }
     : undefined
+}
+
+/** The change's label from its creation and its new words from the quick lane, each absent when not recorded. */
+async function changeOf(db: OrgScopedDb, ids: Ids): Promise<Change> {
+  const rows = await db
+    .select({ type: events.type, payload: events.payload })
+    .from(events)
+    .where(
+      sql`${events.assignmentId} = ${ids.assignmentId} and ${events.type} in ('assignment.created', ${QUICK_EDITED})`
+    )
+    .orderBy(sql`${events.eventId} desc`)
+  const payload = (type: string) => rows.find((r) => r.type === type)?.payload
+  const label = BuildSummary.shape.label.safeParse(
+    payload("assignment.created")?.label
+  ).data
+  const words = payload(QUICK_EDITED)?.words
+  return {
+    ...(label && { label }),
+    ...(typeof words === "string" && { words }),
+  }
 }
 
 /** One note, once: its key makes the event's, so a replayed step writes nothing new. */
@@ -399,11 +456,12 @@ const reviewOpen = async (kit: Tenancy, ids: Ids) => {
 export async function readyNote(kit: Tenancy, ids: Ids): Promise<Note | null> {
   const row = await reviewOpen(kit, ids)
   if (!row) return null
-  const { retry_of, offer } = await kit.withOrg(
+  const { retry_of, offer, change } = await kit.withOrg(
     { orgId: ids.orgId },
     async (db) => ({
       ...(await creationChoices(db, ids)),
       offer: await offerOf(db, ids.assignmentId),
+      change: row.kind === "site.revise" ? await changeOf(db, ids) : {},
     })
   )
   const { named, each } = plannedPages(row.blueprint)
@@ -426,7 +484,7 @@ export async function readyNote(kit: Tenancy, ids: Ids): Promise<Note | null> {
   await writeNote(kit, ids.orgId, note)
   return {
     key: note.key,
-    text: readyText(row.kind, row.blueprint),
+    text: readyText(row.kind, row.blueprint, change, ids.assignmentId),
     ...(offer && { questions: offer }),
   }
 }
