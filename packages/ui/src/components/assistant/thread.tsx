@@ -500,6 +500,7 @@ const FollowBottom: FC<{
     let height = footer.offsetHeight
     let slot = after.offsetHeight
     let size = `${viewport.clientWidth}x${viewport.clientHeight}`
+    let windowSize = `${innerWidth}x${innerHeight}`
     const observer = new ResizeObserver(() => {
       const shrank = footer.offsetHeight < height
       const grew = footer.offsetHeight > height
@@ -507,12 +508,17 @@ const FollowBottom: FC<{
       const next = `${viewport.clientWidth}x${viewport.clientHeight}`
       const resized = next !== size
       size = next
+      const shown = `${innerWidth}x${innerHeight}`
+      const moved = shown !== windowSize
+      windowSize = shown
       const landed = after.offsetHeight > slot
-      const left = after.offsetHeight < slot
       slot = after.offsetHeight
-      // A tray that docks under a reply keeps the owner's message at the top:
-      // ending the turn on it scrolled the transcript back to the bottom.
-      if ((shrank || resized || left) && idle()) {
+      // The owner's message stays at the top until they send the next one: a
+      // card docking, leaving or swapping under the reply resizes the footer
+      // and the viewport, and letting go of the turn then scrolled the
+      // transcript back to show the messages before it. Only the window
+      // itself resizing lets go.
+      if (moved && idle()) {
         store.getState().setTopAnchorTurn(null)
       } else if (landed) {
         const { topAnchorTurn, setTopAnchorTurn } = store.getState()
