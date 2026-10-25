@@ -1,11 +1,14 @@
-import type { ToolCallMessagePartComponent } from "@assistant-ui/react"
+import {
+  type ToolCallMessagePartComponent,
+  useAuiState,
+} from "@assistant-ui/react"
 import {
   CosChangeRequest,
   ONBOARDING_GOAL,
   RequestChangeOutput as RequestChangeResult,
 } from "@workspace/contracts"
 import { Decision, Done } from "@workspace/ui/components/assistant/decision"
-import { decisionView } from "@workspace/ui/lib/tool-state"
+import { decisionView, isRetried } from "@workspace/ui/lib/tool-state"
 
 /**
  * A change the owner is asked to start: the first build at the end of
@@ -13,15 +16,20 @@ import { decisionView } from "@workspace/ui/lib/tool-state"
  * proposes. The change text is the immutable target and stays on screen in
  * every state, and "started" shows only once the server says a build exists.
  * Onboarding's own first build, once started, draws nothing: the owner never
- * asked for it in those words, and the panel shows it.
+ * asked for it in those words, and the panel shows it. Nor does a refusal the
+ * assistant followed with another try.
  */
 
 const RequestChange: ToolCallMessagePartComponent = (props) => {
   const view = decisionView(props, CosChangeRequest, RequestChangeResult)
+  const retried = useAuiState((s) =>
+    isRetried(s.message.parts, props.toolCallId)
+  )
   if (
-    view.state === "done" &&
-    view.input.text === ONBOARDING_GOAL &&
-    view.output?.outcome === "started"
+    retried ||
+    (view.state === "done" &&
+      view.input.text === ONBOARDING_GOAL &&
+      view.output?.outcome === "started")
   ) {
     return null
   }

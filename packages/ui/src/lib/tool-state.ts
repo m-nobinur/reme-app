@@ -490,6 +490,28 @@ export function isHeld(parts: readonly object[], toolCallId: string): boolean {
   )
 }
 
+/**
+ * Whether this call was refused and the same tool was called again later in
+ * the message: the assistant corrected itself, so the refusal is noise the
+ * owner need not read ("The build could not be started." above a change that
+ * started, 2026-10-25).
+ */
+export function isRetried(
+  parts: readonly object[],
+  toolCallId: string
+): boolean {
+  const calls = (parts as (CallPart & { toolName?: string })[]).filter(
+    (p) => p.type === "tool-call"
+  )
+  const at = calls.findIndex((p) => p.toolCallId === toolCallId)
+  const self = calls[at]
+  return (
+    self !== undefined &&
+    (self.result as { outcome?: string } | undefined)?.outcome === "refused" &&
+    calls.slice(at + 1).some((p) => p.toolName === self.toolName)
+  )
+}
+
 /** What a held answer says, on every card that can be held. */
 export const heldText = (approved: boolean) =>
   `${approved ? "You said yes." : "You said not now."} Sent once you answer the other cards.`

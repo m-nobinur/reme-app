@@ -18,6 +18,7 @@ import {
   decisionView,
   detailsText,
   isHeld,
+  isRetried,
   phoneText,
   readView,
   UNCONFIRMED,
@@ -454,4 +455,22 @@ it("writes a UK number the way it is written at home, and leaves others", () => 
   expect(phoneText("+447700900123")).toBe("07700 900123")
   expect(phoneText("+442079460000")).toBe("020 7946 0000")
   expect(phoneText("+14155550100")).toBe("+14155550100")
+})
+
+it("hides a refusal the same tool was called again after, and only that", () => {
+  const changeCall = (id: string, outcome?: string) =>
+    call(id, {
+      toolName: "request_change",
+      ...(outcome && { result: { outcome } }),
+    })
+  const parts = [changeCall("a", "refused"), changeCall("b", "started")]
+  expect(isRetried(parts, "a")).toBe(true)
+  expect(isRetried(parts, "b")).toBe(false)
+  expect(isRetried([changeCall("a", "refused")], "a")).toBe(false)
+  expect(
+    isRetried(
+      [changeCall("a", "refused"), call("b", { toolName: "get_workspace" })],
+      "a"
+    )
+  ).toBe(false)
 })
