@@ -78,6 +78,7 @@ import { askOwner, heldSteers, relayQuestion } from "./relay.ts"
 import { retireOthers, type SweepCounts, sweepOrg } from "./retention.ts"
 import {
   afterFailure,
+  type Note,
   noteProblem,
   noteResumed,
   postNote,
@@ -1036,6 +1037,28 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           )
           reviewed = opened.approval_id !== null
         }
+        // The ready line goes out with the review, so the chat's card lands
+        // with the panel's; a chat busy now is tried again once the build ends.
+        let readyLine: Note | null = null
+        let said = false
+        if (reviewed) {
+          try {
+            readyLine = await step.do("ready note", () =>
+              run((kit) => readyNote(kit, ids))
+            )
+            const note = readyLine
+            if (note) {
+              said = await step.do("say ready", () =>
+                run((kit) => sayReady(kit, ids, note)).then(
+                  () => true,
+                  () => false
+                )
+              )
+            }
+          } catch {
+            // The ready card says it as well; the chat misses one line.
+          }
+        }
         // The screenshots come after the preview exists, not before it: the
         // review card above is already in front of the owner, and the
         // router serves each image once it lands. The sandbox is still the
@@ -1112,16 +1135,12 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         })
         if (verdict.outcome === "failed") await followUp(kept)
         // Last, so a chat busy for days holds up nothing.
-        if (reviewed) {
+        const note = readyLine
+        if (note && !said) {
           try {
-            const note = await step.do("ready note", () =>
-              run((kit) => readyNote(kit, ids))
+            await step.do("say ready again", SAY_RETRIES, () =>
+              run((kit) => sayReady(kit, ids, note))
             )
-            if (note) {
-              await step.do("say ready", SAY_RETRIES, () =>
-                run((kit) => sayReady(kit, ids, note))
-              )
-            }
           } catch {
             // The ready card says it as well; the chat misses one line.
           }

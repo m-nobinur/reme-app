@@ -932,9 +932,13 @@ describe("the assignment Workflow's step names", () => {
     const { names, run } = drive([completion])
     expect(await run()).toMatchObject({ outcome: "preview_ready" })
     // No review opened, so no ready line either.
-    expect([...names, "ready note", "say ready"]).toEqual(
-      expected["owner build"]
-    )
+    const at = names.indexOf("review") + 1
+    expect([
+      ...names.slice(0, at),
+      "ready note",
+      "say ready",
+      ...names.slice(at),
+    ]).toEqual(expected["owner build"])
     // Any other refusal is still final: the build ends failed, not stranded.
     script.reviewRefusal = "revision.not_preview"
     advanced.length = 0

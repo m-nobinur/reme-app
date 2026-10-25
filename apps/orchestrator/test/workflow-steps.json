@@ -25,10 +25,10 @@
       "a11y 1",
       "gates 1",
       "review",
-      "screenshots",
-      "keep warm",
       "ready note",
-      "say ready"
+      "say ready",
+      "screenshots",
+      "keep warm"
     ],
     "information round trip": [
       "claim 1",
@@ -74,10 +74,10 @@
       "a11y 2",
       "gates 2",
       "review",
-      "screenshots",
-      "keep warm",
       "ready note",
-      "say ready"
+      "say ready",
+      "screenshots",
+      "keep warm"
     ],
     "gate failure repaired": [
       "claim 1",
@@ -433,10 +433,10 @@
       "gates 1",
       "a11y 1",
       "review",
-      "screenshots",
-      "keep warm",
       "ready note",
-      "say ready"
+      "say ready",
+      "screenshots",
+      "keep warm"
     ],
     "quick edit handed on": [
       "claim 1",
@@ -450,10 +450,10 @@
       "a11y 1",
       "gates 1",
       "review",
-      "screenshots",
-      "keep warm",
       "ready note",
-      "say ready"
+      "say ready",
+      "screenshots",
+      "keep warm"
     ],
     "quick edit failed a gate": [
       "claim 1",
@@ -470,10 +470,10 @@
       "a11y 2",
       "gates 2",
       "review",
-      "screenshots",
-      "keep warm",
       "ready note",
-      "say ready"
+      "say ready",
+      "screenshots",
+      "keep warm"
     ],
     "accessibility failed after a quick edit": [
       "claim 1",
@@ -492,10 +492,10 @@
       "a11y 2",
       "gates 2",
       "review",
-      "screenshots",
-      "keep warm",
       "ready note",
-      "say ready"
+      "say ready",
+      "screenshots",
+      "keep warm"
     ],
     "superseded before accessibility": [
       "claim 1",
@@ -519,10 +519,10 @@
       "a11y 1",
       "gates 1",
       "review",
-      "screenshots",
-      "keep warm",
       "ready note",
-      "say ready"
+      "say ready",
+      "screenshots",
+      "keep warm"
     ],
     "planned build": [
       "claim 1",
@@ -566,9 +566,9 @@
       "validating 1",
       "gates 1",
       "review",
-      "keep warm",
       "ready note",
-      "say ready"
+      "say ready",
+      "keep warm"
     ],
     "design critique repaired": [
       "claim 1",
