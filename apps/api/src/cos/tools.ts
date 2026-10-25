@@ -77,7 +77,7 @@ import {
 import { readFacts, statusWithFacts } from "../workspace.ts"
 import type { Opening } from "./agent.ts"
 import { readSession } from "./history.ts"
-import { readProfile } from "./memory.ts"
+import { inOwnersWords, readProfile } from "./memory.ts"
 import { wallToUtc } from "./time.ts"
 import type { Turn } from "./turns.ts"
 
@@ -451,19 +451,14 @@ const untyped = (what: string) =>
   })
 
 /**
- * A new phone or email the owner typed in full, recorded as their fact
- * before the change starts, so the build reads the number the owner gave and
- * the content gate agrees with the site. The model proposes the value; it is
- * recorded only when the owner's own messages in `sessionId` hold the digits
- * or the address, so a number the model made up never becomes a fact. The
- * change text, which the owner reads on the card, must name it too.
- * Null when there is nothing to record or it is recorded, else the refusal.
+ * The phone and email in `input` the business does not hold yet: what a yes
+ * on the change would record, so the change shows its card. Null when there
+ * is none, or the change text never touches contact.
  */
-async function recordContact(
+export async function newContact(
   { kit, owner }: Pick<ToolContext, "kit" | "owner">,
-  sessionId: string,
   { contact, text }: CosChangeRequest
-): Promise<Response | null> {
+): Promise<{ phone?: string; email?: string } | null> {
   if (!contact?.phone && !contact?.email) return null
   // The owner approves the change text, which is all the card shows. A text
   // that never touches contact cannot depend on one, so a contact the model
@@ -475,15 +470,12 @@ async function recordContact(
     console.log(JSON.stringify({ code: "cos.contact_dropped" }))
     return null
   }
-  const [log, rows] = await kit.withOrg({ orgId: owner.orgId }, async (db) => [
-    await readSession(db, sessionId),
-    await readFacts(db),
-  ])
   // A value the business already holds is no change: the model restates the
   // current phone and email on unrelated changes (staging, 2026-10-22), and
   // refusing those asked the owner for the same yes twice.
   let heldPhone: string | undefined
   let heldEmail: string | undefined
+  const rows = await kit.withOrg({ orgId: owner.orgId }, readFacts)
   for (const fact of toCosFacts(rows).output.facts) {
     if (fact.key === "business.phone") heldPhone = fact.value.e164
     if (fact.key === "business.email") heldEmail = fact.value.address
@@ -493,18 +485,28 @@ async function recordContact(
     contact.email?.toLowerCase() === heldEmail?.toLowerCase()
       ? undefined
       : contact.email
-  if (!phone && !email) return null
-  const said = log
-    .flatMap((e) => {
-      const m =
-        e.type === "cos.message" ? CosMessage.safeParse(e.payload) : null
-      return m?.success && m.data.message.role === "user"
-        ? m.data.message.parts.flatMap((p) =>
-            p.type === "text" ? [p.text] : []
-          )
-        : []
-    })
-    .join("\n")
+  return phone || email ? { phone, email } : null
+}
+
+/**
+ * A new phone or email the owner typed in full, recorded as their fact
+ * before the change starts, so the build reads the number the owner gave and
+ * the content gate agrees with the site. The model proposes the value; it is
+ * recorded only when the owner's own messages in `sessionId` hold the digits
+ * or the address, so a number the model made up never becomes a fact. The
+ * change text, which the owner reads on the card, must name it too.
+ * Null when there is nothing to record or it is recorded, else the refusal.
+ */
+async function recordContact(
+  { kit, owner }: Pick<ToolContext, "kit" | "owner">,
+  sessionId: string,
+  input: CosChangeRequest
+): Promise<Response | null> {
+  const fresh = await newContact({ kit, owner }, input)
+  if (!fresh) return null
+  const { phone, email } = fresh
+  const { text } = input
+  const said = (await ownerSaid({ kit, owner }, sessionId)).join("\n")
   const stated: FactValue[] = []
   if (phone) {
     if (!(phoneFromOwner(phone, said) && phoneFromOwner(phone, text)))
@@ -535,9 +537,112 @@ async function recordContact(
   return null
 }
 
+/** What the owner wrote in `sessionId`, message by message. */
+async function ownerSaid(
+  { kit, owner }: Pick<ToolContext, "kit" | "owner">,
+  sessionId: string
+): Promise<string[]> {
+  const log = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+    readSession(db, sessionId)
+  )
+  return log.flatMap((e): string[] => {
+    const m = e.type === "cos.message" ? CosMessage.safeParse(e.payload) : null
+    return m?.success && m.data.message.role === "user"
+      ? m.data.message.parts.flatMap((p) =>
+          p.type === "text" && typeof p.text === "string" ? [p.text] : []
+        )
+      : []
+  })
+}
+
+/** A word that turns a claim around. */
+const NEGATION = /\b(?:not|no|never|none|nor|without)\b|n['’]t\b/i
+
+/**
+ * Whether `proof` is something the owner said in `message`: every word of it
+ * is one of the message's, and a message that negates something is used only
+ * by a claim that negates too, since dropping a "not" keeps every word and
+ * turns the claim around ("we're not insured yet" is not "Insured").
+ * shortcut: errs towards refusing, so "no call-out fee, fully insured" cannot back "Fully insured"; a span match if that refuses real claims.
+ */
+export const statedIn = (proof: string, message: string) =>
+  inOwnersWords(proof, [message], false) &&
+  (!NEGATION.test(message) || NEGATION.test(proof))
+
+/** How long `business.proof` may grow: its fact's bound. */
+const PROOF_MAX = 600
+
+class ProofFull extends Error {}
+
+/**
+ * What the owner claims in a change ("local and fully insured"), added to
+ * `business.proof` as their word before the build starts, so the build does
+ * not ask for it and the claims gate accepts it. Recorded only when every
+ * word of it is one the owner wrote in `sessionId`, so nothing the model
+ * made up becomes a claim. Null when there is nothing to record or it is
+ * recorded, else the refusal.
+ */
+async function recordProof(
+  { kit, owner }: Pick<ToolContext, "kit" | "owner">,
+  sessionId: string,
+  { proof }: CosChangeRequest
+): Promise<Response | null> {
+  if (!proof) return null
+  const said = await ownerSaid({ kit, owner }, sessionId)
+  if (!said.some((message) => statedIn(proof, message))) {
+    return failure(400, {
+      class: "validation",
+      code: "proof.not_owners",
+      message:
+        "Every word of proof must come from one message the owner wrote in this conversation, and keep any no or not it had. Say it again in their words, or leave proof out.",
+      detail: {},
+    })
+  }
+  try {
+    await kit.withOrg(
+      { orgId: owner.orgId, workosUserId: owner.session.workosUserId },
+      async (db) => {
+        const rows = await readFacts(db)
+        const held = toCosFacts(rows).output.facts.find(
+          (f) => f.key === "business.proof"
+        )?.value.text
+        if (held?.toLowerCase().includes(proof.toLowerCase())) return
+        const text = held ? `${held.replace(/[\s.]+$/, "")}. ${proof}` : proof
+        if (text.length > PROOF_MAX) throw new ProofFull()
+        await stateFacts(
+          db,
+          owner,
+          [{ key: "business.proof", value: { text } }],
+          rows
+        )
+      }
+    )
+  } catch (error) {
+    if (error instanceof ProofFull) {
+      return failure(400, {
+        class: "validation",
+        code: "proof.full",
+        message:
+          "The business's proof is full. Start the change again without proof.",
+        detail: {},
+      })
+    }
+    console.error(
+      JSON.stringify({ code: "cos.proof_failed", error: failureCode(error) })
+    )
+    return failure(503, {
+      class: "transient",
+      code: "proof.unconfirmed",
+      message: "What the owner said about the business could not be saved.",
+      detail: {},
+    })
+  }
+  return null
+}
+
 /**
  * The owner's change, started as `/changes` starts it, keyed by the
- * approval, after any contact detail in it is recorded. Both ways a yes
+ * approval, after any contact detail and claim in it is recorded. Both ways a yes
  * reaches the change come here: the tool's body and the chat's approval.
  */
 export async function startOwnerChange(
@@ -548,6 +653,7 @@ export async function startOwnerChange(
 ): Promise<Response> {
   return (
     (await recordContact(context, sessionId, input)) ??
+    (await recordProof(context, sessionId, input)) ??
     startChange(
       context.env,
       context.kit,
