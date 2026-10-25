@@ -85,25 +85,50 @@ it("drops the approved line once that version is live", () => {
 describe("awaitsReadyLine", () => {
   const at = "2026-10-25T10:26:49Z"
   const t = (iso: string) => Date.parse(iso)
+  const seen = t(at) + 20_000
   it.each([
-    ["no review", null, null, t(at), false],
-    ["a new review with nothing said since", at, null, t(at) + 5_000, true],
+    ["no review", null, null, seen, seen, false],
+    [
+      "a new review the poll just brought, nothing said since",
+      at,
+      null,
+      seen,
+      seen + 5_000,
+      true,
+    ],
     [
       "the ready line landed",
       at,
       "2026-10-25T10:27:00Z",
-      t(at) + 11_000,
+      seen,
+      seen + 1_000,
       false,
     ],
     [
       "only a reply from before the review",
       at,
       "2026-10-25T10:26:27Z",
-      t(at) + 5_000,
+      seen,
+      seen + 5_000,
       true,
     ],
-    ["past the wait, with no line", at, null, t(at) + 20_000, false],
-  ])("%s", (_case, reviewAt, saidAt, now, waits) => {
-    expect(awaitsReadyLine(reviewAt, saidAt, now)).toBe(waits)
+    [
+      "past the wait since this tab saw it",
+      at,
+      null,
+      seen,
+      seen + 20_000,
+      false,
+    ],
+    [
+      "an old review on a reload",
+      at,
+      null,
+      t(at) + 600_000,
+      t(at) + 600_000,
+      false,
+    ],
+  ])("%s", (_case, reviewAt, saidAt, seenAt, now, waits) => {
+    expect(awaitsReadyLine(reviewAt, saidAt, seenAt, now)).toBe(waits)
   })
 })

@@ -2,7 +2,7 @@ import { useAuiState } from "@assistant-ui/react"
 import { getRouteApi } from "@tanstack/react-router"
 import { revisionPictures } from "@workspace/contracts"
 import { SiteReady } from "@workspace/ui/components/assistant/site-ready"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { decideApproval } from "@/lib/api/server"
 import { DECISION_REFUSED } from "@/lib/decision"
 import {
@@ -145,7 +145,17 @@ export function ChatSiteReadyCard() {
   const sentAt = useAuiState((s) => lastAt(s.thread.messages, "user"))
   const saidAt = useAuiState((s) => lastAt(s.thread.messages, "assistant"))
   const review = readyForReview(useLiveWorkspace().workspace)
-  const waiting = awaitsReadyLine(review?.at ?? null, saidAt, Date.now())
+  // When this tab first saw each review: a ref, read and set in render, since
+  // it only ever records the first sight.
+  const seen = useRef(new Map<string, number>()).current
+  const now = Date.now()
+  if (review && !seen.has(review.approvalId)) seen.set(review.approvalId, now)
+  const waiting = awaitsReadyLine(
+    review?.at ?? null,
+    saidAt,
+    review ? (seen.get(review.approvalId) ?? now) : now,
+    now
+  )
   return empty || waiting ? null : (
     <SiteReadyCard className="mx-2" sentAt={sentAt} />
   )

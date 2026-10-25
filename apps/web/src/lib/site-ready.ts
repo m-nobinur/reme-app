@@ -39,22 +39,28 @@ export function readyForReview(
   return newest
 }
 
-/** How long a new review's card waits for the ready line, which is written after the review opens. */
+/** How long a new review's card waits for the ready line, from when this tab first saw the review. */
 const READY_LINE_MS = 20_000
+/** A review older than this is not new: a reload shows its card at once. */
+const NEW_REVIEW_MS = 120_000
 
 /**
  * Whether the chat's card for a review raised `reviewAt` still waits for the
- * ready line: nothing the assistant said since, and not past `READY_LINE_MS`,
- * after which a line that could not be posted no longer holds the card.
+ * ready line: nothing the assistant said since, the review new, and not past
+ * `READY_LINE_MS` since this tab first saw it (`seenAt`), after which a line
+ * that could not be posted no longer holds the card. Counted from the tab's
+ * own sight of it, since the poll brings a review up to its interval late.
  */
 export const awaitsReadyLine = (
   reviewAt: string | null,
   saidAt: string | null,
+  seenAt: number,
   now: number
 ) =>
   reviewAt !== null &&
   !(saidAt && Date.parse(saidAt) >= Date.parse(reviewAt)) &&
-  now - Date.parse(reviewAt) < READY_LINE_MS
+  now - Date.parse(reviewAt) < NEW_REVIEW_MS &&
+  now - seenAt < READY_LINE_MS
 
 /** A version card's title: the business's website. */
 export const versionTitle = (business: string | null | undefined) =>
