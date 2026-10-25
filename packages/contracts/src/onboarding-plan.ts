@@ -50,6 +50,7 @@ export const DEFAULTABLE_KEYS = [
   "assistant.tone",
   "owner.preferred_name",
   "site.template",
+  "site.direction",
   "site.palette",
   "site.font",
   "site.pages",
