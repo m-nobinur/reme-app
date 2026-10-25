@@ -160,6 +160,8 @@ export async function writePages(input: {
   ) => Promise<string>
   /** Read, change and write the site config, one change at a time. */
   edit: (change: (source: string) => string) => Promise<string>
+  /** A writer has begun: its first call is about to go. */
+  onStarted?: (task: WriterTask) => void
   onWritten?: (task: WriterTask) => void
   sleep?: (ms: number) => Promise<void>
 }): Promise<string[]> {
@@ -170,6 +172,7 @@ export async function writePages(input: {
     const task = tasks[index] as WriterTask
     const fields = fieldsOfPrompt(task.prompt)
     const name = label(task.prompt)
+    input.onStarted?.(task)
     try {
       const user = writerUser(task.prompt, await edit((s) => s))
       let second = false

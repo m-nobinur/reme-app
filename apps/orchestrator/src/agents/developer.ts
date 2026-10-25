@@ -671,6 +671,7 @@ const writePagesTool = (current: Session) =>
       const tasks = writerTasks(plan, serviceCount(brief))
       const total = plan.pages.length
       const shown = new Set<string>()
+      const started = new Set<string>()
       current.tee.emit("build.progress", { stage: "pages", item: null, total })
 
       // One change at a time, through the assignment's queue for this file.
@@ -759,6 +760,19 @@ const writePagesTool = (current: Session) =>
         staggerMs: 3000,
         call,
         edit,
+        // A page is at work from its first writer's start and written at its
+        // first writer's end; `working` rows never count as written.
+        onStarted: (task) => {
+          const page = pageOfPrompt(task.prompt)
+          if (!page || started.has(page)) return
+          started.add(page)
+          current.tee.emit("build.progress", {
+            stage: "pages",
+            item: page,
+            total,
+            working: true,
+          })
+        },
         onWritten: (task) => {
           warm.kick()
           const page = pageOfPrompt(task.prompt)
