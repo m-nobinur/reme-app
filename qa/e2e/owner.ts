@@ -260,14 +260,21 @@ export async function answerOnboarding(page: Page): Promise<void> {
         card.getByRole("button", { name: "Skip", exact: true }).click()
       )
     } else if (slot === "ask-design") {
-      // The design tray opens on its picks made: the logo page, whose Looks
-      // good waits, disabled, for the logo the tray draws by itself to be
-      // kept, else the last page's Build my site.
-      const keep = card.getByRole("button", {
-        name: /^(Looks good|Build my site)$/,
-      })
-      await expect(keep).toBeEnabled({ timeout: 60_000 })
-      await step(() => keep.click())
+      // The design tray opens on the logo question, nothing picked. No shows
+      // the designs drawn as it opened and keeps the first as it lands; Pick
+      // for me then sends that logo and the picks already made.
+      const no = card.getByRole("radio", { name: /^No, create one for me/ })
+      if (await no.isVisible()) {
+        if (!(await no.isChecked())) await step(() => no.check())
+        await expect(
+          card
+            .getByRole("radiogroup", { name: "Logo designs" })
+            .getByRole("radio", { checked: true })
+        ).toBeVisible({ timeout: 90_000 })
+      }
+      await step(() =>
+        card.getByRole("button", { name: "Pick for me", exact: true }).click()
+      )
     } else if (slot === "review-quote-form") {
       await step(() =>
         card.getByRole("button", { name: "Use this form" }).click()
