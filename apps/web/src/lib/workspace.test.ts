@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import type { Workspace, WorkspacePoll } from "./api/types"
 import { EMPTY_WORKSPACE } from "./attention"
 import {
+  afterFrameRead,
   BUILDING_BACKOFF,
   INTERVAL,
   JUST_READY_MS,
@@ -345,4 +346,15 @@ it("ignores a poll that was under way when a newer read was adopted", async () =
   // The adopted read sets the pace: a build is running.
   answers = []
   await wait(0)
+})
+
+it("keeps the workspace on screen when the frame's read fails", () => {
+  expect(afterFrameRead(building, null)).toEqual({
+    workspace: building,
+    failed: true,
+  })
+  expect(afterFrameRead(idle, building)).toEqual({
+    workspace: building,
+    failed: false,
+  })
 })
