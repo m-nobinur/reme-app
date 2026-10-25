@@ -2624,6 +2624,7 @@ export interface components {
         | "site.direction"
         | "site.pages"
         | "quote.form"
+      skippable?: boolean
     }
     AskOpenOutput:
       | {
