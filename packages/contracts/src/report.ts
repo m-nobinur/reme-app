@@ -116,6 +116,12 @@ export const CompletionReport = z.strictObject({
     )
     .max(10)
     .optional(),
+  /**
+   * False when the change could not be made the way the owner asked and the
+   * nearest change was made instead, so the ready line does not claim it.
+   * Absent means as asked, and on reports from before it existed.
+   */
+  as_asked: z.boolean().optional(),
   reported_at: Timestamp,
 })
 

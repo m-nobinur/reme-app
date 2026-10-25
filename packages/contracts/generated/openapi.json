@@ -17417,6 +17417,9 @@
               "additionalProperties": false
             }
           },
+          "as_asked": {
+            "type": "boolean"
+          },
           "reported_at": {
             "type": "string",
             "format": "date-time",

@@ -5015,6 +5015,7 @@ export interface components {
         options: string[] | null
         question: string
       }[]
+      as_asked?: boolean
       /** Format: date-time */
       reported_at: string
     }
