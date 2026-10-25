@@ -122,8 +122,12 @@ export const PLANNER = {
    * low effort adds some; a plan cut off is broken, so this errs high.
    */
   maxOutputTokens: 2_500,
-  /** One call's limit, and the turn's; a slow call is aborted and the script answers. */
-  callMs: 20_000,
+  /**
+   * One call's limit, and the turn's; a slow call is aborted and the script
+   * answers. A minute, the owner's call (2026-10-26): a planner that thinks
+   * may need it, and the script's fixed copy reads worse than a wait.
+   */
+  callMs: 60_000,
   /**
    * A call that has written nothing after this long is raced by an identical
    * one, and the first to write wins. Measured 2026-10-01: Gemini 3.8 Flash
