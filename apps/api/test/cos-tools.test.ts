@@ -45,6 +45,7 @@ import {
   recordReview,
   removeDomain,
   requestChange,
+  statedIn,
   type ToolContext,
   ToolFailed,
 } from "../src/cos/tools.ts"
@@ -114,6 +115,18 @@ const deadline = (ms: number) => {
   return () => spy.mockRestore()
 }
 const never = () => new Promise<Response>(() => undefined)
+
+describe("a claim the owner stated", () => {
+  it.each([
+    ["Local and fully insured", "we're local and fully insured", true],
+    ["Not VAT registered", "We are not VAT registered", true],
+    ["Insured", "we're not insured yet", false],
+    ["Fully insured", "We aren't fully insured", false],
+    ["Fully insured since 2009", "fully insured", false],
+  ])("%s from %s: %s", (proof, message, stated) => {
+    expect(statedIn(proof, message)).toBe(stated)
+  })
+})
 
 describe("a build's pace", () => {
   const now = Date.parse("2026-10-25T01:00:00.000Z")

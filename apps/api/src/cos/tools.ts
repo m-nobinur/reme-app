@@ -554,6 +554,20 @@ async function ownerSaid(
   })
 }
 
+/** A word that turns a claim around. */
+const NEGATION = /\b(?:not|no|never|none|nor|without)\b|n['’]t\b/i
+
+/**
+ * Whether `proof` is something the owner said in `message`: every word of it
+ * is one of the message's, and a message that negates something is used only
+ * by a claim that negates too, since dropping a "not" keeps every word and
+ * turns the claim around ("we're not insured yet" is not "Insured").
+ * shortcut: errs towards refusing, so "no call-out fee, fully insured" cannot back "Fully insured"; a span match if that refuses real claims.
+ */
+export const statedIn = (proof: string, message: string) =>
+  inOwnersWords(proof, [message], false) &&
+  (!NEGATION.test(message) || NEGATION.test(proof))
+
 /** How long `business.proof` may grow: its fact's bound. */
 const PROOF_MAX = 600
 
@@ -573,14 +587,13 @@ async function recordProof(
   { proof }: CosChangeRequest
 ): Promise<Response | null> {
   if (!proof) return null
-  if (
-    !inOwnersWords(proof, await ownerSaid({ kit, owner }, sessionId), false)
-  ) {
+  const said = await ownerSaid({ kit, owner }, sessionId)
+  if (!said.some((message) => statedIn(proof, message))) {
     return failure(400, {
       class: "validation",
       code: "proof.not_owners",
       message:
-        "Every word of proof must be one the owner wrote in this conversation. Say it again in their words, or leave proof out.",
+        "Every word of proof must come from one message the owner wrote in this conversation, and keep any no or not it had. Say it again in their words, or leave proof out.",
       detail: {},
     })
   }
