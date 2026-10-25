@@ -238,7 +238,10 @@ export function websiteSteps(build: BuildSummary): Step[] {
 }
 
 /** A later build as four steps: understanding, making, checking, ready. */
-export function changeSegment(build: BuildSummary): Segment {
+export function changeSegment(
+  build: BuildSummary,
+  expected?: Expected
+): Segment {
   const state = groupOf(build.state)
   const stage = build.activity?.find((r) => r.now)?.id
   const here =
@@ -256,6 +259,7 @@ export function changeSegment(build: BuildSummary): Segment {
       state === "done"
         ? (build.ready_at ?? build.updated_at)
         : build.created_at,
+    ...usualFor(state, build, expected),
   }
 }
 
@@ -438,7 +442,21 @@ export type ActivityInput = {
   due: Due[]
   notes: Reminder[]
   rows: ActivityRows
+  /** How long each lane usually takes, as the chat quotes it. */
+  expected?: Expected
 }
+
+type Expected = WorkspaceStatus["expected_seconds"]
+
+/** A build at work: its lane's usual time, the one the chat quotes too. */
+const usualFor = (
+  state: Segment["state"],
+  build: BuildSummary,
+  expected: Expected
+) =>
+  state === "now" && expected
+    ? { usual_seconds: expected[build.lane ?? "full"].p50 }
+    : {}
 
 const recent = (at: string, now: Date) => now.getTime() - Date.parse(at) < DAY
 
@@ -492,6 +510,7 @@ export function journeyOf(input: ActivityInput): Segment[] {
     ...(build.retry && state !== "done"
       ? { step: "Fixing what stopped the last build" }
       : {}),
+    ...usualFor(state, build, input.expected),
     ...(names && { names }),
   }
   const review = input.approvals.find(
@@ -582,7 +601,8 @@ export function activityOf(input: ActivityInput, now: Date): Activity {
   const first = input.builds[0]?.assignment_id
   const segments: Segment[] = []
 
-  if (live) segments.push(...input.builds.map(changeSegment))
+  if (live)
+    segments.push(...input.builds.map((b) => changeSegment(b, input.expected)))
   for (const row of input.rows.domains)
     segments.push(
       row.origin === "purchased" ? purchaseSegment(row) : domainSegment(row)

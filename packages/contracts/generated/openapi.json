@@ -145,6 +145,11 @@
                   "maxLength": 60,
                   "pattern": "\\S"
                 },
+                "usual_seconds": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
                 "synced_at": {
                   "type": "string",
                   "format": "date-time",
@@ -293,6 +298,11 @@
                   "minLength": 1,
                   "maxLength": 60,
                   "pattern": "\\S"
+                },
+                "usual_seconds": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
                 },
                 "synced_at": {
                   "type": "string",
@@ -443,6 +453,11 @@
                   "maxLength": 60,
                   "pattern": "\\S"
                 },
+                "usual_seconds": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
                 "synced_at": {
                   "type": "string",
                   "format": "date-time",
@@ -591,6 +606,11 @@
                   "minLength": 1,
                   "maxLength": 60,
                   "pattern": "\\S"
+                },
+                "usual_seconds": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
                 },
                 "synced_at": {
                   "type": "string",
@@ -741,6 +761,11 @@
                   "maxLength": 60,
                   "pattern": "\\S"
                 },
+                "usual_seconds": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
                 "synced_at": {
                   "type": "string",
                   "format": "date-time",
@@ -889,6 +914,11 @@
                   "minLength": 1,
                   "maxLength": 60,
                   "pattern": "\\S"
+                },
+                "usual_seconds": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
                 },
                 "synced_at": {
                   "type": "string",
@@ -42467,6 +42497,11 @@
                       "maxLength": 60,
                       "pattern": "\\S"
                     },
+                    "usual_seconds": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
                     "synced_at": {
                       "type": "string",
                       "format": "date-time",
@@ -42615,6 +42650,11 @@
                       "minLength": 1,
                       "maxLength": 60,
                       "pattern": "\\S"
+                    },
+                    "usual_seconds": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
                     },
                     "synced_at": {
                       "type": "string",
@@ -42765,6 +42805,11 @@
                       "maxLength": 60,
                       "pattern": "\\S"
                     },
+                    "usual_seconds": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
                     "synced_at": {
                       "type": "string",
                       "format": "date-time",
@@ -42913,6 +42958,11 @@
                       "minLength": 1,
                       "maxLength": 60,
                       "pattern": "\\S"
+                    },
+                    "usual_seconds": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
                     },
                     "synced_at": {
                       "type": "string",
@@ -43063,6 +43113,11 @@
                       "maxLength": 60,
                       "pattern": "\\S"
                     },
+                    "usual_seconds": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
                     "synced_at": {
                       "type": "string",
                       "format": "date-time",
@@ -43211,6 +43266,11 @@
                       "minLength": 1,
                       "maxLength": 60,
                       "pattern": "\\S"
+                    },
+                    "usual_seconds": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
                     },
                     "synced_at": {
                       "type": "string",

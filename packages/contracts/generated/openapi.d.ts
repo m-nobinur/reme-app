@@ -46,6 +46,7 @@ export interface components {
           domain?: string
         }
         step?: string
+        usual_seconds?: number
         /** Format: date-time */
         synced_at?: string
       }[]
@@ -87,6 +88,7 @@ export interface components {
           domain?: string
         }
         step?: string
+        usual_seconds?: number
         /** Format: date-time */
         synced_at?: string
       }[]
@@ -128,6 +130,7 @@ export interface components {
           domain?: string
         }
         step?: string
+        usual_seconds?: number
         /** Format: date-time */
         synced_at?: string
       }[]
@@ -169,6 +172,7 @@ export interface components {
           domain?: string
         }
         step?: string
+        usual_seconds?: number
         /** Format: date-time */
         synced_at?: string
       }[]
@@ -210,6 +214,7 @@ export interface components {
           domain?: string
         }
         step?: string
+        usual_seconds?: number
         /** Format: date-time */
         synced_at?: string
       }[]
@@ -251,6 +256,7 @@ export interface components {
           domain?: string
         }
         step?: string
+        usual_seconds?: number
         /** Format: date-time */
         synced_at?: string
       }[]
@@ -12122,6 +12128,7 @@ export interface components {
             domain?: string
           }
           step?: string
+          usual_seconds?: number
           /** Format: date-time */
           synced_at?: string
         }[]
@@ -12163,6 +12170,7 @@ export interface components {
             domain?: string
           }
           step?: string
+          usual_seconds?: number
           /** Format: date-time */
           synced_at?: string
         }[]
@@ -12204,6 +12212,7 @@ export interface components {
             domain?: string
           }
           step?: string
+          usual_seconds?: number
           /** Format: date-time */
           synced_at?: string
         }[]
@@ -12245,6 +12254,7 @@ export interface components {
             domain?: string
           }
           step?: string
+          usual_seconds?: number
           /** Format: date-time */
           synced_at?: string
         }[]
@@ -12286,6 +12296,7 @@ export interface components {
             domain?: string
           }
           step?: string
+          usual_seconds?: number
           /** Format: date-time */
           synced_at?: string
         }[]
@@ -12327,6 +12338,7 @@ export interface components {
             domain?: string
           }
           step?: string
+          usual_seconds?: number
           /** Format: date-time */
           synced_at?: string
         }[]

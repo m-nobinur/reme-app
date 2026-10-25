@@ -150,6 +150,8 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
   let busy: Owner
   let asker: Owner
   let changes: Owner
+  /** A live site, where a change to a draft still turns its review down. */
+  let revising: Owner
   let busyIds: Record<string, string>
   let askIds: Record<string, string>
 
@@ -160,6 +162,13 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     busy = await owner(kit, url as string, "busy")
     asker = await owner(kit, url as string, "asker")
     changes = await owner(kit, url as string, "changes")
+    revising = await owner(kit, url as string, "revising")
+    {
+      const s = seed(kit, revising)
+      const live = await s.assignment("published")
+      const revision = await s.revision(live, 1)
+      await s.deployment(revision, await s.approval(live, revision, 1, true))
+    }
 
     // The busy org: a live site, a review whose request expired before the
     // hourly sweep parked it, a cancelled build's undecided request, a
@@ -1101,13 +1110,17 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     // that fails before its own clean-up must not leave a build behind for
     // the next one to route around.
     afterEach(() =>
-      kit.withOrg({ orgId: changes.orgId }, (db) =>
-        db
-          .update(assignments)
-          .set({ state: "cancelled", updatedAt: new Date() })
-          .where(
-            sql`${assignments.state} not in ('published', 'failed', 'cancelled')`
+      Promise.all(
+        [changes, revising].map((who) =>
+          kit.withOrg({ orgId: who.orgId }, (db) =>
+            db
+              .update(assignments)
+              .set({ state: "cancelled", updatedAt: new Date() })
+              .where(
+                sql`${assignments.state} not in ('published', 'failed', 'cancelled')`
+              )
           )
+        )
       )
     )
 
@@ -1239,7 +1252,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       hours: number,
       version: number
     ) => {
-      const s = seed(kit, changes)
+      const s = seed(kit, revising)
       const reviewing = await s.assignment(state)
       const revision = await s.revision(reviewing, version)
       await s.approval(reviewing, revision, hours)
@@ -1248,14 +1261,36 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     const paths = (stub: Stub) =>
       stub.calls.map((c) => new URL(c.request.url).pathname)
 
+    it("revises the owner's draft before the site is live, naming it, in one call", async () => {
+      const s = seed(kit, changes)
+      const reviewing = await s.assignment("awaiting_review")
+      const revision = await s.revision(reviewing, 9)
+      await s.approval(reviewing, revision, 72)
+      const stub = creating(changes)
+      const response = await changes.call(
+        stub,
+        "/changes",
+        json({ text: "Change the hero.", change_kind: "copy" })
+      )
+      expect(response.status).toBe(201)
+      expect(paths(stub)).toEqual(["/assignments/"])
+      expect(stub.calls[0]?.body).toEqual({
+        kind: "site.revise",
+        goal: "Change the hero.",
+        change_kind: "copy",
+        draft_revision_id: revision,
+      })
+      await s.state(reviewing, "cancelled")
+    })
+
     it("builds first, then turns down the open review", async () => {
       const { s, reviewing, revision } = await reviewIn(
         "awaiting_review",
         72,
         10
       )
-      const stub = creating(changes)
-      const response = await changes.call(
+      const stub = creating(revising)
+      const response = await revising.call(
         stub,
         "/changes",
         json({ text: "Change the hero." })
@@ -1272,7 +1307,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     it("leaves the review open when the build is refused", async () => {
       const { s, reviewing } = await reviewIn("awaiting_review", 72, 11)
       const stub = stubOrchestrator(() => capped())
-      const response = await changes.call(
+      const response = await revising.call(
         stub,
         "/changes",
         json({ text: "Change the hero." })
@@ -1284,8 +1319,8 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
 
     it("turns down a review the sweep parked", async () => {
       const { s, reviewing } = await reviewIn("blocked_on_approval", -2, 12)
-      const stub = creating(changes)
-      await changes.call(stub, "/changes", json({ text: "Change the hero." }))
+      const stub = creating(revising)
+      await revising.call(stub, "/changes", json({ text: "Change the hero." }))
       expect(paths(stub)).toEqual([
         "/assignments/",
         `/assignments/${reviewing}/reject`,
@@ -1296,11 +1331,11 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     it("hides a review that expired before the sweep, and waits it out", async () => {
       const { s, reviewing } = await reviewIn("awaiting_review", -1, 13)
       const panel = WorkspaceStatus.parse(
-        await (await workspace(changes)).json()
+        await (await workspace(revising)).json()
       )
       expect(panel.attention.filter((i) => i.kind === "approval")).toEqual([])
-      const stub = creating(changes)
-      const response = await changes.call(
+      const stub = creating(revising)
+      const response = await revising.call(
         stub,
         "/changes",
         json({ text: "Change the hero." })
@@ -1348,14 +1383,14 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
         const stub = stubOrchestrator(async (request) => {
           const path = new URL(request.url).pathname
           if (path === "/assignments/") {
-            const body = created(changes, await request.clone().json())
+            const body = created(revising, await request.clone().json())
             made = body.assignment_id
             return Response.json(body, { status: 201 })
           }
           if (path.endsWith("/reject")) return refusal()
           return Response.json({ assignment_id: made, state: "cancelled" })
         })
-        const response = await changes.call(
+        const response = await revising.call(
           stub,
           "/changes",
           json({ text: "Change the hero." })
@@ -1398,7 +1433,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
           const key = request.headers.get("idempotency-key") ?? ""
           made.id = await s.assignment("queued", { key })
           if (plan.create === "hang") return never()
-          const body = created(changes, await request.clone().json())
+          const body = created(revising, await request.clone().json())
           return Response.json(
             { ...body, assignment_id: made.id },
             { status: 201 }
@@ -1418,7 +1453,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       return { stub, made }
     }
     const stateOf = async (id: string) => {
-      const [row] = await kit.withOrg({ orgId: changes.orgId }, (db) =>
+      const [row] = await kit.withOrg({ orgId: revising.orgId }, (db) =>
         db
           .select({ state: assignments.state })
           .from(assignments)
@@ -1438,7 +1473,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
         const first = replacing(s, reviewing, plan)
         const timer = deadline(1_000)
         try {
-          const response = await changes.call(
+          const response = await revising.call(
             first.stub,
             "/changes",
             json({ text: "Change the hero." }, key)
@@ -1458,7 +1493,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
         )
         expect(await stateOf(first.made.id)).toBe("queued")
         const retry = replacing(s, reviewing)
-        const again = await changes.call(
+        const again = await revising.call(
           retry.stub,
           "/changes",
           json({ text: "Change the hero." }, key)
@@ -1480,7 +1515,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       const first = replacing(s, reviewing, { end: "refuse", cancel: "hang" })
       const timer = deadline(1_000)
       try {
-        const response = await changes.call(
+        const response = await revising.call(
           first.stub,
           "/changes",
           json({ text: "Change the hero." }, key)
@@ -1495,7 +1530,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
         `/assignments/${first.made.id}/cancel`,
       ])
       const retry = replacing(s, reviewing)
-      const again = await changes.call(
+      const again = await revising.call(
         retry.stub,
         "/changes",
         json({ text: "Change the hero." }, key)
@@ -1520,7 +1555,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       })
       const timer = deadline(1_000)
       try {
-        const response = await changes.call(
+        const response = await revising.call(
           stub,
           "/changes",
           json({ text: "Change the hero." })
@@ -1657,7 +1692,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
         .spyOn(console, "error")
         .mockImplementation(() => undefined)
       try {
-        const response = await changes.call(
+        const response = await revising.call(
           stub,
           "/changes",
           json({ text: "Change the hero." })
@@ -1680,6 +1715,26 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       }
       await s.state(reviewing, "cancelled")
       await s.state(made.id, "cancelled")
+    })
+
+    it("leaves out a draft a change holds, and lists it again once nothing holds it", async () => {
+      const s = seed(kit, changes)
+      const held = await s.assignment("paused")
+      const change = await s.assignment("implementing", { kind: "site.revise" })
+      await kit.withOrg({ orgId: changes.orgId }, (db) =>
+        db
+          .update(assignments)
+          .set({ revisionOfAssignmentId: held })
+          .where(eq(assignments.id, change))
+      )
+      const builds = async () =>
+        WorkspaceStatus.parse(
+          await (await workspace(changes)).json()
+        ).builds.map((b) => b.assignment_id)
+      expect(await builds()).toEqual([change])
+      await s.state(change, "cancelled")
+      expect(await builds()).toEqual([held])
+      await s.state(held, "cancelled")
     })
 
     it("routes on every unfinished build, not the panel's ten", async () => {
