@@ -5,7 +5,6 @@ import {
 } from "@workspace/contracts"
 import {
   type AnswerSpec,
-  answerSpecOf,
   answerValue,
   askable,
   FACT_INPUTS,
@@ -13,7 +12,7 @@ import {
 import { expect, it } from "vitest"
 
 /**
- * How the panel asks a question and checks the answer before it is sent.
+ * How a question card checks the answer before it is sent.
  * The check is the orchestrator's: an answer refused here would be refused
  * there, and one accepted here parses as `FactValue` or the question's text.
  */
@@ -22,48 +21,6 @@ const form =
   (values: Record<string, string>) =>
   (name: string): string =>
     values[name] ?? ""
-
-it("asks a fact key with that key's inputs, whatever the schema says", () => {
-  for (const key of FactValueKey.options.filter(askable)) {
-    expect(
-      answerSpecOf({
-        field: key,
-        answer_schema: { type: "object" },
-        options: null,
-      })
-    ).toEqual({ kind: "fact", key })
-  }
-})
-
-it("offers a closed choice where the team gave options", () => {
-  expect(
-    answerSpecOf({
-      field: "visits.frequency",
-      answer_schema: { type: "string" },
-      options: ["Weekly", "Monthly"],
-    })
-  ).toEqual({ kind: "choice", options: ["Weekly", "Monthly"] })
-})
-
-it("holds text to the question's TextAnswerSchema", () => {
-  expect(
-    answerSpecOf({
-      field: "bookings.inbox",
-      answer_schema: { type: "string", maxLength: 80, format: "email" },
-      options: null,
-    })
-  ).toEqual({ kind: "text", maxLength: 80, email: true })
-})
-
-it("falls back to plain text at the owner's cap for a schema it cannot read", () => {
-  expect(
-    answerSpecOf({
-      field: "parking",
-      answer_schema: { type: "string", pattern: "^.*$" },
-      options: [],
-    })
-  ).toEqual({ kind: "text", maxLength: 500, email: false })
-})
 
 /** A value each fact's inputs accept, as an owner would type it. */
 const TYPED: Record<AskableFactKey, Record<string, string>> = {

@@ -29,7 +29,6 @@ import {
   Uuid,
   WorkspaceStatus,
 } from "@workspace/contracts"
-import { answerSpecOf } from "@workspace/ui/lib/answer"
 import { WORKING } from "@workspace/ui/lib/build-state"
 import { factLabel } from "@workspace/ui/lib/facts"
 import { refusalText } from "@workspace/ui/lib/refusal"
@@ -380,8 +379,6 @@ function toAttention(
     case "question":
       return {
         kind: "question",
-        assignmentId: item.request.assignment_id,
-        answer: answerSpecOf(item.request),
         id: item.request.request_id,
         title: factLabel(item.request.field),
         detail: item.request.why,

@@ -25,7 +25,6 @@ import type {
   SiteMedia,
   WorkspaceStatus,
 } from "@workspace/contracts"
-import type { AnswerSpec } from "@workspace/ui/lib/answer"
 
 /**
  * What the owner screens read, and the one interface behind them.
@@ -92,13 +91,8 @@ export type AttentionItem =
   | (AttentionBase & { kind: "report" | "alert"; stopped?: BuildStopCause })
   // A reminder that came due and is not done; `id` is the reminder's.
   | (AttentionBase & { kind: "reminder" })
-  // A question carries what answering it needs: the build it blocks, and the
-  // inputs, derived on the server so the raw `answer_schema` never travels.
-  | (AttentionBase & {
-      kind: "question"
-      assignmentId: string
-      answer: AnswerSpec
-    })
+  // A question is answered in the chat, on the card the assistant posted.
+  | (AttentionBase & { kind: "question" })
   // The approval carries its contract, because the immutable target is drawn
   // from it and a loosened copy could name a different one.
   | (AttentionBase & {

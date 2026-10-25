@@ -634,8 +634,6 @@ it("polls in one request, naming the asker by id for the frame to resolve", asyn
   expect(read !== "unchanged" && read.attention[0]).toMatchObject({
     kind: "question",
     raisedById: DEV,
-    assignmentId: ASSIGNMENT,
-    answer: { kind: "fact", key: "hours.weekday" },
   })
 })
 
