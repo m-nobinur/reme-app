@@ -68,12 +68,15 @@ type Alert = Extract<AttentionItem, { kind: "alert" }>
 const iso = (at: Date) => at.toISOString()
 
 /**
- * shortcut: constants until EV3's rolling p50 and p95 per lane exist; swap
- * this one object for the measured numbers, nothing else reads them.
+ * How long each lane usually takes, from the click to the draft: the one
+ * estimate the chat and the panel both quote. The full lane is the local
+ * runs of 2026-10-24 and 25 (310, 319, 367 and 406 s, a repair round in
+ * two of them); the quick lane is unmeasured.
+ * shortcut: four runs on one machine, until EV3's rolling p50 and p95 per lane exist; swap this one object for them.
  */
 export const EXPECTED_SECONDS = {
   quick: { p50: 15, p95: 45 },
-  full: { p50: 420, p95: 600 },
+  full: { p50: 360, p95: 480 },
 } as const
 
 /** What a full build is doing, finer than the stages the owner sees. */
@@ -979,6 +982,7 @@ export async function statusWithFacts(
         due,
         notes,
         rows,
+        expected: EXPECTED_SECONDS,
       },
       now
     ),

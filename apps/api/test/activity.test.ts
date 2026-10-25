@@ -15,7 +15,7 @@ import {
   PURCHASE_HOLD_MS,
   withOnboarding,
 } from "../src/activity.ts"
-import { activityFor, STAGES } from "../src/workspace.ts"
+import { activityFor, EXPECTED_SECONDS, STAGES } from "../src/workspace.ts"
 
 const NOW = new Date("2026-10-22T12:00:00.000Z")
 const ago = (minutes: number) =>
@@ -219,6 +219,27 @@ describe("change", () => {
     expect(done[0]).toMatchObject({ kind: "change", state: "done" })
     expect(done[0]?.steps.every((s) => s.state === "done")).toBe(true)
     expect(waiting.map((s) => s.kind)).toEqual(["review"])
+  })
+
+  it("carries its lane's usual time while at work, the one the chat quotes, and none once it waits or is done", () => {
+    const expected = EXPECTED_SECONDS
+    const at = (b: BuildSummary, site = LIVE) => {
+      const a = view({ site, builds: [b], expected })
+      return [...a.journey, ...a.now, ...a.waiting, ...a.done].find(
+        (seg) => seg.kind === "change" || seg.kind === "website"
+      )?.usual_seconds
+    }
+    expect(at(build("implementing", { lane: "quick", activity: [] }))).toBe(
+      expected.quick.p50
+    )
+    expect(at(build("validating"))).toBe(expected.full.p50)
+    expect(at(build("implementing"), { ...LIVE, live: null })).toBe(
+      expected.full.p50
+    )
+    expect(at(build("blocked_on_information", { activity: [] }))).toBe(
+      undefined
+    )
+    expect(at(build("awaiting_review", { ready_at: ago(2) }))).toBe(undefined)
   })
 
   it("keeps the same step ids in every state", () => {
