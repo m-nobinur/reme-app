@@ -106,7 +106,7 @@ import { VOICE, voiceProblems } from "./voice.ts"
 export const DEFAULT_ONBOARDING_MODEL = "google/gemini-3.8-flash"
 
 /** Bumped with any change to the instructions or the plan's schema. */
-export const PLANNER_VERSION = "onboarding-18"
+export const PLANNER_VERSION = "onboarding-19"
 
 /** Stream parts that show a call is alive but has written nothing yet. */
 const QUIET = new Set([
@@ -221,6 +221,7 @@ Reading the owner:
 - Record only what they said. Never invent a phone number, an email, a service, a customer or a place. If a phone number or an email looks incomplete, don't record it: say so and ask again. Phone numbers are E.164, read for the UK unless they give a country code: a leading 0 drops after +44 ("07700 900123" is +447700900123), and 00 starts an international number ("00 1 206 555 0104" is +12065550104). A number that cannot be dialled that way is never recorded: ask them to check it.
 - The industry: category is the closest item of the list, or null when none is close; name is their trade in their words.
 - Choices have cards: the industry, whether you build the website, the layout, the colours, the lettering and the pages. Record one only when the owner typed over that choice's own card; otherwise leave it out, and its card asks it in turn. The industry is the exception: record it as soon as their words say what the business does.
+- Who you are can change at any step. When the owner changes it in words ("make it male", "call her Maya", "friendlier please"), record every field it changes: the pronouns, the tone, and the name, the one they give or one you choose to fit new pronouns (list it in chosen_for_owner). Your face follows the pronouns on its own. Say only what you recorded, then carry on with the step you were on (a waiting card: pending_card "unanswered" and answer_only, which shows it again); never reopen the assistant card for a change you recorded.
 - If they leave a card's choice to you ("you pick"), keep what the card holds, its prefill in waiting_card, as Pick for me does, for every field their words say nothing about. A field their words settle, even in the same breath ("you choose, but make it a man": he/him), is their answer: record it and leave it out of chosen_for_owner, then choose the rest to fit it (a man's name). List what you chose in chosen_for_owner, and tell them what you chose and that they can change it. Contact details and what the business does are never yours to choose.
 - A card used "with Pick for me" is the owner asking you to choose. The card holds your choice already, so record nothing for it: say what you went with in your own voice, as your decision, in one sentence ("I've gone with Reme, she/her, with a professional manner."). For the design tray, say you'll choose the rest as you build. Never say they picked it, and never name an avatar.
 - Record owner.preferred_name only when they say what they want to be called. A name in a greeting ("I'm Sophie") is not that. Never ask for it: the owner is called by owner_first_name, taken from their sign-in.
@@ -808,6 +809,12 @@ export function sayProblems(
       "say thanks the owner for a correction, but nothing they said changed what was held"
     )
   }
+  const claimed = context.persona && personaClaim(say, context.persona)
+  if (claimed) {
+    problems.push(
+      `say names ${claimed} for you, but the plan neither writes nor holds it: record it in facts or leave it out of say`
+    )
+  }
   const repeated = sentencesOf(say).find((s) => context.said?.has(s))
   if (repeated) {
     problems.push(
@@ -834,6 +841,41 @@ type SayContext = {
   assistantNamed?: boolean
   /** The longer sentences the assistant has already said in the recent rows, which say must not repeat. */
   said?: ReadonlySet<string>
+  /** The persona values say may name as its own: what the turn ends with, and what it held before. */
+  persona?: { names: string[]; pronouns: string[]; tones: string[] }
+}
+
+/**
+ * A name said as the assistant's own. Shortcut: only these phrasings are
+ * read ("the name James", "call me James", "James, he/him"); widen it when a
+ * live reply claims a name another way.
+ */
+const NAMED =
+  /\b(?:[Tt]he name|[Mm]y name is|[Mm]y name's|[Cc]all me|[Gg]o by|[Gg]oing by|[Kk]nown as)\s+(\p{Lu}[\p{L}'-]+)|(\p{Lu}[\p{L}'-]+),? (?:he\/him|she\/her|they\/them)\b/gu
+
+/** The first pronouns, tone or name `say` claims for the assistant outside `p`; a question offers, so it claims nothing. */
+function personaClaim(say: string, p: NonNullable<SayContext["persona"]>) {
+  for (const sentence of say.split(/(?<=[.!?])\s+/)) {
+    if (sentence.trimEnd().endsWith("?")) continue
+    const words = ` ${wordsOf(sentence).join(" ")} `
+    const pronouns = PRONOUNS.find(
+      (each) => sentence.includes(each.label) && !p.pronouns.includes(each.id)
+    )
+    if (pronouns) return pronouns.label
+    const tone = / (tone|manner|voice) /.test(words)
+      ? TONES.find(
+          (each) => words.includes(` ${each.id} `) && !p.tones.includes(each.id)
+        )
+      : undefined
+    if (tone) return `a ${tone.id} tone`
+    for (const m of sentence.matchAll(NAMED)) {
+      const name = ` ${(m[1] ?? m[2] ?? "").toLowerCase()} `
+      if (!p.names.some((n) => ` ${wordsOf(n).join(" ")} `.includes(name))) {
+        return m[1] ?? m[2]
+      }
+    }
+  }
+  return null
 }
 
 /** A claim that something costs nothing, in the forms the planner wrote it ("included as part of our service, so there is no extra charge"), never "feel free" or "free to change". */
@@ -870,12 +912,31 @@ function echoes(say: string, typed: string): boolean {
 }
 
 /** What `sayProblems` needs to know of a plan's turn. */
-function sayContext(plan: OnboardingPlan, s: PlanState): SayContext {
+function sayContext(
+  plan: OnboardingPlan,
+  s: PlanState,
+  after: Onboarding
+): SayContext {
   const held = s.onboarding.facts
   const name = (
     plan.facts["assistant.name"] ?? factValue(held, "assistant.name")
   )?.name
+  const both = [after.facts, held]
+  const values = <K extends FactValueKey>(key: K) =>
+    both.flatMap((facts) => {
+      const value = factValue(facts, key)
+      return value ? [value] : []
+    })
   return {
+    persona: {
+      // The business's own name is said too ("the name Bramble Window Care").
+      names: [
+        ...values("assistant.name").map((v) => v.name),
+        s.onboarding.orgName,
+      ],
+      pronouns: values("assistant.pronouns").map((v) => v.id),
+      tones: values("assistant.tone").map((v) => v.id),
+    },
     ...(s.input.kind === "message" ? { typed: s.input.text } : {}),
     corrected: Object.entries(plan.facts).some(([key, value]) => {
       const before = factValue(held, key as FactValueKey)
@@ -943,9 +1004,8 @@ export function checkPlan(
   s: PlanState,
   withSay = true
 ): { ok: true; checked: Checked } | { ok: false; errors: string[] } {
-  const errors: string[] = withSay
-    ? sayProblems(plan.say, sayContext(plan, s))
-    : []
+  // The message's own problems go first, once `after` is known.
+  const errors: string[] = []
   const o = s.onboarding
   const said = ownerWords(s)
 
@@ -999,10 +1059,12 @@ export function checkPlan(
     // own card, so it is taken only from a message typed over that card. The
     // industry is the exception: it is read from what the owner says the
     // business does, so the card comes only when their words did not say.
+    // So is a settled persona, which the owner changes in words at any step.
     if (
       CHOICE_KEYS.includes(fact.key) &&
       !wanted.includes(fact.key) &&
-      fact.key !== "business.industry"
+      fact.key !== "business.industry" &&
+      !(PERSONA.includes(fact.key) && has(o, fact.key))
     ) {
       continue
     }
@@ -1062,11 +1124,12 @@ export function checkPlan(
   }
 
   const keys = new Set(facts.map((f) => f.key))
-  // Only the waiting card's answer can be the assistant's own choice; an
-  // industry read from the owner's words is stated as inferred too.
+  // Only the waiting card's answer, or the persona, can be the assistant's
+  // own choice; an industry read from the owner's words is stated as
+  // inferred too.
   const chosen = facts.filter(
     (f) =>
-      (wanted.includes(f.key) &&
+      ((wanted.includes(f.key) || PERSONA.includes(f.key)) &&
         (plan.chosen_for_owner as readonly string[]).includes(f.key)) ||
       (f.key === "business.industry" && !wanted.includes(f.key))
   )
@@ -1079,12 +1142,28 @@ export function checkPlan(
         ? (pending.input as AskDetailsInput).prefill
         : []
   const opened = (key: string) => prefill.find((p) => p.key === key)?.value
+  // The persona before the owner's words: the card's, or the one held.
+  const was = (key: FactValueKey) => opened(key) ?? factValue(o.facts, key)
   const repronounced = facts.some(
     (f) =>
       f.key === "assistant.pronouns" &&
       !chosen.includes(f) &&
-      !same(f.value, opened(f.key))
+      !same(f.value, was(f.key))
   )
+  // A name the owner never typed was chosen for the old pronouns.
+  const oldName = was("assistant.name") as { name: string } | undefined
+  if (
+    repronounced &&
+    oldName &&
+    !keys.has("assistant.name") &&
+    !` ${wordsOf(said).join(" ")} `.includes(
+      ` ${wordsOf(oldName.name).join(" ")} `
+    )
+  ) {
+    errors.push(
+      `assistant.name ${oldName.name} came with the old pronouns; choose a name that fits the new ones and list it in chosen_for_owner`
+    )
+  }
   for (const f of chosen) {
     const value = opened(f.key)
     if (value === undefined) continue
@@ -1101,16 +1180,23 @@ export function checkPlan(
       `${f.key} is not what the card holds, ${JSON.stringify(value)}: if the owner's words asked for this, it is their answer, so leave it out of chosen_for_owner; if they left it to you, keep the card's`
     )
   }
-  // The face follows the pronouns, as the card's own does: words never name one.
+  // The face follows the pronouns, as the card's own does: words never name
+  // one. A held face changes only when new pronouns no longer fit it.
   const pronouns = [...facts, ...o.facts].find(
     (f) => f.key === "assistant.pronouns"
   )?.value as { id?: string } | undefined
   const face = AVATARS.find((a) => a.pronouns === pronouns?.id)
+  const heldFace = AVATARS.find(
+    (a) => a.id === factValue(o.facts, "assistant.avatar")?.id
+  )
   if (
-    pending?.type === "tool-ask_details" &&
     face &&
-    !has(o, "assistant.avatar") &&
-    facts.some((f) => wanted.includes(f.key))
+    (heldFace
+      ? keys.has("assistant.pronouns") &&
+        heldFace.pronouns !== null &&
+        heldFace.pronouns !== pronouns?.id
+      : pending?.type === "tool-ask_details" &&
+        facts.some((f) => wanted.includes(f.key)))
   ) {
     const avatar = FactValue.parse({
       key: "assistant.avatar",
@@ -1118,6 +1204,7 @@ export function checkPlan(
     })
     facts.push(avatar)
     chosen.push(avatar)
+    keys.add(avatar.key)
   }
   // Words over the tray settle it only once each of its questions is held,
   // the owner's answer or the choice they left to you; until then the tray
@@ -1340,10 +1427,20 @@ export function checkPlan(
           `${next.step} is not answered yet, so there is nothing to go back to; ask it in its turn`
         )
       }
+      if (
+        next.step === "assistant" &&
+        facts.some((f) => PERSONA.includes(f.key))
+      ) {
+        errors.push(
+          "you recorded the change to who you are and the persona card shows it; carry on with the step you were on instead of reopening the assistant card"
+        )
+      }
       break
     case "answer_only":
       break
   }
+  if (withSay)
+    errors.unshift(...sayProblems(plan.say, sayContext(plan, s, after)))
   return errors.length > 0
     ? { ok: false, errors }
     : {
@@ -1681,7 +1778,7 @@ export async function planTurn(
           return
         }
         gate = "open"
-        context = sayContext(checked.checked.plan, s)
+        context = sayContext(checked.checked.plan, s, checked.checked.after)
       }
       const whole = wholeSentences(partial.say.trimStart())
       // A retry still writing what the owner has already read.

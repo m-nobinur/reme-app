@@ -19,6 +19,7 @@ import {
   designPrefill,
   detailsCard,
   type Onboarding,
+  reopenCard,
 } from "../src/onboarding.ts"
 import {
   askedSoFar,
@@ -472,6 +473,174 @@ describe("the plan's checks", () => {
     expect(left(man, all).join()).toMatch(
       /assistant.pronouns is not what the card holds.*leave it out of chosen_for_owner/
     )
+  })
+
+  it("saves a persona changed in words at a later step whole, and the card shows it", () => {
+    // Bramble Window Care, 2026-10-25: Pick for me settled Reme, she/her,
+    // she_1, then "make it male" over the website card wrote only James.
+    const o = onboarding([
+      ...without(
+        "assistant.name",
+        "assistant.pronouns",
+        "site.build_mode",
+        "site.template",
+        "site.palette",
+        "site.font",
+        "site.pages"
+      ),
+      { key: "assistant.name", value: { name: "Reme" } },
+      { key: "assistant.pronouns", value: { id: "she_her" } },
+      { key: "assistant.avatar", value: { id: "she_1" } },
+      QUOTE,
+    ])
+    const website = choiceCard("build_for_me", o, counter())
+    const s = typed("make it male", o, website)
+    const male = plan({
+      facts: {
+        "assistant.name": { name: "James" },
+        "assistant.pronouns": { id: "he_him" },
+      },
+      chosen_for_owner: ["assistant.name"],
+      pending_card: "unanswered",
+      say: "I have switched my pronouns to he/him and taken the name James, keeping a professional tone.\n\nNow, back to the website. Would you like me to build it for Regal Rides?",
+    })
+    const checked = checkPlan(male, s)
+    if (!checked.ok) throw new Error(checked.errors.join("; "))
+    expect(checked.checked.stated).toEqual([
+      { key: "assistant.pronouns", value: { id: "he_him" } },
+    ])
+    expect(checked.checked.chosen).toEqual([
+      { key: "assistant.name", value: { name: "James" } },
+      { key: "assistant.avatar", value: { id: "he_1" } },
+    ])
+    const parts = planParts(checked.checked, s, counter())
+    expect(parts.map((p) => p.type)).toEqual([
+      "text",
+      PERSONA_CARD,
+      "text",
+      "tool-ask_choice",
+    ])
+    expect(parts[1]).toMatchObject({
+      data: {
+        name: "James",
+        pronouns: "he_him",
+        avatar: "he_1",
+        tone: "professional",
+      },
+    })
+    // "friendlier please" is the owner's tone, wherever they are.
+    const friendly = checkPlan(
+      plan({
+        facts: { "assistant.tone": { id: "friendly" } },
+        pending_card: "unanswered",
+      }),
+      typed("friendlier please", o, website)
+    )
+    expect(friendly.ok && friendly.checked.stated).toEqual([
+      { key: "assistant.tone", value: { id: "friendly" } },
+    ])
+    // A name the card or the assistant chose came with the old pronouns.
+    expect(
+      errorsOf(
+        plan({
+          facts: { "assistant.pronouns": { id: "he_him" } },
+          pending_card: "unanswered",
+        }),
+        s
+      ).join()
+    ).toMatch(/assistant.name Reme came with the old pronouns/)
+    // One the owner gave stays theirs.
+    expect(
+      errorsOf(
+        plan({
+          facts: { "assistant.pronouns": { id: "they_them" } },
+          pending_card: "unanswered",
+        }),
+        {
+          ...typed("use they/them", o, website),
+          rows: [
+            {
+              role: "user",
+              parts: [{ type: "text", text: "call her Reme", state: "done" }],
+            },
+          ],
+        }
+      )
+    ).toEqual([])
+    // A face of no pronouns fits any.
+    const robot = onboarding([
+      ...(o.facts as FactValue[]).filter((f) => f.key !== "assistant.avatar"),
+      { key: "assistant.avatar", value: { id: "reme" } },
+    ])
+    const kept = checkPlan(male, typed("make it male", robot, website))
+    expect(kept.ok && kept.checked.chosen.map((f) => f.key)).toEqual([
+      "assistant.name",
+    ])
+    // Over the reopened assistant card, the face follows as well.
+    const reopened = reopenCard("assistant", o, counter())
+    const over = checkPlan(
+      plan({ ...male, pending_card: "answered" }),
+      typed("make it male", o, reopened)
+    )
+    expect(over.ok && over.checked.chosen).toContainEqual({
+      key: "assistant.avatar",
+      value: { id: "he_1" },
+    })
+    // A change it recorded is shown by the persona card, not reopened.
+    expect(
+      errorsOf(
+        plan({ ...male, next: { kind: "reopen", step: "assistant" } }),
+        s
+      ).join()
+    ).toMatch(/carry on with the step you were on/)
+  })
+
+  it("refuses a reply that names a persona the plan does not write or hold", () => {
+    const o = onboarding([
+      ...without(
+        "site.build_mode",
+        "site.template",
+        "site.palette",
+        "site.font",
+        "site.pages"
+      ),
+      QUOTE,
+    ])
+    const website = choiceCard("build_for_me", o, counter())
+    const s = typed("make it female", o, website)
+    const said = (say: string, facts: Plan["facts"] = {}) =>
+      errorsOf(plan({ facts, say, pending_card: "unanswered" }), s).filter(
+        (e) => e.includes("for you")
+      )
+    // The measured retry: the change dropped, the claim kept.
+    expect(
+      said(
+        "I have switched my pronouns to she/her and taken the name Maya, keeping a professional tone."
+      )
+    ).toEqual([
+      "say names she/her for you, but the plan neither writes nor holds it: record it in facts or leave it out of say",
+    ])
+    expect(said("I'm Maya, she/her, from now on.")[0]).toMatch(/names she\/her/)
+    expect(said("Call me Maya from now on.")[0]).toMatch(/names Maya/)
+    expect(said("I'll keep a friendly tone with you.")[0]).toMatch(
+      /names a friendly tone/
+    )
+    // What the plan writes, and what is held, may be named.
+    expect(
+      said(
+        "I have switched from he/him to she/her and taken the name Maya, in a professional manner.",
+        {
+          "assistant.name": { name: "Maya" },
+          "assistant.pronouns": { id: "she_her" },
+        }
+      )
+    ).toEqual([])
+    // A question offers, and the business's own name is not the assistant's.
+    expect(
+      said(
+        "Would you like she/her or they/them, and a friendly tone? The name Regal Rides goes in the header."
+      )
+    ).toEqual([])
   })
 
   it("lets the plan choose the palettes shown first, from the pool, three or four of them", () => {
