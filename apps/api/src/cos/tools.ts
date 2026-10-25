@@ -76,7 +76,7 @@ import {
 import { readFacts, statusWithFacts } from "../workspace.ts"
 import type { Opening } from "./agent.ts"
 import { readSession } from "./history.ts"
-import { readProfile } from "./memory.ts"
+import { inOwnersWords, readProfile } from "./memory.ts"
 import { wallToUtc } from "./time.ts"
 import type { Turn } from "./turns.ts"
 
@@ -505,20 +505,7 @@ async function recordContact(
   if (!fresh) return null
   const { phone, email } = fresh
   const { text } = input
-  const log = await kit.withOrg({ orgId: owner.orgId }, (db) =>
-    readSession(db, sessionId)
-  )
-  const said = log
-    .flatMap((e) => {
-      const m =
-        e.type === "cos.message" ? CosMessage.safeParse(e.payload) : null
-      return m?.success && m.data.message.role === "user"
-        ? m.data.message.parts.flatMap((p) =>
-            p.type === "text" ? [p.text] : []
-          )
-        : []
-    })
-    .join("\n")
+  const said = (await ownerSaid({ kit, owner }, sessionId)).join("\n")
   const stated: FactValue[] = []
   if (phone) {
     if (!(phoneFromOwner(phone, said) && phoneFromOwner(phone, text)))
@@ -549,9 +536,99 @@ async function recordContact(
   return null
 }
 
+/** What the owner wrote in `sessionId`, message by message. */
+async function ownerSaid(
+  { kit, owner }: Pick<ToolContext, "kit" | "owner">,
+  sessionId: string
+): Promise<string[]> {
+  const log = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+    readSession(db, sessionId)
+  )
+  return log.flatMap((e): string[] => {
+    const m = e.type === "cos.message" ? CosMessage.safeParse(e.payload) : null
+    return m?.success && m.data.message.role === "user"
+      ? m.data.message.parts.flatMap((p) =>
+          p.type === "text" && typeof p.text === "string" ? [p.text] : []
+        )
+      : []
+  })
+}
+
+/** How long `business.proof` may grow: its fact's bound. */
+const PROOF_MAX = 600
+
+class ProofFull extends Error {}
+
+/**
+ * What the owner claims in a change ("local and fully insured"), added to
+ * `business.proof` as their word before the build starts, so the build does
+ * not ask for it and the claims gate accepts it. Recorded only when every
+ * word of it is one the owner wrote in `sessionId`, so nothing the model
+ * made up becomes a claim. Null when there is nothing to record or it is
+ * recorded, else the refusal.
+ */
+async function recordProof(
+  { kit, owner }: Pick<ToolContext, "kit" | "owner">,
+  sessionId: string,
+  { proof }: CosChangeRequest
+): Promise<Response | null> {
+  if (!proof) return null
+  if (
+    !inOwnersWords(proof, await ownerSaid({ kit, owner }, sessionId), false)
+  ) {
+    return failure(400, {
+      class: "validation",
+      code: "proof.not_owners",
+      message:
+        "Every word of proof must be one the owner wrote in this conversation. Say it again in their words, or leave proof out.",
+      detail: {},
+    })
+  }
+  try {
+    await kit.withOrg(
+      { orgId: owner.orgId, workosUserId: owner.session.workosUserId },
+      async (db) => {
+        const rows = await readFacts(db)
+        const held = toCosFacts(rows).output.facts.find(
+          (f) => f.key === "business.proof"
+        )?.value.text
+        if (held?.toLowerCase().includes(proof.toLowerCase())) return
+        const text = held ? `${held.replace(/[\s.]+$/, "")}. ${proof}` : proof
+        if (text.length > PROOF_MAX) throw new ProofFull()
+        await stateFacts(
+          db,
+          owner,
+          [{ key: "business.proof", value: { text } }],
+          rows
+        )
+      }
+    )
+  } catch (error) {
+    if (error instanceof ProofFull) {
+      return failure(400, {
+        class: "validation",
+        code: "proof.full",
+        message:
+          "The business's proof is full. Start the change again without proof.",
+        detail: {},
+      })
+    }
+    console.error(
+      JSON.stringify({ code: "cos.proof_failed", error: failureCode(error) })
+    )
+    return failure(503, {
+      class: "transient",
+      code: "proof.unconfirmed",
+      message: "What the owner said about the business could not be saved.",
+      detail: {},
+    })
+  }
+  return null
+}
+
 /**
  * The owner's change, started as `/changes` starts it, keyed by the
- * approval, after any contact detail in it is recorded. Both ways a yes
+ * approval, after any contact detail and claim in it is recorded. Both ways a yes
  * reaches the change come here: the tool's body and the chat's approval.
  */
 export async function startOwnerChange(
@@ -562,6 +639,7 @@ export async function startOwnerChange(
 ): Promise<Response> {
   return (
     (await recordContact(context, sessionId, input)) ??
+    (await recordProof(context, sessionId, input)) ??
     startChange(
       context.env,
       context.kit,

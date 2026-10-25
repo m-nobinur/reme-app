@@ -166,7 +166,7 @@ export const LIMITS = {
 } as const
 
 /** Bumped with any change to `INSTRUCTIONS` or a tool's description. */
-const PREFIX_VERSION = "24"
+const PREFIX_VERSION = "25"
 
 export const INSTRUCTIONS = `You are the Chief of Staff for a small service business. You talk with the business owner in a chat and help them run the business. Their website is one of the things you look after; a Developer agent builds it.
 
@@ -231,7 +231,7 @@ export const DESCRIPTIONS: Record<CosToolName, string> = {
   get_preview:
     "Check whether a build has a preview ready, and when it expires, given the build's ref from the workspace. Use it when the owner asks about a build's preview. The owner opens the preview from the card; you never get a link.",
   request_change:
-    "Start a change to the website, in the owner's words. The owner asking is their yes, so it starts straight away with no card; only a change that sets a new phone number or email address shows them a card first. Use it only for a change the owner asked for in their own messages, one change per call. Not for questions the Developer asked. Set change_kind by the biggest part of the change. copy is words only, such as a headline, a phone number or a button label. style is colours, fonts or spacing across the site. section adds, removes, moves or reworks one section or page. photo replaces, adds or removes a picture. creative is a new look, new pages or anything you are unsure of. When the owner types a new phone number or email address in full, also set contact.phone (E.164) or contact.email to exactly what they typed, so the business facts change with the site. Never fill contact from anything but the owner's own words. Set step: a few words, in the owner's language, of what the change does, such as \"Adding the new photos to the home page\".",
+    "Start a change to the website, in the owner's words. The owner asking is their yes, so it starts straight away with no card; only a change that sets a new phone number or email address shows them a card first. Use it only for a change the owner asked for in their own messages, one change per call. Not for questions the Developer asked. Set change_kind by the biggest part of the change. copy is words only, such as a headline, a phone number or a button label. style is colours, fonts or spacing across the site. section adds, removes, moves or reworks one section or page. photo replaces, adds or removes a picture. creative is a new look, new pages or anything you are unsure of. When the owner types a new phone number or email address in full, also set contact.phone (E.164) or contact.email to exactly what they typed, so the business facts change with the site. Never fill contact from anything but the owner's own words. When the owner states something about the business for the site to say, such as insurance, years trading or a guarantee, also set proof to it, so the site can say it. Set step: a few words, in the owner's language, of what the change does, such as \"Adding the new photos to the home page\".",
   answer_question:
     "Propose an answer to one of the Developer's open questions, by the ref on that question in the workspace. For a fact field, value is the fact object {key, value} with the field from that ref; otherwise it is the owner's text. The owner approves it on a card. Use it only with an answer the owner gave you.",
   create_reminder:
