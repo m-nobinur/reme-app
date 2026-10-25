@@ -145,9 +145,7 @@ test("an answered choice reads back as the owner's reply", async ({ page }) => {
   await expect(done.nth(0)).toContainText("did not come through")
 })
 
-test("a reviewed quote form gives way to the owner's reply", async ({
-  page,
-}) => {
+test("a reviewed quote form says what was saved", async ({ page }) => {
   await open(page, "ReviewQuoteForm")
   await expect(page.locator('[data-slot="aui_user-message-root"]')).toHaveText([
     /Looks good/,
@@ -156,9 +154,11 @@ test("a reviewed quote form gives way to the owner's reply", async ({
   const done = page
     .locator('[data-slot="review-quote-form"]')
     .filter({ hasNot: page.getByRole("button", { name: "Looks good" }) })
-  // One overtaken by a typed message leaves nothing; a broken one says so.
-  await expect(done).toHaveCount(1)
-  await expect(done.nth(0)).toContainText("did not come through")
+  // A confirmed one says what it saved, one overtaken by a typed message
+  // leaves nothing, and a broken one says so.
+  await expect(done).toHaveCount(2)
+  await expect(done.filter({ hasText: "Saved. Before a quote" })).toHaveCount(1)
+  await expect(done.filter({ hasText: "did not come through" })).toHaveCount(1)
 })
 
 const PNG = {

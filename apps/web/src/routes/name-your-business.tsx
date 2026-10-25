@@ -35,7 +35,7 @@ export const Route = createFileRoute("/name-your-business")({
 function NameYourBusiness() {
   const { email } = Route.useLoaderData()
   const returnTo = safeReturnTo(Route.useSearch().returnTo)
-  const { run, pending, result } = useSubmit(nameBusiness)
+  const { run, pending, result, setResult } = useSubmit(nameBusiness)
   const failure = result?.status === "failed" ? result.failure : undefined
 
   return (
@@ -64,8 +64,11 @@ function NameYourBusiness() {
       }
       title="What's your business called?"
     >
+      {/* An error goes as soon as the owner types or tries again. */}
       <AuthForm
+        onInput={() => setResult(null)}
         onSubmit={async (values) => {
+          setResult(null)
           const outcome = await run({
             data: { businessName: values.businessName, returnTo },
           })
@@ -84,7 +87,8 @@ function NameYourBusiness() {
           maxLength={120}
           name="businessName"
           placeholder="Sparkle Cleaning Co."
-          required
+          // Not `required`: an empty name gets the same message, in the same
+          // place, as one of spaces, rather than the browser's own bubble.
         />
         <SubmitButton pending={pending} pendingLabel="Setting up…">
           Continue

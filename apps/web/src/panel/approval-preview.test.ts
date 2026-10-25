@@ -49,7 +49,7 @@ const render = (extra: object) =>
 
 const approve = (container: HTMLElement) =>
   [...container.querySelectorAll("button")].find(
-    (b) => b.textContent === "Approve and publish"
+    (b) => b.textContent === "Publish"
   )
 
 it("offers to read a preview that could not be read again, with no link implied", async () => {

@@ -45,7 +45,7 @@ const LEAD = "text-lg text-muted-foreground leading-relaxed"
 
 /** A rise into place on first paint; pair with a `delay-*` to stagger. */
 const RISE =
-  "fill-mode-both duration-700 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-3"
+  "fill-mode-both duration-slow ease-standard motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-3"
 
 type NavLink = { href: string; label: string }
 
@@ -648,7 +648,7 @@ function Faq() {
                 {item.q}
                 <CaretDownIcon
                   aria-hidden
-                  className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-open:rotate-180"
+                  className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
                 />
               </summary>
               <p className="mt-3 max-w-prose text-muted-foreground leading-relaxed">

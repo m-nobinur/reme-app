@@ -26,7 +26,7 @@ test("an approval is named for the site and shows no version or id", async ({
   page,
 }) => {
   await open(page, "ApprovalItem", 400)
-  const approve = page.getByRole("button", { name: "Approve and publish" })
+  const approve = page.getByRole("button", { name: "Publish" })
   await expect(approve).toBeEnabled()
   await expect(page.getByRole("article", { name: "Brightclean" })).toBeVisible()
   await expect(page.getByText(/2f41c9ab|ID |Version \d/)).toHaveCount(0)
@@ -42,9 +42,7 @@ test("an approval with no revision to publish cannot be approved", async ({
   page,
 }) => {
   await open(page, "ApprovalItem unbound", 400)
-  await expect(
-    page.getByRole("button", { name: "Approve and publish" })
-  ).toBeDisabled()
+  await expect(page.getByRole("button", { name: "Publish" })).toBeDisabled()
 })
 
 test("a preview still loading is a skeleton, never a spinner", async ({
@@ -105,7 +103,7 @@ test("the screenshots step through the deck, and the approve button shows a focu
   page,
 }) => {
   await open(page, "ApprovalItem", 400)
-  const approve = page.getByRole("button", { name: "Approve and publish" })
+  const approve = page.getByRole("button", { name: "Publish" })
   const front = page.getByRole("img")
   await expect(front).toHaveAccessibleName("Your home page")
   await page.getByRole("button", { name: "The next picture" }).click()
@@ -321,9 +319,7 @@ test("an approval whose preview fails still says what the owner can do, and lets
   await expect(
     entry.getByRole("button", { name: "Retry preview" })
   ).toBeEnabled()
-  await expect(
-    entry.getByRole("button", { name: "Approve and publish" })
-  ).toBeEnabled()
+  await expect(entry.getByRole("button", { name: "Publish" })).toBeEnabled()
 })
 
 for (const theme of ["light", "dark"] as const) {

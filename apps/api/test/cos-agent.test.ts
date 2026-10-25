@@ -18,6 +18,7 @@ import {
   emailMessageId,
   eq,
   events,
+  facts,
   failureCode,
   postAssistantMessage,
   postOwnerEmail,
@@ -144,6 +145,22 @@ vi.mock("../src/cos/history.ts", async (importOriginal) => {
       cut()
       return real.readSessionSince(...args)
     },
+  }
+})
+
+/**
+ * A change that sets a new phone or email is the one still shown on a card,
+ * so the card tests here stand in for that check: every change is carded
+ * unless a test turns it off.
+ */
+const contact = vi.hoisted(() => ({ carded: true }))
+
+vi.mock("../src/cos/tools.ts", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../src/cos/tools.ts")>()
+  return {
+    ...real,
+    newContact: async (...args: Parameters<typeof real.newContact>) =>
+      contact.carded ? { phone: "+447700900123" } : real.newContact(...args),
   }
 })
 
@@ -298,10 +315,15 @@ describe("the CoS's instructions", () => {
     )
   })
 
-  it("tell the model a started change already has the owner's yes", () => {
+  it("tell the model the owner's words are the yes and to speak of the work as its own", () => {
     expect(INSTRUCTIONS).toMatch(
-      /request_change comes back with outcome "started", the owner already said yes and the build has started[^\n]*Never ask them to approve it again/
+      /request_change in the owner's own words, one change per call, as soon as the owner asks for it: never ask them to confirm it first/
     )
+    expect(INSTRUCTIONS).toMatch(
+      /request_change comes back with outcome "started"[^\n]*never say queued[^\n]*Never ask them to approve it/
+    )
+    expect(INSTRUCTIONS).toContain('"I\'m putting your site together"')
+    expect(INSTRUCTIONS).not.toMatch(/such as "It's/)
   })
 })
 
@@ -1248,7 +1270,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     ])
   })
 
-  it("asks the owner before every act tool, even with a value that parses as a fact", async () => {
+  it("asks the owner before every act tool but an answer, which runs at once even with a value that parses as a fact", async () => {
     const s = seed(kit, me)
     const asking = await s.assignment("blocked_on_information")
     const q = question(me, asking)
@@ -1291,18 +1313,17 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       stub
     )
     expect(done.response.status, done.text).toBe(200)
-    expect(stub.calls).toHaveLength(0)
     const pending = waiting(await tailOf(me, id))
     expect(
       pending.map((p) => p.type).sort((a, b) => a.localeCompare(b))
-    ).toEqual([
-      "tool-answer_question",
-      "tool-create_reminder",
-      "tool-request_change",
-    ])
+    ).toEqual(["tool-create_reminder", "tool-request_change"])
     expect(
       done.chunks.filter((c) => c.type === "tool-approval-request")
-    ).toHaveLength(3)
+    ).toHaveLength(2)
+    // The answer went to the build that asked, under its own call.
+    expect(stub.calls.map((c) => new URL(c.request.url).pathname)).toEqual([
+      `/assignments/${asking}/answer`,
+    ])
     const stored = await kit.withOrg({ orgId: me.orgId }, (db) =>
       db.select().from(reminders).where(eq(reminders.conversationId, id))
     )
@@ -1691,11 +1712,11 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
   })
 
   /** A tail the CoS made, waiting on the four calls ADR-034's fallback proof resolves. */
-  async function fourApprovals(who: Owner, requestId: string) {
+  async function fourApprovals(who: Owner) {
     const id = await conversation(who)
     await turn(
       who,
-      typed(id, "Answer the phone question and make two changes."),
+      typed(id, "Make three changes and remind me to call the supplier."),
       {
         model: scripted(
           calls(
@@ -1705,15 +1726,9 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
               input: { text: "Add a Saturday slot." },
             },
             {
-              id: "call_aq",
-              tool: "answer_question",
-              input: {
-                request_id: requestId,
-                value: {
-                  key: "business.phone",
-                  value: { e164: "+441632960001" },
-                },
-              },
+              id: "call_rc3",
+              tool: "request_change",
+              input: { text: "Add Sundays." },
             },
             {
               id: "call_rc2",
@@ -1794,9 +1809,9 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     const q = question(me, asking)
     await s.event(asking, "information.requested", q)
     await s.state(asking, "cancelled")
-    const { id, tail, pending } = await fourApprovals(me, q.request_id)
+    const { id, tail, pending } = await fourApprovals(me)
     expect(pending).toHaveLength(4)
-    const [rc1, aq, rc2, cr] = pending as [
+    const [rc1, rc3, rc2, cr] = pending as [
       (typeof pending)[number],
       (typeof pending)[number],
       (typeof pending)[number],
@@ -1814,7 +1829,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
           message_id: tail.id,
           results: [
             { kind: "approval", approval_id: rc1.approval.id, approved: true },
-            { kind: "approval", approval_id: aq.approval.id, approved: true },
+            { kind: "approval", approval_id: rc3.approval.id, approved: true },
             {
               kind: "approval",
               approval_id: rc2.approval.id,
@@ -1831,7 +1846,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     expect(done.response.status, done.text).toBe(200)
     expect(
       stub.calls.map((c) => c.request.headers.get("idempotency-key"))
-    ).toEqual([rc1.approval.id, aq.approval.id])
+    ).toEqual([rc1.approval.id, rc3.approval.id])
     const added = (await logOf(id)).slice(before)
     const afterContext = added.slice(
       added.findIndex((e) => e.type === "cos.context")
@@ -1854,7 +1869,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
         }
       ).state
     expect(state(rc1.toolCallId)).toBe("output-available")
-    expect(state(aq.toolCallId)).toBe("output-available")
+    expect(state(rc3.toolCallId)).toBe("output-available")
     expect(state(rc2.toolCallId)).toBe("output-denied")
     expect(state(cr.toolCallId)).toBe("output-denied")
     expect(
@@ -2068,6 +2083,51 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     const after = await tailOf(me, id)
     expect(after.id).toBe(tail.id)
     expect(plain(await replay(tail, done.chunks))).toStrictEqual(plain(after))
+  })
+
+  it("starts a change the owner typed with no card, keyed by its turn and call, and drops a contact it carried", async () => {
+    contact.carded = false
+    try {
+      const id = await conversation(me)
+      const stub = orchestrator()
+      const { model, sent } = scripted(
+        calls({
+          id: "call_rc",
+          tool: "request_change",
+          input: {
+            text: "Add a Saturday slot.",
+            contact: { phone: "+447700900123" },
+          },
+        }),
+        said("I've started your change.")
+      )
+      const done = await turn(
+        me,
+        typed(id, "Add a Saturday slot."),
+        { model },
+        stub
+      )
+      expect(done.response.status, done.text).toBe(200)
+      expect(
+        done.chunks.filter((c) => c.type === "tool-approval-request")
+      ).toHaveLength(0)
+      expect(stub.calls).toHaveLength(1)
+      const [turnRow] = await turnsOf(id)
+      expect(stub.calls[0]?.request.headers.get("idempotency-key")).toBe(
+        `${turnRow?.turn_id}:call_rc`
+      )
+      expect(JSON.stringify(sent[1]?.prompt)).toContain('"outcome":"started"')
+      // The text never names a phone, so the number was never the owner's to set.
+      const phones = await kit.withOrg({ orgId: me.orgId }, (db) =>
+        db
+          .select()
+          .from(facts)
+          .where(sql`${facts.value}->>'e164' = '+447700900123'`)
+      )
+      expect(phones).toHaveLength(0)
+    } finally {
+      contact.carded = true
+    }
   })
 
   it("lets the next turn finish an approved change a dead turn ran, once, under its own token", async () => {

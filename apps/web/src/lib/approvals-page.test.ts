@@ -83,7 +83,7 @@ it("decides the way the panel does, and reads the workspace again", async () => 
     [...container.querySelectorAll("button")].find(
       (each) => each.textContent === name
     )
-  await act(async () => button("Approve and publish")?.click())
+  await act(async () => button("Publish")?.click())
   expect(button("Publishing")?.disabled).toBe(true)
   expect(server.decideApproval).toHaveBeenCalledWith({
     data: {
