@@ -184,6 +184,11 @@ describe("the plan's checks", () => {
       "One thing — then another.",
       "## Heading",
       "I will handpick stock photos for you.",
+      // The replies to "how much does it cost?" on 2026-10-26.
+      "Building the website is included as part of our service, so there is no extra charge.",
+      "There is nothing extra to pay for the website, John.",
+      "It's free of charge.",
+      "The site comes with your plan at no extra cost.",
       "x".repeat(SAY_MAX + 1),
       "   ",
     ]) {
@@ -194,6 +199,15 @@ describe("the plan's checks", () => {
         "Lovely, Dave. Customers will use Request a quote, so every enquiry arrives with what you need."
       )
     ).toEqual([])
+    // Ordinary words around free, included and charge.
+    for (const fine of [
+      "I can free up your evenings by answering enquiries.",
+      "You are free to pick another name.",
+      "I've included a question about pets.",
+      "The site includes a Request a quote page, and you stay in charge of every reply.",
+    ]) {
+      expect(sayProblems(fine), fine).toEqual([])
+    }
   })
 
   it("takes facts only as FactValue, and contact details only as the owner typed them", () => {
@@ -1016,7 +1030,7 @@ describe("the plan's parts", () => {
     const checked = checkPlan(
       plan({
         pending_card: "unanswered",
-        say: "No, the site comes with your plan. Now, the colours.",
+        say: "That is yours to set, not mine. Now, the colours.",
       }),
       s
     )
@@ -1025,7 +1039,7 @@ describe("the plan's parts", () => {
     expect(parts).toEqual([
       {
         type: "text",
-        text: "No, the site comes with your plan. Now, the colours.",
+        text: "That is yours to set, not mine. Now, the colours.",
         state: "done",
       },
       { ...card, toolCallId: "fresh" },

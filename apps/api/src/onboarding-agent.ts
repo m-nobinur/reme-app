@@ -103,7 +103,7 @@ import { VOICE, voiceProblems } from "./voice.ts"
 export const DEFAULT_ONBOARDING_MODEL = "google/gemini-3.8-flash"
 
 /** Bumped with any change to the instructions or the plan's schema. */
-export const PLANNER_VERSION = "onboarding-15"
+export const PLANNER_VERSION = "onboarding-16"
 
 /** Stream parts that show a call is alive but has written nothing yet. */
 const QUIET = new Set([
@@ -208,6 +208,7 @@ How to write say:
 - Short: two short paragraphs at most, under 120 words, plain text, British English. No headings, links, emojis, em dashes or en dashes; use a comma or a full stop.
 - Tone friendly (warm, approachable) until the owner picks one. Professional: polished, full sentences, no exclamation marks. Casual: relaxed, brief, contractions. Use the name the owner gave you. Call the owner by owner_first_name now and then, not in every message; with no name there, use none until they give one.
 - Never mention rates, prices, fees, costs, currency or packages, not even as a verb ("to price a job"): say quote. Promise nothing beyond the website, its Request a quote page and you answering here.
+- Never say what anything costs, or that anything is free, included or at no extra charge, the website and you among them. Asked what something costs, say that is for the owner to set, in words that name no price or cost, then carry on.
 
 ${VOICE}
 
@@ -742,9 +743,9 @@ export function turnData(s: PlanState): string {
 
 /**
  * What a message to the owner must never hold, as the script's copy is
- * tested: rates and currency (the site quotes, it never lists), a link or
- * markup, a heading, an em or en dash, and a promise of images the builder
- * does not have. With the turn's context it also refuses the owner's
+ * tested: rates and currency (the site quotes, it never lists), a claim
+ * that something is free, a link or markup, a heading, an em or en dash,
+ * and a promise of images the builder does not have. With the turn's context it also refuses the owner's
  * sentence read back to them, and thanks for a correction that changed
  * nothing. A problem here is the model's to fix on its retry.
  *
@@ -771,6 +772,11 @@ export function sayProblems(
   ) {
     problems.push(
       "say mentions rates, fees, costs or currency; the site uses Request a quote, so never mention them"
+    )
+  }
+  if (FREE.test(say)) {
+    problems.push(
+      "say claims something is free, included or at no charge; never say what anything costs or that it is free: that is for the owner to set"
     )
   }
   if (/https?:\/\/|www\.|\]\(|<\/?[a-z!]/i.test(say)) {
@@ -821,6 +827,10 @@ type SayContext = {
   /** The longer sentences the assistant has already said in the recent rows, which say must not repeat. */
   said?: ReadonlySet<string>
 }
+
+/** A claim that something costs nothing, in the forms the planner wrote it ("included as part of our service, so there is no extra charge"), never "feel free" or "free to change". */
+const FREE =
+  /\b(free of charge|for free|(is|it's|it is|that's|completely|totally|entirely) free|no (extra |additional |added |hidden )?(charges?|payment)|at no extra|nothing (extra |more |else |further )?to pay|(no need|don't have|do not have|won't have) to pay|complimentary|on the house|(included|comes) (in|with) (the|your|our) (service|plan|subscription|package|price)|part of (the|your|our) (service|plan|subscription|package))\b/i
 
 /** Thanks for a correction, in the forms the planner wrote it. */
 const CORRECTION_THANKS =
