@@ -33,6 +33,7 @@ import {
   type RequestChangeOutput,
   ReviewQuoteFormInput,
   ReviewQuoteFormOutput,
+  SKIP_REPLY,
   TEMPLATES,
   type TemplateId,
   TONES,
@@ -1617,8 +1618,9 @@ function yesNo(words: string): boolean | null {
   return null
 }
 
-/** Whether a typed reply passes over a skippable step. */
-const saysSkip = (words: string) => SKIP.test(norm(words))
+/** Whether a typed reply, or the Skip this one pill's message, passes over a skippable step. */
+const saysSkip = (words: string) =>
+  norm(words) === norm(SKIP_REPLY) || SKIP.test(norm(words))
 
 /** The field each text-asked fact keeps its words in. */
 const FIELD: Partial<Record<FactValueKey, string>> = {

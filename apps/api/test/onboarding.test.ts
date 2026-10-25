@@ -8,6 +8,7 @@ import {
   INDUSTRIES,
   PALETTES,
   PaletteId,
+  SKIP_REPLY,
   TONES,
   type ToneId,
 } from "@workspace/contracts"
@@ -1181,6 +1182,25 @@ describe("the progress a conversation's cards hold", () => {
         row({ step: "service_area.text", state: "output-error", reply: "no" }),
       ]).passed
     ).toEqual([])
+  })
+
+  it("passes an optional question on the Skip this one message, typed or talked over", () => {
+    for (const key of ["business.audience", "business.proof"] as const) {
+      for (const card of [
+        factCard(start(), key, counter()),
+        call("tool-ask_open", { about: key }, counter()),
+      ]) {
+        expect(typedAnswer(card, SKIP_REPLY), card.type).toEqual({
+          kind: "passed",
+          step: key,
+        })
+      }
+      expect(
+        progressOf([
+          row({ step: key, state: "output-error", reply: SKIP_REPLY }),
+        ]).passed
+      ).toEqual([key])
+    }
   })
 
   it("asks a step in new words when the owner comes back to it from another", () => {

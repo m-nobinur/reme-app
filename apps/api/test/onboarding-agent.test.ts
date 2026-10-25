@@ -2,6 +2,7 @@ import {
   type FactValue,
   OnboardingPlan,
   type OnboardingPlan as Plan,
+  SKIP_REPLY,
 } from "@workspace/contracts"
 import { convertArrayToReadableStream, MockLanguageModelV4 } from "ai/test"
 import { describe, expect, it } from "vitest"
@@ -1566,6 +1567,37 @@ describe("a question in words", () => {
       facts: [],
     })
     expect(cardAnswer(card, { answer: "stated" }, [])).toBeNull()
+  })
+
+  it("reads the Skip this one message as a skip at every optional question", () => {
+    for (const key of ["business.audience", "business.proof"] as const) {
+      const o = onboarding(without(key, "business.phone"))
+      for (const card of [
+        call("tool-ask_open", { about: key }, counter()),
+        call(
+          "tool-ask_fact",
+          { key, skippable: true, prefill: null },
+          counter()
+        ),
+      ]) {
+        const s = typed(SKIP_REPLY, o, card)
+        const skip = `the owner tapped Skip on ${key}: set pending_card declined, record nothing for it and move on`
+        expect(
+          errorsOf(
+            plan({
+              pending_card: "answered",
+              facts: { [key]: { text: SKIP_REPLY } },
+            }),
+            s
+          ),
+          card.type
+        ).toContain(skip)
+        expect(
+          errorsOf(plan({ pending_card: "declined" }), s),
+          card.type
+        ).not.toContain(skip)
+      }
+    }
   })
 })
 
