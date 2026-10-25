@@ -1923,6 +1923,20 @@ export function progressOf(rows: readonly ScriptRow[]): Progress {
   let old = false
   const asked: string[] = []
   for (const row of rows) {
+    // A question in words counts only as a skip of an optional fact, on its
+    // card or typed over it: the row outlives a reopen, as asked counts do not.
+    if (row.type === "tool-ask_open") {
+      if (
+        SKIPPABLE.includes(row.step as FactValueKey) &&
+        (row.answer === "skipped" ||
+          (row.state === "output-error" &&
+            row.reply !== null &&
+            saysSkip(row.reply)))
+      ) {
+        passed.add(row.step as string)
+      }
+      continue
+    }
     if (row.type === "tool-request_change") {
       if (row.state === "output-available" || row.state === "output-denied") {
         offered = true

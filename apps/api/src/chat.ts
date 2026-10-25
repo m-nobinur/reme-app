@@ -473,7 +473,7 @@ export async function readScript(
     sql`select
       p->>'type' as type,
       p->>'state' as state,
-      coalesce(p->'input'->>'key', p->'input'->>'step') as step,
+      coalesce(p->'input'->>'key', p->'input'->>'step', p->'input'->>'about') as step,
       p->'output'->>'answer' as answer,
       p->'output'->'ids'->>0 as choice,
       case when p->>'state' = 'output-error' then (

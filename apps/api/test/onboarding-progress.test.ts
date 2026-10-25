@@ -114,6 +114,17 @@ describe("onboardingSteps", () => {
     expect(states(early).customers).toBe("now")
     expect(states(early, { "business.audience": 1 }).customers).toBe("skipped")
     expect(states(at([...WORK, AREA, ...CONTACT])).customers).toBe("skipped")
+    // A skip on its card holds through a return to an earlier step.
+    const skippedThenBack = states(
+      at([...WORK], { passed: ["business.audience"] }),
+      {},
+      true,
+      "service_area.text"
+    )
+    expect([skippedThenBack.area, skippedThenBack.customers]).toEqual([
+      "waiting",
+      "skipped",
+    ])
     // A return to the quote form, read with no asked counts as the panel reads it.
     const back = states(at([...WORK, AREA, QUOTE]), {}, true, "quote_form")
     expect([back.customers, back.proof, back.contact]).toEqual([
