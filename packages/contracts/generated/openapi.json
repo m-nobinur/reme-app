@@ -135,6 +135,12 @@
                       "minLength": 1,
                       "maxLength": 253,
                       "pattern": "\\S"
+                    },
+                    "change": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 40,
+                      "pattern": "\\S"
                     }
                   },
                   "additionalProperties": false
@@ -297,6 +303,12 @@
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 253,
+                      "pattern": "\\S"
+                    },
+                    "change": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 40,
                       "pattern": "\\S"
                     }
                   },
@@ -461,6 +473,12 @@
                       "minLength": 1,
                       "maxLength": 253,
                       "pattern": "\\S"
+                    },
+                    "change": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 40,
+                      "pattern": "\\S"
                     }
                   },
                   "additionalProperties": false
@@ -623,6 +641,12 @@
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 253,
+                      "pattern": "\\S"
+                    },
+                    "change": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 40,
                       "pattern": "\\S"
                     }
                   },
@@ -787,6 +811,12 @@
                       "minLength": 1,
                       "maxLength": 253,
                       "pattern": "\\S"
+                    },
+                    "change": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 40,
+                      "pattern": "\\S"
                     }
                   },
                   "additionalProperties": false
@@ -949,6 +979,12 @@
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 253,
+                      "pattern": "\\S"
+                    },
+                    "change": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 40,
                       "pattern": "\\S"
                     }
                   },
@@ -11241,6 +11277,12 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 4000
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "pattern": "\\S"
           },
           "lane": {
             "type": "string",
@@ -21754,6 +21796,12 @@
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 4000
+                          },
+                          "label": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 40,
+                            "pattern": "\\S"
                           },
                           "lane": {
                             "type": "string",
@@ -32434,6 +32482,13 @@
               "creative"
             ]
           },
+          "label": {
+            "description": "A short name for the change in the owner's terms, as the panel and the ready line say it after \"updating\": \"your hero title\", \"your phone number\", \"the colours\".",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "pattern": "\\S"
+          },
           "chat": {
             "description": "Set when the owner wrote the words in the panel: once the change starts they are also posted in this conversation, or in the newest one when none is named.",
             "type": "object",
@@ -33641,6 +33696,12 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 4000
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40,
+                    "pattern": "\\S"
                   },
                   "lane": {
                     "type": "string",
@@ -39450,6 +39511,12 @@
                   "minLength": 1,
                   "maxLength": 4000
                 },
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 40,
+                  "pattern": "\\S"
+                },
                 "lane": {
                   "type": "string",
                   "enum": [
@@ -42644,6 +42711,12 @@
                           "minLength": 1,
                           "maxLength": 253,
                           "pattern": "\\S"
+                        },
+                        "change": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 40,
+                          "pattern": "\\S"
                         }
                       },
                       "additionalProperties": false
@@ -42806,6 +42879,12 @@
                           "type": "string",
                           "minLength": 1,
                           "maxLength": 253,
+                          "pattern": "\\S"
+                        },
+                        "change": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 40,
                           "pattern": "\\S"
                         }
                       },
@@ -42970,6 +43049,12 @@
                           "minLength": 1,
                           "maxLength": 253,
                           "pattern": "\\S"
+                        },
+                        "change": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 40,
+                          "pattern": "\\S"
                         }
                       },
                       "additionalProperties": false
@@ -43132,6 +43217,12 @@
                           "type": "string",
                           "minLength": 1,
                           "maxLength": 253,
+                          "pattern": "\\S"
+                        },
+                        "change": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 40,
                           "pattern": "\\S"
                         }
                       },
@@ -43296,6 +43387,12 @@
                           "minLength": 1,
                           "maxLength": 253,
                           "pattern": "\\S"
+                        },
+                        "change": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 40,
+                          "pattern": "\\S"
                         }
                       },
                       "additionalProperties": false
@@ -43458,6 +43555,12 @@
                           "type": "string",
                           "minLength": 1,
                           "maxLength": 253,
+                          "pattern": "\\S"
+                        },
+                        "change": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 40,
                           "pattern": "\\S"
                         }
                       },

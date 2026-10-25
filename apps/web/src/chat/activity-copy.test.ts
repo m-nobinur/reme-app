@@ -432,16 +432,42 @@ describe("segment copy", () => {
     ).toBeNull()
   })
 
+  it("names a change by what it changes, or by the website", () => {
+    const ctx = { orgId: "org-1", assistant: "Ellie" }
+    const titled = segment("change", "now", {
+      names: { change: "your hero title" },
+    })
+    expect(segmentTitle(titled, ctx)).toBe("Ellie is updating your hero title")
+    expect(pillLine(titled, ctx)).toBe("Ellie is updating your hero title")
+    expect(segmentTitle(segment("change", "now"), ctx)).toBe(
+      "Ellie is updating your website"
+    )
+    expect(pillLine(segment("change", "now"), { orgId: "org-1" })).toBe(
+      "Updating your website"
+    )
+  })
+
   it("writes the lines under a running or waiting job", () => {
     const ctx = { orgId: "org-1", assistant: "Ellie" }
     expect(
-      segmentLine(segment("website", "now", { usual_seconds: 360 }), ctx, {
-        elapsedSeconds: 130,
-      })
-    ).toBe("2 minutes so far, usually about 6 minutes")
+      segmentLine(
+        segment("website", "now", { usual_seconds: 360, late_seconds: 600 }),
+        ctx,
+        { elapsedSeconds: 130 }
+      )
+    ).toBe("2 minutes so far, about 6 to 10 minutes")
+    // The quick lane, rounded outward to whole minutes; an api that sends no
+    // late time gets the high end half again.
+    const quick = { usual_seconds: 45, late_seconds: 90 }
+    expect(segmentLine(segment("change", "now", quick), ctx)).toBe(
+      "About 1 to 2 minutes"
+    )
     expect(
-      segmentLine(segment("change", "now", { usual_seconds: 15 }), ctx)
-    ).toBe("Usually under a minute")
+      segmentLine(segment("change", "now", quick), ctx, { elapsedSeconds: 30 })
+    ).toBe("Under a minute so far, about 1 to 2 minutes")
+    expect(
+      segmentLine(segment("website", "now", { usual_seconds: 360 }), ctx)
+    ).toBe("About 6 to 9 minutes")
     expect(segmentLine(segment("website", "now"), ctx)).toBeNull()
     expect(
       segmentLine(
@@ -455,19 +481,24 @@ describe("segment copy", () => {
     expect(
       segmentLine(segment("change", "now"), ctx, { elapsedSeconds: 30 })
     ).toBe("Under a minute so far")
-    // Past the lane's p95 it says so instead of the usual time, and a
+    // Past the top the range moves up to start above the time gone, and a
     // restart is said whatever the time.
-    const timed = { usual_seconds: 360, late_seconds: 480 }
-    expect(
-      segmentLine(segment("website", "now", timed), ctx, {
-        elapsedSeconds: 470,
-      })
-    ).toBe("7 minutes so far, usually about 6 minutes")
+    const timed = { usual_seconds: 360, late_seconds: 600 }
     expect(
       segmentLine(segment("website", "now", timed), ctx, {
         elapsedSeconds: 545,
       })
-    ).toBe("9 minutes so far, taking longer than usual")
+    ).toBe("9 minutes so far, about 6 to 10 minutes")
+    expect(
+      segmentLine(segment("website", "now", timed), ctx, {
+        elapsedSeconds: 650,
+      })
+    ).toBe("Taking a little longer, about 11 to 15 minutes")
+    expect(
+      segmentLine(segment("change", "now", quick), ctx, {
+        elapsedSeconds: 130,
+      })
+    ).toBe("Taking a little longer, about 3 to 5 minutes")
     expect(
       segmentLine(
         segment("website", "now", { ...timed, restarted: true }),
@@ -490,6 +521,25 @@ describe("segment copy", () => {
       "Waiting for your payment, until 11:50"
     )
     expect(segmentLine(segment("website", "done"), ctx)).toBeNull()
+  })
+
+  it("never quotes a range that has passed or says a phrase twice", () => {
+    const ctx = { orgId: "org-1", assistant: "Ellie" }
+    const s = segment("website", "now", {
+      usual_seconds: 360,
+      late_seconds: 600,
+    })
+    for (let elapsedSeconds = 0; elapsedSeconds <= 3000; elapsedSeconds += 7) {
+      const line = segmentLine(s, ctx, { elapsedSeconds }) as string
+      const [, low, high] = /about (\d+) to (\d+) minutes/.exec(line) ?? []
+      expect(Number(high)).toBeGreaterThan(Number(low))
+      // The top has not passed, or the range starts above the time gone.
+      expect(
+        Number(high) * 60 >= elapsedSeconds || Number(low) * 60 > elapsedSeconds
+      ).toBe(true)
+      expect(line.match(/minutes?/g)?.length).toBeLessThanOrEqual(2)
+      expect(line).not.toMatch(/usually/i)
+    }
   })
 
   it("says what stopped and what happens next", () => {

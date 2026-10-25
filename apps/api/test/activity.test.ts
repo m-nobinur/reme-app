@@ -253,6 +253,24 @@ describe("change", () => {
     })
   })
 
+  it("names a change by its label, and a build without one by nothing", () => {
+    const named = (label?: string) =>
+      view({
+        site: LIVE,
+        builds: [
+          build("implementing", {
+            lane: "quick",
+            activity: [],
+            ...(label && { label }),
+          }),
+        ],
+      }).now[0]
+    expect(named("your hero title")?.names).toEqual({
+      change: "your hero title",
+    })
+    expect(named()?.names).toBeUndefined()
+  })
+
   it("keeps the same step ids in every state", () => {
     for (const state of [
       "queued",
