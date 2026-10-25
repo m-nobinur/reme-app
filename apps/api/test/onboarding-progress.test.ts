@@ -25,6 +25,29 @@ const CONTACT = [
   { key: "business.phone", value: { e164: "+447700900412" } },
   { key: "business.email", value: { address: "hello@sparkle.invalid" } },
 ] as const satisfies FactValue[]
+const QUOTE = {
+  key: "quote.form",
+  value: {
+    fields: [
+      {
+        key: "rooms",
+        label: "Rooms",
+        type: "number",
+        required: true,
+        hint: null,
+        options: null,
+      },
+      {
+        key: "when",
+        label: "When it's needed",
+        type: "date",
+        required: false,
+        hint: null,
+        options: null,
+      },
+    ],
+  },
+} as const satisfies FactValue
 const ASSISTANT = [
   { key: "assistant.name", value: { name: "Ellie" } },
   { key: "assistant.pronouns", value: { id: "she_her" } },
@@ -91,6 +114,13 @@ describe("onboardingSteps", () => {
     expect(states(early).customers).toBe("now")
     expect(states(early, { "business.audience": 1 }).customers).toBe("skipped")
     expect(states(at([...WORK, AREA, ...CONTACT])).customers).toBe("skipped")
+    // A return to the quote form, read with no asked counts as the panel reads it.
+    const back = states(at([...WORK, AREA, QUOTE]), {}, true, "quote_form")
+    expect([back.customers, back.proof, back.contact]).toEqual([
+      "skipped",
+      "skipped",
+      "waiting",
+    ])
     const told = at([
       ...WORK,
       AREA,

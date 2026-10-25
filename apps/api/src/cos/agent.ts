@@ -203,7 +203,7 @@ Rules:
 - A tool that is refused tells you why; explain it to the owner plainly. A tool whose outcome is unknown did not report back; say you could not confirm it, and do not guess what it did.
 - When the owner declines a proposal, its call comes back as "The owner declined", followed by their words if they gave any. That is the owner saying no, not a refusal: acknowledge it, and don't retry or propose it again unless the owner asks. A refused tool returns an outcome of "refused", and a failed one starts with unknown_outcome or tool_failed.
 - A proposal the owner talked over by sending a new message comes back as "User cancelled tool call by sending a new message." That is neither yes nor no: don't act on it, and ask about it again only if it still matters.
-- When request_change comes back with outcome "started", the change has started; a state of "queued" only means it waits its turn, so never say queued. Say so in one short, natural sentence, as a person would ("On it, I'll let you know when it's ready."). Mention the activity panel only the first time in a conversation, and never repeat the same wording you used for an earlier change. Never ask them to approve it: the only step left is publishing from the review card.
+- When request_change comes back with outcome "started", the change has started; a state of "queued" only means it waits its turn, so never say queued. Never call request_change again for a change that started: reply to the owner. Say so in one short, natural sentence, as a person would ("On it, I'll let you know when it's ready."). Mention the activity panel only the first time in a conversation, and never repeat the same wording you used for an earlier change. Never ask them to approve it: the only step left is publishing from the review card.
 - When the owner asks how a build is going, answer from the workspace in one to three sentences: the step you are on and how far, such as "I'm writing the pages, three of seven done". Never only "still being built", and never that you cannot tell what is happening.
 - A build longer_than_usual: say sorry for the wait in a few words, that it is taking a little longer, and give its wait as the new estimate, then where you are.
 - A build with restarted: you restarted it yourself, minutes_ago minutes ago, because of its why. Say it in the first person and plainly, such as "It got stuck on the photos, so I restarted it a few minutes ago and it's back at work"; when working_again is false, say you have just restarted it. Never say it is restarting on its own or that a system did it. Then say it needs nothing from them and you will tell them here when the draft is ready.
@@ -841,6 +841,32 @@ export function repairedChange<T extends { toolName: string; input: string }>(
     : null
 }
 
+/**
+ * Whether one change came back started twice in the turn's steps. On
+ * 2026-10-25 a model called request_change three times with the same input,
+ * each "started" on one build, and its reply came 10 s late; after a repeat
+ * the next step may only write. A corrected call after a refusal never counts.
+ */
+export function changeRepeated(
+  steps: readonly {
+    toolResults: readonly {
+      toolName: string
+      input: unknown
+      output: unknown
+    }[]
+  }[]
+): boolean {
+  const started = steps.flatMap((step) =>
+    step.toolResults.flatMap((r) =>
+      r.toolName === "request_change" &&
+      (r.output as { outcome?: unknown } | null)?.outcome === "started"
+        ? [(r.input as { text?: unknown }).text]
+        : []
+    )
+  )
+  return new Set(started).size < started.length
+}
+
 /** `request_change`'s input without `step`, the panel's line, which the tool never reads. */
 export function withoutStep(input: unknown): unknown {
   const { step: _step, ...rest } = input as { step?: string }
@@ -1228,7 +1254,7 @@ export function cosAgent(
     // The check and the step's `cos.call` share one transaction. Both sides
     // are hashed redacted, and the model is sent the redacted messages, so
     // the hash covers what it saw (ADR-042).
-    prepareStep: async ({ messages: held, stepNumber }) => {
+    prepareStep: async ({ messages: held, stepNumber, steps }) => {
       const messages = redacted(held)
       const sent = await sha256(messages)
       // The first call is checked here; later ones are stopped by `stopWhen`.
@@ -1287,7 +1313,10 @@ export function cosAgent(
         closed(error)
         throw error
       }
-      return { messages }
+      // toolChoice, not activeTools, so the cached tool list stays the same.
+      return changeRepeated(steps)
+        ? { messages, toolChoice: "none" as const }
+        : { messages }
     },
     onStepEnd: async (step) => {
       const usage = usageOf(step.usage)

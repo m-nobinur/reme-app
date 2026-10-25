@@ -59,6 +59,7 @@ import {
   activeTools,
   binds,
   type CosAgent,
+  changeRepeated,
   contextOf,
   costOf,
   DEFAULT_MODEL,
@@ -325,6 +326,41 @@ describe("the CoS's instructions", () => {
     )
     expect(INSTRUCTIONS).toContain('"I\'m putting your site together"')
     expect(INSTRUCTIONS).not.toMatch(/such as "It's/)
+  })
+})
+
+describe("a change asked twice in one turn", () => {
+  const result = (text: string, outcome: string) => ({
+    toolName: "request_change",
+    input: { text },
+    output: { outcome },
+  })
+  const steps = (...each: ReturnType<typeof result>[]) =>
+    each.map((r) => ({ toolResults: [r] }))
+
+  it("lets the next step only write once the same change started twice", () => {
+    const once = result("Change the label", "started")
+    expect(changeRepeated(steps(once))).toBe(false)
+    expect(changeRepeated(steps(once, once))).toBe(true)
+  })
+
+  it("keeps the tools for a second change and for a fix after a refusal", () => {
+    expect(
+      changeRepeated(
+        steps(
+          result("Change the label", "started"),
+          result("Add our hours", "started")
+        )
+      )
+    ).toBe(false)
+    expect(
+      changeRepeated(
+        steps(
+          result("Change the label", "refused"),
+          result("Change the label", "started")
+        )
+      )
+    ).toBe(false)
   })
 })
 

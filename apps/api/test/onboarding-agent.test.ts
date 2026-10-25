@@ -1,6 +1,7 @@
 import {
   type FactValue,
   OnboardingPlan,
+  PERSONA_CARD,
   type OnboardingPlan as Plan,
   SKIP_REPLY,
 } from "@workspace/contracts"
@@ -13,6 +14,7 @@ import {
   call,
   cardAnswer,
   choiceCard,
+  detailsCard,
   type Onboarding,
 } from "../src/onboarding.ts"
 import {
@@ -1069,6 +1071,69 @@ describe("the plan's parts", () => {
     expect(
       planParts(build.checked, typed("go", ready()), counter())
     ).toMatchObject([{ type: "tool-request_change", state: "input-available" }])
+  })
+
+  it("reads Pick for me as the owner's ask and shows the persona under the reply", () => {
+    const persona = [
+      { key: "assistant.name", value: { name: "Reme" } },
+      { key: "assistant.pronouns", value: { id: "she_her" } },
+      { key: "assistant.avatar", value: { id: "reme" } },
+      { key: "assistant.tone", value: { id: "professional" } },
+    ] as FactValue[]
+    const before = onboarding([
+      ...without(
+        ...persona.map((f) => f.key),
+        "site.build_mode",
+        "site.template",
+        "site.palette",
+        "site.font",
+        "site.pages"
+      ),
+      QUOTE,
+    ])
+    const card = detailsCard("assistant", before, counter())
+    const output = { answer: "stated", facts: persona, skip_all: true }
+    const meant = cardAnswer(card, output, [])
+    const s: PlanState = {
+      onboarding: applied(before, meant as NonNullable<typeof meant>),
+      pending: null,
+      input: { kind: "card", card, output },
+      rows: [],
+    }
+    expect(turnData(s)).toContain("with Pick for me]")
+    const checked = checkPlan(
+      plan({
+        say: "I've gone with Reme, she/her, with a professional manner.",
+        next: {
+          kind: "ask_choice",
+          step: "build_for_me",
+          preselected: [],
+          initial: [],
+        },
+      }),
+      s
+    )
+    if (!checked.ok) throw new Error(checked.errors.join("; "))
+    expect(planParts(checked.checked, s, counter()).slice(0, 2)).toEqual([
+      {
+        type: "text",
+        text: "I've gone with Reme, she/her, with a professional manner.",
+        state: "done",
+      },
+      {
+        type: PERSONA_CARD,
+        data: {
+          name: "Reme",
+          pronouns: "she_her",
+          avatar: "reme",
+          tone: "professional",
+        },
+      },
+    ])
+    // A typed turn shows no persona.
+    expect(planParts(checked.checked, typed("ok"), counter())[1]).toMatchObject(
+      { type: "tool-ask_choice" }
+    )
   })
 
   it("puts the owner's words in a data block the model cannot close", () => {

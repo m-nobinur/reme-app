@@ -13,6 +13,7 @@ export {
   dispatch,
   type FlueHarness,
   type FlueObservation,
+  getAgentInstance,
   init,
   instrument,
   observe,

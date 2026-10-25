@@ -102,22 +102,25 @@ function settled(
   if (name && fact("assistant.pronouns") && fact("assistant.tone")) {
     out.assistant = done(name)
   }
-  // The customers are optional: a detail never given is skipped once it was
-  // asked, or once the owner has moved on to how customers reach them.
-  if (audience) out.customers = done(audience)
-  else if ((asked["business.audience"] ?? 0) >= OPTIONAL_ASKS || out.contact) {
-    out.customers = skipped
-  }
-  // What sets them apart is optional too, and settles the same way.
-  if (proof) out.proof = done(proof)
-  else if ((asked["business.proof"] ?? 0) >= OPTIONAL_ASKS || out.contact) {
-    out.proof = skipped
-  }
   if (quote) {
     out.quote_form = done(
       `${quote.length} ${quote.length === 1 ? "question" : "questions"}`
     )
   } else if (o.closed.includes("quote_form")) out.quote_form = skipped
+  // The customers are optional: a detail never given is skipped once it was
+  // asked, or once the owner has moved on to the quote questions, which come
+  // after it. The panel reads no asked counts, so on a return to the quote
+  // form it showed the skipped customers open (2026-10-25).
+  const movedOn = Boolean(out.quote_form || out.contact)
+  if (audience) out.customers = done(audience)
+  else if ((asked["business.audience"] ?? 0) >= OPTIONAL_ASKS || movedOn) {
+    out.customers = skipped
+  }
+  // What sets them apart is optional too, and settles the same way.
+  if (proof) out.proof = done(proof)
+  else if ((asked["business.proof"] ?? 0) >= OPTIONAL_ASKS || movedOn) {
+    out.proof = skipped
+  }
   if (mode(o) === "assistant") out.website = done()
   if (manual) {
     // The owner skipped the website: nothing the build needs is asked.
