@@ -145,14 +145,40 @@ export const PlanNext = z.discriminatedUnion("kind", [
 
 export const PLAN_DOING_MAX = 60
 
+type StepName =
+  | PlanFactKey
+  | z.infer<typeof ChoiceStep>
+  | z.infer<typeof DetailsStep>
+  | "quote_form"
+  | "design"
+  | "upload"
+
+/** A step of onboarding a waiting line can name: a fact's key, a choice or details card's step, or a tray. */
+export const OnboardingStep = z.enum([
+  ...PLAN_FACT_KEYS,
+  ...ChoiceStep.options,
+  ...DetailsStep.options,
+  "quote_form",
+  "design",
+  "upload",
+] as unknown as [StepName, ...StepName[]])
+
 /**
- * The `ONBOARDING_STATUS` chunk, sent as the plan's keys close. `on` is the
- * plan's own `doing` line, or a fact or move the web words itself. `facts`
+ * The `ONBOARDING_STATUS` chunk, sent as the turn starts and as the plan's
+ * keys close. `on` is the plan's own `doing` line, or a step, fact or move
+ * the web words itself. `facts`
  * lists the keys just stated, for the checklist to tick at once.
  */
 export const OnboardingStatus = z.strictObject({
   on: z.discriminatedUnion("kind", [
     z.strictObject({ kind: z.literal("doing"), text: Text(PLAN_DOING_MAX) }),
+    // Sent as the turn starts, before the planner writes: the step whose
+    // card was just answered, or the one a typed message replies to.
+    z.strictObject({
+      kind: z.literal("step"),
+      step: OnboardingStep,
+      answered: z.boolean(),
+    }),
     z.strictObject({
       kind: z.literal("fact"),
       key: z.enum(PLAN_FACT_KEYS as [PlanFactKey, ...PlanFactKey[]]),
@@ -199,5 +225,6 @@ export const OnboardingPlan = z.strictObject({
 export type OnboardingPlan = z.infer<typeof OnboardingPlan>
 export type PlanNext = z.infer<typeof PlanNext>
 export type OnboardingStatus = z.infer<typeof OnboardingStatus>
+export type OnboardingStep = z.infer<typeof OnboardingStep>
 export type PendingCard = z.infer<typeof PendingCard>
 export type ReopenStep = z.infer<typeof ReopenStep>
