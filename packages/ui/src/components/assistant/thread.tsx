@@ -500,17 +500,12 @@ const FollowBottom: FC<{
         )
       })
     }
-    // assistant-ui's own sum (`computeTopAnchorReserve`), run before the
-    // frame paints instead of after it, so the two always agree. Gives the
-    // space that was held before.
-    const hold = () => {
+    // Where the owner's message sits at the top: assistant-ui's own sum
+    // (`computeTopAnchorReserve`).
+    const anchorTop = () => {
       const { element, targetConfig: clamp } = store.getState()
       const { anchor } = element
-      const reserve = viewport.querySelector<HTMLElement>(
-        "[data-aui-top-anchor-reserve]"
-      )
-      if (!anchor || !clamp || !reserve) return 0
-      const held = reserve.offsetHeight
+      if (!anchor || !clamp) return null
       let top = 0
       for (
         let at: Element | null = anchor;
@@ -523,10 +518,34 @@ const FollowBottom: FC<{
       if (anchor.offsetHeight > clamp.tallerThan) {
         top += Math.max(0, anchor.offsetHeight - clamp.visibleHeight)
       }
+      return top
+    }
+    // That sum run before the frame paints instead of after it, so the two
+    // always agree. Gives the space that was held before.
+    const hold = () => {
+      const top = anchorTop()
+      const reserve = viewport.querySelector<HTMLElement>(
+        "[data-aui-top-anchor-reserve]"
+      )
+      if (top === null || !reserve) return 0
+      const held = reserve.offsetHeight
       const space = top + viewport.clientHeight - (viewport.scrollHeight - held)
       reserve.style.height = `${Math.max(0, space)}px`
       return held
     }
+    // A key typed in the composer, which sits in the scroll content, makes
+    // the browser keep the caret in view, and that stops the glide to the
+    // owner's message where it is. It goes on from there, a frame on: the
+    // caret is kept in view after this frame's callbacks.
+    const resume = () =>
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          const top = anchorTop()
+          if (pinned && top !== null && viewport.scrollTop < top - 1) {
+            viewport.scrollTo({ top, behavior: glide() })
+          }
+        })
+      )
     let height = footer.offsetHeight
     let slot = after.offsetHeight
     let size = `${viewport.clientWidth}x${viewport.clientHeight}`
@@ -594,11 +613,13 @@ const FollowBottom: FC<{
       rows.observe(after.parentElement, { childList: true })
     }
     viewport.addEventListener("scroll", onScroll, { passive: true })
+    footer.addEventListener("input", resume)
     below()
     return () => {
       rows.disconnect()
       observer.disconnect()
       viewport.removeEventListener("scroll", onScroll)
+      footer.removeEventListener("input", resume)
       follow.current = () => undefined
     }
   }, [footer, after, store, aui, onUnseen, onBelow])
