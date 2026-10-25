@@ -704,6 +704,29 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       )
     })
 
+    it("sends the change's label with the build and returns it on the summary", async () => {
+      const stub = creating(me)
+      const output = kept(
+        "request_change",
+        await requestChange(
+          context(me, stub),
+          {
+            text: "Make the hero title more professional",
+            label: "your hero title",
+          },
+          crypto.randomUUID(),
+          await turnOf(me)
+        )
+      )
+      expect(output).toMatchObject({
+        outcome: "started",
+        build: { label: "your hero title" },
+      })
+      expect(stub.calls[0]?.body).toMatchObject({
+        label: "your hero title",
+      })
+    })
+
     it("throws, never refuses, on an unknown outcome, and the rerun finds the one build", async () => {
       const approval = crypto.randomUUID()
       const hung = creating(me, true)

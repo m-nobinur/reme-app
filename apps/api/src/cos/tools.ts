@@ -686,7 +686,8 @@ export async function startOwnerChange(
       context.owner,
       input.text,
       approvalId,
-      input.change_kind
+      input.change_kind,
+      input.label
     )
   )
 }
