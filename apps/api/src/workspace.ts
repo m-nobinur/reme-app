@@ -1,5 +1,6 @@
 import {
   ActivityFeed,
+  AGENT_NOTE,
   ApprovalRequest,
   type AssignmentState,
   type AttentionItem,
@@ -160,6 +161,8 @@ export type Mark = { type: string; fixes?: number | null }
 
 const REPORTED = "assignment.completion_reported"
 const REPAIRED = "assignment.state_changed"
+/** The checks' report: its `fixes` is how many checks failed. */
+const VALIDATED = "assignment.validation_reported"
 
 /**
  * The step a build is on, or null before it starts and in a state that ends
@@ -200,12 +203,14 @@ export type Progress = Partial<
   Record<"pages" | "photos", { done: number; total: number }>
 >
 
-/** One `build.progress` row that finished something: a page, or a photo slot with how it settled. */
+/** One `build.progress` row that names its item: a page begun or written, or a photo slot with how it settled. */
 export type Settled = {
   stage: string
   item: string
   status?: string | null
   asset_id?: string | null
+  /** A page whose writer has started; a row without it is a page written. */
+  working?: boolean | null
 }
 
 /** The most a row counts to (the contract's bound). */
@@ -306,15 +311,27 @@ export function activityFor(
       ...(id === current && at !== "ready" ? { now: true as const } : {}),
     }
   }
+  const pageRows = settled.filter((s) => s.stage === "pages")
   const pagesDone = new Set(
-    settled.filter((s) => s.stage === "pages").map((s) => s.item)
+    pageRows.filter((s) => !s.working).map((s) => s.item)
+  )
+  // Begun and not written, while the writers run: several at once.
+  const pagesAtWork = new Set(
+    current === "writing" && !PARKED.includes(state)
+      ? pageRows.filter((s) => s.working).map((s) => s.item)
+      : []
   )
   const everyPage = passed("writing") || at === "assembling"
-  const pages = plan?.pages.map(({ page }) => ({
-    label: PLANNED_PAGES.find((p) => p.id === page)?.label ?? page,
-    done: everyPage || pagesDone.has(page),
-  }))
+  const pages = plan?.pages.map(({ page }) => {
+    const done = everyPage || pagesDone.has(page)
+    return {
+      label: PLANNED_PAGES.find((p) => p.id === page)?.label ?? page,
+      done,
+      ...(!done && pagesAtWork.has(page) ? { working: true as const } : {}),
+    }
+  })
   const repaired = marks.some((m) => m.type === REPAIRED)
+  const found = marks.filter((m) => m.type === VALIDATED).at(-1)?.fixes
   return [
     row("planning"),
     row("photos", photos),
@@ -326,7 +343,9 @@ export function activityFor(
         ? {
             items: [
               {
-                label: "Fixing what the checks found",
+                label: found
+                  ? `Fixing ${found} ${found === 1 ? "thing" : "things"} the checks found`
+                  : "Fixing what the checks found",
                 done: at !== "fixing",
               },
             ],
@@ -399,6 +418,8 @@ export async function readBuilds(
       // QE4: the quick lane handed the change on, to the Developer or on to
       // the build model. The orchestrator logs each, and the row's lane is
       // only where it started.
+      // A mid-build restart, as the stall watchdog makes (the orchestrator's `retry.ts`).
+      restarted: sql<boolean>`exists (select 1 from events e where e.assignment_id = assignments.id and e.type = ${AGENT_NOTE} and e.payload->>'kind' = 'resumed')`,
       fell: sql<boolean>`exists (select 1 from events e where e.assignment_id = assignments.id and (e.type = 'quick.fell_through' or (e.type = 'model.switched' and e.payload->>'reason' = 'quick.fell_through')))`,
       // Written out rather than interpolated: in a one-table select drizzle
       // drops the table name, and a bare `id` here would mean the revision's.
@@ -412,17 +433,17 @@ export async function readBuilds(
       > | null>`(select e.payload from events e where e.assignment_id = assignments.id and e.type = 'blueprint.proposed' order by e.event_id desc limit 1)`,
       // BA4's counts: distinct pages or photos finished per stage, and the
       // stage's total, so a repeated event never counts twice.
-      progress: sql<Progress | null>`(select json_object_agg(p.stage, json_build_object('done', p.done, 'total', p.total)) from (select e.payload->>'stage' as stage, count(distinct e.payload->>'item')::int as done, max((e.payload->>'total')::int) as total from events e where e.assignment_id = assignments.id and e.type = 'build.progress' group by 1) p)`,
+      progress: sql<Progress | null>`(select json_object_agg(p.stage, json_build_object('done', p.done, 'total', p.total)) from (select e.payload->>'stage' as stage, (count(distinct e.payload->>'item') filter (where e.payload->>'working' is null))::int as done, max((e.payload->>'total')::int) as total from events e where e.assignment_id = assignments.id and e.type = 'build.progress' group by 1) p)`,
       // The same rows by name, in the order they landed: which pages are
       // written, and how each photo slot settled.
       settled: sql<
         Settled[] | null
-      >`(select json_agg(json_build_object('stage', e.payload->>'stage', 'item', e.payload->>'item', 'status', e.payload->>'status', 'asset_id', e.payload->>'asset_id') order by e.event_id) from events e where e.assignment_id = assignments.id and e.type = 'build.progress' and e.payload->>'item' is not null)`,
+      >`(select json_agg(json_build_object('stage', e.payload->>'stage', 'item', e.payload->>'item', 'status', e.payload->>'status', 'asset_id', e.payload->>'asset_id', 'working', (e.payload->>'working')::boolean) order by e.event_id) from events e where e.assignment_id = assignments.id and e.type = 'build.progress' and e.payload->>'item' is not null)`,
       // Where the build has got to, in order: the lead's reports, the design
       // look's rounds and each move into repairing (`activityFor`'s marks).
       marks: sql<
         Mark[] | null
-      >`(select json_agg(json_build_object('type', e.type, 'fixes', case when jsonb_typeof(e.payload->'fixes') = 'array' then jsonb_array_length(e.payload->'fixes') end) order by e.event_id) from events e where e.assignment_id = assignments.id and (e.type in ('assignment.completion_reported', 'design.critiqued', 'design.rechecked') or (e.type = 'assignment.state_changed' and e.payload->>'to' = 'repairing')))`,
+      >`(select json_agg(json_build_object('type', e.type, 'fixes', case when e.type = ${VALIDATED} then (select count(*)::int from jsonb_array_elements(e.payload->'gates') g where g->>'passed' = 'false') when jsonb_typeof(e.payload->'fixes') = 'array' then jsonb_array_length(e.payload->'fixes') end) order by e.event_id) from events e where e.assignment_id = assignments.id and (e.type in ('assignment.completion_reported', 'design.critiqued', 'design.rechecked', ${VALIDATED}) or (e.type = 'assignment.state_changed' and e.payload->>'to' = 'repairing')))`,
       // Time the build waited on the owner's decided plan reviews: each
       // `blueprint.decided` back to the review round it answered.
       reviewMs: sql<
@@ -456,6 +477,7 @@ export async function readBuilds(
       lane,
       ...(fellThrough ? { fell_through: true } : {}),
       ...(row.retryOf ? { retry: true as const } : {}),
+      ...(row.restarted ? { restarted: true as const } : {}),
       activity: activityFor(lane, row.state, progress, {
         plan,
         settled,

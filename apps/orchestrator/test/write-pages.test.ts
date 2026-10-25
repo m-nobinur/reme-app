@@ -111,6 +111,8 @@ describe("the writers' lines in the site config", () => {
 describe("write_pages's fan-out", () => {
   it("runs at most max at once, the first alone until the stagger, a service page after the home page", async () => {
     const site = memorySite()
+    // What the panel hears: each writer as it starts, then as it is written.
+    const heard: string[] = []
     let active = 0
     let most = 0
     const order: string[] = []
@@ -131,6 +133,8 @@ describe("write_pages's fan-out", () => {
           staggered.push(resolve)
         }),
       edit: site.edit,
+      onStarted: (task) => heard.push(`started ${TASKS.indexOf(task)}`),
+      onWritten: (task) => heard.push(`written ${TASKS.indexOf(task)}`),
       call: async (index) => {
         order.push(`start ${index}`)
         active++
@@ -150,10 +154,13 @@ describe("write_pages's fan-out", () => {
     await tick()
     // The home page's call goes alone until the stagger ends.
     expect(order).toEqual(["start 0"])
+    expect(heard).toEqual(["started 0"])
     for (const end of staggered) end()
     await tick()
     // Then one more, the bound: about. The copy writer and the service page wait.
     expect(order).toEqual(["start 0", "start 1"])
+    // Two at work at once, so the panel shows both being written.
+    expect(heard).toEqual(["started 0", "started 1"])
     releases.shift()?.()
     await tick()
     await tick()
@@ -165,6 +172,10 @@ describe("write_pages's fan-out", () => {
     }
     const lines = await pending
     expect(most).toBe(2)
+    for (const index of [0, 1, 2, 3])
+      expect(heard.indexOf(`started ${index}`)).toBeLessThan(
+        heard.indexOf(`written ${index}`)
+      )
     expect(order.indexOf("start 3")).toBeGreaterThan(order.indexOf("end 0"))
     expect(lines).toEqual([
       "- home: Filled.",

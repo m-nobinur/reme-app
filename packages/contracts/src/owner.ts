@@ -301,9 +301,19 @@ export const BuildActivity = z.strictObject({
   now: z.literal(true).optional(),
   /** The stage does not apply to this build (no photos to make, no polish asked); it stays in the list, never done. */
   skipped: z.literal(true).optional(),
-  /** What the row counts, by name, such as the plan's pages, or the repair line under the checks: fixed labels, never model text. */
+  /**
+   * What the row counts, by name, such as the plan's pages, or the repair
+   * line under the checks: fixed labels, never model text. `working` is one
+   * begun and not yet done, such as a page whose writer has started.
+   */
   items: z
-    .array(z.strictObject({ label: Text(60), done: z.boolean() }))
+    .array(
+      z.strictObject({
+        label: Text(60),
+        done: z.boolean(),
+        working: z.literal(true).optional(),
+      })
+    )
     .max(9)
     .optional(),
 })
@@ -431,6 +441,8 @@ export const BuildSummary = z.strictObject({
   fell_through: z.boolean().optional(),
   /** Started again on its own after a build that stopped for a reason on our side. */
   retry: z.literal(true).optional(),
+  /** The pipeline started its Developer again mid-build at least once, as the stall watchdog does. */
+  restarted: z.literal(true).optional(),
   activity: z.array(BuildActivity).max(BUILD_ACTIVITY_MAX).optional(),
   revision: RevisionRef.nullable(),
   /** Absent on a build that did not plan: a revise, the quick lane, an older row. */

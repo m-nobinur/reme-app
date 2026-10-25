@@ -296,6 +296,16 @@ export function panelFor(input: PanelInput): Panel | null {
         : undefined
     const until =
       zone && segment.deadline ? timeOf(segment.deadline, zone, now) : undefined
+    // The first run builds the newest build; a change is named for its
+    // build by the api (`change:<assignment>`).
+    const build =
+      segment.kind === "website"
+        ? (builds[0] ?? null)
+        : segment.kind === "change"
+          ? (builds.find(
+              (each) => segment.id === `change:${each.assignment_id}`
+            ) ?? null)
+          : null
     return {
       id: segment.id,
       kind: segment.kind,
@@ -308,7 +318,11 @@ export function panelFor(input: PanelInput): Panel | null {
         ...(until ? { until } : {}),
       }),
       steps: segment.steps.flatMap((step) => {
-        const label = stepLabel(segment, step)
+        const label = stepLabel(
+          segment,
+          step,
+          build?.activity?.find((row) => row.id === step.id)?.items
+        )
         const { count: _count, ...plain } = step
         const said = stepLabel(segment, plain)
         return label
@@ -323,16 +337,7 @@ export function panelFor(input: PanelInput): Panel | null {
             ]
           : []
       }),
-      // The first run builds the newest build; a change is named for its
-      // build by the api (`change:<assignment>`).
-      build:
-        segment.kind === "website"
-          ? (builds[0] ?? null)
-          : segment.kind === "change"
-            ? (builds.find(
-                (each) => segment.id === `change:${each.assignment_id}`
-              ) ?? null)
-            : null,
+      build,
     }
   }
 

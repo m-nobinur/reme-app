@@ -47,6 +47,9 @@ export interface components {
         }
         step?: string
         usual_seconds?: number
+        late_seconds?: number
+        /** @constant */
+        restarted?: true
         /** Format: date-time */
         synced_at?: string
       }[]
@@ -89,6 +92,9 @@ export interface components {
         }
         step?: string
         usual_seconds?: number
+        late_seconds?: number
+        /** @constant */
+        restarted?: true
         /** Format: date-time */
         synced_at?: string
       }[]
@@ -131,6 +137,9 @@ export interface components {
         }
         step?: string
         usual_seconds?: number
+        late_seconds?: number
+        /** @constant */
+        restarted?: true
         /** Format: date-time */
         synced_at?: string
       }[]
@@ -173,6 +182,9 @@ export interface components {
         }
         step?: string
         usual_seconds?: number
+        late_seconds?: number
+        /** @constant */
+        restarted?: true
         /** Format: date-time */
         synced_at?: string
       }[]
@@ -215,6 +227,9 @@ export interface components {
         }
         step?: string
         usual_seconds?: number
+        late_seconds?: number
+        /** @constant */
+        restarted?: true
         /** Format: date-time */
         synced_at?: string
       }[]
@@ -257,6 +272,9 @@ export interface components {
         }
         step?: string
         usual_seconds?: number
+        late_seconds?: number
+        /** @constant */
+        restarted?: true
         /** Format: date-time */
         synced_at?: string
       }[]
@@ -3218,6 +3236,8 @@ export interface components {
       fell_through?: boolean
       /** @constant */
       retry?: true
+      /** @constant */
+      restarted?: true
       activity?: {
         id: string
         label: string
@@ -3230,6 +3250,8 @@ export interface components {
         items?: {
           label: string
           done: boolean
+          /** @constant */
+          working?: true
         }[]
       }[]
       revision: {
@@ -6258,6 +6280,8 @@ export interface components {
                   fell_through?: boolean
                   /** @constant */
                   retry?: true
+                  /** @constant */
+                  restarted?: true
                   activity?: {
                     id: string
                     label: string
@@ -6270,6 +6294,8 @@ export interface components {
                     items?: {
                       label: string
                       done: boolean
+                      /** @constant */
+                      working?: true
                     }[]
                   }[]
                   revision: {
@@ -9645,6 +9671,8 @@ export interface components {
             fell_through?: boolean
             /** @constant */
             retry?: true
+            /** @constant */
+            restarted?: true
             activity?: {
               id: string
               label: string
@@ -9657,6 +9685,8 @@ export interface components {
               items?: {
                 label: string
                 done: boolean
+                /** @constant */
+                working?: true
               }[]
             }[]
             revision: {
@@ -11198,6 +11228,8 @@ export interface components {
         fell_through?: boolean
         /** @constant */
         retry?: true
+        /** @constant */
+        restarted?: true
         activity?: {
           id: string
           label: string
@@ -11210,6 +11242,8 @@ export interface components {
           items?: {
             label: string
             done: boolean
+            /** @constant */
+            working?: true
           }[]
         }[]
         revision: {
@@ -12142,6 +12176,9 @@ export interface components {
           }
           step?: string
           usual_seconds?: number
+          late_seconds?: number
+          /** @constant */
+          restarted?: true
           /** Format: date-time */
           synced_at?: string
         }[]
@@ -12184,6 +12221,9 @@ export interface components {
           }
           step?: string
           usual_seconds?: number
+          late_seconds?: number
+          /** @constant */
+          restarted?: true
           /** Format: date-time */
           synced_at?: string
         }[]
@@ -12226,6 +12266,9 @@ export interface components {
           }
           step?: string
           usual_seconds?: number
+          late_seconds?: number
+          /** @constant */
+          restarted?: true
           /** Format: date-time */
           synced_at?: string
         }[]
@@ -12268,6 +12311,9 @@ export interface components {
           }
           step?: string
           usual_seconds?: number
+          late_seconds?: number
+          /** @constant */
+          restarted?: true
           /** Format: date-time */
           synced_at?: string
         }[]
@@ -12310,6 +12356,9 @@ export interface components {
           }
           step?: string
           usual_seconds?: number
+          late_seconds?: number
+          /** @constant */
+          restarted?: true
           /** Format: date-time */
           synced_at?: string
         }[]
@@ -12352,6 +12401,9 @@ export interface components {
           }
           step?: string
           usual_seconds?: number
+          late_seconds?: number
+          /** @constant */
+          restarted?: true
           /** Format: date-time */
           synced_at?: string
         }[]

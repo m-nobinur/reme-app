@@ -147,6 +147,29 @@ describe("build activity rows", () => {
     expect(items[0]?.label).toBe(PAGES.find((p) => p.id === first?.page)?.label)
   })
 
+  it("shows every page whose writer has started as at work until it is written, and only while writing", () => {
+    const plan = Blueprint.parse(PLAN)
+    const [first, second] = plan.pages.map((p) => p.page)
+    const settled: Settled[] = [
+      { stage: "pages", item: first as string, working: true },
+      { stage: "pages", item: second as string, working: true },
+      { stage: "pages", item: first as string },
+    ]
+    const pages = (state: AssignmentState) =>
+      activityFor(
+        "full",
+        state,
+        { pages: { done: 1, total: plan.pages.length } },
+        { plan, settled }
+      ).find((r) => r.id === "writing")?.items
+    expect(pages("implementing")).toEqual([
+      { label: expect.any(String), done: true },
+      { label: expect.any(String), done: false, working: true },
+    ])
+    // Waiting on the owner, nothing is being written.
+    expect(pages("blocked_on_information")?.some((i) => i.working)).toBe(false)
+  })
+
   it("follows the build's events past the pages: the look, the checks, a repair", () => {
     const plan = Blueprint.parse(PLAN)
     const at = (state: AssignmentState, marks: Mark[]) => {
@@ -213,6 +236,16 @@ describe("build activity rows", () => {
     expect(rows.find((r) => r.id === "checking")?.items).toEqual([
       { label: "Fixing what the checks found", done: true },
     ])
+    // With the checks' report, the line counts what failed.
+    const validated = { type: "assignment.validation_reported", fixes: 2 }
+    expect(
+      activityFor(
+        "full",
+        "repairing",
+        {},
+        { plan, marks: [reported, asked, reported, validated, repairing] }
+      ).find((r) => r.id === "checking")?.items
+    ).toEqual([{ label: "Fixing 2 things the checks found", done: false }])
     // Pages tick together when the lead wrote them itself.
     expect(
       activityFor("full", "implementing", {}, { plan, marks: [reported] })

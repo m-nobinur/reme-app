@@ -318,7 +318,31 @@ describe("the first run", () => {
         },
         segment("golive", "upcoming", along(GOLIVE_STEPS, -1), BUSINESS),
       ],
-      { builds: [build("implementing", "build-first")] }
+      {
+        builds: [
+          {
+            ...build("implementing", "build-first"),
+            // The build's own row names the pages written and at work.
+            activity: [
+              {
+                id: "writing",
+                label: "Writing the pages",
+                done: 3,
+                total: 6,
+                now: true,
+                items: [
+                  { label: "Home", done: true },
+                  { label: "Services", done: true },
+                  { label: "About", done: true },
+                  { label: "Contact", done: false, working: true },
+                  { label: "Gallery", done: false, working: true },
+                  { label: "Reviews", done: false },
+                ],
+              },
+            ],
+          },
+        ],
+      }
     )
     const [website, ...rest] = panel?.journey ?? []
     // Going live is not shown before the website is done.
@@ -331,15 +355,16 @@ describe("the first run", () => {
     ])
 
     expect(website?.state).toBe("now")
+    // The title says what is happening now.
     expect([
-      "Ellie is building your website",
-      "Ellie is putting your website together",
+      "Ellie is writing your pages",
+      "Ellie is writing your website",
     ]).toContain(website?.title)
     expect(website?.line).toBe("4 minutes so far, usually about 6 minutes")
     expect(website?.steps.map((each) => [each.label, each.state])).toEqual([
       ["Planning", "done"],
       ["Photos", "skipped"],
-      ["Writing the pages, 3 of 6", "now"],
+      ["3 pages are done, 3 to go", "now"],
       ["Polishing", "next"],
       ["Checking", "next"],
       ["Ready", "next"],
@@ -429,7 +454,7 @@ describe("the first run", () => {
       segment("website", "now", steps, BUSINESS),
     ])
     const [planning, photos, writing] = panel?.journey[0]?.steps ?? []
-    expect(writing?.label).toBe("Writing the pages, 2 of 6")
+    expect(writing?.label).toBe("2 pages are done, 4 to go")
     expect(writing?.said).toBe("Writing the pages")
     // A step with no count has nothing to leave out.
     expect(planning?.said).toBeUndefined()

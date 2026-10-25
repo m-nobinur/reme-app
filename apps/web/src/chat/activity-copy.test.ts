@@ -136,9 +136,12 @@ describe("build stage lines", () => {
           stageLine(stage, form, args)
         ) as [string, string, string]
         plain(working)
-        expect(working).toMatch(WORKING)
+        // Pages part written say what is done and what is left.
+        if (!(stage === "writing" && args.done)) {
+          expect(working).toMatch(WORKING)
+          expect(words(working)).toBeLessThanOrEqual(6)
+        }
         expect(words(working)).toBeGreaterThanOrEqual(2)
-        expect(words(working)).toBeLessThanOrEqual(6)
         plain(done)
         expect(done).toMatch(DONE)
         expect(failed).toMatch(
@@ -158,15 +161,41 @@ describe("build stage lines", () => {
     const args = { done: 3, total: 8, fixes: 2 }
     expect(stageLine("photos", "working", args)).toBe("Making 8 photos, 3 done")
     expect(stageLine("writing", "working", { done: 3, total: 6 })).toBe(
-      "Writing the pages, 3 of 6"
+      "3 pages are done, 3 to go"
     )
     expect(stageLine("writing", "done", { total: 6 })).toBe("Wrote 6 pages")
+    expect(stageLine("checking", "working")).toBe("Checking every page")
     expect(stageLine("checking", "working", args)).toBe(
       "Fixing 2 things the checks found"
     )
     expect(stageLine("checking", "working", { fixes: 1 })).toBe(
       "Fixing 1 thing the checks found"
     )
+  })
+})
+
+describe("the pages as they are written", () => {
+  const line = (args: Parameters<typeof stageLine>[2]) =>
+    stageLine("writing", "working", args)
+
+  it("follows the writers: alone, several at once, then done and left", () => {
+    expect(line({})).toBe("Writing the pages")
+    expect(line({ done: 0, total: 7 })).toBe("Writing 7 pages")
+    expect(line({ done: 0, total: 7, working: 1 })).toBe("Writing 7 pages")
+    expect(line({ done: 0, total: 7, working: 3 })).toBe(
+      "Writing 3 pages at once"
+    )
+    expect(line({ done: 1, total: 7, written: ["Home"] })).toBe(
+      "Home is done, 6 to go"
+    )
+    expect(line({ done: 2, total: 7, written: ["Home", "Services"] })).toBe(
+      "Home and Services are done, 5 to go"
+    )
+    expect(
+      line({ done: 3, total: 7, written: ["Home", "Services", "About"] })
+    ).toBe("3 pages are done, 4 to go")
+    expect(line({ done: 1, total: 7 })).toBe("1 page is done, 6 to go")
+    expect(line({ done: 7, total: 7 })).toBe("Putting the pages together")
   })
 })
 
@@ -316,6 +345,34 @@ describe("segment copy", () => {
     }
   })
 
+  it("names what the website build is doing now in its title", () => {
+    const ctx = { orgId: "org-1", assistant: "Ellie" }
+    const on = (id: string, count?: { done: number; total: number }) =>
+      segmentTitle(
+        segment("website", "now", {
+          steps: [
+            { id: "planning", state: "done" },
+            { id, state: "now", ...(count && { count }) },
+          ],
+        }),
+        ctx
+      )
+    expect(on("writing", { done: 2, total: 7 })).toMatch(
+      /^Ellie is writing your (?:pages|website)$/
+    )
+    expect(on("writing", { done: 7, total: 7 })).toMatch(
+      /^Ellie is putting your (?:pages|website) together$/
+    )
+    expect(on("checking")).toMatch(
+      /^Ellie is checking (?:your site|every page)$/
+    )
+    expect(on("photos")).toMatch(/^Ellie is making (?:your )?photos/)
+    // The same org reads the same words on every poll.
+    expect(on("checking")).toBe(on("checking"))
+    // Ready, or no step at work, keeps the build's own title.
+    expect(on("ready")).toMatch(/^Ellie is (?:building|putting) your website/)
+  })
+
   it("says what comes next for a job not begun, never that it is under way", () => {
     for (const orgId of ORGS) {
       const ctx = { orgId, assistant: "Ellie" }
@@ -398,6 +455,31 @@ describe("segment copy", () => {
     expect(
       segmentLine(segment("change", "now"), ctx, { elapsedSeconds: 30 })
     ).toBe("Under a minute so far")
+    // Past the lane's p95 it says so instead of the usual time, and a
+    // restart is said whatever the time.
+    const timed = { usual_seconds: 360, late_seconds: 480 }
+    expect(
+      segmentLine(segment("website", "now", timed), ctx, {
+        elapsedSeconds: 470,
+      })
+    ).toBe("7 minutes so far, usually about 6 minutes")
+    expect(
+      segmentLine(segment("website", "now", timed), ctx, {
+        elapsedSeconds: 545,
+      })
+    ).toBe("9 minutes so far, taking longer than usual")
+    expect(
+      segmentLine(
+        segment("website", "now", { ...timed, restarted: true }),
+        ctx,
+        { elapsedSeconds: 700 }
+      )
+    ).toBe("11 minutes so far, Ellie restarted it")
+    expect(
+      segmentLine(segment("change", "now", { restarted: true }), {
+        orgId: "org-1",
+      })
+    ).toBe("Your assistant restarted it")
     expect(
       segmentLine(segment("domain", "waiting"), ctx, { provider: "Cloudflare" })
     ).toBe("One change to make at Cloudflare")
@@ -519,7 +601,7 @@ describe("page lines", () => {
         ],
       })
     expect(workLine(stage("writing", { done: 3, total: 6 }))).toBe(
-      "Writing the pages, 3 of 6"
+      "3 pages are done, 3 to go"
     )
     expect(workLine(segment("website", "now"))).toBeNull()
     expect(
