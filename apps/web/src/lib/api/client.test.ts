@@ -769,10 +769,10 @@ it("reads a build's preview link, leaving its screenshots to the revision's own 
 })
 
 it("sends a change in the owner's words, and says why one is refused", async () => {
-  answers["POST /changes"] = refusal(409, "change.question_open")
+  answers["POST /changes"] = refusal(409, "change.build_busy")
   expect(await apiSource.requestChange("Bigger logo", "k-2")).toEqual({
     done: false,
-    reason: expect.stringContaining("Answer it first"),
+    reason: expect.stringContaining("Ask again once"),
   })
   expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
     text: "Bigger logo",
@@ -780,7 +780,7 @@ it("sends a change in the owner's words, and says why one is refused", async () 
 })
 
 it("sends the change kind a photo action names", async () => {
-  answers["POST /changes"] = refusal(409, "change.question_open")
+  answers["POST /changes"] = refusal(409, "change.build_busy")
   await apiSource.requestChange("Try another photo", "k-4", "photo")
   expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
     text: "Try another photo",
@@ -789,7 +789,7 @@ it("sends the change kind a photo action names", async () => {
 })
 
 it("asks the api to post a panel note in the chat, in the conversation named", async () => {
-  answers["POST /changes"] = refusal(409, "change.question_open")
+  answers["POST /changes"] = refusal(409, "change.build_busy")
   await apiSource.requestChange("Bigger logo", "k-5", undefined, {
     conversation_id: REQUEST,
   })

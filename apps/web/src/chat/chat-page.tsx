@@ -31,7 +31,6 @@ import {
 import { TrayServicesProvider } from "@workspace/ui/components/assistant/tray-services"
 import { buttonVariants } from "@workspace/ui/components/button"
 import { EmptyState } from "@workspace/ui/components/empty-state"
-import { browserZone } from "@workspace/ui/lib/zone"
 import {
   useEffect,
   useMemo,
@@ -45,6 +44,7 @@ import { useLiveWorkspace } from "@/lib/workspace"
 import { answerBuildQuestion } from "./build-questions"
 import { BuildStopped } from "./build-stopped"
 import { conversationList, unstored } from "./conversations"
+import { cosTools, questionTitles } from "./cos-tools"
 import { saveDesignAnswer } from "./design"
 import { domainPurchase } from "./domain-purchase"
 import { asked, missingConversations, startsNewChat, tailOf } from "./history"
@@ -172,19 +172,11 @@ export function ChatPage() {
     () => false
   )
 
-  // The cards name the question an answer goes to, from the workspace the
-  // panel already reads, and times in the zone each turn carries.
-  const questions = live.workspace?.attention
-  const tools = useMemo(
-    () => ({
-      zone: browserZone(),
-      question: (requestId: string) =>
-        questions?.find(
-          (item) => item.kind === "question" && item.id === requestId
-        )?.title ?? null,
-    }),
-    [questions]
-  )
+  // The cards name the question an answer goes to, and times in the zone each
+  // turn carries. Keyed on the titles, so a poll that changes neither redraws
+  // no card.
+  const titles = questionTitles(live.workspace?.attention)
+  const tools = useMemo(() => cosTools(titles), [titles])
 
   const assistant = assistantOf(live.workspace)
   const ideas = useMemo(

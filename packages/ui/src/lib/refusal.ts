@@ -9,7 +9,6 @@ import { UNCONFIRMED } from "@workspace/ui/lib/tool-state"
  * before asking again.
  */
 const COPY: Record<string, string> = {
-  "change.question_open": "A build is waiting on your answer. Answer it first.",
   "change.build_busy":
     "A build is finishing. Ask again once it is ready for you.",
   "change.cancelled": "That change was stopped. Ask again to start it.",
