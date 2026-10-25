@@ -106,7 +106,7 @@ import { VOICE, voiceProblems } from "./voice.ts"
 export const DEFAULT_ONBOARDING_MODEL = "google/gemini-3.8-flash"
 
 /** Bumped with any change to the instructions or the plan's schema. */
-export const PLANNER_VERSION = "onboarding-17"
+export const PLANNER_VERSION = "onboarding-18"
 
 /** Stream parts that show a call is alive but has written nothing yet. */
 const QUIET = new Set([
