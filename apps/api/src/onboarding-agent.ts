@@ -1828,7 +1828,14 @@ export function planParts(
     case "ask_open":
       return [
         said,
-        call("tool-ask_open", AskOpenInput.parse({ about: next.about }), newId),
+        call(
+          "tool-ask_open",
+          AskOpenInput.parse({
+            about: next.about,
+            skippable: (OPTIONAL as readonly string[]).includes(next.about),
+          }),
+          newId
+        ),
       ]
     case "answer_only":
       return s.input.kind === "message" &&

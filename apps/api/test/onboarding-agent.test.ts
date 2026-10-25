@@ -1534,7 +1534,23 @@ describe("a question in words", () => {
     expect(card).toMatchObject({
       type: "tool-ask_open",
       state: "input-available",
-      input: { about: "business.audience" },
+      input: { about: "business.audience", skippable: true },
+    })
+  })
+
+  it("marks only an optional question as one the owner may skip", () => {
+    const o = onboarding(without("service_area.text", "business.phone"))
+    const s = typed("We do weddings", o)
+    const checked = checkPlan(
+      plan({
+        say: "Where are you based?",
+        next: { kind: "ask_open", about: "service_area.text" },
+      }),
+      s
+    )
+    if (!checked.ok) throw new Error(checked.errors.join("; "))
+    expect(planParts(checked.checked, s, counter())[1]).toMatchObject({
+      input: { about: "service_area.text", skippable: false },
     })
   })
 
