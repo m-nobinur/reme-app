@@ -12,6 +12,7 @@ import {
   choiceText,
   designText,
   detailsText,
+  PICK_FOR_ME,
   SESSION_ENDED,
   SKIPPED,
 } from "@workspace/ui/lib/tool-state"
@@ -277,9 +278,8 @@ export function replyText(part: ChatMessage["parts"][number]): string | null {
       : SKIPPED
   }
   if (part.type === "tool-ask_details") {
-    return part.output.answer === "stated"
-      ? detailsText(part.output.facts)
-      : SKIPPED
+    if (part.output.answer === "skipped") return SKIPPED
+    return part.output.skip_all ? PICK_FOR_ME : detailsText(part.output.facts)
   }
   if (part.type === "tool-ask_choice") {
     return part.output.answer === "chosen"

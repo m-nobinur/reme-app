@@ -731,6 +731,12 @@ it("a details card sends the facts it resolves, and reads back as the owner's wo
   expect(
     replyText(details("output-available", { output: { answer: "skipped" } }))
   ).toBe(SKIPPED)
+  // Pick for me reads as itself; the facts still go in the answer.
+  expect(
+    replyText(
+      details("output-available", { output: { ...NAMED, skip_all: true } })
+    )
+  ).toBe(PICK_FOR_ME)
   expect(replyText(details("input-available"))).toBeNull()
 })
 
