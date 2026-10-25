@@ -3115,6 +3115,72 @@ export interface components {
         purpose: string
       }[]
     }
+    BuildQuestionsPart: {
+      /** @constant */
+      type: "data-build_questions"
+      data: {
+        /** @enum {string} */
+        kind: "build" | "offer"
+        /** Format: uuid */
+        assignment_id: string
+        questions: {
+          /** Format: uuid */
+          id: string
+          text: string
+          input:
+            | {
+                /** @constant */
+                kind: "fact"
+                /** @enum {string} */
+                key:
+                  | "business.name"
+                  | "business.phone"
+                  | "business.email"
+                  | "hours.weekday"
+                  | "service_area.radius"
+                  | "business.tagline"
+                  | "business.offerings"
+                  | "business.audience"
+                  | "business.overview"
+                  | "business.proof"
+                  | "business.disclaimer"
+                  | "service_area.text"
+                  | "assistant.name"
+                  | "owner.preferred_name"
+              }
+            | {
+                /** @constant */
+                kind: "choice"
+                options: string[]
+              }
+            | {
+                /** @constant */
+                kind: "text"
+                maxLength: number
+                email: boolean
+              }
+          skippable: boolean
+          answer?:
+            | {
+                /** @constant */
+                kind: "value"
+                value:
+                  | string
+                  | {
+                      [key: string]: unknown
+                    }
+              }
+            | {
+                /** @constant */
+                kind: "skipped"
+              }
+            | {
+                /** @constant */
+                kind: "closed"
+              }
+        }[]
+      }
+    }
     BuildSummary: {
       /** Format: uuid */
       assignment_id: string
@@ -9364,6 +9430,25 @@ export interface components {
       /** Format: uuid */
       id: string
     }
+    QuestionReply: {
+      message_id: string
+      /** Format: uuid */
+      question_id: string
+      answer:
+        | {
+            /** @constant */
+            kind: "value"
+            value:
+              | string
+              | {
+                  [key: string]: unknown
+                }
+          }
+        | {
+            /** @constant */
+            kind: "skipped"
+          }
+    }
     QuoteField: {
       key: string
       label: string
@@ -10451,6 +10536,68 @@ export interface components {
               kind: "open"
               url: string
             }
+      }
+      questions?: {
+        /** @enum {string} */
+        kind: "build" | "offer"
+        /** Format: uuid */
+        assignment_id: string
+        questions: {
+          /** Format: uuid */
+          id: string
+          text: string
+          input:
+            | {
+                /** @constant */
+                kind: "fact"
+                /** @enum {string} */
+                key:
+                  | "business.name"
+                  | "business.phone"
+                  | "business.email"
+                  | "hours.weekday"
+                  | "service_area.radius"
+                  | "business.tagline"
+                  | "business.offerings"
+                  | "business.audience"
+                  | "business.overview"
+                  | "business.proof"
+                  | "business.disclaimer"
+                  | "service_area.text"
+                  | "assistant.name"
+                  | "owner.preferred_name"
+              }
+            | {
+                /** @constant */
+                kind: "choice"
+                options: string[]
+              }
+            | {
+                /** @constant */
+                kind: "text"
+                maxLength: number
+                email: boolean
+              }
+          skippable: boolean
+          answer?:
+            | {
+                /** @constant */
+                kind: "value"
+                value:
+                  | string
+                  | {
+                      [key: string]: unknown
+                    }
+              }
+            | {
+                /** @constant */
+                kind: "skipped"
+              }
+            | {
+                /** @constant */
+                kind: "closed"
+              }
+        }[]
       }
     }
     SetFactsRequest: {

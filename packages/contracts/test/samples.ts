@@ -1271,6 +1271,33 @@ export const samples: Record<ContractName, unknown> = {
       action: { kind: "open", url: "https://dcc.godaddy.com/manage/dns" },
     },
   },
+  BuildQuestionsPart: {
+    type: "data-build_questions",
+    data: {
+      kind: "offer",
+      assignment_id: "0b8a8e8e-3c1d-4a51-9a51-5f7a3c2d1e10",
+      questions: [
+        {
+          id: "6f1c2a3b-4d5e-4f60-8a71-b2c3d4e5f601",
+          text: "What helps new customers trust you, such as years trading or an accreditation?",
+          input: { kind: "fact", key: "business.proof" },
+          skippable: true,
+          answer: { kind: "value", value: { text: "Family run since 2009" } },
+        },
+        {
+          id: "6f1c2a3b-4d5e-4f60-8a71-b2c3d4e5f602",
+          text: "Do you bring your own cleaning products?",
+          input: { kind: "choice", options: ["Yes", "No"] },
+          skippable: true,
+        },
+      ],
+    },
+  },
+  QuestionReply: {
+    message_id: "srv_0c1f2b3a4d5e6f70",
+    question_id: "6f1c2a3b-4d5e-4f60-8a71-b2c3d4e5f602",
+    answer: { kind: "value", value: "Yes" },
+  },
   ServerMessage: {
     id: "domain-live-0c1f2b3a",
     text: ["brightclean.example is live."],

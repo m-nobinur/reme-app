@@ -26,12 +26,14 @@ import {
   ReviewQuoteFormOutput,
 } from "./chat.ts"
 import {
+  BuildQuestionsPart,
   Conversation,
   ConversationHistory,
   ConversationList,
   ConversationMessage,
   ConversationPatch,
   MessageFeedback,
+  QuestionReply,
   ServerButtonPart,
   ServerMessage,
 } from "./conversation.ts"
@@ -309,6 +311,8 @@ export const contracts = {
   RuntimeSpec,
   ServerButtonPart,
   ServerMessage,
+  BuildQuestionsPart,
+  QuestionReply,
   SearchConnection,
   SearchProperty,
   SearchRow,
