@@ -45,6 +45,7 @@ import {
   recordReview,
   removeDomain,
   requestChange,
+  statedIn,
   type ToolContext,
   ToolFailed,
 } from "../src/cos/tools.ts"
@@ -114,6 +115,18 @@ const deadline = (ms: number) => {
   return () => spy.mockRestore()
 }
 const never = () => new Promise<Response>(() => undefined)
+
+describe("a claim the owner stated", () => {
+  it.each([
+    ["Local and fully insured", "we're local and fully insured", true],
+    ["Not VAT registered", "We are not VAT registered", true],
+    ["Insured", "we're not insured yet", false],
+    ["Fully insured", "We aren't fully insured", false],
+    ["Fully insured since 2009", "fully insured", false],
+  ])("%s from %s: %s", (proof, message, stated) => {
+    expect(statedIn(proof, message)).toBe(stated)
+  })
+})
 
 describe("a build's pace", () => {
   const now = Date.parse("2026-10-25T01:00:00.000Z")
@@ -858,6 +871,64 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         error: { code: "contact.not_typed" },
       })
       expect(stub.calls).toHaveLength(0)
+    })
+
+    const proofNow = async () =>
+      (await getFacts(context(me), {})).facts.find(
+        (f) => f.key === "business.proof"
+      )?.value
+
+    it("records the owner's claims as their proof before the change starts, once, after what the site already says", async () => {
+      await kit.withOrg({ orgId: me.orgId }, (db) =>
+        supersedeFact(db, {
+          orgId: me.orgId,
+          key: "business.proof",
+          factType: "business",
+          value: { text: "Family run since 2009." },
+          provenance: { source: "owner_stated", confidence: 1 },
+        })
+      )
+      const input = {
+        text: "Say we're local and fully insured",
+        change_kind: "copy" as const,
+        proof: "Local and fully insured, with £5 million public liability",
+      }
+      const turn = await turnOf(me, [
+        "Can you say we're local and fully insured? 5 million pounds public liability.",
+      ])
+      // A retry records nothing twice.
+      const key = crypto.randomUUID()
+      for (const _ of [1, 2]) {
+        const output = kept(
+          "request_change",
+          await requestChange(context(me, creating(me)), input, key, turn)
+        )
+        expect(output).toMatchObject({ outcome: "started" })
+      }
+      expect(await proofNow()).toEqual({
+        text: "Family run since 2009. Local and fully insured, with £5 million public liability",
+      })
+    })
+
+    it("refuses a claim with a word the owner never wrote, records nothing and starts nothing", async () => {
+      const before = await proofNow()
+      const turn = await turnOf(me, ["Say we're insured"])
+      const stub = creating(me)
+      const output = kept(
+        "request_change",
+        await requestChange(
+          context(me, stub),
+          { text: "Say we're insured", proof: "Fully insured since 2001" },
+          crypto.randomUUID(),
+          turn
+        )
+      )
+      expect(output).toMatchObject({
+        outcome: "refused",
+        error: { class: "validation", code: "proof.not_owners" },
+      })
+      expect(stub.calls).toHaveLength(0)
+      expect(await proofNow()).toEqual(before)
     })
 
     it("refuses as the closed shape, detail dropped", async () => {

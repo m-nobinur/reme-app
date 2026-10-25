@@ -180,10 +180,21 @@ export const ONBOARDING_GOAL = "Build my website from the details I gave you."
 /**
  * `request_change`'s input: the owner's change, and the new phone or email
  * when the owner typed it in full. The tool records it as the owner's word
- * only if its digits or address appear in what the owner wrote. `step` is a
- * line for the panel: the runner strips it before the tool runs.
+ * only if its digits or address appear in what the owner wrote. `proof` is
+ * what the owner claims about the business in the change, recorded the same
+ * way only if every word of it is the owner's. `step` is a line for the
+ * panel: the runner strips it before the tool runs.
  */
 export const CosChangeRequest = OwnerChangeRequest.extend({
+  proof: z
+    .string()
+    .trim()
+    .min(1)
+    .max(300)
+    .optional()
+    .describe(
+      'What the owner states about the business in this change and wants the site to say, such as insurance, years trading or a guarantee, in their own words and as the site would write it: "Local and fully insured, with £5 million public liability". Money as £5 million, never "5 million pounds". Omit it when the change states nothing about the business.'
+    ),
   contact: z
     .strictObject({
       phone: E164.optional().describe(
