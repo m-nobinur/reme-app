@@ -2638,8 +2638,8 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         })
         const ended = await lastTurn(who, id)
         expect(ended?.outcome).toBe("gated")
-        // The stopped call is charged at its worst, so the reservation closes.
-        expect(ended?.cost_usd).toBeGreaterThan(0)
+        // Stopped before its first byte, the call bills nothing.
+        expect(ended?.cost_usd).toBe(0)
         expect(card.toolCallId).not.toBe(pendingCall(sent.after).toolCallId)
       }, 60_000)
 
