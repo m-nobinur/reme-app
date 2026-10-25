@@ -9,6 +9,7 @@ import {
   type PronounId,
   TONES,
 } from "@workspace/contracts"
+import { ChangeAnswer } from "@workspace/ui/components/assistant/change-answer"
 import {
   Docked,
   TrayFrame,
@@ -501,7 +502,9 @@ function DetailsTray({
 
 const AskDetails: ToolCallMessagePartComponent = (props) => {
   const view = askDetailsView(props)
-  if (view.state === "answered" || view.state === "skipped") return null
+  if (view.state === "answered" || view.state === "skipped") {
+    return <ChangeAnswer step={props.args.step} />
+  }
   if (view.state !== "pending") {
     return (
       <TrayNote

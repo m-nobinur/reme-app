@@ -599,8 +599,8 @@ class ProofFull extends Error {}
  * `business.proof` as their word before the build starts, so the build does
  * not ask for it and the claims gate accepts it. Recorded only when every
  * word of it is one the owner wrote in `sessionId`, so nothing the model
- * made up becomes a claim. Null when there is nothing to record or it is
- * recorded, else the refusal.
+ * made up becomes a claim; any other claim is dropped. Null unless saving
+ * failed, so the change starts whatever the model put in proof.
  */
 async function recordProof(
   { kit, owner }: Pick<ToolContext, "kit" | "owner">,
@@ -618,15 +618,15 @@ async function recordProof(
   ) {
     return null
   }
+  // A claim with a word the owner never wrote is dropped and the change
+  // starts: refusing it made the model retry its own paraphrase twice before
+  // the change began (2026-10-25). The change text still carries what they asked.
   const said = await ownerSaid({ kit, owner }, sessionId)
   if (!said.some((message) => statedIn(proof, message))) {
-    return failure(400, {
-      class: "validation",
-      code: "proof.not_owners",
-      message:
-        "Every word of proof must come from one message the owner wrote in this conversation, and keep any no or not it had. Say it again in their words, or leave proof out.",
-      detail: {},
-    })
+    console.log(
+      JSON.stringify({ code: "cos.proof_dropped", reason: "not_owners" })
+    )
+    return null
   }
   try {
     await kit.withOrg(
@@ -648,14 +648,10 @@ async function recordProof(
       }
     )
   } catch (error) {
+    // Full is the server's to handle, not the model's: the change starts without it.
     if (error instanceof ProofFull) {
-      return failure(400, {
-        class: "validation",
-        code: "proof.full",
-        message:
-          "The business's proof is full. Start the change again without proof.",
-        detail: {},
-      })
+      console.log(JSON.stringify({ code: "cos.proof_dropped", reason: "full" }))
+      return null
     }
     console.error(
       JSON.stringify({ code: "cos.proof_failed", error: failureCode(error) })
@@ -690,7 +686,8 @@ export async function startOwnerChange(
       context.owner,
       input.text,
       approvalId,
-      input.change_kind
+      input.change_kind,
+      input.label
     )
   )
 }

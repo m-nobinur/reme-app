@@ -1,5 +1,6 @@
 import type { ToolCallMessagePartComponent } from "@assistant-ui/react"
 import type { AskableFactKey, AskFactOutput } from "@workspace/contracts"
+import { ChangeAnswer } from "@workspace/ui/components/assistant/change-answer"
 import {
   Docked,
   TrayFrame,
@@ -43,7 +44,9 @@ const AskFact: ToolCallMessagePartComponent = (props) => {
       if (field instanceof HTMLInputElement && !field.value) field.value = value
     }
   }
-  if (view.state === "answered" || view.state === "skipped") return null
+  if (view.state === "answered" || view.state === "skipped") {
+    return <ChangeAnswer step={props.args.key} />
+  }
   if (view.state !== "pending") {
     return (
       <TrayNote

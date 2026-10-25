@@ -73,6 +73,7 @@ import {
   priceOf,
   ROUTES,
   redacted,
+  repairedChange,
   reservation,
   routeOf,
   SITE_CHANGE_LINE,
@@ -324,6 +325,35 @@ describe("the CoS's instructions", () => {
     )
     expect(INSTRUCTIONS).toContain('"I\'m putting your site together"')
     expect(INSTRUCTIONS).not.toMatch(/such as "It's/)
+  })
+})
+
+describe("a change refused by its schema", () => {
+  const call = (input: unknown, toolName = "request_change") => ({
+    toolName,
+    input: JSON.stringify(input),
+  })
+
+  it("drops only a spare field that failed, so the change starts on this call", () => {
+    const repaired = repairedChange(
+      call({
+        text: "Make the hero title more professional",
+        label: "the main heading at the very top of your home page",
+        step: "Rewriting the hero title",
+      })
+    )
+    expect(JSON.parse(repaired?.input ?? "{}")).toEqual({
+      text: "Make the hero title more professional",
+      step: "Rewriting the hero title",
+    })
+  })
+
+  it("leaves any other failure, and any other tool, to the model", () => {
+    expect(repairedChange(call({ label: "your hero title" }))).toBeNull()
+    expect(repairedChange(call({ text: "x" }, "create_reminder"))).toBeNull()
+    expect(
+      repairedChange({ toolName: "request_change", input: "{" })
+    ).toBeNull()
   })
 })
 

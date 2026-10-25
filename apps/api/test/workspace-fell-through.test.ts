@@ -60,5 +60,24 @@ describe.skipIf(!url)("a quick edit that fell through, on /workspace", () => {
     const [build] = await builds()
     expect(build).toMatchObject({ lane: "full" })
     expect(build?.fell_through).toBeUndefined()
+    await s.state(id, "published")
+  })
+
+  it("serves a change's label from its creation event, and none without one", async () => {
+    const s = seed(kit, who)
+    const id = await s.assignment("implementing", { kind: "site.revise" })
+    await s.event(id, "assignment.created", {
+      lane: "quick",
+      label: "your hero title",
+    })
+    const [build] = await builds()
+    expect(BuildSummary.parse(build)).toMatchObject({
+      label: "your hero title",
+    })
+    await s.state(id, "published")
+    const plain = await s.assignment("implementing")
+    await s.event(plain, "assignment.created", { lane: "full" })
+    const [unlabelled] = await builds()
+    expect(unlabelled?.label).toBeUndefined()
   })
 })

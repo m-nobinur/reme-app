@@ -537,6 +537,25 @@ describe("an answer on a card", () => {
     })
   })
 
+  it("refuses a phone on a card that cannot be dialled, so it is never stored", () => {
+    const contact = detailsCard("contact", start(), counter())
+    const phone = (e164: string) => ({ key: "business.phone", value: { e164 } })
+    expect(
+      cardAnswer(
+        contact,
+        { answer: "stated", facts: [phone("+195899933")] },
+        []
+      )
+    ).toBeNull()
+    expect(
+      cardAnswer(
+        contact,
+        { answer: "stated", facts: [phone("+447700900123")] },
+        []
+      )
+    ).toMatchObject({ kind: "facts" })
+  })
+
   it("states a details card's facts, only the step's own keys, each once, and never a skip", () => {
     const card = cardFor("assistant")
     const facts = FACTS.assistant as FactValue[]
@@ -821,6 +840,10 @@ describe("a typed reply", () => {
     expect(form("business.phone", "0044 1632 960001")).toMatchObject({
       facts: [{ value: { e164: "+441632960001" } }],
     })
+    // The trunk 0 drops after +44.
+    expect(form("business.phone", "01632 960001")).toMatchObject({
+      facts: [{ value: { e164: "+441632960001" } }],
+    })
     expect(
       facts("business.offerings", "Regular cleaning, deep cleans and ovens")
     ).toMatchObject({
@@ -834,7 +857,8 @@ describe("a typed reply", () => {
   })
 
   it("asks again with a specific line when the words do not fit", () => {
-    expect(form("business.phone", "01632 960001")).toEqual({
+    // 00 is the international prefix: +1 and too few digits to dial.
+    expect(form("business.phone", "00195 899933")).toEqual({
       kind: "retry",
       reason: "phone",
     })
@@ -1068,6 +1092,23 @@ describe("the progress a conversation's cards hold", () => {
       true
     )
     expect(ended(skipped({ answer: "chosen", choice: "yes" }))).toBe(false)
+  })
+
+  it("does not read a typed no as a skip once another card followed it", () => {
+    const went = progressOf([
+      row({
+        type: "tool-ask_choice",
+        step: "build_for_me",
+        state: "output-error",
+        reply: "No, let me change my assistant first",
+      }),
+      row({
+        type: "tool-ask_details",
+        step: "assistant",
+        state: "input-available",
+      }),
+    ])
+    expect(ended(went)).toBe(false)
   })
 
   it("counts a started build, and not one talked over", () => {

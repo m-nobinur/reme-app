@@ -230,10 +230,15 @@ export const notFound = (noun: "assignment" | "approval") =>
   })
 
 /** The build as the panel shows it, from the row the orchestrator returned. */
-const summary = (body: unknown, lane?: BuildLane): BuildSummary => {
+const summary = (
+  body: unknown,
+  lane?: BuildLane,
+  label?: string
+): BuildSummary => {
   const row = Assignment.parse(body)
   return {
     ...(lane ? { lane } : {}),
+    ...(label ? { label } : {}),
     assignment_id: row.assignment_id,
     kind: row.kind as BuildSummary["kind"],
     state: row.state,
@@ -411,7 +416,9 @@ export async function startChange(
   text: string,
   key: string,
   /** The CoS's read of the change's size; the orchestrator picks the lane from it. */
-  changeKind?: ChangeKind
+  changeKind?: ChangeKind,
+  /** The change's short name in the owner's terms, kept with the build it makes. */
+  label?: string
 ): Promise<Response> {
   // One deadline for the whole change: its reads and every call it makes
   // share it, so a replace's three calls end within it too.
@@ -511,9 +518,10 @@ export async function startChange(
       () => null
     )
     if (ended.ok) {
-      return Response.json(summary(build, await laneOf(build.assignment_id)), {
-        status,
-      })
+      return Response.json(
+        summary(build, await laneOf(build.assignment_id), label),
+        { status }
+      )
     }
     if (ended.status >= 500) return ended
     // The old build keeps the site, so nothing would release the new one.
@@ -558,13 +566,14 @@ export async function startChange(
     if (made.state === "queued" && route.route === "replace") {
       return end(made, 200, route)
     }
-    return Response.json(summary(made))
+    return Response.json(summary(made, undefined, label))
   }
   // A steer ignores the kind: a working build takes the change whatever its size.
   const createBody = (kind: "site.build" | "site.revise", draft?: string) => ({
     kind,
     goal: text,
     ...(changeKind ? { change_kind: changeKind } : {}),
+    ...(label ? { label } : {}),
     ...(draft ? { draft_revision_id: draft } : {}),
   })
   const create = async (kind: "site.build" | "site.revise", draft?: string) => {
@@ -573,7 +582,7 @@ export async function startChange(
     const lane = parsed.success
       ? await laneOf(parsed.data.assignment_id)
       : undefined
-    return relay(result, (body) => summary(body, lane))
+    return relay(result, (body) => summary(body, lane, label))
   }
   switch (route.route) {
     case "refuse":

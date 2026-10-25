@@ -704,6 +704,29 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       )
     })
 
+    it("sends the change's label with the build and returns it on the summary", async () => {
+      const stub = creating(me)
+      const output = kept(
+        "request_change",
+        await requestChange(
+          context(me, stub),
+          {
+            text: "Make the hero title more professional",
+            label: "your hero title",
+          },
+          crypto.randomUUID(),
+          await turnOf(me)
+        )
+      )
+      expect(output).toMatchObject({
+        outcome: "started",
+        build: { label: "your hero title" },
+      })
+      expect(stub.calls[0]?.body).toMatchObject({
+        label: "your hero title",
+      })
+    })
+
     it("throws, never refuses, on an unknown outcome, and the rerun finds the one build", async () => {
       const approval = crypto.randomUUID()
       const hung = creating(me, true)
@@ -1000,7 +1023,7 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       expect(await proofNow()).toEqual(before)
     })
 
-    it("refuses a claim with a word the owner never wrote, records nothing and starts nothing", async () => {
+    it("drops a claim with a word the owner never wrote, records nothing and still starts the change", async () => {
       const before = await proofNow()
       const turn = await turnOf(me, ["Say we're insured"])
       const stub = creating(me)
@@ -1013,11 +1036,8 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
           turn
         )
       )
-      expect(output).toMatchObject({
-        outcome: "refused",
-        error: { class: "validation", code: "proof.not_owners" },
-      })
-      expect(stub.calls).toHaveLength(0)
+      expect(output).toMatchObject({ outcome: "started" })
+      expect(stub.calls).toHaveLength(1)
       expect(await proofNow()).toEqual(before)
     })
 

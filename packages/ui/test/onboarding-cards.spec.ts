@@ -74,7 +74,7 @@ test("a choice of two answers on one tap, with no Submit", async ({ page }) => {
   ).toBeVisible()
   // The card's frame is the region the question names.
   await expect(build.getByRole("region")).toHaveAccessibleName(
-    "Shall I build your website?"
+    "You'll see it before it goes live"
   )
 })
 

@@ -213,6 +213,8 @@ describe("onboarding lines", () => {
   it("has a working line for every move the planner can make", () => {
     for (const option of PlanNext.options) {
       const next = option.shape.kind.value
+      // A reopened step is sent as the question it asks again.
+      if (next === "reopen") continue
       const line = onboardingLine({ kind: "next", next })
       plain(line)
       expect(line).toMatch(WORKING)

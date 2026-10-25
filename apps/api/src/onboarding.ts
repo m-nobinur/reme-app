@@ -14,6 +14,7 @@ import {
   type ChoiceStep,
   DETAILS_KEYS,
   type DetailsStep,
+  dialable,
   FactValue,
   type FactValueKey,
   FIXED_PAGES,
@@ -27,12 +28,14 @@ import {
   PaletteId,
   PRONOUNS,
   type QuoteField,
+  type ReopenStep,
   type RequestChangeOutput,
   ReviewQuoteFormInput,
   ReviewQuoteFormOutput,
   TEMPLATES,
   type TemplateId,
   TONES,
+  toE164,
   UPLOAD_MAX_BYTES,
   UPLOAD_MAX_FILES,
   UPLOAD_TYPES,
@@ -402,8 +405,14 @@ export const factCard = (
   key: FactValueKey,
   newId: () => string
 ) => {
+  // What is held, so a step the owner goes back to opens as they left it.
+  const held = factValue(o.facts, key)
   const prefill =
-    key === "business.name" ? { key, value: { name: o.orgName } } : null
+    held !== undefined
+      ? { key, value: held }
+      : key === "business.name"
+        ? { key, value: { name: o.orgName } }
+        : null
   const parsed = prefill && FactValue.safeParse(prefill)
   return call(
     "tool-ask_fact",
@@ -1151,6 +1160,39 @@ const defaultQuoteForm = (o: Onboarding, newId: () => string) => [
 export const currentStep = (o: Onboarding) =>
   STEPS.find((each) => !each.done(o))
 
+/** Whether the owner has been through `id`: what they can go back to. */
+export const stepDone = (o: Onboarding, id: StepId) =>
+  STEPS.find((each) => each.id === id)?.done(o) ?? false
+
+/**
+ * A step the owner answered, on its own card filled with what is held. Once
+ * it is answered again the script is back on the step it was on, since
+ * every step's progress is its facts.
+ */
+export function reopenCard(
+  step: ReopenStep,
+  o: Onboarding,
+  newId: () => string
+): ToolPart {
+  if (step === "contact" || step === "assistant") {
+    return detailsCard(step, o, newId)
+  }
+  if (step === "industry") {
+    const held = factValue(o.facts, "business.industry")?.category
+    return choiceCard(step, o, newId, held ? { preselected: [held] } : {})
+  }
+  if (step === "quote_form") {
+    const fields =
+      factValue(o.facts, "quote.form")?.fields ?? DEFAULT_QUOTE_FIELDS
+    return call(
+      "tool-review_quote_form",
+      ReviewQuoteFormInput.parse({ fields, note: null }),
+      newId
+    )
+  }
+  return factCard(o, step, newId)
+}
+
 /** The parts of the next step, or the closing line for a skipped website once nothing is left. */
 export function onboardingStep(o: Onboarding, newId: () => string): Part[] {
   const step = currentStep(o)
@@ -1309,12 +1351,17 @@ function detailsAnswer(input: AskDetailsInput, output: unknown): Answer | null {
   const allowed = DETAILS_KEYS[input.step] as readonly string[]
   if (
     new Set(keys).size !== keys.length ||
-    !keys.every((key) => allowed.includes(key))
+    !keys.every((key) => allowed.includes(key)) ||
+    !answer.data.facts.every(canDial)
   ) {
     return null
   }
   return { kind: "facts", facts: answer.data.facts }
 }
+
+/** A card's phone must be one that rings: never stored, the card asks again. */
+const canDial = (fact: FactValue) =>
+  fact.key !== "business.phone" || dialable(fact.value.e164)
 
 /**
  * The contact details the starter's quote form always asks, by the key or
@@ -1463,7 +1510,7 @@ export function cardAnswer(
     if (answer.data.answer === "skipped") {
       return SKIPPABLE.includes(key) ? { kind: "passed", step } : null
     }
-    return answer.data.fact.key === key
+    return answer.data.fact.key === key && canDial(answer.data.fact)
       ? { kind: "facts", facts: [answer.data.fact] }
       : null
   }
@@ -1522,10 +1569,6 @@ function yesNo(words: string): boolean | null {
 /** Whether a typed reply passes over a skippable step. */
 const saysSkip = (words: string) => SKIP.test(norm(words))
 
-/** A typed phone number in E.164, if it can be one. */
-const e164 = (words: string) =>
-  words.replace(/[\s().-]/g, "").replace(/^00/, "+")
-
 /** The field each text-asked fact keeps its words in. */
 const FIELD: Partial<Record<FactValueKey, string>> = {
   "business.name": "name",
@@ -1540,7 +1583,7 @@ function typedFact(key: FactValueKey, words: string): Answer {
   const said = words.trim()
   const value =
     key === "business.phone"
-      ? { e164: e164(said) }
+      ? { e164: toE164(said) }
       : key === "business.offerings"
         ? {
             items: said
@@ -1604,7 +1647,7 @@ function typedContact(words: string): Answer {
     }),
     FactValue.safeParse({
       key: "business.phone",
-      value: { e164: e164(words.match(/\+?[\d\s().-]{7,}\d/)?.[0] ?? "") },
+      value: { e164: toE164(words.match(/\+?[\d\s().-]{7,}\d/)?.[0] ?? "") },
     }),
   ].flatMap((f) => (f.success ? [f.data] : []))
   if (facts.length > 0) return { kind: "facts", facts }
@@ -1843,6 +1886,11 @@ export function progressOf(rows: readonly ScriptRow[]): Progress {
             ? "design"
             : row.step
     if (!step) continue
+    // A card after the website question means onboarding went on, so a
+    // typed "no, let me change my name first" over it was not a skip.
+    if (step !== "build_for_me" && step !== "manual_builder") {
+      siteSkipped = false
+    }
     if (row.type === "tool-ask_choice" && OLD_DESIGN.includes(step)) old = true
     // Rows come in order, so each step ends as its latest card left it.
     if (

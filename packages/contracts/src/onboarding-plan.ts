@@ -73,6 +73,23 @@ export const PlanFacts = z.strictObject(
 ) as unknown as z.ZodType<Partial<Pick<Values, PlanFactKey>>>
 
 /**
+ * The steps an owner can go back to during onboarding: each one's card
+ * opens again, filled with what is held. Pronouns, face and tone are on the
+ * assistant's card.
+ */
+export const ReopenStep = z.enum([
+  "business.name",
+  "business.offerings",
+  "service_area.text",
+  "business.audience",
+  "business.proof",
+  "industry",
+  "quote_form",
+  "contact",
+  "assistant",
+])
+
+/**
  * The turn's next move. The model names what to ask; the api builds every
  * card from the contracts' lists, so an option id, a limit or a visual is
  * never the model's.
@@ -121,6 +138,8 @@ export const PlanNext = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("start_build") }),
   /** A reply with no new question, such as the answer to a side question. */
   z.strictObject({ kind: z.literal("answer_only") }),
+  /** A step the owner already answered and asked to change, on its own card filled with what is held. */
+  z.strictObject({ kind: z.literal("reopen"), step: ReopenStep }),
 ])
 
 export const PLAN_DOING_MAX = 60
@@ -137,12 +156,15 @@ export const OnboardingStatus = z.strictObject({
       kind: z.literal("fact"),
       key: z.enum(PLAN_FACT_KEYS as [PlanFactKey, ...PlanFactKey[]]),
     }),
+    // A reopened step shows as the question it asks again.
     z.strictObject({
       kind: z.literal("next"),
       next: z.enum(
-        PlanNext.options.map((o) => o.shape.kind.value) as [
-          PlanNext["kind"],
-          ...PlanNext["kind"][],
+        PlanNext.options
+          .map((o) => o.shape.kind.value)
+          .filter((kind) => kind !== "reopen") as [
+          Exclude<PlanNext["kind"], "reopen">,
+          ...Exclude<PlanNext["kind"], "reopen">[],
         ]
       ),
     }),
@@ -177,3 +199,4 @@ export type OnboardingPlan = z.infer<typeof OnboardingPlan>
 export type PlanNext = z.infer<typeof PlanNext>
 export type OnboardingStatus = z.infer<typeof OnboardingStatus>
 export type PendingCard = z.infer<typeof PendingCard>
+export type ReopenStep = z.infer<typeof ReopenStep>

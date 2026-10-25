@@ -5,7 +5,7 @@ import {
   type ChatRequest,
   COS_TOOLS,
   type CosApproval,
-  type CosChangeRequest,
+  CosChangeRequest,
   type CosPrefix,
   type CosStep,
   type CosToolName,
@@ -167,7 +167,7 @@ export const LIMITS = {
 } as const
 
 /** Bumped with any change to `INSTRUCTIONS` or a tool's description. */
-const PREFIX_VERSION = "29"
+const PREFIX_VERSION = "30"
 
 export const INSTRUCTIONS = `You are the Chief of Staff for a small service business. You talk with the business owner in a chat and help them run the business. Their website is one of the things you look after; a Developer agent builds it.
 
@@ -234,7 +234,7 @@ export const DESCRIPTIONS: Record<CosToolName, string> = {
   get_preview:
     "Check whether a build has a preview ready, and when it expires, given the build's ref from the workspace. Use it when the owner asks about a build's preview. The owner opens the preview from the card; you never get a link.",
   request_change:
-    "Start a change to the website, in the owner's words. The owner asking is their yes, so it starts straight away with no card; only a change that sets a new phone number or email address shows them a card first. Use it only for a change the owner asked for in their own messages, one change per call. Not for questions the Developer asked. Set change_kind by the biggest part of the change. copy is words only, such as a headline, a phone number or a button label. style is colours, fonts or spacing across the site. section adds, removes, moves or reworks one section or page. photo replaces, adds or removes a picture. creative is a new look, new pages or anything you are unsure of. When the owner types a new phone number or email address in full, also set contact.phone (E.164) or contact.email to exactly what they typed, so the business facts change with the site. Never fill contact from anything but the owner's own words. When the owner states something about the business for the site to say, such as insurance, years trading or a guarantee, also set proof to it, so the site can say it. Set step: a few words, in the owner's language, of what the change does, such as \"Adding the new photos to the home page\".",
+    'Start a change to the website, in the owner\'s words. The owner asking is their yes, so it starts straight away with no card; only a change that sets a new phone number or email address shows them a card first. Use it only for a change the owner asked for in their own messages, one change per call. Not for questions the Developer asked. Set change_kind by the biggest part of the change. copy is words only, such as a headline, a phone number or a button label. style is colours, fonts or spacing across the site. section adds, removes, moves or reworks one section or page. photo replaces, adds or removes a picture. creative is a new look, new pages or anything you are unsure of. When the owner types a new phone number or email address in full, also set contact.phone (E.164) or contact.email to exactly what they typed, so the business facts change with the site. Never fill contact from anything but the owner\'s own words. When the owner states something about the business for the site to say, such as insurance, years trading or a guarantee, also set proof to it, so the site can say it. Set step: a few words, in the owner\'s language, of what the change does, such as "Adding the new photos to the home page". Set label: what changes, as the owner would name it, in 40 characters at most, such as "your hero title" or "your phone number".',
   answer_question:
     "Answer one of the Developer's open questions, by the ref on that question in the workspace, with what the owner told you. For a fact field, value is the fact object {key, value} with the field from that ref; otherwise it is the owner's text. Use it only with an answer the owner gave you.",
   create_reminder:
@@ -813,6 +813,34 @@ export function cleanedChange({ step, ...rest }: CosChangeRequest) {
   return clean ? { ...rest, step: clean } : rest
 }
 
+/** The fields of a change the server can do without: the panel's line, the change's name, a claim. */
+const SPARE = ["step", "label", "proof"] as const
+
+/**
+ * A `request_change` call refused by its schema only for a spare field,
+ * with that field dropped, so the change starts on this call rather than
+ * after the model sees the error and sends it again. Null for any other.
+ */
+export function repairedChange<T extends { toolName: string; input: string }>(
+  call: T
+): T | null {
+  if (call.toolName !== "request_change") return null
+  let input: Record<string, unknown>
+  try {
+    input = JSON.parse(call.input)
+  } catch {
+    return null
+  }
+  for (const key of SPARE) {
+    if (!CosChangeRequest.shape[key].safeParse(input[key]).success) {
+      delete input[key]
+    }
+  }
+  return CosChangeRequest.safeParse(input).success
+    ? { ...call, input: JSON.stringify(input) }
+    : null
+}
+
 /** `request_change`'s input without `step`, the panel's line, which the tool never reads. */
 export function withoutStep(input: unknown): unknown {
   const { step: _step, ...rest } = input as { step?: string }
@@ -1179,6 +1207,7 @@ export function cosAgent(
     // The `step` the panel shows is cleaned before the call is logged, so the
     // part holds what the owner may read; the tool body never gets it.
     experimental_refineToolInput: { request_change: cleanedChange },
+    repairToolCall: async ({ toolCall }) => repairedChange(toolCall),
     // The instructions and tools come first and never change, and only the
     // turn's context and the owner's newest message follow the history, so
     // each call repeats the last one's prefix. Both keys name the
