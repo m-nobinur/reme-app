@@ -1087,7 +1087,7 @@ describe("Pick for me, answered by the script", () => {
   // Enough orgs to meet every wording of each line.
   const ORGS = Array.from({ length: 12 }, (_, i) => `${ORG.slice(0, -2)}${i}0`)
 
-  it("says who the assistant chose to be, then the next question with no thanks, then the persona", () => {
+  it("introduces the assistant, then its persona, then the next question with no thanks", () => {
     const leads = new Set<string>()
     for (const orgId of ORGS) {
       const { step, parts } = persona(
@@ -1106,12 +1106,21 @@ describe("Pick for me, answered by the script", () => {
       leads.add(next)
     }
     expect(leads.size).toBe(3)
-    // The owner's own answer keeps the thanks, shows the persona first and no line about choosing.
-    const own = persona({ answer: "stated", facts })
-    expect(own.parts).toEqual([PERSONA, own.step[0], ...own.step.slice(1)])
-    expect((own.step[0] as { text: string }).text).toMatch(
-      /^(Maya|Thanks|I'm Maya)/
-    )
+    // The owner's own answer: Maya introduces herself, the persona, then the question with no thanks.
+    const intros = new Set<string>()
+    for (const orgId of ORGS) {
+      const own = persona({ answer: "stated", facts }, orgId)
+      const [said, card, lead, ...rest] = own.parts
+      const intro = (said as { text: string }).text
+      expect(intro).toMatch(/Maya/)
+      expect(intro).not.toMatch(/chose|choose|gone with|Leave it/)
+      expect(intro).toMatch(/come across|introduce myself|preview/)
+      expect(card).toEqual(PERSONA)
+      expect((lead as { text: string }).text).not.toMatch(/Maya|Thanks/)
+      expect(rest).toEqual(own.step.slice(1))
+      intros.add(intro)
+    }
+    expect(intros.size).toBe(3)
   })
 
   it("says the design tray left to it is chosen as it builds, then the build's news with no summary", () => {

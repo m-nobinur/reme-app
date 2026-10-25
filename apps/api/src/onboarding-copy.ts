@@ -40,7 +40,7 @@ export type Voice = {
   ownColour: string | null
   /** The services as a short phrase written in the background, such as "your wedding cars". */
   services: string | null
-  /** The assistant just picked for the owner and said so, so a line leaves out its acknowledgement. */
+  /** The assistant just said what it picked or introduced its persona, so a line leaves out its acknowledgement. */
   picked?: boolean
 }
 
@@ -406,18 +406,32 @@ export function chose(v: Voice, what: string): string {
   )
 }
 
-/** Who the assistant became when the owner pressed Pick for me on its card, said before the next question. */
-export function pickedPersona(v: Voice, p: PersonaCard): string {
+/**
+ * The assistant introducing who it is now, just above its persona card and
+ * before the next question: what it chose when the owner pressed Pick for
+ * me, or the owner's own choice welcomed.
+ */
+export function personaIntro(
+  v: Voice,
+  p: PersonaCard,
+  picked: boolean
+): string {
   const pronouns = PRONOUNS.find((each) => each.id === p.pronouns)?.label
   const tone = TONES.find((each) => each.id === p.tone)?.label.toLowerCase()
   const who = `${p.name}, ${pronouns}, with a ${tone} manner`
   return say(
     v,
-    pick(v, "picked_persona", [
-      `I've gone with ${who}. You can change any of it whenever you like.`,
-      `Leave it with me: I'll be ${who}. It's easy to change later.`,
-      `Happy to choose. I'm ${who}, and you can change that any time.`,
-    ])
+    picked
+      ? pick(v, "picked_persona", [
+          `I've gone with ${who}, and you can change any of it whenever you like. Here's how I'll come across:`,
+          `Leave it with me. I'll be ${who}, and here's how that looks:`,
+          `Happy to choose. I'm ${who} from now on. Here's a preview:`,
+        ])
+      : pick(v, "persona_intro", [
+          `From now on I'm ${p.name}, your business assistant. Here's how I'll come across:`,
+          `${p.name} it is. I'll look after ${v.business} from here on, and this is how I'll introduce myself:`,
+          `Thanks${comma(v.owner)}. I'm ${p.name}, your assistant for ${v.business} from now on. Here's a preview:`,
+        ])
   )
 }
 

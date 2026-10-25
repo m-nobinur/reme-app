@@ -55,8 +55,8 @@ import {
   manualEnd,
   notStarted,
   opener,
+  personaIntro,
   pickedLook,
-  pickedPersona,
   question,
   quoteForm,
   quoteUnchanged,
@@ -162,7 +162,7 @@ export type Onboarding = Progress & {
    * than moving on with the change unmade.
    */
   changing?: readonly QuoteField[]
-  /** This turn's answer was the assistant's pick: a line says so (`withChoice`), so the next words leave out their acknowledgement. */
+  /** A line led this turn's reply (`withChoice`): the assistant's pick, or its persona introduced, so the next words leave out their acknowledgement. */
   picked?: boolean
 }
 
@@ -1342,8 +1342,9 @@ export function applied(o: Onboarding, answer: Answer): Onboarding {
       ...(answer.kind === "facts" && answer.changing
         ? { changing: answer.changing }
         : {}),
+      // A line said what was chosen, or introduced the persona, so the next words leave out their thanks.
       ...((answer.kind === "facts"
-        ? answer.chose || answer.persona === "picked"
+        ? answer.chose || answer.persona
         : answer.picked) && { picked: true }),
     }
   }
@@ -1928,15 +1929,15 @@ export function withChoice(
   const v = voiceOf(o)
   const persona =
     answer?.kind === "facts" && answer.persona ? personaPart(o) : null
-  const line =
-    answer?.kind === "design"
+  const line = persona
+    ? personaIntro(
+        v,
+        persona.data,
+        answer?.kind === "facts" && answer.persona === "picked"
+      )
+    : answer?.kind === "design"
       ? answer.picked && pickedLook(v)
-      : answer?.kind === "facts" && answer.chose
-        ? chose(v, answer.chose)
-        : answer?.kind === "facts" &&
-          answer.persona === "picked" &&
-          persona &&
-          pickedPersona(v, persona.data)
+      : answer?.kind === "facts" && answer.chose && chose(v, answer.chose)
   const at = step.findIndex((p) => p.type === "text")
   const lead = step[at]
   if (lead?.type !== "text") {
