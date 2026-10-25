@@ -431,8 +431,10 @@ export async function readBuilds(
       >`(select extract(epoch from max(e.occurred_at)) * 1000 from events e where e.assignment_id = assignments.id and e.type = 'assignment.state_changed' and e.payload->>'to' = 'preview_ready')::float8`,
     })
     .from(assignments)
+    // Less a draft a change holds (the orchestrator's `holdDraft`): it is
+    // paused for the change, which is the build the owner follows.
     .where(
-      sql`${assignments.kind} in ('site.build', 'site.revise') and ${assignments.state} not in ${TERMINAL_STATES}`
+      sql`${assignments.kind} in ('site.build', 'site.revise') and ${assignments.state} not in ${TERMINAL_STATES} and not (assignments.state = 'paused' and exists (select 1 from assignments h where h.revision_of_assignment_id = assignments.id and h.state not in ('published', 'failed', 'cancelled')))`
     )
     .orderBy(sql`${assignments.createdAt} desc`)
   const rows = await (limit === null ? query : query.limit(limit))
