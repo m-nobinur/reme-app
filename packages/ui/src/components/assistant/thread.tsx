@@ -404,64 +404,81 @@ const KeepTurnAnchor: FC = () => {
 }
 
 /**
- * The slot after the last message, from app state. The space assistant-ui
- * holds below a pinned reply is sized from the reply alone and never from
- * this slot, so when a card here shrinks or goes (the ready card on Approve)
- * that space stays and the view settles on blank above the composer until a
- * reload. A shrink with no run going ends the pinned turn, which takes the
- * space away.
+ * Keeps the end of the thread in view. assistant-ui follows the bottom by
+ * itself only when the viewport is not anchored to a turn, and the space it
+ * holds below a pinned reply is sized from the reply alone.
+ *
+ * - A footer that appears or grows (the tray) covered the last lines, and one
+ *   that shrinks, or a viewport that resizes, left that space as blank under
+ *   the reply with Scroll to bottom over it. Either, with no run going, ends
+ *   the pinned turn, and a reader who was at the bottom is put back there.
+ * - The after slot sits in the message group ahead of that space, so a card
+ *   landing in it fills the space rather than landing below it and jumping
+ *   up later. The space is measured again on any change to the viewport
+ *   store, which a landing card makes. A card that shrinks or goes (the
+ *   ready card on Approve), with no run going, ends the turn.
+ * - Between turns, what lands with no turn of the owner's (a message the
+ *   assistant posted on its own, or a card in the slot) is followed: a reader
+ *   at the bottom glides to it, and one who scrolled up is told instead.
  */
-const AfterSlot: FC<{ children: ReactNode }> = ({ children }) => {
-  const viewport = useThreadViewportStore()
-  const aui = useAui()
-  const [slot, setSlot] = useState<HTMLElement | null>(null)
-  useEffect(() => {
-    if (!slot) return
-    let height = slot.offsetHeight
-    const observer = new ResizeObserver(() => {
-      const next = slot.offsetHeight
-      if (next < height && !aui.thread().getState().isRunning) {
-        viewport.getState().setTopAnchorTurn(null)
-      }
-      height = next
-    })
-    observer.observe(slot)
-    return () => observer.disconnect()
-  }, [slot, viewport, aui])
-  return (
-    // Always in the page, so a card that appears in it is read out.
-    <div aria-live="polite" className="-mt-8 mb-14 empty:m-0" ref={setSlot}>
-      {children}
-    </div>
-  )
-}
-
-/**
- * The footer docks over the end of the thread, and assistant-ui only follows
- * the bottom by itself when the viewport is not anchored to a turn, so a
- * tray that appears or grows under the last reply covers its last lines.
- * The space held below a pinned reply is sized once, so a footer that shrinks
- * (a shorter tray step) or a viewport that resizes left it as blank under the
- * reply, with Scroll to bottom over it. Either, with no run going, ends the
- * pinned turn, as AfterSlot does. After any of them, a reader who was at the
- * bottom is put back there.
- */
-const KeepFooterClear: FC<{ footer: HTMLElement | null }> = ({ footer }) => {
+const FollowBottom: FC<{
+  footer: HTMLElement | null
+  after: HTMLElement | null
+  onUnseen: (unseen: boolean) => void
+}> = ({ footer, after, onUnseen }) => {
   const store = useThreadViewportStore()
   const aui = useAui()
+  const follow = useRef<() => void>(() => undefined)
+  // A message added to the open thread: never the history loading in, nor
+  // another thread opening.
+  const count = useAuiState((s) => s.thread.messages.length)
+  const thread = useAuiState((s) => s.threadListItem.id)
+  const seen = useRef({ count, thread })
+  useEffect(() => {
+    const before = seen.current
+    seen.current = { count, thread }
+    if (before.thread === thread && before.count > 0 && count > before.count) {
+      follow.current()
+    }
+  }, [count, thread])
   useEffect(() => {
     const viewport = footer?.closest<HTMLElement>(
       '[data-slot="aui_thread-viewport"]'
     )
-    if (!footer || !viewport) return
+    if (!footer || !after || !viewport) return
+    const idle = () => !aui.thread().getState().isRunning
     const atBottom = () =>
       viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop <= 4
     // Read before a resize moves anything: scroll events come after it.
     let pinned = atBottom()
     const onScroll = () => {
       pinned = atBottom()
+      if (pinned) onUnseen(false)
+    }
+    // A frame on, once the space below the reply is measured again.
+    follow.current = () => {
+      if (!idle()) return
+      requestAnimationFrame(() => {
+        if (atBottom()) return
+        if (!pinned) return onUnseen(true)
+        // Past the fold the held space is spent, so ending the turn moves nothing.
+        if (
+          after.getBoundingClientRect().bottom >
+          footer.getBoundingClientRect().top
+        ) {
+          store.getState().setTopAnchorTurn(null)
+        }
+        const still = matchMedia("(prefers-reduced-motion: reduce)").matches
+        requestAnimationFrame(() =>
+          viewport.scrollTo({
+            top: viewport.scrollHeight,
+            behavior: still ? "instant" : "smooth",
+          })
+        )
+      })
     }
     let height = footer.offsetHeight
+    let slot = after.offsetHeight
     let size = `${viewport.clientWidth}x${viewport.clientHeight}`
     const observer = new ResizeObserver(() => {
       const shrank = footer.offsetHeight < height
@@ -470,22 +487,30 @@ const KeepFooterClear: FC<{ footer: HTMLElement | null }> = ({ footer }) => {
       const next = `${viewport.clientWidth}x${viewport.clientHeight}`
       const resized = next !== size
       size = next
-      if (!shrank && !grew && !resized) return
-      if ((shrank || resized) && !aui.thread().getState().isRunning) {
+      const landed = after.offsetHeight > slot
+      const left = after.offsetHeight < slot
+      slot = after.offsetHeight
+      if ((shrank || resized || left) && idle()) {
         store.getState().setTopAnchorTurn(null)
+      } else if (landed) {
+        const { topAnchorTurn, setTopAnchorTurn } = store.getState()
+        setTopAnchorTurn(topAnchorTurn)
+        follow.current()
       }
-      if (pinned) {
+      if ((shrank || grew || resized) && pinned) {
         viewport.scrollTo({ top: viewport.scrollHeight, behavior: "instant" })
       }
     })
     observer.observe(footer)
     observer.observe(viewport)
+    observer.observe(after)
     viewport.addEventListener("scroll", onScroll, { passive: true })
     return () => {
       observer.disconnect()
       viewport.removeEventListener("scroll", onScroll)
+      follow.current = () => undefined
     }
-  }, [footer, store, aui])
+  }, [footer, after, store, aui, onUnseen])
   return null
 }
 
@@ -501,6 +526,8 @@ const ThreadRoot: FC<{
   // sits in the transcript and draws itself here.
   const [tray, setTray] = useState<HTMLElement | null>(null)
   const [footer, setFooter] = useState<HTMLElement | null>(null)
+  const [slot, setSlot] = useState<HTMLElement | null>(null)
+  const [unseen, setUnseen] = useState(false)
 
   return (
     <TraySlotProvider value={tray}>
@@ -523,7 +550,7 @@ const ThreadRoot: FC<{
           className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll pe-(--panel-inset)"
         >
           <KeepTurnAnchor />
-          <KeepFooterClear footer={footer} />
+          <FollowBottom after={slot} footer={footer} onUnseen={setUnseen} />
           <div
             className={cn(
               "mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4",
@@ -540,15 +567,20 @@ const ThreadRoot: FC<{
             )}
             <HistoryLoading stored={stored} />
 
+            {/* The space assistant-ui holds below a pinned reply goes last,
+                after the slot. An empty slot's margin takes back its gap. */}
             <div
               data-slot="aui_message-group"
-              className="mb-14 flex flex-col gap-y-6 empty:hidden"
+              className="flex flex-col gap-y-6 has-[>:not(:empty)]:mb-14 [&>[data-aui-top-anchor-reserve]]:order-last"
             >
               <ThreadPrimitive.Messages>
                 {renderMessage}
               </ThreadPrimitive.Messages>
+              {/* Always in the page, so a card that appears in it is read out. */}
+              <div aria-live="polite" className="empty:-mt-6" ref={setSlot}>
+                {after}
+              </div>
             </div>
-            <AfterSlot>{after}</AfterSlot>
 
             <ThreadPrimitive.ViewportFooter
               ref={setFooter}
@@ -558,7 +590,7 @@ const ThreadRoot: FC<{
                   "sticky bottom-0 mt-auto rounded-t-(--composer-radius)"
               )}
             >
-              <ThreadScrollToBottom />
+              <ThreadScrollToBottom unseen={unseen} />
               <div className="flex flex-col gap-2">
                 <div className="empty:hidden" ref={setTray} />
                 <Composer autoFocus={autoFocus} expanded={isEmpty} />
@@ -639,21 +671,29 @@ const localDay = (at: string | null): number | null => {
 
 // It shows only after a short delay: on each send the viewport leaves the
 // bottom for the moment it takes to glide the sent message up, and without
-// the delay the button blinked on every send.
-const ThreadScrollToBottom: FC = () => {
+// the delay the button blinked on every send. Something that landed while the
+// owner read further up makes it a "New message" pill.
+const ThreadScrollToBottom: FC<{ unseen: boolean }> = ({ unseen }) => {
+  const className =
+    "aui-thread-scroll-to-bottom absolute -top-12 z-10 self-center rounded-full transition-[opacity,visibility] delay-500 duration-150 disabled:invisible disabled:opacity-0 disabled:delay-0 motion-reduce:transition-none"
   return (
     <ThreadPrimitive.ScrollToBottom
       behavior="smooth"
       render={
-        <TooltipIconButton
-          tooltip="Scroll to bottom"
-          variant="outline"
-          size="icon"
-          className="aui-thread-scroll-to-bottom absolute -top-12 z-10 self-center rounded-full transition-[opacity,visibility] delay-500 duration-150 disabled:invisible disabled:opacity-0 disabled:delay-0 motion-reduce:transition-none"
-        />
+        unseen ? (
+          <Button className={className} size="sm" variant="outline" />
+        ) : (
+          <TooltipIconButton
+            className={className}
+            size="icon"
+            tooltip="Scroll to bottom"
+            variant="outline"
+          />
+        )
       }
     >
-      <ArrowDownIcon />
+      <ArrowDownIcon aria-hidden />
+      {unseen ? "New message" : null}
     </ThreadPrimitive.ScrollToBottom>
   )
 }
