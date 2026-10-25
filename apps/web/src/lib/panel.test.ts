@@ -303,17 +303,20 @@ describe("the first run", () => {
     const panel = firstRun(
       [
         onboarding(8, "done"),
-        segment(
-          "website",
-          "now",
-          [
-            step("planning", "done"),
-            step("photos", "skipped"),
-            step("writing", "now", { count: { done: 3, total: 6 } }),
-            ...along(WEBSITE_STEPS, 0).slice(3),
-          ],
-          BUSINESS
-        ),
+        {
+          ...segment(
+            "website",
+            "now",
+            [
+              step("planning", "done"),
+              step("photos", "skipped"),
+              step("writing", "now", { count: { done: 3, total: 6 } }),
+              ...along(WEBSITE_STEPS, 0).slice(3),
+            ],
+            BUSINESS
+          ),
+          usual_seconds: 360,
+        },
         segment("golive", "upcoming", along(GOLIVE_STEPS, -1), BUSINESS),
       ],
       { builds: [build("implementing", "build-first")] }
@@ -333,7 +336,7 @@ describe("the first run", () => {
       "Ellie is building your website",
       "Ellie is putting your website together",
     ]).toContain(website?.title)
-    expect(website?.line).toBe("4 minutes so far, usually 5 to 10 minutes")
+    expect(website?.line).toBe("4 minutes so far, usually about 6 minutes")
     expect(website?.steps.map((each) => [each.label, each.state])).toEqual([
       ["Planning", "done"],
       ["Photos", "skipped"],

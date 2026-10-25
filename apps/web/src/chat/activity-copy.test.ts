@@ -378,8 +378,14 @@ describe("segment copy", () => {
   it("writes the lines under a running or waiting job", () => {
     const ctx = { orgId: "org-1", assistant: "Ellie" }
     expect(
-      segmentLine(segment("website", "now"), ctx, { elapsedSeconds: 130 })
-    ).toBe("2 minutes so far, usually 5 to 10 minutes")
+      segmentLine(segment("website", "now", { usual_seconds: 360 }), ctx, {
+        elapsedSeconds: 130,
+      })
+    ).toBe("2 minutes so far, usually about 6 minutes")
+    expect(
+      segmentLine(segment("change", "now", { usual_seconds: 15 }), ctx)
+    ).toBe("Usually under a minute")
+    expect(segmentLine(segment("website", "now"), ctx)).toBeNull()
     expect(
       segmentLine(
         segment("change", "now", { step: "Adding the new photos" }),

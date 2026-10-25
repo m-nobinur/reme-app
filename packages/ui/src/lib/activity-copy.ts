@@ -126,6 +126,10 @@ export function cleanArg(
 export const elapsedText = (seconds: number) =>
   seconds < 60 ? "Under a minute" : plural(Math.floor(seconds / 60), "minute")
 
+/** How long a build usually takes, as the chat says it: "usually about 6 minutes". */
+const usualText = (seconds: number) =>
+  `usually ${seconds < 60 ? "under a minute" : `about ${plural(Math.round(seconds / 60), "minute")}`}`
+
 // ---------------------------------------------------------------------------
 // Moments: the assistant's own lines, which name her.
 
@@ -752,22 +756,23 @@ export function segmentLine(
   const elapsed =
     extras.elapsedSeconds === undefined
       ? null
-      : elapsedText(extras.elapsedSeconds)
+      : `${elapsedText(extras.elapsedSeconds)} so far`
+  const usual =
+    segment.usual_seconds === undefined
+      ? null
+      : usualText(segment.usual_seconds)
+  // The time so far, then the lane's usual time the chat quotes too.
+  const timing =
+    elapsed && usual
+      ? `${elapsed}, ${usual}`
+      : (elapsed ?? (usual && cap(usual)))
   switch (segment.kind as JobKind) {
     // The question at work says enough; no count of what is left.
     case "onboarding":
       return null
     case "website":
-      return (
-        cleanArg(segment.step, "text", 60) ??
-        (elapsed
-          ? `${elapsed} so far, usually 5 to 10 minutes`
-          : "Usually 5 to 10 minutes")
-      )
-    case "change": {
-      const step = cleanArg(segment.step, "text", 60)
-      return step ?? (elapsed ? `${elapsed} so far` : null)
-    }
+    case "change":
+      return cleanArg(segment.step, "text", 60) ?? timing
     case "golive":
       // Waiting, its one step says what it waits for.
       return waiting ? null : "Going live in a minute"
