@@ -419,13 +419,15 @@ type Wake = { payload: Record<string, unknown> } | "timeout"
 type Answer = { timeout?: true; after?: number }
 
 /** A recording step: names in order, callbacks run, sleeps skipped, waits scripted. */
-function drive(wakes: Wake[], answers: Answer[] = []) {
+function drive(wakes: Wake[], answers: Answer[] = [], failing: string[] = []) {
   const names: string[] = []
   /** The timeout each answer wait was given. */
   const waits: unknown[] = []
   const step = {
     do: async (name: string, a: unknown, b?: unknown) => {
       names.push(name)
+      // A step out of retries throws to the Workflow.
+      if (failing.includes(name)) throw new Error(`${name} failed`)
       const fn = (typeof a === "function" ? a : b) as () => Promise<unknown>
       return fn()
     },
@@ -990,6 +992,14 @@ describe("a Developer that stops without a report", () => {
   it("fails as developer.start_failed when the lead could not start, without resuming it", async () => {
     advanced.length = 0
     expect(await drive([cannotStart]).run()).toMatchObject({
+      outcome: "failed",
+    })
+    expect(advanced.at(-1)).toEqual(["failed", "developer.start_failed"])
+  })
+
+  it("fails as developer.start_failed when its start step runs out of retries", async () => {
+    advanced.length = 0
+    expect(await drive([], [], ["developer"]).run()).toMatchObject({
       outcome: "failed",
     })
     expect(advanced.at(-1)).toEqual(["failed", "developer.start_failed"])

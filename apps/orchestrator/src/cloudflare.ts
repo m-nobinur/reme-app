@@ -525,35 +525,39 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
     // The admission in one step, create-only, so a retried step cannot admit
     // the Developer twice: the second attempt finds the instance and returns.
     const admit = (role: "quick_section" | null, handedOn: boolean) =>
-      step.do("developer", async () => {
-        const { brief, ...timing } = await prepare(role, handedOn)
-        const origin = timing.origin
-        try {
-          const receipt = await init(Developer, {
-            id: ids.assignmentId,
-            uid: null,
-          }).dispatch({
-            // An owner's words are data, not an instruction: a revise's change
-            // request and an owner's build goal travel as a signal, tainted on
-            // the log (§28.3). A console goal keeps its plain message.
-            message: brief.goal_tainted
-              ? {
-                  kind: "signal",
-                  type: "site.change_requested",
-                  body: brief.goal,
-                  attributes: { taint: "untrusted_input" },
-                }
-              : `Build the site from the canonical facts. ${brief.goal}`,
-            initialData: brief,
-          })
-          return { submission_id: receipt.submissionId, ...timing, origin }
-        } catch (error) {
-          if (error instanceof AgentInstanceExistsError) {
-            return { submission_id: null, ...timing, origin }
+      step
+        .do("developer", async () => {
+          const { brief, ...timing } = await prepare(role, handedOn)
+          const origin = timing.origin
+          try {
+            const receipt = await init(Developer, {
+              id: ids.assignmentId,
+              uid: null,
+            }).dispatch({
+              // An owner's words are data, not an instruction: a revise's change
+              // request and an owner's build goal travel as a signal, tainted on
+              // the log (§28.3). A console goal keeps its plain message.
+              message: brief.goal_tainted
+                ? {
+                    kind: "signal",
+                    type: "site.change_requested",
+                    body: brief.goal,
+                    attributes: { taint: "untrusted_input" },
+                  }
+                : `Build the site from the canonical facts. ${brief.goal}`,
+              initialData: brief,
+            })
+            return { submission_id: receipt.submissionId, ...timing, origin }
+          } catch (error) {
+            if (error instanceof AgentInstanceExistsError) {
+              return { submission_id: null, ...timing, origin }
+            }
+            throw error
           }
-          throw error
-        }
-      })
+        })
+        // Out of retries: the Developer never started, so nothing would wake
+        // this build again. Null, for the caller to end it as failed.
+        .catch(() => null)
 
     // QE4, the quick lane. A copy or style change is one model call and one
     // build, with no Developer; a section change is the Developer at low
@@ -613,6 +617,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
     } else {
       admitted = await admit(section ? "quick_section" : null, false)
     }
+    if (!admitted) return fail("start", "developer.start_failed")
     /** The resume and repair signals' attributes that move a section run to the build role, once. */
     const escalate = (): Record<string, string> => {
       if (!section) return {}
@@ -908,6 +913,8 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           quick = "fell"
           section = true
           admitted = await admit("quick_section", true)
+          if (!admitted)
+            return fail(`start ${round}.quick`, "developer.start_failed")
           // A fall-through for axe carries its findings (rule, impact, page,
           // targets, summary, html) to the Developer, who reruns the gate's
           // script until it is clean.
