@@ -19,6 +19,7 @@ import {
   BuildQuestionsUI,
 } from "@workspace/ui/components/assistant/build-questions"
 import { DomainPurchaseProvider } from "@workspace/ui/components/assistant/buy-domain"
+import { SetupOpenProvider } from "@workspace/ui/components/assistant/change-answer"
 import { ChangeAskedUI } from "@workspace/ui/components/assistant/change-asked"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
 import { MemoryChipUI } from "@workspace/ui/components/assistant/memory-chip"
@@ -39,6 +40,7 @@ import {
   useSyncExternalStore,
 } from "react"
 import { assistantOf, briefingOf } from "@/lib/briefing"
+import { settingUp } from "@/lib/onboarding"
 import { OPENING_REVEAL } from "@/lib/reveal"
 import { useLiveWorkspace } from "@/lib/workspace"
 import { answerBuildQuestion } from "./build-questions"
@@ -220,26 +222,30 @@ export function ChatPage() {
                 <SaveDesignAnswerProvider value={saveDesignAnswer}>
                   <DomainPurchaseProvider value={domainPurchase}>
                     <AnswerBuildQuestionProvider value={answerBuildQuestion}>
-                      <Thread
-                        after={
-                          <>
-                            <StillWorking />
-                            <ChatSiteReadyCard />
-                            <BuildStopped />
-                          </>
-                        }
-                        assistant={live.workspace?.assistantName}
-                        briefing={briefing.line}
-                        components={{ ToolFallback: Approval }}
-                        mode={mode}
-                        placeholder={`Ask ${assistant} anything…`}
-                        placeholderIdeas={ideas}
-                        questionPlaceholder={`Tell ${assistant} what to do instead…`}
-                        quickActions={OWNER_QUICK_ACTIONS}
-                        reveal={onboarding ? OPENING_REVEAL : undefined}
-                        stored={id}
-                        updates={<ChatUpdates />}
-                      />
+                      <SetupOpenProvider
+                        value={!!onboarding && settingUp(live.workspace)}
+                      >
+                        <Thread
+                          after={
+                            <>
+                              <StillWorking />
+                              <ChatSiteReadyCard />
+                              <BuildStopped />
+                            </>
+                          }
+                          assistant={live.workspace?.assistantName}
+                          briefing={briefing.line}
+                          components={{ ToolFallback: Approval }}
+                          mode={mode}
+                          placeholder={`Ask ${assistant} anything…`}
+                          placeholderIdeas={ideas}
+                          questionPlaceholder={`Tell ${assistant} what to do instead…`}
+                          quickActions={OWNER_QUICK_ACTIONS}
+                          reveal={onboarding ? OPENING_REVEAL : undefined}
+                          stored={id}
+                          updates={<ChatUpdates />}
+                        />
+                      </SetupOpenProvider>
                     </AnswerBuildQuestionProvider>
                   </DomainPurchaseProvider>
                 </SaveDesignAnswerProvider>
