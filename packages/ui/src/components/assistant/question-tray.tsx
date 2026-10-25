@@ -904,6 +904,7 @@ function TrayFrame({
   const id = useId()
   const ownBody = useRef<HTMLDivElement>(null)
   const bodyRef = givenBody ?? ownBody
+  const contentRef = useRef<HTMLDivElement>(null)
   const rootRef = useRef<HTMLElement>(null)
   const settled = useRef<boolean>(false)
   const [more, setMore] = useState(false)
@@ -937,13 +938,24 @@ function TrayFrame({
     if (body)
       setMore(body.scrollHeight - body.scrollTop - body.clientHeight > 4)
   }
+  // The body is held at its content's height, so a new page eases to its own
+  // height instead of snapping; the frame's cap still shrinks it to scroll.
+  // The write waits a frame: the body is observed too, and resizing it in
+  // the observer's own callback would loop.
   // biome-ignore lint/correctness/useExhaustiveDependencies: measure again when the page or its state changes
   useEffect(() => {
     const body = bodyRef.current
-    if (!body) return
+    const content = contentRef.current
+    if (!body || !content) return
     measure()
-    const watch = new ResizeObserver(measure)
+    const watch = new ResizeObserver(() =>
+      requestAnimationFrame(() => {
+        body.style.height = `${content.offsetHeight}px`
+        measure()
+      })
+    )
     watch.observe(body)
+    watch.observe(content)
     return () => watch.disconnect()
   }, [page?.index, collapsed])
 
@@ -1062,12 +1074,14 @@ function TrayFrame({
                 instead, the ones in a folded section stretched the thread
                 and the composer slid as it scrolled. */}
             <div
-              className="relative flex min-h-0 flex-col gap-3 overflow-y-auto rounded-b-3xl bg-(--body) p-3"
+              className="relative min-h-0 overflow-y-auto rounded-b-3xl bg-(--body) transition-[height] duration-200 ease-out motion-reduce:transition-none"
               id={`${id}-body`}
               onScroll={measure}
               ref={bodyRef}
             >
-              {children}
+              <div className="flex flex-col gap-3 p-3" ref={contentRef}>
+                {children}
+              </div>
             </div>
             {more ? (
               // A fade, not a decoration: it says there is more below.
