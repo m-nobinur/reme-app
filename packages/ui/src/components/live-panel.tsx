@@ -306,17 +306,19 @@ function StepDetail({
       )
     }
     case "writing":
+      // Waiting, being written (several at once, as the writers run side by
+      // side), written.
       return row.items?.length ? (
         <ul aria-label="Pages" className="flex flex-wrap gap-1.5">
           {row.items.map((item) => (
             <li
               className={cn(
                 "inline-flex h-6 items-center gap-1 rounded-md border px-2 text-xs",
-                item.done
+                item.done || item.working
                   ? "border-border text-foreground"
                   : "border-dashed text-muted-foreground"
               )}
-              data-state={item.done ? "done" : "next"}
+              data-state={item.done ? "done" : item.working ? "now" : "next"}
               key={item.label}
             >
               {item.done ? (
@@ -326,8 +328,21 @@ function StepDetail({
                   weight="fill"
                 />
               ) : null}
-              {item.label}
-              {item.done ? <span className="sr-only"> (written)</span> : null}
+              {/* The shimmer masks its own box, so it takes the words, not the border. */}
+              <span
+                className={cn(
+                  !item.done &&
+                    item.working &&
+                    "shimmer shimmer-color-foreground motion-reduce:animate-none"
+                )}
+              >
+                {item.label}
+              </span>
+              {item.done ? (
+                <span className="sr-only"> (written)</span>
+              ) : item.working ? (
+                <span className="sr-only"> (being written)</span>
+              ) : null}
             </li>
           ))}
         </ul>

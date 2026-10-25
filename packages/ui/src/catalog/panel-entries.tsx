@@ -165,9 +165,14 @@ const row = (
 ): BuildActivity => ({ id, label, done, total })
 
 /** The plan's six pages as the writing step names them, the first `done` written. */
+/** The plan's pages: `done` written, the next two being written side by side. */
 const pages = (done: number) =>
   ["Home", "Services", "About", "Request a quote", "Gallery", "Contact"].map(
-    (label, i) => ({ label, done: i < done })
+    (label, i) => ({
+      label,
+      done: i < done,
+      ...(i >= done && i < done + 2 && { working: true as const }),
+    })
   )
 
 /** A full build's steps as the api lists them, at `step` with these counts. */
