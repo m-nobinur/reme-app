@@ -8,7 +8,7 @@ import {
 } from "@workspace/contracts"
 import { convertArrayToReadableStream, MockLanguageModelV4 } from "ai/test"
 import { describe, expect, it } from "vitest"
-import type { ToolPart } from "../src/chat.ts"
+import type { Part, ToolPart } from "../src/chat.ts"
 import { priceOf } from "../src/cos/agent.ts"
 import {
   applied,
@@ -363,7 +363,7 @@ describe("the plan's checks", () => {
     const again = plan({
       pending_card: "answered",
       say: "I'll create a logo for you. Now the colours.",
-      next: { kind: "ask_design" } as Plan["next"],
+      next: { kind: "ask_design", logo: "create" },
     })
     const s = typed("no logo, make one for me", o, tray)
     const shown = checkPlan(again, s)
@@ -416,6 +416,112 @@ describe("the plan's checks", () => {
         typed("dealer's choice", o, tray)
       ).join()
     ).toMatch(/site.direction is not what the card holds/)
+  })
+
+  it("opens the tray on the logo's way the owner's words chose, and on none for a bare word", () => {
+    const o = atDesign(
+      without("site.template", "site.palette", "site.font", "site.pages")
+    )
+    const tray = designCard(o, counter())
+    const logoOf = (part: Part | undefined) =>
+      ((part as ToolPart).input as AskDesignInput).questions.find(
+        (q) => q.id === "logo"
+      )
+    // The default is only a default: no way chosen.
+    expect(logoOf(tray)?.path).toBeUndefined()
+    expect(logoOf(tray)?.card.preselected).toEqual(["create"])
+    const shown = (words: string, logo?: "upload" | "create") => {
+      const s = typed(words, o, tray)
+      const checked = checkPlan(
+        plan({
+          pending_card: "answered",
+          say: "Noted. Now the colours.",
+          next: { kind: "ask_design", ...(logo && { logo }) },
+        }),
+        s
+      )
+      if (!checked.ok) throw new Error(checked.errors.join("; "))
+      return logoOf(planParts(checked.checked, s, counter())[1])
+    }
+    expect(shown("no logo, make one for me", "create")?.path).toBe("create")
+    expect(shown("I'll upload mine", "upload")?.path).toBe("upload")
+    expect(shown("the second layout")?.path).toBeUndefined()
+    // A bare yes, no, ok or skip chooses no way.
+    for (const words of ["skip", "Yes!", "ok", "no"]) {
+      expect(
+        errorsOf(
+          plan({
+            pending_card: "answered",
+            say: "Noted.",
+            next: { kind: "ask_design", logo: "create" },
+          }),
+          typed(words, o, tray)
+        ).join(),
+        words
+      ).toMatch(/they chose none/)
+    }
+    // Shown again over other words, the tray keeps the way chosen before.
+    const chosen = designCard(o, counter(), "upload")
+    const s = typed("which colours suit a window cleaner?", o, chosen)
+    const checked = checkPlan(
+      plan({ pending_card: "unanswered", say: "Calm blues suit it." }),
+      s
+    )
+    if (!checked.ok) throw new Error(checked.errors.join("; "))
+    expect(logoOf(planParts(checked.checked, s, counter())[1])?.path).toBe(
+      "upload"
+    )
+  })
+
+  it("refuses a reply that promises the logo while no way is chosen or held", () => {
+    const o = atDesign(
+      without("site.template", "site.palette", "site.font", "site.pages")
+    )
+    const said = (
+      say: string,
+      s = typed("skip", o, designCard(o, counter()))
+    ) =>
+      errorsOf(
+        plan({ pending_card: "answered", say, next: { kind: "ask_design" } }),
+        s
+      ).filter((e) => e.includes("logo"))
+    // The live replies of 2026-10-26, to "skip" and to words with no way set.
+    expect(said("No problem, I will create a logo for you.")[0]).toMatch(
+      /promises to make or use the owner's logo/
+    )
+    expect(said("I will design the logo for you.")).toHaveLength(1)
+    expect(said("Got it, I'll use your logo.")).toHaveLength(1)
+    // An offer or a question promises nothing.
+    expect(said("Upload a logo or I'll create one.")).toEqual([])
+    expect(said("Shall I design a logo for you?")).toEqual([])
+    // A way the tray carries, or a logo held, may be promised.
+    const chosen = designCard(o, counter(), "create")
+    expect(
+      said("I'll create a logo for you.", typed("skip", o, chosen))
+    ).toEqual([])
+    const held = atDesign([
+      ...without("site.template", "site.palette", "site.font", "site.pages"),
+      {
+        key: "media.uploads",
+        value: {
+          items: [
+            {
+              id: "0d9e0f10-2131-4a2b-9c3d-4e5f60718293",
+              name: "logo.png",
+              content_type: "image/png",
+              bytes: 4821,
+              use: "logo",
+            },
+          ],
+        },
+      },
+    ])
+    expect(
+      said(
+        "I'll use your logo.",
+        typed("skip", held, designCard(held, counter()))
+      )
+    ).toEqual([])
   })
 
   it("keeps the assistant card's own values for what the owner left to it, and a name to fit the pronouns they asked for", () => {
