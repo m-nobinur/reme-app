@@ -17,6 +17,7 @@ import {
   ReminderPatch,
   SetFactsRequest,
   TextAnswerSchema,
+  toE164,
   WorkspaceStatus,
 } from "../src/owner.ts"
 import { ACCEPTED, REFUSED, verdict } from "./json-schema.ts"
@@ -168,6 +169,26 @@ describe("AttentionItem", () => {
   it.each(refused)("refuses %s", (_name, item) => {
     expect(verdict("AttentionItem", AttentionItem, item)).toEqual(REFUSED)
   })
+})
+
+describe("toE164", () => {
+  it.each([
+    ["07700 900123", "+447700900123"],
+    ["(0117) 496 0124", "+441174960124"],
+    ["+44 (0)20 7946 0000", "+442079460000"],
+    ["0044 7700 900123", "+447700900123"],
+    ["+1 (206) 555-0104", "+12065550104"],
+  ])("reads %s as %s", (typed, e164) => {
+    expect(toE164(typed)).toBe(e164)
+  })
+
+  // 00 is the international prefix, so this is +1 with too few digits, never +44 0195.
+  it.each(["00195 899933", "0770 090", "+44 0123", "hello"])(
+    "cannot dial %s",
+    (typed) => {
+      expect(toE164(typed)).toBeNull()
+    }
+  )
 })
 
 describe("FactValue", () => {

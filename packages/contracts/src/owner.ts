@@ -46,6 +46,33 @@ export const ReviewValue = z.strictObject({
 })
 /** A phone number as the site stores it: E.164. */
 export const E164 = z.string().regex(/^\+[1-9]\d{6,14}$/)
+
+/**
+ * Whether an E.164 number can be dialled: a UK one has 9 or 10 digits after
+ * +44 and no trunk 0, a North American one ten digits whose area and
+ * exchange start from 2 to 9. Checked where an owner gives a number, not in
+ * `E164`, whose fixtures use short reserved numbers.
+ */
+// shortcut: UK and North American rules only, any other country is held to E.164's shape; libphonenumber when an owner elsewhere signs up.
+export const dialable = (e164: string) =>
+  E164.safeParse(e164).success &&
+  (e164.startsWith("+44")
+    ? /^\+44[1-9]\d{8,9}$/.test(e164)
+    : !e164.startsWith("+1") || /^\+1[2-9]\d{2}[2-9]\d{6}$/.test(e164))
+
+/**
+ * A number as an owner in the UK types it, in E.164, or null when it cannot
+ * be dialled. A leading 0 is the trunk prefix and drops after +44, also when
+ * typed after the country code ("+44 (0)7700 900123"); 00 is the
+ * international prefix.
+ */
+export function toE164(typed: string): string | null {
+  const digits = typed.replace(/[\s().-]/g, "").replace(/^00/, "+")
+  const e164 = (
+    digits.startsWith("0") ? `+44${digits.slice(1)}` : digits
+  ).replace(/^\+440/, "+44")
+  return dialable(e164) ? e164 : null
+}
 const fact = <K extends string, V extends z.ZodRawShape>(
   key: K,
   value: V,
