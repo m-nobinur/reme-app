@@ -1212,13 +1212,28 @@ const ordered = (p: Plan) =>
  * A planner model that streams each call's answer in turn, seven characters
  * a chunk: a plan (keys in the asked order), raw text, an Error, or a hang.
  */
-function planner(answers: (Plan | string | Error | "hang")[]) {
+function planner(answers: (Plan | string | Error | "hang" | "stall")[]) {
   const prompts: unknown[] = []
   const model = new MockLanguageModelV4({
     doStream: async (options) => {
       const answer = answers[prompts.length] ?? answers.at(-1)
       prompts.push(options.prompt)
       if (answer instanceof Error) throw answer
+      // Begins writing, then goes quiet until it is stopped.
+      if (answer === "stall") {
+        return {
+          stream: new ReadableStream({
+            start(c) {
+              c.enqueue({ type: "stream-start", warnings: [] })
+              c.enqueue({ type: "text-start", id: "t" })
+              c.enqueue({ type: "text-delta", id: "t", delta: "{" })
+              options.abortSignal?.addEventListener("abort", () =>
+                c.error(options.abortSignal?.reason)
+              )
+            },
+          }) as never,
+        }
+      }
       if (answer === "hang") {
         await new Promise((_, reject) =>
           options.abortSignal?.addEventListener("abort", () =>
@@ -1390,14 +1405,14 @@ describe("a planned turn", () => {
     if (kept.ok) expect(kept.checked.plan.say).toBe(whole)
   })
 
-  it("asks again once after a provider error, and falls back on a second or a slow call, counting the call at its worst", async () => {
+  it("asks again once after a provider error, and falls back on a second or a slow call, booking a call stopped before its first byte at nothing", async () => {
     const blip = planner([new Error("503"), plan({ say: "Noted." })])
     expect((await planTurn(blip.model, PRICE, typed("hello"))).ok).toBe(true)
     const broken = planner([new Error("503"), new Error("503")])
     const failed = await planTurn(broken.model, PRICE, typed("hello"))
     expect(failed).toMatchObject({ ok: false, reason: "provider" })
     expect(broken.prompts).toHaveLength(2)
-    expect(failed.calls[0]?.costUsd).toBeGreaterThan(0)
+    expect(failed.calls[0]?.costUsd).toBe(0)
 
     const slow = planner(["hang"])
     const started = Date.now()
@@ -1407,9 +1422,23 @@ describe("a planned turn", () => {
     })
     expect(late).toMatchObject({ ok: false, reason: "timeout" })
     expect(Date.now() - started).toBeLessThan(1_500)
+    expect(late.calls[0]?.costUsd).toBe(0)
+
+    // A call that began writing may bill, so it counts at its worst.
+    const writing = await planTurn(
+      planner(["stall"]).model,
+      PRICE,
+      typed("hello"),
+      {
+        callMs: 50,
+        totalMs: 2_000,
+      }
+    )
+    expect(writing).toMatchObject({ ok: false, reason: "timeout" })
+    expect(writing.calls[0]?.costUsd).toBeGreaterThan(0.01)
 
     // Stopped from outside: it ends at once, shows nothing, and the call
-    // still counts at its worst.
+    // bills nothing, as none was written.
     const stop = new AbortController()
     const held = planner(["hang"])
     const said: string[] = []
@@ -1424,7 +1453,7 @@ describe("a planned turn", () => {
     setTimeout(() => stop.abort(), 20)
     expect(await stopped).toMatchObject({ ok: false, shown: "" })
     expect(said).toEqual([])
-    expect((await stopped).calls[0]?.costUsd).toBeGreaterThan(0)
+    expect((await stopped).calls[0]?.costUsd).toBe(0)
     expect(held.prompts).toHaveLength(1)
   })
 
@@ -1444,9 +1473,8 @@ describe("a planned turn", () => {
     })
     expect(out).toMatchObject({ ok: true })
     expect(stalled.prompts).toHaveLength(2)
-    // The raced call may still bill, so it is counted.
+    // The raced call was stopped before its first byte, so only the kept one bills.
     expect(out.calls).toHaveLength(1)
-    expect(out.calls[0]?.costUsd).toBeGreaterThan(0)
 
     const quick = planner([
       plan({
@@ -1455,8 +1483,11 @@ describe("a planned turn", () => {
         next: { kind: "ask_open", about: "service_area.text" },
       }),
     ])
-    expect((await planTurn(quick.model, PRICE, typed("hello"))).ok).toBe(true)
+    const unraced = await planTurn(quick.model, PRICE, typed("hello"))
+    expect(unraced.ok).toBe(true)
     expect(quick.prompts).toHaveLength(1)
+    expect(out.calls[0]?.costUsd).toBeGreaterThan(0)
+    expect(out.calls[0]?.costUsd).toBe(unraced.calls[0]?.costUsd)
   })
 
   it("never lets the owner's instructions past the checks", async () => {

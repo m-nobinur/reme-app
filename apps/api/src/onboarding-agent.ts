@@ -1535,6 +1535,9 @@ export async function planTurn(
     let usage: Usage = NO_USAGE
     let cost = 0
     let errors: string[] = []
+    // This attempt's calls, and whether each began writing: one stopped
+    // before its first byte bills nothing (measured 2026-10-26).
+    const begun: { wrote: boolean }[] = []
 
     // This call's stream: shut for good once anything stops it.
     let gate: "waiting" | "open" | "shut" = onSay ? "waiting" : "shut"
@@ -1620,11 +1623,14 @@ export async function planTurn(
           // Errors arrive as stream parts below; the default handler only logs.
           onError: () => undefined,
         })
-        return {
+        const c = {
           result,
           parts: result.fullStream[Symbol.asyncIterator](),
           stop,
+          wrote: false,
         }
+        begun.push(c)
+        return c
       }
       type Call = ReturnType<typeof begin>
       // A call's parts up to its first text, or its end, whichever comes first.
@@ -1634,6 +1640,7 @@ export async function planTurn(
           const next = await c.parts.next()
           if (next.done) return { c, seen }
           seen.push(next.value)
+          if (/^(text|reasoning)-/.test(next.value.type)) c.wrote = true
           if (!QUIET.has(next.value.type)) return { c, seen }
         }
       }
@@ -1648,9 +1655,7 @@ export async function planTurn(
       })
       let won = await Promise.race([firstOpening, late])
       clearTimeout(timer)
-      let hedged = false
       if (won === "late") {
-        hedged = true
         const second = begin()
         won = await Promise.race([firstOpening, opening(second)])
         ;(won.c === first ? second : first).stop.abort()
@@ -1676,12 +1681,12 @@ export async function planTurn(
         providerMetadata: await won.c.result.providerMetadata,
       }
       usage = usageOf(step.usage)
-      // The raced call may still bill, so it counts at its worst.
+      // A raced call that began writing may still bill, so it counts at its worst.
+      const kept = won.c
       cost =
         stepCost(price, step) +
-        (hedged
-          ? worstCall(price, instructions.length + JSON.stringify(sent).length)
-          : 0)
+        begun.filter((c) => c !== kept && c.wrote).length *
+          worstCall(price, instructions.length + JSON.stringify(sent).length)
     } catch (error) {
       const timedOut =
         signal.aborted ||
@@ -1692,8 +1697,8 @@ export async function planTurn(
         messages: sent,
         raw,
         usage: NO_USAGE,
-        // Unknown, so counted at its worst: it may still bill.
-        costUsd: worstCall(price, chars),
+        // Unknown for a call that began writing, so counted at its worst.
+        costUsd: begun.filter((c) => c.wrote).length * worstCall(price, chars),
         ms: Date.now() - started,
         errors: [timedOut ? "timeout" : "provider error"],
       })
