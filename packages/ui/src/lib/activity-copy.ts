@@ -1,6 +1,7 @@
 import type {
   ActivitySegment,
   ActivityStep,
+  BuildActivity,
   CosToolName,
   OnboardingStatus,
   PlanFactKey,
@@ -14,7 +15,8 @@ import type {
  * test checks every template.
  *
  * Rules. A working line is a present participle, sentence case, 2 to 6
- * words, with no full stop and no ellipsis. A done line is past tense and
+ * words, with no full stop and no ellipsis; the pages once some are written
+ * say what is done and what is left instead. A done line is past tense and
  * carries the result when there is one. A failed line starts "Couldn't" and
  * ends on the next step. A line holds one argument at most, cleaned by
  * `cleanArg`. The words are the owner's: "your website", "your DNS", never
@@ -417,8 +419,31 @@ type StageArgs = {
   /** Photos or pages finished, and how many there are. */
   done?: number
   total?: number
+  /** Pages being written now. */
+  working?: number
+  /** The written pages' names, in the plan's order. */
+  written?: readonly string[]
   /** Things the checks found and the build is fixing. */
   fixes?: number
+}
+
+/**
+ * The pages as they are written: the first writer alone, then several at
+ * once, then what is done and what is left, naming up to two done pages.
+ */
+function writingLine(a: StageArgs) {
+  const { total, done = 0, working = 0, written = [] } = a
+  if (!total) return "Writing the pages"
+  if (done >= total) return "Putting the pages together"
+  if (done === 0) {
+    if (working > 1) return `Writing ${working} pages at once`
+    return `Writing ${plural(total, "page")}`
+  }
+  const finished =
+    written.length === done && done <= 2
+      ? written.join(" and ")
+      : plural(done, "page")
+  return `${finished} ${done === 1 ? "is" : "are"} done, ${total - done} to go`
 }
 
 type StageCopy = {
@@ -448,10 +473,7 @@ const STAGES: Record<BuildStage, StageCopy> = {
   },
   writing: {
     kind: "writing",
-    working: (a) =>
-      a.total
-        ? `Writing the pages, ${a.done ?? 0} of ${a.total}`
-        : "Writing the pages",
+    working: writingLine,
     done: (a) =>
       a.total ? `Wrote ${plural(a.total, "page")}` : "Wrote the pages",
     fail: "finish the pages",
@@ -467,7 +489,7 @@ const STAGES: Record<BuildStage, StageCopy> = {
     working: (a) =>
       a.fixes
         ? `Fixing ${plural(a.fixes, "thing")} the checks found`
-        : "Checking the pages",
+        : "Checking every page",
     done: () => "Checked the pages",
     fail: "finish the checks",
   },
@@ -678,6 +700,31 @@ const JOBS: Record<JobKind, JobCopy> = {
   },
 }
 
+/**
+ * The website's title while it is at work, by the stage it is on, so the
+ * heading says what is happening now; two ways each, as the other titles.
+ */
+const WEBSITE_NOW: Partial<
+  Record<BuildStage | "assembling", readonly string[]>
+> = {
+  planning: ["planning your website", "planning your pages"],
+  photos: ["making your photos", "making photos for your website"],
+  writing: ["writing your pages", "writing your website"],
+  assembling: ["putting your pages together", "putting your website together"],
+  polishing: ["polishing the design", "polishing your website"],
+  checking: ["checking your site", "checking every page"],
+}
+
+/** The stage a website segment is on, with the pages all written read as putting them together. */
+const websiteNow = (segment: ActivitySegment) => {
+  const step = segment.steps.find((s) => s.state === "now")
+  if (!step || !isStage(step.id)) return null
+  const count = step.count
+  return step.id === "writing" && count && count.done >= count.total
+    ? "assembling"
+    : step.id
+}
+
 /** What a waiting segment waits for, after "waiting for". */
 const WAITING: Partial<Record<ActivitySegment["kind"], string>> = {
   onboarding: "your answer",
@@ -719,6 +766,14 @@ export function segmentTitle(segment: ActivitySegment, ctx: CopyContext) {
     return pick(ctx, `${segment.kind}:waiting`, copy.waiting(n))
   }
   const done = segment.state === "done"
+  const stage =
+    segment.kind === "website" && segment.state === "now"
+      ? websiteNow(segment)
+      : null
+  const now = stage ? WEBSITE_NOW[stage] : undefined
+  if (now) {
+    return is(n.assistant, pick(ctx, `website:${stage}`, now))
+  }
   return pick(
     ctx,
     `${segment.kind}:${done ? "done" : "title"}`,
@@ -757,15 +812,23 @@ export function segmentLine(
     extras.elapsedSeconds === undefined
       ? null
       : `${elapsedText(extras.elapsedSeconds)} so far`
-  const usual =
-    segment.usual_seconds === undefined
-      ? null
-      : usualText(segment.usual_seconds)
-  // The time so far, then the lane's usual time the chat quotes too.
+  const late =
+    segment.late_seconds !== undefined &&
+    extras.elapsedSeconds !== undefined &&
+    extras.elapsedSeconds > segment.late_seconds
+  // The time so far, then what can be said of it: a restart, past the lane's
+  // p95, or the usual time the chat quotes too. Nothing it cannot back.
+  const said = segment.restarted
+    ? n.assistant
+      ? `${n.assistant} restarted it`
+      : "restarted once"
+    : late
+      ? "taking longer than usual"
+      : segment.usual_seconds === undefined
+        ? null
+        : usualText(segment.usual_seconds)
   const timing =
-    elapsed && usual
-      ? `${elapsed}, ${usual}`
-      : (elapsed ?? (usual && cap(usual)))
+    elapsed && said ? `${elapsed}, ${said}` : (elapsed ?? (said && cap(said)))
   switch (segment.kind as JobKind) {
     // The question at work says enough; no count of what is left.
     case "onboarding":
@@ -892,16 +955,30 @@ const ONBOARDING_ASKS: Readonly<Record<string, string>> = {
 }
 
 /**
- * A step's label. The website's step at work says what it is doing, with
- * its count ("Writing the pages, 3 of 6"); an onboarding step being asked is
- * its question, and the approval waited on says so; every other step, and one in a segment that stopped, is its
- * name.
+ * A step's label. The website's step at work says what it is doing from its
+ * count and, given its build row's `items`, which pages are written or at
+ * work ("Home and Services are done, 5 to go") or the repair the checks
+ * asked for; an onboarding step being asked is its question, and the
+ * approval waited on says so; every other step, and one in a segment that
+ * stopped, is its name.
  * Null for a step the table does not know, which the panel leaves out.
  */
-export function stepLabel(segment: ActivitySegment, step: ActivityStep) {
+export function stepLabel(
+  segment: ActivitySegment,
+  step: ActivityStep,
+  items?: BuildActivity["items"]
+) {
   const working = segment.state === "now" && step.state === "now"
   if (segment.kind === "website" && working && isStage(step.id)) {
-    return stageLine(step.id, "working", step.count ?? {})
+    const fixing = step.id === "checking" && items?.find((i) => !i.done)
+    if (fixing) return fixing.label
+    return stageLine(step.id, "working", {
+      ...step.count,
+      ...(items && {
+        working: items.filter((i) => i.working).length,
+        written: items.filter((i) => i.done).map((i) => i.label),
+      }),
+    })
   }
   const asked = step.state === "now" || step.state === "waiting"
   if (segment.kind === "onboarding" && asked && ONBOARDING_ASKS[step.id]) {
