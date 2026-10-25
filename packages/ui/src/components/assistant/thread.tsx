@@ -183,7 +183,7 @@ export type ThreadReveal = {
 
 type ThreadSettings = Omit<
   ThreadProps,
-  "components" | "autoFocus" | "after" | "updates"
+  "components" | "autoFocus" | "after" | "updates" | "reveal"
 >
 
 const EMPTY_COMPONENTS: ThreadComponents = {}
@@ -216,6 +216,12 @@ const groupThreadParts = (part: PartState, context?: GroupByContext) =>
 const ThreadComponentsContext =
   createContext<ThreadComponents>(EMPTY_COMPONENTS)
 const ThreadSettingsContext = createContext<ThreadSettings>(EMPTY_SETTINGS)
+// Apart from the settings, which every message would otherwise re-render on:
+// a new mode or briefing then redrew the whole transcript.
+const ThreadRevealContext = createContext<ThreadReveal | undefined>(undefined)
+
+// Module level, so the message list keeps its memo when the thread re-renders.
+const renderMessage = () => <ThreadMessage />
 
 // Startup exposes a loading placeholder thread; treat it as a new chat so
 // the composer mounts centered. Loads after startup keep the docked layout.
@@ -311,7 +317,6 @@ export const Thread: FC<ThreadProps> = ({
       briefing,
       quickActions,
       mode,
-      reveal,
     }),
     [
       stored,
@@ -321,24 +326,44 @@ export const Thread: FC<ThreadProps> = ({
       briefing,
       quickActions,
       mode,
-      reveal,
     ]
+  )
+  // Held by its parts, so a caller's inline object does not redraw every
+  // message on each of its renders, such as each workspace poll.
+  const {
+    AssistantMessage,
+    Welcome,
+    ToolFallback: Fallback,
+    ToolGroup,
+    ReasoningGroup,
+  } = components
+  const parts = useMemo(
+    () => ({
+      AssistantMessage,
+      Welcome,
+      ToolFallback: Fallback,
+      ToolGroup,
+      ReasoningGroup,
+    }),
+    [AssistantMessage, Welcome, Fallback, ToolGroup, ReasoningGroup]
   )
   // The composer's input, which a card can hand the owner to.
   const input = useRef<HTMLTextAreaElement>(null)
 
   return (
-    <ThreadComponentsContext.Provider value={components}>
+    <ThreadComponentsContext.Provider value={parts}>
       <ThreadSettingsContext.Provider value={settings}>
-        <ComposerInputContext.Provider value={input}>
-          <ThreadRoot
-            after={after}
-            autoFocus={autoFocus}
-            isEmpty={isEmpty}
-            stored={Boolean(stored)}
-            updates={updates}
-          />
-        </ComposerInputContext.Provider>
+        <ThreadRevealContext.Provider value={reveal}>
+          <ComposerInputContext.Provider value={input}>
+            <ThreadRoot
+              after={after}
+              autoFocus={autoFocus}
+              isEmpty={isEmpty}
+              stored={Boolean(stored)}
+              updates={updates}
+            />
+          </ComposerInputContext.Provider>
+        </ThreadRevealContext.Provider>
       </ThreadSettingsContext.Provider>
     </ThreadComponentsContext.Provider>
   )
@@ -520,7 +545,7 @@ const ThreadRoot: FC<{
               className="mb-14 flex flex-col gap-y-6 empty:hidden"
             >
               <ThreadPrimitive.Messages>
-                {() => <ThreadMessage />}
+                {renderMessage}
               </ThreadPrimitive.Messages>
             </div>
             <AfterSlot>{after}</AfterSlot>
@@ -994,7 +1019,7 @@ type Reveal =
  * ends it at once, and less motion skips the words.
  */
 const useReveal = (): Reveal => {
-  const { reveal } = useContext(ThreadSettingsContext)
+  const reveal = useContext(ThreadRevealContext)
   const aui = useAui()
   const [words] = useState(() => {
     const message = aui.message().getState()
