@@ -128,8 +128,8 @@ function Staff() {
               Reporting lines
             </h2>
             <p className="mb-3 max-w-prose text-muted-foreground text-sm">
-              Who reports to whom. The whole organisation, not the filter above:
-              a tree with branches missing is a misleading tree.
+              Who reports to whom, across the whole organisation. The filter
+              above does not apply here.
             </p>
             <OrgTree
               aria-label="Reporting lines"
