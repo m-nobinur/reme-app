@@ -303,6 +303,7 @@ live("a revise", () => {
         kind: "site.revise",
         goal: "Add Sundays",
         draft_revision_id: revisionId,
+        label: " your opening hours ",
       })
       expect(res.status).toBe(201)
       const body = (await res.json()) as {
@@ -325,6 +326,7 @@ live("a revise", () => {
     expect(created?.payload).toMatchObject({
       revises_revision_id: revisionId,
       draft_revision_id: revisionId,
+      label: "your opening hours",
     })
     expect(
       await kit.withOrg({ orgId }, (db) => reviseSource(db, first))
