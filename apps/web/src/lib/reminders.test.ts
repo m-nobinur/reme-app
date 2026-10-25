@@ -166,9 +166,9 @@ it("words each rule and points it where it is acted on", () => {
     },
     {
       key: `question-${REQUEST}`,
-      title: "The Developer asked about weekday hours",
+      title: "Ellie asked about weekday hours",
       detail: "Waiting for over 12 hours.",
-      action: { label: "Answer in the panel", focus: `question-${REQUEST}` },
+      action: { label: "Show the question", focus: `question-${REQUEST}` },
     },
     {
       key: `build-${BUILD}`,

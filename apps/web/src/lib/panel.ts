@@ -18,7 +18,7 @@ import {
   stepLabel,
 } from "@workspace/ui/lib/activity-copy"
 import type { AttentionItem, Workspace } from "./api/types"
-import { askerOf } from "./briefing"
+import { assistantOf, leading } from "./briefing"
 import { onboardingFor } from "./onboarding"
 import { dayOf, dueLine, upcomingNotes } from "./reminders"
 
@@ -125,7 +125,6 @@ export type PanelInput = {
   /** The organisation's name, or null before the business has one. */
   business: string | null
   conversations: Conversation[] | null
-  names: Record<string, string>
   now: Date
   /** The reader's zone, or null on the server, when no time of day is said. */
   zone: string | null
@@ -276,7 +275,7 @@ const running = (segment: ActivitySegment | undefined) =>
   segment?.state === "failed"
 
 export function panelFor(input: PanelInput): Panel | null {
-  const { workspace, business, names, now, zone } = input
+  const { workspace, business, now, zone } = input
   const { live, host, url, builds, attention } = workspace
   const activity = workspace.activity ?? NO_ACTIVITY
   const onboarding = business
@@ -441,7 +440,7 @@ export function panelFor(input: PanelInput): Panel | null {
       questions.length === 1
         ? {
             tone,
-            lead: askerOf(question, names),
+            lead: leading(assistantOf(workspace)),
             detail: "has a question for you",
           }
         : { tone, lead: `${questions.length} questions`, detail: "for you" }

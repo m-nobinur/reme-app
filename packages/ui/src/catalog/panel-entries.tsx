@@ -3,11 +3,10 @@ import {
   CheckCircleIcon,
   PulseIcon,
 } from "@phosphor-icons/react"
-import {
-  type ActivitySegment,
-  type ApprovalTarget,
-  type BuildActivity,
-  FactValueKey,
+import type {
+  ActivitySegment,
+  ApprovalTarget,
+  BuildActivity,
 } from "@workspace/contracts"
 import { buttonVariants } from "@workspace/ui/components/button"
 import {
@@ -38,16 +37,13 @@ import {
   stepKind,
   stepLabel,
 } from "@workspace/ui/lib/activity-copy"
-import { type AnswerSpec, askable } from "@workspace/ui/lib/answer"
 import { paletteStops } from "@workspace/ui/lib/blueprint"
 import type { ReactNode } from "react"
 import { BLUEPRINT } from "./blueprint-fixtures"
 
 /**
  * Catalog entries for the live panel. Every state a component has is its own
- * entry, and the states the contract defines are enumerated from it: every
- * `FactValueKey` as a question. Segments are worded by the copy table, as
- * `apps/web` words them.
+ * entry. Segments are worded by the copy table, as `apps/web` words them.
  * Brightclean and everything about it is invented; the screenshots are
  * drawn here, not taken of any site.
  */
@@ -113,18 +109,17 @@ const retry = () => new Promise<void>((done) => setTimeout(done, 400))
 /** The live site's home page on a laptop, as the panel's thumbnail. */
 const THUMBNAIL = { src: page(1440) }
 
-const ANSWER_EXPIRY = "The build waits on you until you answer."
-
-const question = (spec: AnswerSpec, title: string, extra = {}) => (
+const question = (title: string) => (
   <QuestionItem
-    askedBy="Alex"
-    expiresAt={null}
-    onAnswer={noop}
-    onExpiry={ANSWER_EXPIRY}
-    spec={spec}
+    action={
+      <button
+        className={buttonVariants({ variant: "outline", size: "sm" })}
+        type="button"
+      >
+        Answer in the chat
+      </button>
+    }
     title={title}
-    why="The contact section shows when you are open."
-    {...extra}
   />
 )
 
@@ -404,15 +399,9 @@ function SamplePanel() {
             state: "now",
             steps: along(["understanding", "making", "checking", "ready"], 2),
           })}
-          {target(
-            "question-sample",
-            question({ kind: "fact", key: "hours.weekday" }, "Weekday hours")
-          )}
+          {target("question-sample", question("Weekday hours"))}
           {target("approval-sample", approval())}
-          {target(
-            "question-more",
-            question({ kind: "fact", key: "business.phone" }, "Phone number")
-          )}
+          {target("question-more", question("Phone number"))}
         </WaitingOnYou>
         <ComingUp
           items={[
@@ -778,42 +767,7 @@ const panelCatalog: Entry[] = [
     name: "StopBuild quick edit moved on",
     render: () => <StopBuild fellThrough onStop={noop} state="implementing" />,
   },
-  {
-    name: "QuestionItem",
-    render: () =>
-      question({ kind: "fact", key: "hours.weekday" }, "Weekday hours"),
-  },
-  {
-    name: "QuestionItem kinds",
-    render: () => (
-      <div className="grid gap-4 sm:grid-cols-2">
-        {FactValueKey.options.filter(askable).map((key) => (
-          <div key={key}>{question({ kind: "fact", key }, key)}</div>
-        ))}
-        {question({ kind: "text", maxLength: 80, email: false }, "Parking")}
-        {question({ kind: "text", maxLength: 254, email: true }, "Bookings")}
-        {question(
-          { kind: "choice", options: ["Weekly", "Fortnightly", "Monthly"] },
-          "Visit frequency"
-        )}
-      </div>
-    ),
-  },
-  {
-    name: "QuestionItem pending",
-    render: () =>
-      question({ kind: "fact", key: "business.phone" }, "Phone number", {
-        pending: true,
-      }),
-  },
-  {
-    name: "QuestionItem error",
-    render: () =>
-      question({ kind: "fact", key: "business.email" }, "Email address", {
-        error:
-          "That answer does not fit the question. Check it and send it again.",
-      }),
-  },
+  { name: "QuestionItem", render: () => question("Weekday hours") },
   { name: "ApprovalItem", render: () => approval() },
   {
     name: "ApprovalItem loading",
@@ -851,7 +805,7 @@ const panelCatalog: Entry[] = [
     name,
     render: () => (
       <WaitingOnYou status="Published v3.">
-        {question({ kind: "fact", key: "business.phone" }, "Phone number")}
+        {question("Phone number")}
       </WaitingOnYou>
     ),
   })),

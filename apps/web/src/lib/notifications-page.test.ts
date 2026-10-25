@@ -11,7 +11,7 @@ import { anchorOf } from "./reminders"
 
 /**
  * The notifications page as wired: which cookie it writes, when, and where
- * its "Answer in the panel" link goes, and the shell opening the panel that
+ * its "Show the question" link goes, and the shell opening the panel that
  * link asks for. A link renders as an anchor that names its route, state
  * and hash.
  */
@@ -143,7 +143,7 @@ it("marks only the organisation on screen as seen", async () => {
 it("opens the panel on the question, with nothing about it in the address", async () => {
   await render()
   const answer = [...container.querySelectorAll("a")].find(
-    (anchor) => anchor.textContent === "Answer in the panel"
+    (anchor) => anchor.textContent === "Show the question"
   )
   expect(answer?.dataset.to).toBe("/app")
   expect(answer?.dataset.hash).toBeUndefined()

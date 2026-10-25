@@ -82,13 +82,13 @@ export const TraySlotProvider = SlotContext.Provider
 export const useTraySlot = () => useContext(SlotContext)
 
 /**
- * How to open the docked question again while the owner has it folded, for
- * the line where its call sits and for the activity panel; null while it is
- * open or nothing waits.
- * shortcut: one folded tray per page, as the thread docks one at a time;
- * key it by call if two ever dock together.
+ * The docked question, for the line where its call sits and for the activity
+ * panel: `open` unfolds it and puts the keyboard in it. Null while nothing
+ * waits.
+ * shortcut: one tray per page, as the thread docks one at a time; key it by
+ * call if two ever dock together.
  */
-type Reopen = { open: () => void; many: boolean }
+type Reopen = { open: () => void; many: boolean; folded: boolean }
 let reopen: Reopen | null = null
 const reopenWatchers = new Set<() => void>()
 const setReopen = (next: Reopen | null) => {
@@ -102,14 +102,18 @@ const watchReopen = (watch: () => void) => {
   }
 }
 
-/** A text button that opens the folded question, or nothing while none is folded. */
-export function ShowFoldedQuestion({ className }: { className?: string }) {
-  const folded = useSyncExternalStore(
+/** The docked question's handle, or null while none waits. */
+export const useDockedQuestion = () =>
+  useSyncExternalStore(
     watchReopen,
     () => reopen,
     () => null
   )
-  if (!folded) return null
+
+/** A text button that opens the folded question, or nothing while none is folded. */
+export function ShowFoldedQuestion({ className }: { className?: string }) {
+  const folded = useDockedQuestion()
+  if (!folded?.folded) return null
   return (
     <button
       className={cn(
@@ -907,6 +911,15 @@ function TrayFrame({
   const paged = page !== undefined && page.total > 1
   const count = paged ? `${page.index + 1} of ${page.total}` : null
 
+  // The page's picked or first field. Pages the owner is not on stay in the
+  // form, hidden; their fields are skipped.
+  const focusPage = () => {
+    const shown = [
+      ...(bodyRef.current?.querySelectorAll<HTMLInputElement>("input") ?? []),
+    ].filter((input) => input.checkVisibility({ checkOpacity: true }))
+    ;(shown.find((input) => input.checked) ?? shown[0])?.focus()
+  }
+
   // A new page takes the keyboard when it was in the tray, so Tab and the
   // arrow keys carry on in it; focus in the composer is left alone.
   // biome-ignore lint/correctness/useExhaustiveDependencies: only a change of page moves focus
@@ -915,12 +928,7 @@ function TrayFrame({
       settled.current = true
       return
     }
-    if (!rootRef.current?.contains(document.activeElement)) return
-    // Pages the owner is not on stay in the form, hidden; their fields are skipped.
-    const shown = [
-      ...(bodyRef.current?.querySelectorAll<HTMLInputElement>("input") ?? []),
-    ].filter((input) => input.checkVisibility({ checkOpacity: true }))
-    ;(shown.find((input) => input.checked) ?? shown[0])?.focus()
+    if (rootRef.current?.contains(document.activeElement)) focusPage()
   }, [page?.index])
 
   // Whether the body hides content below its fold, so a fade can say so.
@@ -939,13 +947,24 @@ function TrayFrame({
     return () => watch.disconnect()
   }, [page?.index, collapsed])
 
-  // Folded, the tray can be opened again from its waiting line and the panel.
-  const expand = useRef(() => onCollapsedChange(false))
-  expand.current = () => onCollapsedChange(false)
+  // The tray opens from its waiting line and the panel. Unfolding draws the
+  // body first, so the focus waits a frame.
+  const open = () => {
+    onCollapsedChange(false)
+    requestAnimationFrame(focusPage)
+  }
+  const expand = useRef(open)
+  expand.current = open
   useEffect(() => {
-    if (!collapsed) return
-    setReopen({ open: () => expand.current(), many: paged })
-    return () => setReopen(null)
+    const mine = {
+      open: () => expand.current(),
+      many: paged,
+      folded: collapsed,
+    }
+    setReopen(mine)
+    return () => {
+      if (reopen === mine) setReopen(null)
+    }
   }, [collapsed, paged])
 
   const collapse = () => {
