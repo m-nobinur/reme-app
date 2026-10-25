@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { AssignmentState } from "./assignment.ts"
+import { AssignmentState, InformationRequest } from "./assignment.ts"
 import { Timestamp, Uuid } from "./common.ts"
 
 /**
@@ -101,6 +101,21 @@ export const CompletionReport = z.strictObject({
     .min(1),
   risks: z.array(z.string().min(1)),
   decisions_needed: z.array(z.string().min(1)),
+  /**
+   * What the build left off the site for want of a fact, each asked as an
+   * `ask_chief` question would be. Once the draft is ready the assistant
+   * offers to add them. Absent on reports from before it existed.
+   */
+  left_out: z
+    .array(
+      InformationRequest.pick({
+        field: true,
+        answer_schema: true,
+        options: true,
+      }).extend({ question: InformationRequest.shape.question.unwrap() })
+    )
+    .max(10)
+    .optional(),
   reported_at: Timestamp,
 })
 

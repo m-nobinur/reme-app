@@ -3179,6 +3179,7 @@ export interface components {
                 /** @constant */
                 kind: "closed"
               }
+          field?: string
         }[]
       }
     }
@@ -4971,6 +4972,14 @@ export interface components {
       }[]
       risks: string[]
       decisions_needed: string[]
+      left_out?: {
+        field: string
+        answer_schema: {
+          [key: string]: unknown
+        }
+        options: string[] | null
+        question: string
+      }[]
       /** Format: date-time */
       reported_at: string
     }
@@ -10599,6 +10608,7 @@ export interface components {
                 /** @constant */
                 kind: "closed"
               }
+          field?: string
         }[]
       }
     }

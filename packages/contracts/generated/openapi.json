@@ -11085,6 +11085,11 @@
                           "additionalProperties": false
                         }
                       ]
+                    },
+                    "field": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100
                     }
                   },
                   "required": [
@@ -17230,6 +17235,52 @@
             "items": {
               "type": "string",
               "minLength": 1
+            }
+          },
+          "left_out": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "answer_schema": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                },
+                "options": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "question": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 300
+                }
+              },
+              "required": [
+                "field",
+                "answer_schema",
+                "options",
+                "question"
+              ],
+              "additionalProperties": false
             }
           },
           "reported_at": {
@@ -37106,6 +37157,11 @@
                           "additionalProperties": false
                         }
                       ]
+                    },
+                    "field": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100
                     }
                   },
                   "required": [
