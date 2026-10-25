@@ -934,6 +934,7 @@ const Composer: FC<{ autoFocus: boolean; expanded: boolean }> = ({
     mode,
   } = useContext(ThreadSettingsContext)
   const input = useContext(ComposerInputContext)
+  const aui = useAui()
   const idea =
     useCycle([placeholder, ...(placeholderIdeas ?? [])], 5000).item ?? ""
   // A question waits in the tray: what the owner types instead is an
@@ -976,6 +977,17 @@ const Composer: FC<{ autoFocus: boolean; expanded: boolean }> = ({
           disabled={!sendable}
           enterKeyHint="send"
           aria-label="Message input"
+          // assistant-ui sends nothing on Enter while a reply runs, but lets
+          // the key type a new line into what the owner waits to send.
+          onKeyDown={(e) => {
+            if (
+              e.key === "Enter" &&
+              !e.shiftKey &&
+              !e.nativeEvent.isComposing &&
+              aui.thread().getState().isRunning
+            )
+              e.preventDefault()
+          }}
         />
         <ComposerSend expanded={expanded} />
       </div>
