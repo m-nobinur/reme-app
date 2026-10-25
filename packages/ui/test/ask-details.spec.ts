@@ -94,6 +94,25 @@ test("the assistant tray asks for a name, pronouns, a look and a tone, a page ea
   await expect(assistant.getByRole("button", { name: "Submit" })).toBeVisible()
 })
 
+test("a filled assistant tray opens on its first page and keeps every pick in one press", async ({
+  page,
+}) => {
+  await open(page, "AskDetails")
+  const assistant = pending(page).nth(3)
+  await expect(assistant.getByText("1 of 4", { exact: true })).toBeVisible()
+  await expect(
+    assistant.getByRole("textbox", { name: "Assistant's name" })
+  ).toHaveValue("Reme")
+  // Every pick stays editable a page away.
+  await assistant.getByRole("button", { name: "Next question" }).click()
+  await expect(
+    assistant.getByRole("radio", { name: "they/them" })
+  ).toBeChecked()
+  await expect(
+    assistant.getByRole("button", { name: "Looks good" })
+  ).toBeVisible()
+})
+
 test("Escape collapses the tray to its question and the count", async ({
   page,
 }) => {

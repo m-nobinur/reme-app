@@ -1888,4 +1888,25 @@ describe("the assistant card's name ideas", () => {
     }
     expect(ideas(start({ prepared }))).toEqual(["Poppy", "Theo"])
   })
+
+  it("opens filled with the assistant as it comes, the org's own picks first", () => {
+    const prefill = (o: Onboarding) =>
+      AskDetailsInput.parse(detailsCard("assistant", o, counter()).input)
+        .prefill
+    expect(prefill(start())).toEqual([
+      { key: "assistant.name", value: { name: "Reme" } },
+      { key: "assistant.pronouns", value: { id: "they_them" } },
+      { key: "assistant.avatar", value: { id: "reme" } },
+      { key: "assistant.tone", value: { id: "friendly" } },
+    ])
+    const named = start({
+      facts: [{ key: "assistant.name", value: { name: "Maya" } }],
+    })
+    expect(prefill(named).map((fact) => fact.value)).toEqual([
+      { name: "Maya" },
+      { id: "they_them" },
+      { id: "reme" },
+      { id: "friendly" },
+    ])
+  })
 })

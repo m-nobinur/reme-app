@@ -417,8 +417,20 @@ export const factCard = (
 }
 
 /**
+ * The assistant as it comes, for the picks the org does not hold yet, so
+ * the card opens filled and one Looks good keeps them all.
+ */
+const PERSONA: FactValue[] = [
+  { key: "assistant.name", value: { name: "Reme" } },
+  { key: "assistant.pronouns", value: { id: "they_them" } },
+  { key: "assistant.avatar", value: { id: "reme" } },
+  { key: "assistant.tone", value: { id: "friendly" } },
+]
+
+/**
  * A details card: the step's facts together, each one the org holds filled
- * in, and the sign-in email offered as the business's until one is held.
+ * in, the sign-in email offered as the business's until one is held, and
+ * the assistant as it comes where nothing is held.
  */
 export const detailsCard = (
   step: DetailsStep,
@@ -433,10 +445,13 @@ export const detailsCard = (
     key: "business.email",
     value: { address: o.ownerEmail ?? "" },
   })
+  const unheld = (fact: FactValue) => !has(o, fact.key)
   const prefill =
-    step === "contact" && !has(o, "business.email") && email.success
-      ? [...held, email.data]
-      : held
+    step === "contact"
+      ? !has(o, "business.email") && email.success
+        ? [...held, email.data]
+        : held
+      : [...held, ...PERSONA.filter(unheld)]
   // Names written for this business, when the background call has them.
   const ideas = step === "assistant" ? o.prepared?.assistant_names : undefined
   return call(

@@ -284,13 +284,14 @@ function DetailsTray({
   })
   // Where this tab left off, else the first page without an answer: a name
   // the owner typed in the chat comes back filled, so the card opens past it.
+  // With every page filled it opens on the first, and Looks good on any page
+  // keeps them all.
   const firstOpen = keys.findIndex((each) => prefilled(input, each) === null)
+  const filled = firstOpen < 0
   const [page, setPage] = useState(
     Object.keys(draft.values).length > 0
       ? Math.min(draft.page, keys.length - 1)
-      : firstOpen < 0
-        ? keys.length - 1
-        : firstOpen
+      : Math.max(firstOpen, 0)
   )
   const [collapsed, setCollapsed] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
@@ -372,7 +373,7 @@ function DetailsTray({
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!last) return forward()
+    if (!(last || filled)) return forward()
     const held = values()
     const facts: FactValue[] = []
     for (const [at, each] of keys.entries()) {
@@ -400,7 +401,10 @@ function DetailsTray({
             }
           : undefined
       }
-      submit={{ label: last ? "Submit" : "Next", form: `${id}-form` }}
+      submit={{
+        label: filled ? "Looks good" : last ? "Submit" : "Next",
+        form: `${id}-form`,
+      }}
     >
       <form
         id={`${id}-form`}
