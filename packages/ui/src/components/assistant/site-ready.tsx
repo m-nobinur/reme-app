@@ -114,7 +114,7 @@ export function SiteReady({
   )
   const publish = (
     <Button
-      className="shrink-0"
+      className="relative shrink-0 overflow-visible"
       disabled={pending}
       onClick={onApprove}
       size="sm"
@@ -125,6 +125,14 @@ export function SiteReady({
         <RocketLaunchIcon aria-hidden />
       )}
       {pending ? "Publishing" : "Publish"}
+      {/* Waiting on the owner: the bell's unread mark, so it reads as theirs to do. */}
+      {pending ? null : (
+        <span
+          aria-hidden
+          className="absolute -top-1 -right-1 size-2.5 rounded-full bg-destructive ring-2 ring-card"
+          data-slot="attention-dot"
+        />
+      )}
     </Button>
   )
   const failed = error ? (

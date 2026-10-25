@@ -162,7 +162,7 @@ function ToolGroupContent({
 }
 
 /**
- * A consecutive run of tool calls, as one disclosure. This is the shape
+ * A consecutive run of tool calls at work, as one disclosure. This is the shape
  * `Thread`'s `ToolGroup` slot passes, so the composition lives here rather than
  * inline in the thread.
  */
@@ -171,8 +171,12 @@ const ToolGroup: FC<PropsWithChildren<{ group: ThreadGroupPart }>> = ({
   children,
 }) => {
   // A "1 tool call" disclosure wrapping one tool call's own disclosure costs
-  // the reader two taps to see one thing. Group only what there is a group of.
-  if (group.indices.length < 2) return children
+  // the reader two taps to see one thing. Group only what there is a group of,
+  // and only while it runs: once done, reads draw nothing and a card stands
+  // on its own, so "Checked 3 things" would open onto nothing.
+  if (group.indices.length < 2 || group.status.type !== "running") {
+    return children
+  }
 
   return (
     <ToolGroupRoot>

@@ -16,8 +16,9 @@ import { decisionView, isRetried } from "@workspace/ui/lib/tool-state"
  * proposes. The change text is the immutable target and stays on screen in
  * every state, and "started" shows only once the server says a build exists.
  * Onboarding's own first build, once started, draws nothing: the owner never
- * asked for it in those words, and the panel shows it. Nor does a refusal the
- * assistant followed with another try.
+ * asked for it in those words, and the panel shows it. Nor does a change the
+ * owner's own words started with no card, nor a refusal the assistant
+ * followed with another try.
  */
 
 const RequestChange: ToolCallMessagePartComponent = (props) => {
@@ -25,11 +26,13 @@ const RequestChange: ToolCallMessagePartComponent = (props) => {
   const retried = useAuiState((s) =>
     isRetried(s.message.parts, props.toolCallId)
   )
+  // Started with no card to answer: the owner's message and the reply say it.
+  const asked = (props as { approval?: unknown }).approval != null
   if (
     retried ||
     (view.state === "done" &&
-      view.input.text === ONBOARDING_GOAL &&
-      view.output?.outcome === "started")
+      view.output?.outcome === "started" &&
+      (!asked || view.input.text === ONBOARDING_GOAL))
   ) {
     return null
   }

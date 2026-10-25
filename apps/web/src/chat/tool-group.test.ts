@@ -24,7 +24,7 @@ async function label(status: "running" | "complete") {
   return text
 }
 
-it("says what it is checking while it checks, and what it checked after", async () => {
+it("says what it is checking while it checks, and draws no disclosure after", async () => {
   expect(await label("running")).toBe("Checking 2 things")
-  expect(await label("complete")).toBe("Checked 2 things")
+  expect(await label("complete")).toBeUndefined()
 })

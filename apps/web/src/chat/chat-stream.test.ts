@@ -1155,12 +1155,12 @@ it("shows every Chief of Staff tool in the owner's words, and nothing of its wir
       }),
     ],
   })
-  await press(chat, "Checked 3 things")
   const shown = chat.textContent ?? ""
+  // Finished reads draw nothing, and a finished run of calls no disclosure.
+  for (const quiet of ["Checked 3 things", "Found your details"]) {
+    expect(shown, quiet).not.toContain(quiet)
+  }
   for (const text of [
-    "Checked where things stand",
-    "Found your details",
-    "Checked the preview",
     "You have started as many builds as a day allows. Try again tomorrow.",
     "We could not confirm this went through.",
     "Weekday hours: 08:00 to 18:00",
@@ -1392,7 +1392,6 @@ it("renders every piece of model or owner text on a card as text, never as marku
       }),
     ],
   })
-  await press(chat, "Checked 2 things")
   // A read shows its line alone, so three places the text lands: the
   // change, the answer and the reminder, each as the characters it is.
   expect(chat.textContent?.split(INJECTED)).toHaveLength(4)

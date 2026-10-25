@@ -27,7 +27,7 @@ import {
 } from "@workspace/ui/components/assistant/domain"
 import { ConnectGoogle } from "@workspace/ui/components/assistant/google"
 import { ToolStatus } from "@workspace/ui/components/status-line"
-import { type ToolArgs, toolLine } from "@workspace/ui/lib/activity-copy"
+import type { ToolArgs } from "@workspace/ui/lib/activity-copy"
 import { factLabel, factText } from "@workspace/ui/lib/facts"
 import { formatDateTime } from "@workspace/ui/lib/format"
 import { refusalText } from "@workspace/ui/lib/refusal"
@@ -49,7 +49,7 @@ import { createContext, useContext } from "react"
 
 /* Reads ----------------------------------------------------------------- */
 
-/** One read: a line while it runs, then the same line, done. The reply says what it found. */
+/** One read: a line while it runs, then nothing, since the reply says what it found. */
 function Read<O>({
   view,
   tool,
@@ -63,16 +63,7 @@ function Read<O>({
 }) {
   // A read the stream left running is over once its message is.
   const running = useAuiState((s) => s.message.status?.type === "running")
-  if (view.state === "done") {
-    return (
-      <p
-        className="px-1 py-1.5 text-chat-step text-muted-foreground"
-        data-slot={slot}
-      >
-        {toolLine(tool, "done", args)}
-      </p>
-    )
-  }
+  if (view.state === "done") return null
   const state =
     view.state === "working" && running
       ? "working"
