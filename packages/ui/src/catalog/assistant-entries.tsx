@@ -35,6 +35,7 @@ import {
 import { ChangeAskedUI } from "@workspace/ui/components/assistant/change-asked"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
 import { MemoryChipUI } from "@workspace/ui/components/assistant/memory-chip"
+import { PersonaCardUI } from "@workspace/ui/components/assistant/persona-card"
 import { TrayFrame } from "@workspace/ui/components/assistant/question-tray"
 import { ServerButtonUI } from "@workspace/ui/components/assistant/server-button"
 import { SiteReady } from "@workspace/ui/components/assistant/site-ready"
@@ -1655,6 +1656,31 @@ const CONNECT_GOOGLE_STATES: ThreadMessageLike[] = [
   }),
 ]
 
+/** The reply to the assistant set-up, after Pick for me: the persona as set. */
+const PERSONA: ThreadMessageLike[] = [
+  ask("Pick for me"),
+  {
+    content: [
+      {
+        text: "I've gone with Reme, she/her, with a professional manner.",
+        type: "text",
+      },
+      {
+        type: "data",
+        name: "persona",
+        data: {
+          name: "Reme",
+          pronouns: "she_her",
+          avatar: "she_1",
+          tone: "professional",
+        },
+      },
+    ],
+    role: "assistant",
+    status: DONE,
+  },
+]
+
 /** A reply that opens with what the assistant remembered since the owner last looked. */
 const REMEMBERED: ThreadMessageLike[] = [
   ask("Thanks, that is all."),
@@ -2672,6 +2698,14 @@ const assistantCatalog = [
     render: () => (
       <FixtureThread height="h-[24rem]" messages={REMEMBERED}>
         <MemoryChipUI />
+      </FixtureThread>
+    ),
+  },
+  {
+    name: "PersonaCardUI",
+    render: () => (
+      <FixtureThread height="h-[22rem]" messages={PERSONA}>
+        <PersonaCardUI />
       </FixtureThread>
     ),
   },

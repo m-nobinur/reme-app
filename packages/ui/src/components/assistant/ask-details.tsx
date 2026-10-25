@@ -38,11 +38,12 @@ import { type FocusEvent, type FormEvent, useId, useRef, useState } from "react"
  * until the last one reads. Every page stays in the form, hidden, so going
  * back finds what was typed, and a reload resumes on the page reached. The
  * assistant's pages also offer Pick for me, which sends at once with the
- * prefill for anything left empty. Once answered or skipped it shows nothing:
- * the owner's reply after it says what they gave.
+ * prefill for anything left empty, and the owner's reply reads Pick for me.
+ * Once answered or skipped it shows nothing: the owner's reply after it says
+ * what they gave.
  */
 
-type Answer = { answer: "stated"; facts: FactValue[] }
+type Answer = { answer: "stated"; facts: FactValue[]; skip_all?: boolean }
 
 const PICKS = {
   "assistant.pronouns": {
@@ -370,7 +371,7 @@ function DetailsTray({
   }
 
   /** Every key's fact from `held`, else the page of the first one wrong. */
-  const send = (held: Record<string, string>) => {
+  const send = (held: Record<string, string>, picked = false) => {
     const facts: FactValue[] = []
     for (const [at, each] of keys.entries()) {
       const result = read(each, held)
@@ -378,7 +379,7 @@ function DetailsTray({
       facts.push(result.fact)
     }
     // The draft stays: a refused answer reopens the card with it.
-    onAnswer({ answer: "stated", facts })
+    onAnswer({ answer: "stated", facts, ...(picked && { skip_all: true }) })
   }
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -387,22 +388,25 @@ function DetailsTray({
   }
   // What the owner set, and the prefill for any field left empty.
   const pickForMe = () =>
-    send({
-      ...Object.fromEntries(
-        keys.flatMap((each) => {
-          const value = prefilled(input, each)
-          return isPick(each)
-            ? [[each, String(value?.id ?? "")]]
-            : FACT_INPUTS[each].fields.map((field) => [
-                field.name,
-                String(value?.[field.name] ?? ""),
-              ])
-        })
-      ),
-      ...Object.fromEntries(
-        Object.entries(values()).filter(([, value]) => value.trim())
-      ),
-    })
+    send(
+      {
+        ...Object.fromEntries(
+          keys.flatMap((each) => {
+            const value = prefilled(input, each)
+            return isPick(each)
+              ? [[each, String(value?.id ?? "")]]
+              : FACT_INPUTS[each].fields.map((field) => [
+                  field.name,
+                  String(value?.[field.name] ?? ""),
+                ])
+          })
+        ),
+        ...Object.fromEntries(
+          Object.entries(values()).filter(([, value]) => value.trim())
+        ),
+      },
+      true
+    )
 
   return (
     <TrayFrame

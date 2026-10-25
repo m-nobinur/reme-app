@@ -22,6 +22,7 @@ import { DomainPurchaseProvider } from "@workspace/ui/components/assistant/buy-d
 import { ChangeAskedUI } from "@workspace/ui/components/assistant/change-asked"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
 import { MemoryChipUI } from "@workspace/ui/components/assistant/memory-chip"
+import { PersonaCardUI } from "@workspace/ui/components/assistant/persona-card"
 import { ServerButtonUI } from "@workspace/ui/components/assistant/server-button"
 import {
   OWNER_QUICK_ACTIONS,
@@ -194,6 +195,7 @@ export function ChatPage() {
       <ChangeAskedUI />
       <BuildQuestionsUI />
       <MemoryChipUI />
+      <PersonaCardUI />
       {/* The shell's main scrolls; the thread owns its own scroll instead. */}
       <div className="h-full">
         {missing ? (

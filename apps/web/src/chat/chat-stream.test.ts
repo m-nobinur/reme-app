@@ -6,11 +6,16 @@ import {
   AssistantRuntimeProvider,
   useRemoteThreadListRuntime,
 } from "@assistant-ui/react"
-import { ChatRequest, TOOL_CALL_CANCELLED } from "@workspace/contracts"
+import {
+  ChatRequest,
+  PERSONA_CARD,
+  TOOL_CALL_CANCELLED,
+} from "@workspace/contracts"
 import { Approval } from "@workspace/ui/components/assistant/approval"
 import { SaveDesignAnswerProvider } from "@workspace/ui/components/assistant/ask-design"
 import { ChangeAskedUI } from "@workspace/ui/components/assistant/change-asked"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
+import { PersonaCardUI } from "@workspace/ui/components/assistant/persona-card"
 import { ServerButtonUI } from "@workspace/ui/components/assistant/server-button"
 import { Thread } from "@workspace/ui/components/assistant/thread"
 import { act, createElement, useEffect, useState } from "react"
@@ -219,6 +224,7 @@ function Chat() {
     { runtime },
     createElement(ServerButtonUI),
     createElement(ChangeAskedUI),
+    createElement(PersonaCardUI),
     createElement(
       CosToolsProvider,
       { value: tools },
@@ -394,6 +400,38 @@ it("a change asked for in the panel reads as one resolved line", async () => {
   expect(line?.textContent).toBe(
     "Asked for changes: Make the hero say end of tenancy cleans.Your new version will show here when it's ready."
   )
+})
+
+it("the reply to the assistant set-up shows the persona as a card", async () => {
+  const start = FIXTURE.histories.start as {
+    messages: { id: string; parent_id: string | null; content: unknown }[]
+  }
+  const [first] = start.messages
+  const reply = {
+    ...first,
+    id: "msg_persona",
+    parent_id: first?.id ?? null,
+    content: {
+      role: "assistant",
+      parts: [
+        { type: "step-start" },
+        {
+          type: PERSONA_CARD,
+          data: {
+            name: "Reme",
+            pronouns: "she_her",
+            avatar: "she_1",
+            tone: "professional",
+          },
+        },
+      ],
+      metadata: { custom: { createdAt: "2026-09-26T19:45:00.000Z" } },
+    },
+  }
+  const container = await open({ messages: [first, reply] })
+  const card = container.querySelector('[data-slot="persona-card"]')
+  expect(card?.getAttribute("aria-label")).toBe("Your assistant")
+  expect(card?.textContent).toBe("Remeshe/her · Professional")
 })
 
 it("typing with focus on a link goes to the composer, and Space opens nothing", async () => {
@@ -1714,7 +1752,11 @@ it("the assistant tray opens on the defaults, ticked, says Next before the last 
   await press(chat, "Pick for me")
   await vi.waitFor(() => expect(sent).toHaveLength(1))
   expect(sent[0]).toMatchObject({
-    turn: { results: [{ output: { answer: "stated", facts: PERSONA } }] },
+    turn: {
+      results: [
+        { output: { answer: "stated", facts: PERSONA, skip_all: true } },
+      ],
+    },
   })
 })
 
