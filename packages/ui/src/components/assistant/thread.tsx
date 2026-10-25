@@ -455,6 +455,10 @@ const FollowBottom: FC<{
     // which suits a footer laid over the messages, not ours.
     const atBottom = () =>
       viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop <= 1
+    const glide = (): ScrollBehavior =>
+      matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "instant"
+        : "smooth"
     // Read before a resize moves anything: scroll events come after it.
     let pinned = atBottom()
     let last = { top: viewport.scrollTop, height: viewport.scrollHeight }
@@ -470,8 +474,12 @@ const FollowBottom: FC<{
         after.getBoundingClientRect().bottom >
           footer.getBoundingClientRect().top + 1
       )
+    // Where the view was before the content shrank and the browser clamped
+    // the scroll, when that clamp's scroll event comes before the resize.
+    let rest: number | null = null
     const onScroll = () => {
       const { scrollTop: top, scrollHeight: height } = viewport
+      rest = pinned && top < last.top && height < last.height ? last.top : null
       if (top < last.top && height === last.height) pinned = false
       else if (atBottom()) pinned = true
       last = { top, height }
@@ -491,12 +499,8 @@ const FollowBottom: FC<{
         ) {
           store.getState().setTopAnchorTurn(null)
         }
-        const still = matchMedia("(prefers-reduced-motion: reduce)").matches
         requestAnimationFrame(() =>
-          viewport.scrollTo({
-            top: viewport.scrollHeight,
-            behavior: still ? "instant" : "smooth",
-          })
+          viewport.scrollTo({ top: viewport.scrollHeight, behavior: glide() })
         )
       })
     }
@@ -541,11 +545,19 @@ const FollowBottom: FC<{
       const landed = after.offsetHeight > slot
       slot = after.offsetHeight
       if (landed) follow.current()
-      // With the space held, the bottom is where the owner's message sits at
-      // the top, so this puts back what the clamp took. A tray growing over
-      // that space leaves the message where it is; one docking under a reply
-      // that already filled the view keeps the reader at its end.
-      if ((shrank || resized || (grew && !held)) && pinned) {
+      // Puts back what the clamp took, then goes on to the bottom: with the
+      // space held, where the owner's message sits at the top. A send that
+      // takes the tray or Skip this one away with it glides there as a typed
+      // one does; going straight to the bottom left assistant-ui no glide.
+      const back = rest ?? last.top
+      if ((shrank || resized) && pinned && viewport.scrollTop < back) {
+        viewport.scrollTo({ top: back, behavior: "instant" })
+        viewport.scrollTo({ top: viewport.scrollHeight, behavior: glide() })
+      }
+      // A tray growing over that space leaves the message where it is; one
+      // docking under a reply that already filled the view keeps the reader
+      // at its end.
+      if (grew && !held && pinned) {
         viewport.scrollTo({ top: viewport.scrollHeight, behavior: "instant" })
       }
       // assistant-ui reads `isAtBottom` on a scroll, or on a resize that

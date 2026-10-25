@@ -118,7 +118,16 @@ const readScroll = (viewport: Element) => {
   }
   return clamped
 }
+/**
+ * Smooth scrolls under way, eased over a few frames as a browser does. Off,
+ * one lands at once, and the frames sampled are where it settles.
+ */
+let glide = false
+const GLIDE_FRAMES = 8
+const gliding = new Map<Element, { from: number; to: number; step: number }>()
 const writeScroll = (viewport: Element, top: number) => {
+  // Any other scroll stops a glide in flight.
+  gliding.delete(viewport)
   const next = Math.max(0, Math.min(top, maxScroll(viewport)))
   if (next !== (scrolled.get(viewport) ?? 0)) pendingScroll.add(viewport)
   scrolled.set(viewport, next)
@@ -215,9 +224,14 @@ function patchLayout() {
     },
     scrollTo: {
       configurable: true,
-      // A smooth scroll lands at once here; the frames sampled are where it settles.
       value(this: HTMLElement, options?: ScrollToOptions) {
-        if (options?.top !== undefined) writeScroll(this, options.top)
+        if (options?.top === undefined) return
+        if (!glide || options.behavior !== "smooth") {
+          return writeScroll(this, options.top)
+        }
+        const from = readScroll(this)
+        const to = Math.max(0, Math.min(options.top, maxScroll(this)))
+        gliding.set(this, { from, to, step: 0 })
       },
     },
   })
@@ -271,6 +285,12 @@ let clock = 0
 async function frame() {
   clock += 16
   await act(async () => {
+    for (const [viewport, { from, to, step }] of [...gliding]) {
+      const t = (step + 1) / GLIDE_FRAMES
+      const eased = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2
+      writeScroll(viewport, Math.round(from + (to - from) * eased))
+      if (t < 1) gliding.set(viewport, { from, to, step: step + 1 })
+    }
     for (const viewport of [...pendingScroll]) {
       pendingScroll.delete(viewport)
       viewport.dispatchEvent(new Event("scroll"))
@@ -359,6 +379,8 @@ let root: Root
 beforeEach(async () => {
   layout = { clientHeight: 729, footer: 80, slot: 0, rows: new Map() }
   painted = []
+  glide = false
+  gliding.clear()
   animation = new Map()
   vi.stubGlobal("ResizeObserver", FakeResizeObserver)
   vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
@@ -579,3 +601,51 @@ it("the persona card waits for the words above it to finish typing in", async ()
       ?.textContent
   ).toContain("friendly and clear.")
 })
+
+/**
+ * Every way the owner sends glides their message up from the bottom, as a
+ * typed send does: an answer on the tray (a card, Pick for me, Looks good or
+ * Next) and Skip this one take what sat above the composer away as they send.
+ */
+const SENDS = [
+  { what: "a typed message", footer: 80, leavesFirst: false },
+  { what: "an answer on the tray", footer: 421, leavesFirst: false },
+  {
+    what: "an answer on the tray, gone a frame early",
+    footer: 421,
+    leavesFirst: true,
+  },
+  { what: "Skip this one", footer: 124, leavesFirst: false },
+]
+for (const { what, footer, leavesFirst } of SENDS) {
+  it(`${what} glides the owner's message to the top`, async () => {
+    layout.footer = footer
+    await frames()
+    await sendAndReply("u1")
+    glide = true
+    const from = painted.length
+    layout.footer = 80
+    if (leavesFirst) await frame()
+    await setState({
+      messages: [
+        ...state.messages,
+        said("u2", "user", "Something else"),
+        { ...said("u2-reply", "assistant", ""), status: { type: "running" } },
+      ],
+      isRunning: true,
+    })
+    await frames(GLIDE_FRAMES + 4)
+    // From the frame it lands, the new message shows under the reply where
+    // the composer was, with nothing above it moved, then rises.
+    const path = painted.slice(from + (leavesFirst ? 1 : 0))
+    const trace = path.join(" ")
+    expect(path[0], trace).toBe(USER_ROW + 260)
+    expect(path.at(-1), trace).toBe(0)
+    expect(
+      path.every((top, i) => i === 0 || top <= (path[i - 1] ?? top)),
+      trace
+    ).toBe(true)
+    const steps = path.filter((top, i) => i > 0 && top !== path[i - 1])
+    expect(steps.length, trace).toBeGreaterThanOrEqual(GLIDE_FRAMES - 1)
+  })
+}
