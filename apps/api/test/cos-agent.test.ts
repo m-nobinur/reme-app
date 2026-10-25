@@ -7,6 +7,7 @@ import {
   CosToolResult,
   CosTurn,
   CreateReminderRequest,
+  ONBOARDING_STATUS,
   TOOL_FAILED,
   TOOL_UNKNOWN,
   toolErrorKind,
@@ -2678,7 +2679,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     const first = await turn(me, typed(id, "Add a Saturday slot."), {
       model: scripted(
         reasoned(
-          "The owner wants a change; propose it.",
+          "**Prioritizing The Saturday Slot**\nThe owner wants a change; propose it.",
           calls({
             id: "call_rc",
             tool: "request_change",
@@ -2689,8 +2690,22 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     })
     expect(first.response.status, first.text).toBe(200)
     expect(first.chunks.some((c) => c.type.startsWith("reasoning"))).toBe(false)
+    // Only the thought's heading reaches the owner, as a transient status.
+    const statuses = first.chunks.filter((c) => c.type === ONBOARDING_STATUS)
+    expect(statuses).toEqual([
+      {
+        type: ONBOARDING_STATUS,
+        data: {
+          on: { kind: "thinking", text: "Prioritising the Saturday slot" },
+          facts: [],
+        },
+        transient: true,
+      },
+    ])
+    expect(first.text).not.toContain("The owner wants a change")
     const tail = await tailOf(me, id)
     expect(tail.parts.some((p) => p.type === "reasoning")).toBe(false)
+    expect(JSON.stringify(tail)).not.toContain("Prioritising")
     const logged = (await logOf(id)).filter((e) => e.type === "cos.message")
     expect(JSON.stringify(logged.at(-1)?.payload)).toContain(
       "The owner wants a change"

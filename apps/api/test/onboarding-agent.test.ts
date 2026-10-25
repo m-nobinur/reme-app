@@ -1386,7 +1386,12 @@ const ordered = (p: Plan) =>
  * A planner model that streams each call's answer in turn, seven characters
  * a chunk: a plan (keys in the asked order), raw text, an Error, or a hang.
  */
-function planner(answers: (Plan | string | Error | "hang" | "stall")[]) {
+/** A call that thinks in `thinks` for `ms` before writing `writes`. */
+type Thinking = { thinks: string[]; ms: number; writes: Plan }
+
+function planner(
+  answers: (Plan | Thinking | string | Error | "hang" | "stall")[]
+) {
   const prompts: unknown[] = []
   const model = new MockLanguageModelV4({
     doStream: async (options) => {
@@ -1415,28 +1420,58 @@ function planner(answers: (Plan | string | Error | "hang" | "stall")[]) {
           )
         )
       }
-      const text = typeof answer === "string" ? answer : ordered(answer as Plan)
+      const thinking =
+        typeof answer === "object" && "thinks" in answer ? answer : null
+      const text =
+        typeof answer === "string"
+          ? answer
+          : ordered((thinking?.writes ?? answer) as Plan)
       const deltas = text.match(/[\s\S]{1,7}/g) ?? []
-      return {
-        stream: convertArrayToReadableStream([
-          { type: "stream-start", warnings: [] },
-          { type: "text-start", id: "t" },
-          ...deltas.map((delta) => ({ type: "text-delta", id: "t", delta })),
-          { type: "text-end", id: "t" },
-          {
-            type: "finish",
-            finishReason: { unified: "stop", raw: undefined },
-            usage: {
-              inputTokens: {
-                total: 4000,
-                noCache: 3000,
-                cacheRead: 1000,
-                cacheWrite: undefined,
-              },
-              outputTokens: { total: 300, text: 300, reasoning: undefined },
+      const parts = [
+        { type: "stream-start", warnings: [] },
+        ...(thinking
+          ? [
+              { type: "reasoning-start", id: "r" },
+              ...thinking.thinks.map((delta) => ({
+                type: "reasoning-delta",
+                id: "r",
+                delta,
+              })),
+              { type: "reasoning-end", id: "r" },
+            ]
+          : []),
+        { type: "text-start", id: "t" },
+        ...deltas.map((delta) => ({ type: "text-delta", id: "t", delta })),
+        { type: "text-end", id: "t" },
+        {
+          type: "finish",
+          finishReason: { unified: "stop", raw: undefined },
+          usage: {
+            inputTokens: {
+              total: 4000,
+              noCache: 3000,
+              cacheRead: 1000,
+              cacheWrite: undefined,
             },
+            outputTokens: { total: 300, text: 300, reasoning: undefined },
           },
-        ]) as never,
+        },
+      ]
+      if (!thinking) {
+        return { stream: convertArrayToReadableStream(parts) as never }
+      }
+      // Its thoughts at once, its first text only after `ms`.
+      return {
+        stream: new ReadableStream({
+          async pull(c) {
+            const part = parts.shift()
+            if (!part) return c.close()
+            if (part.type === "text-start") {
+              await new Promise((resolve) => setTimeout(resolve, thinking.ms))
+            }
+            c.enqueue(part)
+          },
+        }) as never,
       }
     },
   })
@@ -1662,6 +1697,40 @@ describe("a planned turn", () => {
     expect(quick.prompts).toHaveLength(1)
     expect(out.calls[0]?.costUsd).toBeGreaterThan(0)
     expect(out.calls[0]?.costUsd).toBe(unraced.calls[0]?.costUsd)
+  })
+
+  it("lets a thinking call keep its time, and sends its thoughts' headings", async () => {
+    const seen: unknown[] = []
+    const thinker = planner([
+      {
+        thinks: [
+          "**Evaluating Service Models**\n\nThe owner offers regular cleans.",
+        ],
+        ms: 200,
+        writes: plan({
+          facts: {},
+          say: "Got it. Which areas do you cover?",
+          next: { kind: "ask_open", about: "service_area.text" },
+        }),
+      },
+    ])
+    const out = await planTurn(
+      thinker.model,
+      PRICE,
+      typed("hello"),
+      { callMs: 5_000, totalMs: 10_000, hedgeMs: 50 },
+      () => undefined,
+      undefined,
+      { send: (status) => seen.push(status), commit: async () => [] }
+    )
+    expect(out).toMatchObject({ ok: true })
+    // Past the hedge, but thinking: never raced.
+    expect(thinker.prompts).toHaveLength(1)
+    expect(seen[0]).toEqual({
+      on: { kind: "thinking", text: "Evaluating service models" },
+      facts: [],
+    })
+    expect(JSON.stringify(seen)).not.toContain("regular cleans")
   })
 
   it("never lets the owner's instructions past the checks", async () => {

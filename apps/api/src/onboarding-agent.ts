@@ -82,6 +82,7 @@ import {
   OPTIONAL_ASKS,
   onboardingSteps,
 } from "./onboarding-progress.ts"
+import { thoughtHeadings } from "./thinking.ts"
 import { VOICE, voiceProblems } from "./voice.ts"
 
 /**
@@ -132,8 +133,8 @@ export const PLANNER = {
    */
   callMs: 60_000,
   /**
-   * A call that has written nothing after this long is raced by an identical
-   * one, and the first to write wins. Measured 2026-10-01: Gemini 3.8 Flash
+   * A call that has written nothing, nor begun to think, after this long is
+   * raced by an identical one, and the first to write wins. Measured 2026-10-01: Gemini 3.8 Flash
    * answered in 1.6 to 3.8 s or in 17 to 20 s, nothing between, while the
    * same request sent raw never passed 5 s; the slow mode is a host stalling.
    */
@@ -1714,19 +1715,24 @@ export async function planTurn(
           result,
           parts: result.fullStream[Symbol.asyncIterator](),
           stop,
-          wrote: false,
+          wrote: false as boolean,
+          think: thoughtHeadings((line) =>
+            tell({ on: { kind: "thinking", text: line }, facts: [] })
+          ),
         }
         begun.push(c)
         return c
       }
       type Call = ReturnType<typeof begin>
-      // A call's parts up to its first text, or its end, whichever comes first.
+      // A call's parts up to its first text, or its end, whichever comes
+      // first. Its thoughts' headings go out as they come.
       const opening = async (c: Call) => {
         const seen = []
         for (;;) {
           const next = await c.parts.next()
           if (next.done) return { c, seen }
           seen.push(next.value)
+          if (next.value.type === "reasoning-delta") c.think(next.value.text)
           if (/^(text|reasoning)-/.test(next.value.type)) c.wrote = true
           if (!QUIET.has(next.value.type)) return { c, seen }
         }
@@ -1734,11 +1740,11 @@ export async function planTurn(
       const first = begin()
       const firstOpening = opening(first)
       let timer: ReturnType<typeof setTimeout> | undefined
+      // A call that is thinking is alive, not stalled: it keeps its time.
       const late = new Promise<"late">((resolve) => {
-        timer = setTimeout(
-          () => resolve("late"),
-          limits.hedgeMs ?? PLANNER.hedgeMs
-        )
+        timer = setTimeout(() => {
+          if (!first.wrote) resolve("late")
+        }, limits.hedgeMs ?? PLANNER.hedgeMs)
       })
       let won = await Promise.race([firstOpening, late])
       clearTimeout(timer)

@@ -3,6 +3,8 @@ import {
   CosToolName,
   type CosTurn,
   type MemoryChip,
+  ONBOARDING_STATUS,
+  type OnboardingStatus,
 } from "@workspace/contracts"
 import type { OrgScopedDb } from "@workspace/db"
 import {
@@ -13,6 +15,7 @@ import {
   type UIMessageChunk,
 } from "ai"
 import { withoutProviderData } from "../http.ts"
+import { thoughtHeadings } from "../thinking.ts"
 import {
   type AgentTurn,
   caughtUp,
@@ -250,7 +253,18 @@ export async function streamTurn(
   let finish: UIMessageChunk | null = null
   let errored = queued.some((c) => c.type === "error")
   // Reasoning counts as content above and stays in the log, but the owner
-  // never sees it, as a chunk or as a provider's data on one.
+  // never sees it, as a chunk or as a provider's data on one: only each
+  // thought's heading, as a transient status.
+  const think = thoughtHeadings((text) =>
+    queued.push({
+      type: ONBOARDING_STATUS,
+      data: {
+        on: { kind: "thinking", text },
+        facts: [],
+      } satisfies OnboardingStatus,
+      transient: true,
+    })
+  )
   const body = new ReadableStream<UIMessageChunk>({
     async pull(controller) {
       for (;;) {
@@ -261,6 +275,7 @@ export async function streamTurn(
           chunk = value
         }
         if (chunk.type === "finish") finish = chunk
+        else if (chunk.type === "reasoning-delta") think(chunk.delta)
         else if (!chunk.type.startsWith("reasoning-")) {
           if (chunk.type === "error") errored = true
           controller.enqueue(withoutProviderData(chunk))
