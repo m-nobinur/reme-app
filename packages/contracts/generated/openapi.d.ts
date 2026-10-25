@@ -5713,6 +5713,7 @@ export interface components {
                 running_minutes: number
                 quiet_minutes: number
                 overdue: boolean
+                range: string
               }
               restarted?: {
                 minutes_ago: number
@@ -5850,6 +5851,10 @@ export interface components {
                 p50: number
                 p95: number
               }
+            }
+            expected_range?: {
+              quick: string
+              full: string
             }
           }
         }
@@ -7697,6 +7702,7 @@ export interface components {
           running_minutes: number
           quiet_minutes: number
           overdue: boolean
+          range: string
         }
         restarted?: {
           minutes_ago: number
@@ -7824,6 +7830,10 @@ export interface components {
           p50: number
           p95: number
         }
+      }
+      expected_range?: {
+        quick: string
+        full: string
       }
     }
     CreateOrgRequest: {

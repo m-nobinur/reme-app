@@ -19963,12 +19963,17 @@
                             },
                             "overdue": {
                               "type": "boolean"
+                            },
+                            "range": {
+                              "type": "string",
+                              "maxLength": 40
                             }
                           },
                           "required": [
                             "running_minutes",
                             "quiet_minutes",
-                            "overdue"
+                            "overdue",
+                            "range"
                           ],
                           "additionalProperties": false
                         },
@@ -20389,6 +20394,24 @@
                     "required": [
                       "full",
                       "quick"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "expected_range": {
+                    "type": "object",
+                    "properties": {
+                      "quick": {
+                        "type": "string",
+                        "maxLength": 40
+                      },
+                      "full": {
+                        "type": "string",
+                        "maxLength": 40
+                      }
+                    },
+                    "required": [
+                      "quick",
+                      "full"
                     ],
                     "additionalProperties": false
                   }
@@ -26670,12 +26693,17 @@
                     },
                     "overdue": {
                       "type": "boolean"
+                    },
+                    "range": {
+                      "type": "string",
+                      "maxLength": 40
                     }
                   },
                   "required": [
                     "running_minutes",
                     "quiet_minutes",
-                    "overdue"
+                    "overdue",
+                    "range"
                   ],
                   "additionalProperties": false
                 },
@@ -27096,6 +27124,24 @@
             "required": [
               "full",
               "quick"
+            ],
+            "additionalProperties": false
+          },
+          "expected_range": {
+            "type": "object",
+            "properties": {
+              "quick": {
+                "type": "string",
+                "maxLength": 40
+              },
+              "full": {
+                "type": "string",
+                "maxLength": 40
+              }
+            },
+            "required": [
+              "quick",
+              "full"
             ],
             "additionalProperties": false
           }

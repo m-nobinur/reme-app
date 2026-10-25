@@ -93,14 +93,16 @@ export const CosWorkspace = z.strictObject({
         /**
          * While the pipeline works on it: whole minutes since it started,
          * less the owner's plan reviews, and since it last logged any work.
-         * `overdue` is past the p95 of `expected_seconds` for its lane.
-         * Optional, as `progress`.
+         * `overdue` is past the top of its lane's range, and `range` is the
+         * panel's words for the wait ("about 6 to 10 minutes"), moved up to
+         * start above the time gone once overdue. Optional, as `progress`.
          */
         timing: z
           .strictObject({
             running_minutes: z.int().nonnegative(),
             quiet_minutes: z.int().nonnegative(),
             overdue: z.boolean(),
+            range: z.string().max(40),
           })
           .optional(),
         /**
@@ -166,6 +168,10 @@ export const CosWorkspace = z.strictObject({
     .optional(),
   /** How long each lane usually takes, so the CoS quotes the measured wait. */
   expected_seconds: WorkspaceStatus.shape.expected_seconds,
+  /** Each lane's wait in the panel's words, for a build that has just started. */
+  expected_range: z
+    .strictObject({ quick: z.string().max(40), full: z.string().max(40) })
+    .optional(),
 })
 
 /** `get_facts`'s output: the org's current values, without their records. */
