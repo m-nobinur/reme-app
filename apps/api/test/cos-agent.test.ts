@@ -1270,7 +1270,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     ])
   })
 
-  it("asks the owner before every act tool but an answer, which runs at once even with a value that parses as a fact", async () => {
+  it("asks the owner before a change and an answer that set a phone, and before a reminder", async () => {
     const s = seed(kit, me)
     const asking = await s.assignment("blocked_on_information")
     const q = question(me, asking)
@@ -1313,17 +1313,18 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       stub
     )
     expect(done.response.status, done.text).toBe(200)
+    expect(stub.calls).toHaveLength(0)
     const pending = waiting(await tailOf(me, id))
     expect(
       pending.map((p) => p.type).sort((a, b) => a.localeCompare(b))
-    ).toEqual(["tool-create_reminder", "tool-request_change"])
+    ).toEqual([
+      "tool-answer_question",
+      "tool-create_reminder",
+      "tool-request_change",
+    ])
     expect(
       done.chunks.filter((c) => c.type === "tool-approval-request")
-    ).toHaveLength(2)
-    // The answer went to the build that asked, under its own call.
-    expect(stub.calls.map((c) => new URL(c.request.url).pathname)).toEqual([
-      `/assignments/${asking}/answer`,
-    ])
+    ).toHaveLength(3)
     const stored = await kit.withOrg({ orgId: me.orgId }, (db) =>
       db.select().from(reminders).where(eq(reminders.conversationId, id))
     )
@@ -1336,6 +1337,46 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     expect(log.find((e) => e.type === "cos.step")?.taint.sort()).toEqual([
       "inferred",
       "untrusted_input",
+    ])
+    await s.state(asking, "cancelled")
+  })
+
+  it("sends an answer in the owner's words at once, keyed by its turn and call", async () => {
+    const s = seed(kit, me)
+    const asking = await s.assignment("blocked_on_information")
+    const q = question(me, asking, "founding_year")
+    await s.event(asking, "information.requested", q)
+    await s.blocked(asking, q.request_id, 4)
+    const id = await conversation(me)
+    const stub = stubOrchestrator()
+    const { model } = scripted(
+      calls({
+        id: "functions.answer_question:0",
+        tool: "answer_question",
+        input: { request_id: q.request_id, value: "Since 2009" },
+      })
+    )
+    const done = await turn(
+      me,
+      typed(id, "We've been going since 2009."),
+      { model },
+      stub
+    )
+    expect(done.response.status, done.text).toBe(200)
+    expect(
+      done.chunks.filter((c) => c.type === "tool-approval-request")
+    ).toHaveLength(0)
+    const [turnRow] = await turnsOf(id)
+    expect(
+      stub.calls.map((c) => [
+        new URL(c.request.url).pathname,
+        c.request.headers.get("idempotency-key"),
+      ])
+    ).toEqual([
+      [
+        `/assignments/${asking}/answer`,
+        `${turnRow?.turn_id}:functions.answer_question:0`,
+      ],
     ])
     await s.state(asking, "cancelled")
   })
