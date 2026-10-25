@@ -107,15 +107,15 @@ it("reads a change the owner is asked to start, in every state", () => {
         outcome: "refused",
         error: {
           class: "validation",
-          code: "change.question_open",
-          message: "Answer the open question first.",
+          code: "change.build_busy",
+          message: "A build is finishing.",
         },
       },
     })
   ).toEqual({
     state: "refused",
     input: CHANGE,
-    code: "change.question_open",
+    code: "change.build_busy",
   })
   expect(
     change({
@@ -262,8 +262,8 @@ it("a yes is held only while another card in its message still waits", () => {
 })
 
 it("says a refusal in the owner's words, never the api's", () => {
-  expect(refusalText("change.question_open", "Fallback.")).toBe(
-    "A build is waiting on your answer. Answer it first."
+  expect(refusalText("change.build_busy", "Fallback.")).toBe(
+    "A build is finishing. Ask again once it is ready for you."
   )
   expect(refusalText("request.not_found", "Fallback.")).toBe(
     "That question is no longer waiting on you."

@@ -1118,8 +1118,8 @@ const REQUEST_CHANGE_STATES: ThreadMessageLike[] = [
     result: {
       error: {
         class: "validation",
-        code: "change.question_open",
-        message: "A build is waiting on your answer. Answer it first.",
+        code: "change.build_busy",
+        message: "A build is finishing. Try again once it settles.",
       },
       outcome: "refused",
     },
