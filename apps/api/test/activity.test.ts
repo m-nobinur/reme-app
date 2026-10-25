@@ -232,6 +232,24 @@ describe("change", () => {
     ])
   })
 
+  it("keeps a quick edit checking its page until its review opens", () => {
+    const { now } = view({
+      site: LIVE,
+      builds: [build("preview_ready", { lane: "quick", activity: [] })],
+    })
+    expect(now[0]).toMatchObject({ state: "now", step: "Checking the page" })
+    expect(states(now[0])).toEqual([
+      "understanding:done",
+      "making:done",
+      "checking:now",
+      "ready:next",
+    ])
+    // A full build is done once its preview exists.
+    expect(view({ site: LIVE, builds: [build("preview_ready")] }).now).toEqual(
+      []
+    )
+  })
+
   it("waits on the owner when the build is blocked on a question", () => {
     const { waiting } = view({
       site: LIVE,

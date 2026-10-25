@@ -158,6 +158,10 @@ export const GOOGLE_STEPS = ["sign_in", "verify", "sitemap"] as const
 
 /** Where a change stands, by the build stage it is on. */
 const CHANGE_OF_STAGE: Record<string, number> = {
+  // A quick edit's own steps.
+  edit: 1,
+  check: 2,
+  preview: 2,
   planning: 0,
   photos: 1,
   writing: 1,
@@ -242,10 +246,14 @@ export function changeSegment(
   build: BuildSummary,
   expected?: Expected
 ): Segment {
-  const state = groupOf(build.state)
+  // A quick edit checks its pages after its preview exists and before its
+  // review opens, so it is still at work until then.
+  const checking = build.lane === "quick" && build.state === "preview_ready"
+  const state = checking ? "now" : groupOf(build.state)
   const stage = build.activity?.find((r) => r.now)?.id
-  const here =
-    state === "done"
+  const here = checking
+    ? 2
+    : state === "done"
       ? CHANGE_STEPS.length
       : stage !== undefined
         ? (CHANGE_OF_STAGE[stage] ?? 1)
@@ -260,6 +268,7 @@ export function changeSegment(
         ? (build.ready_at ?? build.updated_at)
         : build.created_at,
     ...(build.label && { names: { change: build.label } }),
+    ...(checking && { step: "Checking the page" }),
     ...usualFor(state, build, expected),
   }
 }
