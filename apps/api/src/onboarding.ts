@@ -1916,9 +1916,9 @@ export function personaPart(
 }
 
 /**
- * The next step's parts: its first words led by a line saying what the
- * assistant picked, when it picked, and the persona under them when the
- * answer came on the assistant's card.
+ * The next step's parts: a line saying what the assistant picked, when it
+ * picked, then the persona when the answer came on the assistant's card,
+ * then the step's own words.
  */
 export function withChoice(
   answer: Answer | undefined,
@@ -1939,14 +1939,19 @@ export function withChoice(
           pickedPersona(v, persona.data)
   const at = step.findIndex((p) => p.type === "text")
   const lead = step[at]
-  const shown = persona ? [persona] : []
   if (lead?.type !== "text") {
-    return [...(line ? [text(line)] : []), ...shown, ...step]
+    return [
+      ...(line ? [text(line)] : []),
+      ...(persona ? [persona] : []),
+      ...step,
+    ]
   }
+  // The persona goes before the next question, under the line when there is one.
   return [
     ...step.slice(0, at),
-    line ? text(`${line}\n\n${lead.text}`) : lead,
-    ...shown,
+    ...(persona
+      ? [...(line ? [text(line)] : []), persona, lead]
+      : [line ? text(`${line}\n\n${lead.text}`) : lead]),
     ...step.slice(at + 1),
   ]
 }

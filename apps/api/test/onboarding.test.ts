@@ -1094,20 +1094,21 @@ describe("Pick for me, answered by the script", () => {
         { answer: "stated", facts, skip_all: true },
         orgId
       )
-      const [lead, card, ...rest] = parts
-      const [line, next] = (lead as { text: string }).text.split("\n\n")
+      // The line, the persona, then the next question: no "Maya it is!" or "Thanks, Probe."
+      const [said, card, lead, ...rest] = parts
+      const line = (said as { text: string }).text
+      const next = (lead as { text: string }).text
       expect(line).toMatch(/Maya, she\/her, with a friendly manner/)
-      // The next question follows at once: no "Maya it is!" or "Thanks, Probe."
+      expect(card).toEqual(PERSONA)
       expect(next).not.toMatch(/Maya|Thanks/)
       expect(next).toMatch(/website/)
-      expect(card).toEqual(PERSONA)
       expect(rest).toEqual(step.slice(1))
-      leads.add(next as string)
+      leads.add(next)
     }
     expect(leads.size).toBe(3)
-    // The owner's own answer keeps the thanks, shows the persona and no line about choosing.
+    // The owner's own answer keeps the thanks, shows the persona first and no line about choosing.
     const own = persona({ answer: "stated", facts })
-    expect(own.parts).toEqual([own.step[0], PERSONA, ...own.step.slice(1)])
+    expect(own.parts).toEqual([PERSONA, own.step[0], ...own.step.slice(1)])
     expect((own.step[0] as { text: string }).text).toMatch(
       /^(Maya|Thanks|I'm Maya)/
     )
