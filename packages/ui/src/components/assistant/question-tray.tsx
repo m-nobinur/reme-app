@@ -1296,7 +1296,7 @@ function QuestionTray({
   const fromLogo = useLogoPalettes(
     logoAnswer && "logo" in logoAnswer ? logoAnswer.logo.id : undefined
   )
-  // The logo page's own primary button (Design my logo), while it has one.
+  // The logo page's own primary button (Design for me), while it has one.
   const [logoSubmit, setLogoSubmit] = useState<TrayFrameProps["submit"]>()
   const focusComposer = useFocusComposer()
 
@@ -1371,6 +1371,8 @@ function QuestionTray({
     if (ready) onward()
   }
   const set = (given: Answer | undefined) => {
+    // Pick for me waited on the logo page for a design: the one kept finishes.
+    if (given && logo && finishing) return finish(true, given)
     setAnswers((now) => {
       const { [question.id]: _, ...rest } = now
       return given ? { ...now, [question.id]: given } : rest
@@ -1447,6 +1449,7 @@ function QuestionTray({
           answer={answer && "logo" in answer ? answer : undefined}
           onAnswer={set}
           palettes={palettes}
+          picking={finishing}
           setSubmit={setLogoSubmit}
           start={start?.logo}
         />
