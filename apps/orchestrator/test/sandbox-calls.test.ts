@@ -81,4 +81,22 @@ describe("a sandbox call that never answers", () => {
     expect(tries).toBe(1)
     expect(await sandbox.getState()).toEqual({ status: "running" })
   })
+
+  it("calls a Durable Object stub's methods directly, never through .call or .apply", async () => {
+    // A stub reads any property of a method, `call` included, as another RPC method.
+    const rpc = (value: unknown) =>
+      new Proxy(async (..._args: unknown[]) => value, {
+        get: (_fn, key) => () => {
+          throw new TypeError(
+            `The RPC receiver does not implement the method "${String(key)}".`
+          )
+        },
+      })
+    const sandbox = bounded({
+      exec: rpc({ exitCode: 0, stdout: "ok" }),
+      readFile: rpc({ content: "page" }),
+    })
+    expect(await sandbox.exec("true")).toEqual({ exitCode: 0, stdout: "ok" })
+    expect(await sandbox.readFile("/x")).toEqual({ content: "page" })
+  })
 })

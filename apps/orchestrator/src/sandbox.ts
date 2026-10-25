@@ -117,24 +117,23 @@ type Call = (...args: unknown[]) => Promise<unknown>
 export function bounded<S extends object>(stub: S): S {
   return new Proxy(stub, {
     get(target, name) {
-      const call = (target as Record<PropertyKey, unknown>)[name]
+      // Called on the stub itself: a Durable Object stub reads `.call` or
+      // `.apply` on one of its methods as another RPC method, not Function's.
+      const method = (key: PropertyKey) =>
+        (target as Record<PropertyKey, Call>)[key] as Call
       if (name === "exec") {
         return (command: unknown, options?: { timeout?: number }) =>
           withDeadline(
-            () => (call as Call).call(target, command, options),
+            () => method("exec")(command, options),
             (options?.timeout ?? EXEC_CALL_MS) + EXEC_GRACE_MS,
             "exec"
           )
       }
       if (FILE_CALLS.has(name)) {
         return (...args: unknown[]) =>
-          withDeadline(
-            () => (call as Call).apply(target, args),
-            FILE_CALL_MS,
-            String(name)
-          )
+          withDeadline(() => method(name)(...args), FILE_CALL_MS, String(name))
       }
-      return call
+      return (target as Record<PropertyKey, unknown>)[name]
     },
   })
 }
