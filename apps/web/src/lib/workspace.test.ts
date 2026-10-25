@@ -184,6 +184,12 @@ it("backs off to 60 s after a failed read, and keeps the last workspace", async 
   expect(tags).toHaveLength(3)
 })
 
+it("keeps a build's pace while a built draft takes its screenshots", async () => {
+  start({ ...idle, builds: [{ ...BUILD, state: "preview_ready" }] })
+  await wait(INTERVAL.building)
+  expect(tags).toHaveLength(1)
+})
+
 it("keeps a build's pace for a minute after a review opens, then idles", async () => {
   const review = {
     ...idle,

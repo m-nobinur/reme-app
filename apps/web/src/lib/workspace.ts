@@ -85,7 +85,10 @@ export function startPolling({
     clearTimeout(timer)
     const busy =
       current?.building ||
-      current?.builds.some((b) => b.state === "queued") ||
+      // Queued, or built and taking its screenshots: both move on their own.
+      current?.builds.some(
+        (b) => b.state === "queued" || b.state === "preview_ready"
+      ) ||
       // A review just opened: its ready line is posted a few seconds later.
       current?.attention.some(
         (item) =>
