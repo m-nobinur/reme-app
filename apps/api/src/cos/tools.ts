@@ -77,7 +77,7 @@ import {
 import { readFacts, statusWithFacts } from "../workspace.ts"
 import type { Opening } from "./agent.ts"
 import { readSession } from "./history.ts"
-import { inOwnersWords, readProfile } from "./memory.ts"
+import { contentWords, inOwnersWords, readProfile } from "./memory.ts"
 import { wallToUtc } from "./time.ts"
 import type { Turn } from "./turns.ts"
 
@@ -712,25 +712,28 @@ const notOwners = () =>
 
 /**
  * Whether the answer is the owner's own word in `said`: text as `statedIn`
- * reads a claim, a phone number or email address as they typed it, and every
- * other part of a fact's value as words or figures one message holds. So an
- * answer the model made up, or one lifted from a page or a review, never
- * becomes a fact.
+ * reads a claim, a phone number or email address as they typed it, and the
+ * other parts of a fact's value all as words or figures of one message. So
+ * an answer the model made up, pieced together, or lifted from a page or a
+ * review never becomes a fact. Text with no words of its own proves nothing.
  */
 export function ownersAnswer(
   value: AnswerQuestionInput["value"],
   said: readonly string[]
 ): boolean {
-  if (typeof value === "string") return said.some((m) => statedIn(value, m))
+  const stated = (text: string, message: string) =>
+    contentWords(text).length > 0 && statedIn(text, message)
+  if (typeof value === "string") return said.some((m) => stated(value, m))
   const all = said.join("\n")
   if (value.key === "business.phone")
     return phoneFromOwner(value.value.e164, all)
   if (value.key === "business.email") {
     return emailFromOwner(value.value.address, all)
   }
-  return Object.values(value.value)
-    .flat()
-    .every((part) => said.some((m) => statedIn(String(part), m)))
+  const parts = Object.values(value.value).flat().map(String)
+  return (
+    parts.length > 0 && said.some((m) => parts.every((part) => stated(part, m)))
+  )
 }
 
 const reviewElsewhere = () =>

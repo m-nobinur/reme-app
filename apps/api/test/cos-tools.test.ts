@@ -135,6 +135,20 @@ describe("an answer the owner gave", () => {
   it("is their words, or the number they typed", () => {
     expect(ownersAnswer("street outside", said)).toBe(true)
     expect(ownersAnswer("a car park", said)).toBe(false)
+    // Nothing of its own to check is no proof.
+    expect(ownersAnswer("the", said)).toBe(false)
+    // Every part of a value from one message, never pieced together.
+    const area = { key: "service_area.text", value: { text: "Bristol" } }
+    expect(ownersAnswer(area as never, ["Bristol and Bath"])).toBe(true)
+    expect(
+      ownersAnswer(
+        {
+          key: "service_area.radius",
+          value: { centre: "Leeds", radius_km: 25 },
+        } as never,
+        ["We're in Leeds.", "About 25 miles out."]
+      )
+    ).toBe(false)
     const phone = (e164: string) =>
       ownersAnswer({ key: "business.phone", value: { e164 } }, said)
     expect(phone("+441174960125")).toBe(true)

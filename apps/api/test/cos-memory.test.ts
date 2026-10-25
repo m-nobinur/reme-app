@@ -579,7 +579,6 @@ describe("the readers of the facts table", () => {
       .map((file) => relative(root, file))
       .sort()
     expect(direct).toEqual([
-      "apps/orchestrator/src/app.ts",
       "apps/orchestrator/src/cloudflare.ts",
       "apps/orchestrator/src/heartbeat.ts",
       "apps/orchestrator/src/validate.ts",
