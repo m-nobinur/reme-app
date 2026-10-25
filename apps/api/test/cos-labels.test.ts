@@ -103,11 +103,17 @@ describe("the workspace the CoS reads", () => {
       ).builds[0]
     expect(
       read({
-        timing: { running_minutes: 38, quiet_minutes: 12, overdue: true },
+        timing: {
+          running_minutes: 38,
+          quiet_minutes: 12,
+          overdue: true,
+          range: "about 39 to 47 minutes",
+        },
         restarted: { minutes_ago: 2, cause: "stalled", working: true },
       })
     ).toMatchObject({
       running_minutes: 38,
+      wait: "about 39 to 47 minutes",
       longer_than_usual: true,
       minutes_since_last_work: 12,
       restarted: {
@@ -118,7 +124,12 @@ describe("the workspace the CoS reads", () => {
     })
     // A short quiet is still work, and a build on time says nothing of it.
     const onTime = read({
-      timing: { running_minutes: 4, quiet_minutes: 2, overdue: false },
+      timing: {
+        running_minutes: 4,
+        quiet_minutes: 2,
+        overdue: false,
+        range: "about 6 to 10 minutes",
+      },
     })
     expect(onTime).toMatchObject({ running_minutes: 4 })
     expect(onTime).not.toHaveProperty("longer_than_usual")

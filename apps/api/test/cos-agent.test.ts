@@ -371,14 +371,14 @@ describe("the CoS's change kinds", () => {
     }
   })
 
-  it("tells the model to quote the measured wait, not a fixed one", () => {
-    expect(INSTRUCTIONS).toContain("expected_seconds.quick.p50")
-    expect(INSTRUCTIONS).toContain("Never use a fixed time of your own")
+  it("tells the model to quote the measured wait as a range, not a fixed one", () => {
+    expect(INSTRUCTIONS).toContain("expected_range.quick")
+    expect(INSTRUCTIONS).toContain("Always a range, never one figure")
     // A quick edit can move to a longer build, so the time is never a promise.
     expect(INSTRUCTIONS).toContain("Never promise that time")
   })
 
-  it("carries expected_seconds and each build's lane in the workspace the model reads", () => {
+  it("carries each lane's range and each build's lane in the workspace the model reads", () => {
     const text = contextOf("act", {
       site: { host: null, live_version: null },
       questions: [],
@@ -400,8 +400,13 @@ describe("the CoS's change kinds", () => {
         quick: { p50: 15, p95: 45 },
         full: { p50: 180, p95: 330 },
       },
+      expected_range: {
+        quick: "about 1 to 2 minutes",
+        full: "about 3 to 6 minutes",
+      },
     }).text
-    expect(text).toContain('"expected_seconds":{"quick":{"p50":15')
+    expect(text).toContain('"expected_range":{"quick":"about 1 to 2 minutes"')
+    expect(text).not.toContain("p50")
     expect(text).toContain('"lane":"quick"')
   })
 })

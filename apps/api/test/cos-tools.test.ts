@@ -180,7 +180,12 @@ describe("a build's pace", () => {
   it("counts the minutes run without the owner's reviews, and the quiet since the last work", () => {
     const life = { work_ms: ago(12), resumed_ms: null, cause: null }
     expect(paceOf(build, life, expected, now)).toEqual({
-      timing: { running_minutes: 38, quiet_minutes: 12, overdue: true },
+      timing: {
+        running_minutes: 38,
+        quiet_minutes: 12,
+        overdue: true,
+        range: "about 39 to 47 minutes",
+      },
     })
     expect(
       paceOf(
@@ -190,7 +195,12 @@ describe("a build's pace", () => {
         now
       )
     ).toEqual({
-      timing: { running_minutes: 8, quiet_minutes: 10, overdue: false },
+      timing: {
+        running_minutes: 8,
+        quiet_minutes: 10,
+        overdue: false,
+        range: "about 7 to 15 minutes",
+      },
     })
   })
 
@@ -207,11 +217,15 @@ describe("a build's pace", () => {
     ).toEqual({ minutes_ago: 3, cause: "other", working: false })
   })
 
-  it("says nothing of a build waiting on the owner or with no usual time", () => {
+  it("says nothing of a build waiting on the owner, and falls back to the measured lanes", () => {
     expect(
       paceOf({ ...build, state: "awaiting_review" }, undefined, expected, now)
     ).toEqual({})
-    expect(paceOf(build, undefined, undefined, now).timing?.overdue).toBe(false)
+    // 38 minutes is past the measured 6 to 10, so the range moves above it.
+    expect(paceOf(build, undefined, undefined, now).timing).toMatchObject({
+      overdue: true,
+      range: "about 39 to 43 minutes",
+    })
   })
 })
 
@@ -414,6 +428,10 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         missing_facts: expect.any(Array),
         domains: [],
         expected_seconds: expect.any(Object),
+        expected_range: {
+          quick: "about 1 to 2 minutes",
+          full: "about 6 to 10 minutes",
+        },
       })
       expect(output.missing_facts.length).toBeGreaterThan(0)
     })

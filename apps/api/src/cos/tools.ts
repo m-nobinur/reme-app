@@ -50,6 +50,7 @@ import {
   sql,
   type Tenancy,
 } from "@workspace/db"
+import { rangeText } from "@workspace/ui/lib/activity-copy"
 import { settleCard } from "../build-questions.ts"
 import {
   type Bridged,
@@ -74,7 +75,7 @@ import {
   createReminder as storeReminder,
   wakeScheduler,
 } from "../reminders.ts"
-import { readFacts, statusWithFacts } from "../workspace.ts"
+import { EXPECTED_SECONDS, readFacts, statusWithFacts } from "../workspace.ts"
 import type { Opening } from "./agent.ts"
 import { readSession } from "./history.ts"
 import { contentWords, inOwnersWords, readProfile } from "./memory.ts"
@@ -185,6 +186,15 @@ const WORKING = new Set<string>([
 
 const wholeMinutes = (ms: number) => Math.max(0, Math.floor(ms / 60_000))
 
+/** A lane's wait in the panel's words, before any time has run. */
+const rangeOf = (
+  expected: WorkspaceStatus["expected_seconds"],
+  lane: "quick" | "full"
+) => {
+  const { p50, p95 } = (expected ?? EXPECTED_SECONDS)[lane]
+  return rangeText(p50, p95).text
+}
+
 /**
  * How long a build the pipeline is working on has run, how long since it
  * last logged work, and its last mid-build restart. The clock leaves out the
@@ -198,13 +208,15 @@ export function paceOf(
 ): Pick<CosWorkspace["builds"][number], "timing" | "restarted"> {
   if (!WORKING.has(build.state)) return {}
   const started = Date.parse(build.created_at)
-  const running = wholeMinutes(now - started - (build.review_ms ?? 0))
-  const longest = expected?.[build.lane ?? "full"].p95
+  const ran = now - started - (build.review_ms ?? 0)
+  const lane = (expected ?? EXPECTED_SECONDS)[build.lane ?? "full"]
+  const range = rangeText(lane.p50, lane.p95, Math.max(0, ran / 1000))
   return {
     timing: {
-      running_minutes: running,
+      running_minutes: wholeMinutes(ran),
       quiet_minutes: wholeMinutes(now - (life?.work_ms ?? started)),
-      overdue: longest !== undefined && running * 60 > longest,
+      overdue: range.longer,
+      range: range.text,
     },
     ...(life?.resumed_ms != null && {
       restarted: {
@@ -346,6 +358,10 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
       last_check: DomainCheck.safeParse(r.lastCheck).data ?? null,
     })),
     expected_seconds: status.expected_seconds,
+    expected_range: {
+      quick: rangeOf(status.expected_seconds, "quick"),
+      full: rangeOf(status.expected_seconds, "full"),
+    },
   })
   return {
     workspace,

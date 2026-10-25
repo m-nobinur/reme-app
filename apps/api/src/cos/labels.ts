@@ -118,6 +118,7 @@ export function workspaceLabels(workspace: CosWorkspace) {
       ),
       ...(b.timing && {
         running_minutes: b.timing.running_minutes,
+        wait: b.timing.range,
         ...(b.timing.overdue && { longer_than_usual: true }),
         ...(b.timing.quiet_minutes >= QUIET_MINUTES && {
           minutes_since_last_work: b.timing.quiet_minutes,
@@ -154,6 +155,6 @@ export function workspaceLabels(workspace: CosWorkspace) {
         last_check: d.last_check && CHECK[d.last_check.status],
       })),
     }),
-    expected_seconds: workspace.expected_seconds,
+    expected_range: workspace.expected_range,
   }
 }
