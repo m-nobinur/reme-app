@@ -18,6 +18,8 @@ interface Props {
   sizes?: string
   /** The one image above the fold: eager, high priority, preloaded. */
   priority?: boolean
+  /** Above the fold but not the page's main image, such as the header logo: eager, never preloaded. */
+  eager?: boolean
   /** Encoding quality, 1 to 100, of the fallback WebP and, without `avifQuality`, the AVIF. */
   quality?: number
   /** AVIF quality by candidate width: a bigger candidate can take a lower one, since a screen that fetches it is dense. */
@@ -31,6 +33,7 @@ const {
   widths = [480, 768, 960],
   sizes = "(min-width: 64rem) 50vw, 100vw",
   priority = false,
+  eager = false,
   quality = 55,
   avifQuality = () => quality,
 } = Astro.props
@@ -70,7 +73,7 @@ const webp = meta
       width: fallbackWidth,
       format: "webp",
       quality,
-      loading: priority ? "eager" : "lazy",
+      loading: priority || eager ? "eager" : "lazy",
       decoding: "async",
       fetchpriority: priority ? "high" : undefined,
     })
