@@ -51,22 +51,26 @@ import { cn } from "@workspace/ui/lib/utils"
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react"
 
 /**
- * The logo question's page in the design tray, the first question and one
- * that cannot be skipped. It asks first whether they have a logo, nothing
- * picked. Yes opens the upload. With no logo held, a round of three is drawn
- * from the filled brief as the page opens, so No shows its designs with the
- * first picked, at the top; under them the brief folds into summary rows (a
- * few words on the look, the colours, the logo type and a style) that reopen
- * it. Changing the brief turns the tray's primary into Redesign my logo,
- * which draws a round
- * from it. Rounds are saved by the api, so a reload reads them back. Picking
- * a design keeps it as the logo and answers the question; Change my logo
- * draws another round from the picked one, after the wait the api sets
- * between rounds.
+ * The logo question's two pages in the design tray, the first question and
+ * one that cannot be skipped. The first asks whether they have a logo,
+ * nothing picked; a pick moves on to the second, so going back is how the
+ * owner changes it. Yes there is the upload. With no logo held, a round of
+ * three is drawn from the filled brief as the first page opens, so No shows
+ * its designs with the first picked, at the top; under them the brief folds
+ * into summary rows (a few words on the look, the colours, the logo type and
+ * a style) that reopen it. Changing the brief turns the tray's primary and
+ * its forward arrow into Redesign my logo, which draws a round from it.
+ * Rounds are saved by the api, so a reload reads them back. Picking a design
+ * keeps it as the logo and answers the question; Change my logo draws
+ * another round from the picked one, after the wait the api sets between
+ * rounds.
  */
 
 /** The logo question's answer: the logo kept. */
 export type LogoAnswer = { logo: Asset }
+
+/** Whether they have a logo: Yes is the upload, No the designs. */
+export type LogoPath = "upload" | "create"
 
 const TYPE_LABELS: Record<LogoType, string> = {
   lockup: "Icon + name",
@@ -192,20 +196,16 @@ type Brief = {
 
 /** Where the catalog opens the page. */
 export type LogoStart = {
-  path?: "upload" | "create"
+  path?: LogoPath
   brief?: Partial<Brief>
   /** The change field open, with these words. */
   changes?: string
 }
 
 const BRIEF_PARTS = ["look", "colours", "type", "style"] as const
-type Part = "choice" | (typeof BRIEF_PARTS)[number] | "end"
+type Part = (typeof BRIEF_PARTS)[number] | "end"
 const order = (part: Part) =>
-  part === "choice"
-    ? -1
-    : part === "end"
-      ? BRIEF_PARTS.length
-      : BRIEF_PARTS.indexOf(part)
+  part === "end" ? BRIEF_PARTS.length : BRIEF_PARTS.indexOf(part)
 
 /** A few colours as overlapping dots, for a summary row. */
 function Dots({ colors }: { colors: readonly string[] }) {
@@ -234,6 +234,9 @@ function TrayLogo({
   palettes,
   setSubmit,
   start,
+  path,
+  onPath,
+  step,
   picking = false,
 }: TrayPageProps<LogoAnswer> & {
   /** The palettes the tray offers, the site's own first. */
@@ -241,13 +244,17 @@ function TrayLogo({
   /** Sets the tray's primary button while this page has its own; undefined hands it back. */
   setSubmit: (submit: TrayFrameProps["submit"]) => void
   start?: LogoStart | undefined
-  /** Pick for me was pressed: with no logo yet, No and its first design. */
+  /** The way picked on the first page, held by the tray. */
+  path: LogoPath | null
+  onPath: (way: LogoPath) => void
+  /** The first page, whether they have a logo, or the second. */
+  step: "choice" | "designs"
+  /** Pick for me was pressed and the tray waits for a logo. */
   picking?: boolean | undefined
 }) {
   const id = useId()
   const services = useTrayServices()
   const [first] = question.card.preselected
-  const [path, setPath] = useState(start?.path ?? null)
   const { draft: brief, keep: setBrief } = useTabDraft<Brief>(
     `logo-brief:${toolCallId}`,
     // Opened filled, the site's own colours first, so the first round needs
@@ -327,9 +334,7 @@ function TrayLogo({
     each.variants.some((variant) => variant.id === kept)
   )
   const held = loaded ? (keptDrawn ? "create" : "upload") : null
-  // Pick for me with no logo yet takes a drawn design, whatever was chosen.
-  const shownPath =
-    picking && !answer ? "create" : (path ?? (answer ? held : null))
+  const shownPath = path ?? (answer ? held : null)
   const round = at === null ? latest : rounds[at]
   const shownAt = at ?? rounds.length - 1
   const [uploadOption, createOption] = question.card.options
@@ -370,21 +375,18 @@ function TrayLogo({
   // The top section open: the one the owner last settled or reopened.
   const top: Part =
     focus ??
-    (shownPath === null
-      ? "choice"
-      : shownPath === "upload"
-        ? "end"
-        : !briefReady
-          ? (BRIEF_PARTS[Math.max(0, limit - 1)] ?? "look")
-          : rounds.length > 0
-            ? "end"
-            : "style")
+    (shownPath !== "create"
+      ? "end"
+      : !briefReady
+        ? (BRIEF_PARTS[Math.max(0, limit - 1)] ?? "look")
+        : rounds.length > 0
+          ? "end"
+          : "style")
   const create = shownPath === "create"
   const opened = (part: (typeof BRIEF_PARTS)[number]) =>
     create && order(part) >= order(top) && order(part) <= limit
   const folded = (part: (typeof BRIEF_PARTS)[number]) =>
     create && settled[part] && order(part) < order(top)
-  const choiceOpen = shownPath === null || top === "choice"
 
   const send = async (chosen: File) => {
     if (!services) return setError(NO_SERVICES)
@@ -536,10 +538,11 @@ function TrayLogo({
   }, [top])
 
   // With no round yet, or a brief changed since the newest, the tray's
-  // primary is Redesign my logo while rounds are left; a layout effect, so the
-  // tray never paints Next in its place.
+  // primary is Redesign my logo while rounds are left, and moving on draws
+  // first; a layout effect, so the tray never paints Next in its place. Not
+  // before the rounds are read, so none is drawn twice.
   const designFirst =
-    create && rounds.length < LOGO_ROUNDS_MAX && (!latest || changed)
+    create && loaded && rounds.length < LOGO_ROUNDS_MAX && (!latest || changed)
   const design = useRef(() => undefined as undefined)
   design.current = () => {
     // The pick is set aside once the round starts; its first design follows.
@@ -571,11 +574,42 @@ function TrayLogo({
   }, [designFirst, designBusy, designDisabled, designLabel, setSubmit])
   useLayoutEffect(() => () => setSubmit(undefined), [setSubmit])
 
+  if (step === "choice") {
+    return (
+      <Ways
+        label={question.question ?? "Your logo"}
+        onPick={(way) => {
+          setFocus(null)
+          setError(null)
+          // Yes sets a drawn design aside: the logo is the one they upload.
+          if (way === "upload" && keptDrawn) onAnswer(undefined)
+          onPath(way)
+        }}
+        // A tap on the one already picked moves on again.
+        onRepick={onPath}
+        picked={shownPath}
+        ways={[
+          {
+            way: "upload",
+            label: uploadOption?.label ?? "Yes, I have my logo",
+            hint: "Upload the file you have",
+            icon: <UploadSimpleIcon aria-hidden />,
+          },
+          {
+            way: "create",
+            label: createOption?.label ?? "No, create one for me",
+            hint: "Pick from three designs",
+            icon: <PenNibIcon aria-hidden />,
+          },
+        ]}
+      />
+    )
+  }
+
   return (
     <div className="-my-1.5 flex shrink-0 flex-col" ref={page}>
-      {/* The designs, once a round has started: first, so the pick needs no
-          scroll; they fold away while the logo question is reopened. */}
-      <Fold open={create && round !== undefined && !choiceOpen}>
+      {/* The designs, once a round has started: first, so the pick needs no scroll. */}
+      <Fold open={create && round !== undefined}>
         {round && services ? (
           <div className="flex flex-col gap-3" data-part="end">
             {rounds.length > 1 ? (
@@ -745,43 +779,6 @@ function TrayLogo({
             ) : null}
           </div>
         ) : null}
-      </Fold>
-
-      <Fold open={!choiceOpen}>
-        <Summary label="Logo" onOpen={() => setFocus("choice")}>
-          <span className="truncate">
-            {shownPath === "upload" ? uploadOption?.label : createOption?.label}
-          </span>
-        </Summary>
-      </Fold>
-      <Fold open={choiceOpen}>
-        <Ways
-          label={question.question ?? "Your logo"}
-          onPick={(way) => {
-            setPath(way)
-            setFocus(null)
-            setError(null)
-            // Yes sets a drawn design aside: the logo is the one they upload.
-            if (way === "upload" && keptDrawn) onAnswer(undefined)
-          }}
-          // A tap on the one already chosen folds the pair again.
-          onRepick={() => setFocus(null)}
-          picked={shownPath}
-          ways={[
-            {
-              way: "upload",
-              label: uploadOption?.label ?? "Yes, I have my logo",
-              hint: "Upload the file you have",
-              icon: <UploadSimpleIcon aria-hidden />,
-            },
-            {
-              way: "create",
-              label: createOption?.label ?? "No, create one for me",
-              hint: "Pick from three designs",
-              icon: <PenNibIcon aria-hidden />,
-            },
-          ]}
-        />
       </Fold>
 
       {/* Yes: the upload. */}
