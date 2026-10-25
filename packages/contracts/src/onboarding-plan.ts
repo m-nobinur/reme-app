@@ -165,13 +165,16 @@ export const OnboardingStep = z.enum([
 
 /**
  * The `ONBOARDING_STATUS` chunk, sent as the turn starts and as the plan's
- * keys close. `on` is the plan's own `doing` line, or a step, fact or move
- * the web words itself. `facts`
+ * keys close. `on` is the plan's own `doing` line, the heading of the
+ * thought a reasoning model is on (any turn, the Chief of Staff's too), or a
+ * step, fact or move the web words itself. `facts`
  * lists the keys just stated, for the checklist to tick at once.
  */
 export const OnboardingStatus = z.strictObject({
   on: z.discriminatedUnion("kind", [
     z.strictObject({ kind: z.literal("doing"), text: Text(PLAN_DOING_MAX) }),
+    // Cleaned by the api; the reasoning itself never leaves it.
+    z.strictObject({ kind: z.literal("thinking"), text: Text(PLAN_DOING_MAX) }),
     // Sent as the turn starts, before the planner writes: the step whose
     // card was just answered, or the one a typed message replies to.
     z.strictObject({

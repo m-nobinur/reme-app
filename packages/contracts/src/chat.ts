@@ -74,9 +74,10 @@ export const PersonaCard = z.strictObject({
 })
 
 /**
- * The transient chunk the onboarding planner's stream carries while the plan
- * is still being written: an `OnboardingStatus`. It is never stored, and it
- * goes when the first word of the reply arrives.
+ * The transient chunk a turn's stream carries before its reply: an
+ * `OnboardingStatus`, from the onboarding planner, or the heading of the
+ * model's current thought on any turn. It is never stored, and it goes when
+ * the first word of the reply arrives.
  */
 export const ONBOARDING_STATUS = "data-onboarding_status"
 
