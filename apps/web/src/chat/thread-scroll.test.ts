@@ -118,7 +118,16 @@ const readScroll = (viewport: Element) => {
   }
   return clamped
 }
+/**
+ * Smooth scrolls under way, eased over a few frames as a browser does. Off,
+ * one lands at once, and the frames sampled are where it settles.
+ */
+let glide = false
+const GLIDE_FRAMES = 8
+const gliding = new Map<Element, { from: number; to: number; step: number }>()
 const writeScroll = (viewport: Element, top: number) => {
+  // Any other scroll stops a glide in flight.
+  gliding.delete(viewport)
   const next = Math.max(0, Math.min(top, maxScroll(viewport)))
   if (next !== (scrolled.get(viewport) ?? 0)) pendingScroll.add(viewport)
   scrolled.set(viewport, next)
@@ -215,9 +224,14 @@ function patchLayout() {
     },
     scrollTo: {
       configurable: true,
-      // A smooth scroll lands at once here; the frames sampled are where it settles.
       value(this: HTMLElement, options?: ScrollToOptions) {
-        if (options?.top !== undefined) writeScroll(this, options.top)
+        if (options?.top === undefined) return
+        if (!glide || options.behavior !== "smooth") {
+          return writeScroll(this, options.top)
+        }
+        const from = readScroll(this)
+        const to = Math.max(0, Math.min(options.top, maxScroll(this)))
+        gliding.set(this, { from, to, step: 0 })
       },
     },
   })
@@ -232,8 +246,20 @@ function unpatchLayout() {
   originals.clear()
 }
 
-/** Resize observers fire after layout, for each target whose size changed. */
+/**
+ * Resize observers fire after layout, for each target whose size changed.
+ * As in the browser, each round after the first delivers only targets deeper
+ * than the shallowest one just delivered; a shallower one changed by a
+ * callback waits for the next frame, and the page logs a loop warning.
+ */
 const observers = new Set<FakeResizeObserver>()
+const sizeOf = (el: Element) =>
+  `${(el as HTMLElement).clientWidth}x${heightOf(el)}`
+const depthOf = (el: Element) => {
+  let depth = 0
+  for (let at = el.parentElement; at; at = at.parentElement) depth += 1
+  return depth
+}
 class FakeResizeObserver {
   sizes = new Map<Element, string | undefined>()
   constructor(readonly callback: ResizeObserverCallback) {
@@ -249,16 +275,37 @@ class FakeResizeObserver {
     this.sizes.clear()
     observers.delete(this)
   }
-  /** Whether it fired. */
-  deliver() {
-    let changed = false
-    for (const [el, last] of this.sizes) {
-      const size = `${(el as HTMLElement).clientWidth}x${heightOf(el)}`
-      if (size !== last) changed = true
-      this.sizes.set(el, size)
+  changed() {
+    return [...this.sizes]
+      .filter(([el, last]) => sizeOf(el) !== last)
+      .map(([el]) => el)
+  }
+  deliver(targets: Element[]) {
+    for (const el of targets) this.sizes.set(el, sizeOf(el))
+    this.callback([], this as unknown as ResizeObserver)
+  }
+}
+/** "ResizeObserver loop completed with undelivered notifications", as logged. */
+let loops = 0
+function deliverResizes() {
+  let depth = -1
+  for (;;) {
+    const due = [...observers].map(
+      (observer) =>
+        [
+          observer,
+          observer.changed().filter((el) => depthOf(el) > depth),
+        ] as const
+    )
+    const targets = due.flatMap(([, each]) => each)
+    if (targets.length === 0) break
+    for (const [observer, each] of due) {
+      if (each.length > 0) observer.deliver(each)
     }
-    if (changed) this.callback([], this as unknown as ResizeObserver)
-    return changed
+    depth = Math.min(...targets.map(depthOf))
+  }
+  if ([...observers].some((observer) => observer.changed().length > 0)) {
+    loops += 1
   }
 }
 
@@ -271,6 +318,12 @@ let clock = 0
 async function frame() {
   clock += 16
   await act(async () => {
+    for (const [viewport, { from, to, step }] of [...gliding]) {
+      const t = (step + 1) / GLIDE_FRAMES
+      const eased = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2
+      writeScroll(viewport, Math.round(from + (to - from) * eased))
+      if (t < 1) gliding.set(viewport, { from, to, step: step + 1 })
+    }
     for (const viewport of [...pendingScroll]) {
       pendingScroll.delete(viewport)
       viewport.dispatchEvent(new Event("scroll"))
@@ -278,11 +331,7 @@ async function frame() {
     const due = [...animation.values()]
     animation.clear()
     for (const callback of due) callback(clock)
-    for (let round = 0; round < 10; round++) {
-      let fired = false
-      for (const observer of [...observers]) fired = observer.deliver() || fired
-      if (!fired) break
-    }
+    deliverResizes()
   })
   painted.push(ownerMessageTop())
 }
@@ -359,6 +408,9 @@ let root: Root
 beforeEach(async () => {
   layout = { clientHeight: 729, footer: 80, slot: 0, rows: new Map() }
   painted = []
+  glide = false
+  gliding.clear()
+  loops = 0
   animation = new Map()
   vi.stubGlobal("ResizeObserver", FakeResizeObserver)
   vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
@@ -578,4 +630,87 @@ it("the persona card waits for the words above it to finish typing in", async ()
     chat.querySelector('[data-slot="persona-card"]')?.previousElementSibling
       ?.textContent
   ).toContain("friendly and clear.")
+})
+
+/**
+ * Every way the owner sends glides their message up from the bottom, as a
+ * typed send does: an answer on the tray (a card, Pick for me, Looks good or
+ * Next) and Skip this one take what sat above the composer away as they send.
+ */
+const SENDS = [
+  { what: "a typed message", footer: 80, leavesFirst: false },
+  { what: "an answer on the tray", footer: 421, leavesFirst: false },
+  {
+    what: "an answer on the tray, gone a frame early",
+    footer: 421,
+    leavesFirst: true,
+  },
+  { what: "Skip this one", footer: 124, leavesFirst: false },
+]
+for (const { what, footer, leavesFirst } of SENDS) {
+  it(`${what} glides the owner's message to the top`, async () => {
+    layout.footer = footer
+    await frames()
+    await sendAndReply("u1")
+    glide = true
+    const from = painted.length
+    layout.footer = 80
+    if (leavesFirst) await frame()
+    await setState({
+      messages: [
+        ...state.messages,
+        said("u2", "user", "Something else"),
+        { ...said("u2-reply", "assistant", ""), status: { type: "running" } },
+      ],
+      isRunning: true,
+    })
+    await frames(GLIDE_FRAMES + 4)
+    // From the frame it lands, the new message shows under the reply where
+    // the composer was, with nothing above it moved, then rises.
+    const path = painted.slice(from + (leavesFirst ? 1 : 0))
+    const trace = path.join(" ")
+    expect(path[0], trace).toBe(USER_ROW + 260)
+    expect(path.at(-1), trace).toBe(0)
+    expect(
+      path.every((top, i) => i === 0 || top <= (path[i - 1] ?? top)),
+      trace
+    ).toBe(true)
+    const steps = path.filter((top, i) => i > 0 && top !== path[i - 1])
+    expect(steps.length, trace).toBeGreaterThanOrEqual(GLIDE_FRAMES - 1)
+  })
+}
+
+it("Scroll to bottom shows once the reply grows past the composer", async () => {
+  await sendAndReply("u1")
+  const button = chat.querySelector(".aui-thread-scroll-to-bottom")
+  expect(button?.classList.contains("invisible")).toBe(true)
+  layout.rows.set("u1-reply", 1200)
+  await frames()
+  expect(button?.classList.contains("invisible")).toBe(false)
+})
+
+it("logs no resize loop through a turn, a tray and the next send", async () => {
+  layout.footer = 421
+  await frames()
+  loops = 0
+  await sendAndReply("u1")
+  layout.slot = 180
+  await frames()
+  layout.footer = 80
+  await setState({
+    messages: [
+      ...state.messages,
+      said("u2", "user", "Something else"),
+      { ...said("u2-reply", "assistant", ""), status: { type: "running" } },
+    ],
+    isRunning: true,
+  })
+  // The reply streams into the space held below it, then past the fold.
+  for (const height of [60, 120, 300, 900]) {
+    layout.rows.set("u2-reply", height)
+    await frames(2)
+  }
+  layout.clientHeight = 770
+  await frames()
+  expect(loops).toBe(0)
 })
