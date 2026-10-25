@@ -97,6 +97,12 @@ export const TONES = [
 ] as const satisfies readonly Preset<string>[]
 export const ToneId = z.enum(ids(TONES))
 
+/**
+ * The message the Skip this one pill sends while an optional question
+ * waits. The api reads it as a skip of that question, never as its answer.
+ */
+export const SKIP_REPLY = "I'd like to skip this question."
+
 export const TEMPLATES = [
   {
     id: "classic",

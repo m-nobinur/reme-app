@@ -9134,6 +9134,9 @@
               "site.pages",
               "quote.form"
             ]
+          },
+          "skippable": {
+            "type": "boolean"
           }
         },
         "required": [

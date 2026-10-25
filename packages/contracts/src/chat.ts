@@ -133,7 +133,8 @@ export const AskFactOutput = z.discriminatedUnion("answer", [
 /**
  * `ask_open`'s input: a question the owner answers in their own words, by the
  * fact it is after or "quote.form". The assistant's message asks it; the
- * tray's title is the web's copy for `about`.
+ * tray's title is the web's copy for `about`. `skippable` marks a question
+ * the owner may pass on; a call without it, as stored before it, is required.
  */
 type OpenKey = Exclude<FactValueKey, "media.uploads" | ReviewFactKey>
 
@@ -147,6 +148,7 @@ export const AskOpenInput = z.strictObject({
           !(REVIEW_FACT_KEYS as readonly string[]).includes(key)
       ) as [OpenKey, ...OpenKey[]]
   ),
+  skippable: z.boolean().optional(),
 })
 
 /** `ask_open`'s output: the owner's words, or a skip. */

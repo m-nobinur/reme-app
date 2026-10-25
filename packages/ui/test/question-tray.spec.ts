@@ -3,7 +3,7 @@ import { axe, open } from "./helpers"
 
 /**
  * The question tray: a native radio group the keyboard walks, Enter for Next,
- * Escape to collapse, and the last question's Build my site. Each state in the
+ * Escape to collapse, and the last question's Looks good. Each state in the
  * catalog entry is its own tray under its own title.
  */
 
@@ -74,7 +74,7 @@ test("a card of many ticks several with Space, in order, and none is unanswered"
   await expect(
     box("Gallery Photos of your work, as a home page section")
   ).not.toBeChecked()
-  const build = pages.getByRole("button", { name: "Build my site" })
+  const build = pages.getByRole("button", { name: "Looks good" })
   await expect(build).toBeEnabled()
   // Untick every box from the keyboard: with none left the question is unanswered.
   const ticked = group.getByRole("checkbox", { checked: true })
@@ -97,21 +97,23 @@ test("the tray is named by its question, and collapsed by its question too", asy
   await expect(collapsed.getByText("3 of 6", { exact: true })).toBeVisible()
 })
 
-test("with every pick made, one Looks good keeps them on any page", async ({
+test("with every pick made, a page before the last reads Next and offers Pick for me", async ({
   page,
 }) => {
   await open(page, "QuestionTray")
   const every = state(page, "Every pick made")
   await expect(every.getByText("2 of 6", { exact: true })).toBeVisible()
-  await expect(every.getByRole("button", { name: "Looks good" })).toBeEnabled()
-  await expect(every.getByText("I'll build your site with these")).toBeVisible()
+  await expect(
+    every.getByRole("button", { name: "Next", exact: true })
+  ).toBeEnabled()
+  await expect(every.getByRole("button", { name: "Pick for me" })).toBeEnabled()
 })
 
-test("the last question reads Build my site", async ({ page }) => {
+test("the last question reads Looks good", async ({ page }) => {
   await open(page, "QuestionTray")
   await expect(
     state(page, "Last question, own words typed").getByRole("button", {
-      name: "Build my site",
+      name: "Looks good",
     })
   ).toBeEnabled()
 })

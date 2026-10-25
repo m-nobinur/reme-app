@@ -3,7 +3,7 @@ import { axe, open } from "./helpers"
 
 /**
  * The details tray: one field per page, each checked as the owner leaves it,
- * the picks as native radio groups, and Submit on the last page. Answered
+ * the picks as native radio groups, and Looks good on the last page. Answered
  * and skipped asks give way to the owner's reply. Each open ask is docked in
  * a thread of its own.
  */
@@ -52,7 +52,7 @@ test("the contact tray checks the phone, then starts the email from the sign-in"
     )
   ).toBeVisible()
   await contact.getByRole("textbox", { name: "Email address" }).fill("nope")
-  await contact.getByRole("button", { name: "Submit" }).click()
+  await contact.getByRole("button", { name: "Looks good" }).click()
   await expect(contact.getByRole("alert")).toHaveText([
     "Enter a valid email address.",
   ])
@@ -68,7 +68,7 @@ test("the assistant tray asks for a name, pronouns, a look and a tone, a page ea
   const assistant = pending(page).nth(1)
   await expect(assistant.getByText("1 of 4", { exact: true })).toBeVisible()
   await expect(
-    assistant.getByRole("button", { name: "Skip all" })
+    assistant.getByRole("button", { name: "Pick for me" })
   ).toBeVisible()
   await assistant.getByRole("button", { name: "Next", exact: true }).click()
   await expect(assistant.getByRole("alert")).toHaveText([
@@ -91,10 +91,12 @@ test("the assistant tray asks for a name, pronouns, a look and a tone, a page ea
   await expect(
     assistant.getByRole("group", { name: "Tone" }).getByRole("radio")
   ).toHaveCount(3)
-  await expect(assistant.getByRole("button", { name: "Submit" })).toBeVisible()
+  await expect(
+    assistant.getByRole("button", { name: "Looks good" })
+  ).toBeVisible()
 })
 
-test("a filled assistant tray opens on its first page and keeps every pick in one press", async ({
+test("a filled assistant tray opens on its first page, a pick stays editable a page away", async ({
   page,
 }) => {
   await open(page, "AskDetails")
@@ -109,7 +111,7 @@ test("a filled assistant tray opens on its first page and keeps every pick in on
     assistant.getByRole("radio", { name: "they/them" })
   ).toBeChecked()
   await expect(
-    assistant.getByRole("button", { name: "Looks good" })
+    assistant.getByRole("button", { name: "Next", exact: true })
   ).toBeVisible()
 })
 

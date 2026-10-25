@@ -875,9 +875,12 @@ type TrayFrameProps = {
   onBack?: (() => void) | undefined
   onForward?: (() => void) | undefined
   skip?: { label: string; onSkip: () => void; disabled?: boolean } | undefined
+  /** Pick for me: the tray finishes at once, on its defaults for what is left. */
+  pick?: { onPick: () => void; disabled?: boolean } | undefined
   /**
    * The primary button. With `form` it submits that form, so Enter in a
-   * field submits too; without, Enter in a field presses it.
+   * field submits too; without, Enter in a field presses it. A step that
+   * acts differently passes its own label and action here.
    */
   submit?:
     | {
@@ -904,6 +907,7 @@ function TrayFrame({
   onBack,
   onForward,
   skip,
+  pick,
   submit,
   status,
   bodyRef: givenBody,
@@ -922,7 +926,7 @@ function TrayFrame({
   const count = paged ? `${page.index + 1} of ${page.total}` : null
   // A one-tap question has nothing under its options: no empty footer band,
   // and the body takes the card's own corners.
-  const footed = paged || status != null || skip || submit
+  const footed = paged || status != null || skip || pick || submit
   const bottom = footed
     ? "rounded-b-3xl"
     : "rounded-b-[calc(var(--composer-radius,var(--radius-4xl))-1px)]"
@@ -1157,6 +1161,17 @@ function TrayFrame({
                   {skip.label}
                 </Button>
               ) : null}
+              {pick ? (
+                <Button
+                  className={ACCENT_RING}
+                  disabled={pick.disabled}
+                  onClick={pick.onPick}
+                  type="button"
+                  variant="secondary"
+                >
+                  Pick for me
+                </Button>
+              ) : null}
               {submit ? (
                 // Filled with the accent, so its ring stands off the fill.
                 <Button
@@ -1197,7 +1212,7 @@ type QuestionTrayProps = {
   toolCallId: string
   /** An answer, as the owner leaves its question. Store it; a reload resumes after it. */
   onAnswer?: (id: string, answer: Answer) => void
-  /** Build my site or Skip all. */
+  /** Looks good or Pick for me. */
   onFinish: (output: AskDesignOutput) => void
   start?: Start
   /** The business's name, which the lettering previews are set in. */
@@ -1208,9 +1223,9 @@ type QuestionTrayProps = {
 /**
  * The design questions of a build, one page each: the options as a native
  * radio group, or checkboxes on a question that takes several, Write your
- * own, and Next, which reads Build my site on the last. Answers are code's:
+ * own, and Next, which reads Looks good on the last. Answers are code's:
  * `onAnswer` gets each one as the owner leaves its question, `onFinish` the
- * `AskDesignOutput` on Build my site or Skip all.
+ * `AskDesignOutput` on Looks good or Pick for me.
  */
 function QuestionTray({
   input,
@@ -1281,7 +1296,7 @@ function QuestionTray({
   const fromLogo = useLogoPalettes(
     logoAnswer && "logo" in logoAnswer ? logoAnswer.logo.id : undefined
   )
-  // The logo page's own primary button (Design my logo), while it has one.
+  // The logo page's own primary button (Design for me), while it has one.
   const [logoSubmit, setLogoSubmit] = useState<TrayFrameProps["submit"]>()
   const focusComposer = useFocusComposer()
 
@@ -1322,8 +1337,8 @@ function QuestionTray({
     settle(skipping, chosen)
     setIndex(to)
   }
-  // The logo cannot be skipped: Skip all without one opens its page, whose
-  // primary button then finishes the skip.
+  // The logo cannot be skipped: Pick for me without one opens its page, whose
+  // primary button then finishes.
   const finish = (skipAll: boolean, chosen = answer) => {
     const now = settle(!skipAll, chosen)
     const logo = questions.findIndex(
@@ -1345,21 +1360,19 @@ function QuestionTray({
     onFinish({ answers: sent, skip_all: skipAll || finishing })
     focusComposer()
   }
-  // Every other question holds an answer: one press keeps them all, once
-  // this one has its own (`chosen`), such as a logo still drawing.
-  const others = questions.every(
-    (each) => each.id === question.id || each.id in answers
-  )
-  const complete = (chosen = answer) => others && chosen !== undefined
+  const complete =
+    answer !== undefined && questions.every((each) => each.id in answers)
   // Next, with the answer a page has only just set when it moves on itself.
   const onward = (chosen = answer) => {
-    if (last || finishing || complete(chosen)) finish(finishing, chosen)
+    if (last || finishing) finish(finishing, chosen)
     else go(index + 1, true, chosen)
   }
   const next = () => {
     if (ready) onward()
   }
   const set = (given: Answer | undefined) => {
+    // Pick for me waited on the logo page for a design: the one kept finishes.
+    if (given && logo && finishing) return finish(true, given)
     setAnswers((now) => {
       const { [question.id]: _, ...rest } = now
       return given ? { ...now, [question.id]: given } : rest
@@ -1412,34 +1425,18 @@ function QuestionTray({
       onCollapsedChange={setCollapsed}
       onForward={last || !ready ? undefined : () => go(index + 1, true)}
       page={{ index, total }}
+      pick={{ onPick: () => finish(true), disabled: finishing && !ready }}
       question={question.question ?? "Choose one"}
-      // The logo cannot be skipped, so its page offers no Skip all.
-      skip={
-        logo
-          ? undefined
-          : {
-              label: "Skip all",
-              onSkip: () => finish(true),
-              disabled: finishing && !ready,
-            }
-      }
       status={
         finishing && !ready
           ? "A logo is all that is still needed"
-          : complete()
+          : last && complete
             ? "I'll build your site with these"
             : null
       }
       submit={
         (logo && logoSubmit) || {
-          // The last page says what pressing it does; before it, Looks good
-          // keeps every pick made.
-          label:
-            last || finishing
-              ? "Build my site"
-              : others
-                ? "Looks good"
-                : "Next",
+          label: last || finishing ? "Looks good" : "Next",
           onSubmit: next,
           disabled: !ready,
         }
@@ -1452,6 +1449,7 @@ function QuestionTray({
           answer={answer && "logo" in answer ? answer : undefined}
           onAnswer={set}
           palettes={palettes}
+          picking={finishing}
           setSubmit={setLogoSubmit}
           start={start?.logo}
         />
