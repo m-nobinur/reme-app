@@ -130,10 +130,10 @@ export function ShowFoldedQuestion({ className }: { className?: string }) {
 
 /**
  * Draws an open question in the thread's tray slot once no turn runs, so it
- * never appears mid-stream, in the moment the waiting line does, fading and
- * rising in. It is then brought into view, and takes the focus only from an
- * empty composer. Where the call sits in the transcript it says the
- * assistant is waiting; the thread dims behind an open tray (globals.css).
+ * never appears mid-stream, fading and rising in. It is then brought into
+ * view, and takes the focus only from an empty composer. Where the call sits
+ * in the transcript it says the assistant is waiting; the thread dims behind
+ * an open tray (globals.css).
  */
 function Docked({
   name,
@@ -152,25 +152,29 @@ function Docked({
   const running = useRevealWaiting(true)
   const ref = useRef<HTMLDivElement>(null)
   useFocusWhenIdle(!settled, running, ref)
-  if (!slot || running) return null
+  if (!slot) return null
   return (
     <>
+      {/* Drawn with the call as it streams in, so the reply has its full
+          height before the turn ends and nothing under it moves then. */}
       {settled ? null : (
         <p className="flex flex-wrap items-baseline gap-x-2 pt-3 text-muted-foreground text-sm">
           {many ? "Waiting for your answers" : "Waiting for your answer"}
           <ShowFoldedQuestion />
         </p>
       )}
-      {createPortal(
-        <div
-          data-slot={name}
-          ref={ref}
-          className="motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-2 duration-enter ease-standard motion-safe:animate-in"
-        >
-          {children}
-        </div>,
-        slot
-      )}
+      {running
+        ? null
+        : createPortal(
+            <div
+              data-slot={name}
+              ref={ref}
+              className="motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-2 duration-enter ease-standard motion-safe:animate-in"
+            >
+              {children}
+            </div>,
+            slot
+          )}
     </>
   )
 }
@@ -916,6 +920,12 @@ function TrayFrame({
   const focusComposer = useFocusComposer()
   const paged = page !== undefined && page.total > 1
   const count = paged ? `${page.index + 1} of ${page.total}` : null
+  // A one-tap question has nothing under its options: no empty footer band,
+  // and the body takes the card's own corners.
+  const footed = paged || status != null || skip || submit
+  const bottom = footed
+    ? "rounded-b-3xl"
+    : "rounded-b-[calc(var(--composer-radius,var(--radius-4xl))-1px)]"
 
   // The page's picked or first field. Pages the owner is not on stay in the
   // form, hidden; their fields are skipped.
@@ -1079,7 +1089,10 @@ function TrayFrame({
                 instead, the ones in a folded section stretched the thread
                 and the composer slid as it scrolled. */}
             <div
-              className="relative min-h-0 overflow-y-auto rounded-b-3xl bg-(--body) transition-[height] duration-enter ease-standard motion-reduce:transition-none"
+              className={cn(
+                "relative min-h-0 overflow-y-auto bg-(--body) transition-[height] duration-enter ease-standard motion-reduce:transition-none",
+                bottom
+              )}
               id={`${id}-body`}
               onScroll={measure}
               ref={bodyRef}
@@ -1092,70 +1105,75 @@ function TrayFrame({
               // A fade, not a decoration: it says there is more below.
               <span
                 aria-hidden
-                className="pointer-events-none absolute inset-x-0 bottom-0 h-10 rounded-b-3xl bg-linear-to-t from-(--body) to-transparent"
+                className={cn(
+                  "pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-linear-to-t from-(--body) to-transparent",
+                  bottom
+                )}
               />
             ) : null}
           </div>
-          <div className="flex flex-wrap items-center gap-1 p-4">
-            {paged ? (
-              <>
+          {footed ? (
+            <div className="flex flex-wrap items-center gap-1 p-4">
+              {paged ? (
+                <>
+                  <Button
+                    aria-label="Previous question"
+                    className={ACCENT_RING}
+                    disabled={!onBack}
+                    onClick={onBack}
+                    size="icon"
+                    type="button"
+                    variant="ghost"
+                  >
+                    <CaretLeftIcon aria-hidden />
+                  </Button>
+                  <Button
+                    aria-label="Next question"
+                    className={ACCENT_RING}
+                    disabled={!onForward}
+                    onClick={onForward}
+                    size="icon"
+                    type="button"
+                    variant="ghost"
+                  >
+                    <CaretRightIcon aria-hidden />
+                  </Button>
+                </>
+              ) : null}
+              <span
+                className="min-w-0 flex-1 px-1 text-muted-foreground text-xs"
+                role="status"
+              >
+                {status}
+              </span>
+              {skip ? (
                 <Button
-                  aria-label="Previous question"
                   className={ACCENT_RING}
-                  disabled={!onBack}
-                  onClick={onBack}
-                  size="icon"
+                  disabled={skip.disabled}
+                  onClick={skip.onSkip}
                   type="button"
                   variant="ghost"
                 >
-                  <CaretLeftIcon aria-hidden />
+                  {skip.label}
                 </Button>
+              ) : null}
+              {submit ? (
+                // Filled with the accent, so its ring stands off the fill.
                 <Button
-                  aria-label="Next question"
-                  className={ACCENT_RING}
-                  disabled={!onForward}
-                  onClick={onForward}
-                  size="icon"
-                  type="button"
-                  variant="ghost"
+                  className={cn(
+                    ACCENT_RING,
+                    "px-5 focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+                  )}
+                  disabled={submit.disabled}
+                  form={submit.form}
+                  onClick={submit.form ? undefined : submit.onSubmit}
+                  type={submit.form ? "submit" : "button"}
                 >
-                  <CaretRightIcon aria-hidden />
+                  {submit.label}
                 </Button>
-              </>
-            ) : null}
-            <span
-              className="min-w-0 flex-1 px-1 text-muted-foreground text-xs"
-              role="status"
-            >
-              {status}
-            </span>
-            {skip ? (
-              <Button
-                className={ACCENT_RING}
-                disabled={skip.disabled}
-                onClick={skip.onSkip}
-                type="button"
-                variant="ghost"
-              >
-                {skip.label}
-              </Button>
-            ) : null}
-            {submit ? (
-              // Filled with the accent, so its ring stands off the fill.
-              <Button
-                className={cn(
-                  ACCENT_RING,
-                  "px-5 focus-visible:ring-offset-2 focus-visible:ring-offset-card"
-                )}
-                disabled={submit.disabled}
-                form={submit.form}
-                onClick={submit.form ? undefined : submit.onSubmit}
-                type={submit.form ? "submit" : "button"}
-              >
-                {submit.label}
-              </Button>
-            ) : null}
-          </div>
+              ) : null}
+            </div>
+          ) : null}
         </>
       )}
     </section>

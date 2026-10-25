@@ -501,7 +501,10 @@ const FollowBottom: FC<{
       const landed = after.offsetHeight > slot
       const left = after.offsetHeight < slot
       slot = after.offsetHeight
-      if ((shrank || resized || left) && idle()) {
+      // A docked tray that grows with the turn still pinned shrank the space
+      // held below the reply instead, so the reply sat behind the card, the
+      // owner's message peeked over it, and Scroll to bottom showed.
+      if ((shrank || grew || resized || left) && idle()) {
         store.getState().setTopAnchorTurn(null)
       } else if (landed) {
         const { topAnchorTurn, setTopAnchorTurn } = store.getState()
