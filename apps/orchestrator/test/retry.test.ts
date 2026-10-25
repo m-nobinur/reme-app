@@ -89,7 +89,6 @@ describe("what the owner reads", () => {
     readyText("site.revise", null),
     resumedText("site.build"),
     resumedText("site.revise"),
-    resumedText("site.build", true),
   ]
 
   it.each(lines)("%s", (line) => {
@@ -579,6 +578,8 @@ live("a failed owner build's retry", () => {
     // A stall is said; this org has no conversation to say it in.
     expect(await resume(2, "developer.stalled")).toBe("none")
     expect(await resume(2, "developer.stalled")).toBe("none")
+    // A second stall says nothing new.
+    expect(await resume(3, "developer.stalled")).toBeNull()
     expect(await notesOf(orgId, ids.assignmentId)).toEqual([
       expect.objectContaining({
         kind: "resumed",
@@ -592,6 +593,7 @@ live("a failed owner build's retry", () => {
         cause: "stalled",
         next: "retrying",
       }),
+      expect.objectContaining({ kind: "resumed", attempt: 3 }),
     ])
   })
 })

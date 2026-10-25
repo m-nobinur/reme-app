@@ -102,10 +102,8 @@ export function retryingText(
   return `${subject(kind)} hit a problem${where}, so ${next}. Nothing for you to do: I'll say here when the draft is ready.`
 }
 
-export function resumedText(kind: string, again = false): string {
-  return again
-    ? `${subject(kind)} got stuck again, so I restarted it once more from where it left off. Nothing for you to do: I'll say here when the draft is ready.`
-    : `${subject(kind)} got stuck, so I restarted it from where it left off. Nothing for you to do: I'll say here when the draft is ready.`
+export function resumedText(kind: string): string {
+  return `${subject(kind)} got stuck, so I restarted it from where it left off. Nothing for you to do: I'll say here when the draft is ready.`
 }
 
 export function stoppedText(kind: string, reason: string): string {
@@ -449,8 +447,10 @@ export async function sayReady(
 
 /**
  * A Developer started again mid-build: its note, and for an owner's build
- * that went quiet long enough to be noticed, one line in the chat. Posted
- * once and never retried, so a busy chat holds up nothing; a resume after a
+ * that went quiet long enough to be noticed, one line in the chat, the first
+ * time only. A later stall, or one in a retry that already said it was
+ * starting again, posts nothing new: the panel shows the step. Posted once
+ * and never retried, so a busy chat holds up nothing; a resume after a
  * replaced sandbox is over too soon to tell. What the post did, or null.
  */
 export async function noteResumed(
@@ -472,18 +472,23 @@ export async function noteResumed(
   }
   await writeNote(kit, ids.orgId, note)
   if (cause !== "stalled") return null
-  const { origin, kind } = await kit.withOrg({ orgId: ids.orgId }, (db) =>
-    creationChoices(db, ids)
+  const { origin, kind, retry_of, said } = await kit.withOrg(
+    { orgId: ids.orgId },
+    async (db) => {
+      const [earlier] = await db
+        .select({ id: events.eventId })
+        .from(events)
+        .where(
+          sql`${events.assignmentId} = ${ids.assignmentId} and ${events.type} = ${AGENT_NOTE}
+            and ${events.payload}->>'kind' = 'resumed' and ${events.payload}->>'cause' = 'stalled'
+            and (${events.payload}->>'attempt')::int < ${resume.attempt}`
+        )
+        .limit(1)
+      return { ...(await creationChoices(db, ids)), said: Boolean(earlier) }
+    }
   )
-  if (origin !== "owner") return null
-  const text = await narrate(
-    env,
-    kit,
-    ids.orgId,
-    kind,
-    note,
-    resumedText(kind, resume.attempt > 1)
-  )
+  if (origin !== "owner" || retry_of || said) return null
+  const text = await narrate(env, kit, ids.orgId, kind, note, resumedText(kind))
   return postAssistantMessage(kit, {
     orgId: ids.orgId,
     key: note.key,
