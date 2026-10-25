@@ -18,13 +18,13 @@ import {
   RegistrantDetails,
   type RegistrantType,
   sellableTld,
+  toE164,
 } from "@workspace/contracts"
 import { Problem } from "@workspace/ui/components/assistant/decision"
 import { Button } from "@workspace/ui/components/button"
 import { Field } from "@workspace/ui/components/field"
 import { ToolStatus } from "@workspace/ui/components/status-line"
 import type { ToolArgs } from "@workspace/ui/lib/activity-copy"
-import { toE164 } from "@workspace/ui/lib/answer"
 import { CARD_SURFACE, FIELD_ERROR } from "@workspace/ui/lib/card"
 import { refusalText } from "@workspace/ui/lib/refusal"
 import { mountCheckout } from "@workspace/ui/lib/stripe"
@@ -378,7 +378,7 @@ export function readDetails(
       name: field(data, "name"),
       business_name: field(data, "business_name"),
       email: field(data, "email"),
-      phone: phone ? toE164(phone) : undefined,
+      phone: phone ? (toE164(phone) ?? phone) : undefined,
       address: {
         street: field(data, "street"),
         city: field(data, "city"),

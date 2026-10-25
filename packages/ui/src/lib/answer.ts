@@ -1,7 +1,9 @@
 import {
   type AskableFactKey,
+  dialable,
   FactValue,
   type FactValueKey,
+  toE164,
 } from "@workspace/contracts"
 
 /**
@@ -33,28 +35,6 @@ export type FactInput = {
   check?: (value: unknown) => boolean
   /** The field's value from what the input holds. Trimmed text by default. */
   parse?: (raw: string) => unknown
-}
-
-/** A UK number has 9 or 10 digits after +44; any other country is left to E.164. */
-const UK_NUMBER = /^\+44\d{9,10}$/
-const ringable = (value: unknown) =>
-  typeof value === "string" &&
-  (!value.startsWith("+44") || UK_NUMBER.test(value))
-
-/**
- * A UK number as the owner types it, to E.164. Anything it does not
- * recognise goes through unchanged, and `FactValue` refuses it.
- */
-export function toE164(raw: string): string {
-  // "+44 (0)7700 900123": the bracketed trunk zero is dropped after a
-  // country code, or it would land inside the number.
-  const digits = raw
-    .replace(/^(\s*(?:\+|00)\d{1,3})\s*\(0\)/, "$1")
-    .replace(/[\s().-]/g, "")
-  if (digits.startsWith("+")) return digits
-  if (digits.startsWith("00")) return `+${digits.slice(2)}`
-  if (digits.startsWith("0")) return `+44${digits.slice(1)}`
-  return digits
 }
 
 const number = (raw: string) => (raw.trim() === "" ? Number.NaN : Number(raw))
@@ -97,8 +77,9 @@ export const FACT_INPUTS = {
         autoComplete: "tel",
         placeholder: "+44 161 496 0000",
         invalid: "Enter a valid number customers can ring.",
-        check: ringable,
-        parse: toE164,
+        check: (value) => typeof value === "string" && dialable(value),
+        // What cannot be read stays as typed, for the check to name.
+        parse: (raw) => toE164(raw) ?? raw,
       },
     ],
   },
