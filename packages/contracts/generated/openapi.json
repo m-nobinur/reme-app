@@ -9452,6 +9452,11 @@
                     "type": "string",
                     "minLength": 1
                   },
+                  "question": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300
+                  },
                   "answer_schema": {
                     "type": "object",
                     "propertyNames": {
@@ -31364,6 +31369,11 @@
             "type": "string",
             "minLength": 1
           },
+          "question": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
           "answer_schema": {
             "type": "object",
             "propertyNames": {
@@ -41605,6 +41615,11 @@
                         "why": {
                           "type": "string",
                           "minLength": 1
+                        },
+                        "question": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300
                         },
                         "answer_schema": {
                           "type": "object",

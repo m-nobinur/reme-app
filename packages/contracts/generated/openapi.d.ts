@@ -2705,6 +2705,7 @@ export interface components {
             requested_by_staff_id: string
             field: string
             why: string
+            question?: string
             answer_schema: {
               [key: string]: unknown
             }
@@ -9024,6 +9025,7 @@ export interface components {
       requested_by_staff_id: string
       field: string
       why: string
+      question?: string
       answer_schema: {
         [key: string]: unknown
       }
@@ -11854,6 +11856,7 @@ export interface components {
               requested_by_staff_id: string
               field: string
               why: string
+              question?: string
               answer_schema: {
                 [key: string]: unknown
               }
