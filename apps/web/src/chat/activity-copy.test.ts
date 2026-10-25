@@ -259,16 +259,17 @@ describe("the first line of each kind of turn", () => {
     expect(first({ kind: "step", step: "upload", answered: true }).label).toBe(
       "Looking at your photos"
     )
-    // A typed message, on the script's step or over a card.
-    expect(
-      first({ kind: "step", step: "business.offerings", answered: false })
-    ).toEqual({ kind: "reading", label: "Looking at your services" })
-    expect(
-      first({ kind: "step", step: "quote_form", answered: false }).label
-    ).toBe("Looking at your quote questions")
-    expect(
-      first({ kind: "step", step: "build_for_me", answered: false }).label
-    ).toBe("Looking at who builds your website")
+    // A typed message: what it does, true at any step.
+    expect(first({ kind: "reading", about: "answer" })).toEqual({
+      kind: "reading",
+      label: "Looking at your answer",
+    })
+    expect(first({ kind: "reading", about: "change" }).label).toBe(
+      "Looking at what you'd like to change"
+    )
+    expect(first({ kind: "reading", about: "question" }).label).toBe(
+      "Looking into your question"
+    )
     // The plan's own line, once it writes one.
     expect(first({ kind: "doing", text: "Reading about your rates" })).toEqual({
       kind: "planning",

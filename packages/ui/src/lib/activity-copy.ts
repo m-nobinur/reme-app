@@ -3,6 +3,7 @@ import type {
   ActivityStep,
   BuildActivity,
   CosToolName,
+  MessageReading,
   OnboardingStatus,
   OnboardingStep,
   PlanFactKey,
@@ -631,14 +632,23 @@ const NEXT_LINE: Record<
   answer_only: "Working on your answer",
 }
 
+/** A typed message's line, true at any step. */
+const READING_LINE: Record<MessageReading, string> = {
+  answer: "Looking at your answer",
+  change: "Looking at what you'd like to change",
+  question: "Looking into your question",
+}
+
 export const onboardingLine = (on: OnboardingStatus["on"]) =>
   on.kind === "doing" || on.kind === "thinking"
     ? on.text
     : on.kind === "step"
       ? stepLine(on.step, on.answered)
-      : on.kind === "fact"
-        ? stepLine(on.key, true)
-        : NEXT_LINE[on.next]
+      : on.kind === "reading"
+        ? READING_LINE[on.about]
+        : on.kind === "fact"
+          ? stepLine(on.key, true)
+          : NEXT_LINE[on.next]
 
 const NEXT_KIND: Record<
   Extract<OnboardingStatus["on"], { kind: "next" }>["next"],
@@ -661,7 +671,7 @@ export const onboardingKind = (on: OnboardingStatus["on"]): StatusKind =>
     ? NEXT_KIND[on.next]
     : on.kind === "thinking"
       ? "thinking"
-      : on.kind === "step" && !on.answered
+      : on.kind === "reading" || (on.kind === "step" && !on.answered)
         ? "reading"
         : "planning"
 
