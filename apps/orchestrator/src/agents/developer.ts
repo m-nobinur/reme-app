@@ -875,7 +875,7 @@ export const reportComplete = (current: Session) =>
   defineTool({
     name: "report_complete",
     description:
-      "Report the build done. Runs astro check and astro build, uploads the site, and ends your turn. Call it only when every claim on the site traces to a fact and the site builds. In left_out, list each claim or section you left off because no fact supports it, as one question for the owner in ask_chief's shape (field, question, answer_schema, options); the owner is offered them once the draft is ready.",
+      "Report the build done. Runs astro check and astro build, uploads the site, and ends your turn. Call it only when every claim on the site traces to a fact and the site builds. In left_out, list each claim or section you left off or left empty because no fact supports it (opening hours, an overview, a guarantee), as one question for the owner in ask_chief's shape (field, question, answer_schema, options); the owner is offered them once the draft is ready. Anything left out goes in left_out, never only in risks.",
     input: toolInput(
       CompletionReport.pick({
         summary: true,
