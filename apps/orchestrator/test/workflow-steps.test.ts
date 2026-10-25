@@ -525,6 +525,13 @@ const paths: [string, Wake[], Setup, { outcome: string }][] = [
     { looks: [unanswered] },
     { outcome: "preview_ready" },
   ],
+  // The owner's own build asks them, takes the answer and opens its review.
+  [
+    "owner question, then a ready draft",
+    [information, completion],
+    { origin: "owner", looks: [unanswered] },
+    { outcome: "preview_ready" },
+  ],
   // A nudge for an earlier question, or a repeat: one more look, then a wait.
   [
     "a stale nudge, then the answer",
@@ -938,6 +945,7 @@ describe("the assignment Workflow's step names", () => {
         "build",
         "owner build",
         "information round trip",
+        "owner question, then a ready draft",
         "gate failure repaired",
         "gate failure ends failed",
         "owner build failed, then retried",
