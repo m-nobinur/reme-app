@@ -25,6 +25,10 @@ import { ChoiceForm } from "@workspace/ui/components/assistant/ask-choice"
 import { SaveDesignAnswerProvider } from "@workspace/ui/components/assistant/ask-design"
 import { UploadPhotosProvider } from "@workspace/ui/components/assistant/ask-upload"
 import {
+  AnswerBuildQuestionProvider,
+  BuildQuestionsUI,
+} from "@workspace/ui/components/assistant/build-questions"
+import {
   type DomainPurchase,
   DomainPurchaseProvider,
 } from "@workspace/ui/components/assistant/buy-domain"
@@ -1684,6 +1688,55 @@ const CHANGE_ASKED: ThreadMessageLike[] = [
   },
 ]
 
+/** Three questions a build waits on, posted by the assistant as one stack. */
+const BUILD_QUESTIONS: ThreadMessageLike[] = [
+  {
+    content: [
+      {
+        text: "Three quick things before I finish your website.",
+        type: "text",
+      },
+      {
+        type: "data",
+        name: "build_questions",
+        data: {
+          kind: "build",
+          assignment_id: "00000000-0000-4000-8000-0000000000b1",
+          questions: [
+            {
+              id: "00000000-0000-4000-8000-0000000000c1",
+              text: "What hours are you open on weekdays?",
+              input: { kind: "fact", key: "hours.weekday" },
+              skippable: false,
+            },
+            {
+              id: "00000000-0000-4000-8000-0000000000c2",
+              text: "How often do most customers book you?",
+              input: {
+                kind: "choice",
+                options: ["Weekly", "Fortnightly", "Monthly"],
+              },
+              skippable: true,
+            },
+            {
+              id: "00000000-0000-4000-8000-0000000000c3",
+              text: "Is there anywhere customers should park?",
+              input: { kind: "text", maxLength: 200, email: false },
+              skippable: true,
+            },
+          ],
+        },
+      },
+    ],
+    role: "assistant",
+    status: DONE,
+  },
+]
+
+/** Stores every answer after a moment, so the tick and the move on show. */
+const answerSlowly = () =>
+  new Promise<null>((done) => setTimeout(() => done(null), 400))
+
 /** Messages the assistant posted on its own, each with the button it can carry. */
 const POSTED: ThreadMessageLike[] = [
   ask("Is my domain connected?"),
@@ -2575,6 +2628,20 @@ const assistantCatalog = [
       <FixtureThread height="h-[34rem]" messages={POSTED}>
         <ServerButtonUI />
       </FixtureThread>
+    ),
+  },
+  {
+    name: "BuildQuestionsUI",
+    render: () => (
+      <AnswerBuildQuestionProvider value={answerSlowly}>
+        <OwnerThread
+          height="h-[40rem]"
+          messages={BUILD_QUESTIONS}
+          stored="00000000-0000-4000-8000-0000000000a1"
+        >
+          <BuildQuestionsUI />
+        </OwnerThread>
+      </AnswerBuildQuestionProvider>
     ),
   },
   {

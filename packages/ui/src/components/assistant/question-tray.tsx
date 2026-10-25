@@ -138,24 +138,29 @@ export function ShowFoldedQuestion({ className }: { className?: string }) {
 function Docked({
   name,
   many = false,
+  settled = false,
   children,
 }: {
   name: string
   /** The tray asks more than one question. */
   many?: boolean
+  /** Every answer is in: nothing waits, and the keyboard stays put. */
+  settled?: boolean
   children: ReactNode
 }) {
   const slot = useContext(SlotContext)
   const running = useRevealWaiting(true)
   const ref = useRef<HTMLDivElement>(null)
-  useFocusWhenIdle(true, running, ref)
+  useFocusWhenIdle(!settled, running, ref)
   if (!slot || running) return null
   return (
     <>
-      <p className="flex flex-wrap items-baseline gap-x-2 pt-3 text-muted-foreground text-sm">
-        {many ? "Waiting for your answers" : "Waiting for your answer"}
-        <ShowFoldedQuestion />
-      </p>
+      {settled ? null : (
+        <p className="flex flex-wrap items-baseline gap-x-2 pt-3 text-muted-foreground text-sm">
+          {many ? "Waiting for your answers" : "Waiting for your answer"}
+          <ShowFoldedQuestion />
+        </p>
+      )}
       {createPortal(
         <div
           data-slot={name}

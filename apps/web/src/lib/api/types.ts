@@ -19,6 +19,7 @@ import type {
   MemoryView,
   MessageFeedback,
   PushSubscribeRequest,
+  QuestionReply,
   RegistrantDetails,
   Reminder,
   SiteMedia,
@@ -283,10 +284,10 @@ export type OwnerDataSource = {
    * request: the api reads the org from the session, and nothing is named.
    */
   pollWorkspace: (etag: string | null) => Promise<WorkspacePoll>
+  /** One answer to a question the assistant asked in `conversationId`. */
   answer: (
-    assignmentId: string,
-    requestId: string,
-    value: unknown,
+    conversationId: string,
+    reply: QuestionReply,
     key: string
   ) => Promise<WriteOutcome>
   cancelBuild: (assignmentId: string) => Promise<WriteOutcome>

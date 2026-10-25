@@ -21,6 +21,7 @@ import {
   PushConfig,
   PushSubscribed,
   type PushSubscribeRequest,
+  type QuestionReply,
   REVISION_PICTURES,
   type RegistrantDetails,
   SiteMedia,
@@ -534,17 +535,13 @@ function segment(id: string): string {
 }
 
 async function answer(
-  assignmentId: string,
-  requestId: string,
-  value: unknown,
+  conversationId: string,
+  reply: QuestionReply,
   key: string
 ): Promise<WriteOutcome> {
-  const path = `/builds/${segment(assignmentId)}/answer`
-  const response = await post(path, { request_id: requestId, value }, key)
-  // The same answer again is a retry and gets its receipt (202). A 409
-  // `answer.already_given` means a different answer is on record, so this
-  // one was not recorded.
-  return await outcome(response, path)
+  const path = `/conversations/${segment(conversationId)}/questions`
+  // The same answer again is a retry; a refusal says why in the owner's words.
+  return await outcome(await post(path, reply, key), path)
 }
 
 async function cancelBuild(assignmentId: string): Promise<WriteOutcome> {

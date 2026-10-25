@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
+import type { QuestionReply } from "@workspace/contracts"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { EMPTY_WORKSPACE } from "../attention"
 import { apiSource, treeOf } from "./client"
@@ -652,7 +653,7 @@ it("counts a queued build as open but not working", async () => {
 
 it("refuses an id that is not a uuid before any request is made", async () => {
   // `new URL` collapses dot segments, so ".." would reach another route.
-  await expect(apiSource.answer("..", REQUEST, "x", "k")).rejects.toThrow()
+  await expect(apiSource.answer("..", reply("x"), "k")).rejects.toThrow()
   await expect(apiSource.cancelBuild("../changes")).rejects.toThrow()
   await expect(apiSource.preview(".")).rejects.toThrow()
   await expect(apiSource.conversation("..")).rejects.toThrow()
@@ -687,44 +688,42 @@ it("shows the question /workspace says the build waits on, and no other", async 
   )
 })
 
-it("sends an answer to the build it blocks, with the caller's key", async () => {
-  answers[`POST /builds/${ASSIGNMENT}/answer`] = Response.json(
-    {},
-    { status: 202 }
-  )
+/** The owner's answer to the question `REQUEST` in message `msg-1`. */
+const reply = (value: string | Record<string, string>): QuestionReply => ({
+  message_id: "msg-1",
+  question_id: REQUEST,
+  answer: { kind: "value", value },
+})
+
+const QUESTIONS = `POST /conversations/${CONVERSATION}/questions`
+
+it("sends an answer to the conversation that asked, with the caller's key", async () => {
+  answers[QUESTIONS] = Response.json({})
   const value = { open: "08:00", close: "17:00" }
-  expect(await apiSource.answer(ASSIGNMENT, REQUEST, value, "k-1")).toEqual({
+  expect(await apiSource.answer(CONVERSATION, reply(value), "k-1")).toEqual({
     done: true,
   })
-  expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
-    request_id: REQUEST,
-    value,
-  })
+  expect(JSON.parse(String(calls[0]?.init?.body))).toEqual(reply(value))
   expect(headerOf(calls[0], "idempotency-key")).toBe("k-1")
 })
 
 it("says why an answer was refused, including one already answered differently", async () => {
-  answers[`POST /builds/${ASSIGNMENT}/answer`] = refusal(400, "answer.invalid")
-  expect(await apiSource.answer(ASSIGNMENT, REQUEST, "x", "k")).toEqual({
+  answers[QUESTIONS] = refusal(400, "answer.invalid")
+  expect(await apiSource.answer(CONVERSATION, reply("x"), "k")).toEqual({
     done: false,
     reason: expect.stringContaining("does not fit the question"),
   })
-  answers[`POST /builds/${ASSIGNMENT}/answer`] = refusal(
-    409,
-    "answer.already_given"
-  )
+  answers[QUESTIONS] = refusal(409, "answer.already_given")
   // A different answer is on record: this one was not, and the question is
-  // gone from the build.
-  expect(await apiSource.answer(ASSIGNMENT, REQUEST, "x", "k")).toEqual({
+  // settled.
+  expect(await apiSource.answer(CONVERSATION, reply("x"), "k")).toEqual({
     done: false,
     gone: true,
     reason: expect.stringContaining("already answered"),
   })
-  answers[`POST /builds/${ASSIGNMENT}/answer`] = new Response(null, {
-    status: 502,
-  })
+  answers[QUESTIONS] = new Response(null, { status: 502 })
   await expect(
-    apiSource.answer(ASSIGNMENT, REQUEST, "x", "k")
+    apiSource.answer(CONVERSATION, reply("x"), "k")
   ).rejects.toThrow()
 })
 
