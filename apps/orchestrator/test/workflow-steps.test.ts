@@ -251,7 +251,7 @@ vi.mock("../src/state.ts", () => ({
 vi.mock("../src/revise.ts", () => ({
   SITE_ROOT: "/workspace/site",
   latestBlueprint: async () => null,
-  publishedSource: async () =>
+  reviseSource: async () =>
     ROW.kind === "site.revise"
       ? { revision_id: "rev-live", assignment_id: "x", source_key: "k" }
       : null,

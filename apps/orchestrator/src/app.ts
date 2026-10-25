@@ -79,7 +79,7 @@ import {
 } from "./publish.ts"
 import { answers } from "./question.ts"
 import { pickLane } from "./quick.ts"
-import { publishedSource } from "./revise.ts"
+import { holdDraft, publishedSource } from "./revise.ts"
 import { endSandbox, endSite, probe } from "./sandbox.ts"
 import { connectGoogle } from "./search.ts"
 import { liveInspect, livePerformance } from "./search-read.ts"
@@ -293,6 +293,7 @@ bridge.post("/", async (c) => {
     model?: unknown
     withhold?: unknown
     change_kind?: unknown
+    draft_revision_id?: unknown
   }
   const kind = typeof body.kind === "string" ? body.kind : "site.build"
   // Both are the console's test levers; an owner gets the defaults.
@@ -334,12 +335,26 @@ bridge.post("/", async (c) => {
       detail: { length: goal.length, max: GOAL_MAX },
     })
   }
+  // A change to a site not live yet names the draft it starts from.
+  const draft = body.draft_revision_id
+  if (
+    draft !== undefined &&
+    (kind !== "site.revise" || !Uuid.safeParse(draft).success)
+  ) {
+    return failure(c, 400, {
+      class: "validation",
+      code: "assignment.draft_invalid",
+      message: "draft_revision_id is a revision id, and only on a site.revise.",
+      detail: {},
+    })
+  }
   return createAssignment(c, key, {
     kind,
     goal,
     model,
     withhold,
     ...pickLane(kind, body.change_kind),
+    ...(typeof draft === "string" ? { draft } : {}),
   })
 })
 
@@ -355,6 +370,8 @@ export type NewAssignment = {
   change_kind: ChangeKind | null
   /** The failed build this one starts again (retry.ts), whose plan it keeps. */
   retry_of?: { assignment_id: string; blueprint: unknown }
+  /** The owner's draft a change starts from, before the site is live (`holdDraft`). */
+  draft?: string
 }
 
 /** The row and its `assignment.created` event, or why not, in the caller's transaction. */
@@ -369,6 +386,7 @@ export async function insertAssignment(
   | { capped: true }
   | { unpublished: true }
   | { missing: true }
+  | { draft_moved: true }
 > {
   const { kind, goal, model, withhold, lane, change_kind } = input
   const taint: TaintLabel[] =
@@ -397,9 +415,6 @@ export async function insertAssignment(
       return { capped: true as const }
     }
   }
-  const source =
-    kind === "site.revise" ? await publishedSource(db, orgId) : null
-  if (kind === "site.revise" && !source) return { unpublished: true as const }
   const codes = await db
     .select({ id: staff.id, code: staff.staffCode })
     .from(staff)
@@ -409,6 +424,14 @@ export async function insertAssignment(
   const developer = codes.find((s) => s.code === STAFF_CODE.developer)
   const chief = codes.find((s) => s.code === STAFF_CODE.chief)
   if (!developer || !chief) return { missing: true as const }
+  // Last before the insert: holding the draft pauses it in this transaction.
+  const source = input.draft
+    ? await holdDraft(db, orgId, input.draft)
+    : kind === "site.revise"
+      ? await publishedSource(db, orgId)
+      : null
+  if (input.draft && !source) return { draft_moved: true as const }
+  if (kind === "site.revise" && !source) return { unpublished: true as const }
   const [row] = await db
     .insert(assignments)
     .values({
@@ -447,6 +470,7 @@ export async function insertAssignment(
       change_kind,
       origin: owner ? "owner" : "console",
       ...(source ? { revises_revision_id: source.revision_id } : {}),
+      ...(input.draft ? { draft_revision_id: input.draft } : {}),
       ...(input.retry_of ? { retry_of: input.retry_of.assignment_id } : {}),
     },
     taint,
@@ -488,6 +512,14 @@ async function createAssignment(
       code: "builds.daily_cap",
       message: `A business starts at most ${OWNER_DAILY_BUILDS} builds in 24 hours.`,
       detail: { max: OWNER_DAILY_BUILDS },
+    })
+  }
+  if ("draft_moved" in result) {
+    return failure(c, 409, {
+      class: "validation",
+      code: "change.draft_moved",
+      message: "The draft changed while the change was asked for. Ask again.",
+      detail: {},
     })
   }
   if ("missing" in result) {
