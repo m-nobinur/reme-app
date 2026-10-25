@@ -95,6 +95,7 @@ describe("what the owner reads", () => {
       { label: "your hero title", words: "Professional home cleaning" },
       "b"
     ),
+    readyText("site.revise", null, { label: "your hero title", nearest: true }),
     resumedText("site.build"),
     resumedText("site.revise"),
   ]
@@ -103,6 +104,22 @@ describe("what the owner reads", () => {
     // No code, id, number, name of ours or em dash.
     expect(line).not.toMatch(/[a-z]+[._][a-z]+|\d|Reme|Ava|—/)
     expect(line.length).toBeLessThan(240)
+  })
+
+  it("never claims a change the build made somewhere else instead", () => {
+    const line = readyText(
+      "site.revise",
+      null,
+      {
+        label: "the small label above your hero title",
+        words: "x",
+        nearest: true,
+      },
+      "a"
+    )
+    expect(line).toBe(
+      "I couldn't change the small label above your hero title exactly as you asked, so I made the nearest change I could. Have a look, and tell me if you'd like it done another way."
+    )
   })
 
   it("names the planned pages by the names the owner picked them by", () => {

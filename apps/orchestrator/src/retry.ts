@@ -131,7 +131,8 @@ function plannedPages(blueprint: unknown) {
 }
 
 /** What a change says about itself: the owner's short name for it, and the new words of a copy change. */
-export type Change = { label?: string; words?: string }
+/** `nearest` when the build says it could not make the change as asked. */
+export type Change = { label?: string; words?: string; nearest?: true }
 
 /** The same assignment always reads the same wording, so a replayed step posts what the first did. */
 const pick = <T>(seed: string, variants: readonly T[]) =>
@@ -148,10 +149,14 @@ const pick = <T>(seed: string, variants: readonly T[]) =>
 export function readyText(
   kind: string,
   blueprint: unknown,
-  { label, words }: Change = {},
+  { label, words, nearest }: Change = {},
   seed = ""
 ): string {
   if (kind === "site.revise") {
+    // Never claim a change the build made somewhere else instead.
+    if (nearest) {
+      return `I couldn't change ${label ?? "that"} exactly as you asked, so I made the nearest change I could. Have a look, and tell me if you'd like it done another way.`
+    }
     if (!label) {
       return "Your website changes are ready. Preview them, then approve them or tell me what to change."
     }
@@ -223,13 +228,13 @@ async function offerOf(
     : undefined
 }
 
-/** The change's label from its creation and its new words from the quick lane, each absent when not recorded. */
+/** The change's label from its creation, its new words from the quick lane and whether its report says it was not made as asked, each absent when not recorded. */
 async function changeOf(db: OrgScopedDb, ids: Ids): Promise<Change> {
   const rows = await db
     .select({ type: events.type, payload: events.payload })
     .from(events)
     .where(
-      sql`${events.assignmentId} = ${ids.assignmentId} and ${events.type} in ('assignment.created', ${QUICK_EDITED})`
+      sql`${events.assignmentId} = ${ids.assignmentId} and ${events.type} in ('assignment.created', 'assignment.completion_reported', ${QUICK_EDITED})`
     )
     .orderBy(sql`${events.eventId} desc`)
   const payload = (type: string) => rows.find((r) => r.type === type)?.payload
@@ -237,9 +242,11 @@ async function changeOf(db: OrgScopedDb, ids: Ids): Promise<Change> {
     payload("assignment.created")?.label
   ).data
   const words = payload(QUICK_EDITED)?.words
+  const asAsked = payload("assignment.completion_reported")?.as_asked
   return {
     ...(label && { label }),
     ...(typeof words === "string" && { words }),
+    ...(asAsked === false && { nearest: true as const }),
   }
 }
 
