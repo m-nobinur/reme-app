@@ -435,9 +435,10 @@ function TrayLogo({
 
   // With no logo held the page opens on making one: one round starts by
   // itself from the filled brief, and its first design is kept as it lands,
-  // so Looks good takes it. A pick or an upload in the meantime wins.
+  // so Looks good takes it. A pick or an upload in the meantime wins. A page
+  // the catalog opens in a given state stays in it.
   const auto = useRef<"draw" | "keep" | "done">(
-    first === "create" && !answer ? "draw" : "done"
+    first === "create" && !answer && !start ? "draw" : "done"
   )
   // biome-ignore lint/correctness/useExhaustiveDependencies: steps on the rounds read, once each
   useEffect(() => {

@@ -97,6 +97,16 @@ test("the tray is named by its question, and collapsed by its question too", asy
   await expect(collapsed.getByText("3 of 6", { exact: true })).toBeVisible()
 })
 
+test("with every pick made, one Looks good keeps them on any page", async ({
+  page,
+}) => {
+  await open(page, "QuestionTray")
+  const every = state(page, "Every pick made")
+  await expect(every.getByText("2 of 6", { exact: true })).toBeVisible()
+  await expect(every.getByRole("button", { name: "Looks good" })).toBeEnabled()
+  await expect(every.getByText("I'll build your site with these")).toBeVisible()
+})
+
 test("the last question reads Build my site", async ({ page }) => {
   await open(page, "QuestionTray")
   await expect(

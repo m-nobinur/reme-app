@@ -144,8 +144,9 @@ const refused = {
     ),
 }
 
-/** A brief filled in up to each section. */
-const COLOURED = { colours: { palette: 0 } }
+/** A brief filled in up to each section; the rest unset, as the owner cleared it. */
+const UNSET = { colours: null, type: null, style: null }
+const COLOURED = { ...UNSET, colours: { palette: 0 } }
 const TYPED = { ...COLOURED, type: "emblem" } as const
 const STYLED = { ...TYPED, style: "hand_drawn" } as const
 
@@ -337,11 +338,17 @@ const STATES: State[] = [
     input: logoOn("upload"),
     start: { index: LOGO, answers: { logo: { logo: KEPT } } },
   },
-  { title: "Logo, create: how it should look and colours", input: create },
+  // No start: the page draws its first round by itself and keeps a design.
+  { title: "Logo, create: drawn by itself", input: create },
+  {
+    title: "Logo, create: how it should look and colours",
+    input: create,
+    start: { logo: { brief: UNSET } },
+  },
   {
     title: "Logo, create: own colours",
     input: create,
-    start: { logo: { brief: { colours: { custom: [primary] } } } },
+    start: { logo: { brief: { ...UNSET, colours: { custom: [primary] } } } },
   },
   {
     title: "Logo, create: colours picked, logo type next",
@@ -483,6 +490,21 @@ const STATES: State[] = [
     start: {
       index: 5,
       answers: { pages: { choices: ["services", "gallery", "faq"] } },
+    },
+  },
+  {
+    // Every pick made, as a new owner's tray opens once its logo lands.
+    title: "Every pick made",
+    start: {
+      index: PALETTE,
+      answers: {
+        logo: { logo: KEPT },
+        palette: { choice: OFFERED[0]?.id ?? "" },
+        lettering: { choice: "outfit_figtree" },
+        arrangement: { choice: "dark_rows" },
+        photos: { photos: [], create: true },
+        pages: { choices: ["services", "faq"] },
+      },
     },
   },
   { title: "Collapsed", start: { index: LETTERING, collapsed: true } },

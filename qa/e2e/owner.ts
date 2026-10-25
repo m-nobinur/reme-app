@@ -269,7 +269,8 @@ export async function answerOnboarding(page: Page): Promise<void> {
     } else if (slot === "ask-details") {
       // One field a page: an empty text field from the sheet, by its label,
       // a prefilled email stays, and a set of chips takes its first option.
-      // Next until the last page, which reads Submit.
+      // Next until the last page, which reads Submit, or Looks good on a
+      // tray that opened filled.
       for (;;) {
         for (const field of await card.getByRole("textbox").all()) {
           if (!(await field.isVisible()) || (await field.inputValue())) continue
@@ -288,7 +289,9 @@ export async function answerOnboarding(page: Page): Promise<void> {
         if (!(await next.count())) break
         await next.click()
       }
-      await step(() => card.getByRole("button", { name: "Submit" }).click())
+      await step(() =>
+        card.getByRole("button", { name: /^(Submit|Looks good)$/ }).click()
+      )
     } else if (slot === "ask-choice") {
       // A choice of two answers on its tap, with no Submit.
       const submit = card.getByRole("button", { name: "Submit" })
