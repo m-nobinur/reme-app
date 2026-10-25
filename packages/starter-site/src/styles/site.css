@@ -261,11 +261,12 @@ picture {
   display: block;
 }
 
-/* The owner's logo, at a fixed height whatever its file's size. */
+/* The owner's logo, at a fixed height whatever its file's size. A drawn logo is
+   square with its name inside, so it needs room to read. */
 .site-logo {
   display: block;
   width: auto;
-  height: 2.5rem;
+  height: 4rem;
   max-width: 12rem;
   object-fit: contain;
 }
@@ -2665,7 +2666,7 @@ picture {
 }
 
 .site-footer .site-logo {
-  height: 2rem;
+  height: 3rem;
 }
 
 .footer-blurb {
