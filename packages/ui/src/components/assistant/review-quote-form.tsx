@@ -182,7 +182,7 @@ const ReviewQuoteForm: ToolCallMessagePartComponent = (props) => {
 
   return (
     <div
-      className="motion-safe:fade-in-0 flex flex-col gap-2.5 pt-3 duration-250 motion-safe:animate-in"
+      className="motion-safe:fade-in-0 flex flex-col gap-2.5 pt-3 duration-enter ease-standard motion-safe:animate-in"
       data-slot="review-quote-form"
     >
       <ul

@@ -675,7 +675,7 @@ const localDay = (at: string | null): number | null => {
 // owner read further up makes it a "New message" pill.
 const ThreadScrollToBottom: FC<{ unseen: boolean }> = ({ unseen }) => {
   const className =
-    "aui-thread-scroll-to-bottom absolute -top-12 z-10 self-center rounded-full transition-[opacity,visibility] delay-500 duration-150 disabled:invisible disabled:opacity-0 disabled:delay-0 motion-reduce:transition-none"
+    "aui-thread-scroll-to-bottom absolute -top-12 z-10 self-center rounded-full transition-[opacity,visibility] delay-500 disabled:invisible disabled:opacity-0 disabled:delay-0 motion-reduce:transition-none"
   return (
     <ThreadPrimitive.ScrollToBottom
       behavior="smooth"
@@ -1165,7 +1165,7 @@ const AssistantMessage: FC = () => {
                     )
                     // Played in: the cards follow the words.
                     return reveal.phase === "played" ? (
-                      <div className="fade-in animate-in duration-200 motion-reduce:animate-none">
+                      <div className="fade-in animate-in duration-enter ease-standard motion-reduce:animate-none">
                         {card}
                       </div>
                     ) : (

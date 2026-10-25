@@ -169,7 +169,7 @@ export function SiteReady({
       className={cn(
         "flex flex-col overflow-hidden rounded-2xl border border-border bg-card",
         inTray
-          ? "motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-2 duration-250 ease-out motion-safe:animate-in"
+          ? "motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-2 duration-enter ease-standard motion-safe:animate-in"
           : ["max-w-xl", className]
       )}
       data-slot={inTray ? "site-ready-docked" : "site-ready"}

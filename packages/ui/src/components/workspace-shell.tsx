@@ -311,7 +311,7 @@ function WorkspaceShell({
         <aside
           aria-label="Workspace"
           className={cn(
-            "hidden shrink-0 flex-col overflow-hidden border-border bg-rail text-rail-foreground transition-[width] duration-200 ease-out motion-reduce:transition-none md:flex",
+            "hidden shrink-0 flex-col overflow-hidden border-border bg-rail text-rail-foreground transition-[width] duration-enter motion-reduce:transition-none md:flex",
             railOpen ? "w-16 border-r" : "w-0",
             "[&_[data-slot=rail-label]]:sr-only"
           )}
@@ -428,7 +428,7 @@ function WorkspaceShell({
               <CaretDownIcon
                 aria-hidden
                 className={cn(
-                  "size-4 shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none",
+                  "size-4 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none",
                   // It points the way the card opens: down from the top, up from the bottom.
                   expanded !== floating && "rotate-180"
                 )}

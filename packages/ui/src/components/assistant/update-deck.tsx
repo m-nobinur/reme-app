@@ -74,7 +74,7 @@ export function UpdateDeck({ updates }: { updates: readonly Update[] }) {
             <div
               aria-hidden={index !== front}
               className={cn(
-                "flex min-w-0 items-center transition-opacity duration-700 ease-out motion-reduce:transition-none",
+                "flex min-w-0 items-center transition-opacity duration-slow motion-reduce:transition-none",
                 index === front ? "opacity-100" : "invisible opacity-0"
               )}
               inert={index !== front}

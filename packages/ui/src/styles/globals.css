@@ -81,6 +81,33 @@
 @source "../../../apps/**/*.{ts,tsx}";
 @source "../**/*.{ts,tsx}";
 
+/* Motion: three durations and one easing for whatever moves in answer to the
+   owner or the work. Fast is a change of state (hover, colour, a chevron),
+   enter is something arriving or opening, slow is a picture or a long reveal
+   settling. The illustrations' idle loops keep their own pace. Static, so
+   plain CSS and inline styles can read them too. */
+@theme static {
+  --duration-fast: 150ms;
+  --duration-enter: 250ms;
+  --duration-slow: 500ms;
+  --ease-standard: cubic-bezier(0.32, 0.72, 0, 1);
+  --default-transition-duration: var(--duration-fast);
+  --default-transition-timing-function: var(--ease-standard);
+}
+/* Each sets the duration tw-animate-css reads too, as `duration-150` does. */
+@utility duration-fast {
+  --tw-duration: var(--duration-fast);
+  transition-duration: var(--duration-fast);
+}
+@utility duration-enter {
+  --tw-duration: var(--duration-enter);
+  transition-duration: var(--duration-enter);
+}
+@utility duration-slow {
+  --tw-duration: var(--duration-slow);
+  transition-duration: var(--duration-slow);
+}
+
 @theme inline {
   --font-heading: var(--font-sans);
   --color-rail-foreground: var(--rail-foreground);
@@ -130,7 +157,8 @@
   --animate-persona-float: persona-float 5s ease-in-out infinite;
   --animate-persona-sway: persona-sway 7s ease-in-out infinite;
   --animate-persona-blink: persona-blink 6.5s linear infinite;
-  --animate-persona-blink-once: persona-blink-once 0.28s ease-in-out;
+  --animate-persona-blink-once: persona-blink-once var(--duration-enter)
+    var(--ease-standard);
   /* A portrait's head: a slow, uneven tilt and a small nod. */
   --animate-avatar-sway: avatar-sway 9s ease-in-out infinite;
   --animate-flow: flow 1.4s linear infinite;
@@ -146,7 +174,8 @@
   --animate-status-swing: status-swing 1.4s ease-in-out infinite;
   --animate-status-lift: status-lift 1.4s ease-in-out infinite;
   --animate-status-breathe: status-breathe 1.8s ease-in-out infinite;
-  --animate-status-reveal: status-reveal 0.5s ease-out backwards;
+  --animate-status-reveal: status-reveal var(--duration-slow)
+    var(--ease-standard) backwards;
   /* The drawn icons' parts (status-icons.tsx). */
   --animate-icon-spin: icon-spin 3s linear infinite;
   --animate-icon-dash: icon-dash 1.2s linear infinite;
@@ -547,7 +576,7 @@
 @media (prefers-reduced-motion: no-preference) {
   /* Zero specificity, so a part's own transition still wins. */
   [data-slot="aui_message-group"] :where(*) {
-    transition: color 300ms ease;
+    transition: color var(--duration-enter) var(--ease-standard);
   }
 }
 [data-slot="aui_thread-viewport"]:has(
