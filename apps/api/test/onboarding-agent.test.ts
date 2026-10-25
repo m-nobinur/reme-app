@@ -381,6 +381,13 @@ describe("the plan's checks", () => {
     const done = checkPlan(deferred, typed("dealer's choice", o, tray))
     if (!done.ok) throw new Error(done.errors.join("; "))
     expect(done.checked.chosen).toEqual(prefill)
+    // A bare yes, no or skip answers the question the owner is on, never
+    // the rest: the live run of 2026-10-26 built on "skip" and on "yes".
+    for (const words of ["skip", "Yes!", "no thanks"]) {
+      const errors = errorsOf(deferred, typed(words, o, tray)).join()
+      expect(errors, words).toMatch(/bare yes, no or skip/)
+      expect(errors, words).toMatch(/design tray still asks/)
+    }
     // The owner's layout and the rest left to it.
     const second = String(
       (tray.input as AskDesignInput).questions.find(
@@ -407,7 +414,7 @@ describe("the plan's checks", () => {
         }),
         typed("dealer's choice", o, tray)
       ).join()
-    ).toMatch(/site.direction was left to you/)
+    ).toMatch(/site.direction is not what the card holds/)
   })
 
   it("keeps the assistant card's own values for what the owner left to it, and a name to fit the pronouns they asked for", () => {
@@ -415,15 +422,15 @@ describe("the plan's checks", () => {
       without("assistant.name", "assistant.pronouns", "assistant.tone")
     )
     const card = detailsCard("assistant", o, counter())
-    const left = (facts: Plan["facts"], chosen: string[]) =>
+    const left = (facts: Plan["facts"], picked: string[]) =>
       errorsOf(
         plan({
           facts,
-          chosen_for_owner: chosen as Plan["chosen_for_owner"],
+          chosen_for_owner: picked as Plan["chosen_for_owner"],
           pending_card: "answered",
         }),
         typed("dealer's choice", o, card)
-      ).filter((e) => e.includes("was left to you"))
+      ).filter((e) => e.startsWith("assistant."))
     const asCome = {
       "assistant.name": { name: "Reme" },
       "assistant.pronouns": { id: "she_her" },
@@ -435,16 +442,36 @@ describe("the plan's checks", () => {
     expect(
       left({ ...asCome, "assistant.tone": { id: "friendly" } }, all)
     ).toEqual([
-      'assistant.tone was left to you: keep what the card holds, {"id":"professional"}',
+      'assistant.tone is not what the card holds, {"id":"professional"}: if the owner\'s words asked for this, it is their answer, so leave it out of chosen_for_owner; if they left it to you, keep the card\'s',
     ])
-    // "You choose, but make it a man": a man's name is the owner's ask.
+    // "You choose, but make it a man": he/him is the owner's, and the name
+    // and face follow it. The live run kept Reme, she/her on the old refusal.
     const man = {
       ...asCome,
       "assistant.name": { name: "Arthur" },
       "assistant.pronouns": { id: "he_him" },
     } as Plan["facts"]
-    expect(left(man, ["assistant.name", "assistant.tone"])).toEqual([])
-    expect(left(man, all)).toHaveLength(2)
+    const chosen = ["assistant.name", "assistant.tone"]
+    expect(left(man, chosen)).toEqual([])
+    const checked = checkPlan(
+      plan({
+        facts: man,
+        chosen_for_owner: chosen as Plan["chosen_for_owner"],
+        pending_card: "answered",
+      }),
+      typed("you choose, but make it a man", o, card)
+    )
+    expect(checked.ok && checked.checked.chosen).toContainEqual({
+      key: "assistant.avatar",
+      value: { id: "he_1" },
+    })
+    expect(
+      left({ ...man, "assistant.name": { name: "Reme" } }, chosen)[0]
+    ).toMatch(/does not fit the pronouns/)
+    // Listed as its own choice, the refusal says a value they asked for is theirs.
+    expect(left(man, all).join()).toMatch(
+      /assistant.pronouns is not what the card holds.*leave it out of chosen_for_owner/
+    )
   })
 
   it("lets the plan choose the palettes shown first, from the pool, three or four of them", () => {
