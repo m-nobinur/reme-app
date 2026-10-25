@@ -61,6 +61,11 @@ export const ActivitySegment = z.strictObject({
     .optional(),
   /** A model-written line for "change" and "turn", cleaned: shown as data. */
   step: Text(60).optional(),
+  /**
+   * A website or change build at work: how long its lane usually takes, in
+   * seconds, the same measured p50 the chat quotes.
+   */
+  usual_seconds: z.int().positive().optional(),
   /** Google only: when Search Console data was last read. */
   synced_at: Timestamp.optional(),
 })
