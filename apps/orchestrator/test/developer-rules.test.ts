@@ -81,8 +81,10 @@ describe("the Developer's site rules", () => {
     expect(rules).toContain("not appear on the site: service_area.text.")
   })
 
-  it("sends a requested claim no fact supports to ask_chief", () => {
-    expect(text(true)).toContain("call ask_chief for it rather than writing it")
+  it("leaves out a requested claim no fact supports, for the owner to be offered", () => {
+    expect(text(true)).toContain(
+      "leave it out and list it in left_out rather than writing it"
+    )
   })
 
   it("says how the copy reads, the page heads and the icons", () => {
@@ -102,14 +104,11 @@ describe("the Developer's site rules", () => {
     expect(rules).toContain("Never write, shorten or correct a review")
   })
 
-  it("keeps proof to what the owner said and asks the owner rarely", () => {
+  it("keeps proof to what the owner said and never asks beyond the required facts", () => {
     const rules = text(false)
     expect(rules).toContain("business.proof is the only source")
     expect(rules).toContain("never add to it")
-    expect(rules).toContain("once a build at most")
-    expect(rules).toContain(
-      "Never ask for a nice-to-have or for business.proof"
-    )
+    expect(rules).toContain("Beyond the required facts, never call ask_chief")
   })
 
   it("bans the copy check's own stock phrases", () => {
