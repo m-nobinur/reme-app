@@ -861,18 +861,24 @@ export const reportComplete = (current: Session) =>
   defineTool({
     name: "report_complete",
     description:
-      "Report the build done. Runs astro check and astro build, uploads the site, and ends your turn. Call it only when every claim on the site traces to a fact and the site builds.",
+      "Report the build done. Runs astro check and astro build, uploads the site, and ends your turn. Call it only when every claim on the site traces to a fact and the site builds. In left_out, list each claim or section you left off because no fact supports it, as one question for the owner in ask_chief's shape (field, question, answer_schema, options); the owner is offered them once the draft is ready.",
     input: toolInput(
       CompletionReport.pick({
         summary: true,
         changes: true,
         risks: true,
         decisions_needed: true,
+        left_out: true,
       })
     ),
     harness: true,
     durable: true,
     async run({ data, harness, step }) {
+      // Thrown before the build runs, so the model fixes the list and calls again.
+      for (const item of data.left_out ?? []) {
+        const refusal = refuseQuestion(item)
+        if (refusal) throw new Error(`left_out ${item.field}: ${refusal}`)
+      }
       const { spec } = current.runtime
       const orgId = spec.org_id
       const assignmentId = current.brief.snapshot.assignment_id
@@ -917,6 +923,12 @@ export const reportComplete = (current: Session) =>
         checks: checksOf({ check, build, custom }),
         risks: data.risks,
         decisions_needed: data.decisions_needed,
+        ...(data.left_out?.length && {
+          left_out: data.left_out.map((item) => ({
+            ...item,
+            options: askedOptions(item),
+          })),
+        }),
         reported_at: new Date().toISOString(),
       })
       // Model output: nothing downstream may promote it (§28.3).

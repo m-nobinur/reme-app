@@ -78,6 +78,7 @@ export const ASK_CHIEF_DESCRIPTION = [
   `For any other key the owner answers in text: answer_schema is exactly {"type":"string"}, optionally with "maxLength" (1 to ${ANSWER_TEXT_MAX}) and "format":"email", and no other keyword or object wrapper.`,
   `options is a closed list of literal values the owner picks exactly as written, at most ${OPTIONS_MAX}, each valid under answer_schema, and only when the answer is a choice among known values. Never put an instruction, a question, an empty string or "null" in it.`,
   "question is how the owner's assistant will ask it: one short plain question about their business, ending in a question mark, with no field names, no names of anyone and no technical words.",
+  "Ask only when the site cannot be built without the answer. Anything else no fact supports, a claim or a section, leave out and list in report_complete's left_out.",
   "Ask only about the business. The build, its files and its tools are yours: never ask the owner to fix them.",
 ].join("\n")
 

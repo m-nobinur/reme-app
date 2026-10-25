@@ -2,8 +2,11 @@ import {
   AGENT_NOTE,
   AgentNote,
   Blueprint,
+  type BuildQuestion,
+  type BuildQuestions,
   type BuildStopCause,
   buildFailure,
+  CompletionReport,
   type GateName,
   PLANNED_PAGES,
   TONES,
@@ -15,6 +18,7 @@ import {
   eq,
   events,
   failureCode,
+  type OrgScopedDb,
   type Posted,
   pgCode,
   postAssistantMessage,
@@ -26,6 +30,7 @@ import { assistantName } from "./assistant.ts"
 import { creationChoices, failureReason, lastReport } from "./brief.ts"
 import { eventKey } from "./domain-flow.ts"
 import { logSpend, replyOf, writeText } from "./heartbeat-write.ts"
+import { inputOf, refuseQuestion } from "./question.ts"
 import { workKey } from "./sandbox.ts"
 import { type Ids, REPAIR_LIMIT, repairsSoFar } from "./state.ts"
 
@@ -137,7 +142,47 @@ export function readyText(kind: string, blueprint: unknown): string {
   return `Your website draft is ready, with ${list} pages${plus}. ${next}`
 }
 
-export type Note = { key: string; text: string }
+/** A chat line to post, and with a ready line, what the build left out to offer. */
+export type Note = { key: string; text: string; questions?: BuildQuestions }
+
+/** Said above the offer, which is a card of skippable questions. */
+export const OFFER_LINE =
+  "I left out a few things I didn't know yet. Want me to add these?"
+
+/**
+ * What this build left out (`left_out` on its last report) as one stack of
+ * skippable questions: each one `ask_chief` would take, about a fact that is
+ * still missing, once per fact. None when nothing is left to offer.
+ */
+async function offerOf(
+  db: OrgScopedDb,
+  assignmentId: string
+): Promise<BuildQuestions | undefined> {
+  const [row] = await db
+    .select({ payload: events.payload })
+    .from(events)
+    .where(
+      sql`${events.assignmentId} = ${assignmentId} and ${events.type} = 'assignment.completion_reported'`
+    )
+    .orderBy(sql`${events.eventId} desc`)
+    .limit(1)
+  const items = CompletionReport.safeParse(row?.payload).data?.left_out ?? []
+  const questions: BuildQuestion[] = []
+  for (const item of items) {
+    if (questions.some((q) => q.field === item.field)) continue
+    if (refuseQuestion(item) || (await currentFact(db, item.field))) continue
+    questions.push({
+      id: crypto.randomUUID(),
+      text: item.question.trim(),
+      input: inputOf(item),
+      skippable: true,
+      field: item.field,
+    })
+  }
+  return questions.length > 0
+    ? { kind: "offer", assignment_id: assignmentId, questions }
+    : undefined
+}
 
 /** One note, once: its key makes the event's, so a replayed step writes nothing new. */
 export async function writeNote(
@@ -318,7 +363,9 @@ export async function postNote(
   const posted = await postAssistantMessage(kit, {
     orgId,
     key: note.key,
-    message: { text: [note.text] },
+    message: note.questions
+      ? { text: [note.text, OFFER_LINE], questions: note.questions }
+      : { text: [note.text] },
   })
   if (posted === "busy" || posted === "waiting") {
     throw new Error(`build.note_${posted}`)
@@ -352,8 +399,12 @@ export async function readyNote(
 ): Promise<Note | null> {
   const row = await reviewOpen(kit, ids)
   if (!row) return null
-  const { retry_of } = await kit.withOrg({ orgId: ids.orgId }, (db) =>
-    creationChoices(db, ids)
+  const { retry_of, offer } = await kit.withOrg(
+    { orgId: ids.orgId },
+    async (db) => ({
+      ...(await creationChoices(db, ids)),
+      offer: await offerOf(db, ids.assignmentId),
+    })
   )
   const { named, each } = plannedPages(row.blueprint)
   const pages =
@@ -383,6 +434,7 @@ export async function readyNote(
       note,
       readyText(row.kind, row.blueprint)
     ),
+    ...(offer && { questions: offer }),
   }
 }
 

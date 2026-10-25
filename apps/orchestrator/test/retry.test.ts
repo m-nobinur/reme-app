@@ -1,8 +1,16 @@
 import { AGENT_NOTE, Blueprint, BUILD_FAILURES } from "@workspace/contracts"
-import { assignments, eq, events, newUlid, sql } from "@workspace/db"
+import {
+  appendEvent,
+  assignments,
+  eq,
+  events,
+  newUlid,
+  sql,
+  supersedeFact,
+} from "@workspace/db"
 import { afterAll, describe, expect, it, vi } from "vitest"
 import type { writeText } from "../src/heartbeat-write.ts"
-import { freshOrg, kit } from "./fixture.ts"
+import { freshOrg, kit, newAssignment } from "./fixture.ts"
 
 // app.ts loads both at import time; neither is reached here.
 vi.mock("../src/sandbox.ts", () => ({
@@ -481,6 +489,72 @@ live("a failed owner build's retry", () => {
     expect(done).toHaveLength(1)
     expect(done[0]).toMatchObject({ next: "waiting_owner", attempt: 1 })
     expect(done[0]?.pages).toEqual(expect.arrayContaining(["Home"]))
+  })
+
+  it("offers what the build left out with the ready line, once per missing fact", async () => {
+    const orgId = await freshOrg(kit)
+    const ids = await newAssignment(kit, orgId)
+    const ask = (field: string, question: string) => ({
+      field,
+      question,
+      answer_schema: { type: "string" },
+      options: null,
+    })
+    await kit.withOrg({ orgId }, async (db) => {
+      await supersedeFact(db, {
+        orgId,
+        key: "business.parking",
+        factType: "business",
+        value: "Street parking",
+        provenance: { source: "owner_stated", confidence: 1 },
+      })
+      await appendEvent(db, {
+        orgId,
+        assignmentId: ids.assignmentId,
+        staffId: null,
+        type: "assignment.completion_reported",
+        payload: {
+          report_id: crypto.randomUUID(),
+          org_id: orgId,
+          assignment_id: ids.assignmentId,
+          session_id: crypto.randomUUID(),
+          revision_id: crypto.randomUUID(),
+          summary: "Built the site.",
+          changes: [{ path: "src/pages/index.astro", reason: "Home page" }],
+          screenshots: [],
+          checks: [{ check: "astro build", exit_code: 0, output_key: null }],
+          risks: [],
+          decisions_needed: [],
+          left_out: [
+            ask("business.insurance", "Are you insured, and for how much?"),
+            ask("business.insurance", "What insurance do you hold?"),
+            // Known since the build started: nothing to offer.
+            ask("business.parking", "Can customers park near you?"),
+            // Never put to the owner: it names a field.
+            ask("business.guarantee", "What is business.guarantee?"),
+          ],
+          reported_at: new Date().toISOString(),
+        },
+      })
+      await db
+        .update(assignments)
+        .set({ state: "awaiting_review" })
+        .where(eq(assignments.id, ids.assignmentId))
+    })
+    const ready = await readyNote({}, kit, ids)
+    expect(ready?.questions).toEqual({
+      kind: "offer",
+      assignment_id: ids.assignmentId,
+      questions: [
+        {
+          id: expect.any(String),
+          text: "Are you insured, and for how much?",
+          input: { kind: "text", maxLength: 500, email: false },
+          skippable: true,
+          field: "business.insurance",
+        },
+      ],
+    })
   })
 
   it("notes every mid-build resume once, and says only a stall in the chat", async () => {

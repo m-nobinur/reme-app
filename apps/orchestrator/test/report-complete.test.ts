@@ -71,13 +71,14 @@ const current = {
 }
 type Run = (args: unknown) => Promise<{ output: string; terminate: boolean }>
 const run = (reportComplete(current as never) as unknown as { run: Run }).run
-const call = () =>
+const call = (left_out?: unknown[]) =>
   run({
     data: {
       summary: "Built",
       changes: [{ path: "src/site-config.ts", reason: "Filled from facts" }],
       risks: [],
       decisions_needed: [],
+      left_out,
     },
     harness: { sandbox: {} },
     step: { do: (_: string, fn: () => Promise<unknown>) => fn() },
@@ -97,6 +98,22 @@ describe("report_complete", () => {
     expect(emitted).toEqual(["assignment.completion_reported"])
     expect(sent).toHaveLength(1)
     expect(result.terminate).toBe(true)
+  })
+
+  it("refuses a left-out item the owner could not be asked, before it builds", async () => {
+    state = "implementing"
+    await expect(
+      call([
+        {
+          field: "business.insurance",
+          question: "What should business.insurance say?",
+          answer_schema: { type: "string" },
+          options: null,
+        },
+      ])
+    ).rejects.toThrow(/left_out business.insurance/)
+    expect(finished).toEqual([])
+    expect(emitted).toEqual([])
   })
 
   // Row 8 of the measured build: a lead resumed after an interruption
