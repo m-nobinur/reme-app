@@ -1851,6 +1851,7 @@ export interface components {
                 }
               }
           )[]
+          skip_all?: boolean
         }
       | {
           /** @constant */
@@ -4742,6 +4743,7 @@ export interface components {
                                   }
                                 }
                             )[]
+                            skip_all?: boolean
                           }
                         | {
                             /** @constant */

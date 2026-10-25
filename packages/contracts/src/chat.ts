@@ -5,9 +5,12 @@ import { SectionVariant } from "./design.ts"
 import { ToolCallId } from "./ids.ts"
 import {
   Asset,
+  AvatarId,
   HexColour,
   PaletteFromImage,
+  PronounId,
   QuoteFields,
+  ToneId,
   UPLOAD_MAX_BYTES,
   UPLOAD_MAX_FILES,
   UPLOAD_TYPES,
@@ -55,6 +58,20 @@ export const TOOL_CALL_CANCELLED =
  * as cancelled, so it reads the stored message again and shows the outcome.
  */
 export const CARD_ANSWERED = "data-card_answered"
+
+/**
+ * The stored part the reply to the assistant set-up carries: the persona the
+ * owner settled on, or the assistant chose for them, as `PersonaCard`.
+ */
+export const PERSONA_CARD = "data-persona"
+
+/** A `PERSONA_CARD` part's data: the `assistant.*` facts' values. */
+export const PersonaCard = z.strictObject({
+  name: Text(40),
+  pronouns: PronounId,
+  avatar: AvatarId,
+  tone: ToneId,
+})
 
 /**
  * The transient chunk the onboarding planner's stream carries while the plan
@@ -429,12 +446,14 @@ export const AskDetailsInput = z
 /**
  * `ask_details`'s output: the facts the owner stated, at least one. The api
  * refuses a key outside the call's step, a key stated twice, and a skip of a
- * card that is not skippable.
+ * card that is not skippable. `skip_all`, as on `AskDesignOutput`: the owner
+ * pressed Pick for me, so the facts are the assistant's choice.
  */
 export const AskDetailsOutput = z.discriminatedUnion("answer", [
   z.strictObject({
     answer: z.literal("stated"),
     facts: z.array(FactValue).min(1).max(4),
+    skip_all: z.boolean().optional(),
   }),
   z.strictObject({ answer: z.literal("skipped") }),
 ])
@@ -583,6 +602,7 @@ export type AskFactInput = z.infer<typeof AskFactInput>
 export type DetailsStep = z.infer<typeof DetailsStep>
 export type AskDetailsInput = z.infer<typeof AskDetailsInput>
 export type AskDetailsOutput = z.infer<typeof AskDetailsOutput>
+export type PersonaCard = z.infer<typeof PersonaCard>
 export type AskFactOutput = z.infer<typeof AskFactOutput>
 export type AskOpenInput = z.infer<typeof AskOpenInput>
 export type AskOpenOutput = z.infer<typeof AskOpenOutput>
