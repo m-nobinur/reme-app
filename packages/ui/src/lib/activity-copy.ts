@@ -4,6 +4,7 @@ import type {
   BuildActivity,
   CosToolName,
   OnboardingStatus,
+  OnboardingStep,
   PlanFactKey,
 } from "@workspace/contracts"
 
@@ -153,32 +154,52 @@ export function rangeText(
 // ---------------------------------------------------------------------------
 // Moments: the assistant's own lines, which name her.
 
-/** Seconds into a turn at which the line moves on. The wait says something true: more time has passed. */
-export const THINKING_AFTER = 4
-export const STILL_ON_IT_AFTER = 12
+/**
+ * Seconds with no news after which the waiting line moves on, so what it
+ * says stays true: more time has passed.
+ */
+export const WORKING_AFTER = 4
+export const STILL_AFTER = 12
+export const LATE_AFTER = 30
 
 /** The icon for `turnMoment`'s line at the same moment, so the picture changes with the words. */
 export const turnKind = (elapsedSeconds: number): StatusKind =>
-  elapsedSeconds >= STILL_ON_IT_AFTER
+  elapsedSeconds >= STILL_AFTER
     ? "still"
-    : elapsedSeconds >= THINKING_AFTER
-      ? "thinking"
+    : elapsedSeconds >= WORKING_AFTER
+      ? "writing"
       : "reading"
 
-/** A turn before any tool or word: reading, then thinking it through, then still on it. */
-export function turnMoment(
-  elapsedSeconds: number,
-  ctx: CopyContext,
-  about: "message" | "answer" = "message"
-) {
+/**
+ * A turn with no news: reading, putting a reply together, still working,
+ * then longer than usual, never a time. Never "thinking": most turns run
+ * with no reasoning, and a real one shows its own line.
+ */
+export function turnMoment(elapsedSeconds: number, ctx: CopyContext) {
   const rest =
-    elapsedSeconds >= STILL_ON_IT_AFTER
-      ? "still on it"
-      : elapsedSeconds >= THINKING_AFTER
-        ? "thinking it through"
-        : `reading your ${about}`
+    elapsedSeconds >= LATE_AFTER
+      ? "taking longer than usual"
+      : elapsedSeconds >= STILL_AFTER
+        ? "still working on it"
+        : elapsedSeconds >= WORKING_AFTER
+          ? "putting a reply together"
+          : "reading your message"
   return is(named(ctx.assistant), rest)
 }
+
+/**
+ * A turn's line before its first word: its latest onboarding status while
+ * it is fresh, then how long it has stood, so the words change only when
+ * something did.
+ */
+export const waitingLine = (
+  on: OnboardingStatus["on"] | null,
+  seconds: number,
+  ctx: CopyContext
+): { kind: StatusKind; label: string } =>
+  on && seconds < STILL_AFTER
+    ? { kind: onboardingKind(on), label: onboardingLine(on) }
+    : { kind: turnKind(seconds), label: turnMoment(seconds, ctx) }
 
 /** A turn a reload cut off, still running: its reply comes when it lands. */
 export const resumingLine = (ctx: CopyContext) =>
@@ -536,34 +557,64 @@ export function stageLine(
 export const stageKind = (stage: BuildStage): StatusKind => STAGES[stage].kind
 
 // ---------------------------------------------------------------------------
-// Onboarding: the plan's own keys as they close in the stream (the api sends
-// a key, never a word).
+// Onboarding: the step a turn starts on, then the plan's own keys as they
+// close in the stream (the api sends a key, never a word).
 
-const FACT_LINE: Record<PlanFactKey, string> = {
-  "business.name": "Saving your business name",
-  "business.phone": "Saving your phone number",
-  "business.email": "Saving your email address",
-  "hours.weekday": "Noting your opening hours",
-  "service_area.radius": "Noting how far you travel",
-  "business.tagline": "Noting your tagline",
-  "business.industry": "Noting what you do",
-  "business.offerings": "Noting your services",
-  "business.audience": "Noting who you work for",
-  "business.overview": "Noting how you work",
-  "business.proof": "Noting what sets you apart",
-  "business.disclaimer": "Noting your regulatory notice",
-  "service_area.text": "Noting where you work",
-  "assistant.name": "Saving your assistant's name",
-  "assistant.pronouns": "Noting your assistant's pronouns",
-  "assistant.tone": "Noting the tone you want",
-  "owner.preferred_name": "Noting what to call you",
-  "site.build_mode": "Noting who builds your website",
-  "site.template": "Noting your website layout",
-  "site.palette": "Noting your colours",
-  "site.font": "Noting your lettering",
-  "site.direction": "Noting your page arrangement",
-  "site.pages": "Noting your website pages",
+/** Each step as the owner would name it, after "Noting" or "Looking at". */
+const FACT_TOPIC: Record<PlanFactKey, string> = {
+  "business.name": "your business name",
+  "business.phone": "your phone number",
+  "business.email": "your email address",
+  "hours.weekday": "your opening hours",
+  "service_area.radius": "how far you travel",
+  "business.tagline": "your tagline",
+  "business.industry": "what you do",
+  "business.offerings": "your services",
+  "business.audience": "who you work for",
+  "business.overview": "how you work",
+  "business.proof": "what sets you apart",
+  "business.disclaimer": "your regulatory notice",
+  "service_area.text": "where you work",
+  "assistant.name": "your assistant's name",
+  "assistant.pronouns": "your assistant's pronouns",
+  "assistant.tone": "the tone you want",
+  "owner.preferred_name": "what to call you",
+  "site.build_mode": "who builds your website",
+  "site.template": "your website layout",
+  "site.palette": "your colours",
+  "site.font": "your lettering",
+  "site.direction": "your page arrangement",
+  "site.pages": "your website pages",
 }
+const TOPIC: Record<OnboardingStep, string> = {
+  ...FACT_TOPIC,
+  industry: FACT_TOPIC["business.industry"],
+  pronouns: FACT_TOPIC["assistant.pronouns"],
+  tone: FACT_TOPIC["assistant.tone"],
+  build_for_me: FACT_TOPIC["site.build_mode"],
+  manual_builder: FACT_TOPIC["site.build_mode"],
+  template: FACT_TOPIC["site.template"],
+  palette: FACT_TOPIC["site.palette"],
+  font: FACT_TOPIC["site.font"],
+  pages: FACT_TOPIC["site.pages"],
+  contact: "your phone and email",
+  assistant: "your assistant's details",
+  quote_form: "your quote questions",
+  design: "your design choices",
+  upload: "your photos",
+}
+
+/** Kept word for word as given, so saved rather than noted. */
+const SAVED: readonly OnboardingStep[] = [
+  "business.name",
+  "business.phone",
+  "business.email",
+  "assistant.name",
+]
+
+/** "Noting your services" once given, "Looking at your services" while a reply about them is read. */
+const stepLine = (step: OnboardingStep, given: boolean) =>
+  `${!given || step === "upload" ? "Looking at" : SAVED.includes(step) ? "Saving" : "Noting"} ${TOPIC[step]}`
 
 const NEXT_LINE: Record<
   Extract<OnboardingStatus["on"], { kind: "next" }>["next"],
@@ -583,9 +634,11 @@ const NEXT_LINE: Record<
 export const onboardingLine = (on: OnboardingStatus["on"]) =>
   on.kind === "doing"
     ? on.text
-    : on.kind === "fact"
-      ? FACT_LINE[on.key]
-      : NEXT_LINE[on.next]
+    : on.kind === "step"
+      ? stepLine(on.step, on.answered)
+      : on.kind === "fact"
+        ? stepLine(on.key, true)
+        : NEXT_LINE[on.next]
 
 const NEXT_KIND: Record<
   Extract<OnboardingStatus["on"], { kind: "next" }>["next"],
@@ -602,9 +655,13 @@ const NEXT_KIND: Record<
   answer_only: "writing",
 }
 
-/** The icon for `onboardingLine`: a fact noted down, or the move being made ready. */
+/** The icon for `onboardingLine`: a reply being read, a fact noted down, or the move being made ready. */
 export const onboardingKind = (on: OnboardingStatus["on"]): StatusKind =>
-  on.kind === "next" ? NEXT_KIND[on.next] : "planning"
+  on.kind === "next"
+    ? NEXT_KIND[on.next]
+    : on.kind === "step" && !on.answered
+      ? "reading"
+      : "planning"
 
 // ---------------------------------------------------------------------------
 // Segments: a title, a line under it and a done title, with the business and

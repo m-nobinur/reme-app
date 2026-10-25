@@ -1,6 +1,7 @@
 import {
   type ActivitySegment,
   CosToolName,
+  OnboardingStep,
   PLAN_FACT_KEYS,
   PlanNext,
 } from "@workspace/contracts"
@@ -21,6 +22,7 @@ import {
   standingLine,
   toolLine,
   turnMoment,
+  waitingLine,
   waitingRow,
   workLine,
   writingBack,
@@ -227,19 +229,88 @@ describe("onboarding lines", () => {
       "Drafting your quote requirements"
     )
   })
+
+  it("has a working line for every step a turn can start on, given or read", () => {
+    for (const step of OnboardingStep.options) {
+      for (const answered of [true, false]) {
+        const line = onboardingLine({ kind: "step", step, answered })
+        plain(line)
+        expect(line).toMatch(WORKING)
+        expect(words(line)).toBeLessThanOrEqual(6)
+      }
+    }
+  })
+})
+
+describe("the first line of each kind of turn", () => {
+  const ellie = { orgId: "org-1", assistant: "Ellie" }
+  const first = (on: Parameters<typeof waitingLine>[0]) =>
+    waitingLine(on, 0, ellie)
+
+  it("names what the turn is on, never the same words every turn", () => {
+    // A card just answered.
+    expect(first({ kind: "step", step: "contact", answered: true })).toEqual({
+      kind: "planning",
+      label: "Noting your phone and email",
+    })
+    expect(
+      first({ kind: "step", step: "business.phone", answered: true }).label
+    ).toBe("Saving your phone number")
+    expect(first({ kind: "step", step: "upload", answered: true }).label).toBe(
+      "Looking at your photos"
+    )
+    // A typed message, on the script's step or over a card.
+    expect(
+      first({ kind: "step", step: "business.offerings", answered: false })
+    ).toEqual({ kind: "reading", label: "Looking at your services" })
+    expect(
+      first({ kind: "step", step: "quote_form", answered: false }).label
+    ).toBe("Looking at your quote questions")
+    expect(
+      first({ kind: "step", step: "build_for_me", answered: false }).label
+    ).toBe("Looking at who builds your website")
+    // The plan's own line, once it writes one.
+    expect(first({ kind: "doing", text: "Reading about your rates" })).toEqual({
+      kind: "planning",
+      label: "Reading about your rates",
+    })
+    // A turn with no status: the assistant's own moment.
+    expect(first(null)).toEqual({
+      kind: "reading",
+      label: "Ellie is reading your message",
+    })
+  })
+
+  it("moves on from a status that stood quiet, and never says thinking", () => {
+    const on = { kind: "step", step: "contact", answered: true } as const
+    expect(waitingLine(on, 11.9, ellie).label).toBe(
+      "Noting your phone and email"
+    )
+    expect(waitingLine(on, 12, ellie)).toEqual({
+      kind: "still",
+      label: "Ellie is still working on it",
+    })
+    expect(waitingLine(on, 30, ellie).label).toBe(
+      "Ellie is taking longer than usual"
+    )
+    for (const seconds of [0, 4, 12, 30, 600]) {
+      expect(waitingLine(null, seconds, ellie).label).not.toMatch(/think/i)
+    }
+  })
 })
 
 describe("the assistant's moments", () => {
   const ellie = { orgId: "org-1", assistant: "Ellie" }
 
-  it("moves on at 4 s and 12 s and never rotates", () => {
+  it("moves on at 4 s, 12 s and 30 s and never rotates", () => {
     expect(turnMoment(0, ellie)).toBe("Ellie is reading your message")
     expect(turnMoment(3.9, ellie)).toBe("Ellie is reading your message")
-    expect(turnMoment(4, ellie)).toBe("Ellie is thinking it through")
-    expect(turnMoment(11.9, ellie)).toBe("Ellie is thinking it through")
-    expect(turnMoment(12, ellie)).toBe("Ellie is still on it")
-    expect(turnMoment(600, ellie)).toBe("Ellie is still on it")
-    expect(turnMoment(0, ellie, "answer")).toBe("Ellie is reading your answer")
+    expect(turnMoment(4, ellie)).toBe("Ellie is putting a reply together")
+    expect(turnMoment(11.9, ellie)).toBe("Ellie is putting a reply together")
+    expect(turnMoment(12, ellie)).toBe("Ellie is still working on it")
+    expect(turnMoment(29.9, ellie)).toBe("Ellie is still working on it")
+    expect(turnMoment(30, ellie)).toBe("Ellie is taking longer than usual")
+    expect(turnMoment(600, ellie)).toBe("Ellie is taking longer than usual")
     expect(writingBack(ellie)).toBe("Ellie is writing back")
     expect(planningLine(ellie)).toBe("Ellie is planning your website")
   })
@@ -248,8 +319,9 @@ describe("the assistant's moments", () => {
     for (const assistant of [undefined, null, "", "  "]) {
       const ctx = { orgId: "org-1", assistant }
       expect(turnMoment(0, ctx)).toBe("Reading your message")
-      expect(turnMoment(5, ctx)).toBe("Thinking it through")
-      expect(turnMoment(20, ctx)).toBe("Still on it")
+      expect(turnMoment(5, ctx)).toBe("Putting a reply together")
+      expect(turnMoment(20, ctx)).toBe("Still working on it")
+      expect(turnMoment(40, ctx)).toBe("Taking longer than usual")
       expect(writingBack(ctx)).toBe("Writing back")
       expect(planningLine(ctx)).toBe("Planning your website")
     }

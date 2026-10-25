@@ -1,5 +1,10 @@
 import { ONBOARDING_STATUS, OnboardingStatus } from "@workspace/contracts"
-import { useSyncExternalStore } from "react"
+import {
+  LATE_AFTER,
+  STILL_AFTER,
+  WORKING_AFTER,
+} from "@workspace/ui/lib/activity-copy"
+import { useEffect, useState, useSyncExternalStore } from "react"
 
 /**
  * What the onboarding planner is on in the turn in flight, from its
@@ -49,3 +54,23 @@ export const useOnboardingStatus = () =>
     () => latest,
     () => null
   )
+
+const MARKS = [WORKING_AFTER, STILL_AFTER, LATE_AFTER]
+
+/**
+ * The latest status and the seconds it has stood, in steps at the waiting
+ * line's marks: news starts the count again.
+ */
+export function useOnboardingWait() {
+  const status = useOnboardingStatus()
+  const [stood, setStood] = useState({ status, seconds: 0 })
+  useEffect(() => {
+    const timers = MARKS.map((at) =>
+      setTimeout(() => setStood({ status, seconds: at }), at * 1000)
+    )
+    return () => {
+      for (const timer of timers) clearTimeout(timer)
+    }
+  }, [status])
+  return { status, seconds: stood.status === status ? stood.seconds : 0 }
+}
