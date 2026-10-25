@@ -8,6 +8,7 @@ import {
   type FactRecord,
   type FactValue,
   ONBOARDING_STATUS,
+  type OnboardingStatus,
   StaffDirectory,
 } from "@workspace/contracts"
 import {
@@ -197,20 +198,14 @@ describe("the step a planned turn starts on", () => {
     ).toEqual({ kind: "step", step: "business.tagline", answered: true })
   })
 
-  it("names what a typed message replies to: its card, else the script's step", () => {
-    expect(on(typed)).toEqual({
-      kind: "step",
-      step: "business.offerings",
-      answered: false,
-    })
-    expect(on(typed, card("tool-ask_open", { about: "quote.form" }))).toEqual({
-      kind: "step",
-      step: "quote_form",
-      answered: false,
-    })
+  it("names no step for a typed message, whatever card is in view", () => {
+    expect(on(typed)).toBeUndefined()
+    expect(
+      on(typed, card("tool-ask_open", { about: "quote.form" }))
+    ).toBeUndefined()
     expect(
       on(typed, card("tool-ask_choice", { step: "build_for_me" }))
-    ).toEqual({ kind: "step", step: "build_for_me", answered: false })
+    ).toBeUndefined()
   })
 
   it("names nothing for a call no line is for", () => {
@@ -3123,7 +3118,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       ).toEqual({ text: "Couples" })
     }, 60_000)
 
-    it("says the step at once, then what the plan is on before its first word, once its facts are written", async () => {
+    it("says what a typed message does at once, then what the plan is on before its first word, once its facts are written", async () => {
       const who = await owner(kit, url as string, "chat-status")
       // The stream drops after the plan, so only a write made before the
       // message streamed can hold the plan's facts.
@@ -3139,7 +3134,14 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         ],
         true
       )
-      const me = talker(who, undefined, { planner: dropped.model })
+      const read: string[] = []
+      const me = talker(who, undefined, {
+        planner: dropped.model,
+        reading: async (_asked, said) => {
+          read.push(said)
+          return "answer"
+        },
+      })
       const id = await me.onboarding()
       const done = await me.turn(id, {
         turn: {
@@ -3148,6 +3150,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
           text: "Dog grooming. Call 07700 900 412.",
         },
       })
+      expect(read).toEqual(["Dog grooming. Call 07700 900 412."])
       const firstWord = done.chunks.findIndex((c) => c.type === "text-delta")
       expect(firstWord).toBeGreaterThan(0)
       expect(
@@ -3157,10 +3160,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       ).toEqual([
         {
           type: ONBOARDING_STATUS,
-          data: {
-            on: { kind: "step", step: "business.offerings", answered: false },
-            facts: [],
-          },
+          data: { on: { kind: "reading", about: "answer" }, facts: [] },
           transient: true,
         },
         {
@@ -3187,6 +3187,32 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       expect(
         (await factsOf(who)).find((f) => f.key === "business.phone")?.value
       ).toEqual({ e164: "+447700900412" })
+    }, 60_000)
+
+    it("never waits for the reading, and guesses no step while it is out", async () => {
+      const who = await owner(kit, url as string, "chat-unread")
+      const read = planner([
+        plan({
+          facts: { "business.offerings": { items: ["Dog grooming"] } },
+          say: "Dog grooming, noted.",
+        }),
+      ])
+      const me = talker(who, undefined, {
+        planner: read.model,
+        reading: () => new Promise(() => undefined),
+      })
+      const id = await me.onboarding()
+      const done = await me.turn(id, {
+        turn: { kind: "message", message_id: "u_unread_1", text: "Dogs" },
+      })
+      const kinds = done.chunks.flatMap((c) =>
+        c.type === ONBOARDING_STATUS
+          ? [(c.data as OnboardingStatus).on.kind]
+          : []
+      )
+      expect(kinds.length).toBeGreaterThan(0)
+      expect(kinds).not.toContain("step")
+      expect(kinds).not.toContain("reading")
     }, 60_000)
 
     it("keeps what the owner read when the provider fails after it, and lets the script finish the turn", async () => {
