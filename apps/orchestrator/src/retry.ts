@@ -5,6 +5,7 @@ import {
   type BuildQuestion,
   type BuildQuestions,
   type BuildStopCause,
+  BuildSummary,
   buildFailure,
   CompletionReport,
   type GateName,
@@ -31,6 +32,7 @@ import { creationChoices, failureReason, lastReport } from "./brief.ts"
 import { eventKey } from "./domain-flow.ts"
 import { logSpend, replyOf, writeText } from "./heartbeat-write.ts"
 import { inputOf, refuseQuestion } from "./question.ts"
+import { QUICK_EDITED } from "./quick.ts"
 import { workKey } from "./sandbox.ts"
 import { type Ids, REPAIR_LIMIT, repairsSoFar } from "./state.ts"
 
@@ -128,10 +130,45 @@ function plannedPages(blueprint: unknown) {
   return { named, each: pages.includes("service") }
 }
 
-/** The ready line: the planned pages by the names the owner picked them by. */
-export function readyText(kind: string, blueprint: unknown): string {
+/** What a change says about itself: the owner's short name for it, and the new words of a copy change. */
+export type Change = { label?: string; words?: string }
+
+/** The same assignment always reads the same wording, so a replayed step posts what the first did. */
+const pick = <T>(seed: string, variants: readonly T[]) =>
+  variants[
+    [...seed].reduce((sum, char) => sum + (char.codePointAt(0) ?? 0), 0) %
+      variants.length
+  ] as T
+
+/**
+ * The ready line: a change names itself by its label, with its new words when
+ * a copy change made them; a first build names the planned pages by the names
+ * the owner picked them by.
+ */
+export function readyText(
+  kind: string,
+  blueprint: unknown,
+  { label, words }: Change = {},
+  seed = ""
+): string {
   if (kind === "site.revise") {
-    return "Your website changes are ready. Preview them, then approve them or tell me what to change."
+    if (!label) {
+      return "Your website changes are ready. Preview them, then approve them or tell me what to change."
+    }
+    const next = "Have a look, and publish when you're happy."
+    return pick(
+      seed,
+      words
+        ? [
+            `I've updated ${label}: ${words}. ${next}`,
+            `I've changed ${label} to "${words}". ${next}`,
+          ]
+        : [
+            `I've updated ${label}. ${next}`,
+            `All done, I've updated ${label}. ${next}`,
+            `I've made the change to ${label}. ${next}`,
+          ]
+    )
   }
   const next = "Preview it, then approve it or tell me what to change."
   const { named, each } = plannedPages(blueprint)
@@ -186,6 +223,26 @@ async function offerOf(
     : undefined
 }
 
+/** The change's label from its creation and its new words from the quick lane, each absent when not recorded. */
+async function changeOf(db: OrgScopedDb, ids: Ids): Promise<Change> {
+  const rows = await db
+    .select({ type: events.type, payload: events.payload })
+    .from(events)
+    .where(
+      sql`${events.assignmentId} = ${ids.assignmentId} and ${events.type} in ('assignment.created', ${QUICK_EDITED})`
+    )
+    .orderBy(sql`${events.eventId} desc`)
+  const payload = (type: string) => rows.find((r) => r.type === type)?.payload
+  const label = BuildSummary.shape.label.safeParse(
+    payload("assignment.created")?.label
+  ).data
+  const words = payload(QUICK_EDITED)?.words
+  return {
+    ...(label && { label }),
+    ...(typeof words === "string" && { words }),
+  }
+}
+
 /** One note, once: its key makes the event's, so a replayed step writes nothing new. */
 export async function writeNote(
   kit: Tenancy,
@@ -237,14 +294,16 @@ export const NARRATED_PER_HOUR = 6
 const NARRATE_TIMEOUT_MS = 8_000
 
 /** What happens next, by note, in the words the model must keep to. */
-const NEXT_WORDS: Record<Exclude<AgentNote["kind"], "problem">, string> = {
+const NEXT_WORDS: Record<
+  Exclude<AgentNote["kind"], "problem" | "done">,
+  string
+> = {
   resumed:
     "You already restarted it from where it left off, and it is back at work. Nothing is needed from the owner, and you will tell them here when the draft is ready.",
   retrying:
     "You have already started it again by yourself. The owner need do nothing, and you will say here when the draft is ready.",
   stopped:
     "Nothing more happens until the owner says try again or tells you what to change.",
-  done: "The owner can preview it, then approve it or tell you what to change.",
 }
 
 const narratePrompt = (name: string | null, tone: string | null) =>
@@ -290,7 +349,7 @@ export async function narrate(
   write: typeof writeText = writeText
 ): Promise<string> {
   const key = env.OPENROUTER_API_KEY
-  if (!key || note.kind === "problem") return template
+  if (!key || note.kind === "problem" || note.kind === "done") return template
   try {
     const known = await kit.withOrg({ orgId }, async (db) => {
       // shortcut: counts calls already logged, so lines narrated at the same moment can pass it by a few.
@@ -391,21 +450,18 @@ const reviewOpen = async (kit: Tenancy, ids: Ids) => {
 
 /**
  * The draft is ready: its `done` note and the ready line to post, while the
- * review it announces is still open. A step of its own, so a busy chat
- * retries the post and never the model call.
+ * review it announces is still open. The line is the template, with no model
+ * call in front of it: the owner is looking at the review already.
  */
-export async function readyNote(
-  env: { OPENROUTER_API_KEY?: string },
-  kit: Tenancy,
-  ids: Ids
-): Promise<Note | null> {
+export async function readyNote(kit: Tenancy, ids: Ids): Promise<Note | null> {
   const row = await reviewOpen(kit, ids)
   if (!row) return null
-  const { retry_of, offer } = await kit.withOrg(
+  const { retry_of, offer, change } = await kit.withOrg(
     { orgId: ids.orgId },
     async (db) => ({
       ...(await creationChoices(db, ids)),
       offer: await offerOf(db, ids.assignmentId),
+      change: row.kind === "site.revise" ? await changeOf(db, ids) : {},
     })
   )
   const { named, each } = plannedPages(row.blueprint)
@@ -428,14 +484,7 @@ export async function readyNote(
   await writeNote(kit, ids.orgId, note)
   return {
     key: note.key,
-    text: await narrate(
-      env,
-      kit,
-      ids.orgId,
-      row.kind,
-      note,
-      readyText(row.kind, row.blueprint)
-    ),
+    text: readyText(row.kind, row.blueprint, change, ids.assignmentId),
     ...(offer && { questions: offer }),
   }
 }

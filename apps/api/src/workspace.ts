@@ -221,6 +221,43 @@ const COUNT_MAX = 999
 const toDraw = (plan: Blueprint | null | undefined) =>
   (plan?.images ?? []).filter((i) => i.source === "generated" && !i.asset_id)
 
+/** A quick change's three steps, in order; the orchestrator tells each as it starts it (`quick.step`). */
+const QUICK_ROWS = [
+  ["edit", "Writing the change"],
+  ["check", "Checking the page"],
+  ["preview", "Taking the preview"],
+] as const
+
+/**
+ * A quick change's rows, from the step its own events last told: the ones
+ * before it done, it the one `now`. Nothing is `now` before the first is
+ * told; from the preview on all are done. A change the Developer makes (the
+ * section lane) tells none, so its report stands for the preview.
+ */
+function quickActivity(
+  state: AssignmentState,
+  step: string | null | undefined,
+  reported: boolean
+): BuildActivity[] {
+  const told = QUICK_ROWS.findIndex(([id]) => id === step)
+  const at = READY.includes(state)
+    ? QUICK_ROWS.length
+    : told >= 0
+      ? told
+      : reported || state === "validating"
+        ? QUICK_ROWS.length - 1
+        : state === "queued" || state === "briefing"
+          ? -1
+          : 0
+  return QUICK_ROWS.map(([id, label], i) => ({
+    id,
+    label,
+    done: i < at ? 1 : 0,
+    total: 1,
+    ...(i === at ? { now: true as const } : {}),
+  }))
+}
+
 /**
  * The same six stages for every full build from its first event, so a row
  * never appears or goes: Plan, Photos, Pages, Polish, Check, Ready. Stages
@@ -233,7 +270,7 @@ const toDraw = (plan: Blueprint | null | undefined) =>
  * alone; the pages tick as each is written, or all at once when the lead
  * reports a build it wrote itself. From the preview on every row is kept,
  * done. Any stage but the pages and photos is whole, `1 of 1`. A quick build
- * gets none; the panel shows one line for it.
+ * lists its own three steps instead (`quickActivity`).
  */
 export function activityFor(
   lane: BuildLane,
@@ -243,8 +280,22 @@ export function activityFor(
     plan,
     settled = [],
     marks = [],
-  }: { plan?: Blueprint | null; settled?: Settled[]; marks?: Mark[] } = {}
+    step,
+  }: {
+    plan?: Blueprint | null
+    settled?: Settled[]
+    marks?: Mark[]
+    /** The step a quick change last told. */
+    step?: string | null
+  } = {}
 ): BuildActivity[] {
+  if (lane === "quick") {
+    return quickActivity(
+      state,
+      step,
+      marks.some((m) => m.type === REPORTED)
+    )
+  }
   // A build waiting on a person is where its events left it: a plan, a report
   // or a counted page or photo means the lead has begun, else it is planning.
   // shortcut: an unplanned build parked before its first event reads as
@@ -260,7 +311,7 @@ export function activityFor(
     Boolean(plan)
   )
   const queued = state === "queued" || state === "briefing"
-  if (lane === "quick" || (!reached && !queued)) return []
+  if (!reached && !queued) return []
   // Every page written and no report yet: the lead is putting the site
   // together, which took 2 min 20 s in perf run 2 under "6 of 6".
   const written =
@@ -445,6 +496,10 @@ export async function readBuilds(
       marks: sql<
         Mark[] | null
       >`(select json_agg(json_build_object('type', e.type, 'fixes', case when e.type = ${VALIDATED} then (select count(*)::int from jsonb_array_elements(e.payload->'gates') g where g->>'passed' = 'false') when jsonb_typeof(e.payload->'fixes') = 'array' then jsonb_array_length(e.payload->'fixes') end) order by e.event_id) from events e where e.assignment_id = assignments.id and (e.type in ('assignment.completion_reported', 'design.critiqued', 'design.rechecked', ${VALIDATED}) or (e.type = 'assignment.state_changed' and e.payload->>'to' = 'repairing')))`,
+      // The step a quick change last told (the orchestrator's `quick.step`).
+      step: sql<
+        string | null
+      >`(select e.payload->>'step' from events e where e.assignment_id = assignments.id and e.type = 'quick.step' order by e.event_id desc limit 1)`,
       // Time the build waited on the owner's decided plan reviews: each
       // `blueprint.decided` back to the review round it answered.
       reviewMs: sql<
@@ -483,6 +538,7 @@ export async function readBuilds(
         plan,
         settled,
         marks: row.marks ?? [],
+        step: row.step,
       }),
       revision: row.revision,
       ...planOf(row),

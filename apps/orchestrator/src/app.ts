@@ -1,5 +1,6 @@
 import {
   type BuildLane,
+  BuildSummary,
   type ChangeKind,
   type EnvelopeBody,
   envelope,
@@ -294,6 +295,7 @@ bridge.post("/", async (c) => {
     withhold?: unknown
     change_kind?: unknown
     draft_revision_id?: unknown
+    label?: unknown
   }
   const kind = typeof body.kind === "string" ? body.kind : "site.build"
   // Both are the console's test levers; an owner gets the defaults.
@@ -335,6 +337,9 @@ bridge.post("/", async (c) => {
       detail: { length: goal.length, max: GOAL_MAX },
     })
   }
+  const label = BuildSummary.shape.label.safeParse(
+    typeof body.label === "string" ? body.label.trim() : undefined
+  ).data
   // A change to a site not live yet names the draft it starts from.
   const draft = body.draft_revision_id
   if (
@@ -355,6 +360,8 @@ bridge.post("/", async (c) => {
     withhold,
     ...pickLane(kind, body.change_kind),
     ...(typeof draft === "string" ? { draft } : {}),
+    // A label that does not fit is dropped, never a reason to refuse the change.
+    ...(label ? { label } : {}),
   })
 })
 
@@ -372,6 +379,8 @@ export type NewAssignment = {
   retry_of?: { assignment_id: string; blueprint: unknown }
   /** The owner's draft a change starts from, before the site is live (`holdDraft`). */
   draft?: string
+  /** A change's short name in the owner's terms, for the panel and the ready line. */
+  label?: string
 }
 
 /** The row and its `assignment.created` event, or why not, in the caller's transaction. */
@@ -471,6 +480,7 @@ export async function insertAssignment(
       origin: owner ? "owner" : "console",
       ...(source ? { revises_revision_id: source.revision_id } : {}),
       ...(input.draft ? { draft_revision_id: input.draft } : {}),
+      ...(input.label ? { label: input.label } : {}),
       ...(input.retry_of ? { retry_of: input.retry_of.assignment_id } : {}),
     },
     taint,

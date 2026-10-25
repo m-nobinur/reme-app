@@ -395,10 +395,45 @@ describe("build activity rows", () => {
     expect(causeOf(null)).toBe("other")
   })
 
-  it("shows none for a quick build or one that ended unfinished", () => {
-    expect(activityFor("quick", "implementing")).toEqual([])
+  it("shows none for a build that ended unfinished", () => {
     expect(activityFor("full", "failed")).toEqual([])
     expect(activityFor("full", "cancelled")).toEqual([])
+  })
+
+  it("follows a quick change through the steps its own events told", () => {
+    const rows = (state: AssignmentState, step?: string, marks: Mark[] = []) =>
+      activityFor("quick", state, {}, { step, marks }).map(
+        (r) => `${r.id}:${r.done}${r.now ? ":now" : ""}`
+      )
+    expect(rows("queued")).toEqual(["edit:0", "check:0", "preview:0"])
+    expect(rows("implementing", "edit")).toEqual([
+      "edit:0:now",
+      "check:0",
+      "preview:0",
+    ])
+    expect(rows("implementing", "check")).toEqual([
+      "edit:1",
+      "check:0:now",
+      "preview:0",
+    ])
+    expect(rows("validating", "preview")).toEqual([
+      "edit:1",
+      "check:1",
+      "preview:0:now",
+    ])
+    expect(rows("awaiting_review", "preview")).toEqual([
+      "edit:1",
+      "check:1",
+      "preview:1",
+    ])
+    // The Developer's section change tells no step: its report is the preview.
+    expect(rows("implementing")).toEqual(["edit:0:now", "check:0", "preview:0"])
+    const reported: Mark[] = [{ type: "assignment.completion_reported" }]
+    expect(rows("implementing", undefined, reported)).toEqual([
+      "edit:1",
+      "check:1",
+      "preview:0:now",
+    ])
   })
 
   it("lists every stage before the build starts, and keeps them all once it is ready", () => {
