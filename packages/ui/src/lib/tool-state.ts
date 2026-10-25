@@ -512,6 +512,24 @@ export function isRetried(
   )
 }
 
+/**
+ * Whether a running reply already shows how it is getting on, so a trailing
+ * status line would stack on it: its words, or a call still at work, which
+ * draws its own line or card. `quiet` names the calls that draw nothing.
+ * A line under the words also pushed the reply down a line as each turn
+ * ended on a question (2026-10-25).
+ */
+export function showsProgress(
+  parts: readonly object[],
+  quiet: Readonly<Record<string, unknown>>
+): boolean {
+  return (parts as (CallPart & { toolName?: string })[]).some((p) =>
+    p.type === "tool-call"
+      ? unresolved(p) && !Object.hasOwn(quiet, p.toolName ?? "")
+      : p.type === "text"
+  )
+}
+
 /** What a held answer says, on every card that can be held. */
 export const heldText = (approved: boolean) =>
   `${approved ? "You said yes." : "You said not now."} Sent once you answer the other cards.`

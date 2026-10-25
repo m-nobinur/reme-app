@@ -68,6 +68,7 @@ import { SHOW_DELAY_MS } from "@workspace/ui/lib/status-line"
 import {
   SESSION_ENDED,
   SKIPPED,
+  showsProgress,
   waitsOnTray,
 } from "@workspace/ui/lib/tool-state"
 import { cn } from "@workspace/ui/lib/utils"
@@ -500,7 +501,10 @@ const FollowBottom: FC<{
       const landed = after.offsetHeight > slot
       const left = after.offsetHeight < slot
       slot = after.offsetHeight
-      if ((shrank || resized || left) && idle()) {
+      // A docked tray that grows with the turn still pinned shrank the space
+      // held below the reply instead, so the reply sat behind the card, the
+      // owner's message peeked over it, and Scroll to bottom showed.
+      if ((shrank || grew || resized || left) && idle()) {
         store.getState().setTopAnchorTurn(null)
       } else if (landed) {
         const { topAnchorTurn, setTopAnchorTurn } = store.getState()
@@ -1039,23 +1043,17 @@ const MessageError: FC = () => {
 }
 
 /**
- * The line a reply shows until its first words arrive. Quiet, and not under a
- * card that already says it is working (Saving, Stopping): the owner has
- * answered it and its own line is the progress. A played-in opening is not
- * work, so it shows the line at once; a real turn waits out the status line's
- * delay.
+ * The reply's one status line until its first words arrive. It gives way to
+ * a call at work, whose own line or card is the progress ("Passing on your
+ * change", Saving), so two never stack. A played-in opening is not work, so
+ * it shows the line at once; a real turn waits out the status line's delay.
  */
 const TypingIndicator: FC<{ immediate?: boolean }> = ({
   immediate = false,
 }) => {
   const { assistant } = useContext(ThreadSettingsContext)
-  const answered = useAuiState((s) =>
-    s.message.parts.some(
-      (part) =>
-        part.type === "tool-call" &&
-        part.result === undefined &&
-        part.approval?.approved !== undefined
-    )
+  const shown = useAuiState(
+    (s) => !immediate && showsProgress(s.message.parts, COS_QUIET)
   )
   const status = useOnboardingStatus()
   const toolsRan = useAuiState((s) =>
@@ -1072,7 +1070,7 @@ const TypingIndicator: FC<{ immediate?: boolean }> = ({
       for (const timer of timers) clearTimeout(timer)
     }
   }, [])
-  if (answered) return null
+  if (shown) return null
   const ctx = { orgId: "", assistant }
   return (
     <span data-slot="aui_assistant-message-indicator">

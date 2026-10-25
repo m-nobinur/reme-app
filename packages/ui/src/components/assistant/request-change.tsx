@@ -23,8 +23,11 @@ import { decisionView, isRetried } from "@workspace/ui/lib/tool-state"
 
 const RequestChange: ToolCallMessagePartComponent = (props) => {
   const view = decisionView(props, CosChangeRequest, RequestChangeResult)
-  const retried = useAuiState((s) =>
-    isRetried(s.message.parts, props.toolCallId)
+  // A refusal waits for its turn to end: the assistant may still try again.
+  const retried = useAuiState(
+    (s) =>
+      (s.message.status?.type === "running" && view.state === "refused") ||
+      isRetried(s.message.parts, props.toolCallId)
   )
   // Started with no card to answer: the owner's message and the reply say it.
   const asked = (props as { approval?: unknown }).approval != null
