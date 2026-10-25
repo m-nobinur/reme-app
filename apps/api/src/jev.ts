@@ -21,6 +21,8 @@ export const JEV = {
   url: "https://openrouter.ai/api/alpha/decisions",
   model: "typesafe/jev-1.13",
   timeoutMs: 1_000,
+  /** A message's reading is never waited for: it only fills the line until a real one comes. */
+  readingMs: 3_000,
   /** `answers_it` and the kind's confidence must both reach this. */
   sure: 0.9,
   /** The picked option's confidence must reach this. */
@@ -215,7 +217,8 @@ async function ask(
   apiKey: string,
   state: Record<string, string>,
   questions: Record<string, unknown>,
-  fetchImpl: typeof fetch
+  fetchImpl: typeof fetch,
+  timeoutMs: number = JEV.timeoutMs
 ): Promise<{ body: JevResponse | null; error: string | null }> {
   try {
     const response = await fetchImpl(JEV.url, {
@@ -232,7 +235,7 @@ async function ask(
         ),
         questions,
       }),
-      signal: AbortSignal.timeout(JEV.timeoutMs),
+      signal: AbortSignal.timeout(timeoutMs),
     })
     if (!response.ok) return { body: null, error: `status ${response.status}` }
     return { body: (await response.json()) as JevResponse, error: null }
@@ -383,7 +386,8 @@ export async function jevReading(
         },
       },
     },
-    fetchImpl
+    fetchImpl,
+    JEV.readingMs
   )
   const { choice, confidence } = body?.answers?.reading ?? {}
   const read = MessageReading.safeParse(choice)
