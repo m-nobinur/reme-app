@@ -15,7 +15,7 @@ import {
   type VersionPictures,
 } from "@workspace/ui/components/live-panel"
 import { cn, META } from "@workspace/ui/lib/utils"
-import { useId, useState } from "react"
+import { useId, useLayoutEffect, useState } from "react"
 import { createPortal } from "react-dom"
 
 /**
@@ -24,7 +24,9 @@ import { createPortal } from "react-dom"
  * It is drawn from the workspace, not stored in the thread, and never
  * optimistic: Publish waits for the server, and "approved" shows only once
  * the decision is recorded. Docked, it is held above the composer until the
- * site is published, as its first row, which opens the whole card.
+ * site is published, as its first row, which opens the whole card. In a
+ * thread it is drawn into one node that moves from the chat to the tray, so
+ * docking moves the card rather than drawing it again.
  * As a row, it is that row alone, for the new chat's updates.
  */
 export function SiteReady({
@@ -39,6 +41,7 @@ export function SiteReady({
   onApprove,
   onMakeChanges,
   docked = false,
+  closeOn = null,
   row = false,
   className,
 }: {
@@ -58,6 +61,8 @@ export function SiteReady({
   onMakeChanges: () => void
   /** The owner has written since it was put up: it sits above the composer. */
   docked?: boolean
+  /** A docked card the owner opened closes when this changes: each message they send. */
+  closeOn?: string | null
   /** Only its first row, unframed, for a deck of updates. */
   row?: boolean
   className?: string
@@ -65,7 +70,23 @@ export function SiteReady({
   const id = useId()
   const slot = useTraySlot()
   const [open, setOpen] = useState(false)
+  // Closed in the render that sees the new value, not by a remount.
+  const [openFor, setOpenFor] = useState(closeOn)
+  if (openFor !== closeOn) {
+    setOpenFor(closeOn)
+    setOpen(false)
+  }
   const inTray = docked && slot !== null
+  // The node the card is drawn into, put in its spot in the chat or in the tray.
+  const [host] = useState(() =>
+    typeof document === "undefined" ? null : document.createElement("div")
+  )
+  const [spot, setSpot] = useState<HTMLElement | null>(null)
+  useLayoutEffect(() => {
+    const into = inTray ? slot : spot
+    if (host && into && host.parentElement !== into) into.appendChild(host)
+  }, [host, inTray, slot, spot])
+  useLayoutEffect(() => () => void host?.remove(), [host])
   const done = (
     <p
       className={cn(
@@ -197,13 +218,19 @@ export function SiteReady({
       {failed}
     </article>
   )
-  if (!inTray) return card
-  return createPortal(
-    approved ? (
-      <div className="rounded-2xl border border-border bg-card">{done}</div>
-    ) : (
-      card
-    ),
-    slot
+  // Outside a thread, and on the server, it stays where it is drawn.
+  if (!slot || !host) return card
+  return (
+    <>
+      {inTray ? null : <div ref={setSpot} />}
+      {createPortal(
+        inTray && approved ? (
+          <div className="rounded-2xl border border-border bg-card">{done}</div>
+        ) : (
+          card
+        ),
+        host
+      )}
+    </>
   )
 }
