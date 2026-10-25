@@ -13,6 +13,7 @@ import { PasswordField } from "@workspace/ui/components/password-field"
 import { SubmitButton } from "@workspace/ui/components/submit-button"
 import { signIn } from "@/lib/auth/actions"
 import { safeReturnTo } from "@/lib/auth/redirect-target"
+import { leaveIfSignedIn } from "@/lib/auth/signed-in"
 import { useSubmit } from "@/lib/auth/use-submit"
 
 const CALLBACK_ERROR_TEXT = {
@@ -45,6 +46,7 @@ export const Route = createFileRoute("/sign-in")({
       ? (search.error as CallbackError)
       : undefined,
   }),
+  loader: leaveIfSignedIn,
   head: () => ({ meta: [{ title: "Sign in · Reme" }] }),
   component: SignIn,
 })

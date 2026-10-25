@@ -12,6 +12,7 @@ import {
   verifyEmail,
 } from "@/lib/auth/actions"
 import { CODE_LENGTH, codeProblem } from "@/lib/auth/code"
+import { leaveIfSignedIn } from "@/lib/auth/signed-in"
 import { useCooldown } from "@/lib/auth/use-cooldown"
 import { useSubmit } from "@/lib/auth/use-submit"
 
@@ -19,6 +20,7 @@ export const Route = createFileRoute("/verify-email")({
   // In the loader, not `beforeLoad`: `beforeLoad` also runs on the client
   // during hydration, where the sealed flow cookie is not readable.
   loader: async () => {
+    await leaveIfSignedIn()
     const pending = await getPendingAuth()
     if (!pending) {
       throw redirect({ to: "/sign-in" })

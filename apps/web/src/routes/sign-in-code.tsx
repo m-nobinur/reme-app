@@ -11,6 +11,7 @@ import { useState } from "react"
 import { sendSignInCode, signInWithCode } from "@/lib/auth/actions"
 import { CODE_LENGTH, codeProblem } from "@/lib/auth/code"
 import { safeReturnTo } from "@/lib/auth/redirect-target"
+import { leaveIfSignedIn } from "@/lib/auth/signed-in"
 import { useSubmit } from "@/lib/auth/use-submit"
 
 type SignInCodeSearch = { returnTo?: string }
@@ -21,6 +22,7 @@ export const Route = createFileRoute("/sign-in-code")({
     returnTo:
       search.returnTo === undefined ? undefined : safeReturnTo(search.returnTo),
   }),
+  loader: leaveIfSignedIn,
   head: () => ({ meta: [{ title: "Sign in with a code · Reme" }] }),
   component: SignInCode,
 })

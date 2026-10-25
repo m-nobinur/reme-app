@@ -7,9 +7,11 @@ import { Logo } from "@workspace/ui/components/logo"
 import { SubmitButton } from "@workspace/ui/components/submit-button"
 import { useState } from "react"
 import { requestPasswordReset } from "@/lib/auth/actions"
+import { leaveIfSignedIn } from "@/lib/auth/signed-in"
 import { useSubmit } from "@/lib/auth/use-submit"
 
 export const Route = createFileRoute("/forgot-password")({
+  loader: leaveIfSignedIn,
   head: () => ({ meta: [{ title: "Reset your password · Reme" }] }),
   component: ForgotPassword,
 })

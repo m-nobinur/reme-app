@@ -8,6 +8,7 @@ import { SubmitButton } from "@workspace/ui/components/submit-button"
 import { PASSWORD_POLICY } from "@workspace/ui/lib/password-policy"
 import { useState } from "react"
 import { resetPassword } from "@/lib/auth/actions"
+import { leaveIfSignedIn } from "@/lib/auth/signed-in"
 import { useSubmit } from "@/lib/auth/use-submit"
 
 /** Optional, so `/reset-password` with no token renders the dead-link page. */
@@ -18,6 +19,7 @@ export const Route = createFileRoute("/reset-password")({
     token:
       typeof search.token === "string" ? search.token.slice(0, 256) : undefined,
   }),
+  loader: leaveIfSignedIn,
   head: () => ({ meta: [{ title: "Set a new password · Reme" }] }),
   component: ResetPassword,
 })
