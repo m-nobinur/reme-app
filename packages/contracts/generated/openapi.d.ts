@@ -1077,6 +1077,8 @@ export interface components {
           /** @enum {string} */
           use?: "logo" | "hero" | "work" | "team"
         }[]
+        /** @enum {string} */
+        path?: "upload" | "create"
       }[]
     }
     AskDesignOutput: {
@@ -9263,6 +9265,11 @@ export interface components {
           }
         | {
             /** @constant */
+            kind: "thinking"
+            text: string
+          }
+        | {
+            /** @constant */
             kind: "step"
             /** @enum {string} */
             step:
@@ -9304,6 +9311,12 @@ export interface components {
               | "design"
               | "upload"
             answered: boolean
+          }
+        | {
+            /** @constant */
+            kind: "reading"
+            /** @enum {string} */
+            about: "answer" | "change" | "question"
           }
         | {
             /** @constant */

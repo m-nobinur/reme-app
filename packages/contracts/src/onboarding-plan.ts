@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { ChoiceStep, DetailsStep } from "./chat.ts"
+import { ChoiceStep, DetailsStep, LogoPath } from "./chat.ts"
 import { QuoteFields } from "./onboarding.ts"
 import {
   FactValue,
@@ -118,8 +118,13 @@ export const PlanNext = z.discriminatedUnion("kind", [
   /**
    * The design tray: palette, lettering, page arrangement and pages as four
    * questions, replacing the template, palette, font and pages cards.
+   * `logo` is the way the owner's words this turn chose for the logo, which
+   * the tray opens on; left out, the tray asks.
    */
-  z.strictObject({ kind: z.literal("ask_design") }),
+  z.strictObject({
+    kind: z.literal("ask_design"),
+    logo: LogoPath.optional(),
+  }),
   /** A form for one fact, such as a phone number. */
   z.strictObject({
     kind: z.literal("ask_fact"),
