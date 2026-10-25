@@ -19,6 +19,7 @@ import {
   facts,
   failureCode,
   listOrgIds,
+  type Posted,
   type Tenancy,
   tenancy,
   toFactRecord,
@@ -72,6 +73,7 @@ import {
   writePointer,
 } from "./publish.ts"
 import { quickEdit } from "./quick.ts"
+import { askOwner, relayQuestion } from "./relay.ts"
 import { retireOthers, type SweepCounts, sweepOrg } from "./retention.ts"
 import {
   afterFailure,
@@ -169,6 +171,10 @@ type DeveloperEvent =
  */
 const ANSWER_DEADLINE_MS = 7 * 24 * 60 * 60 * 1000
 const LOOK_EVERY_MS = 6 * 60 * 60 * 1000
+/** How soon a question the chat could not take yet is posted again. */
+const POST_AGAIN_MS = 2 * 60 * 1000
+/** Posts the chat will take later: the question is posted again. */
+const QUEUED: ReadonlySet<Posted> = new Set(["busy", "waiting"])
 
 /** How long a queued assignment waits for the site lock: 20 × 30 s. */
 const CLAIM_ATTEMPTS = 20
@@ -1104,6 +1110,13 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         `deadline ${round}`,
         async () => Date.now() + ANSWER_DEADLINE_MS
       )
+      // The assistant answers what it already knows; only the rest is put
+      // to the owner, as a card in the chat.
+      const relayed = await step.do(`relay ${round}`, () =>
+        run((kit) => relayQuestion(this.env, kit, ids, payload.request_id))
+      )
+      const ask = relayed && "ask" in relayed ? relayed.ask : null
+      let posted = ask === null
       let factId = ""
       for (let look = 1; ; look++) {
         // The clock is read inside the step too, so a replay takes the same
@@ -1120,9 +1133,21 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             waited?.request.request_id === payload.request_id
               ? (waited.fact_id ?? "")
               : ""
-          return { factId: answered, left: deadline - Date.now() }
+          // The card, until the chat takes it: a busy chat, or one waiting
+          // on another card, is tried again at the next look.
+          const shown =
+            posted ||
+            Boolean(answered) ||
+            ask === null ||
+            !QUEUED.has(
+              await run((kit) =>
+                askOwner(kit, ids, payload.request_id, ask)
+              ).then((p) => p ?? "posted")
+            )
+          return { factId: answered, left: deadline - Date.now(), shown }
         })
         factId = seen.factId
+        posted = seen.shown
         if (factId) break
         // Seven days with no answer. `fail` releases the site lock and takes
         // the checkpoint out of R2 with the container.
@@ -1132,7 +1157,10 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         try {
           await step.waitForEvent(`answer ${round}.${look}`, {
             type: "answer",
-            timeout: Math.min(LOOK_EVERY_MS, seen.left),
+            timeout: Math.min(
+              posted ? LOOK_EVERY_MS : POST_AGAIN_MS,
+              seen.left
+            ),
           })
         } catch {
           // No nudge in time: look anyway.

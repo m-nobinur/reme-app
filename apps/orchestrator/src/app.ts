@@ -34,7 +34,6 @@ import {
   staff,
   steerByKey,
   steerKeyHash,
-  supersedeFact,
   type Tenancy,
   tenancy,
   toAssignment,
@@ -79,6 +78,7 @@ import {
 } from "./publish.ts"
 import { answers } from "./question.ts"
 import { pickLane } from "./quick.ts"
+import { recordAnswer } from "./relay.ts"
 import { publishedSource } from "./revise.ts"
 import { endSandbox, endSite, probe } from "./sandbox.ts"
 import { connectGoogle } from "./search.ts"
@@ -1053,41 +1053,13 @@ bridge.post("/:id/answer", async (c) => {
     const question = { ...waited.request, field }
     const value = tried.find((v) => answers(question, v))
     if (value === undefined) return { invalid: field }
-    const [root] = owner
-      ? await db
-          .select({ id: staff.id })
-          .from(staff)
-          .where(sql`${staff.kind} = 'human' and ${staff.managerId} is null`)
-      : []
-    const [existing] = await db
-      .select({ factType: facts.factType })
-      .from(facts)
-      .where(sql`${facts.key} = ${field} and ${facts.validTo} is null`)
-    const written = await supersedeFact(db, {
+    const answer = await recordAnswer(db, {
       orgId,
-      key: field,
-      factType: existing?.factType ?? field.split(".")[0] ?? "answer",
-      value,
-      provenance: {
-        source: "owner_stated",
-        confidence: 1,
-        verifiedByStaffId: root?.id ?? row.createdByStaffId,
-      },
-    })
-    const answer = InformationAnswer.parse({
-      answer_id: crypto.randomUUID(),
-      org_id: orgId,
-      assignment_id: id,
-      request_id: requestId,
-      fact_id: written.factId,
-      answered_at: new Date().toISOString(),
-    })
-    await appendEvent(db, {
-      orgId,
-      assignmentId: id,
-      staffId: row.createdByStaffId,
-      type: "information.answered",
-      payload: answer,
+      assignment: row,
+      requestId,
+      field,
+      given: { value },
+      byOwner: Boolean(owner),
     })
     return { answer, nudge: true }
   })

@@ -824,6 +824,7 @@ export const askChief = (current: Session) =>
         requested_by_staff_id: spec.staff_id,
         field: data.field,
         why: data.why,
+        question: data.question,
         answer_schema: data.answer_schema,
         options: askedOptions(data),
         blocking: data.blocking,

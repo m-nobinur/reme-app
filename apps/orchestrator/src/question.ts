@@ -1,9 +1,12 @@
 import {
   ANSWER_TEXT_MAX,
+  CHOICE_FACT_KEYS,
   FactValue,
   FactValueKey,
   InformationRequest,
   OwnerAnswerText,
+  type QuestionInput,
+  REVIEW_FACT_KEYS,
   TextAnswerSchema,
 } from "@workspace/contracts"
 import { z } from "zod"
@@ -53,6 +56,7 @@ export const AskChiefInput = InformationRequest.pick({
   answer_schema: true,
   blocking: true,
 }).extend({
+  question: InformationRequest.shape.question.unwrap(),
   options: z
     .array(z.string().min(1).max(ANSWER_TEXT_MAX))
     .max(OPTIONS_MAX)
@@ -73,6 +77,7 @@ export const ASK_CHIEF_DESCRIPTION = [
   `For ${FactValueKey.options.join(", ")} the answer has a fixed shape: send answer_schema {"type":"object"} and no options.`,
   `For any other key the owner answers in text: answer_schema is exactly {"type":"string"}, optionally with "maxLength" (1 to ${ANSWER_TEXT_MAX}) and "format":"email", and no other keyword or object wrapper.`,
   `options is a closed list of literal values the owner picks exactly as written, at most ${OPTIONS_MAX}, each valid under answer_schema, and only when the answer is a choice among known values. Never put an instruction, a question, an empty string or "null" in it.`,
+  "question is how the owner's assistant will ask it: one short plain question about their business, ending in a question mark, with no field names, no names of anyone and no technical words.",
   "Ask only about the business. The build, its files and its tools are yours: never ask the owner to fix them.",
 ].join("\n")
 
@@ -84,15 +89,44 @@ export const ASK_CHIEF_DESCRIPTION = [
 const INTERNALS =
   /\/(?:workspace|opt|tmp)\b|\bgit\b|\brepository\b|\bsandbox\b|\bcontainer\b|\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b/i
 
+/** Keys the owner picks or confirms elsewhere, never types: no question asks for one. */
+const PICKED: readonly string[] = [...CHOICE_FACT_KEYS, ...REVIEW_FACT_KEYS]
+
+/**
+ * Whether `text` may be put to the owner as it stands: one plain question,
+ * with no field name ("business.proof"), no one else named, nothing of the
+ * build and no dash.
+ */
+export function questionOk(text: string): boolean {
+  const line = text.trim()
+  return (
+    line.length > 0 &&
+    line.length <= 300 &&
+    line.endsWith("?") &&
+    line.split("?").length === 2 &&
+    !/\n|[—–]|\s-\s|https?:/.test(line) &&
+    !/\b[a-z]+[._][a-z_]+\b/.test(line) &&
+    !/\b(?:developer|agent|chief of staff|staff|reme)\b/i.test(line) &&
+    !INTERNALS.test(line)
+  )
+}
+
 /** Why `ask_chief` refuses this question, for the model to read; null when it may be asked. */
 export function refuseQuestion(q: {
   field: string
   why?: string
+  question?: string
   answer_schema?: unknown
   options?: string[] | null
 }): string | null {
-  if (q.why && INTERNALS.test(q.why)) {
+  if ((q.why && INTERNALS.test(q.why)) || INTERNALS.test(q.question ?? "")) {
     return "Ask the owner only about their business. A problem with the build, its files or its tools is not theirs to fix: carry on, or stop and say so in your report."
+  }
+  if (PICKED.includes(q.field)) {
+    return `${q.field} is the owner's own pick. Build with what they picked, or leave it out and list it in your report.`
+  }
+  if (q.question !== undefined && !questionOk(q.question)) {
+    return "Write question as one short plain question to the owner about their business, ending in a question mark: no field names, no names of anyone, no dashes and no technical words."
   }
   const options = q.options ?? []
   if (isFactKey(q.field)) {
@@ -114,6 +148,29 @@ export function refuseQuestion(q: {
   return bad === undefined
     ? null
     : `The option "${bad.slice(0, 80)}" does not satisfy the answer_schema. An option is a literal value the owner picks, never an instruction.`
+}
+
+/** How the owner answers this question on the chat's card, as the web's `answerSpecOf` reads it. */
+export function inputOf(q: {
+  field: string
+  answer_schema: unknown
+  options?: string[] | null
+}): QuestionInput {
+  const key = FactValueKey.exclude([
+    ...CHOICE_FACT_KEYS,
+    ...REVIEW_FACT_KEYS,
+  ]).safeParse(q.field)
+  if (key.success) return { kind: "fact", key: key.data }
+  // Options `answers` would drop, being instructions rather than values, offer no choice.
+  if (q.options?.length && refuseQuestion(q) === null) {
+    return { kind: "choice", options: q.options }
+  }
+  const schema = TextAnswerSchema.safeParse(q.answer_schema).data
+  return {
+    kind: "text",
+    maxLength: schema?.maxLength ?? ANSWER_TEXT_MAX,
+    email: schema?.format === "email",
+  }
 }
 
 /**

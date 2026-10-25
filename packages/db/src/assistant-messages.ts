@@ -54,7 +54,7 @@ export async function postAssistantMessage(
     conversationId?: string
   }
 ): Promise<Posted> {
-  const { id, text, button } = ServerMessage.parse({
+  const { id, text, button, questions } = ServerMessage.parse({
     ...message,
     id: serverMessageId(key),
   })
@@ -67,6 +67,7 @@ export async function postAssistantMessage(
       { type: "step-start" },
       ...text.map((words) => ({ type: "text", text: words, state: "done" })),
       ...(button ? [{ type: "data-button", data: button }] : []),
+      ...(questions ? [{ type: "data-build_questions", data: questions }] : []),
     ],
   })
 }
