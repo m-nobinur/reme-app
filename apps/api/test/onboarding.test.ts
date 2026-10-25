@@ -1108,6 +1108,28 @@ describe("the progress a conversation's cards hold", () => {
     ).toBe(true)
   })
 
+  it("counts a skipped question in words, clicked or typed, and nothing else of it", () => {
+    const open = (over: Record<string, unknown>) =>
+      row({ type: "tool-ask_open", ...over })
+    expect(
+      progressOf([
+        open({ step: "business.audience", answer: "skipped" }),
+        open({
+          step: "business.proof",
+          state: "output-error",
+          reply: SKIP_REPLY,
+        }),
+        open({ step: "service_area.text", answer: "skipped" }),
+        open({ step: "business.audience", state: "input-available" }),
+      ])
+    ).toEqual({
+      passed: ["business.audience", "business.proof"],
+      closed: [],
+      offered: false,
+      builder: null,
+    })
+  })
+
   it("ends the script on a skipped website, clicked or typed", () => {
     const skipped = (over: Record<string, unknown>) =>
       progressOf([
