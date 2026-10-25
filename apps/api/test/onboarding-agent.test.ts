@@ -1307,10 +1307,39 @@ describe("the plan's parts", () => {
         },
       },
     ])
-    // A typed turn shows no persona.
-    expect(planParts(checked.checked, typed("ok"), counter())[1]).toMatchObject(
-      { type: "tool-ask_choice" }
+    // A typed turn that leaves the persona as it was shows none.
+    expect(
+      planParts(checked.checked, typed("ok", s.onboarding), counter())[1]
+    ).toMatchObject({ type: "tool-ask_choice" })
+  })
+
+  it("shows the persona card between the intro and the next question when words settle it", () => {
+    const o = onboarding(
+      without("assistant.name", "assistant.pronouns", "assistant.tone")
     )
+    const card = detailsCard("assistant", o, counter())
+    const man = plan({
+      facts: {
+        "assistant.name": { name: "Oliver" },
+        "assistant.pronouns": { id: "he_him" },
+        "assistant.tone": { id: "professional" },
+      },
+      chosen_for_owner: ["assistant.name", "assistant.tone"],
+      pending_card: "answered",
+      say: "I've gone with Oliver, he/him.\n\nNext, what should your quote form ask?",
+      next: { kind: "ask_open", about: "quote.form" },
+    })
+    const s = typed("you choose, but make it a man", o, card)
+    const checked = checkPlan(man, s)
+    if (!checked.ok) throw new Error(checked.errors.join("; "))
+    expect(planParts(checked.checked, s, counter()).map((p) => p.type)).toEqual(
+      ["text", PERSONA_CARD, "text", "tool-ask_open"]
+    )
+    // Words that change nothing the card holds add no card.
+    const held = typed("thanks", checked.checked.after)
+    expect(
+      planParts(checked.checked, held, counter()).map((p) => p.type)
+    ).toEqual(["text", "tool-ask_open"])
   })
 
   it("puts the owner's words in a data block the model cannot close", () => {

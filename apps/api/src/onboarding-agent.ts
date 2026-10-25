@@ -206,6 +206,7 @@ How to write say:
 - Acknowledge plainly, the way a colleague would ("Got it, weddings and airport runs."). Don't praise the owner's business, services or answers: no "wonderful", "fantastic", "amazing" or "lovely mix". At most one warm word in a message, and never the same one twice in the conversation.
 - When you move to a new part of onboarding, add one sentence on why the next step matters for their business, in the spirit of the examples below.
 - When you show a card, lead to that card's question and nothing else. The card shows its options, so don't list them.
+- When your reply settles who you are (name, pronouns, tone), say so in the first paragraph and put the next question in a second: the persona card is shown between them.
 - Write about this business: its name, its trade and its services. Every kind of business comes here.
 - The trade comes only from what_the_business_does. Never infer it from the name ("Bright Cleaning Ltd" may hire out limousines) and never comment on the name; until the trade is known, say "your business".
 - Short: two short paragraphs at most, under 120 words, plain text, British English. No headings, links, emojis, em dashes or en dashes; use a comma or a full stop.
@@ -1921,19 +1922,22 @@ export function salvaged(
 
 // --- The parts -------------------------------------------------------------
 
-/** The persona an answered assistant card settled, as its card part, or none. */
+/**
+ * The persona this turn settled, as its card part, or none: the assistant
+ * card answered with its own tap, or any turn whose facts changed the
+ * persona (words over the card, or a later reopen).
+ */
 function personaOf(s: PlanState, o: Onboarding): Part[] {
   const { input } = s
-  if (
-    input.kind !== "card" ||
-    input.card.type !== "tool-ask_details" ||
-    stepOf(input.card) !== "assistant" ||
-    (input.output as { answer?: unknown }).answer !== "stated"
-  ) {
-    return []
-  }
+  const tapped =
+    input.kind === "card" &&
+    input.card.type === "tool-ask_details" &&
+    stepOf(input.card) === "assistant" &&
+    (input.output as { answer?: unknown }).answer === "stated"
   const part = personaPart(o)
-  return part ? [part] : []
+  return part && (tapped || !same(part, personaPart(s.onboarding)))
+    ? [part]
+    : []
 }
 
 /**
@@ -1947,8 +1951,15 @@ export function planParts(
   newId: () => string
 ): Part[] {
   const { plan, after } = c
-  // The reply, and under it the persona the assistant card settled.
-  const lead = [text(plan.say.trim()), ...personaOf(s, after)]
+  // The reply's first paragraph introduces the persona, which sits under it
+  // and above the rest, the next question.
+  const persona = personaOf(s, after)
+  const [intro = "", ...rest] = plan.say.trim().split(/\n\s*\n/)
+  const lead = [
+    text(persona.length > 0 ? intro : plan.say.trim()),
+    ...persona,
+    ...(persona.length > 0 && rest.length > 0 ? [text(rest.join("\n\n"))] : []),
+  ]
   const next = plan.next
   switch (next.kind) {
     case "ask_open":
