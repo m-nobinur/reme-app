@@ -1270,7 +1270,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     ])
   })
 
-  it("asks the owner before every act tool, even with a value that parses as a fact", async () => {
+  it("asks the owner before every act tool but an answer, which runs at once even with a value that parses as a fact", async () => {
     const s = seed(kit, me)
     const asking = await s.assignment("blocked_on_information")
     const q = question(me, asking)
@@ -1313,18 +1313,17 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       stub
     )
     expect(done.response.status, done.text).toBe(200)
-    expect(stub.calls).toHaveLength(0)
     const pending = waiting(await tailOf(me, id))
     expect(
       pending.map((p) => p.type).sort((a, b) => a.localeCompare(b))
-    ).toEqual([
-      "tool-answer_question",
-      "tool-create_reminder",
-      "tool-request_change",
-    ])
+    ).toEqual(["tool-create_reminder", "tool-request_change"])
     expect(
       done.chunks.filter((c) => c.type === "tool-approval-request")
-    ).toHaveLength(3)
+    ).toHaveLength(2)
+    // The answer went to the build that asked, under its own call.
+    expect(stub.calls.map((c) => new URL(c.request.url).pathname)).toEqual([
+      `/assignments/${asking}/answer`,
+    ])
     const stored = await kit.withOrg({ orgId: me.orgId }, (db) =>
       db.select().from(reminders).where(eq(reminders.conversationId, id))
     )
@@ -1713,11 +1712,11 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
   })
 
   /** A tail the CoS made, waiting on the four calls ADR-034's fallback proof resolves. */
-  async function fourApprovals(who: Owner, requestId: string) {
+  async function fourApprovals(who: Owner) {
     const id = await conversation(who)
     await turn(
       who,
-      typed(id, "Answer the phone question and make two changes."),
+      typed(id, "Make three changes and remind me to call the supplier."),
       {
         model: scripted(
           calls(
@@ -1727,15 +1726,9 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
               input: { text: "Add a Saturday slot." },
             },
             {
-              id: "call_aq",
-              tool: "answer_question",
-              input: {
-                request_id: requestId,
-                value: {
-                  key: "business.phone",
-                  value: { e164: "+441632960001" },
-                },
-              },
+              id: "call_rc3",
+              tool: "request_change",
+              input: { text: "Add Sundays." },
             },
             {
               id: "call_rc2",
@@ -1816,9 +1809,9 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     const q = question(me, asking)
     await s.event(asking, "information.requested", q)
     await s.state(asking, "cancelled")
-    const { id, tail, pending } = await fourApprovals(me, q.request_id)
+    const { id, tail, pending } = await fourApprovals(me)
     expect(pending).toHaveLength(4)
-    const [rc1, aq, rc2, cr] = pending as [
+    const [rc1, rc3, rc2, cr] = pending as [
       (typeof pending)[number],
       (typeof pending)[number],
       (typeof pending)[number],
@@ -1836,7 +1829,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
           message_id: tail.id,
           results: [
             { kind: "approval", approval_id: rc1.approval.id, approved: true },
-            { kind: "approval", approval_id: aq.approval.id, approved: true },
+            { kind: "approval", approval_id: rc3.approval.id, approved: true },
             {
               kind: "approval",
               approval_id: rc2.approval.id,
@@ -1853,7 +1846,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     expect(done.response.status, done.text).toBe(200)
     expect(
       stub.calls.map((c) => c.request.headers.get("idempotency-key"))
-    ).toEqual([rc1.approval.id, aq.approval.id])
+    ).toEqual([rc1.approval.id, rc3.approval.id])
     const added = (await logOf(id)).slice(before)
     const afterContext = added.slice(
       added.findIndex((e) => e.type === "cos.context")
@@ -1876,7 +1869,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
         }
       ).state
     expect(state(rc1.toolCallId)).toBe("output-available")
-    expect(state(aq.toolCallId)).toBe("output-available")
+    expect(state(rc3.toolCallId)).toBe("output-available")
     expect(state(rc2.toolCallId)).toBe("output-denied")
     expect(state(cr.toolCallId)).toBe("output-denied")
     expect(
