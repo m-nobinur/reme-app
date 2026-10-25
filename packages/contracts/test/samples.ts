@@ -381,6 +381,12 @@ export const samples: Record<ContractName, unknown> = {
         round: 1,
         status: "ready",
         variants: [{ id: "8d9e0f10-2131-4a2b-9c3d-4e5f60718293" }],
+        brief: {
+          description: "",
+          colors: [paletteSample.primary],
+          type: "lockup",
+          style: "minimal",
+        },
       },
     ],
     next_at: null,
