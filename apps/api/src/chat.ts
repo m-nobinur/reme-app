@@ -12,6 +12,8 @@ import {
   type MemoryChip,
   ONBOARDING_STATUS,
   OnboardingPlan,
+  PERSONA_CARD,
+  type PersonaCard,
   RequestChangeOutput,
   TOOL_CALL_CANCELLED,
 } from "@workspace/contracts"
@@ -230,6 +232,7 @@ export type ToolPart = {
 export type Part =
   | { type: "step-start" }
   | { type: "text"; text: string; state: "done" }
+  | { type: typeof PERSONA_CARD; data: PersonaCard }
   | ToolPart
 type Content = { role: "user" | "assistant"; parts: Part[] }
 
@@ -277,6 +280,7 @@ function made(part: Part): UIMessageChunk[] {
       { type: "text-end", id: "text" },
     ]
   }
+  if (part.type === PERSONA_CARD) return [part]
   const { toolCallId } = part
   const call: UIMessageChunk[] = [
     {

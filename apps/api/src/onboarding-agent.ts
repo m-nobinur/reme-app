@@ -13,6 +13,8 @@ import {
   type OnboardingStatus,
   PAGES,
   PALETTES,
+  PERSONA_CARD,
+  PersonaCard,
   PLAN_DOING_MAX,
   PLAN_FACT_KEYS,
   PLANNER_TURN_MS,
@@ -212,6 +214,7 @@ Reading the owner:
 - The industry: category is the closest item of the list, or null when none is close; name is their trade in their words.
 - Choices have cards: the industry, whether you build the website, the layout, the colours, the lettering and the pages. Record one only when the owner typed over that choice's own card; otherwise leave it out, and its card asks it in turn. The industry is the exception: record it as soon as their words say what the business does.
 - If they leave a card's choice to you ("you pick"), choose what suits the business for that card, record it, list its key in chosen_for_owner, and tell them what you chose and that they can change it. Contact details and what the business does are never yours to choose.
+- A card used "with Pick for me" is the owner asking you to choose. The card holds your choice already, so record nothing for it: say what you went with in your own voice, as your decision, in one sentence ("I've gone with Reme, she/her, with a professional manner."). For the design tray, say you'll choose the rest as you build. Never say they picked it, and never name an avatar.
 - Record owner.preferred_name only when they say what they want to be called. A name in a greeting ("I'm Sophie") is not that. Never ask for it: the owner is called by owner_first_name, taken from their sign-in.
 - If their words answer only part of a card, record that part, set pending_card "answered", and ask the same card again for the rest.
 - Who the customers are is optional, but ask it once before the contact card, with whatever is still missing about the services and the area, unless they already said it. If they defer it, leave it; the build never waits for it.
@@ -496,13 +499,16 @@ function cardLine(part: ToolPart): string {
               ? `a quote form proposal: ${(input.fields as { label: string }[]).map((f) => f.label).join(", ")}`
               : part.type === "tool-ask_open"
                 ? `a question in words about ${input.about}`
-                : "the first build"
+                : part.type === "tool-ask_design"
+                  ? "the design tray"
+                  : "the first build"
   if (part.state === "input-available") return `[${asked}, waiting]`
   if (part.state === "output-error") {
     return `[${asked}, left unanswered: the owner typed a message instead]`
   }
   if (part.type === "tool-request_change") return "[the build started]"
   const step = typeof input.step === "string" ? input.step : ""
+  const picked = output.skip_all === true ? " with Pick for me" : ""
   const answer =
     output.answer === "skipped"
       ? "skipped"
@@ -524,7 +530,7 @@ function cardLine(part: ToolPart): string {
                 : output.answer === "changes"
                   ? `asked for changes: ${output.text}`
                   : "answered"
-  return `[${asked}, ${answer}]`
+  return `[${asked}, ${answer}${picked}]`
 }
 
 /** The rows as lines: who spoke, and their words or what a card did. */
@@ -1811,6 +1817,26 @@ export function salvaged(
 
 // --- The parts -------------------------------------------------------------
 
+/** The persona an answered assistant card settled, as its card part, or none. */
+function personaOf(s: PlanState, o: Onboarding): Part[] {
+  const { input } = s
+  if (
+    input.kind !== "card" ||
+    input.card.type !== "tool-ask_details" ||
+    stepOf(input.card) !== "assistant" ||
+    (input.output as { answer?: unknown }).answer !== "stated"
+  ) {
+    return []
+  }
+  const card = PersonaCard.safeParse({
+    name: factValue(o.facts, "assistant.name")?.name,
+    pronouns: factValue(o.facts, "assistant.pronouns")?.id,
+    avatar: factValue(o.facts, "assistant.avatar")?.id,
+    tone: factValue(o.facts, "assistant.tone")?.id,
+  })
+  return card.success ? [{ type: PERSONA_CARD, data: card.data }] : []
+}
+
 /**
  * The parts a checked plan shows: the message, then the card it asks with.
  * A build is its pending call alone; `chat.ts` starts it and puts the
@@ -1822,12 +1848,13 @@ export function planParts(
   newId: () => string
 ): Part[] {
   const { plan, after } = c
-  const said = text(plan.say.trim())
+  // The reply, and under it the persona the assistant card settled.
+  const lead = [text(plan.say.trim()), ...personaOf(s, after)]
   const next = plan.next
   switch (next.kind) {
     case "ask_open":
       return [
-        said,
+        ...lead,
         call(
           "tool-ask_open",
           AskOpenInput.parse({
@@ -1842,19 +1869,19 @@ export function planParts(
         s.pending &&
         plan.pending_card === "unanswered"
         ? [
-            said,
+            ...lead,
             s.pending.type === "tool-ask_design"
               ? designCard(after, newId)
               : call(s.pending.type, s.pending.input, newId),
           ]
-        : [said]
+        : lead
     case "ask_fact":
-      return [said, factCard(after, next.key, newId)]
+      return [...lead, factCard(after, next.key, newId)]
     case "ask_details":
-      return [said, detailsCard(next.step, after, newId)]
+      return [...lead, detailsCard(next.step, after, newId)]
     case "ask_choice":
       return [
-        said,
+        ...lead,
         choiceCard(next.step, after, newId, {
           ...(next.preselected.length > 0
             ? { preselected: next.preselected }
@@ -1863,13 +1890,13 @@ export function planParts(
         }),
       ]
     case "ask_design":
-      return [said, designCard(after, newId)]
+      return [...lead, designCard(after, newId)]
     // Refused by the checks: the photos are a tray question.
     case "ask_upload":
-      return [said]
+      return lead
     case "review_quote_form":
       return [
-        said,
+        ...lead,
         call(
           "tool-review_quote_form",
           ReviewQuoteFormInput.parse({ fields: next.fields, note: next.note }),
@@ -1879,6 +1906,6 @@ export function planParts(
     case "start_build":
       return [call("tool-request_change", { text: ONBOARDING_GOAL }, newId)]
     case "reopen":
-      return [said, reopenCard(next.step, after, newId)]
+      return [...lead, reopenCard(next.step, after, newId)]
   }
 }
