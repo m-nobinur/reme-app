@@ -90,7 +90,6 @@ const input = (over: Partial<PanelInput> = {}): PanelInput => ({
   orgId: ORG,
   business: "Fixture Clean",
   conversations: [],
-  names: {},
   now: NOW,
   zone: ZONE,
   ...over,
@@ -303,17 +302,20 @@ describe("the first run", () => {
     const panel = firstRun(
       [
         onboarding(8, "done"),
-        segment(
-          "website",
-          "now",
-          [
-            step("planning", "done"),
-            step("photos", "skipped"),
-            step("writing", "now", { count: { done: 3, total: 6 } }),
-            ...along(WEBSITE_STEPS, 0).slice(3),
-          ],
-          BUSINESS
-        ),
+        {
+          ...segment(
+            "website",
+            "now",
+            [
+              step("planning", "done"),
+              step("photos", "skipped"),
+              step("writing", "now", { count: { done: 3, total: 6 } }),
+              ...along(WEBSITE_STEPS, 0).slice(3),
+            ],
+            BUSINESS
+          ),
+          usual_seconds: 360,
+        },
         segment("golive", "upcoming", along(GOLIVE_STEPS, -1), BUSINESS),
       ],
       { builds: [build("implementing", "build-first")] }
@@ -333,7 +335,7 @@ describe("the first run", () => {
       "Ellie is building your website",
       "Ellie is putting your website together",
     ]).toContain(website?.title)
-    expect(website?.line).toBe("4 minutes so far, usually 5 to 10 minutes")
+    expect(website?.line).toBe("4 minutes so far, usually about 6 minutes")
     expect(website?.steps.map((each) => [each.label, each.state])).toEqual([
       ["Planning", "done"],
       ["Photos", "skipped"],
@@ -729,7 +731,7 @@ describe("on the Approvals page", () => {
       })
     )
     expect(panel?.waiting.map((item) => item.kind)).toEqual(["question"])
-    expect(panel?.line.lead).toBe("Alex")
+    expect(panel?.line.lead).toBe("Your assistant")
     expect(
       panelFor(
         input({
@@ -742,8 +744,8 @@ describe("on the Approvals page", () => {
 })
 
 describe("the one line", () => {
-  const line = (over: Partial<Workspace>, names = {}) =>
-    panelFor(input({ workspace: workspace(over), names }))?.line
+  const line = (over: Partial<Workspace>) =>
+    panelFor(input({ workspace: workspace(over) }))?.line
 
   it("says what is most pressing", () => {
     expect(
@@ -778,15 +780,14 @@ describe("the one line", () => {
     })
   })
 
-  it("names who asked, from the directory", () => {
+  it("says the assistant asks, never the staff member who did", () => {
     expect(
-      line(
-        { live: 2, attention: [question("A colleague", "staff-1")] },
-        {
-          "staff-1": "Alex",
-        }
-      )
-    ).toEqual({ tone: "live", lead: "Alex", detail: "has a question for you" })
+      line({
+        live: 2,
+        assistantName: "Ellie",
+        attention: [question("Alex", "staff-1")],
+      })
+    ).toEqual({ tone: "live", lead: "Ellie", detail: "has a question for you" })
   })
 })
 

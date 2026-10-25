@@ -280,11 +280,22 @@ const ACT_TOOLS: readonly CosToolName[] = [
   "buy_domain",
 ]
 /**
- * The act tools with no card, keyed by their tool call instead of an
- * approval: the owner's payment in Checkout is a purchase's consent, and an
- * answer is the owner's own words.
+ * The act tool with no card: the owner's payment in Checkout is its
+ * consent, so it is keyed by its tool call instead of an approval.
  */
-const UNAPPROVED: readonly CosToolName[] = ["buy_domain", "answer_question"]
+const UNAPPROVED: readonly CosToolName[] = ["buy_domain"]
+/**
+ * The act tools the owner's own words are the yes for, so they run with no
+ * card unless they set a new phone or email (`toolApproval`). Keyed by their
+ * call, which the turn scopes: a provider's call id is unique only within
+ * its turn ("functions.answer_question:0" repeats).
+ */
+const OWNERS_WORDS: readonly CosToolName[] = [
+  "request_change",
+  "answer_question",
+]
+/** The facts an answer sets that still ask the owner on a card, as a change's contact does. */
+const CONTACT_KEYS: readonly string[] = ["business.phone", "business.email"]
 /** The act tools whose input is the owner's words, so a call to one is `untrusted_input`. */
 const QUOTING: readonly string[] = [
   "create_reminder",
@@ -827,14 +838,11 @@ export async function runTool(
     turn: Turn,
     zone: string | null
   ) => Promise<unknown>
-  // A change the owner typed runs with no card unless it sets a new phone or
-  // email (`toolApproval`), keyed by its call. The call id is the provider's,
-  // unique only within its turn, so the turn scopes it.
   const key =
     approvalId ??
     (UNAPPROVED.includes(name)
       ? toolCallId
-      : name === "request_change"
+      : OWNERS_WORDS.includes(name)
         ? `${run.turn.turnId}:${toolCallId}`
         : null)
   if (ACT_TOOLS.includes(name) && !key) {
@@ -1136,6 +1144,10 @@ export function cosAgent(
       // The owner's words are the yes, and a new phone or email still asks.
       request_change: async (input) =>
         (await newContact(run.tools, input).catch(() => true))
+          ? "user-approval"
+          : "not-applicable",
+      answer_question: ({ value }) =>
+        typeof value === "object" && CONTACT_KEYS.includes(value.key)
           ? "user-approval"
           : "not-applicable",
       create_reminder: "user-approval",

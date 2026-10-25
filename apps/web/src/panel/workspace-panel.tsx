@@ -18,7 +18,10 @@ import {
   type Reminder,
   revisionPictures,
 } from "@workspace/contracts"
-import { ShowFoldedQuestion } from "@workspace/ui/components/assistant/question-tray"
+import {
+  ShowFoldedQuestion,
+  useDockedQuestion,
+} from "@workspace/ui/components/assistant/question-tray"
 import { AssistantAvatar } from "@workspace/ui/components/assistant-avatar"
 import { buttonVariants } from "@workspace/ui/components/button"
 import {
@@ -56,16 +59,14 @@ import {
   useState,
   useSyncExternalStore,
 } from "react"
+import { lastChat } from "@/chat/history"
 import {
-  answerQuestion,
   cancelBuild,
   completeReminder,
   decideApproval,
   getPreview,
 } from "@/lib/api/server"
 import type { AttentionItem, Workspace, WriteOutcome } from "@/lib/api/types"
-import { attemptKeys } from "@/lib/attempt"
-import { askerOf } from "@/lib/briefing"
 import { DECISION_REFUSED } from "@/lib/decision"
 import {
   type Panel,
@@ -97,7 +98,6 @@ const frame = getRouteApi("/app")
 
 type Refresh = () => Promise<void>
 type Approval = Extract<AttentionItem, { kind: "approval" }>
-type Question = Extract<AttentionItem, { kind: "question" }>
 
 type Announce = (status: string) => void
 
@@ -137,50 +137,28 @@ function useWrite<Name extends string>(refresh: Refresh, announce?: Announce) {
   return { pending, error, run }
 }
 
-/** Who raised an item: the frame's directory knows; a poll names no one. */
-function useAsker(item: AttentionItem): string {
-  return askerOf(item, frame.useLoaderData().names)
-}
+const ANSWER = cn(buttonVariants({ variant: "outline", size: "sm" }), "mt-1")
 
-function Answerable({
-  item,
-  refresh,
-  announce,
-}: {
-  item: Question
-  refresh: Refresh
-  announce: Announce
-}) {
-  const { pending, error, run } = useWrite<"answer">(refresh, announce)
-  // One key per answer until it lands: a retry after a timeout is the same
-  // request, and a changed answer is a new one.
-  const [keys] = useState(attemptKeys)
-  return (
-    <QuestionItem
-      askedBy={useAsker(item)}
-      error={error}
-      expiresAt={item.expiresAt}
-      onAnswer={(value) =>
-        void run("answer", async () => {
-          const outcome = await answerQuestion({
-            data: {
-              assignmentId: item.assignmentId,
-              requestId: item.id,
-              value,
-              key: keys.key(value),
-            },
-          })
-          if (outcome.done) keys.done()
-          return outcome
-        })
-      }
-      onExpiry={item.onExpiry}
-      pending={pending !== null}
-      spec={item.answer}
-      title={item.title}
-      why={item.detail}
-    />
-  )
+/**
+ * A question's way to its card in the chat: in this thread the docked card
+ * opens and takes the keyboard; elsewhere the latest chat opens, where the
+ * card docks and takes it itself.
+ */
+function AnswerInChat() {
+  const docked = useDockedQuestion()
+  const chat = lastChat(frame.useLoaderData().conversations)
+  if (docked) {
+    return (
+      <button className={ANSWER} onClick={docked.open} type="button">
+        Answer in the chat
+      </button>
+    )
+  }
+  return chat ? (
+    <Link className={ANSWER} params={{ id: chat.id }} to="/app/c/$id">
+      Answer in the chat
+    </Link>
+  ) : null
 }
 
 /**
@@ -566,7 +544,7 @@ type Tab = "activity" | "reminders" | "website"
  * workspace could not be read, which the panel says on its own.
  */
 export function usePanel(workspace: Workspace | null): Panel | null {
-  const { active, conversations, names } = frame.useLoaderData()
+  const { active, conversations } = frame.useLoaderData()
   const route = useMatches({ select: (matches) => matches.at(-1)?.routeId })
   const { id } = useParams({ strict: false })
   const zone = useBrowserZone()
@@ -579,7 +557,6 @@ export function usePanel(workspace: Workspace | null): Panel | null {
     orgId: active?.id ?? null,
     business: active?.name ?? null,
     conversations,
-    names,
     now: new Date(minute),
     zone,
   })
@@ -691,7 +668,7 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
               key={item.id}
               tabIndex={-1}
             >
-              <Answerable announce={setStatus} item={item} refresh={refresh} />
+              <QuestionItem action={<AnswerInChat />} title={item.title} />
             </div>
           ) : null
         )}

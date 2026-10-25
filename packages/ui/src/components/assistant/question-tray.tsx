@@ -82,13 +82,13 @@ export const TraySlotProvider = SlotContext.Provider
 export const useTraySlot = () => useContext(SlotContext)
 
 /**
- * How to open the docked question again while the owner has it folded, for
- * the line where its call sits and for the activity panel; null while it is
- * open or nothing waits.
- * shortcut: one folded tray per page, as the thread docks one at a time;
- * key it by call if two ever dock together.
+ * The docked question, for the line where its call sits and for the activity
+ * panel: `open` unfolds it and puts the keyboard in it. Null while nothing
+ * waits.
+ * shortcut: one tray per page, as the thread docks one at a time; key it by
+ * call if two ever dock together.
  */
-type Reopen = { open: () => void; many: boolean }
+type Reopen = { open: () => void; many: boolean; folded: boolean }
 let reopen: Reopen | null = null
 const reopenWatchers = new Set<() => void>()
 const setReopen = (next: Reopen | null) => {
@@ -102,14 +102,18 @@ const watchReopen = (watch: () => void) => {
   }
 }
 
-/** A text button that opens the folded question, or nothing while none is folded. */
-export function ShowFoldedQuestion({ className }: { className?: string }) {
-  const folded = useSyncExternalStore(
+/** The docked question's handle, or null while none waits. */
+export const useDockedQuestion = () =>
+  useSyncExternalStore(
     watchReopen,
     () => reopen,
     () => null
   )
-  if (!folded) return null
+
+/** A text button that opens the folded question, or nothing while none is folded. */
+export function ShowFoldedQuestion({ className }: { className?: string }) {
+  const folded = useDockedQuestion()
+  if (!folded?.folded) return null
   return (
     <button
       className={cn(
@@ -134,29 +138,34 @@ export function ShowFoldedQuestion({ className }: { className?: string }) {
 function Docked({
   name,
   many = false,
+  settled = false,
   children,
 }: {
   name: string
   /** The tray asks more than one question. */
   many?: boolean
+  /** Every answer is in: nothing waits, and the keyboard stays put. */
+  settled?: boolean
   children: ReactNode
 }) {
   const slot = useContext(SlotContext)
   const running = useRevealWaiting(true)
   const ref = useRef<HTMLDivElement>(null)
-  useFocusWhenIdle(true, running, ref)
+  useFocusWhenIdle(!settled, running, ref)
   if (!slot || running) return null
   return (
     <>
-      <p className="flex flex-wrap items-baseline gap-x-2 pt-3 text-muted-foreground text-sm">
-        {many ? "Waiting for your answers" : "Waiting for your answer"}
-        <ShowFoldedQuestion />
-      </p>
+      {settled ? null : (
+        <p className="flex flex-wrap items-baseline gap-x-2 pt-3 text-muted-foreground text-sm">
+          {many ? "Waiting for your answers" : "Waiting for your answer"}
+          <ShowFoldedQuestion />
+        </p>
+      )}
       {createPortal(
         <div
           data-slot={name}
           ref={ref}
-          className="motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-2 duration-250 ease-out motion-safe:animate-in"
+          className="motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-2 duration-enter ease-standard motion-safe:animate-in"
         >
           {children}
         </div>,
@@ -317,7 +326,7 @@ function Fold({ open, children }: { open: boolean; children: ReactNode }) {
   return (
     <div
       className={cn(
-        "-mx-1 grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none",
+        "-mx-1 grid transition-[grid-template-rows,opacity] duration-enter ease-standard motion-reduce:transition-none",
         open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
       )}
       inert={!open}
@@ -900,12 +909,22 @@ function TrayFrame({
   const id = useId()
   const ownBody = useRef<HTMLDivElement>(null)
   const bodyRef = givenBody ?? ownBody
+  const contentRef = useRef<HTMLDivElement>(null)
   const rootRef = useRef<HTMLElement>(null)
   const settled = useRef<boolean>(false)
   const [more, setMore] = useState(false)
   const focusComposer = useFocusComposer()
   const paged = page !== undefined && page.total > 1
   const count = paged ? `${page.index + 1} of ${page.total}` : null
+
+  // The page's picked or first field. Pages the owner is not on stay in the
+  // form, hidden; their fields are skipped.
+  const focusPage = () => {
+    const shown = [
+      ...(bodyRef.current?.querySelectorAll<HTMLInputElement>("input") ?? []),
+    ].filter((input) => input.checkVisibility({ checkOpacity: true }))
+    ;(shown.find((input) => input.checked) ?? shown[0])?.focus()
+  }
 
   // A new page takes the keyboard when it was in the tray, so Tab and the
   // arrow keys carry on in it; focus in the composer is left alone.
@@ -915,12 +934,7 @@ function TrayFrame({
       settled.current = true
       return
     }
-    if (!rootRef.current?.contains(document.activeElement)) return
-    // Pages the owner is not on stay in the form, hidden; their fields are skipped.
-    const shown = [
-      ...(bodyRef.current?.querySelectorAll<HTMLInputElement>("input") ?? []),
-    ].filter((input) => input.checkVisibility({ checkOpacity: true }))
-    ;(shown.find((input) => input.checked) ?? shown[0])?.focus()
+    if (rootRef.current?.contains(document.activeElement)) focusPage()
   }, [page?.index])
 
   // Whether the body hides content below its fold, so a fade can say so.
@@ -929,23 +943,45 @@ function TrayFrame({
     if (body)
       setMore(body.scrollHeight - body.scrollTop - body.clientHeight > 4)
   }
+  // The body is held at its content's height, so a new page eases to its own
+  // height instead of snapping; the frame's cap still shrinks it to scroll.
+  // The write waits a frame: the body is observed too, and resizing it in
+  // the observer's own callback would loop.
   // biome-ignore lint/correctness/useExhaustiveDependencies: measure again when the page or its state changes
   useEffect(() => {
     const body = bodyRef.current
-    if (!body) return
+    const content = contentRef.current
+    if (!body || !content) return
     measure()
-    const watch = new ResizeObserver(measure)
+    const watch = new ResizeObserver(() =>
+      requestAnimationFrame(() => {
+        body.style.height = `${content.offsetHeight}px`
+        measure()
+      })
+    )
     watch.observe(body)
+    watch.observe(content)
     return () => watch.disconnect()
   }, [page?.index, collapsed])
 
-  // Folded, the tray can be opened again from its waiting line and the panel.
-  const expand = useRef(() => onCollapsedChange(false))
-  expand.current = () => onCollapsedChange(false)
+  // The tray opens from its waiting line and the panel. Unfolding draws the
+  // body first, so the focus waits a frame.
+  const open = () => {
+    onCollapsedChange(false)
+    requestAnimationFrame(focusPage)
+  }
+  const expand = useRef(open)
+  expand.current = open
   useEffect(() => {
-    if (!collapsed) return
-    setReopen({ open: () => expand.current(), many: paged })
-    return () => setReopen(null)
+    const mine = {
+      open: () => expand.current(),
+      many: paged,
+      folded: collapsed,
+    }
+    setReopen(mine)
+    return () => {
+      if (reopen === mine) setReopen(null)
+    }
   }, [collapsed, paged])
 
   const collapse = () => {
@@ -1043,12 +1079,14 @@ function TrayFrame({
                 instead, the ones in a folded section stretched the thread
                 and the composer slid as it scrolled. */}
             <div
-              className="relative flex min-h-0 flex-col gap-3 overflow-y-auto rounded-b-3xl bg-(--body) p-3"
+              className="relative min-h-0 overflow-y-auto rounded-b-3xl bg-(--body) transition-[height] duration-enter ease-standard motion-reduce:transition-none"
               id={`${id}-body`}
               onScroll={measure}
               ref={bodyRef}
             >
-              {children}
+              <div className="flex flex-col gap-3 p-3" ref={contentRef}>
+                {children}
+              </div>
             </div>
             {more ? (
               // A fade, not a decoration: it says there is more below.
@@ -1178,8 +1216,11 @@ function QuestionTray({
         const logo = each.held?.[0]
         return logo ? [[each.id, { logo }]] : []
       }
+      // Photos opened on making them are an answer: the builder draws them.
       if (each.visual === "photos") {
-        const held = heldPhotosAnswer(each.held)
+        const held =
+          heldPhotosAnswer(each.held) ??
+          (first === "create" ? { photos: [], create: true } : undefined)
         return held ? [[each.id, held]] : []
       }
       if (own) return [[each.id, { own }]]
@@ -1286,9 +1327,15 @@ function QuestionTray({
     onFinish({ answers: sent, skip_all: skipAll || finishing })
     focusComposer()
   }
+  // Every other question holds an answer: one press keeps them all, once
+  // this one has its own (`chosen`), such as a logo still drawing.
+  const others = questions.every(
+    (each) => each.id === question.id || each.id in answers
+  )
+  const complete = (chosen = answer) => others && chosen !== undefined
   // Next, with the answer a page has only just set when it moves on itself.
   const onward = (chosen = answer) => {
-    if (last || finishing) finish(finishing, chosen)
+    if (last || finishing || complete(chosen)) finish(finishing, chosen)
     else go(index + 1, true, chosen)
   }
   const next = () => {
@@ -1358,10 +1405,23 @@ function QuestionTray({
               disabled: finishing && !ready,
             }
       }
-      status={finishing && !ready ? "A logo is all that is still needed" : null}
+      status={
+        finishing && !ready
+          ? "A logo is all that is still needed"
+          : complete()
+            ? "I'll build your site with these"
+            : null
+      }
       submit={
         (logo && logoSubmit) || {
-          label: last || finishing ? "Build my site" : "Next",
+          // The last page says what pressing it does; before it, Looks good
+          // keeps every pick made.
+          label:
+            last || finishing
+              ? "Build my site"
+              : others
+                ? "Looks good"
+                : "Next",
           onSubmit: next,
           disabled: !ready,
         }

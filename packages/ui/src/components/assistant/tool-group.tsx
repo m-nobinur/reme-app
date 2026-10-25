@@ -18,7 +18,8 @@ import {
 
 type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart
 
-const ANIMATION_DURATION = 200
+// The enter token, in milliseconds for the scroll lock.
+const ANIMATION_DURATION = 250
 
 type ToolGroupRootProps = Omit<
   React.ComponentProps<typeof Collapsible>,
@@ -113,7 +114,7 @@ function ToolGroupTrigger({
         data-slot="tool-group-trigger-chevron"
         className={cn(
           "aui-tool-group-trigger-chevron size-3 shrink-0",
-          "transition-transform duration-(--animation-duration) ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
+          "transition-transform duration-(--animation-duration) ease-standard motion-reduce:transition-none",
           "-rotate-90",
           "group-data-open/trigger:rotate-0",
           "group-data-panel-open/trigger:rotate-0"
@@ -133,7 +134,7 @@ function ToolGroupContent({
       data-slot="tool-group-content"
       className={cn(
         "aui-tool-group-content relative overflow-hidden text-sm outline-none",
-        "group/collapsible-content ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:animate-none",
+        "group/collapsible-content ease-standard motion-reduce:animate-none",
         "data-closed:animate-collapsible-up",
         "data-open:animate-collapsible-down",
         "data-closed:fill-mode-forwards",
@@ -146,7 +147,7 @@ function ToolGroupContent({
       <div
         className={cn(
           "mt-1 flex flex-col gap-1",
-          "[&>*]:fade-in-0 [&>*]:slide-in-from-top-1 [&>*]:animation-duration-(--animation-duration) [&>*]:animate-in [&>*]:blur-in-[2px] [&>*]:ease-[cubic-bezier(0.32,0.72,0,1)]",
+          "[&>*]:fade-in-0 [&>*]:slide-in-from-top-1 [&>*]:animation-duration-(--animation-duration) [&>*]:animate-in [&>*]:blur-in-[2px] [&>*]:ease-standard",
           "[&>*]:motion-reduce:animate-none",
           "[&>*:nth-child(2)]:[animation-delay:40ms]",
           "[&>*:nth-child(3)]:[animation-delay:80ms]",

@@ -333,6 +333,43 @@ export async function transition(
     eventId,
     reason: input.reason ?? null,
   })
+  // A change holds the draft it revises paused (revise.ts `holdDraft`): the
+  // draft comes back, with its review, if the change ends without a draft
+  // of its own, and goes once the change's own is in front of the owner.
+  // After this row's own move, so a change that ends has freed the site.
+  if (
+    row.revisionOfAssignmentId &&
+    (to === "cancelled" || to === "failed" || to === "awaiting_review")
+  ) {
+    const [held] = await db
+      .select()
+      .from(assignments)
+      .where(
+        sql`${assignments.id} = ${row.revisionOfAssignmentId} and ${assignments.state} = 'paused'`
+      )
+      .for("update")
+    if (held) {
+      const ids = { orgId: held.orgId, assignmentId: held.id }
+      await transition(
+        db,
+        to === "awaiting_review"
+          ? {
+              ...ids,
+              to: "cancelled",
+              expectedVersion: held.version,
+              reason: "superseded",
+              payload: { superseded_by: row.id },
+            }
+          : {
+              ...ids,
+              to:
+                (await enteredFrom(db, held.id, "paused")) ?? "awaiting_review",
+              expectedVersion: held.version,
+              reason: "change.ended",
+            }
+      )
+    }
+  }
   return { from, to, version, eventId }
 }
 

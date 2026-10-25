@@ -3,6 +3,7 @@ import {
   CalendarBlankIcon,
   CalendarDotsIcon,
   CaretCircleDownIcon,
+  CheckCircleIcon,
   CheckSquareIcon,
   EnvelopeSimpleIcon,
   HashIcon,
@@ -33,18 +34,17 @@ import {
   shownQuote,
 } from "@workspace/ui/lib/quote-form"
 import { reviewQuoteFormView } from "@workspace/ui/lib/tool-state"
-import { cn } from "@workspace/ui/lib/utils"
 import { useEffect, useState } from "react"
 
 /**
  * What the owner needs to know before a quote, as the assistant proposes it
  * from their answer: one pill per question in the transcript, its type as an
- * icon, then a star that is coloured when the question is required. A click
- * on the star switches required and optional, and a pill's remove button
- * shows on hover or focus. Anything else is said in the chat: words typed
- * while the pills wait answer them (`quoteChanges` carries the pills as the
- * owner left them), and "Looks good" confirms. Once answered it shows
- * nothing: the owner's reply after it says what they settled on.
+ * icon, then a star when the question is required or "optional" when it is
+ * not. A click on either switches it, and a pill's remove button shows on
+ * hover or focus. Anything else is said in the chat: words typed while the
+ * pills wait answer them (`quoteChanges` carries the pills as the owner left
+ * them), and "Looks good" confirms. Confirmed, it says what was saved, since
+ * the words above it pointed at the pills; changed, the next proposal does.
  */
 
 const TYPE_ICON: Record<QuoteDraft[number]["field"]["type"], Icon> = {
@@ -61,17 +61,18 @@ const TYPE_ICON: Record<QuoteDraft[number]["field"]["type"], Icon> = {
   email: EnvelopeSimpleIcon,
 }
 
-/** The star a required question carries; muted when it is optional. */
-function Star({ required }: { required: boolean }) {
-  return (
+/** The star a required question carries, or the word for an optional one. */
+function Mark({ required }: { required: boolean }) {
+  return required ? (
     <span
       aria-hidden
-      className={cn(
-        "font-semibold text-base leading-none",
-        required ? "text-primary" : "text-muted-foreground/50"
-      )}
+      className="font-semibold text-base text-primary leading-none"
     >
       *
+    </span>
+  ) : (
+    <span aria-hidden className="text-muted-foreground text-xs">
+      optional
     </span>
   )
 }
@@ -108,13 +109,13 @@ function Pill({
         <button
           aria-label={`${field.label}, required`}
           aria-pressed={field.required}
-          className="-ms-1 flex size-6 items-center justify-center rounded-full outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+          className="-ms-1 flex h-6 min-w-6 items-center justify-center rounded-full px-1 outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
           onClick={() =>
             onChange(setRequired(draft, field.key, !field.required))
           }
           type="button"
         >
-          <Star required={field.required} />
+          <Mark required={field.required} />
         </button>
       </Hint>
       {/* Hidden until the pill is hovered or holds focus, unless the pointer is a finger. */}
@@ -155,7 +156,24 @@ const ReviewQuoteForm: ToolCallMessagePartComponent = (props) => {
     }
   }, [pending, toolCallId, draft])
 
-  if (view.state === "answered") return null
+  if (view.state === "answered") {
+    if (view.output.answer !== "confirmed") return null
+    const asked = view.output.fields.map((field) => field.label).join(", ")
+    return (
+      <p
+        className="flex items-start gap-2 pt-3 text-muted-foreground text-sm"
+        data-slot="review-quote-form"
+      >
+        <CheckCircleIcon
+          aria-hidden
+          className="mt-0.5 size-4 shrink-0 text-primary"
+        />
+        {asked
+          ? `Saved. Before a quote I'll ask each customer for ${asked}, as well as their name, email and phone.`
+          : "Saved. Before a quote I'll ask each customer for their name, email and phone."}
+      </p>
+    )
+  }
   if (!pending) {
     return (
       <TrayNote
@@ -182,7 +200,7 @@ const ReviewQuoteForm: ToolCallMessagePartComponent = (props) => {
 
   return (
     <div
-      className="motion-safe:fade-in-0 flex flex-col gap-2.5 pt-3 duration-250 motion-safe:animate-in"
+      className="motion-safe:fade-in-0 flex flex-col gap-2.5 pt-3 duration-enter ease-standard motion-safe:animate-in"
       data-slot="review-quote-form"
     >
       <ul
@@ -202,10 +220,7 @@ const ReviewQuoteForm: ToolCallMessagePartComponent = (props) => {
       </ul>
       <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground text-xs">
         <span className="inline-flex items-center gap-1">
-          <Star required /> Required
-        </span>
-        <span className="inline-flex items-center gap-1">
-          <Star required={false} /> Optional
+          <Mark required /> Required
         </span>
         <span>Name, email and phone are always asked.</span>
       </p>

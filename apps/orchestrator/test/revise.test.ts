@@ -27,14 +27,22 @@ vi.mock("../src/sandbox.ts", () => ({
 }))
 vi.mock("../src/agents/developer.ts", () => ({ Developer: {} }))
 
-const { placePhotos, publishedSource, restoreAndMap } = await import(
-  "../src/revise.ts"
-)
+const { placePhotos, publishedSource, restoreAndMap, reviseSource } =
+  await import("../src/revise.ts")
+const { advance, cancel } = await import("../src/state.ts")
 const { photoKey } = await import("../src/photo-files.ts")
 const { activate } = await import("../src/publish.ts")
 const { default: app } = await import("../src/app.ts")
-const { addRevision, eventsOf, GOOD_HTML, kit, previewed, storage } =
-  await import("./site.ts")
+const {
+  addRevision,
+  eventsOf,
+  GOOD_HTML,
+  kit,
+  previewed,
+  stateOf,
+  storage,
+  TO_PREVIEW,
+} = await import("./site.ts")
 
 const url = process.env.DATABASE_URL
 const live = describe.skipIf(!url)
@@ -277,5 +285,76 @@ live("a revise", () => {
       db.select().from(siteRevisions).where(eq(siteRevisions.id, revisionId))
     )
     expect(revision?.status).toBe("published")
+  })
+
+  it("revises the owner's draft before the site is live, holding it until the change is ready, and gives it back if the change stops", async () => {
+    const built = await previewed(storage())
+    const { orgId, ids, revisionId } = built
+    const slug = `state-test-${orgId.slice(0, 8)}`
+    await advance(kit, ids, "awaiting_review")
+    const statusOf = async (id: string) =>
+      (
+        await kit.withOrg({ orgId }, (db) =>
+          db.select().from(siteRevisions).where(eq(siteRevisions.id, id))
+        )
+      )[0]?.status
+    const change = async () => {
+      const res = await post(slug, {
+        kind: "site.revise",
+        goal: "Add Sundays",
+        draft_revision_id: revisionId,
+      })
+      expect(res.status).toBe(201)
+      const body = (await res.json()) as {
+        assignment_id: string
+        revision_of_assignment_id: string | null
+      }
+      expect(body.revision_of_assignment_id).toBe(ids.assignmentId)
+      return { orgId, assignmentId: body.assignment_id }
+    }
+    // Only a revise names a draft.
+    const build = await post(slug, {
+      kind: "site.build",
+      draft_revision_id: revisionId,
+    })
+    expect(build.status).toBe(400)
+
+    const first = await change()
+    expect(await stateOf(ids)).toBe("paused")
+    const [created] = await eventsOf(first, "assignment.created")
+    expect(created?.payload).toMatchObject({
+      revises_revision_id: revisionId,
+      draft_revision_id: revisionId,
+    })
+    expect(
+      await kit.withOrg({ orgId }, (db) => reviseSource(db, first))
+    ).toEqual({
+      revision_id: revisionId,
+      assignment_id: ids.assignmentId,
+      source_key: `sites/${orgId}/${revisionId}/source.tar.zst`,
+    })
+    // The draft is held: a second change on it is refused, not stacked.
+    const again = await post(slug, {
+      kind: "site.revise",
+      goal: "Add Mondays",
+      draft_revision_id: revisionId,
+    })
+    expect(again.status).toBe(409)
+    expect(await again.json()).toMatchObject({ code: "change.draft_moved" })
+
+    // Stop: the draft is back in front of the owner, its preview kept.
+    await cancel(kit, first, "stopped by the owner")
+    expect(await stateOf(ids)).toBe("awaiting_review")
+    expect(await statusOf(revisionId)).toBe("preview")
+
+    // A change that reaches its own review takes the draft's place.
+    const second = await change()
+    for (const to of TO_PREVIEW) await advance(kit, second, to)
+    expect(await stateOf(ids)).toBe("paused")
+    await advance(kit, second, "awaiting_review")
+    expect(await stateOf(ids)).toBe("cancelled")
+    expect(await statusOf(revisionId)).toBe("retired")
+    await cancel(kit, second)
+    expect(await stateOf(ids)).toBe("cancelled")
   })
 })

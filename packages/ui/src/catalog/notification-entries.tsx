@@ -98,7 +98,7 @@ const ONE_OF_EACH: Record<Kind, NotificationItem> = {
     onExpiry: "The build waits on you until you answer.",
     action: (
       <a className={ACTION} href="#answer">
-        Answer in the panel
+        Show the question
       </a>
     ),
   },

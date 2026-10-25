@@ -254,6 +254,8 @@ export type ChangeInput = {
 
 type ChangeRoute =
   | { route: "build" | "revise" }
+  /** Revise the owner's draft before the site is live, holding it until the change's own is ready. */
+  | { route: "draft"; revision_id: string }
   | { route: "steer"; assignment_id: string }
   | {
       route: "refuse"
@@ -284,8 +286,10 @@ const STEERABLE: readonly AssignmentState[] = [
 /**
  * Where an owner's change goes, from the site's state alone. A build
  * waiting on the owner's answer takes the change as a steer, which reaches
- * its Developer once the answer resumes it. A build waiting on a decision the orchestrator would take now (a review in
- * date, or one the sweep parked) is replaced: its review is turned down. A
+ * its Developer once the answer resumes it. A build waiting on a decision
+ * the orchestrator would take now (a review in date, or one the sweep
+ * parked) is replaced: its review is turned down, or before the site is
+ * live the change revises that draft instead. A
  * build parked on its budget is replaced by cancelling it. A working build
  * takes the change as a steer. A build settling on its own (queued,
  * previewed, publishing, paused from the console, or a review that expired
@@ -303,6 +307,7 @@ export function routeChange(site: ChangeInput): ChangeRoute {
     )
     const parked = build.state === "blocked_on_approval"
     if (review && (parked || build.state === "awaiting_review")) {
+      if (!site.live) return { route: "draft", revision_id: review.revision_id }
       return {
         route: "replace",
         via: "reject",
@@ -556,13 +561,14 @@ export async function startChange(
     return Response.json(summary(made))
   }
   // A steer ignores the kind: a working build takes the change whatever its size.
-  const createBody = (kind: "site.build" | "site.revise") => ({
+  const createBody = (kind: "site.build" | "site.revise", draft?: string) => ({
     kind,
     goal: text,
     ...(changeKind ? { change_kind: changeKind } : {}),
+    ...(draft ? { draft_revision_id: draft } : {}),
   })
-  const create = async (kind: "site.build" | "site.revise") => {
-    const result = await call("/", createBody(kind))
+  const create = async (kind: "site.build" | "site.revise", draft?: string) => {
+    const result = await call("/", createBody(kind, draft))
     const parsed = Assignment.safeParse(result.body)
     const lane = parsed.success
       ? await laneOf(parsed.data.assignment_id)
@@ -603,6 +609,8 @@ export async function startChange(
       return create("site.build")
     case "revise":
       return create("site.revise")
+    case "draft":
+      return create("site.revise", route.revision_id)
   }
 }
 

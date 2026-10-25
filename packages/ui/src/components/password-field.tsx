@@ -46,7 +46,7 @@ function StrengthBar({ verdict }: { verdict: PasswordVerdict }) {
       {[1, 2, 3, 4].map((step) => (
         <span
           className={cn(
-            "h-1 flex-1 rounded-full transition-colors duration-200",
+            "h-1 flex-1 rounded-full transition-colors",
             step <= verdict.score
               ? verdict.acceptable
                 ? "bg-primary"

@@ -157,6 +157,7 @@ export type CopyFinding = {
     | "leak"
     | "town"
     | "term"
+    | "headline"
     | "missing"
   text: string
   detail: string
@@ -443,16 +444,22 @@ const TERM_KEYS = new Set([
   "business.proof",
 ])
 
-/** What the copy may say: every word in the facts, and those of them that name the work. */
+/** The facts that name what the business does: the home headline has to. */
+const WORK_KEYS = new Set(["business.offerings", "business.industry"])
+
+/** What the copy may say: every word in the facts, those of them that name the work, and the stems of the service and trade names. */
 export function factWords(facts: readonly FactRecord[]) {
   const known = new Set<string>()
   const terms = new Set<string>()
+  const work = new Set<string>()
   for (const fact of facts)
     for (const word of stringsOf(fact.value).flatMap(wordsOf)) {
       known.add(word)
       if (TERM_KEYS.has(fact.key) && word.length >= 6) terms.add(word)
+      if (WORK_KEYS.has(fact.key) && !FILLER.has(word) && word.length >= 4)
+        work.add(word.slice(0, 5))
     }
-  return { known, terms }
+  return { known, terms, work }
 }
 
 /**
@@ -463,7 +470,11 @@ export function factWords(facts: readonly FactRecord[]) {
 export function copyFindings(
   pages: readonly { file: string; html: string }[],
   areas = "",
-  words: ReturnType<typeof factWords> = { known: new Set(), terms: new Set() }
+  words: ReturnType<typeof factWords> = {
+    known: new Set(),
+    terms: new Set(),
+    work: new Set(),
+  }
 ): CopyFinding[] {
   const found: CopyFinding[] = []
   const headings: { file: string; text: string; stems: Set<string> }[] = []
@@ -598,6 +609,20 @@ export function copyFindings(
     }
 
     for (const h of page.headings) {
+      // "Leeds and around" is a place, not a headline: the h1 names the work.
+      if (
+        h.tag === "h1" &&
+        file === "index.html" &&
+        words.work.size > 0 &&
+        ![...stemsOf(h.text)].some((stem) => words.work.has(stem))
+      )
+        found.push({
+          file,
+          node: h.node,
+          problem: "headline",
+          text: h.text,
+          detail: `the home h1 names no service or outcome; write what the customer gets from this business's work (a service or the trade), with the place as the supporting detail`,
+        })
       if (STOCK_HEADINGS.includes(plainText(h.text))) {
         found.push({
           file,
@@ -854,7 +879,7 @@ export function copyGateRules(): string[] {
   return [
     `- The copy gate runs after you, and each miss costs a repair round, so meet its numbers the first time. Every page title is ${TITLE_CHARS.min} to ${TITLE_CHARS.max} characters as the page shows it: a title that does not contain businessName exactly gets " | " and businessName after it, so either name the business exactly as businessName or leave room for it. Every meta description ${DESCRIPTION_CHARS.min} to ${DESCRIPTION_CHARS.max} characters; no two pages share either.`,
     `- Words per section: ${words.join("; ")}.`,
-    `- Headings: no h1 or h2 on the site repeats another or is a stock label, and an h2 is never the same as or close to its own page's h1: ${Math.round(NEAR * 100)} percent of the significant words shared, in any order, counts as the same ("Deep cleaning in Bristol" under "Bristol deep cleaning"). Give every h2 its own words. Each process step's body is its own: no two steps on the site share their words.`,
+    `- Headings: no h1 or h2 on the site repeats another or is a stock label, and an h2 is never the same as or close to its own page's h1: ${Math.round(NEAR * 100)} percent of the significant words shared, in any order, counts as the same ("Deep cleaning in Bristol" under "Bristol deep cleaning"). Give every h2 its own words. Each process step's body is its own: no two steps on the site share their words. The home h1 names a service or the trade from the facts, with the place as the supporting detail: "Leeds and around" fails.`,
   ]
 }
 

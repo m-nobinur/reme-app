@@ -86,8 +86,8 @@ import {
 import {
   latestBlueprint,
   mapSite,
-  publishedSource,
   restoreAndMap,
+  reviseSource,
   SITE_ROOT,
 } from "./revise.ts"
 import {
@@ -424,11 +424,10 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           const choices = await creationChoices(db, ids)
           const snapshot = await takeSnapshot(db, ids, choices.withhold)
           const spec = await issueSpec(db, this.env, row, choices.model)
-          // A revise starts from what the site serves (ADR-032), never a preview.
+          // A revise starts from what the site serves (ADR-032), or before
+          // the site is live from the owner's draft it was asked on.
           const source =
-            row.kind === "site.revise"
-              ? await publishedSource(db, ids.orgId)
-              : null
+            row.kind === "site.revise" ? await reviseSource(db, ids) : null
           if (row.kind === "site.revise" && !source) {
             throw new NonRetryableError("site.not_published")
           }

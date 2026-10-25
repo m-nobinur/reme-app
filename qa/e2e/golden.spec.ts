@@ -184,21 +184,33 @@ type Workspace = {
 const panel = (page: Page) => page.getByRole("complementary", { name: "Panel" })
 
 /**
- * Answers one question from the team in place: the first offered option or
- * a line that changes nothing.
+ * Answers the questions the assistant asked, in the chat card the panel's
+ * row opens: each page the first offered option or a line that changes
+ * nothing, until the stack folds away.
  */
 async function answer(page: Page, item: Locator) {
-  const title = await item.getByRole("heading").innerText()
-  const text = item.getByLabel("Your answer")
-  if (await text.count()) {
-    await text.fill("Keep everything else as it is.")
-  } else {
-    await item.getByRole("radio").first().check()
+  await item.getByText("Answer in the chat").click()
+  const stack = page.locator('[data-slot="build-questions"]')
+  const card = stack.locator('[data-slot="question-tray"]')
+  const send = card.getByRole("button", { name: "Send", exact: true })
+  const folded = stack.getByText("Thanks, that's everything I needed.")
+  await expect(send).toBeVisible({ timeout: WAIT.chat })
+  // A guard against a stack that never folds: at most ten questions.
+  for (let left = 10; left > 0 && (await send.isVisible()); left--) {
+    const text = card.locator(
+      'input[name="answer"]:not([type="radio"]):visible'
+    )
+    if (await text.count()) {
+      await text.fill("Keep everything else as it is.")
+    } else {
+      await card.locator('input[type="radio"]:visible').first().check()
+    }
+    await send.click()
+    // The tick, then the next question on its own, or the fold.
+    await expect(send).toHaveCount(0, { timeout: WAIT.chat })
+    await expect(send.or(folded)).toBeVisible({ timeout: WAIT.chat })
   }
-  await item.getByRole("button", { name: "Send answer" }).click()
-  await expect(
-    panel(page).getByRole("article", { name: title, exact: true })
-  ).toHaveCount(0, { timeout: WAIT.chat })
+  await expect(stack).toHaveCount(0, { timeout: WAIT.chat })
 }
 
 /**

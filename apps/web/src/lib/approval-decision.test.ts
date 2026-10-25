@@ -191,9 +191,9 @@ it("sends only the revision shown beside Approve, pressed in the panel", async (
             )
           })
           const approve = [...container.querySelectorAll("button")].find(
-            (button) => button.textContent === "Approve and publish"
+            (button) => button.textContent === "Publish"
           )
-          expect(approve?.textContent).toBe("Approve and publish")
+          expect(approve?.textContent).toBe("Publish")
           expect(approve?.disabled).toBe(false)
           const shown = revisionOn(container)
 
@@ -237,7 +237,7 @@ it("disables Approve for anything but a revision", () => {
       )
       // The attribute, not the class: every button's class names `disabled:`.
       const enabled =
-        !/<button(?=[^>]*\sdisabled="")[^>]*>(?:<svg.*?<\/svg>)?Approve and publish/.test(
+        !/<button(?=[^>]*\sdisabled="")[^>]*>(?:<svg.*?<\/svg>)?Publish/.test(
           html
         )
       expect(enabled).toBe(generated.kind === "revision")

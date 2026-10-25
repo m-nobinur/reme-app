@@ -34,7 +34,6 @@ import { useCycle } from "@workspace/ui/hooks/use-cycle"
 import { SKIPPED, type StatusKind } from "@workspace/ui/lib/activity-copy"
 import {
   type AnswerSpec,
-  answerValue,
   FACT_INPUTS,
   type FactInput,
 } from "@workspace/ui/lib/answer"
@@ -48,7 +47,6 @@ import { formatDateTime, relativeTime } from "@workspace/ui/lib/format"
 import { cn, META } from "@workspace/ui/lib/utils"
 import {
   Children,
-  type FormEvent,
   isValidElement,
   type ReactNode,
   useEffect,
@@ -108,12 +106,6 @@ function PanelSection({
       {children}
     </section>
   )
-}
-
-/** A link that opens outside the app, and says so to a screen reader. */
-const expiryLine = (expiresAt: string | null, onExpiry: string) => {
-  const expires = formatDateTime(expiresAt)
-  return expires ? `Open until ${expires}. ${onExpiry}` : onExpiry
 }
 
 /* Segments ----------------------------------------------------------- */
@@ -248,7 +240,7 @@ function PhotoTile({ photo }: { photo: BuildPhoto }) {
         <img
           alt={photo.alt ?? ""}
           className={cn(
-            "size-full object-cover transition-opacity duration-200 motion-reduce:transition-none",
+            "size-full object-cover transition-opacity duration-enter motion-reduce:transition-none",
             loaded ? "opacity-100" : "opacity-0"
           )}
           decoding="async"
@@ -498,7 +490,7 @@ function PanelSegment({
   return (
     <section
       aria-labelledby={`${id}-title`}
-      className="fade-in flex animate-in flex-col duration-200 motion-reduce:animate-none"
+      className="fade-in flex animate-in flex-col duration-enter motion-reduce:animate-none"
       data-slot="panel-segment"
       data-state={folded ? "folded" : state}
     >
@@ -557,7 +549,7 @@ function PanelSegment({
         <div
           aria-hidden={!shown}
           className={cn(
-            "grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none",
+            "grid transition-[grid-template-rows] duration-enter ease-standard motion-reduce:transition-none",
             shown ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
           )}
           id={`${id}-steps`}
@@ -954,78 +946,22 @@ function AnswerInputs({
 }
 
 /**
- * A question from the team, answered in place with native inputs: `time`,
- * `tel` and `email` where the fact is one, a closed choice where the team
- * offered options, and text held to the question's own limits otherwise.
- * The value is checked the way the orchestrator checks it before it is sent.
+ * A question waiting on the owner. It is answered in the chat, never here:
+ * the row says it waits and `action` takes the owner to the card.
  */
-function QuestionItem({
-  title,
-  why,
-  askedBy,
-  expiresAt,
-  onExpiry,
-  spec,
-  onAnswer,
-  pending: busy = false,
-  error = null,
-}: {
-  title: string
-  /** The team's reason, shown as the text it is and never as markup. */
-  why: string
-  askedBy: string
-  expiresAt: string | null
-  onExpiry: string
-  spec: AnswerSpec
-  onAnswer: (value: unknown) => void
-  pending?: boolean
-  error?: string | null
-}) {
+function QuestionItem({ title, action }: { title: string; action: ReactNode }) {
   const id = useId()
-  const [invalid, setInvalid] = useState<string | null>(null)
-  const shown = invalid ?? error
-
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const form = new FormData(event.currentTarget)
-    const parsed = answerValue(spec, (name) => String(form.get(name) ?? ""))
-    if ("error" in parsed) {
-      setInvalid(parsed.error)
-      return
-    }
-    setInvalid(null)
-    onAnswer(parsed.value)
-  }
-
   return (
     <article
       aria-labelledby={`${id}-title`}
-      className="flex flex-col gap-2 py-3"
+      className="flex flex-col items-start gap-1 py-3"
       data-slot="question-item"
     >
       <h3 className="font-medium text-sm" id={`${id}-title`}>
         {title}
       </h3>
-      <p className={META}>
-        {askedBy} asked: {why}
-      </p>
-      <form className="flex flex-col gap-2" noValidate onSubmit={submit}>
-        <AnswerInputs
-          id={id}
-          invalid={shown !== null}
-          spec={spec}
-          title={title}
-        />
-        {shown ? (
-          <p className="text-[0.8125rem] text-destructive" role="alert">
-            {shown}
-          </p>
-        ) : null}
-        <Button className="self-start" disabled={busy} size="sm" type="submit">
-          {pending(busy, "Send answer", "Sending")}
-        </Button>
-      </form>
-      <p className={META}>{expiryLine(expiresAt, onExpiry)}</p>
+      <p className={META}>Waiting on your answer</p>
+      {action}
     </article>
   )
 }
@@ -1111,7 +1047,7 @@ function Shot({
         <img
           alt={alt}
           className={cn(
-            "relative size-full object-cover object-top transition-opacity duration-300 motion-reduce:transition-none",
+            "relative size-full object-cover object-top transition-opacity duration-enter motion-reduce:transition-none",
             loaded ? "opacity-100" : "opacity-0"
           )}
           height={250}
@@ -1332,7 +1268,7 @@ function ShotStack({
       })}
       <div className="relative z-30 aspect-[16/10] overflow-hidden rounded-lg border border-border bg-muted shadow-sm">
         <div
-          className="flex size-full transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+          className="flex size-full transition-transform duration-slow ease-standard motion-reduce:transition-none"
           style={{ transform: `translateX(-${front * 100}%)` }}
         >
           {SLIDES.map((slide, at) => {
@@ -1402,7 +1338,7 @@ function ShotStack({
                 <span
                   aria-hidden
                   className={cn(
-                    "h-1.5 rounded-full transition-all duration-300 motion-reduce:transition-none",
+                    "h-1.5 rounded-full transition-all duration-enter motion-reduce:transition-none",
                     at === front
                       ? "w-3 bg-foreground"
                       : "w-1.5 bg-foreground/40 group-hover/dot:bg-foreground/70"
@@ -1422,7 +1358,7 @@ function ShotStack({
 
 /**
  * A version ready to publish, in the panel, under the step that waits on
- * it: the version as a stack of screenshots, then Approve and publish, which
+ * it: the version as a stack of screenshots, then Publish, which
  * sends exactly the revision the approval is bound to, and Preview.
  */
 function ApprovalItem({
@@ -1470,7 +1406,7 @@ function ApprovalItem({
           ) : (
             <RocketLaunchIcon aria-hidden />
           )}
-          {pending(busy, "Approve and publish", "Publishing")}
+          {pending(busy, "Publish", "Publishing")}
         </Button>
         <PreviewLink iconOnly onRetry={onRetryPreview} preview={preview} />
       </div>
@@ -1809,7 +1745,7 @@ function LiveLine({
         className={cn(
           "min-w-0 truncate",
           turns.length > 1 &&
-            "fade-in slide-in-from-bottom-1 animate-in duration-300 motion-reduce:animate-none"
+            "fade-in slide-in-from-bottom-1 animate-in duration-enter motion-reduce:animate-none"
         )}
         // A new key per turn replays the slide.
         key={turns.length > 1 ? `${at}:${shown.lead}` : "line"}
