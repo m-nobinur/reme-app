@@ -21,6 +21,7 @@ import {
   isRetried,
   phoneText,
   readView,
+  showsProgress,
   UNCONFIRMED,
 } from "@workspace/ui/lib/tool-state"
 import { expect, it } from "vitest"
@@ -472,5 +473,24 @@ it("hides a refusal the same tool was called again after, and only that", () => 
       [changeCall("a", "refused"), call("b", { toolName: "get_workspace" })],
       "a"
     )
+  ).toBe(false)
+})
+
+it("leaves the reply's status line to a reply with nothing at work on screen", () => {
+  const quiet = { remember: () => null }
+  const text = { type: "text", text: "Lovely." }
+  expect(showsProgress([], quiet)).toBe(false)
+  expect(
+    showsProgress([call("a", { toolName: "get_workspace", result: {} })], quiet)
+  ).toBe(false)
+  expect(
+    showsProgress([call("a", { toolName: "request_change" })], quiet)
+  ).toBe(true)
+  expect(showsProgress([text], quiet)).toBe(true)
+  expect(showsProgress([call("b", { toolName: "remember" })], quiet)).toBe(
+    false
+  )
+  expect(
+    showsProgress([call("c", { toolName: "x", isError: true })], quiet)
   ).toBe(false)
 })
