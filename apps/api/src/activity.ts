@@ -478,7 +478,10 @@ export function journeyOf(input: ActivityInput): Segment[] {
   const names = input.business ? { business: input.business } : undefined
   const since = iso(input.rows.since)
   // A build the owner stopped leaves the website to come, as before one began.
-  const newest = input.builds[0]
+  // A stopped change gives the draft back, so the build before it stands.
+  const newest = input.builds.find(
+    (b) => b.kind === "site.build" || b.state !== "cancelled"
+  )
   const build = newest?.state === "cancelled" ? undefined : newest
   if (!build) {
     const failed = input.feed.find(
@@ -548,7 +551,23 @@ export function journeyOf(input: ActivityInput): Segment[] {
             steps: along(GOLIVE_STEPS, -1),
             at: since,
           }
-  return [website, { ...golive, ...(names && { names }) }]
+  // A change to the draft before it is first live: the website is built and
+  // the change is the step under way, named as a change after publishing is.
+  const made: Segment[] =
+    build.kind === "site.revise"
+      ? [
+          {
+            id: "website",
+            kind: "website",
+            state: "done",
+            steps: along(STAGES, STAGES.length),
+            at: build.created_at,
+            ...(names && { names }),
+          },
+          changeSegment(build, input.expected),
+        ]
+      : [website]
+  return [...made, { ...golive, ...(names && { names }) }]
 }
 
 /** The most rows Coming up lists of each kind. */

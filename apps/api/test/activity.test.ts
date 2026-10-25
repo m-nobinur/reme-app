@@ -147,6 +147,37 @@ describe("journey", () => {
     expect(now).toEqual([])
   })
 
+  it("shows a change to the draft as a change after the built website, by its label", () => {
+    const { journey, now } = view({
+      builds: [
+        build("implementing", {
+          kind: "site.revise",
+          lane: "quick",
+          label: "your hero subtitle",
+        }),
+        build("cancelled", { assignment_id: ID(2) }),
+      ],
+    })
+    expect(journey.map((s) => [s.kind, s.state])).toEqual([
+      ["website", "done"],
+      ["change", "now"],
+      ["golive", "upcoming"],
+    ])
+    expect(journey[1]?.names).toEqual({ change: "your hero subtitle" })
+    expect(now).toEqual([])
+    // Stopped, the draft it would replace stands again.
+    const back = view({
+      builds: [
+        build("cancelled", { kind: "site.revise" }),
+        build("awaiting_review", { assignment_id: ID(2) }),
+      ],
+    }).journey
+    expect(back.map((s) => [s.kind, s.state])).toEqual([
+      ["website", "done"],
+      ["golive", "upcoming"],
+    ])
+  })
+
   it("puts the first review in going live, with its expiry, not in Waiting on you", () => {
     const expires = ago(-60 * 24)
     const { journey, waiting } = view({
