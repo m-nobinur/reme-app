@@ -46,6 +46,7 @@ import {
   type Part,
   readScript,
   type Script,
+  stepStatus,
   type ToolPart,
 } from "../src/chat.ts"
 import { DAILY_CAP_USD } from "../src/cos/turns.ts"
@@ -56,7 +57,11 @@ import {
   opening,
   stepOf,
 } from "../src/onboarding.ts"
-import { PLANNER, PLANNER_VERSION } from "../src/onboarding-agent.ts"
+import {
+  PLANNER,
+  PLANNER_VERSION,
+  type PlanState,
+} from "../src/onboarding-agent.ts"
 import {
   type Owner,
   owner,
@@ -163,6 +168,55 @@ describe("the script's next step", () => {
       { type: "step-start" },
       { type: "text", text: expect.stringMatching(/\?$/), state: "done" },
     ])
+  })
+})
+
+describe("the step a planned turn starts on", () => {
+  const card = (type: string, input: object) =>
+    ({ type, toolCallId: "c1", state: "input-available", input }) as ToolPart
+  const on = (
+    input: PlanState["input"],
+    pending: ToolPart | null = null,
+    onboarding = state()
+  ) => stepStatus({ onboarding, pending, input, rows: [] })?.on
+  const typed = { kind: "message", text: "We do end of tenancy" } as const
+  const answered = (part: ToolPart) =>
+    ({ kind: "card", card: part, output: {} }) as const
+
+  it("names the card just answered", () => {
+    expect(on(answered(card("tool-ask_details", { step: "contact" })))).toEqual(
+      { kind: "step", step: "contact", answered: true }
+    )
+    expect(on(answered(card("tool-ask_upload", {})))).toEqual({
+      kind: "step",
+      step: "upload",
+      answered: true,
+    })
+    expect(
+      on(answered(card("tool-ask_open", { about: "business.tagline" })))
+    ).toEqual({ kind: "step", step: "business.tagline", answered: true })
+  })
+
+  it("names what a typed message replies to: its card, else the script's step", () => {
+    expect(on(typed)).toEqual({
+      kind: "step",
+      step: "business.offerings",
+      answered: false,
+    })
+    expect(on(typed, card("tool-ask_open", { about: "quote.form" }))).toEqual({
+      kind: "step",
+      step: "quote_form",
+      answered: false,
+    })
+    expect(
+      on(typed, card("tool-ask_choice", { step: "build_for_me" }))
+    ).toEqual({ kind: "step", step: "build_for_me", answered: false })
+  })
+
+  it("names nothing for a call no line is for", () => {
+    expect(on(typed, card("tool-request_change", { text: "Build" }))).toBe(
+      undefined
+    )
   })
 })
 
@@ -3069,7 +3123,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       ).toEqual({ text: "Couples" })
     }, 60_000)
 
-    it("says what the plan is on before its first word, once its facts are written", async () => {
+    it("says the step at once, then what the plan is on before its first word, once its facts are written", async () => {
       const who = await owner(kit, url as string, "chat-status")
       // The stream drops after the plan, so only a write made before the
       // message streamed can hold the plan's facts.
@@ -3101,6 +3155,14 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
           .slice(0, firstWord)
           .filter((c) => c.type === ONBOARDING_STATUS)
       ).toEqual([
+        {
+          type: ONBOARDING_STATUS,
+          data: {
+            on: { kind: "step", step: "business.offerings", answered: false },
+            facts: [],
+          },
+          transient: true,
+        },
         {
           type: ONBOARDING_STATUS,
           data: { on: { kind: "fact", key: "business.offerings" }, facts: [] },
