@@ -376,7 +376,7 @@ export type RetryReason =
 
 const RETRIES: Record<Exclude<RetryReason, "quote">, string> = {
   phone:
-    "I'll need the number with its country code, like +44 7700 900123, so it works for every visitor. What's the best number?",
+    "That number doesn't look quite right. Could you check it and send it again?",
   email:
     "That doesn't look quite like an email address. Could you check it and send it again?",
   long: "That's a bit long for this one. Could you say it more briefly?",

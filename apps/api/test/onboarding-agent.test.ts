@@ -213,6 +213,13 @@ describe("the plan's checks", () => {
         s
       )[0]
     ).toMatch(/not a number the owner typed/)
+    // Seen live: 00 is the international prefix, so this was never +44 0195 899933.
+    expect(
+      errorsOf(
+        plan({ facts: { "business.phone": { e164: "+440195899933" } } }),
+        typed("00195 899933")
+      )[0]
+    ).toMatch(/ask them to check it/)
     expect(
       errorsOf(
         plan({

@@ -1222,9 +1222,9 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       expect(pendingCall(industry.after)).toMatchObject({
         input: { step: "contact" },
       })
-      const again = await talk.say(id, "u_2", "01632 960001")
+      const again = await talk.say(id, "u_2", "00195 899933")
       expect(again.after.parts.slice(1)).toMatchObject([
-        { type: "text", text: expect.stringContaining("country code") },
+        { type: "text", text: expect.stringContaining("check it") },
         {
           type: "tool-ask_details",
           state: "input-available",

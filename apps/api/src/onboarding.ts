@@ -14,6 +14,7 @@ import {
   type ChoiceStep,
   DETAILS_KEYS,
   type DetailsStep,
+  dialable,
   FactValue,
   type FactValueKey,
   FIXED_PAGES,
@@ -34,6 +35,7 @@ import {
   TEMPLATES,
   type TemplateId,
   TONES,
+  toE164,
   UPLOAD_MAX_BYTES,
   UPLOAD_MAX_FILES,
   UPLOAD_TYPES,
@@ -1349,12 +1351,17 @@ function detailsAnswer(input: AskDetailsInput, output: unknown): Answer | null {
   const allowed = DETAILS_KEYS[input.step] as readonly string[]
   if (
     new Set(keys).size !== keys.length ||
-    !keys.every((key) => allowed.includes(key))
+    !keys.every((key) => allowed.includes(key)) ||
+    !answer.data.facts.every(canDial)
   ) {
     return null
   }
   return { kind: "facts", facts: answer.data.facts }
 }
+
+/** A card's phone must be one that rings: never stored, the card asks again. */
+const canDial = (fact: FactValue) =>
+  fact.key !== "business.phone" || dialable(fact.value.e164)
 
 /**
  * The contact details the starter's quote form always asks, by the key or
@@ -1503,7 +1510,7 @@ export function cardAnswer(
     if (answer.data.answer === "skipped") {
       return SKIPPABLE.includes(key) ? { kind: "passed", step } : null
     }
-    return answer.data.fact.key === key
+    return answer.data.fact.key === key && canDial(answer.data.fact)
       ? { kind: "facts", facts: [answer.data.fact] }
       : null
   }
@@ -1562,10 +1569,6 @@ function yesNo(words: string): boolean | null {
 /** Whether a typed reply passes over a skippable step. */
 const saysSkip = (words: string) => SKIP.test(norm(words))
 
-/** A typed phone number in E.164, if it can be one. */
-const e164 = (words: string) =>
-  words.replace(/[\s().-]/g, "").replace(/^00/, "+")
-
 /** The field each text-asked fact keeps its words in. */
 const FIELD: Partial<Record<FactValueKey, string>> = {
   "business.name": "name",
@@ -1580,7 +1583,7 @@ function typedFact(key: FactValueKey, words: string): Answer {
   const said = words.trim()
   const value =
     key === "business.phone"
-      ? { e164: e164(said) }
+      ? { e164: toE164(said) }
       : key === "business.offerings"
         ? {
             items: said
@@ -1644,7 +1647,7 @@ function typedContact(words: string): Answer {
     }),
     FactValue.safeParse({
       key: "business.phone",
-      value: { e164: e164(words.match(/\+?[\d\s().-]{7,}\d/)?.[0] ?? "") },
+      value: { e164: toE164(words.match(/\+?[\d\s().-]{7,}\d/)?.[0] ?? "") },
     }),
   ].flatMap((f) => (f.success ? [f.data] : []))
   if (facts.length > 0) return { kind: "facts", facts }

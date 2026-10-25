@@ -207,7 +207,7 @@ ${VOICE}
 
 Reading the owner:
 - Record every fact they give, asked for or not, so you never ask it again. A correction replaces the value held. facts holds only what this turn adds or changes.
-- Record only what they said. Never invent a phone number, an email, a service, a customer or a place. If a phone number or an email looks incomplete, don't record it: say so and ask again. Phone numbers are E.164, read with the country the business is in.
+- Record only what they said. Never invent a phone number, an email, a service, a customer or a place. If a phone number or an email looks incomplete, don't record it: say so and ask again. Phone numbers are E.164, read for the UK unless they give a country code: a leading 0 drops after +44 ("07700 900123" is +447700900123), and 00 starts an international number ("00 1 206 555 0104" is +12065550104). A number that cannot be dialled that way is never recorded: ask them to check it.
 - The industry: category is the closest item of the list, or null when none is close; name is their trade in their words.
 - Choices have cards: the industry, whether you build the website, the layout, the colours, the lettering and the pages. Record one only when the owner typed over that choice's own card; otherwise leave it out, and its card asks it in turn. The industry is the exception: record it as soon as their words say what the business does.
 - If they leave a card's choice to you ("you pick"), choose what suits the business for that card, record it, list its key in chosen_for_owner, and tell them what you chose and that they can change it. Contact details and what the business does are never yours to choose.
@@ -919,7 +919,7 @@ export function checkPlan(
       !phoneFromOwner(fact.value.e164, said)
     ) {
       errors.push(
-        "facts.business.phone is not a number the owner typed; record only their number"
+        "facts.business.phone is not a number the owner typed, read for their country, or it cannot be dialled; record only their number, and if it cannot be dialled leave it out and ask them to check it"
       )
       continue
     }
