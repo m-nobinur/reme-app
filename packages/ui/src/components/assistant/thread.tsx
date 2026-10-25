@@ -223,9 +223,6 @@ const ThreadSettingsContext = createContext<ThreadSettings>(EMPTY_SETTINGS)
 // a new mode or briefing then redrew the whole transcript.
 const ThreadRevealContext = createContext<ThreadReveal | undefined>(undefined)
 
-// Module level, so the message list keeps its memo when the thread re-renders.
-const renderMessage = () => <ThreadMessage />
-
 // Startup exposes a loading placeholder thread; treat it as a new chat so
 // the composer mounts centered. Loads after startup keep the docked layout.
 const isNewChatView = (s: AssistantState) =>
@@ -595,9 +592,7 @@ const ThreadRoot: FC<{
               data-slot="aui_message-group"
               className="flex flex-col gap-y-6 has-[>:not(:empty)]:mb-14 [&>[data-aui-top-anchor-reserve]]:order-last"
             >
-              <ThreadPrimitive.Messages>
-                {renderMessage}
-              </ThreadPrimitive.Messages>
+              <ThreadMessages />
               {/* Always in the page, so a card that appears in it is read out. */}
               <div aria-live="polite" className="empty:-mt-6" ref={setSlot}>
                 {after}
@@ -642,6 +637,38 @@ const ThreadMessage: FC = () => {
       {role === "user" ? <UserMessage /> : <AssistantMessageComponent />}
     </>
   )
+}
+
+// Module level, so each row keeps its memo when the thread re-renders.
+const MESSAGE_COMPONENTS = { Message: ThreadMessage }
+
+/**
+ * Each row's key, space separated: a reply's is the message before it, not
+ * its own id. While a turn waits the runtime shows a placeholder reply under
+ * an id of its own, and the reply that streams in carries the server's, so
+ * keyed by id the row was torn down and mounted again on every reply.
+ */
+export const rowKeys = (messages: readonly { id: string; role: string }[]) =>
+  messages
+    .map((message, index) =>
+      message.role === "assistant"
+        ? `reply:${messages[index - 1]?.id ?? ""}`
+        : message.id
+    )
+    .join(" ")
+
+const ThreadMessages: FC = () => {
+  const keys = useAuiState((s) => rowKeys(s.thread.messages))
+  if (!keys) return null
+  return keys
+    .split(" ")
+    .map((key, index) => (
+      <ThreadPrimitive.MessageByIndex
+        components={MESSAGE_COMPONENTS}
+        index={index}
+        key={key}
+      />
+    ))
 }
 
 /** The day a stored message was written, from the `createdAt` the server puts in `metadata.custom`. */
@@ -1208,7 +1235,9 @@ const AssistantMessage: FC = () => {
   const ACTION_BAR_HEIGHT = `min-h-7.5 ${ACTION_BAR_PT}`
 
   const reveal = useReveal()
-  const writing = reveal.phase === "typing" || reveal.phase === "writing"
+  const running = useAuiState((s) => s.message.status?.type === "running")
+  const writing =
+    running || reveal.phase === "typing" || reveal.phase === "writing"
 
   return (
     <MessagePrimitive.Root
@@ -1275,11 +1304,17 @@ const AssistantMessage: FC = () => {
           <MessageError />
         </div>
 
+        {/* Its space is held from the start, but nothing under the words
+            shows (or counts as moving) until the reply is done. */}
         <div
           data-slot="aui_assistant-message-footer"
-          className={cn("flex items-center gap-2", ACTION_BAR_HEIGHT)}
+          className={cn(
+            "flex items-center gap-2",
+            ACTION_BAR_HEIGHT,
+            writing && "invisible"
+          )}
         >
-          <MessageTime held={writing} />
+          <MessageTime />
           {/* A message of cards alone has no words to rate. */}
           <AuiIf
             condition={(s) =>
@@ -1355,19 +1390,11 @@ const LOCAL_TIME = new Intl.DateTimeFormat("en-GB", {
   hour12: true,
 })
 
-/**
- * Held back, in its place, while the reply is still being written, so
- * nothing under the words moves but the words.
- */
-const MessageTime: FC<{ held?: boolean }> = ({ held = false }) => {
+const MessageTime: FC = () => {
   const at = useAuiState((s) => sentAt(s.message))
-  const running = useAuiState((s) => s.message.status?.type === "running")
   return (
     <time
-      className={cn(
-        "text-[0.6875rem] text-muted-foreground tabular-nums",
-        (running || held) && "invisible"
-      )}
+      className="text-[0.6875rem] text-muted-foreground tabular-nums"
       dateTime={at}
     >
       {LOCAL_TIME.format(new Date(at))}
