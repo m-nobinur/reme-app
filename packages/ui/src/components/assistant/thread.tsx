@@ -1392,14 +1392,13 @@ const Feedback: FC = () => {
  * owns the history, so a regenerated or rewritten turn would only ever exist
  * on this screen. They show on hover or focus rather than through `autohide`,
  * which unmounts them until the pointer arrives, so a keyboard could never
- * reach them and a touch screen never see them.
+ * reach them and a touch screen never see them. Nor `hideWhenRunning`: it
+ * took every reply's thumbs down on each send and drew them all again when
+ * the turn ended. The reply being written hides its own footer.
  */
 const AssistantActionBar: FC = () => {
   return (
-    <ActionBarPrimitive.Root
-      hideWhenRunning
-      className="aui-assistant-action-bar-root flex gap-1 text-muted-foreground opacity-0 transition-opacity duration-150 focus-within:opacity-100 group-hover/message:opacity-100 [@media(hover:none)]:opacity-100"
-    >
+    <ActionBarPrimitive.Root className="aui-assistant-action-bar-root flex gap-1 text-muted-foreground opacity-0 transition-opacity duration-150 focus-within:opacity-100 group-hover/message:opacity-100 [@media(hover:none)]:opacity-100">
       <Feedback />
     </ActionBarPrimitive.Root>
   )
