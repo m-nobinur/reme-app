@@ -302,6 +302,9 @@ export const DesignVisual = z.enum([
   "photos",
 ])
 
+/** A logo page's two ways: the owner's own logo, or the assistant making one. */
+export const LogoPath = z.enum(["upload", "create"])
+
 /** A question id: how an answer finds its question. */
 const QuestionId = z.string().regex(/^[a-z][a-z0-9_]{1,39}$/)
 
@@ -338,6 +341,12 @@ export const AskDesignInput = z.strictObject({
          * tray opens with it: the logo, or the photos and their review.
          */
         held: z.array(Asset).max(UPLOAD_MAX_FILES).optional(),
+        /**
+         * The way the owner chose in words, on a logo question only: the
+         * tray opens on it. Absent, the tray asks; the card's `preselected`
+         * is only the default.
+         */
+        path: LogoPath.optional(),
       })
     )
     .min(1)
@@ -353,6 +362,11 @@ export const AskDesignInput = z.strictObject({
         message:
           "upload belongs to a logo or photos question, and each needs it",
       }
+    )
+    .refine(
+      (questions) =>
+        questions.every((q) => q.path === undefined || q.visual === "logo"),
+      { message: "path belongs to a logo question" }
     ),
 })
 
@@ -593,6 +607,7 @@ export const ChatRequest = z.strictObject({
 export type ChoiceStep = z.infer<typeof ChoiceStep>
 export type AskChoiceInput = z.infer<typeof AskChoiceInput>
 export type AskChoiceOutput = z.infer<typeof AskChoiceOutput>
+export type LogoPath = z.infer<typeof LogoPath>
 export type AskDesignInput = z.infer<typeof AskDesignInput>
 export type AskDesignOutput = z.infer<typeof AskDesignOutput>
 export type ReviewQuoteFormInput = z.infer<typeof ReviewQuoteFormInput>

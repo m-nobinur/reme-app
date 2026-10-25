@@ -218,6 +218,27 @@ it("asks whether they have a logo on its own page, then shows the designs with n
   await vi.waitFor(() => expect(fake.kept).toEqual([uuid(10)]))
 })
 
+it("opens on the way the owner chose in words: the designs on create, the drop zone on upload", async () => {
+  const withPath = (path: "upload" | "create"): AskDesignInput => ({
+    questions: INPUT.questions.map((q) =>
+      q.visual === "logo" ? { ...q, path } : q
+    ),
+  })
+  const fake = fakes()
+  const made = await render(fake.services, { input: withPath("create") })
+  expect(made.header()).toBe("Your logo")
+  await vi.waitFor(() => expect(fake.kept).toEqual([uuid(10)]))
+  expect(made.designs()).not.toBeNull()
+  expect(made.container.textContent).not.toContain("Drop your logo")
+  await unmount?.()
+
+  const own = await render(fakes().services, { input: withPath("upload") })
+  expect(own.header()).toBe("Your logo")
+  expect(own.container.textContent).toContain(
+    "Drop your logo here or choose it"
+  )
+})
+
 it("going back to the designs draws them at once, with no yes or no first and nothing read", async () => {
   const fake = fakes()
   const tray = await render(fake.services)

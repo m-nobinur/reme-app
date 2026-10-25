@@ -186,6 +186,24 @@ describe("AskDesignInput", () => {
     }
   })
 
+  it("takes a chosen path on the logo question only", () => {
+    const upload = {
+      accept: ["image/png"],
+      max_files: 1,
+      max_bytes: 1000,
+      skippable: false,
+    }
+    const logo = { ...first, visual: "logo", upload, path: "create" }
+    expect(AskDesignInput.safeParse({ questions: [logo] }).success).toBe(true)
+    for (const bad of [
+      { ...logo, path: "pick" },
+      { ...logo, visual: "photos" },
+      { ...first, path: "upload" },
+    ]) {
+      expect(AskDesignInput.safeParse({ questions: [bad] }).success).toBe(false)
+    }
+  })
+
   it("keeps every rule of the ordinary choice card on each question", () => {
     const card = first.card as Obj
     const bad = { ...card, initial: ["not_offered", "a", "b"] }

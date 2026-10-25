@@ -65,6 +65,7 @@ import {
   factCard,
   factValue,
   has,
+  logoOf,
   mode,
   ONBOARDING_GOAL,
   type Onboarding,
@@ -74,6 +75,7 @@ import {
   stepDone,
   stepOf,
   text,
+  trayLogoPath,
   voiceOf,
 } from "./onboarding.ts"
 import { firstName, isAsked, question } from "./onboarding-copy.ts"
@@ -107,7 +109,7 @@ import { VOICE, voiceProblems } from "./voice.ts"
 export const DEFAULT_ONBOARDING_MODEL = "google/gemini-3.8-flash"
 
 /** Bumped with any change to the instructions or the plan's schema. */
-export const PLANNER_VERSION = "onboarding-19"
+export const PLANNER_VERSION = "onboarding-20"
 
 /** Stream parts that show a call is alive but has written nothing yet. */
 const QUIET = new Set([
@@ -190,7 +192,7 @@ Onboarding, in this order (the checklist in the data says where you are; work on
 3. Then the phone number and email customers should use, on the ask_details contact card.
 4. You: your name, pronouns and tone on the ask_details assistant card.
 5. The website: say it turns visitors into enquiries through its Request a quote page, then ask whether to build it (ask_choice build_for_me). Some owners already have a website: say they can skip if so. If they skip, record site.build_mode "manual" and close warmly with answer_only in the same turn: connecting a website they already have is coming soon, so stay tuned; until then you help with enquiries, quotes and follow-ups, and you can build a site whenever they ask. Onboarding is over. Never offer a website builder.
-6. The design, last, in one tray of six questions (ask_design): the logo, the colours, the lettering, the page arrangement, the photos and the pages. The owner answers it on the tray and may leave any question to you but the logo, which they upload or have you create there; photos they don't send, you create. Their answer starts the build. If their words answer only some of it, record what they answered (a logo or photos they don't have, you create), set pending_card "answered" and show the tray again (ask_design) for the rest; a bare yes, no or skip answers only the question they are on, the first the tray still asks, so record nothing for the others. There is no image library: never promise stock or hand-picked images.
+6. The design, last, in one tray of six questions (ask_design): the logo, the colours, the lettering, the page arrangement, the photos and the pages. The owner answers it on the tray and may leave any question to you but the logo, which they upload or have you create there; photos they don't send, you create. Their answer starts the build. If their words answer only some of it, record what they answered (photos they don't have, you create), set pending_card "answered" and show the tray again (ask_design) for the rest; a bare yes, no or skip answers only the question they are on, the first the tray still asks, so record nothing for the others. When their words choose the logo's way ("make one for me", "I've got a logo", "I'll upload mine"), set next.logo to create or upload and the tray opens there; a bare yes, no, ok or skip chooses none. Never say you'll make or use their logo unless next.logo is set or they have one. There is no image library: never promise stock or hand-picked images.
 7. Start the build (start_build), when the owner settled the design in words instead of on the tray: every question answered, or the rest left to you ("you pick the rest", "dealer's choice"). It needs no approval and runs in the background: say it has started, that progress shows in the activity panel, that they can keep chatting, and that you'll tell them when the first draft is ready.
 
 How to write doing:
@@ -238,7 +240,7 @@ Your next move (next.kind):
 - ask_fact: a small form for one fact. Never for owner.preferred_name.
 - ask_details: one card for a few facts. Step contact asks the phone number and the email (it opens with their sign-in email); step assistant asks your name, pronouns and tone.
 - ask_choice: a card with a fixed list, for industry, build_for_me, template, palette, font and pages. preselected is almost always empty; it may tick this card's own option ids. For palette, initial may name the three or four palette ids that suit this business best, shown first; otherwise it is empty.
-- ask_design: the design tray, with no options to write; the api builds every question from the business's industry. Ask it once, where the order says; the owner answers on the tray, and the build starts from that answer.
+- ask_design: the design tray, with no options to write; the api builds every question from the business's industry. logo is the logo's way the owner's words chose this turn, upload or create; leave it out when they chose none. Ask it once, where the order says; the owner answers on the tray, and the build starts from that answer.
 - review_quote_form, start_build: as above.
 - answer_only: no new question, for a side question or the close of the manual path.
 - reopen: the owner wants to change or go back to something they already answered, in any words ("I want to set my assistant again", "can I change the phone number"). step is the one they mean, from can_go_back_to in the data; its card opens filled with what they gave. Say in one short sentence that here it is to change, nothing more. If they answer it in words, show the change back before anything else: a quote form is proposed again with exactly their changes (pending_card declined, review_quote_form) for them to confirm; any other answer is recorded and named back in a few words. Once it is settled, carry on with the step you were on, in new words that note the return ("Now, back to how customers reach you"), never a sentence you already said. Never tell them it can be changed later or in their settings: reopen it now. If they name a change without the card (a corrected phone number), record it as a correction instead.
@@ -816,6 +818,11 @@ export function sayProblems(
       `say names ${claimed} for you, but the plan neither writes nor holds it: record it in facts or leave it out of say`
     )
   }
+  if (context.logo === false && logoClaim(say)) {
+    problems.push(
+      "say promises to make or use the owner's logo, but no way for it is chosen and none is held: leave the promise out, as the tray asks; if the owner's words chose one this turn, set next.logo"
+    )
+  }
   const repeated = sentencesOf(say).find((s) => context.said?.has(s))
   if (repeated) {
     problems.push(
@@ -844,6 +851,8 @@ type SayContext = {
   said?: ReadonlySet<string>
   /** The persona values say may name as its own: what the turn ends with, and what it held before. */
   persona?: { names: string[]; pronouns: string[]; tones: string[] }
+  /** Whether the logo has a way: one the owner chose in words, or a logo held. */
+  logo?: boolean
 }
 
 /**
@@ -878,6 +887,21 @@ function personaClaim(say: string, p: NonNullable<SayContext["persona"]>) {
   }
   return null
 }
+
+/**
+ * A promise to make the owner's logo or use theirs, as the planner wrote it
+ * ("I will create a logo for you"); an offer names the logo first ("Upload a
+ * logo or I'll create one"). Shortcut: only these phrasings are read; widen
+ * it when a live reply promises another way.
+ */
+const LOGO_PROMISE =
+  /\bI(?:['’]ll| will| am going to|['’]m going to)\s+(?:\w+\s+)?(?:create|make|design|draw|sketch|craft|use|work with)\b[^.!?]*\blogo\b/i
+
+/** Whether `say` promises the logo outside a question, which only offers. */
+const logoClaim = (say: string) =>
+  say
+    .split(/(?<=[.!?])\s+/)
+    .some((s) => !s.trimEnd().endsWith("?") && LOGO_PROMISE.test(s))
 
 /** A claim that something costs nothing, in the forms the planner wrote it ("included as part of our service, so there is no extra charge"), never "feel free" or "free to change". */
 const FREE =
@@ -938,6 +962,11 @@ function sayContext(
       pronouns: values("assistant.pronouns").map((v) => v.id),
       tones: values("assistant.tone").map((v) => v.id),
     },
+    logo: Boolean(
+      (plan.next.kind === "ask_design" && plan.next.logo) ||
+        trayLogoPath(s.pending) ||
+        logoOf(after.facts)
+    ),
     ...(s.input.kind === "message" ? { typed: s.input.text } : {}),
     corrected: Object.entries(plan.facts).some(([key, value]) => {
       const before = factValue(held, key as FactValueKey)
@@ -1393,6 +1422,17 @@ export function checkPlan(
       else if (designDone(after) || oldDesign(after)) {
         errors.push(
           "the design is settled already, or finishes on its own cards; don't ask ask_design"
+        )
+      }
+      // The logo's way is the owner's, from their words this turn; a bare
+      // yes, no or skip chooses none.
+      if (
+        next.logo &&
+        (s.input.kind !== "message" ||
+          BARE.test(wordsOf(s.input.text).join(" ")))
+      ) {
+        errors.push(
+          "logo is the way the owner's words chose this turn for their logo, and they chose none: leave it out and the tray asks"
         )
       }
       break
@@ -2088,7 +2128,7 @@ export function planParts(
         ? [
             ...lead,
             s.pending.type === "tool-ask_design"
-              ? designCard(after, newId)
+              ? designCard(after, newId, trayLogoPath(s.pending))
               : call(s.pending.type, s.pending.input, newId),
           ]
         : lead
@@ -2107,7 +2147,11 @@ export function planParts(
         }),
       ]
     case "ask_design":
-      return [...lead, designCard(after, newId)]
+      // A way chosen on an earlier turn holds until new words choose another.
+      return [
+        ...lead,
+        designCard(after, newId, next.logo ?? trayLogoPath(s.pending)),
+      ]
     // Refused by the checks: the photos are a tray question.
     case "ask_upload":
       return lead

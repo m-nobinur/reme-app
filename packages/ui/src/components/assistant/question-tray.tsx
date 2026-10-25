@@ -1257,7 +1257,7 @@ function QuestionTray({
     questions.flatMap((each): [string, Answer][] => {
       const [first] = each.card.preselected
       const own = each.card.own
-      // A logo or photos page's ticked option only opens that path.
+      // The logo page's ticked option is only a default; a logo held answers it.
       if (each.visual === "logo") {
         const logo = each.held?.[0]
         return logo ? [[each.id, { logo }]] : []
@@ -1285,10 +1285,12 @@ function QuestionTray({
   const [answers, setAnswers] = useState(
     start?.answers ?? { ...ticked, ...saved?.answers }
   )
+  const logoQuestion = questions.find((each) => each.visual === "logo")
   // Whether they have a logo, the logo's first page; the tray holds it, so
-  // the second page knows its way before it paints.
+  // the second page knows its way before it paints. A way the owner chose in
+  // words opens on that page.
   const [logoPath, setLogoPath] = useState(
-    start?.logo?.path ?? saved?.logoPath ?? null
+    start?.logo?.path ?? saved?.logoPath ?? logoQuestion?.path ?? null
   )
   const firstOpen = pages.findIndex(
     (each) =>
@@ -1315,7 +1317,6 @@ function QuestionTray({
   useEffect(() => {
     save({ answers, index, picture, logoPath })
   }, [answers, index, picture, logoPath])
-  const logoQuestion = questions.find((each) => each.visual === "logo")
   const logoAnswer = logoQuestion && answers[logoQuestion.id]
   const fromLogo = useLogoPalettes(
     logoAnswer && "logo" in logoAnswer ? logoAnswer.logo.id : undefined

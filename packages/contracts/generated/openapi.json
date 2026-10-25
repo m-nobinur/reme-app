@@ -3687,6 +3687,13 @@
                     ],
                     "additionalProperties": false
                   }
+                },
+                "path": {
+                  "type": "string",
+                  "enum": [
+                    "upload",
+                    "create"
+                  ]
                 }
               },
               "required": [
@@ -32402,6 +32409,26 @@
                 "properties": {
                   "kind": {
                     "type": "string",
+                    "const": "thinking"
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60,
+                    "pattern": "\\S"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "text"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
                     "const": "step"
                   },
                   "step": {
@@ -32454,6 +32481,28 @@
                   "kind",
                   "step",
                   "answered"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "reading"
+                  },
+                  "about": {
+                    "type": "string",
+                    "enum": [
+                      "answer",
+                      "change",
+                      "question"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "about"
                 ],
                 "additionalProperties": false
               },

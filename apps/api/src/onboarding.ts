@@ -22,6 +22,7 @@ import {
   FONT_PAIRS,
   FONTS,
   INDUSTRIES,
+  type LogoPath,
   ONBOARDING_GOAL,
   PAGES,
   PALETTES,
@@ -701,8 +702,13 @@ const dropZone = (files: number) => ({
  * opens ticked, so a tray asked again starts where the owner left off, and
  * any other opens on its first option, so one Looks good keeps them all; the
  * logo and photos pages open with what the org holds, else on making them.
+ * `path` is the logo's way the owner chose in words, which the tray opens on.
  */
-export function designCard(o: Onboarding, newId: () => string): ToolPart {
+export function designCard(
+  o: Onboarding,
+  newId: () => string,
+  path?: LogoPath
+): ToolPart {
   const directions = directionsFor(o)
   const suited = [
     ...new Set(directions.flatMap((d) => d.palettes)),
@@ -816,6 +822,7 @@ export function designCard(o: Onboarding, newId: () => string): ToolPart {
           ),
           upload: dropZone(1),
           ...(logo ? { held: [logo] } : {}),
+          ...(path ? { path } : {}),
         },
         {
           id: "palette",
@@ -899,6 +906,12 @@ export function designCard(o: Onboarding, newId: () => string): ToolPart {
     newId
   )
 }
+
+/** The logo's way a tray opens on, which the owner chose in words. */
+export const trayLogoPath = (part: ToolPart | null) =>
+  AskDesignInput.safeParse(part?.input).data?.questions.find(
+    (q) => q.visual === "logo"
+  )?.path
 
 /** A reply as compared with a label: lower case, words only. */
 const plainly = (words: string) =>
@@ -1832,7 +1845,7 @@ export function again(
   return [
     text(why),
     part.type === "tool-ask_design"
-      ? designCard(o, newId)
+      ? designCard(o, newId, trayLogoPath(part))
       : call(part.type, part.input, newId),
   ]
 }
