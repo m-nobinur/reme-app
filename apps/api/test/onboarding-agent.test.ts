@@ -924,7 +924,17 @@ describe("going back to a step", () => {
     })
     if (!words) throw new Error("not read as words")
     const s = typed(words.text, o, words.form)
-    const redrafted = [...FIELDS, { ...(FIELDS[1] as object), key: "rooms" }]
+    const redrafted = [
+      ...FIELDS,
+      {
+        key: "rooms",
+        label: "Number of rooms",
+        type: "number" as const,
+        required: false,
+        hint: null,
+        options: null,
+      },
+    ]
     const checked = checkPlan(
       plan({
         pending_card: "declined",
@@ -946,7 +956,12 @@ describe("going back to a step", () => {
       "I have a good picture of Regal Rides now. How should customers get in touch?"
     const s: PlanState = {
       ...typed("Looks good", onboarding(without("business.phone"))),
-      rows: [{ role: "assistant", parts: [{ type: "text", text: asked }] }],
+      rows: [
+        {
+          role: "assistant",
+          parts: [{ type: "text", text: asked, state: "done" }],
+        },
+      ],
     }
     const back = (say: string) =>
       errorsOf(
