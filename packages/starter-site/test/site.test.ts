@@ -251,6 +251,8 @@ describe("a component with its fields filled", () => {
       new RegExp(`data-copy="hero_lede"[^>]*>\\s*${FILLED.homeIntro}`)
     )
     expect(home).toContain(`<p class="hero-note">${FILLED.heroNote}</p>`)
+    // The hero's small label is its own field; empty, it is the trade.
+    expect(home).toContain(`<p class="eyebrow">${FILLED.heroEyebrow}</p>`)
     expect(home).toContain(FILLED.tagline)
     expect(home).toContain('<span class="accent">Fairhaven homes</span>')
     for (const kind of ["service_body", "step_body", "faq_answer"])

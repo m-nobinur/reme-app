@@ -147,6 +147,11 @@ const values = {
    */
   heroCaption: "",
   /**
+   * The small label above the home page's h1, a few words such as "Trusted
+   * home cleaners". Empty shows the trade's name (industry).
+   */
+  heroEyebrow: "",
+  /**
    * The home page's h1: the main service and the area, as "Weekly house
    * cleaning in Fairhaven". Falls back to the business name.
    */

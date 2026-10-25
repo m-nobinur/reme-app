@@ -14,7 +14,7 @@ props:
   - name: eyebrow
     type: string
     required: false
-    description: A short line above it, as site.industry.
+    description: A short line above it, as site.heroEyebrow or site.industry.
   - name: variant
     type: '"wash" | "split_arch" | "split_frame" | "dark_center" | "text_led"'
     required: false
@@ -61,7 +61,7 @@ constraints:
   - With no photo the home hero shows highlights, the first three services with
     their icons, never an empty box.
   - Renders nothing when the heading, the lede and the actions are all empty.
-  - eyebrow is for the home page, with site.industry.
+  - eyebrow is for the home page: site.heroEyebrow, or site.industry when it is empty.
   - An inner page header with no photo and an `art` slot is a cover, the drawing
     beside the text; the service area page fills it with the area drawing, and
     deep puts it on the deep band.
