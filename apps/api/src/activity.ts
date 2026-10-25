@@ -448,14 +448,20 @@ export type ActivityInput = {
 
 type Expected = WorkspaceStatus["expected_seconds"]
 
-/** A build at work: its lane's usual time, the one the chat quotes too. */
+/** A build at work: its lane's usual and late times, the ones the chat quotes too, and whether it was restarted. */
 const usualFor = (
   state: Segment["state"],
   build: BuildSummary,
   expected: Expected
 ) =>
-  state === "now" && expected
-    ? { usual_seconds: expected[build.lane ?? "full"].p50 }
+  state === "now"
+    ? {
+        ...(expected && {
+          usual_seconds: expected[build.lane ?? "full"].p50,
+          late_seconds: expected[build.lane ?? "full"].p95,
+        }),
+        ...(build.restarted && { restarted: true as const }),
+      }
     : {}
 
 const recent = (at: string, now: Date) => now.getTime() - Date.parse(at) < DAY

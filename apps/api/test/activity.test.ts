@@ -241,6 +241,16 @@ describe("change", () => {
       undefined
     )
     expect(at(build("awaiting_review", { ready_at: ago(2) }))).toBe(undefined)
+    // The late time beside it, and a restart said while it runs.
+    const working = view({
+      site: LIVE,
+      builds: [build("implementing", { restarted: true })],
+      expected,
+    }).now[0]
+    expect(working).toMatchObject({
+      late_seconds: expected.full.p95,
+      restarted: true,
+    })
   })
 
   it("keeps the same step ids in every state", () => {
