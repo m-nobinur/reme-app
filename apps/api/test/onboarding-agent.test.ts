@@ -541,7 +541,7 @@ describe("the plan's checks", () => {
         typed("what's a palette?", o, card)
       )
     ).toContain(
-      "pending_card unanswered shows the waiting card again, so next must be answer_only"
+      "pending_card unanswered shows the waiting card again, so next must be answer_only or reopen"
     )
     // Answered with nothing recorded: the palette is still missing, so it is asked again.
     const blank = checkPlan(
@@ -825,6 +825,96 @@ describe("what the planner reads and how often it asks", () => {
       ]
     )
     expect(asked).toEqual({ "business.overview": 2, "site.palette": 1 })
+  })
+})
+
+describe("going back to a step", () => {
+  /** At the website question: the business and the assistant answered. */
+  const atWebsite = () =>
+    onboarding([
+      ...without(
+        "site.build_mode",
+        "site.template",
+        "site.palette",
+        "site.font",
+        "site.pages"
+      ),
+      QUOTE,
+    ])
+
+  it("reopens the assistant's card as it was over the website question, which stays due", () => {
+    const o = atWebsite()
+    const card = choiceCard("build_for_me", o, counter())
+    const s = typed("I want to set my assistant again", o, card)
+    const checked = checkPlan(
+      plan({
+        pending_card: "unanswered",
+        say: "Here it is, change whatever you like.",
+        next: { kind: "reopen", step: "assistant" },
+      }),
+      s
+    )
+    if (!checked.ok) throw new Error(checked.errors.join("; "))
+    const [said, reopened] = planParts(checked.checked, s, () => "fresh")
+    expect(said).toMatchObject({
+      text: "Here it is, change whatever you like.",
+    })
+    expect(reopened).toMatchObject({
+      type: "tool-ask_details",
+      toolCallId: "fresh",
+      input: {
+        step: "assistant",
+        prefill: expect.arrayContaining([
+          { key: "assistant.name", value: { name: "Jeeves" } },
+          { key: "assistant.tone", value: { id: "professional" } },
+        ]),
+      },
+    })
+    const data = JSON.parse(
+      turnData(s)
+        .split("\n")[2]
+        ?.replace(/\\u003c/g, "<") ?? "{}"
+    )
+    expect(data.due_next).toEqual(["ask_choice build_for_me"])
+    expect(data.can_go_back_to).toContain("assistant")
+  })
+
+  it("reopens a fact and the quote form filled with what is held", () => {
+    const s = typed("can I change my services", atWebsite())
+    const parts = (step: "business.offerings" | "quote_form") => {
+      const checked = checkPlan(
+        plan({ say: "Sure, here they are.", next: { kind: "reopen", step } }),
+        s
+      )
+      if (!checked.ok) throw new Error(checked.errors.join("; "))
+      return planParts(checked.checked, s, counter())[1]
+    }
+    expect(parts("business.offerings")).toMatchObject({
+      type: "tool-ask_fact",
+      input: {
+        key: "business.offerings",
+        prefill: { items: ["Wedding cars"] },
+      },
+    })
+    expect(parts("quote_form")).toMatchObject({
+      type: "tool-review_quote_form",
+      input: { fields: FIELDS },
+    })
+  })
+
+  it("refuses to reopen a step not answered yet", () => {
+    const o = onboarding([
+      ...without("business.phone", "business.email"),
+      QUOTE,
+    ])
+    expect(
+      errorsOf(
+        plan({ next: { kind: "reopen", step: "contact" } }),
+        typed("change my number", o)
+      )
+    ).toContain(
+      "contact is not answered yet, so there is nothing to go back to; ask it in its turn"
+    )
   })
 })
 

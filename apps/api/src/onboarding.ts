@@ -27,6 +27,7 @@ import {
   PaletteId,
   PRONOUNS,
   type QuoteField,
+  type ReopenStep,
   type RequestChangeOutput,
   ReviewQuoteFormInput,
   ReviewQuoteFormOutput,
@@ -402,8 +403,14 @@ export const factCard = (
   key: FactValueKey,
   newId: () => string
 ) => {
+  // What is held, so a step the owner goes back to opens as they left it.
+  const held = factValue(o.facts, key)
   const prefill =
-    key === "business.name" ? { key, value: { name: o.orgName } } : null
+    held !== undefined
+      ? { key, value: held }
+      : key === "business.name"
+        ? { key, value: { name: o.orgName } }
+        : null
   const parsed = prefill && FactValue.safeParse(prefill)
   return call(
     "tool-ask_fact",
@@ -1151,6 +1158,39 @@ const defaultQuoteForm = (o: Onboarding, newId: () => string) => [
 export const currentStep = (o: Onboarding) =>
   STEPS.find((each) => !each.done(o))
 
+/** Whether the owner has been through `id`: what they can go back to. */
+export const stepDone = (o: Onboarding, id: StepId) =>
+  STEPS.find((each) => each.id === id)?.done(o) ?? false
+
+/**
+ * A step the owner answered, on its own card filled with what is held. Once
+ * it is answered again the script is back on the step it was on, since
+ * every step's progress is its facts.
+ */
+export function reopenCard(
+  step: ReopenStep,
+  o: Onboarding,
+  newId: () => string
+): ToolPart {
+  if (step === "contact" || step === "assistant") {
+    return detailsCard(step, o, newId)
+  }
+  if (step === "industry") {
+    const held = factValue(o.facts, "business.industry")?.category
+    return choiceCard(step, o, newId, held ? { preselected: [held] } : {})
+  }
+  if (step === "quote_form") {
+    const fields =
+      factValue(o.facts, "quote.form")?.fields ?? DEFAULT_QUOTE_FIELDS
+    return call(
+      "tool-review_quote_form",
+      ReviewQuoteFormInput.parse({ fields, note: null }),
+      newId
+    )
+  }
+  return factCard(o, step, newId)
+}
+
 /** The parts of the next step, or the closing line for a skipped website once nothing is left. */
 export function onboardingStep(o: Onboarding, newId: () => string): Part[] {
   const step = currentStep(o)
@@ -1843,6 +1883,11 @@ export function progressOf(rows: readonly ScriptRow[]): Progress {
             ? "design"
             : row.step
     if (!step) continue
+    // A card after the website question means onboarding went on, so a
+    // typed "no, let me change my name first" over it was not a skip.
+    if (step !== "build_for_me" && step !== "manual_builder") {
+      siteSkipped = false
+    }
     if (row.type === "tool-ask_choice" && OLD_DESIGN.includes(step)) old = true
     // Rows come in order, so each step ends as its latest card left it.
     if (

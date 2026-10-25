@@ -18,6 +18,7 @@ import {
   PLANNER_TURN_MS,
   type PlanFactKey,
   PRONOUNS,
+  ReopenStep,
   ReviewQuoteFormInput,
   ReviewQuoteFormOutput,
   TEMPLATES,
@@ -64,6 +65,8 @@ import {
   ONBOARDING_GOAL,
   type Onboarding,
   oldDesign,
+  reopenCard,
+  stepDone,
   stepOf,
   text,
   voiceOf,
@@ -98,7 +101,7 @@ import { VOICE, voiceProblems } from "./voice.ts"
 export const DEFAULT_ONBOARDING_MODEL = "google/gemini-3.8-flash"
 
 /** Bumped with any change to the instructions or the plan's schema. */
-export const PLANNER_VERSION = "onboarding-13"
+export const PLANNER_VERSION = "onboarding-14"
 
 /** Stream parts that show a call is alive but has written nothing yet. */
 const QUIET = new Set([
@@ -223,7 +226,8 @@ Your next move (next.kind):
 - ask_design: the design tray, with no options to write; the api builds every question from the business's industry. Ask it once, where the order says; the owner answers on the tray, and the build starts from that answer.
 - review_quote_form, start_build: as above.
 - answer_only: no new question, for a side question or the close of the manual path.
-- pending_card, when a card was waiting and the owner typed instead: "answered" if their words answered it (record its fact; for a quote form, they accept it as proposed), "declined" if they don't want to answer it, "unanswered" if they wrote about something else (use answer_only, and the card is shown again). null when no card was waiting.
+- reopen: the owner wants to change or go back to something they already answered, in any words ("I want to set my assistant again", "can I change the phone number"). step is the one they mean, from can_go_back_to in the data; its card opens filled with what they gave. Say in one short sentence that here it is to change, nothing more. Once they answer it, carry on with the step you were on. Never tell them it can be changed later or in their settings: reopen it now. If they name a change without the card (a corrected phone number), record it as a correction instead.
+- pending_card, when a card was waiting and the owner typed instead: "answered" if their words answered it (record its fact; for a quote form, they accept it as proposed), "declined" if they don't want to answer it, "unanswered" if they wrote about something else (use answer_only or reopen, and the card is shown again after). null when no card was waiting.
 - Never ask for what the facts hold. The checklist says what is missing and whether the build is ready.
 
 ${STYLE_ANCHORS}
@@ -703,6 +707,7 @@ export function turnData(s: PlanState): string {
     // The moves the checks accept before this message's facts, so the plan
     // keeps to the order the first time rather than on its retry.
     due_next: expectedNext(o)?.map(describe) ?? null,
+    can_go_back_to: ReopenStep.options.filter((step) => stepDone(o, step)),
     facts: factsOf(o),
     owner_first_name: firstName(o.ownerName) || null,
     waiting_card: s.input.kind === "message" ? waiting(s.pending) : null,
@@ -972,9 +977,13 @@ export function checkPlan(
       )
     }
   }
-  if (verdict === "unanswered" && plan.next.kind !== "answer_only") {
+  if (
+    verdict === "unanswered" &&
+    plan.next.kind !== "answer_only" &&
+    plan.next.kind !== "reopen"
+  ) {
     errors.push(
-      "pending_card unanswered shows the waiting card again, so next must be answer_only"
+      "pending_card unanswered shows the waiting card again, so next must be answer_only or reopen"
     )
   }
   // An accepted proposal is stated as it was shown, never as the model restates it.
@@ -1057,6 +1066,9 @@ export function checkPlan(
   if (
     expected &&
     next.kind !== "answer_only" &&
+    next.kind !== "reopen" &&
+    // A form the owner reopened and changed is proposed again in its place.
+    !reproposed &&
     !expected.some((each) => sameMove(each, next))
   ) {
     errors.push(
@@ -1179,6 +1191,13 @@ export function checkPlan(
       }
       break
     }
+    case "reopen":
+      if (!stepDone(after, next.step)) {
+        errors.push(
+          `${next.step} is not answered yet, so there is nothing to go back to; ask it in its turn`
+        )
+      }
+      break
     case "answer_only":
       break
   }
@@ -1505,7 +1524,10 @@ export async function planTurn(
             ? await status.commit(checked.checked)
             : []
         tell({
-          on: { kind: "next", next: next.kind },
+          on: {
+            kind: "next",
+            next: next.kind === "reopen" ? "ask_fact" : next.kind,
+          },
           facts: written.filter(isPlanFactKey),
         })
         if (next.kind === "start_build") {
@@ -1812,5 +1834,7 @@ export function planParts(
       ]
     case "start_build":
       return [call("tool-request_change", { text: ONBOARDING_GOAL }, newId)]
+    case "reopen":
+      return [said, reopenCard(next.step, after, newId)]
   }
 }

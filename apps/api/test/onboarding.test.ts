@@ -1070,6 +1070,23 @@ describe("the progress a conversation's cards hold", () => {
     expect(ended(skipped({ answer: "chosen", choice: "yes" }))).toBe(false)
   })
 
+  it("does not read a typed no as a skip once another card followed it", () => {
+    const went = progressOf([
+      row({
+        type: "tool-ask_choice",
+        step: "build_for_me",
+        state: "output-error",
+        reply: "No, let me change my assistant first",
+      }),
+      row({
+        type: "tool-ask_details",
+        step: "assistant",
+        state: "input-available",
+      }),
+    ])
+    expect(ended(went)).toBe(false)
+  })
+
   it("counts a started build, and not one talked over", () => {
     expect(
       progressOf([row({ type: "tool-request_change", state: "output-error" })])
