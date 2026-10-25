@@ -246,8 +246,20 @@ function unpatchLayout() {
   originals.clear()
 }
 
-/** Resize observers fire after layout, for each target whose size changed. */
+/**
+ * Resize observers fire after layout, for each target whose size changed.
+ * As in the browser, each round after the first delivers only targets deeper
+ * than the shallowest one just delivered; a shallower one changed by a
+ * callback waits for the next frame, and the page logs a loop warning.
+ */
 const observers = new Set<FakeResizeObserver>()
+const sizeOf = (el: Element) =>
+  `${(el as HTMLElement).clientWidth}x${heightOf(el)}`
+const depthOf = (el: Element) => {
+  let depth = 0
+  for (let at = el.parentElement; at; at = at.parentElement) depth += 1
+  return depth
+}
 class FakeResizeObserver {
   sizes = new Map<Element, string | undefined>()
   constructor(readonly callback: ResizeObserverCallback) {
@@ -263,16 +275,37 @@ class FakeResizeObserver {
     this.sizes.clear()
     observers.delete(this)
   }
-  /** Whether it fired. */
-  deliver() {
-    let changed = false
-    for (const [el, last] of this.sizes) {
-      const size = `${(el as HTMLElement).clientWidth}x${heightOf(el)}`
-      if (size !== last) changed = true
-      this.sizes.set(el, size)
+  changed() {
+    return [...this.sizes]
+      .filter(([el, last]) => sizeOf(el) !== last)
+      .map(([el]) => el)
+  }
+  deliver(targets: Element[]) {
+    for (const el of targets) this.sizes.set(el, sizeOf(el))
+    this.callback([], this as unknown as ResizeObserver)
+  }
+}
+/** "ResizeObserver loop completed with undelivered notifications", as logged. */
+let loops = 0
+function deliverResizes() {
+  let depth = -1
+  for (;;) {
+    const due = [...observers].map(
+      (observer) =>
+        [
+          observer,
+          observer.changed().filter((el) => depthOf(el) > depth),
+        ] as const
+    )
+    const targets = due.flatMap(([, each]) => each)
+    if (targets.length === 0) break
+    for (const [observer, each] of due) {
+      if (each.length > 0) observer.deliver(each)
     }
-    if (changed) this.callback([], this as unknown as ResizeObserver)
-    return changed
+    depth = Math.min(...targets.map(depthOf))
+  }
+  if ([...observers].some((observer) => observer.changed().length > 0)) {
+    loops += 1
   }
 }
 
@@ -298,11 +331,7 @@ async function frame() {
     const due = [...animation.values()]
     animation.clear()
     for (const callback of due) callback(clock)
-    for (let round = 0; round < 10; round++) {
-      let fired = false
-      for (const observer of [...observers]) fired = observer.deliver() || fired
-      if (!fired) break
-    }
+    deliverResizes()
   })
   painted.push(ownerMessageTop())
 }
@@ -381,6 +410,7 @@ beforeEach(async () => {
   painted = []
   glide = false
   gliding.clear()
+  loops = 0
   animation = new Map()
   vi.stubGlobal("ResizeObserver", FakeResizeObserver)
   vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
@@ -649,3 +679,38 @@ for (const { what, footer, leavesFirst } of SENDS) {
     expect(steps.length, trace).toBeGreaterThanOrEqual(GLIDE_FRAMES - 1)
   })
 }
+
+it("Scroll to bottom shows once the reply grows past the composer", async () => {
+  await sendAndReply("u1")
+  const button = chat.querySelector(".aui-thread-scroll-to-bottom")
+  expect(button?.classList.contains("invisible")).toBe(true)
+  layout.rows.set("u1-reply", 1200)
+  await frames()
+  expect(button?.classList.contains("invisible")).toBe(false)
+})
+
+it("logs no resize loop through a turn, a tray and the next send", async () => {
+  layout.footer = 421
+  await frames()
+  loops = 0
+  await sendAndReply("u1")
+  layout.slot = 180
+  await frames()
+  layout.footer = 80
+  await setState({
+    messages: [
+      ...state.messages,
+      said("u2", "user", "Something else"),
+      { ...said("u2-reply", "assistant", ""), status: { type: "running" } },
+    ],
+    isRunning: true,
+  })
+  // The reply streams into the space held below it, then past the fold.
+  for (const height of [60, 120, 300, 900]) {
+    layout.rows.set("u2-reply", height)
+    await frames(2)
+  }
+  layout.clientHeight = 770
+  await frames()
+  expect(loops).toBe(0)
+})

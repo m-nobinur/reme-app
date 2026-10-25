@@ -570,11 +570,37 @@ const FollowBottom: FC<{
     observer.observe(footer)
     observer.observe(viewport)
     observer.observe(after)
-    // The transcript outgrowing the space held below the reply.
-    if (after.parentElement) observer.observe(after.parentElement)
+    // Each row, for the transcript outgrowing the space held below the reply.
+    // Not their group: the held space sits in it, and sizing that above
+    // resized an observed box inside its own callback, which the browser
+    // logs as a ResizeObserver loop.
+    const watch = (nodes: Iterable<Node>) => {
+      for (const node of nodes) {
+        if (
+          node instanceof HTMLElement &&
+          node !== after &&
+          !node.hasAttribute("data-aui-top-anchor-reserve")
+        ) {
+          observer.observe(node)
+        }
+      }
+    }
+    const rows = new MutationObserver((records) => {
+      for (const { addedNodes, removedNodes } of records) {
+        watch(addedNodes)
+        for (const node of removedNodes) {
+          if (node instanceof Element) observer.unobserve(node)
+        }
+      }
+    })
+    if (after.parentElement) {
+      watch(after.parentElement.children)
+      rows.observe(after.parentElement, { childList: true })
+    }
     viewport.addEventListener("scroll", onScroll, { passive: true })
     below()
     return () => {
+      rows.disconnect()
       observer.disconnect()
       viewport.removeEventListener("scroll", onScroll)
       follow.current = () => undefined
