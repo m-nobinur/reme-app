@@ -1,6 +1,7 @@
 import {
   conversationMessages,
   conversations,
+  eq,
   type Tenancy,
   tenancy,
 } from "@workspace/db"
@@ -34,6 +35,11 @@ describe.skipIf(!url)("when onboarding finished, on a live connection", () => {
   /** A new onboarding conversation holding `rows` in order: role, minute, parts. */
   const onboarding = (rows: [string, number, Part[]][]) =>
     kit.withOrg({ orgId: who.orgId }, async (db) => {
+      // An org holds one onboarding conversation: the last case's becomes an assistant chat.
+      await db
+        .update(conversations)
+        .set({ kind: "assistant" })
+        .where(eq(conversations.kind, "onboarding"))
       const [made] = await db
         .insert(conversations)
         .values({
