@@ -10,6 +10,7 @@ import {
   AskOpenInput,
   AskOpenOutput,
   AskUploadOutput,
+  AVATARS,
   CALM_PALETTES,
   type ChoiceStep,
   DETAILS_KEYS,
@@ -427,13 +428,17 @@ export const factCard = (
 
 /**
  * The assistant as it comes, for the picks the org does not hold yet, so
- * the card opens filled and one Looks good keeps them all.
+ * the card opens filled and one Looks good keeps them all. The face is the
+ * first one drawn for she/her.
  */
-const PERSONA: FactValue[] = [
+const PERSONA: [FactValue, FactValue, FactValue, FactValue] = [
   { key: "assistant.name", value: { name: "Reme" } },
-  { key: "assistant.pronouns", value: { id: "they_them" } },
-  { key: "assistant.avatar", value: { id: "reme" } },
-  { key: "assistant.tone", value: { id: "friendly" } },
+  { key: "assistant.pronouns", value: { id: "she_her" } },
+  {
+    key: "assistant.avatar",
+    value: { id: AVATARS.find((a) => a.pronouns === "she_her")?.id ?? "reme" },
+  },
+  { key: "assistant.tone", value: { id: "professional" } },
 ]
 
 /**
@@ -1722,9 +1727,6 @@ export function again(
   ]
 }
 
-/** The names the assistant may take when the owner leaves it to them. */
-const NAMES = ["Ava", "Sam", "Max", "Mia", "Leo", "Isla"]
-
 /**
  * The facts the assistant picks for a card the owner left to it ("you
  * pick"), and what it says it picked, or null when the card is not the
@@ -1733,16 +1735,17 @@ const NAMES = ["Ava", "Sam", "Max", "Mia", "Leo", "Isla"]
  */
 function pickFor(part: ToolPart, o: Onboarding): Answer | null {
   const step = stepOf(part)
-  const name = NAMES[hash(`${o.orgId}|name`) % NAMES.length] as string
+  const [name, pronouns, face, tone] = PERSONA
   const palette = firstPalettes(o.orgId)[0] as PaletteId
   const font = FONTS[0]?.id
   // Each pick, and how the assistant names it to the owner.
   const picks: Partial<Record<StepId, [FactValue, string][]>> = {
+    // The defaults the assistant card opens on.
     assistant: [
-      [{ key: "assistant.name", value: { name } }, `the name ${name}`],
-      [{ key: "assistant.pronouns", value: { id: "they_them" } }, "they/them"],
-      [{ key: "assistant.avatar", value: { id: "reme" } }, "Reme's own look"],
-      [{ key: "assistant.tone", value: { id: "friendly" } }, "a friendly tone"],
+      [name, "the name Reme"],
+      [pronouns, "she/her"],
+      [face, "a face to match"],
+      [tone, "a professional tone"],
     ],
     template: [
       [

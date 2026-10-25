@@ -1022,11 +1022,13 @@ describe("a reply Jev read", () => {
     expect(decided(cardFor("assistant"), { kind: "defer" }, named)).toEqual({
       kind: "facts",
       facts: [
-        { key: "assistant.pronouns", value: { id: "they_them" } },
-        { key: "assistant.avatar", value: { id: "reme" } },
-        { key: "assistant.tone", value: { id: "friendly" } },
+        { key: "assistant.pronouns", value: { id: "she_her" } },
+        { key: "assistant.avatar", value: { id: "she_1" } },
+        { key: "assistant.tone", value: { id: "professional" } },
       ],
-      chose: expect.any(String),
+      chose: expect.stringContaining(
+        "she/her, a face to match and a professional tone"
+      ),
     })
     // What the business does, its contact details and the build are the owner's.
     for (const step of ["industry", "contact", "build_for_me"] as const) {
@@ -1938,24 +1940,24 @@ describe("the assistant card's name ideas", () => {
     expect(ideas(start({ prepared }))).toEqual(["Poppy", "Theo"])
   })
 
-  it("opens filled with the assistant as it comes, the org's own picks first", () => {
+  it("opens filled with Reme, she/her, the first she/her face and professional, the org's own picks first", () => {
     const prefill = (o: Onboarding) =>
       AskDetailsInput.parse(detailsCard("assistant", o, counter()).input)
         .prefill
     expect(prefill(start())).toEqual([
       { key: "assistant.name", value: { name: "Reme" } },
-      { key: "assistant.pronouns", value: { id: "they_them" } },
-      { key: "assistant.avatar", value: { id: "reme" } },
-      { key: "assistant.tone", value: { id: "friendly" } },
+      { key: "assistant.pronouns", value: { id: "she_her" } },
+      { key: "assistant.avatar", value: { id: "she_1" } },
+      { key: "assistant.tone", value: { id: "professional" } },
     ])
     const named = start({
       facts: [{ key: "assistant.name", value: { name: "Maya" } }],
     })
     expect(prefill(named).map((fact) => fact.value)).toEqual([
       { name: "Maya" },
-      { id: "they_them" },
-      { id: "reme" },
-      { id: "friendly" },
+      { id: "she_her" },
+      { id: "she_1" },
+      { id: "professional" },
     ])
   })
 })
