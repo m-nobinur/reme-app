@@ -1,6 +1,7 @@
 import {
   type BuildQuestions,
   Conversation,
+  type QuestionInput,
   type QuestionReply,
 } from "@workspace/contracts"
 import {
@@ -25,7 +26,7 @@ describe("what a question card takes", () => {
     const phone = { kind: "fact", key: "business.phone" } as const
     expect(fits(phone, { e164: "+441614960000" })).toBe(true)
     expect(fits(phone, "0161 496 0000")).toBe(false)
-    const choice = { kind: "choice", options: ["Yes", "No"] } as const
+    const choice: QuestionInput = { kind: "choice", options: ["Yes", "No"] }
     expect(fits(choice, "Yes")).toBe(true)
     expect(fits(choice, "Maybe")).toBe(false)
     const email = { kind: "text", maxLength: 254, email: true } as const
