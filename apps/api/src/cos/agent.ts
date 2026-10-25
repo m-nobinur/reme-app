@@ -73,6 +73,7 @@ import {
   getPreview,
   getWorkspace,
   newContact,
+  ownerSaid,
   recordReview,
   removeDomain,
   requestChange,
@@ -1144,7 +1145,9 @@ export function cosAgent(
     toolApproval: {
       // The owner's words are the yes, and a new phone or email still asks.
       request_change: async (input) =>
-        (await newContact(run.tools, input).catch(() => true))
+        (await ownerSaid(run.tools, run.turn.sessionId)
+          .then((said) => newContact(run.tools, input, said.join("\n")))
+          .catch(() => true))
           ? "user-approval"
           : "not-applicable",
       answer_question: ({ value }) =>

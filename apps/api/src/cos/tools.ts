@@ -450,6 +450,10 @@ const untyped = (what: string) =>
     detail: {},
   })
 
+/** Something in the owner's words that could be a phone number or an email address. */
+const TYPED_PHONE = /\d[\d\s().-]{6,}\d/
+const TYPED_EMAIL = /\S@\S+\.\S/
+
 /**
  * The phone and email in `input` the business does not hold yet: what a yes
  * on the change would record, so the change shows its card. Null when there
@@ -457,7 +461,9 @@ const untyped = (what: string) =>
  */
 export async function newContact(
   { kit, owner }: Pick<ToolContext, "kit" | "owner">,
-  { contact, text }: CosChangeRequest
+  { contact, text }: CosChangeRequest,
+  /** Everything the owner wrote in the conversation, when the caller has it. */
+  said?: string
 ): Promise<{ phone?: string; email?: string } | null> {
   if (!contact?.phone && !contact?.email) return null
   // The owner approves the change text, which is all the card shows. A text
@@ -480,9 +486,19 @@ export async function newContact(
     if (fact.key === "business.phone") heldPhone = fact.value.e164
     if (fact.key === "business.email") heldEmail = fact.value.address
   }
-  const phone = contact.phone === heldPhone ? undefined : contact.phone
+  // A phone or email when the owner typed none at all is made up: on
+  // 2026-10-25 "add our hours to the contact page" came with an invented
+  // phone and email and asked for a yes. Dropped, never carded. One that
+  // differs from what they typed is kept, for the refusal to correct.
+  const invented = (gave: RegExp) => said !== undefined && !gave.test(said)
+  const phone =
+    !contact.phone || contact.phone === heldPhone || invented(TYPED_PHONE)
+      ? undefined
+      : contact.phone
   const email =
-    contact.email?.toLowerCase() === heldEmail?.toLowerCase()
+    !contact.email ||
+    contact.email.toLowerCase() === heldEmail?.toLowerCase() ||
+    invented(TYPED_EMAIL)
       ? undefined
       : contact.email
   return phone || email ? { phone, email } : null
@@ -502,11 +518,11 @@ async function recordContact(
   sessionId: string,
   input: CosChangeRequest
 ): Promise<Response | null> {
-  const fresh = await newContact({ kit, owner }, input)
+  const said = (await ownerSaid({ kit, owner }, sessionId)).join("\n")
+  const fresh = await newContact({ kit, owner }, input, said)
   if (!fresh) return null
   const { phone, email } = fresh
   const { text } = input
-  const said = (await ownerSaid({ kit, owner }, sessionId)).join("\n")
   const stated: FactValue[] = []
   if (phone) {
     if (!(phoneFromOwner(phone, said) && phoneFromOwner(phone, text)))
@@ -538,7 +554,7 @@ async function recordContact(
 }
 
 /** What the owner wrote in `sessionId`, message by message. */
-async function ownerSaid(
+export async function ownerSaid(
   { kit, owner }: Pick<ToolContext, "kit" | "owner">,
   sessionId: string
 ): Promise<string[]> {

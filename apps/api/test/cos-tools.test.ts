@@ -41,6 +41,7 @@ import {
   getFacts,
   getPreview,
   getWorkspace,
+  newContact,
   ownersAnswer,
   paceOf,
   recordReview,
@@ -853,9 +854,11 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       }
     )
 
+    // The owner typed a phone number: a different one is refused for the
+    // model to correct. An email when they typed none is dropped (above).
     it.each([
       ["phone", { phone: "+441174960199" }],
-      ["email", { email: "someone@invented.example" }],
+      ["email", { email: "someone@invented.example", phone: "+441174960199" }],
     ])(
       "refuses a %s the owner never typed, changes no fact and starts nothing",
       async (_what, contact) => {
@@ -885,6 +888,20 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         expect(await phoneNow()).toEqual(before)
       }
     )
+
+    it("drops a phone and email the owner never typed anywhere, so the change needs no yes", async () => {
+      const said = "Add our opening hours to the contact page"
+      expect(
+        await newContact(
+          context(me),
+          {
+            text: "Add opening hours to the contact page",
+            contact: { phone: "+441423555019", email: "hello@example.co.uk" },
+          },
+          said
+        )
+      ).toBeNull()
+    })
 
     it("refuses a typed number the change text the owner approves does not name", async () => {
       const turn = await turnOf(me, [
