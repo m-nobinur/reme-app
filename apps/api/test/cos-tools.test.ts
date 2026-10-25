@@ -31,7 +31,7 @@ import {
 import { remember } from "../src/cos/memory.ts"
 import { getIndexing, getSearchPerformance } from "../src/cos/search-tools.ts"
 import {
-  answerQuestion,
+  answerQuestion as answerTool,
   buyDomain,
   CONNECT_RETRY_MS,
   checkDomain,
@@ -41,6 +41,7 @@ import {
   getFacts,
   getPreview,
   getWorkspace,
+  ownersAnswer,
   paceOf,
   recordReview,
   removeDomain,
@@ -125,6 +126,25 @@ describe("a claim the owner stated", () => {
     ["Fully insured since 2009", "fully insured", false],
   ])("%s from %s: %s", (proof, message, stated) => {
     expect(statedIn(proof, message)).toBe(stated)
+  })
+})
+
+describe("an answer the owner gave", () => {
+  const said = ["Ring 0117 496 0125. We park on the street outside."]
+
+  it("is their words, or the number they typed", () => {
+    expect(ownersAnswer("street outside", said)).toBe(true)
+    expect(ownersAnswer("a car park", said)).toBe(false)
+    const phone = (e164: string) =>
+      ownersAnswer({ key: "business.phone", value: { e164 } }, said)
+    expect(phone("+441174960125")).toBe(true)
+    expect(phone("+441174960999")).toBe(false)
+    expect(
+      ownersAnswer(
+        { key: "business.proof", value: { text: "Family run since 2009" } },
+        said
+      )
+    ).toBe(false)
   })
 })
 
@@ -973,6 +993,41 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       key: "business.email",
       value: { address: "owner@cos-probe.invalid" },
     } as const
+
+    /** A turn whose owner wrote every answer these cases give. */
+    let spoke: Promise<{ sessionId: string }> | undefined
+    const answerQuestion = async (
+      ctx: Parameters<typeof answerTool>[0],
+      input: Parameters<typeof answerTool>[1],
+      key: string,
+      turn?: { sessionId: string }
+    ) => {
+      spoke ??= turnOf(me, [
+        "Ring 01234 567890 or email owner@cos-probe.invalid. We're shut on Mondays.",
+      ])
+      return answerTool(ctx, input, key, turn ?? (await spoke))
+    }
+
+    it("refuses an answer the owner never wrote, without calling the orchestrator", async () => {
+      const { s, asking, waited } = await blocked(me)
+      const stub = answering({ [waited.request_id]: waited.field })
+      const typed = await turnOf(me, ["Our number is changing soon."])
+      const output = kept(
+        "answer_question",
+        await answerQuestion(
+          context(me, stub),
+          { request_id: waited.request_id, value: PHONE },
+          crypto.randomUUID(),
+          typed
+        )
+      )
+      expect(output).toMatchObject({
+        outcome: "refused",
+        error: { code: "answer.not_owners" },
+      })
+      expect(stub.calls).toHaveLength(0)
+      await s.state(asking, "cancelled")
+    })
 
     /**
      * The orchestrator's `/answer` as it reads a value (`answers` in its

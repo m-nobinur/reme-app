@@ -701,6 +701,38 @@ const answerInvalid = () =>
     detail: {},
   })
 
+const notOwners = () =>
+  failure(400, {
+    class: "validation",
+    code: "answer.not_owners",
+    message:
+      "Answer only with what the owner wrote in this conversation, in their words, or the number or address they typed. Otherwise leave the question on its card for them.",
+    detail: {},
+  })
+
+/**
+ * Whether the answer is the owner's own word in `said`: text as `statedIn`
+ * reads a claim, a phone number or email address as they typed it, and every
+ * other part of a fact's value as words or figures one message holds. So an
+ * answer the model made up, or one lifted from a page or a review, never
+ * becomes a fact.
+ */
+export function ownersAnswer(
+  value: AnswerQuestionInput["value"],
+  said: readonly string[]
+): boolean {
+  if (typeof value === "string") return said.some((m) => statedIn(value, m))
+  const all = said.join("\n")
+  if (value.key === "business.phone")
+    return phoneFromOwner(value.value.e164, all)
+  if (value.key === "business.email") {
+    return emailFromOwner(value.value.address, all)
+  }
+  return Object.values(value.value)
+    .flat()
+    .every((part) => said.some((m) => statedIn(String(part), m)))
+}
+
 const reviewElsewhere = () =>
   failure(400, {
     class: "validation",
@@ -735,7 +767,8 @@ const reviewElsewhere = () =>
 export async function answerQuestion(
   { env, kit, owner }: ToolContext,
   input: AnswerQuestionInput,
-  key: string
+  key: string,
+  turn: Pick<Turn, "sessionId">
 ): Promise<AnswerQuestionOutput> {
   const [asked] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
     db
@@ -760,6 +793,9 @@ export async function answerQuestion(
   // whether the customer agreed to be quoted; an answer card does not.
   if (fact && (REVIEW_FACT_KEYS as readonly string[]).includes(fact.key)) {
     return refused(reviewElsewhere())
+  }
+  if (!ownersAnswer(value, await ownerSaid({ kit, owner }, turn.sessionId))) {
+    return refused(notOwners())
   }
   const answered = relay(
     await bridge(env, owner, `/${asked.assignmentId}/answer`, {
