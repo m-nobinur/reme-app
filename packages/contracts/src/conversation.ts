@@ -1,6 +1,13 @@
 import { z } from "zod"
-import { Timestamp, Uuid } from "./common.ts"
-import { GOAL_MAX } from "./owner.ts"
+import { JsonObject, Timestamp, Uuid } from "./common.ts"
+import {
+  ANSWER_TEXT_MAX,
+  CHOICE_FACT_KEYS,
+  FactValueKey,
+  GOAL_MAX,
+  OwnerAnswerText,
+  REVIEW_FACT_KEYS,
+} from "./owner.ts"
 import { Text } from "./text.ts"
 
 /**
@@ -116,14 +123,97 @@ export const ChangeAskedPart = z.strictObject({
 })
 
 /**
+ * How the owner answers one question, as the web's `AnswerSpec`: a fact
+ * key's own inputs, a closed list picked as written, or free text held to
+ * a length and, for an address, the email rule.
+ */
+export const QuestionInput = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("fact"),
+    key: FactValueKey.exclude([...CHOICE_FACT_KEYS, ...REVIEW_FACT_KEYS]),
+  }),
+  z.strictObject({
+    kind: z.literal("choice"),
+    options: z.array(OwnerAnswerText).min(1).max(10),
+  }),
+  z.strictObject({
+    kind: z.literal("text"),
+    maxLength: z.int().min(1).max(ANSWER_TEXT_MAX),
+    email: z.boolean(),
+  }),
+])
+
+/** The owner's side of a question: their value (a fact key's value object, or text), or a skip. */
+const OwnerQuestionAnswer = [
+  z.strictObject({
+    kind: z.literal("value"),
+    value: z.union([OwnerAnswerText, JsonObject]),
+  }),
+  z.strictObject({ kind: z.literal("skipped") }),
+] as const
+
+/**
+ * What became of one question: the owner's value or skip, or `closed` when
+ * the build stopped waiting on it before the owner answered.
+ */
+export const QuestionAnswer = z.discriminatedUnion("kind", [
+  ...OwnerQuestionAnswer,
+  z.strictObject({ kind: z.literal("closed") }),
+])
+
+/**
+ * One question the assistant puts to the owner for their website. `id` is
+ * the build's request id for a build's question. `text` is the question in
+ * the assistant's own words. `answer` is set once it is settled.
+ */
+export const BuildQuestion = z.strictObject({
+  id: Uuid,
+  text: Text(300),
+  input: QuestionInput,
+  skippable: z.boolean(),
+  answer: QuestionAnswer.optional(),
+})
+
+/**
+ * The questions one message asks, drawn as one stack. `build`: what a
+ * build waits on, and an answer resumes it. `offer`: what a ready draft
+ * left out; once every one is settled, the answers start one change on top
+ * of that draft. `assignment_id` is the build's, read by the server only.
+ */
+export const BuildQuestions = z.strictObject({
+  kind: z.enum(["build", "offer"]),
+  assignment_id: Uuid,
+  questions: z.array(BuildQuestion).min(1).max(10),
+})
+
+/** How `BuildQuestions` is stored among a message's parts: an AI SDK data part. */
+export const BuildQuestionsPart = z.strictObject({
+  type: z.literal("data-build_questions"),
+  data: BuildQuestions,
+})
+
+/**
+ * `POST /conversations/{id}/questions`: the owner's answer to one question
+ * of a stack, by the message that holds it. Answered with the
+ * `BuildQuestions` as now stored.
+ */
+export const QuestionReply = z.strictObject({
+  message_id: MessageId,
+  question_id: Uuid,
+  answer: z.discriminatedUnion("kind", [...OwnerQuestionAnswer]),
+})
+
+/**
  * A message the server posts on its own, with no owner turn: the text parts,
- * then the button part if there is one. `id` is derived from what happened,
- * not generated, so posting it twice stores it once.
+ * then the button part if there is one, then the questions if there are any.
+ * `id` is derived from what happened, not generated, so posting it twice
+ * stores it once.
  */
 export const ServerMessage = z.strictObject({
   id: MessageId,
   text: z.array(Text(2000)).min(1).max(5),
   button: ServerButton.optional(),
+  questions: BuildQuestions.optional(),
 })
 
 /**
@@ -145,3 +235,9 @@ export type MessageFeedback = z.infer<typeof MessageFeedback>
 export type ServerButton = z.infer<typeof ServerButton>
 export type ServerButtonPart = z.infer<typeof ServerButtonPart>
 export type ServerMessage = z.infer<typeof ServerMessage>
+export type QuestionInput = z.infer<typeof QuestionInput>
+export type QuestionAnswer = z.infer<typeof QuestionAnswer>
+export type BuildQuestion = z.infer<typeof BuildQuestion>
+export type BuildQuestions = z.infer<typeof BuildQuestions>
+export type BuildQuestionsPart = z.infer<typeof BuildQuestionsPart>
+export type QuestionReply = z.infer<typeof QuestionReply>
