@@ -410,7 +410,7 @@ const STATES: State[] = [
     rounds: [ROUND],
   },
   {
-    title: "Logo, a setting changed: Design for me",
+    title: "Logo, a setting changed: Redesign my logo",
     start: {
       index: LOGO,
       answers: { logo: { logo: KEPT } },
