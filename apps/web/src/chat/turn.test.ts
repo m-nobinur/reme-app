@@ -3,7 +3,11 @@ import {
   TOOL_CALL_CANCELLED as CANCELLED,
   ChatRequest,
 } from "@workspace/contracts"
-import { SESSION_ENDED, SKIPPED } from "@workspace/ui/lib/tool-state"
+import {
+  PICK_FOR_ME,
+  SESSION_ENDED,
+  SKIPPED,
+} from "@workspace/ui/lib/tool-state"
 import { afterEach, expect, it, vi } from "vitest"
 import type { ChatMessage } from "./message"
 import {
@@ -727,6 +731,12 @@ it("a details card sends the facts it resolves, and reads back as the owner's wo
   expect(
     replyText(details("output-available", { output: { answer: "skipped" } }))
   ).toBe(SKIPPED)
+  // Pick for me reads as itself; the facts still go in the answer.
+  expect(
+    replyText(
+      details("output-available", { output: { ...NAMED, skip_all: true } })
+    )
+  ).toBe(PICK_FOR_ME)
   expect(replyText(details("input-available"))).toBeNull()
 })
 
@@ -822,12 +832,17 @@ it("a finished design tray sends its answers, and reads back as the owner's word
     kind: "results",
     results: [{ kind: "answer", tool_call_id: "call_design", output }],
   })
-  // Nothing picked reads Skipped; an answer skipped is left out.
+  // Nothing picked reads Skipped, Pick for me itself; an answer skipped is left out.
   expect(
     replyText(
-      tray("output-available", { output: { answers: {}, skip_all: true } })
+      tray("output-available", { output: { answers: {}, skip_all: false } })
     )
   ).toBe(SKIPPED)
+  expect(
+    replyText(
+      tray("output-available", { output: { ...output, skip_all: true } })
+    )
+  ).toBe(PICK_FOR_ME)
   expect(
     replyText(
       tray("output-available", {

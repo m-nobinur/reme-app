@@ -6379,6 +6379,9 @@
                     }
                   ]
                 }
+              },
+              "skip_all": {
+                "type": "boolean"
               }
             },
             "required": [
@@ -16320,6 +16323,9 @@
                                               }
                                             ]
                                           }
+                                        },
+                                        "skip_all": {
+                                          "type": "boolean"
                                         }
                                       },
                                       "required": [

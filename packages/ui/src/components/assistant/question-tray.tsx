@@ -43,7 +43,7 @@ import {
   faceCss,
   previewFaces,
 } from "@workspace/ui/lib/font-faces"
-import { layoutLook } from "@workspace/ui/lib/tool-state"
+import { layoutLook, PICK_FOR_ME } from "@workspace/ui/lib/tool-state"
 import { cn } from "@workspace/ui/lib/utils"
 import {
   type ComponentProps,
@@ -1169,7 +1169,7 @@ function TrayFrame({
                   type="button"
                   variant="secondary"
                 >
-                  Pick for me
+                  {PICK_FOR_ME}
                 </Button>
               ) : null}
               {submit ? (
@@ -1296,7 +1296,7 @@ function QuestionTray({
   const fromLogo = useLogoPalettes(
     logoAnswer && "logo" in logoAnswer ? logoAnswer.logo.id : undefined
   )
-  // The logo page's own primary button (Design for me), while it has one.
+  // The logo page's own primary button (Redesign my logo), while it has one.
   const [logoSubmit, setLogoSubmit] = useState<TrayFrameProps["submit"]>()
   const focusComposer = useFocusComposer()
 

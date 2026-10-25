@@ -55,9 +55,10 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react"
  * that cannot be skipped. It asks first whether they have a logo, nothing
  * picked. Yes opens the upload. With no logo held, a round of three is drawn
  * from the filled brief as the page opens, so No shows its designs with the
- * first picked; above them the brief folds into summary rows (a few words on
- * the look, the colours, the logo type and a style) that reopen it. Changing
- * the brief turns the tray's primary into Design for me, which draws a round
+ * first picked, at the top; under them the brief folds into summary rows (a
+ * few words on the look, the colours, the logo type and a style) that reopen
+ * it. Changing the brief turns the tray's primary into Redesign my logo,
+ * which draws a round
  * from it. Rounds are saved by the api, so a reload reads them back. Picking
  * a design keeps it as the logo and answers the question; Change my logo
  * draws another round from the picked one, after the wait the api sets
@@ -535,7 +536,7 @@ function TrayLogo({
   }, [top])
 
   // With no round yet, or a brief changed since the newest, the tray's
-  // primary is Design for me while rounds are left; a layout effect, so the
+  // primary is Redesign my logo while rounds are left; a layout effect, so the
   // tray never paints Next in its place.
   const designFirst =
     create && rounds.length < LOGO_ROUNDS_MAX && (!latest || changed)
@@ -549,7 +550,7 @@ function TrayLogo({
   const designDisabled = !briefReady || busy !== null || left > 0
   const designBusy = busy === "draw"
   const designLabel =
-    left > 0 ? `Design for me ${waitText(left)}` : "Design for me"
+    left > 0 ? `Redesign ${waitText(left)}` : "Redesign my logo"
   useLayoutEffect(() => {
     setSubmit(
       designFirst
@@ -572,6 +573,180 @@ function TrayLogo({
 
   return (
     <div className="-my-1.5 flex shrink-0 flex-col" ref={page}>
+      {/* The designs, once a round has started: first, so the pick needs no
+          scroll; they fold away while the logo question is reopened. */}
+      <Fold open={create && round !== undefined && !choiceOpen}>
+        {round && services ? (
+          <div className="flex flex-col gap-3" data-part="end">
+            {rounds.length > 1 ? (
+              <div className="flex items-center gap-1">
+                <Button
+                  aria-label="Earlier designs"
+                  className={ACCENT_RING}
+                  disabled={shownAt === 0}
+                  onClick={() => setAt(shownAt - 1)}
+                  size="icon-sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  <CaretLeftIcon aria-hidden />
+                </Button>
+                <span className="text-muted-foreground text-xs tabular-nums">
+                  Round {shownAt + 1} of {rounds.length}
+                </span>
+                <Button
+                  aria-label="Later designs"
+                  className={ACCENT_RING}
+                  disabled={shownAt === rounds.length - 1}
+                  onClick={() => setAt(shownAt + 1)}
+                  size="icon-sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  <CaretRightIcon aria-hidden />
+                </Button>
+              </div>
+            ) : null}
+
+            {round.status === "failed" ? (
+              <div className="flex flex-col items-start gap-2 rounded-xl border border-border bg-card p-3">
+                <p className="text-sm">These designs did not come through.</p>
+                <Button
+                  className={ACCENT_RING}
+                  disabled={busy === "draw"}
+                  onClick={() => void draw(asked.current)}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  Try again
+                </Button>
+              </div>
+            ) : (
+              <div
+                aria-busy={round.status === "drawing"}
+                aria-label="Logo designs"
+                className="grid max-w-md grid-cols-3 gap-2"
+                role="radiogroup"
+              >
+                {Array.from({ length: LOGO_VARIANTS }, (_, place) => {
+                  const variant = round.variants[place]
+                  return (
+                    <RadioTile
+                      checked={variant !== undefined && kept === variant.id}
+                      className={cn(TRAY_TILE, "p-1.5")}
+                      disabled={
+                        !variant || round.status !== "ready" || busy !== null
+                      }
+                      // biome-ignore lint/suspicious/noArrayIndexKey: a slot stays put while its design lands
+                      key={place}
+                      name={`${id}-design`}
+                      onPick={() => variant && void keep(variant.id)}
+                    >
+                      <span className="relative">
+                        {variant ? (
+                          <img
+                            alt={`Design ${place + 1}`}
+                            // Lands from a blur, as tw-animate-css draws it.
+                            className="motion-safe:fade-in aspect-square w-full rounded-lg object-contain p-2 duration-slow ease-standard motion-safe:animate-in motion-safe:blur-in-md"
+                            key={variant.id}
+                            src={services.imageUrl(variant.id)}
+                            style={{ backgroundColor: paper }}
+                          />
+                        ) : (
+                          // The image's alt names a landed design; a slot still
+                          // waiting needs a name of its own for its radio.
+                          <Diffusing
+                            className="aspect-square rounded-lg"
+                            colors={colors.length > 0 ? colors : [stops[2]]}
+                            delay={place * 1500}
+                            paper={paper}
+                          >
+                            <span className="sr-only">{`Design ${place + 1}`}</span>
+                          </Diffusing>
+                        )}
+                        {busy === variant?.id ? (
+                          <SpinnerGapIcon
+                            aria-label="Saving"
+                            className="absolute top-1.5 right-1.5 size-4 animate-spin"
+                          />
+                        ) : null}
+                      </span>
+                    </RadioTile>
+                  )
+                })}
+              </div>
+            )}
+
+            {round.status === "drawing" ? (
+              <DrawingLine key={round.round} name={businessName} />
+            ) : null}
+
+            {round.status === "ready" && rounds.length >= LOGO_ROUNDS_MAX ? (
+              <p className="text-muted-foreground text-xs">
+                That is all the rounds for this logo. Pick one, or upload your
+                own.
+              </p>
+            ) : round.status === "ready" && changes === null ? (
+              <Button
+                className={cn("self-start", ACCENT_RING)}
+                onClick={() => setChanges("")}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                Change my logo
+              </Button>
+            ) : round.status === "ready" && changes !== null ? (
+              <div className="flex @md:flex-row flex-col gap-2">
+                <Input
+                  aria-label="What should change?"
+                  autoComplete="off"
+                  autoFocus={start?.changes === undefined}
+                  className={cn("@md:flex-1 shrink-0", TRAY_FIELD)}
+                  maxLength={300}
+                  onChange={(event) => setChanges(event.currentTarget.value)}
+                  onKeyDown={(event) => {
+                    // Enter redesigns here, not the tray's Next.
+                    if (event.key !== "Enter") return
+                    event.preventDefault()
+                    event.stopPropagation()
+                    if (left <= 0 && busy === null && briefReady) redesign()
+                  }}
+                  placeholder={
+                    kept
+                      ? "What should change in the one you picked?"
+                      : "What should change?"
+                  }
+                  value={changes}
+                />
+                <div className="flex gap-2">
+                  <Button
+                    className={cn("tabular-nums", ACCENT_RING)}
+                    disabled={left > 0 || busy !== null || !briefReady}
+                    onClick={redesign}
+                    type="button"
+                  >
+                    {busy === "draw" ? (
+                      <SpinnerGapIcon aria-hidden className="animate-spin" />
+                    ) : null}
+                    {left > 0 ? `Redesign ${waitText(left)}` : "Redesign"}
+                  </Button>
+                  <Button
+                    className={ACCENT_RING}
+                    onClick={() => setChanges(null)}
+                    type="button"
+                    variant="ghost"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </Fold>
+
       <Fold open={!choiceOpen}>
         <Summary label="Logo" onOpen={() => setFocus("choice")}>
           <span className="truncate">
@@ -889,179 +1064,6 @@ function TrayLogo({
             </RadioTile>
           </div>
         </fieldset>
-      </Fold>
-
-      {/* The designs, once a round has started. */}
-      <Fold open={create && round !== undefined}>
-        {round && services ? (
-          <div className="flex flex-col gap-3">
-            {rounds.length > 1 ? (
-              <div className="flex items-center gap-1">
-                <Button
-                  aria-label="Earlier designs"
-                  className={ACCENT_RING}
-                  disabled={shownAt === 0}
-                  onClick={() => setAt(shownAt - 1)}
-                  size="icon-sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  <CaretLeftIcon aria-hidden />
-                </Button>
-                <span className="text-muted-foreground text-xs tabular-nums">
-                  Round {shownAt + 1} of {rounds.length}
-                </span>
-                <Button
-                  aria-label="Later designs"
-                  className={ACCENT_RING}
-                  disabled={shownAt === rounds.length - 1}
-                  onClick={() => setAt(shownAt + 1)}
-                  size="icon-sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  <CaretRightIcon aria-hidden />
-                </Button>
-              </div>
-            ) : null}
-
-            {round.status === "failed" ? (
-              <div className="flex flex-col items-start gap-2 rounded-xl border border-border bg-card p-3">
-                <p className="text-sm">These designs did not come through.</p>
-                <Button
-                  className={ACCENT_RING}
-                  disabled={busy === "draw"}
-                  onClick={() => void draw(asked.current)}
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                >
-                  Try again
-                </Button>
-              </div>
-            ) : (
-              <div
-                aria-busy={round.status === "drawing"}
-                aria-label="Logo designs"
-                className="grid max-w-md grid-cols-3 gap-2"
-                role="radiogroup"
-              >
-                {Array.from({ length: LOGO_VARIANTS }, (_, place) => {
-                  const variant = round.variants[place]
-                  return (
-                    <RadioTile
-                      checked={variant !== undefined && kept === variant.id}
-                      className={cn(TRAY_TILE, "p-1.5")}
-                      disabled={
-                        !variant || round.status !== "ready" || busy !== null
-                      }
-                      // biome-ignore lint/suspicious/noArrayIndexKey: a slot stays put while its design lands
-                      key={place}
-                      name={`${id}-design`}
-                      onPick={() => variant && void keep(variant.id)}
-                    >
-                      <span className="relative">
-                        {variant ? (
-                          <img
-                            alt={`Design ${place + 1}`}
-                            // Lands from a blur, as tw-animate-css draws it.
-                            className="motion-safe:fade-in aspect-square w-full rounded-lg object-contain p-2 duration-slow ease-standard motion-safe:animate-in motion-safe:blur-in-md"
-                            key={variant.id}
-                            src={services.imageUrl(variant.id)}
-                            style={{ backgroundColor: paper }}
-                          />
-                        ) : (
-                          // The image's alt names a landed design; a slot still
-                          // waiting needs a name of its own for its radio.
-                          <Diffusing
-                            className="aspect-square rounded-lg"
-                            colors={colors.length > 0 ? colors : [stops[2]]}
-                            delay={place * 1500}
-                            paper={paper}
-                          >
-                            <span className="sr-only">{`Design ${place + 1}`}</span>
-                          </Diffusing>
-                        )}
-                        {busy === variant?.id ? (
-                          <SpinnerGapIcon
-                            aria-label="Saving"
-                            className="absolute top-1.5 right-1.5 size-4 animate-spin"
-                          />
-                        ) : null}
-                      </span>
-                    </RadioTile>
-                  )
-                })}
-              </div>
-            )}
-
-            {round.status === "drawing" ? (
-              <DrawingLine key={round.round} name={businessName} />
-            ) : null}
-
-            {round.status === "ready" && rounds.length >= LOGO_ROUNDS_MAX ? (
-              <p className="text-muted-foreground text-xs">
-                That is all the rounds for this logo. Pick one, or upload your
-                own.
-              </p>
-            ) : round.status === "ready" && changes === null ? (
-              <Button
-                className={cn("self-start", ACCENT_RING)}
-                onClick={() => setChanges("")}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                Change my logo
-              </Button>
-            ) : round.status === "ready" && changes !== null ? (
-              <div className="flex @md:flex-row flex-col gap-2">
-                <Input
-                  aria-label="What should change?"
-                  autoComplete="off"
-                  autoFocus={start?.changes === undefined}
-                  className={cn("@md:flex-1 shrink-0", TRAY_FIELD)}
-                  maxLength={300}
-                  onChange={(event) => setChanges(event.currentTarget.value)}
-                  onKeyDown={(event) => {
-                    // Enter redesigns here, not the tray's Next.
-                    if (event.key !== "Enter") return
-                    event.preventDefault()
-                    event.stopPropagation()
-                    if (left <= 0 && busy === null && briefReady) redesign()
-                  }}
-                  placeholder={
-                    kept
-                      ? "What should change in the one you picked?"
-                      : "What should change?"
-                  }
-                  value={changes}
-                />
-                <div className="flex gap-2">
-                  <Button
-                    className={cn("tabular-nums", ACCENT_RING)}
-                    disabled={left > 0 || busy !== null || !briefReady}
-                    onClick={redesign}
-                    type="button"
-                  >
-                    {busy === "draw" ? (
-                      <SpinnerGapIcon aria-hidden className="animate-spin" />
-                    ) : null}
-                    {left > 0 ? `Redesign ${waitText(left)}` : "Redesign"}
-                  </Button>
-                  <Button
-                    className={ACCENT_RING}
-                    onClick={() => setChanges(null)}
-                    type="button"
-                    variant="ghost"
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
       </Fold>
 
       {error ? (

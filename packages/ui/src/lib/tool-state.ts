@@ -330,6 +330,12 @@ export function phoneText(e164: string): string {
     : `${national.slice(0, 5)} ${national.slice(5)}`
 }
 
+/** A preset's label by id; an id no longer offered reads as itself. */
+export const presetLabel = (
+  presets: readonly { id: string; label: string }[],
+  id: string
+) => presets.find((each) => each.id === id)?.label ?? id
+
 /**
  * Details as the owner gave them, in the tray's order and the words it
  * showed: "07700 900123 · hello@example.com" or "Ava · she/her · Friendly".
@@ -340,14 +346,10 @@ export function detailsText(facts: readonly FactValue[]): string {
     .filter((fact) => fact.key !== "assistant.avatar")
     .map((fact) => {
       if (fact.key === "business.phone") return phoneText(fact.value.e164)
-      if (fact.key === "assistant.pronouns" || fact.key === "assistant.tone") {
-        const presets: readonly { id: string; label: string }[] =
-          fact.key === "assistant.pronouns" ? PRONOUNS : TONES
-        return (
-          presets.find((each) => each.id === fact.value.id)?.label ??
-          fact.value.id
-        )
-      }
+      if (fact.key === "assistant.pronouns")
+        return presetLabel(PRONOUNS, fact.value.id)
+      if (fact.key === "assistant.tone")
+        return presetLabel(TONES, fact.value.id)
       return factText(fact.key, fact.value)
     })
     .join(" · ")
@@ -414,16 +416,21 @@ export function layoutLook(option: DesignOption) {
 /** A skipped question, as the owner's reply shows it, muted. */
 export const SKIPPED = "Skipped"
 
+/** The tray button that leaves the rest to the assistant, and the owner's reply when pressed. */
+export const PICK_FOR_ME = "Pick for me"
+
 /**
  * A finished design tray as the owner's words: what they picked on each
  * question, in the tray's order and the words it showed, "Ocean · Outfit and
  * Figtree · Text left, photo right", their own words as typed. A question
  * skipped or never opened is left out; with nothing picked it reads Skipped.
+ * Pick for me reads as itself: the owner asked the assistant to choose.
  */
 export function designText(
   input: AskDesignInput | null,
   output: AskDesignOutput
 ): string {
+  if (output.skip_all) return PICK_FOR_ME
   const picked = (input?.questions ?? []).flatMap((each) => {
     const answer = output.answers[each.id]
     if (!answer || "skipped" in answer) return []
