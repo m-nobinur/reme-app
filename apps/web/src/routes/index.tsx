@@ -16,6 +16,7 @@ import {
   Workforce,
 } from "@workspace/ui/components/landing"
 import { Logo } from "@workspace/ui/components/logo"
+import { signedIn } from "@/lib/auth/signed-in"
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -28,6 +29,8 @@ export const Route = createFileRoute("/")({
       },
     ],
   }),
+  // Decided on the server so a signed-in owner never sees the signed-out header.
+  loader: signedIn,
   component: Landing,
 })
 
@@ -60,32 +63,46 @@ const howItWorks = (
   </a>
 )
 
+/** The way in: the app for a signed-in owner, sign-up for anyone else. */
+function Start({
+  isSignedIn,
+  ...style
+}: { isSignedIn: boolean } & Parameters<typeof buttonVariants>[0]) {
+  return (
+    <Link
+      className={buttonVariants(style)}
+      to={isSignedIn ? "/app" : "/sign-up"}
+    >
+      {isSignedIn ? "Open your assistant" : "Get started"}
+      {arrow}
+    </Link>
+  )
+}
+
 /** The only page that is public by design. Everything else lives under /app. */
 function Landing() {
+  const isSignedIn = Route.useLoaderData()
   return (
     <div className="min-h-svh bg-background font-brand text-foreground">
       <SiteHeader
         actions={
           <>
-            <Link
-              className={buttonVariants({
-                variant: "ghost",
-                className: "hidden px-3 text-xs sm:inline-flex",
-              })}
-              to="/sign-in"
-            >
-              Sign in
-            </Link>
-            <Link
-              className={buttonVariants({
-                variant: "outline",
-                className: "px-4 text-xs",
-              })}
-              to="/sign-up"
-            >
-              Get started
-              {arrow}
-            </Link>
+            {isSignedIn ? null : (
+              <Link
+                className={buttonVariants({
+                  variant: "ghost",
+                  className: "hidden px-3 text-xs sm:inline-flex",
+                })}
+                to="/sign-in"
+              >
+                Sign in
+              </Link>
+            )}
+            <Start
+              className="px-4 text-xs"
+              isSignedIn={isSignedIn}
+              variant="outline"
+            />
           </>
         }
         brand={brand}
@@ -95,10 +112,7 @@ function Landing() {
         <Hero
           actions={
             <>
-              <Link className={buttonVariants({ size: "lg" })} to="/sign-up">
-                Get started
-                {arrow}
-              </Link>
+              <Start isSignedIn={isSignedIn} size="lg" />
               {howItWorks}
             </>
           }
@@ -114,26 +128,19 @@ function Landing() {
         <ClosingCta
           actions={
             <>
-              <Link
-                className={buttonVariants({
-                  size: "lg",
-                  className: "h-12 px-8",
-                })}
-                to="/sign-up"
-              >
-                Get started
-                {arrow}
-              </Link>
-              <Link
-                className={buttonVariants({
-                  size: "lg",
-                  variant: "outline",
-                  className: "h-12 px-8",
-                })}
-                to="/sign-in"
-              >
-                Sign in
-              </Link>
+              <Start className="h-12 px-8" isSignedIn={isSignedIn} size="lg" />
+              {isSignedIn ? null : (
+                <Link
+                  className={buttonVariants({
+                    size: "lg",
+                    variant: "outline",
+                    className: "h-12 px-8",
+                  })}
+                  to="/sign-in"
+                >
+                  Sign in
+                </Link>
+              )}
             </>
           }
         />
@@ -151,7 +158,9 @@ function Landing() {
           },
           {
             title: "Account",
-            links: (
+            links: isSignedIn ? (
+              <Link to="/app">Open your assistant</Link>
+            ) : (
               <>
                 <Link to="/sign-up">Get started</Link>
                 <Link to="/sign-in">Sign in</Link>
