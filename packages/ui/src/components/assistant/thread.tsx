@@ -1298,7 +1298,10 @@ const AssistantMessage: FC = () => {
       <div className="min-w-0">
         <div
           data-slot="aui_assistant-message-content"
-          className="wrap-break-word pe-2 text-chat text-chat-foreground"
+          // What follows words still typing in waits for them (the markdown
+          // reads running until its reveal catches up), so a card under them
+          // shows where it settles instead of sliding down as they grow.
+          className="wrap-break-word pe-2 text-chat text-chat-foreground [&>.aui-md[data-status=running]~*]:invisible"
           // A played-in message is read out once, whole, when it is done.
           aria-live={reveal.phase === "still" ? undefined : "polite"}
         >

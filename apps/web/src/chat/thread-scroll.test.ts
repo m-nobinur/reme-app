@@ -4,6 +4,8 @@ import {
   type ThreadMessageLike,
   useExternalStoreRuntime,
 } from "@assistant-ui/react"
+import { AVATARS, PRONOUNS, TONES } from "@workspace/contracts"
+import { PersonaCardUI } from "@workspace/ui/components/assistant/persona-card"
 import { Thread } from "@workspace/ui/components/assistant/thread"
 import { act, createElement, useSyncExternalStore } from "react"
 import { createRoot, type Root } from "react-dom/client"
@@ -332,6 +334,7 @@ function Chat() {
   return createElement(
     AssistantRuntimeProvider,
     { runtime },
+    createElement(PersonaCardUI),
     createElement(Thread, { autoFocus: false })
   )
 }
@@ -519,4 +522,60 @@ it("a tray docking under a reply that fills the view keeps the reader at its end
   expect(
     viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop
   ).toBeLessThanOrEqual(1)
+})
+
+it("the persona card waits for the words above it to finish typing in", async () => {
+  const intro =
+    "Here's how I'll introduce myself from now on: I'm Reme, she/her, and I'll keep things friendly and clear."
+  const reply = (content: ThreadMessageLike["content"]): ThreadMessageLike => ({
+    id: "u1-reply",
+    role: "assistant",
+    content,
+    status: { type: "running" },
+  })
+  await setState({
+    messages: [
+      ...state.messages,
+      said("u1", "user", "Pick for me"),
+      reply([{ type: "text", text: intro.slice(0, 20) }]),
+    ],
+    isRunning: true,
+  })
+  await frames(2)
+  // The rest of the words and the card land together, the words still typing in.
+  await setState({
+    messages: [
+      ...state.messages.slice(0, -1),
+      reply([
+        { type: "text", text: intro },
+        {
+          type: "data",
+          name: "persona",
+          data: {
+            name: "Reme",
+            pronouns: PRONOUNS[0].id,
+            avatar: AVATARS[0].id,
+            tone: TONES[0].id,
+          },
+        },
+      ]),
+    ],
+  })
+  await frame()
+  const waiting = () =>
+    chat.querySelector(
+      '[data-slot="aui_assistant-message-content"] > .aui-md[data-status="running"] ~ [data-slot="persona-card"]'
+    )
+  // happy-dom applies no Tailwind, so the rule is read off the class.
+  expect(
+    chat.querySelector('[data-slot="persona-card"]')?.parentElement?.className
+  ).toContain("[&>.aui-md[data-status=running]~*]:invisible")
+  expect(waiting()).not.toBeNull()
+  // About 5 ms a character, so 40 frames are plenty.
+  for (let i = 0; i < 40 && waiting(); i++) await frame()
+  expect(waiting()).toBeNull()
+  expect(
+    chat.querySelector('[data-slot="persona-card"]')?.previousElementSibling
+      ?.textContent
+  ).toContain("friendly and clear.")
 })
