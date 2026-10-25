@@ -238,11 +238,13 @@ function TrayLogo({
   )
   const { draft: brief, keep: setBrief } = useTabDraft<Brief>(
     `logo-brief:${toolCallId}`,
+    // Opened filled, the site's own colours first, so Design my logo is
+    // one press; every part still changes.
     {
       description: "",
-      colours: null,
-      type: null,
-      style: null,
+      colours: { palette: 0 },
+      type: "lockup",
+      style: "minimal",
       ...start?.brief,
     }
   )

@@ -1437,7 +1437,13 @@ describe("the design tray", () => {
       ],
     })
     expect(input.questions[1]?.card.preselected).toEqual([palette])
-    expect(input.questions[2]?.card.preselected).toEqual([])
+    // One not answered yet opens on its first option, kept with Looks good.
+    expect(input.questions[2]?.card.preselected).toEqual(
+      ids(input, "lettering").slice(0, 1)
+    )
+    // With no logo or photos held, both open on making them.
+    expect(input.questions[0]?.card.preselected).toEqual(["create"])
+    expect(input.questions[4]?.card.preselected).toEqual(["create"])
   })
 
   it("opens on the owner's own words where the org wrote its own", () => {
@@ -1461,9 +1467,11 @@ describe("the design tray", () => {
       undefined,
       undefined,
     ])
-    // Pages, a card of many, opens on the usual ones.
-    for (const q of input.questions.filter((each) => each.id !== "pages"))
-      expect(q.card.preselected).toEqual([])
+    // Own words tick nothing; pages, a card of many, opens on the usual ones.
+    for (const id of ["palette", "lettering", "arrangement"])
+      expect(
+        input.questions.find((q) => q.id === id)?.card.preselected
+      ).toEqual([])
     // A hex code is held as the brand colour and comes back as the words;
     // pages' own words ride beside the ids they came with.
     const code = PALETTES[0]?.brand as string
@@ -1887,5 +1895,26 @@ describe("the assistant card's name ideas", () => {
       assistant_names: ["Poppy", "Theo"],
     }
     expect(ideas(start({ prepared }))).toEqual(["Poppy", "Theo"])
+  })
+
+  it("opens filled with the assistant as it comes, the org's own picks first", () => {
+    const prefill = (o: Onboarding) =>
+      AskDetailsInput.parse(detailsCard("assistant", o, counter()).input)
+        .prefill
+    expect(prefill(start())).toEqual([
+      { key: "assistant.name", value: { name: "Reme" } },
+      { key: "assistant.pronouns", value: { id: "they_them" } },
+      { key: "assistant.avatar", value: { id: "reme" } },
+      { key: "assistant.tone", value: { id: "friendly" } },
+    ])
+    const named = start({
+      facts: [{ key: "assistant.name", value: { name: "Maya" } }],
+    })
+    expect(prefill(named).map((fact) => fact.value)).toEqual([
+      { name: "Maya" },
+      { id: "they_them" },
+      { id: "reme" },
+      { id: "friendly" },
+    ])
   })
 })

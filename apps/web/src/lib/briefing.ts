@@ -1,6 +1,6 @@
 import { factLabel } from "@workspace/ui/lib/facts"
 import { localMidnight } from "@workspace/ui/lib/zone"
-import type { AttentionItem, OrgSummary, Workspace } from "./api/types"
+import type { OrgSummary, Workspace } from "./api/types"
 import { factsNeeded, questionOf } from "./reminders"
 
 /**
@@ -103,9 +103,9 @@ export function briefingOf(
   } else if (approval && live) {
     next = "Your latest changes are ready to publish."
   } else if (waiting) {
-    next = `${waiting.raisedBy} is still waiting for your answer about ${waiting.title.toLowerCase()}.`
+    next = `${assistant} is still waiting for your answer about ${waiting.title.toLowerCase()}.`
   } else if (questions.length === 1) {
-    next = `${questions[0]?.raisedBy} has a question for you.`
+    next = `${assistant} has a question for you.`
   } else if (questions.length > 1) {
     next = `You have ${questions.length} questions to answer.`
   } else if (unpublished && !approval) {
@@ -168,7 +168,3 @@ export function briefingOf(
     suggestions: suggestions.slice(0, 4).map((prompt) => ({ prompt })),
   }
 }
-
-/** Who raised an item: the directory's name when the reader has one. */
-export const askerOf = (item: AttentionItem, names: Record<string, string>) =>
-  (item.raisedById && names[item.raisedById]) || item.raisedBy

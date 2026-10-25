@@ -14,6 +14,10 @@ import {
 import { Approval } from "@workspace/ui/components/assistant/approval"
 import { SaveDesignAnswerProvider } from "@workspace/ui/components/assistant/ask-design"
 import { UploadPhotosProvider } from "@workspace/ui/components/assistant/ask-upload"
+import {
+  AnswerBuildQuestionProvider,
+  BuildQuestionsUI,
+} from "@workspace/ui/components/assistant/build-questions"
 import { DomainPurchaseProvider } from "@workspace/ui/components/assistant/buy-domain"
 import { ChangeAskedUI } from "@workspace/ui/components/assistant/change-asked"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
@@ -38,6 +42,7 @@ import {
 import { assistantOf, briefingOf } from "@/lib/briefing"
 import { OPENING_REVEAL } from "@/lib/reveal"
 import { useLiveWorkspace } from "@/lib/workspace"
+import { answerBuildQuestion } from "./build-questions"
 import { BuildStopped } from "./build-stopped"
 import { conversationList, unstored } from "./conversations"
 import { saveDesignAnswer } from "./design"
@@ -195,6 +200,7 @@ export function ChatPage() {
     <AssistantRuntimeProvider runtime={runtime}>
       <ServerButtonUI />
       <ChangeAskedUI />
+      <BuildQuestionsUI />
       <MemoryChipUI />
       {/* The shell's main scrolls; the thread owns its own scroll instead. */}
       <div className="h-full">
@@ -221,26 +227,28 @@ export function ChatPage() {
               <TrayServicesProvider value={trayServices}>
                 <SaveDesignAnswerProvider value={saveDesignAnswer}>
                   <DomainPurchaseProvider value={domainPurchase}>
-                    <Thread
-                      after={
-                        <>
-                          <StillWorking />
-                          <ChatSiteReadyCard />
-                          <BuildStopped />
-                        </>
-                      }
-                      assistant={live.workspace?.assistantName}
-                      briefing={briefing.line}
-                      components={{ ToolFallback: Approval }}
-                      mode={mode}
-                      placeholder={`Ask ${assistant} anything…`}
-                      placeholderIdeas={ideas}
-                      questionPlaceholder={`Tell ${assistant} what to do instead…`}
-                      quickActions={OWNER_QUICK_ACTIONS}
-                      reveal={onboarding ? OPENING_REVEAL : undefined}
-                      stored={id}
-                      updates={<ChatUpdates />}
-                    />
+                    <AnswerBuildQuestionProvider value={answerBuildQuestion}>
+                      <Thread
+                        after={
+                          <>
+                            <StillWorking />
+                            <ChatSiteReadyCard />
+                            <BuildStopped />
+                          </>
+                        }
+                        assistant={live.workspace?.assistantName}
+                        briefing={briefing.line}
+                        components={{ ToolFallback: Approval }}
+                        mode={mode}
+                        placeholder={`Ask ${assistant} anything…`}
+                        placeholderIdeas={ideas}
+                        questionPlaceholder={`Tell ${assistant} what to do instead…`}
+                        quickActions={OWNER_QUICK_ACTIONS}
+                        reveal={onboarding ? OPENING_REVEAL : undefined}
+                        stored={id}
+                        updates={<ChatUpdates />}
+                      />
+                    </AnswerBuildQuestionProvider>
                   </DomainPurchaseProvider>
                 </SaveDesignAnswerProvider>
               </TrayServicesProvider>

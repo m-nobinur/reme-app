@@ -75,14 +75,24 @@ it("offers a live site's owner a look, a change and a reminder", () => {
   ])
 })
 
-it("names who asked when one question waits on a live site", () => {
+it("says the assistant asks, never who on the staff did", () => {
   const briefing = briefingOf(
     ORG,
     workspace({ live: 3, attention: [question("The Developer")] })
   )
   expect(briefing.line).toBe(
-    "Your website is live. The Developer has a question for you."
+    "Your website is live. Your assistant has a question for you."
   )
+  expect(
+    briefingOf(
+      ORG,
+      workspace({
+        live: 3,
+        assistantName: "Ellie",
+        attention: [question("The Developer")],
+      })
+    ).line
+  ).toBe("Your website is live. Ellie has a question for you.")
   expect(prompts(briefing)).toEqual([
     "What do you need from me?",
     "What's on my website now?",
@@ -234,7 +244,7 @@ it("nudges about a question that has waited, naming it, in place of the count", 
     NOW
   )
   expect(briefing.line).toBe(
-    "Your website is live. The Developer is still waiting for your answer about weekday hours."
+    "Your website is live. Your assistant is still waiting for your answer about weekday hours."
   )
 })
 
@@ -279,7 +289,7 @@ it("puts an unpublished version after reviews and questions", () => {
     "Your website is live. Your latest changes are ready to publish."
   )
   expect(lineOf({ attention: [question("The Developer")] })).toBe(
-    "Your website is live. The Developer has a question for you."
+    "Your website is live. Your assistant has a question for you."
   )
   expect(
     lineOf({

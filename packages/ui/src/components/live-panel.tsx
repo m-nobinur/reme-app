@@ -34,7 +34,6 @@ import { useCycle } from "@workspace/ui/hooks/use-cycle"
 import { SKIPPED, type StatusKind } from "@workspace/ui/lib/activity-copy"
 import {
   type AnswerSpec,
-  answerValue,
   FACT_INPUTS,
   type FactInput,
 } from "@workspace/ui/lib/answer"
@@ -48,7 +47,6 @@ import { formatDateTime, relativeTime } from "@workspace/ui/lib/format"
 import { cn, META } from "@workspace/ui/lib/utils"
 import {
   Children,
-  type FormEvent,
   isValidElement,
   type ReactNode,
   useEffect,
@@ -108,12 +106,6 @@ function PanelSection({
       {children}
     </section>
   )
-}
-
-/** A link that opens outside the app, and says so to a screen reader. */
-const expiryLine = (expiresAt: string | null, onExpiry: string) => {
-  const expires = formatDateTime(expiresAt)
-  return expires ? `Open until ${expires}. ${onExpiry}` : onExpiry
 }
 
 /* Segments ----------------------------------------------------------- */
@@ -954,78 +946,22 @@ function AnswerInputs({
 }
 
 /**
- * A question from the team, answered in place with native inputs: `time`,
- * `tel` and `email` where the fact is one, a closed choice where the team
- * offered options, and text held to the question's own limits otherwise.
- * The value is checked the way the orchestrator checks it before it is sent.
+ * A question waiting on the owner. It is answered in the chat, never here:
+ * the row says it waits and `action` takes the owner to the card.
  */
-function QuestionItem({
-  title,
-  why,
-  askedBy,
-  expiresAt,
-  onExpiry,
-  spec,
-  onAnswer,
-  pending: busy = false,
-  error = null,
-}: {
-  title: string
-  /** The team's reason, shown as the text it is and never as markup. */
-  why: string
-  askedBy: string
-  expiresAt: string | null
-  onExpiry: string
-  spec: AnswerSpec
-  onAnswer: (value: unknown) => void
-  pending?: boolean
-  error?: string | null
-}) {
+function QuestionItem({ title, action }: { title: string; action: ReactNode }) {
   const id = useId()
-  const [invalid, setInvalid] = useState<string | null>(null)
-  const shown = invalid ?? error
-
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const form = new FormData(event.currentTarget)
-    const parsed = answerValue(spec, (name) => String(form.get(name) ?? ""))
-    if ("error" in parsed) {
-      setInvalid(parsed.error)
-      return
-    }
-    setInvalid(null)
-    onAnswer(parsed.value)
-  }
-
   return (
     <article
       aria-labelledby={`${id}-title`}
-      className="flex flex-col gap-2 py-3"
+      className="flex flex-col items-start gap-1 py-3"
       data-slot="question-item"
     >
       <h3 className="font-medium text-sm" id={`${id}-title`}>
         {title}
       </h3>
-      <p className={META}>
-        {askedBy} asked: {why}
-      </p>
-      <form className="flex flex-col gap-2" noValidate onSubmit={submit}>
-        <AnswerInputs
-          id={id}
-          invalid={shown !== null}
-          spec={spec}
-          title={title}
-        />
-        {shown ? (
-          <p className="text-[0.8125rem] text-destructive" role="alert">
-            {shown}
-          </p>
-        ) : null}
-        <Button className="self-start" disabled={busy} size="sm" type="submit">
-          {pending(busy, "Send answer", "Sending")}
-        </Button>
-      </form>
-      <p className={META}>{expiryLine(expiresAt, onExpiry)}</p>
+      <p className={META}>Waiting on your answer</p>
+      {action}
     </article>
   )
 }

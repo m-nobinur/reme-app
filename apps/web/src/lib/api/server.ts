@@ -11,6 +11,7 @@ import {
   type MemoryView,
   MessageFeedback,
   PushSubscribeRequest,
+  QuestionReply,
   RegistrantDetails,
   Reminder,
   SetTimeZoneRequest,
@@ -30,7 +31,6 @@ import type {
   AttentionItem,
   BusinessProfile,
   DecisionOutcome,
-  Json,
   OrgNode,
   OrgSummary,
   PipelineItem,
@@ -202,23 +202,17 @@ const ANSWER_BYTES = 2048
 export const answerQuestion = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const data = record(input)
-    if (JSON.stringify(data.value ?? null).length > ANSWER_BYTES) {
+    if (JSON.stringify(data.reply ?? null).length > ANSWER_BYTES) {
       throw new Error("That answer is too long.")
     }
     return {
-      assignmentId: id(data.assignmentId),
-      requestId: id(data.requestId),
-      value: data.value as Json,
+      conversationId: id(data.conversationId),
+      reply: QuestionReply.parse(data.reply),
       key: keyOf(data.key),
     }
   })
   .handler(async ({ data }): Promise<WriteOutcome> => {
-    return await source.answer(
-      data.assignmentId,
-      data.requestId,
-      data.value,
-      data.key
-    )
+    return await source.answer(data.conversationId, data.reply, data.key)
   })
 
 export const cancelBuild = createServerFn({ method: "POST" })

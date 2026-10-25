@@ -72,7 +72,7 @@ test("the list shows one row of each kind the contract has, in its order", async
   ).toEqual(["question", "approval", "report", "alert", "reminder"])
   // A question and an approval link to where they are acted on.
   await expect(
-    page.getByRole("link", { name: "Answer in the panel" })
+    page.getByRole("link", { name: "Show the question" })
   ).toBeVisible()
   await expect(
     page.getByRole("link", { name: "Review and publish" })

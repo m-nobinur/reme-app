@@ -145,11 +145,11 @@ const neededOf = (
       return {
         key: `question-${reminder.request_id}`,
         title: question
-          ? `${question.raisedBy} asked about ${question.title.toLowerCase()}`
+          ? `${leading(assistant)} asked about ${question.title.toLowerCase()}`
           : "A question is waiting for your answer",
         detail: "Waiting for over 12 hours.",
         action: {
-          label: "Answer in the panel",
+          label: "Show the question",
           focus: anchorOf.question(reminder.request_id),
         },
       }

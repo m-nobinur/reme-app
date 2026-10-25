@@ -1,5 +1,5 @@
 import { CheckCircleIcon } from "@phosphor-icons/react"
-import { createFileRoute, getRouteApi } from "@tanstack/react-router"
+import { createFileRoute } from "@tanstack/react-router"
 import { PageHeader } from "@workspace/ui/components/app-shell"
 import { Button } from "@workspace/ui/components/button"
 import { EmptyState } from "@workspace/ui/components/empty-state"
@@ -14,8 +14,6 @@ export const Route = createFileRoute("/app/approvals")({
   component: Approvals,
 })
 
-const frame = getRouteApi("/app")
-
 /**
  * The approvals in the frame's live workspace, each decided exactly as the
  * panel decides it, so both surfaces read and write the same way.
@@ -23,7 +21,6 @@ const frame = getRouteApi("/app")
 function Approvals() {
   const { q } = Route.useSearch()
   const navigate = Route.useNavigate()
-  const { names } = frame.useLoaderData()
   const { workspace, refresh } = useLiveWorkspace()
   const [status, setStatus] = useState<string | null>(null)
 
@@ -49,18 +46,16 @@ function Approvals() {
   const needle = (q ?? "").toLowerCase()
   const matches = needle
     ? approvals.filter((item) =>
-        [
-          item.title,
-          (item.raisedById && names[item.raisedById]) || item.raisedBy,
-          item.request.action_kind,
-        ].some((field) => field.toLowerCase().includes(needle))
+        [item.title, item.request.action_kind].some((field) =>
+          field.toLowerCase().includes(needle)
+        )
       )
     : approvals
 
   return (
     <>
       <PageHeader
-        description="Decisions Reme cannot take on its own. Each one shows what it changes and when it expires."
+        description="Decisions that need your yes. Each one shows what it changes and when it expires."
         title="Approvals"
       />
 
@@ -70,7 +65,7 @@ function Approvals() {
 
       {approvals.length === 0 ? (
         <EmptyState
-          description="Approval requests appear here as Reme raises them."
+          description="Anything that needs your yes shows here."
           icon={<CheckCircleIcon />}
           title="Nothing waiting on you"
         />

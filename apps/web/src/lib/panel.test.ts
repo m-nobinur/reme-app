@@ -90,7 +90,6 @@ const input = (over: Partial<PanelInput> = {}): PanelInput => ({
   orgId: ORG,
   business: "Fixture Clean",
   conversations: [],
-  names: {},
   now: NOW,
   zone: ZONE,
   ...over,
@@ -729,7 +728,7 @@ describe("on the Approvals page", () => {
       })
     )
     expect(panel?.waiting.map((item) => item.kind)).toEqual(["question"])
-    expect(panel?.line.lead).toBe("Alex")
+    expect(panel?.line.lead).toBe("Your assistant")
     expect(
       panelFor(
         input({
@@ -742,8 +741,8 @@ describe("on the Approvals page", () => {
 })
 
 describe("the one line", () => {
-  const line = (over: Partial<Workspace>, names = {}) =>
-    panelFor(input({ workspace: workspace(over), names }))?.line
+  const line = (over: Partial<Workspace>) =>
+    panelFor(input({ workspace: workspace(over) }))?.line
 
   it("says what is most pressing", () => {
     expect(
@@ -778,15 +777,14 @@ describe("the one line", () => {
     })
   })
 
-  it("names who asked, from the directory", () => {
+  it("says the assistant asks, never the staff member who did", () => {
     expect(
-      line(
-        { live: 2, attention: [question("A colleague", "staff-1")] },
-        {
-          "staff-1": "Alex",
-        }
-      )
-    ).toEqual({ tone: "live", lead: "Alex", detail: "has a question for you" })
+      line({
+        live: 2,
+        assistantName: "Ellie",
+        attention: [question("Alex", "staff-1")],
+      })
+    ).toEqual({ tone: "live", lead: "Ellie", detail: "has a question for you" })
   })
 })
 

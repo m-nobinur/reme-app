@@ -1,9 +1,7 @@
 import {
-  ANSWER_TEXT_MAX,
   type AskableFactKey,
   FactValue,
-  FactValueKey,
-  TextAnswerSchema,
+  type FactValueKey,
 } from "@workspace/contracts"
 
 /**
@@ -221,25 +219,6 @@ export const askable = (key: FactValueKey): key is AskableFactKey =>
 export const saidInChat = (key: AskableFactKey) => {
   const fields: readonly FactInput[] = FACT_INPUTS[key].fields
   return fields.length === 1 && fields[0]?.type === "text"
-}
-
-/** The spec for one `InformationRequest`, from its own fields. */
-export function answerSpecOf(request: {
-  field: string
-  answer_schema: unknown
-  options: string[] | null
-}): AnswerSpec {
-  const key = FactValueKey.safeParse(request.field)
-  if (key.success && askable(key.data)) return { kind: "fact", key: key.data }
-  if (request.options?.length) {
-    return { kind: "choice", options: request.options }
-  }
-  const schema = TextAnswerSchema.safeParse(request.answer_schema)
-  return {
-    kind: "text",
-    maxLength: schema.data?.maxLength ?? ANSWER_TEXT_MAX,
-    email: schema.data?.format === "email",
-  }
 }
 
 type Parsed = { value: unknown } | { error: string }
