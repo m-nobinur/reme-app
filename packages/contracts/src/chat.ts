@@ -35,7 +35,7 @@ const ApprovalId = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/)
  * The most an onboarding turn waits on its planner, every attempt included,
  * before the script answers it instead (`apps/api`'s `PLANNER.totalMs`).
  */
-export const PLANNER_TURN_MS = 30_000
+export const PLANNER_TURN_MS = 60_000
 
 /**
  * How long `POST /chat` may take to start answering, for the web's proxy to
