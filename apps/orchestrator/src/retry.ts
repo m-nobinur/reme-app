@@ -106,6 +106,10 @@ export function resumedText(kind: string): string {
   return `${subject(kind)} got stuck, so I restarted it from where it left off. Nothing for you to do: I'll say here when the draft is ready.`
 }
 
+/** A change to an unpublished draft failed, and the draft it started from is back. */
+export const DRAFT_BACK =
+  "I couldn't make your change, so your earlier draft is still ready to publish. Nothing for you to do."
+
 export function stoppedText(kind: string, reason: string): string {
   return `${subject(kind)} couldn't finish: ${CAUSE_WORDS[buildFailure(reason).cause]}. Say try again, or tell me what to change.`
 }
@@ -537,12 +541,22 @@ export async function afterFailure(
       )
       .limit(1)
     const failed = (report?.gates ?? []).filter((g) => !g.passed)
+    // The draft this change started from, given back with its review (state.ts).
+    const [draft] = row?.revisionOfAssignmentId
+      ? await db
+          .select({ id: assignments.id })
+          .from(assignments)
+          .where(
+            sql`${assignments.id} = ${row.revisionOfAssignmentId} and ${assignments.state} in ('awaiting_review', 'blocked_on_approval')`
+          )
+      : []
     return {
       row,
       choices,
       reason,
       failed: [...new Set(failed.map((g) => g.gate))],
       busy: Boolean(open),
+      draftBack: Boolean(draft),
     }
   })
   const { row, choices, reason } = read
@@ -582,6 +596,14 @@ export async function afterFailure(
         key: note.key,
         text: await narrate(env, kit, ids.orgId, row.kind, note, text),
       },
+    }
+  }
+  // The draft that is back is what the owner has: one line, and no retry.
+  if (read.draftBack) {
+    await stop("none")
+    return {
+      retry_id: null,
+      note: { key: `site.draft_back:${ids.assignmentId}`, text: DRAFT_BACK },
     }
   }
   if (verdict === "quiet") return stop("none")

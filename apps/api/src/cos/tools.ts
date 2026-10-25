@@ -77,7 +77,7 @@ import {
 import { readFacts, statusWithFacts } from "../workspace.ts"
 import type { Opening } from "./agent.ts"
 import { readSession } from "./history.ts"
-import { inOwnersWords, readProfile } from "./memory.ts"
+import { contentWords, inOwnersWords, readProfile } from "./memory.ts"
 import { wallToUtc } from "./time.ts"
 import type { Turn } from "./turns.ts"
 
@@ -701,6 +701,41 @@ const answerInvalid = () =>
     detail: {},
   })
 
+const notOwners = () =>
+  failure(400, {
+    class: "validation",
+    code: "answer.not_owners",
+    message:
+      "Answer only with what the owner wrote in this conversation, in their words, or the number or address they typed. Otherwise leave the question on its card for them.",
+    detail: {},
+  })
+
+/**
+ * Whether the answer is the owner's own word in `said`: text as `statedIn`
+ * reads a claim, a phone number or email address as they typed it, and the
+ * other parts of a fact's value all as words or figures of one message. So
+ * an answer the model made up, pieced together, or lifted from a page or a
+ * review never becomes a fact. Text with no words of its own proves nothing.
+ */
+export function ownersAnswer(
+  value: AnswerQuestionInput["value"],
+  said: readonly string[]
+): boolean {
+  const stated = (text: string, message: string) =>
+    contentWords(text).length > 0 && statedIn(text, message)
+  if (typeof value === "string") return said.some((m) => stated(value, m))
+  const all = said.join("\n")
+  if (value.key === "business.phone")
+    return phoneFromOwner(value.value.e164, all)
+  if (value.key === "business.email") {
+    return emailFromOwner(value.value.address, all)
+  }
+  const parts = Object.values(value.value).flat().map(String)
+  return (
+    parts.length > 0 && said.some((m) => parts.every((part) => stated(part, m)))
+  )
+}
+
 const reviewElsewhere = () =>
   failure(400, {
     class: "validation",
@@ -735,7 +770,8 @@ const reviewElsewhere = () =>
 export async function answerQuestion(
   { env, kit, owner }: ToolContext,
   input: AnswerQuestionInput,
-  key: string
+  key: string,
+  turn: Pick<Turn, "sessionId">
 ): Promise<AnswerQuestionOutput> {
   const [asked] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
     db
@@ -760,6 +796,9 @@ export async function answerQuestion(
   // whether the customer agreed to be quoted; an answer card does not.
   if (fact && (REVIEW_FACT_KEYS as readonly string[]).includes(fact.key)) {
     return refused(reviewElsewhere())
+  }
+  if (!ownersAnswer(value, await ownerSaid({ kit, owner }, turn.sessionId))) {
+    return refused(notOwners())
   }
   const answered = relay(
     await bridge(env, owner, `/${asked.assignmentId}/answer`, {

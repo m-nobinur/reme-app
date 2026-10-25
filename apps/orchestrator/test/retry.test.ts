@@ -33,6 +33,7 @@ const {
   resumedText,
   retryingText,
   stoppedText,
+  DRAFT_BACK,
 } = await import("../src/retry.ts")
 const { workKey } = await import("../src/sandbox.ts")
 const { advance } = await import("../src/state.ts")
@@ -308,6 +309,53 @@ live("a failed owner build's retry", () => {
     await advance(kit, ids, "failed", { reason })
     return ids
   }
+
+  it("says once that a failed change gave the earlier draft back, and starts nothing", async () => {
+    const orgId = await freshOrg(kit)
+    const draft = await newAssignment(kit, orgId)
+    for (const to of [
+      "briefing",
+      "planning",
+      "implementing",
+      "validating",
+      "preview_ready",
+      "awaiting_review",
+    ] as const) {
+      await advance(kit, draft, to)
+    }
+    // As `holdDraft` leaves it: paused, which frees the site for the change.
+    await advance(kit, draft, "paused", { reason: "change.held" })
+    const change = await kit.withOrg({ orgId }, async (db) => {
+      // A build, since a revise would need the draft's revision row: only
+      // the link to the draft decides this branch.
+      const made = await insertAssignment(db, orgId, "k-draft", true, {
+        kind: "site.build",
+        goal: "Make the headline shorter.",
+        model: "A",
+        withhold: [],
+        lane: "full",
+        change_kind: "copy",
+      })
+      if (!("row" in made)) throw new Error("not created")
+      await db
+        .update(assignments)
+        .set({ revisionOfAssignmentId: draft.assignmentId })
+        .where(eq(assignments.id, made.row.id))
+      return made.row.id
+    })
+    const ids = await fail(
+      { orgId, assignmentId: change },
+      "gates.repair_budget_exhausted"
+    )
+    created.length = 0
+    const first = await afterFailure(env, kit, ids)
+    expect(first).toEqual({
+      retry_id: null,
+      note: { key: `site.draft_back:${change}`, text: DRAFT_BACK },
+    })
+    expect(await afterFailure(env, kit, ids)).toEqual(first)
+    expect(created).toEqual([])
+  })
 
   it("starts one retry with the plan, however often the step runs, and says so", async () => {
     const orgId = await freshOrg(kit)
