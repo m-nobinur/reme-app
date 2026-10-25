@@ -66,6 +66,10 @@ export const ActivitySegment = z.strictObject({
    * seconds, the same measured p50 the chat quotes.
    */
   usual_seconds: z.int().positive().optional(),
+  /** The same lane's p95, in seconds: past it the build is taking longer than usual. */
+  late_seconds: z.int().positive().optional(),
+  /** A website or change build the pipeline started again mid-build. */
+  restarted: z.literal(true).optional(),
   /** Google only: when Search Console data was last read. */
   synced_at: Timestamp.optional(),
 })

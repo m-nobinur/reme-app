@@ -150,6 +150,15 @@
                   "exclusiveMinimum": 0,
                   "maximum": 9007199254740991
                 },
+                "late_seconds": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "restarted": {
+                  "type": "boolean",
+                  "const": true
+                },
                 "synced_at": {
                   "type": "string",
                   "format": "date-time",
@@ -303,6 +312,15 @@
                   "type": "integer",
                   "exclusiveMinimum": 0,
                   "maximum": 9007199254740991
+                },
+                "late_seconds": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "restarted": {
+                  "type": "boolean",
+                  "const": true
                 },
                 "synced_at": {
                   "type": "string",
@@ -458,6 +476,15 @@
                   "exclusiveMinimum": 0,
                   "maximum": 9007199254740991
                 },
+                "late_seconds": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "restarted": {
+                  "type": "boolean",
+                  "const": true
+                },
                 "synced_at": {
                   "type": "string",
                   "format": "date-time",
@@ -611,6 +638,15 @@
                   "type": "integer",
                   "exclusiveMinimum": 0,
                   "maximum": 9007199254740991
+                },
+                "late_seconds": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "restarted": {
+                  "type": "boolean",
+                  "const": true
                 },
                 "synced_at": {
                   "type": "string",
@@ -766,6 +802,15 @@
                   "exclusiveMinimum": 0,
                   "maximum": 9007199254740991
                 },
+                "late_seconds": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "restarted": {
+                  "type": "boolean",
+                  "const": true
+                },
                 "synced_at": {
                   "type": "string",
                   "format": "date-time",
@@ -919,6 +964,15 @@
                   "type": "integer",
                   "exclusiveMinimum": 0,
                   "maximum": 9007199254740991
+                },
+                "late_seconds": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "restarted": {
+                  "type": "boolean",
+                  "const": true
                 },
                 "synced_at": {
                   "type": "string",
@@ -11202,6 +11256,10 @@
             "type": "boolean",
             "const": true
           },
+          "restarted": {
+            "type": "boolean",
+            "const": true
+          },
           "activity": {
             "maxItems": 8,
             "type": "array",
@@ -11250,6 +11308,10 @@
                       },
                       "done": {
                         "type": "boolean"
+                      },
+                      "working": {
+                        "type": "boolean",
+                        "const": true
                       }
                     },
                     "required": [
@@ -21707,6 +21769,10 @@
                             "type": "boolean",
                             "const": true
                           },
+                          "restarted": {
+                            "type": "boolean",
+                            "const": true
+                          },
                           "activity": {
                             "maxItems": 8,
                             "type": "array",
@@ -21755,6 +21821,10 @@
                                       },
                                       "done": {
                                         "type": "boolean"
+                                      },
+                                      "working": {
+                                        "type": "boolean",
+                                        "const": true
                                       }
                                     },
                                     "required": [
@@ -33586,6 +33656,10 @@
                     "type": "boolean",
                     "const": true
                   },
+                  "restarted": {
+                    "type": "boolean",
+                    "const": true
+                  },
                   "activity": {
                     "maxItems": 8,
                     "type": "array",
@@ -33634,6 +33708,10 @@
                               },
                               "done": {
                                 "type": "boolean"
+                              },
+                              "working": {
+                                "type": "boolean",
+                                "const": true
                               }
                             },
                             "required": [
@@ -39386,6 +39464,10 @@
                   "type": "boolean",
                   "const": true
                 },
+                "restarted": {
+                  "type": "boolean",
+                  "const": true
+                },
                 "activity": {
                   "maxItems": 8,
                   "type": "array",
@@ -39434,6 +39516,10 @@
                             },
                             "done": {
                               "type": "boolean"
+                            },
+                            "working": {
+                              "type": "boolean",
+                              "const": true
                             }
                           },
                           "required": [
@@ -42573,6 +42659,15 @@
                       "exclusiveMinimum": 0,
                       "maximum": 9007199254740991
                     },
+                    "late_seconds": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "restarted": {
+                      "type": "boolean",
+                      "const": true
+                    },
                     "synced_at": {
                       "type": "string",
                       "format": "date-time",
@@ -42726,6 +42821,15 @@
                       "type": "integer",
                       "exclusiveMinimum": 0,
                       "maximum": 9007199254740991
+                    },
+                    "late_seconds": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "restarted": {
+                      "type": "boolean",
+                      "const": true
                     },
                     "synced_at": {
                       "type": "string",
@@ -42881,6 +42985,15 @@
                       "exclusiveMinimum": 0,
                       "maximum": 9007199254740991
                     },
+                    "late_seconds": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "restarted": {
+                      "type": "boolean",
+                      "const": true
+                    },
                     "synced_at": {
                       "type": "string",
                       "format": "date-time",
@@ -43034,6 +43147,15 @@
                       "type": "integer",
                       "exclusiveMinimum": 0,
                       "maximum": 9007199254740991
+                    },
+                    "late_seconds": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "restarted": {
+                      "type": "boolean",
+                      "const": true
                     },
                     "synced_at": {
                       "type": "string",
@@ -43189,6 +43311,15 @@
                       "exclusiveMinimum": 0,
                       "maximum": 9007199254740991
                     },
+                    "late_seconds": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "restarted": {
+                      "type": "boolean",
+                      "const": true
+                    },
                     "synced_at": {
                       "type": "string",
                       "format": "date-time",
@@ -43342,6 +43473,15 @@
                       "type": "integer",
                       "exclusiveMinimum": 0,
                       "maximum": 9007199254740991
+                    },
+                    "late_seconds": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "restarted": {
+                      "type": "boolean",
+                      "const": true
                     },
                     "synced_at": {
                       "type": "string",
