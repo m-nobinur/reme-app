@@ -15,7 +15,6 @@ import {
   TextTIcon,
   XIcon,
 } from "@phosphor-icons/react"
-import { ChangeAnswer } from "@workspace/ui/components/assistant/change-answer"
 import {
   TrayNote,
   useTabDraft,
@@ -161,21 +160,18 @@ const ReviewQuoteForm: ToolCallMessagePartComponent = (props) => {
     if (view.output.answer !== "confirmed") return null
     const asked = view.output.fields.map((field) => field.label).join(", ")
     return (
-      <>
-        <p
-          className="flex items-start gap-2 pt-3 text-muted-foreground text-sm"
-          data-slot="review-quote-form"
-        >
-          <CheckCircleIcon
-            aria-hidden
-            className="mt-0.5 size-4 shrink-0 text-primary"
-          />
-          {asked
-            ? `Saved. Before a quote I'll ask each customer for ${asked}, as well as their name, email and phone.`
-            : "Saved. Before a quote I'll ask each customer for their name, email and phone."}
-        </p>
-        <ChangeAnswer step="quote_form" />
-      </>
+      <p
+        className="flex items-start gap-2 pt-3 text-muted-foreground text-sm"
+        data-slot="review-quote-form"
+      >
+        <CheckCircleIcon
+          aria-hidden
+          className="mt-0.5 size-4 shrink-0 text-primary"
+        />
+        {asked
+          ? `Saved. Before a quote I'll ask each customer for ${asked}, as well as their name, email and phone.`
+          : "Saved. Before a quote I'll ask each customer for their name, email and phone."}
+      </p>
     )
   }
   if (!pending) {

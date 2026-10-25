@@ -5,7 +5,6 @@ import {
   ShuffleIcon,
 } from "@phosphor-icons/react"
 import type { AskChoiceInput } from "@workspace/contracts"
-import { ChangeAnswer } from "@workspace/ui/components/assistant/change-answer"
 import {
   Docked,
   TrayFrame,
@@ -642,7 +641,7 @@ const AskChoice: ToolCallMessagePartComponent = (props) => {
   const [collapsed, setCollapsed] = useState(false)
 
   if (view.state === "answered" || view.state === "skipped") {
-    return <ChangeAnswer step={props.args.step} />
+    return null
   }
   if (view.state !== "pending") {
     return (
