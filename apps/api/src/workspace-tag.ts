@@ -119,6 +119,36 @@ async function onboardingOf(
     asking ?? undefined
   )
   return segment.state === "done"
-    ? { ...segment, at: new Date(open.updated_at).toISOString() }
+    ? { ...segment, at: await finishedAt(db, open) }
     : segment
+}
+
+/**
+ * When onboarding finished: the row after the newest settled onboarding card,
+ * which is the owner's answer or the assistant's next step, else the card's
+ * own row. The conversation's `updated_at` moves with every later message, so
+ * it cannot say; a request-change card is a later journey's, not onboarding's.
+ * Read only once the segment is done, so a poll mid-onboarding does not.
+ */
+export async function finishedAt(
+  db: OrgScopedDb,
+  open: Pick<Open, "id" | "updated_at">
+): Promise<string> {
+  const [row] = await db.execute<{ at: string | Date }>(sql`
+    select coalesce(
+      (select n.created_at from ${conversationMessages} n
+        where n.conversation_id = m.conversation_id and n.seq > m.seq
+        order by n.seq limit 1),
+      m.created_at) as at
+    from ${conversationMessages} m
+    where m.conversation_id = ${open.id} and m.content->>'role' = 'assistant'
+      and exists (
+        select 1 from jsonb_array_elements(m.content->'parts') p
+        where p->>'type' like 'tool-%' and p->>'type' <> 'tool-request_change'
+          and p->>'state' <> 'input-available'
+          and (p->>'type' in ('tool-ask_upload', 'tool-review_quote_form', 'tool-ask_design')
+            or coalesce(p->'input'->>'key', p->'input'->>'step') is not null))
+    order by m.seq desc
+    limit 1`)
+  return new Date(row?.at ?? open.updated_at).toISOString()
 }

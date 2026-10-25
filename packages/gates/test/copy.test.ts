@@ -401,6 +401,34 @@ describe("the copy gate", () => {
       )
     })
 
+    it("fails a home h1 that names no service, and passes one that does", () => {
+      const own = factWords([
+        { key: "business.industry", value: { category: "cleaning" } },
+        {
+          key: "business.offerings",
+          value: { items: ["Regular house cleaning", "End of tenancy"] },
+        },
+      ] as unknown as FactRecord[])
+      const headline = (h1: string, file = "index.html") =>
+        copyFindings(
+          [page(file, "Cleaning in Leeds", `<h1>${h1}</h1>`)],
+          "",
+          own
+        )
+          .filter((f) => f.problem === "headline")
+          .map((f) => f.text)
+      expect(headline("Leeds and around")).toEqual(["Leeds and around"])
+      expect(headline("Weekly house cleaning in Leeds")).toEqual([])
+      expect(headline("Tenancy handovers, done right")).toEqual([])
+      // Only the home page's h1, and only when the facts name the work.
+      expect(headline("Leeds and around", "about/index.html")).toEqual([])
+      expect(
+        copyFindings([
+          page("index.html", "x", "<h1>Leeds and around</h1>"),
+        ]).filter((f) => f.problem === "headline")
+      ).toEqual([])
+    })
+
     it("does not spell-check addresses or JSON-LD urls, nor a real word the trade shares", () => {
       const fact = (key: string, value: unknown) =>
         ({ key, value }) as unknown as FactRecord

@@ -259,7 +259,7 @@ describe("a direction", () => {
     expect(css).not.toMatch(/gallery-grid \{[^}]*auto-fit/)
     // A logo keeps its own shape, at a fixed height.
     expect(css).toMatch(
-      /\n\.site-logo \{[^}]*height: 2\.5rem;[^}]*object-fit: contain;/
+      /\n\.site-logo \{[^}]*height: 4rem;[^}]*object-fit: contain;/
     )
   })
 
