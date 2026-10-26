@@ -111,7 +111,10 @@ try {
   process.exit(1)
 }
 
-if (size.printed != null && Math.abs(size.gzip / 1024 - size.printed) > 0.02) {
+// Binary modules (the api's logo pictures) gzip a little differently in
+// wrangler's order: 0.2 KiB in 1168. A wrong module set is off by far more.
+const slack = Math.max(0.02, (size.printed ?? 0) * 0.001)
+if (size.printed != null && Math.abs(size.gzip / 1024 - size.printed) > slack) {
   console.error(
     `size: measured ${(size.gzip / 1024).toFixed(2)} KiB but wrangler reported ${size.printed.toFixed(2)} KiB. ` +
       "The module set or its concatenation order no longer matches wrangler's, so this number is not what Cloudflare receives."
