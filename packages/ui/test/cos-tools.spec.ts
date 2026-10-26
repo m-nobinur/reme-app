@@ -11,25 +11,19 @@ import { open, WCAG } from "./helpers"
 const WIRE =
   /get_|_question|_reminder|call_|approval_|unknown_outcome|tool_failed|[{}]/
 
-test("reads say what they looked at, and a finished one is its line alone", async ({
+test("reads say what they looked at, and a finished one shows nothing", async ({
   page,
 }) => {
   await open(page, "CosReads")
   const entry = page.locator('[data-entry="CosReads"]')
   await expect(entry.locator('[data-slot="cos-read-workspace"]')).toHaveText([
-    "Checking where things stand",
-    "Checked where things stand",
     "Couldn't check where things stand, try again in a moment",
   ])
   await expect(entry.locator('[data-slot="cos-read-facts"]')).toHaveText([
-    "Found your details",
     "Stopped looking up your details",
   ])
-  // A refused preview reads as checked too; the reply says what came back.
-  await expect(entry.locator('[data-slot="cos-read-preview"]')).toHaveText([
-    "Checked the preview",
-    "Checked the preview",
-  ])
+  // A refused preview is finished too; the reply says what came back.
+  await expect(entry.locator('[data-slot="cos-read-preview"]')).toHaveCount(0)
   // The reply says what a read found, so nothing opens onto the raw result.
   await expect(
     entry.locator('[data-slot^="cos-read-"]').getByRole("button")

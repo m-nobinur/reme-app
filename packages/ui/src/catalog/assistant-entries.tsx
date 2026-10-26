@@ -2671,20 +2671,23 @@ const assistantCatalog = [
       </FixtureThread>
     ),
   },
-  {
-    name: "BuildQuestionsUI",
-    render: () => (
-      <AnswerBuildQuestionProvider value={answerSlowly}>
-        <OwnerThread
-          height="h-[40rem]"
-          messages={BUILD_QUESTIONS}
-          stored="00000000-0000-4000-8000-0000000000a1"
-        >
-          <BuildQuestionsUI />
-        </OwnerThread>
-      </AnswerBuildQuestionProvider>
-    ),
-  },
+  // The question stack and the provider that gives it the app's answer call.
+  ...(["BuildQuestionsUI", "AnswerBuildQuestionProvider"] as const).map(
+    (name) => ({
+      name,
+      render: () => (
+        <AnswerBuildQuestionProvider value={answerSlowly}>
+          <OwnerThread
+            height="h-[40rem]"
+            messages={BUILD_QUESTIONS}
+            stored="00000000-0000-4000-8000-0000000000a1"
+          >
+            <BuildQuestionsUI />
+          </OwnerThread>
+        </AnswerBuildQuestionProvider>
+      ),
+    })
+  ),
   {
     name: "ChangeAskedUI",
     render: () => (
@@ -2704,7 +2707,7 @@ const assistantCatalog = [
   {
     name: "PersonaCardUI",
     render: () => (
-      <FixtureThread height="h-[22rem]" messages={PERSONA}>
+      <FixtureThread height="h-[28rem]" messages={PERSONA}>
         <PersonaCardUI />
       </FixtureThread>
     ),

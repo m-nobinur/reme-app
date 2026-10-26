@@ -17,7 +17,7 @@ test("only the open asks show a tray; answered and skipped ones give way", async
   page,
 }) => {
   await open(page, "AskDetails")
-  await expect(pending(page)).toHaveCount(3)
+  await expect(pending(page)).toHaveCount(4)
   await expect(
     page.getByText("07700 900123 · sam@brightclean.example")
   ).toBeVisible()

@@ -29,7 +29,7 @@ test("arrow keys pick and Enter moves on", async ({ page }) => {
   await page.keyboard.press("ArrowRight")
   await expect(first.getByRole("radio").nth(1)).toBeChecked()
   await page.keyboard.press("Enter")
-  await expect(first.getByText("3 of 6", { exact: true })).toBeVisible()
+  await expect(first.getByText("4 of 7", { exact: true })).toBeVisible()
   await expect(first.getByRole("radiogroup")).toHaveAccessibleName(
     "Which lettering do you prefer?"
   )
@@ -94,7 +94,7 @@ test("the tray is named by its question, and collapsed by its question too", asy
   )
   const collapsed = state(page, "Collapsed")
   await expect(collapsed).toHaveAccessibleName("Which lettering do you prefer?")
-  await expect(collapsed.getByText("3 of 6", { exact: true })).toBeVisible()
+  await expect(collapsed.getByText("4 of 7", { exact: true })).toBeVisible()
 })
 
 test("with every pick made, a page before the last reads Next and offers Pick for me", async ({
@@ -102,7 +102,7 @@ test("with every pick made, a page before the last reads Next and offers Pick fo
 }) => {
   await open(page, "QuestionTray")
   const every = state(page, "Every pick made")
-  await expect(every.getByText("2 of 6", { exact: true })).toBeVisible()
+  await expect(every.getByText("3 of 7", { exact: true })).toBeVisible()
   await expect(
     every.getByRole("button", { name: "Next", exact: true })
   ).toBeEnabled()
