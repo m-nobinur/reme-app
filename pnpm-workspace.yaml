@@ -21,5 +21,12 @@ overrides:
   'brace-expansion@>=2.0.0 <2.1.7': 2.1.7
   # Event-loop denial of service through indexed source maps.
   'source-map-js@>=1.0.0 <1.2.2': 1.2.2
+  # Memory exhaustion validating oversized input, through @cloudflare/sandbox.
+  'zod@>=4.0.0 <4.6.6': 4.6.6
+  # Denial of service through a crafted body, through @google/genai.
+  'body-parser@>=2.0.0 <2.4.0': 2.4.0
+  # Denial of service through excessive content-encodings, through openai and the AI SDK.
+  'undici@>=8.0.0 <8.12.2': 8.12.2
+  'undici@>=7.18.0 <7.30.1': 7.30.1
 patchedDependencies:
   '@workos/authkit-session@0.7.1': patches/@workos__authkit-session@0.7.1.patch
