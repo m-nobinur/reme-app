@@ -275,8 +275,8 @@ describe("a direction", () => {
     )
   })
 
-  test("shows the industry above the heading", () => {
-    expect(home("fresh_modern").texts).toContain(FILLED.industry)
+  test("shows the hero's eyebrow above the heading", () => {
+    expect(home("fresh_modern").texts).toContain(FILLED.heroEyebrow)
   })
 
   test("carries the chosen type and colour in the head", () => {

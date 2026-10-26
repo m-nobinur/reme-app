@@ -86,7 +86,7 @@ describe("a theme from a preset's six roles", () => {
       expect(text, each.id).toBe(each.primary)
       // A dark paper swaps the names the stylesheet reads as surface and text.
       const swap =
-        each.id === "after_dark"
+        each.id === "after_dark" || each.id === "ember"
           ? `;--ink:${each.paper};--paper:${each.ink};color-scheme:dark`
           : ""
       expect(css, each.id).toBe(
