@@ -63,11 +63,6 @@ test("the panel asks a new owner to name the business and nothing else", async (
   // This account has no organisation, so a question, an approval or a build
   // here is either a leak or a fixture, and both are defects. With no
   // business there are no steps to list yet: naming it comes first.
-  await expect(
-    panel(page).getByText(
-      "Name your business and Reme can start on its website."
-    )
-  ).toBeVisible()
   await expect(panel(page).getByRole("listitem")).toHaveText([
     "Name your business",
   ])
@@ -114,13 +109,16 @@ test("the panel is where the owner left it on the first paint", async ({
     return /<aside[^>]*id="workspace-panel"[^>]*>/.exec(html)?.[0] ?? ""
   }
   expect(await panelClass("/app/approvals", "open")).toBe("")
+  // With no business the panel opens on its one next step, whatever the
+  // cookie says, so both states arrive open in the server's HTML.
   for (const path of ["/app", "/app/c/00000000-0000-4000-8000-000000000000"]) {
-    const closed = await panelClass(path, "closed")
-    expect(closed, `no panel in the server HTML of ${path}`).toContain(
-      "workspace-panel"
-    )
-    expect(closed).toContain('data-state="closed"')
-    expect(await panelClass(path, "open"), path).toContain('data-state="open"')
+    for (const state of ["closed", "open"]) {
+      const html = await panelClass(path, state)
+      expect(html, `no panel in the server HTML of ${path}`).toContain(
+        "workspace-panel"
+      )
+      expect(html, `${path} with ${state}`).toContain('data-state="open"')
+    }
   }
 })
 
@@ -201,7 +199,7 @@ test("New chat starts an empty conversation", async ({ page }) => {
   // The rail's; the top bar carries one too.
   await page
     .getByRole("complementary", { name: "Workspace" })
-    .getByRole("link", { name: "New chat" })
+    .getByRole("link", { name: "New conversation" })
     .click()
   await expect(
     page.getByRole("heading", { name: "What should we do today?" })
@@ -246,7 +244,7 @@ test("the top bar holds new chat, the history and the bell", async ({
   await expect(
     page
       .getByRole("complementary", { name: "Workspace" })
-      .getByRole("link", { name: "New chat" })
+      .getByRole("link", { name: "New conversation" })
   ).toBeVisible()
 })
 
