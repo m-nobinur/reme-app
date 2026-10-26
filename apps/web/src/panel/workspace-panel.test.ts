@@ -427,6 +427,19 @@ it("says once that a quick edit moved to a longer build, and says nothing for an
   expect(container.querySelector('[data-slot="panel-segment"]')).not.toBeNull()
   expect(container.querySelector('[data-slot="stop-build"]')).not.toBeNull()
 
+  // A quick edit checking its pages after its preview can still be stopped;
+  // a full build with its preview made has nothing left to stop.
+  const stop = () =>
+    [...container.querySelectorAll('[data-slot="stop-build"] button')].some(
+      (b) => b.textContent === "Stop"
+    )
+  live.workspace = build({ lane: "quick", state: "preview_ready" }) as Workspace
+  await act(async () => root.render(createElement(Frame)))
+  expect(stop()).toBe(true)
+  live.workspace = build({ state: "preview_ready" }) as Workspace
+  await act(async () => root.render(createElement(Frame)))
+  expect(stop()).toBe(false)
+
   live.workspace = build({}) as Workspace
   await act(async () => root.render(createElement(Frame)))
   expect(line()).toHaveLength(0)

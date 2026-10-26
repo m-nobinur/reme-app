@@ -306,6 +306,7 @@ function Stoppable({
     <StopBuild
       error={stop.error}
       fellThrough={build.fell_through}
+      lane={build.lane}
       onStop={() =>
         void stop.run("stop", () =>
           cancelBuild({ data: { assignmentId: build.assignment_id } })

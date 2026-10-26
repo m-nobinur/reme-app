@@ -21,6 +21,7 @@ import type {
   AvatarId,
   Blueprint,
   BuildActivity,
+  BuildLane,
   BuildPhoto,
   DecisionRequest,
 } from "@workspace/contracts"
@@ -145,9 +146,15 @@ function stageWord(state: AssignmentState): string {
   return STEPS[BUILD_STAGES[state]]
 }
 
-/** The states a Stop still means something in. */
-const STOPPABLE = (state: AssignmentState) =>
-  BUILD_STAGES[state] < 3 && state !== "failed" && state !== "cancelled"
+/**
+ * The states a Stop still means something in. A quick edit checks its pages
+ * after its preview exists, and the panel still shows it checking.
+ */
+const STOPPABLE = (state: AssignmentState, lane?: BuildLane) =>
+  (BUILD_STAGES[state] < 3 ||
+    (lane === "quick" && state === "preview_ready")) &&
+  state !== "failed" &&
+  state !== "cancelled"
 
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`
 
@@ -646,6 +653,7 @@ function PanelSegment({
  */
 function StopBuild({
   state,
+  lane,
   fellThrough = false,
   onStop,
   stopping = false,
@@ -653,6 +661,7 @@ function StopBuild({
   defaultConfirming = false,
 }: {
   state: AssignmentState
+  lane?: BuildLane | undefined
   fellThrough?: boolean | undefined
   onStop?: (() => void) | undefined
   stopping?: boolean
@@ -681,7 +690,7 @@ function StopBuild({
           minutes.
         </p>
       ) : null}
-      {onStop && STOPPABLE(state) ? (
+      {onStop && STOPPABLE(state, lane) ? (
         confirming ? (
           <div className="flex flex-wrap gap-2">
             <Button
