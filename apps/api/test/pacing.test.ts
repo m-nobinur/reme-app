@@ -89,7 +89,8 @@ describe("pace", () => {
 
   it("skips the reading beat when words already streamed", async () => {
     const { waits } = await run(0, true)
-    expect(Math.max(...waits.slice(0, -1))).toBeLessThan(100)
+    // Under the 600 ms floor of a reading beat; a long word can take 100 ms.
+    expect(Math.max(...waits.slice(0, -1))).toBeLessThan(600)
     expect(waits.at(-1)).toBeGreaterThanOrEqual(300)
   })
 })
