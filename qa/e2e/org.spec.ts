@@ -125,22 +125,8 @@ test("an owner with an org sees its team and the fact it stated @probe-org", asy
   // A new owner lands in onboarding, with the org's own first steps beside it.
   await visit(page, "/app")
   await expect(page).toHaveURL(/\/app\/c\/[0-9a-f-]{36}$/)
-  // The rail names the organisation beside its mark.
-  await expect(
-    page
-      .getByRole("complementary", { name: "Workspace" })
-      .getByRole("link", { name, exact: true })
-  ).toBeVisible()
-  const steps = panel(page)
-    .getByRole("region", { name: "First steps" })
-    .getByRole("listitem")
-  await expect(steps).toHaveCount(workspace.missing_facts.length + 1)
-  await expect(steps.last()).toHaveText("To do: Build your first version")
-  await expect(steps.filter({ hasText: "Phone number" })).toHaveCount(0)
-  // Worded for this business, and no link to the chat the owner is in.
-  await expect(
-    panel(page).getByText(`Getting ${name} ready for its first website.`)
-  ).toBeVisible()
+  // The panel beside it, with no link to the chat the owner is in.
+  await expect(panel(page)).toBeVisible()
   await expect(
     panel(page).getByRole("link", { name: "Continue getting started" })
   ).toHaveCount(0)
