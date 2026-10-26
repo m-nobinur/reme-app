@@ -71,9 +71,14 @@ beforeAll(async () => {
   }
   browser = await chromium.launch()
   // A context of its own: axe refuses a page made straight off the browser.
-  page = await (await browser.newContext()).newPage()
+  // Reduced motion, as the build's scan sets it: axe reads text mid fade-in
+  // as faint. a11y/motion.test.ts covers the fade itself.
+  page = await (await browser.newContext({ reducedMotion: "reduce" })).newPage()
   phone = await (
-    await browser.newContext({ viewport: { width: 390, height: 844 } })
+    await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      reducedMotion: "reduce",
+    })
   ).newPage()
 }, 300_000)
 

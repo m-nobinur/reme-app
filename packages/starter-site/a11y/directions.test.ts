@@ -78,8 +78,12 @@ for (const direction of DIRECTIONS) {
       const site = sites.find((each) => each.id === direction.id)
       if (!browser || !site)
         throw new Error("the browser or the build did not start")
+      // Reduced motion, so axe never reads a block mid fade-in.
       const page = await (
-        await browser.newContext({ viewport: { width, height: 900 } })
+        await browser.newContext({
+          viewport: { width, height: 900 },
+          reducedMotion: "reduce",
+        })
       ).newPage()
       await page.goto(`${site.origin}/`)
       // The direction's own variants rendered, so one that silently fell
