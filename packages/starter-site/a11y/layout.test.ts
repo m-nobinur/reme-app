@@ -97,17 +97,19 @@ test("the phone header keeps the name on one line and the action in the menu", a
   expect(await wide.locator(".menu-action").isVisible()).toBe(false)
 })
 
-test("the eyebrow dot is the colour of the eyebrow", async () => {
+test("the eyebrow dot is the brand colour", async () => {
   const page = await open(1440, 900, "/")
-  const [dot, text] = await page.evaluate(() => {
+  const [dot, brand] = await page.evaluate(() => {
     const el = document.querySelector(".hero .eyebrow")
     if (!el) return ["", ""]
+    const probe = el.appendChild(document.createElement("span"))
+    probe.style.color = "var(--brand-text)"
     return [
       getComputedStyle(el, "::before").backgroundColor,
-      getComputedStyle(el).color,
+      getComputedStyle(probe).color,
     ]
   })
-  expect(dot).toBe(text)
+  expect(dot).toBe(brand)
 })
 
 test("five service cards fill rows of 3 and 2, the last row centred", async () => {
