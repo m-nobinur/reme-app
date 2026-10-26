@@ -251,7 +251,7 @@
       "caption is the one piece of copy on the photo, site.heroCaption, and shows only with the photo.",
       "With no photo the home hero shows highlights, the first three services with their icons, never an empty box.",
       "Renders nothing when the heading, the lede and the actions are all empty.",
-      "eyebrow is for the home page, with site.industry.",
+      "eyebrow is for the home page, site.heroEyebrow or, when that is empty, site.industry.",
       "An inner page header with no photo and an `art` slot is a cover, the drawing beside the text; the service area page fills it with the area drawing, and deep puts it on the deep band.",
       "image is the home page's, from site.heroImage and site.heroImageAlt; it renders only with both, and the same photo is not used again on the page."
     ],
