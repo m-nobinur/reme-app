@@ -107,11 +107,14 @@ test("the empty state opens on the briefing and what to ask", async ({
     page.getByRole("heading", { name: "What should we do today?" })
   ).toBeVisible()
   await expect(page.locator('[data-slot="aui_thread-briefing"]')).toHaveText(
-    "v3 is live. Version 4 is ready for you to approve."
+    "Your website is live. Your latest changes are ready to publish."
   )
-  await expect(input(page)).toHaveAttribute("placeholder", "Ask Reme anything…")
+  await expect(input(page)).toHaveAttribute(
+    "placeholder",
+    "Ask Ellie anything…"
+  )
   await expect(page.locator(".aui-thread-welcome-suggestion")).toHaveText([
-    "What changed in version 4?",
+    "What changed in the new version?",
     "What do you need from me?",
     "What is on my website now?",
   ])
@@ -164,27 +167,32 @@ test("a quick action keeps the owner's draft and adds to it", async ({
   await expect(input(page)).toBeFocused()
 })
 
-test("website change mode shows a chip beside +, and its × leaves the mode", async ({
+test("website change mode takes the place of +, and pressing it leaves the mode", async ({
   page,
 }) => {
   await open(page, "ThreadSiteChange")
-  const chip = page.locator('[data-slot="aui_composer-mode"]')
-  await expect(chip).toHaveText("Website change")
+  const mode = page.locator('[data-slot="aui_composer-mode"]')
+  await expect(mode).toHaveAccessibleName(
+    "Website change mode. Press to leave it"
+  )
+  await expect(page.getByRole("button", { name: "Quick actions" })).toHaveCount(
+    0
+  )
   await expect(input(page)).toHaveAttribute(
     "placeholder",
     "Describe what to change on your website…"
   )
-  // Beside "+", on its right.
-  const plus = await page
-    .getByRole("button", { name: "Quick actions" })
-    .boundingBox()
-  const box = await chip.boundingBox()
-  expect(box?.x).toBeGreaterThanOrEqual((plus?.x ?? 0) + (plus?.width ?? 0))
   await axe(page, "ThreadSiteChange")
 
-  await page.getByRole("button", { name: "Leave website change mode" }).click()
-  await expect(chip).toHaveCount(0)
-  await expect(input(page)).toHaveAttribute("placeholder", "Ask Reme anything…")
+  await mode.click()
+  await expect(mode).toHaveCount(0)
+  await expect(
+    page.getByRole("button", { name: "Quick actions" })
+  ).toBeVisible()
+  await expect(input(page)).toHaveAttribute(
+    "placeholder",
+    "Ask Ellie anything…"
+  )
   await expect(input(page)).toBeFocused()
 })
 

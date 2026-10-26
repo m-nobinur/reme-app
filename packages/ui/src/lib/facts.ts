@@ -1,4 +1,4 @@
-import type { FactValueKey } from "@workspace/contracts"
+import { AVATARS, type FactValueKey } from "@workspace/contracts"
 import { formatMoney } from "@workspace/ui/lib/format"
 
 /** What each fact an owner can state is called on their screens. */
@@ -18,6 +18,7 @@ const LABEL: Record<FactValueKey, string> = {
   "service_area.text": "Area you cover",
   "assistant.name": "Assistant's name",
   "assistant.pronouns": "Assistant's pronouns",
+  "assistant.avatar": "Assistant's look",
   "assistant.tone": "Assistant's tone",
   "owner.preferred_name": "What the assistant calls you",
   "site.build_mode": "Who builds the site",
@@ -54,6 +55,11 @@ export function factText(key: string, raw: unknown): string {
     return String(raw)
   }
   const value = raw as Record<string, unknown>
+  if (key === "assistant.avatar") {
+    return (
+      AVATARS.find((each) => each.id === value.id)?.label ?? String(value.id)
+    )
+  }
   if (typeof value.quote === "string" && typeof value.name === "string") {
     return `"${value.quote}" ${value.name}`
   }

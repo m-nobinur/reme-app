@@ -207,6 +207,22 @@ describe("GetPreviewOutput", () => {
 })
 
 describe("CosWorkspace", () => {
+  it("replays a workspace read stored before builds carried progress and stops", () => {
+    const {
+      stopped: _stopped,
+      builds,
+      ...rest
+    } = samples.CosWorkspace as {
+      stopped: unknown
+      builds: { progress?: unknown }[]
+    }
+    const stored = {
+      ...rest,
+      builds: builds.map(({ progress: _progress, ...build }) => build),
+    }
+    expect(verdict("CosWorkspace", CosWorkspace, stored)).toEqual(ACCEPTED)
+  })
+
   const workspace = samples.CosWorkspace as {
     questions: Record<string, unknown>[]
     approvals: unknown[]

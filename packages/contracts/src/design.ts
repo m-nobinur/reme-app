@@ -7,6 +7,7 @@ import {
   IndustryId,
   PageId,
   PaletteId,
+  PaletteRoles,
   type TemplateId,
 } from "./onboarding.ts"
 import { Text } from "./text.ts"
@@ -243,8 +244,8 @@ export const CUSTOM_SECTIONS_MAX = 2
 
 /**
  * What the planner returns and the owner reviews before anything is built.
- * `palette` is a preset or the owner's own colour, which the starter derives
- * the six roles from. Whether pages repeat, `home` and `quote` are present and
+ * `palette` is a preset, the owner's own colour, which the starter derives
+ * the six roles from, or the owner's own palette with all six. Whether pages repeat, `home` and `quote` are present and
  * slot ids are unique is the planner step's check, in code, not a schema
  * rule: a JSON Schema cannot say it and the check needs the fact list anyway.
  * `features` is the card's plain-language list, one line each.
@@ -255,6 +256,12 @@ export const Blueprint = z.strictObject({
   palette: z.discriminatedUnion("kind", [
     z.strictObject({ kind: z.literal("preset"), id: PaletteId }),
     z.strictObject({ kind: z.literal("brand"), brand: HexColour }),
+    /** The owner's own palette, read from their logo or a picture, used as it is. */
+    z.strictObject({
+      kind: z.literal("roles"),
+      name: Text(40),
+      roles: PaletteRoles,
+    }),
   ]),
   pages: z
     .array(

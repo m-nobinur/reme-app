@@ -6,7 +6,9 @@ import {
   WarningCircleIcon,
 } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
+import { StatusLine, ToolStatus } from "@workspace/ui/components/status-line"
 import { useRevealWaiting } from "@workspace/ui/hooks/use-reveal-waiting"
+import { toolKind } from "@workspace/ui/lib/activity-copy"
 import { refusalText } from "@workspace/ui/lib/refusal"
 import {
   BROKEN,
@@ -74,17 +76,21 @@ export function Decision<I, O>({
   useRevealWaiting(view.state === "asking")
 
   if (view.state === "drafting") {
-    return (
-      <p
-        className={cn(
-          "px-1 py-1.5 text-muted-foreground text-sm",
-          running && "shimmer motion-reduce:animate-none"
-        )}
+    return running ? (
+      <ToolStatus
+        className="flex px-1 py-1.5 text-sm"
         data-slot={slot}
-        role={running ? "status" : undefined}
-      >
-        {running ? "Writing this out" : UNFINISHED}
-      </p>
+        state="working"
+        tool={props.toolName}
+      />
+    ) : (
+      <StatusLine
+        className="flex px-1 py-1.5 text-sm"
+        data-slot={slot}
+        kind={toolKind(props.toolName)}
+        label={UNFINISHED}
+        state="stopped"
+      />
     )
   }
 

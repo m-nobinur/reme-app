@@ -16,6 +16,9 @@
   // Workers Logs map back to `src/`; it does not count toward the bundle size.
   "minify": true,
   "upload_source_maps": true,
+  // The logo maker hands the image model an example picture as a reference
+  // (`logo-references.ts`), bundled so a draw fetches nothing.
+  "rules": [{ "type": "Data", "globs": ["**/*.webp"], "fallthrough": true }],
   // The worker runs next to the database, not next to the reader. Measured on
   // staging before this line existed: `/staff` p95 3499 ms from Dhaka against a
   // database in eu-central-1, with `cpuTime` 6 to 45 ms. So it was never

@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright"
 import { expect, type Page, test } from "@playwright/test"
-import { open, WCAG } from "./helpers"
+import { open, settled, WCAG } from "./helpers"
 
 /**
  * Onboarding's two cards: a fact asked for with its own inputs, and the
@@ -9,23 +9,28 @@ import { open, WCAG } from "./helpers"
 
 const asks = (page: Page) => page.locator('[data-slot="ask-fact"]')
 
-test("a question shows its own inputs, the name filled in, Skip only where allowed", async ({
+test("a question shows its own inputs, the email filled in, Skip only where allowed", async ({
   page,
 }) => {
   await open(page, "AskFact")
   const forms = asks(page).locator("form")
   await expect(forms).toHaveCount(2)
-  await expect(page.getByLabel("Business name")).toHaveValue("Brightclean")
-  await expect(forms.nth(1).getByLabel("Tagline")).toHaveAttribute(
-    "maxlength",
-    "120"
-  )
-  // Only the tagline may be skipped.
-  await expect(page.getByRole("button", { name: "Skip for now" })).toHaveCount(
-    1
-  )
   await expect(
-    forms.nth(1).getByRole("button", { name: "Skip for now" })
+    page.getByRole("textbox", { name: "Email address" })
+  ).toHaveValue("hello@brightclean.test")
+  await expect(forms.nth(1).getByLabel("Opening time")).toHaveAttribute(
+    "type",
+    "time"
+  )
+  // Only the hours may be skipped; the button sits in the tray's footer.
+  await expect(
+    page.getByRole("button", { name: "Skip", exact: true })
+  ).toHaveCount(1)
+  await expect(
+    asks(page)
+      .filter({ has: page.locator("form") })
+      .nth(1)
+      .getByRole("button", { name: "Skip", exact: true })
   ).toBeVisible()
 })
 
@@ -33,11 +38,16 @@ test("a question refuses a wrong answer in place, before anything is sent", asyn
   page,
 }) => {
   await open(page, "AskFact")
-  const form = asks(page).locator("form").first()
-  await form.getByLabel("Business name").fill("")
-  await form.getByRole("button", { name: "Save" }).click()
-  await expect(form.getByRole("alert")).toHaveText("Check the business name.")
-  await expect(form.getByLabel("Business name")).toHaveAttribute(
+  const tray = asks(page)
+    .filter({ has: page.locator("form") })
+    .first()
+  const form = tray.locator("form")
+  await form.getByLabel("Email address").fill("")
+  await tray.getByRole("button", { name: "Submit" }).click()
+  await expect(form.getByRole("alert")).toHaveText(
+    "Enter a valid email address."
+  )
+  await expect(form.getByLabel("Email address")).toHaveAttribute(
     "aria-invalid",
     "true"
   )
@@ -50,13 +60,13 @@ test("an answered question gives way to the owner's reply, each step its own mes
   await expect(page.locator('[data-slot="aui_user-message-root"]')).toHaveText([
     /Brightclean/,
     /\+447700900123/,
-    /Skip for now/,
+    /Skipped/,
   ])
-  // An answered or skipped card shows nothing; one not answered says why.
+  // An answered or skipped question shows nothing; one not answered says why.
   const done = asks(page).filter({ hasNot: page.locator("form") })
-  await expect(done).toHaveCount(2)
-  await expect(done.nth(0)).toContainText("Not answered")
-  await expect(done.nth(1)).toContainText("did not come through")
+  // One overtaken by a typed message leaves nothing; a broken one says so.
+  await expect(done).toHaveCount(1)
+  await expect(done.nth(0)).toContainText("did not come through")
 })
 
 test("the change card is one tap either way, and waits for the server", async ({
@@ -77,9 +87,12 @@ test("the change card is one tap either way, and waits for the server", async ({
     answered.getByRole("button", { name: "Starting" })
   ).toBeDisabled()
   await expect(answered.getByRole("button", { name: "Not now" })).toBeDisabled()
-  await expect(cards.nth(2)).toContainText("Build 5b0f6c1e")
-  await expect(cards.nth(3)).toContainText("Version 4, ID 9c3e1f2a")
-  await expect(cards.nth(4)).toContainText("Answer it first")
+  // A started build names no version, id or hash.
+  for (const started of [cards.nth(2), cards.nth(3)]) {
+    await expect(started).toContainText("Started. Follow it in the panel.")
+    await expect(started).not.toContainText(/5b0f6c1e|9c3e1f2a|ID |Build /)
+  }
+  await expect(cards.nth(4)).toContainText("Ask again once it is ready")
   await expect(cards.nth(5)).toContainText("You said not now.")
   await expect(cards.nth(6)).toContainText("Not started")
   // An error after a yes may still have started the build: the owner checks.
@@ -111,7 +124,7 @@ test("the change card is one tap either way, and waits for the server", async ({
   await expect(sent.getByRole("status")).toHaveCount(0)
   await expect(sent.locator('[aria-busy="true"]')).toHaveCount(1)
   // Nothing to approve while the model is still writing the change.
-  await expect(cards.nth(13)).toHaveText("Writing this out")
+  await expect(cards.nth(13)).toHaveText("Passing on your change")
   await expect(cards.nth(13).getByRole("button")).toHaveCount(0)
   // A no on its way to the server claims nothing is starting.
   const declining = cards.nth(14)
@@ -155,6 +168,7 @@ for (const theme of ["light", "dark"] as const) {
         page,
       }) => {
         await open(page, entry, width, theme)
+        await settled(page)
         const results = await new AxeBuilder({ page })
           .include(`[data-entry="${entry}"]`)
           .withTags(WCAG)

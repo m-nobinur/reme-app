@@ -3,47 +3,31 @@ import { expect, test } from "@playwright/test"
 import { open, WCAG } from "./helpers"
 
 /**
- * The Chief of Staff's tools in every state: reads as quiet lines that open
- * onto what they found, and cards that wait for the owner's yes. None shows
+ * The Chief of Staff's tools in every state: reads as quiet lines, with the
+ * reply saying what they found, and cards that wait for the owner's yes. None shows
  * a tool name, an id, raw output or the api's model-facing error text.
  */
 
 const WIRE =
   /get_|_question|_reminder|call_|approval_|unknown_outcome|tool_failed|[{}]/
 
-test("reads say what they looked at, and open onto what they found", async ({
+test("reads say what they looked at, and a finished one shows nothing", async ({
   page,
 }) => {
   await open(page, "CosReads")
   const entry = page.locator('[data-entry="CosReads"]')
+  await expect(entry.locator('[data-slot="cos-read-workspace"]')).toHaveText([
+    "Couldn't check where things stand, try again in a moment",
+  ])
+  await expect(entry.locator('[data-slot="cos-read-facts"]')).toHaveText([
+    "Stopped looking up your details",
+  ])
+  // A refused preview is finished too; the reply says what came back.
+  await expect(entry.locator('[data-slot="cos-read-preview"]')).toHaveCount(0)
+  // The reply says what a read found, so nothing opens onto the raw result.
   await expect(
-    entry.locator('[data-slot="cos-read-workspace"][role="status"]')
-  ).toHaveText("Checking your workspace")
-  await expect(entry).toContainText("Could not check your workspace")
-  await expect(entry).toContainText("Stopped reading your business details")
-  await expect(entry).toContainText("Checked for a preview")
-
-  await entry.getByRole("button", { name: "Checked your workspace" }).click()
-  const workspace = entry.locator('[data-slot="cos-read-workspace"] dl')
-  await expect(workspace).toContainText("Version 3 is live")
-  await expect(workspace).toContainText("Add Saturday hours, 9 to 1.")
-  await expect(workspace).toContainText("Building")
-  await expect(workspace).toContainText("A question about service area")
-  await expect(workspace).toContainText("Version 4 to review by")
-  await expect(workspace).toContainText("Tagline")
-
-  await entry
-    .getByRole("button", { name: "Read your business details" })
-    .click()
-  await expect(entry.locator('[data-slot="cos-read-facts"] dl')).toContainText(
-    "Weekday hours08:00 to 18:00"
-  )
-  await entry
-    .getByRole("button", { name: "Checked the preview of version 4" })
-    .click()
-  await expect(entry).toContainText("It shows under Your website.")
-  await entry.getByRole("button", { name: "Checked for a preview" }).click()
-  await expect(entry).toContainText("That build is not in your workspace.")
+    entry.locator('[data-slot^="cos-read-"]').getByRole("button")
+  ).toHaveCount(0)
   await expect(entry).not.toContainText("No assignment with that id")
   expect(await entry.innerText()).not.toMatch(WIRE)
 })
@@ -76,7 +60,11 @@ for (const [entry, slot, yes, busy, target, detail, done, refused] of [
     await expect(cards).toHaveCount(14)
     // Nothing to approve while the model is still writing it, and a call
     // the stream left unfinished stops rather than working forever.
-    await expect(cards.nth(0)).toHaveText("Writing this out")
+    await expect(cards.nth(0)).toHaveText(
+      entry === "AnswerQuestion"
+        ? "Passing on your answer"
+        : "Setting a reminder"
+    )
     await expect(cards.nth(0).getByRole("button")).toHaveCount(0)
     await expect(cards.nth(1)).toContainText("This was not finished.")
     await expect(cards.nth(1).getByRole("button")).toHaveCount(0)
@@ -105,7 +93,7 @@ for (const [entry, slot, yes, busy, target, detail, done, refused] of [
     await expect(cards.nth(7)).toContainText(done)
     await expect(cards.nth(8)).toContainText(refused)
     await expect(cards.nth(9)).toContainText("You said not now.")
-    await expect(cards.nth(10)).toContainText("You sent a message instead.")
+    await expect(cards.nth(10)).not.toContainText("You sent a message instead.")
     await expect(cards.nth(11)).toContainText(
       "We could not confirm this went through."
     )

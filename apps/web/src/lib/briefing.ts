@@ -1,7 +1,7 @@
 import { factLabel } from "@workspace/ui/lib/facts"
 import { localMidnight } from "@workspace/ui/lib/zone"
-import type { AttentionItem, OrgSummary, Workspace } from "./api/types"
-import { factsNeeded, questionOf, upcomingNotes } from "./reminders"
+import type { OrgSummary, Workspace } from "./api/types"
+import { factsNeeded, questionOf } from "./reminders"
 
 /**
  * What the empty conversation opens with: one line on where things stand, the
@@ -11,11 +11,10 @@ import { factsNeeded, questionOf, upcomingNotes } from "./reminders"
  */
 export type Briefing = {
   line: string | null
-  context: { name: string; status: string; live: boolean } | null
   suggestions: { prompt: string }[]
 }
 
-const NOTHING: Briefing = { line: null, context: null, suggestions: [] }
+const NOTHING: Briefing = { line: null, suggestions: [] }
 
 /** `15:00`, on the browser's clock. */
 const clock = (date: Date) =>
@@ -40,9 +39,16 @@ function due(at: string, now: Date): string {
   return `${when} at ${clock(date)}`
 }
 
-/** What the owner calls their assistant: the name they gave it, else Reme. */
+/**
+ * What the owner calls their assistant: the name they gave it, else "your
+ * assistant". Never the product name, which is not who they are talking to.
+ */
 export const assistantOf = (workspace: Workspace | null) =>
-  workspace?.assistantName?.trim() || "Reme"
+  workspace?.assistantName?.trim() || "your assistant"
+
+/** `assistantOf` opening a sentence: "Ellie", or "Your assistant". */
+export const leading = (assistant: string) =>
+  assistant.charAt(0).toUpperCase() + assistant.slice(1)
 
 export function briefingOf(
   org: OrgSummary | null,
@@ -54,19 +60,23 @@ export function briefingOf(
   }
   const { live, building, open, attention, derivedReminders } = workspace
   const approval = attention.find((item) => item.kind === "approval")
-  const approvals = attention.filter((item) => item.kind === "approval").length
+  const assistant = leading(assistantOf(workspace))
   const questions = attention.filter((item) => item.kind === "question")
 
+  // A site waiting on Publish is still an open build, but it is ready; the
+  // updates under the composer carry Publish.
   const site = live
-    ? `v${live} is live.`
-    : building
-      ? "Your first version is being built."
-      : open
-        ? "Your first version is under way."
-        : "You have no website yet."
+    ? "Your website is live."
+    : approval
+      ? "Your website is ready to go live."
+      : building
+        ? `${assistant} is building your website.`
+        : open
+          ? "Your website is in progress."
+          : "You don't have a website yet."
 
   // Each reminder rule sharpens the line for its own kind, so one line never
-  // says the same thing twice: a closing review replaces "ready to approve",
+  // says the same thing twice: a closing review replaces "ready to publish",
   // an old question replaces the question count.
   const expiring = derivedReminders
     .flatMap((reminder) =>
@@ -89,24 +99,21 @@ export function briefingOf(
 
   let next: string | null = null
   if (expiring) {
-    next = `Your review of v${expiring.version} expires ${due(expiring.expires_at, now)}.`
-  } else if (approval) {
-    next =
-      approvals === 1
-        ? `Version ${approval.version} is ready for you to approve.`
-        : `${approvals} versions are ready for you to approve.`
+    next = `Publish ${live ? "your latest changes" : "it"} by ${due(expiring.expires_at, now)}.`
+  } else if (approval && live) {
+    next = "Your latest changes are ready to publish."
   } else if (waiting) {
-    next = `${waiting.raisedBy}'s question about ${waiting.title.toLowerCase()} is still waiting on you.`
+    next = `${assistant} is still waiting for your answer about ${waiting.title.toLowerCase()}.`
   } else if (questions.length === 1) {
-    next = `${questions[0]?.raisedBy} has one question for you.`
+    next = `${assistant} has a question for you.`
   } else if (questions.length > 1) {
-    next = `${questions.length} questions are waiting on you.`
-  } else if (unpublished) {
-    next = `Version ${unpublished.version} is ready but not published.`
+    next = `You have ${questions.length} questions to answer.`
+  } else if (unpublished && !approval) {
+    next = "Your latest changes aren't published yet."
   } else if (facts) {
-    next = `${assistantOf(workspace)} still needs ${factsNeeded(facts.keys)}.`
+    next = `${assistant} still needs ${factsNeeded(facts.keys)}.`
   } else if (building && live) {
-    next = "A change is being built."
+    next = `${assistant} is working on your changes.`
   }
 
   // What waits on the owner first, then the build, then what to do next.
@@ -115,16 +122,22 @@ export function briefingOf(
   const fresh = !live && !open && !approval
   const suggestions: string[] = []
   if (approval) {
-    suggestions.push(`What changed in version ${approval.version}?`)
+    suggestions.push(
+      live ? "What did you change?" : "What's on my new website?"
+    )
   }
   if (questions.length > 0) {
     suggestions.push("What do you need from me?")
   }
   if (unpublished && !approval) {
-    suggestions.push(`Why is version ${unpublished.version} not live yet?`)
+    suggestions.push("Why aren't my changes live yet?")
   }
   if (building) {
-    suggestions.push("How is the build going?")
+    suggestions.push(
+      live
+        ? "How are my changes coming along?"
+        : "How's my website coming along?"
+    )
   }
   if (fresh) {
     suggestions.push("Build my website")
@@ -144,7 +157,7 @@ export function briefingOf(
   }
   if (live) {
     suggestions.push(
-      "What is on my website now?",
+      "What's on my website now?",
       "I want to change something on my website",
       "Set a reminder for me"
     )
@@ -152,126 +165,6 @@ export function briefingOf(
 
   return {
     line: next ? `${site} ${next}` : site,
-    context: {
-      name: org.name,
-      status: live
-        ? `site live on v${live}`
-        : building
-          ? "first version building"
-          : open
-            ? "first version under way"
-            : "no site yet",
-      live: live !== null,
-    },
     suggestions: suggestions.slice(0, 4).map((prompt) => ({ prompt })),
   }
-}
-
-/** Who raised an item: the directory's name when the reader has one. */
-export const askerOf = (item: AttentionItem, names: Record<string, string>) =>
-  (item.raisedById && names[item.raisedById]) || item.raisedBy
-
-/**
- * The panel's opening lines, two at most: what the assistant is doing, then what the
- * owner should do next. With nothing to do it says so in one line. `now` is
- * null while the reader's clock is unknown (the server's render): nothing is
- * said about today then, so the server's HTML and the first browser render
- * agree.
- */
-export function digestOf(
-  workspace: Workspace,
-  names: Record<string, string>,
-  now: Date | null
-): string[] {
-  const { attention, live, building, open, derivedReminders } = workspace
-  const approvals = attention.flatMap((item) =>
-    item.kind === "approval" ? [item] : []
-  )
-  const questions = attention.flatMap((item) =>
-    item.kind === "question" ? [item] : []
-  )
-  const dated = upcomingNotes(workspace.reminderNotes, now?.getTime()).filter(
-    (note) => note.due_at !== null
-  )
-  const today = now
-    ? dated.filter(
-        (note) =>
-          localMidnight(new Date(note.due_at ?? "")) === localMidnight(now)
-      )
-    : []
-  const facts = derivedReminders.find(
-    (reminder) => reminder.rule === "facts_missing"
-  )
-  const assistant = assistantOf(workspace)
-
-  // What waits on the owner, most pressing first, with how many items each covers.
-  const needs: { text: string; count: number }[] = []
-  const [soonest] = today
-  if (soonest?.due_at) {
-    const at = clock(new Date(soonest.due_at))
-    needs.push({
-      text:
-        today.length === 1
-          ? `${soonest.title.replace(/[.?!]+$/, "")} at ${at}.`
-          : `${today.length} reminders today, the next at ${at}.`,
-      count: today.length,
-    })
-  }
-  const [approval] = approvals
-  if (approval) {
-    needs.push({
-      text:
-        approvals.length === 1
-          ? `Version ${approval.version} is ready to review.`
-          : `${approvals.length} versions are ready to review.`,
-      count: approvals.length,
-    })
-  }
-  const [question] = questions
-  if (question) {
-    needs.push({
-      text:
-        questions.length === 1
-          ? `${askerOf(question, names)} asked about ${question.title.toLowerCase()}.`
-          : `${questions.length} questions are waiting for you.`,
-      count: questions.length,
-    })
-  } else if (facts) {
-    // A question is usually the build asking for the same fact.
-    needs.push({
-      text: `${assistant} needs ${factsNeeded(facts.keys)}.`,
-      count: 1,
-    })
-  }
-
-  const doing = building
-    ? live
-      ? `${assistant} is updating your website.`
-      : `${assistant} is building your website.`
-    : null
-  const total = needs.reduce((sum, need) => sum + need.count, 0)
-  const count = (n: number, more = "") =>
-    `${n} ${more}${n === 1 ? "thing needs" : "things need"} you.`
-
-  if (doing) {
-    const [only] = needs
-    if (!only) return [doing]
-    return [doing, needs.length === 1 ? only.text : count(total)]
-  }
-  const [first, second] = needs
-  if (first && second) {
-    return needs.length === 2
-      ? [first.text, second.text]
-      : [first.text, count(total - first.count, "more ")]
-  }
-  if (first) return [first.text]
-
-  const site = live
-    ? `Your site is live on version ${live}.`
-    : open
-      ? "Your website is under way."
-      : `Tell ${assistant} about your business to start your website.`
-  if (!live && !open) return [site]
-  // A dated reminder may fall today, which only the browser can say.
-  return !now && dated.length ? [site] : [`All caught up. ${site}`]
 }

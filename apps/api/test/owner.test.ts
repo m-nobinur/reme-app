@@ -45,7 +45,7 @@ describe("routeChange, row by row", () => {
     }
   })
 
-  it("refuses while a question is open, ahead of everything else", () => {
+  it("steers the build waiting on an answer, ahead of everything else", () => {
     expect(
       routeChange(
         site({
@@ -57,37 +57,41 @@ describe("routeChange, row by row", () => {
           reviews: [{ assignment_id: A, revision_id: R }],
         })
       )
-    ).toEqual({ route: "refuse", reason: "question_open", assignment_id: B })
+    ).toEqual({ route: "steer", assignment_id: B })
   })
 
-  it("turns down an open review, then builds or revises", () => {
+  it("revises the owner's draft before the site is live, and turns down a review on a live site", () => {
     const reviewing = {
       builds: [{ assignment_id: A, state: "awaiting_review" as const }],
       reviews: [{ assignment_id: A, revision_id: R }],
     }
     expect(routeChange(site(reviewing))).toEqual({
+      route: "draft",
+      revision_id: R,
+    })
+    expect(routeChange(site({ ...reviewing, live: true }))).toEqual({
       route: "replace",
       via: "reject",
       assignment_id: A,
       revision_id: R,
-      rebuild: "site.build",
-    })
-    expect(routeChange(site({ ...reviewing, live: true }))).toMatchObject({
-      route: "replace",
-      via: "reject",
       rebuild: "site.revise",
     })
   })
 
-  it("turns down a review the sweep parked", () => {
-    expect(
-      routeChange(
-        site({
-          builds: [{ assignment_id: A, state: "blocked_on_approval" }],
-          reviews: [{ assignment_id: A, revision_id: R }],
-        })
-      )
-    ).toMatchObject({ route: "replace", via: "reject", assignment_id: A })
+  it("revises a draft whose review the sweep parked, and turns one down on a live site", () => {
+    const parked = {
+      builds: [{ assignment_id: A, state: "blocked_on_approval" as const }],
+      reviews: [{ assignment_id: A, revision_id: R }],
+    }
+    expect(routeChange(site(parked))).toEqual({
+      route: "draft",
+      revision_id: R,
+    })
+    expect(routeChange(site({ ...parked, live: true }))).toMatchObject({
+      route: "replace",
+      via: "reject",
+      assignment_id: A,
+    })
   })
 
   it("waits out a review that expired before the sweep parked it", () => {
@@ -244,7 +248,6 @@ describe("owner routes refuse before the database", () => {
     ["POST", "/changes"],
     ["GET", "/activity"],
     ["POST", `/builds/${A}/answer`],
-    ["POST", `/builds/${A}/blueprint`],
     ["POST", `/builds/${A}/cancel`],
     ["GET", `/builds/${A}/preview`],
     ["POST", `/approvals/${A}/decision`],

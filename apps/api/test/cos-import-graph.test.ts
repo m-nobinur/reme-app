@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync } from "node:fs"
-import { dirname, join, relative, resolve } from "node:path"
+import { dirname, extname, join, relative, resolve } from "node:path"
 import { fileURLToPath, URL } from "node:url"
 import ts from "typescript"
 import { describe, expect, it } from "vitest"
@@ -14,14 +14,18 @@ import { describe, expect, it } from "vitest"
 const SRC = fileURLToPath(new URL("../src", import.meta.url))
 const COS = join(SRC, "cos")
 
-/** The relative module specifiers `file` imports, re-exports or loads. */
+/** The relative module specifiers `file` imports, re-exports or loads at run time. */
 function specifiers(source: ts.SourceFile): string[] {
   const found: string[] = []
   const visit = (node: ts.Node) => {
     if (
       (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
       node.moduleSpecifier &&
-      ts.isStringLiteral(node.moduleSpecifier)
+      ts.isStringLiteral(node.moduleSpecifier) &&
+      // A type-only import is erased, so it reaches nothing at run time.
+      !(ts.isImportDeclaration(node)
+        ? node.importClause?.isTypeOnly
+        : node.isTypeOnly)
     ) {
       found.push(node.moduleSpecifier.text)
     }
@@ -83,6 +87,8 @@ function reachable(): Map<string, string[]> {
       ts.ScriptTarget.Latest
     )
     for (const spec of specifiers(source)) {
+      // A JSON or picture import is data, and imports nothing further.
+      if (!["", ".ts"].includes(extname(spec))) continue
       const target = resolve(dirname(file), spec)
       queue.push([target.endsWith(".ts") ? target : `${target}.ts`, path])
     }

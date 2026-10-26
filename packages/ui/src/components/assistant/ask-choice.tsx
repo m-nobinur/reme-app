@@ -5,14 +5,15 @@ import {
   ShuffleIcon,
 } from "@phosphor-icons/react"
 import type { AskChoiceInput } from "@workspace/contracts"
+import {
+  Docked,
+  TrayFrame,
+  TrayNote,
+  useTabDraft,
+} from "@workspace/ui/components/assistant/question-tray"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import {
-  useFocusWhenIdle,
-  useRevealWaiting,
-} from "@workspace/ui/hooks/use-reveal-waiting"
-import {
-  CARD_SURFACE,
   FIELD_ERROR,
   OPTION,
   OPTION_PILL,
@@ -27,20 +28,36 @@ import {
 } from "@workspace/ui/lib/colour"
 import { askChoiceView } from "@workspace/ui/lib/tool-state"
 import { cn } from "@workspace/ui/lib/utils"
-import { type FormEvent, useId, useRef, useState } from "react"
+import { type FormEvent, useId, useState } from "react"
 
 /**
- * A question onboarding answers from a short list: the industry, the
- * assistant's pronouns and tone, whether to build the site, and its
- * template, colours, type and pages. The question is the text part above;
- * the card is the options, as native radios or checkboxes so the arrow keys
- * and the screen reader know the group. Colour, type and template options
- * show what they are, drawn from the option's own data. A long list shows
- * the call's `initial` few and brings in others on Show others; a colour
- * card's Other is a colour picker. Nothing is sent until the owner presses
- * Continue. Once answered or skipped it shows nothing: the owner's reply
- * after it says what they picked.
+ * A question onboarding answers from a short list, in the question tray: the
+ * industry, the assistant's pronouns and tone, whether to build the site,
+ * and its template, colours, type and pages. The assistant's message asks
+ * it; the tray's title is the web's copy for the step, and the body is the
+ * options, as native radios or checkboxes so the arrow keys and the screen
+ * reader know the group. Colour, type and template options show what they
+ * are, drawn from the option's own data. A long list shows the call's
+ * `initial` few and brings in others on Show others; a colour card's Other is
+ * a colour picker. Nothing is sent until the owner presses Submit, except on
+ * a list of exactly two with no Other, where tapping an option is the answer.
+ * Once answered or skipped it shows nothing: the owner's reply after it says
+ * what they picked.
  */
+
+/** The tray's title for each step. */
+const STEP_ASK: Record<AskChoiceInput["step"], string> = {
+  industry: "What kind of work do you do?",
+  pronouns: "Which pronouns should your assistant use?",
+  tone: "How should your assistant sound?",
+  // The message asks the question; the title says what it does not.
+  build_for_me: "You'll see it before it goes live",
+  manual_builder: "Would you rather build it yourself?",
+  template: "Which layout do you like?",
+  palette: "Which colours feel right?",
+  font: "Which lettering do you prefer?",
+  pages: "Which pages should your website have?",
+}
 
 type Option = AskChoiceInput["options"][number]
 
@@ -361,28 +378,42 @@ function ColourField({
  */
 type Start = { shown?: string[]; other?: string }
 
+/** Two options and nothing else to type: a tap is the answer, with no Submit. */
+const oneTapOf = (input: AskChoiceInput) =>
+  !input.multiple && !input.other && input.options.length === 2
+
 /**
- * The open card: the options as a native group, Other and its field, and
- * Continue. `onAnswer` gets the answer `AskChoiceOutput` takes.
+ * The tray's body: the options as a native group, Other and its field. The
+ * tray's Submit sends the form `id`. `onAnswer` gets the answer
+ * `AskChoiceOutput` takes.
  */
 function ChoiceForm({
+  id: formId,
   input,
   onAnswer,
   start,
+  draftId,
 }: {
+  id?: string
+  /** Where the picks are kept for this tab, the call's id; none keeps nothing. */
+  draftId?: string
   input: AskChoiceInput
-  onAnswer: (
-    answer:
-      | { answer: "chosen"; ids: string[]; other: string | null }
-      | { answer: "skipped" }
-  ) => void
+  onAnswer: (answer: {
+    answer: "chosen"
+    ids: string[]
+    other: string | null
+  }) => void
   start?: Start
 }) {
   const id = useId()
-  const [picked, setPicked] = useState<string[]>(() =>
-    start?.other !== undefined ? [OTHER] : input.preselected
-  )
-  const [other, setOther] = useState(start?.other ?? "")
+  const { draft, keep } = useTabDraft(draftId ? `choice:${draftId}` : null, {
+    picked: start?.other !== undefined ? [OTHER] : input.preselected,
+    other: start?.other ?? "",
+  })
+  const { picked, other } = draft
+  const setPicked = (next: (now: string[]) => string[]) =>
+    keep({ ...draft, picked: next(picked) })
+  const setOther = (value: string) => keep({ ...draft, other: value })
   const [invalid, setInvalid] = useState<string | null>(null)
   const [shown, setShown] = useState(() => start?.shown ?? input.initial)
   const [seen, setSeen] = useState(() => shown ?? [])
@@ -407,6 +438,7 @@ function ChoiceForm({
         )
       : "flex flex-wrap gap-2"
   const otherPicked = picked.includes(OTHER)
+  const oneTap = oneTapOf(input)
 
   const toggle = (value: string, on: boolean) => {
     setInvalid(null)
@@ -467,23 +499,13 @@ function ChoiceForm({
 
   const option = (value: string, label: string, rest?: Option) => {
     const checked = picked.includes(value)
-    return (
-      <label
-        className={cn(
-          OPTION,
-          pictured || hinted ? OPTION_TILE : OPTION_PILL,
-          value === OTHER && color && "border-dashed"
-        )}
-        key={value}
-      >
-        <input
-          checked={checked}
-          className="sr-only"
-          name={`${id}-choice`}
-          onChange={(event) => toggle(value, event.currentTarget.checked)}
-          type={multiple ? "checkbox" : "radio"}
-          value={value}
-        />
+    const shape = cn(
+      OPTION,
+      pictured || hinted ? OPTION_TILE : OPTION_PILL,
+      value === OTHER && color && "border-dashed"
+    )
+    const body = (
+      <>
         {rest?.visual ? <Visual visual={rest.visual} /> : null}
         {value === OTHER && color ? (
           <EyedropperIcon
@@ -509,14 +531,51 @@ function ChoiceForm({
         {rest?.hint ? (
           <span className="text-muted-foreground text-xs">{rest.hint}</span>
         ) : null}
+      </>
+    )
+    // Buttons, not radios: the arrow keys would answer as they moved.
+    if (oneTap)
+      return (
+        <button
+          aria-pressed={checked}
+          className={cn(
+            shape,
+            "text-left outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring",
+            checked && "border-primary bg-primary/5"
+          )}
+          key={value}
+          onClick={() =>
+            onAnswer({ answer: "chosen", ids: [value], other: null })
+          }
+          type="button"
+        >
+          {body}
+        </button>
+      )
+    return (
+      <label className={shape} key={value}>
+        <input
+          checked={checked}
+          className="sr-only"
+          name={`${id}-choice`}
+          onChange={(event) => toggle(value, event.currentTarget.checked)}
+          type={multiple ? "checkbox" : "radio"}
+          value={value}
+        />
+        {body}
       </label>
     )
   }
 
   return (
-    <form className="flex flex-col gap-3" noValidate onSubmit={submit}>
+    <form
+      className="flex flex-col gap-3"
+      id={formId}
+      noValidate
+      onSubmit={submit}
+    >
       <fieldset className="flex flex-col gap-2">
-        <legend className="mb-2 text-muted-foreground text-xs">
+        <legend className="sr-only">
           {multiple ? "Pick any that fit" : "Pick one"}
         </legend>
         <div className={layout}>
@@ -572,60 +631,55 @@ function ChoiceForm({
           {invalid}
         </p>
       ) : null}
-      <div className="flex flex-wrap gap-2">
-        <Button size="sm" type="submit">
-          Continue
-        </Button>
-        {input.skippable ? (
-          <Button
-            onClick={() => onAnswer({ answer: "skipped" })}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            Skip for now
-          </Button>
-        ) : null}
-      </div>
     </form>
   )
 }
 
 const AskChoice: ToolCallMessagePartComponent = (props) => {
   const view = askChoiceView(props)
-  const waiting = view.state === "pending"
-  const running = useRevealWaiting(waiting)
-  const cardRef = useRef<HTMLDivElement>(null)
-  useFocusWhenIdle(waiting, running, cardRef)
+  const id = useId()
+  const [collapsed, setCollapsed] = useState(false)
 
-  if (view.state === "answered" || view.state === "skipped") return null
+  if (view.state === "answered" || view.state === "skipped") {
+    return null
+  }
   if (view.state !== "pending") {
     return (
-      <div className="my-3 max-w-md" data-slot="ask-choice">
-        <p
-          className={cn(
-            "text-sm",
-            view.state === "error"
-              ? "text-destructive"
-              : "text-muted-foreground"
-          )}
-        >
-          {view.state === "cancelled"
-            ? "You replied in the chat instead."
-            : view.message}
-        </p>
-      </div>
+      <TrayNote
+        error={view.state === "error" ? view.message : null}
+        name="ask-choice"
+      />
     )
   }
+  const { input } = view
 
   return (
-    <div
-      className={cn(CARD_SURFACE, "my-3 flex max-w-2xl flex-col gap-2")}
-      data-slot="ask-choice"
-      ref={cardRef}
-    >
-      <ChoiceForm input={view.input} onAnswer={props.addResult} />
-    </div>
+    <Docked name="ask-choice">
+      <TrayFrame
+        collapsed={collapsed}
+        hint={input.multiple ? "Pick any that fit" : null}
+        onCollapsedChange={setCollapsed}
+        question={STEP_ASK[input.step]}
+        skip={
+          input.skippable
+            ? {
+                label: "Skip",
+                onSkip: () => props.addResult({ answer: "skipped" }),
+              }
+            : undefined
+        }
+        submit={
+          oneTapOf(input) ? undefined : { label: "Submit", form: `${id}-form` }
+        }
+      >
+        <ChoiceForm
+          draftId={props.toolCallId}
+          id={`${id}-form`}
+          input={input}
+          onAnswer={props.addResult}
+        />
+      </TrayFrame>
+    </Docked>
   )
 }
 AskChoice.displayName = "AskChoice"

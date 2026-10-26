@@ -7,10 +7,10 @@ import {
 import { CopyIcon } from "@phosphor-icons/react"
 import {
   type AskChoiceInput,
-  type Blueprint,
   type DomainPurchaseStatus,
   FONTS,
   INDUSTRIES,
+  ONBOARDING_GOAL,
   PALETTES,
   PRONOUNS,
   TEMPLATES,
@@ -25,16 +25,18 @@ import { ChoiceForm } from "@workspace/ui/components/assistant/ask-choice"
 import { SaveDesignAnswerProvider } from "@workspace/ui/components/assistant/ask-design"
 import { UploadPhotosProvider } from "@workspace/ui/components/assistant/ask-upload"
 import {
-  BlueprintCard,
-  type BlueprintCardProps,
-  SiteNameProvider,
-} from "@workspace/ui/components/assistant/blueprint-card"
+  AnswerBuildQuestionProvider,
+  BuildQuestionsUI,
+} from "@workspace/ui/components/assistant/build-questions"
 import {
   type DomainPurchase,
   DomainPurchaseProvider,
 } from "@workspace/ui/components/assistant/buy-domain"
+import { ChangeAskedUI } from "@workspace/ui/components/assistant/change-asked"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
 import { MemoryChipUI } from "@workspace/ui/components/assistant/memory-chip"
+import { PersonaCardUI } from "@workspace/ui/components/assistant/persona-card"
+import { TrayFrame } from "@workspace/ui/components/assistant/question-tray"
 import { ServerButtonUI } from "@workspace/ui/components/assistant/server-button"
 import { SiteReady } from "@workspace/ui/components/assistant/site-ready"
 import {
@@ -48,14 +50,19 @@ import {
   ThreadPending,
 } from "@workspace/ui/components/assistant/thread-pending"
 import { TooltipIconButton } from "@workspace/ui/components/assistant/tooltip-icon-button"
+import {
+  UpdateDeck,
+  UpdateKindIcon,
+  UpdateRow,
+} from "@workspace/ui/components/assistant/update-deck"
 import { Button } from "@workspace/ui/components/button"
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@workspace/ui/components/collapsible"
-import { GeneratedPhotos } from "@workspace/ui/components/generated-photos"
 import { AnswerInputs } from "@workspace/ui/components/live-panel"
+import { SitePictures } from "@workspace/ui/components/site-pictures"
 import {
   Tooltip,
   TooltipContent,
@@ -66,7 +73,7 @@ import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 import { FACT_INPUTS } from "@workspace/ui/lib/answer"
 import { BROKEN } from "@workspace/ui/lib/tool-state"
 import { type ReactNode, useState } from "react"
-import { BLUEPRINT, REPLAN } from "./blueprint-fixtures"
+import { ICON } from "./panel-entries"
 import { INPUT as ASK_DESIGN_INPUT } from "./tray-entries"
 
 /**
@@ -189,9 +196,43 @@ function FixtureThread({
   )
 }
 
+/**
+ * An ask in its settled states, in one thread, then each open question in a
+ * thread of its own, so its tray docks alone above the composer as it does
+ * in the app.
+ */
+function TrayStates({
+  settled,
+  open,
+  height,
+}: {
+  settled: ThreadMessageLike[]
+  open: ThreadMessageLike[]
+  height: string
+}) {
+  return (
+    <div className="flex flex-col gap-8">
+      <FixtureThread height={height} messages={settled} />
+      {open.map((message, index) => (
+        <FixtureThread
+          height="h-[44rem]"
+          isDisabled={false}
+          // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list of fixtures
+          key={index}
+          messages={[message]}
+          settings={{
+            placeholder: "Ask Sam anything…",
+            questionPlaceholder: "Tell Sam what to do instead…",
+          }}
+        />
+      ))}
+    </div>
+  )
+}
+
 /** The composer's surroundings as the owner app sets them: the "+" starters. */
 const SUGGESTIONS: ThreadSuggestion[] = [
-  { prompt: "What changed in version 4?" },
+  { prompt: "What changed in the new version?" },
   { prompt: "What do you need from me?" },
   { prompt: "What is on my website now?" },
 ]
@@ -202,8 +243,9 @@ function OwnerThread(props: Parameters<typeof FixtureThread>[0]) {
     <FixtureThread
       {...props}
       settings={{
-        placeholder: "Ask Reme anything…",
-        questionPlaceholder: "Or tell Reme something else…",
+        assistant: "Ellie",
+        placeholder: "Ask Ellie anything…",
+        questionPlaceholder: "Tell Ellie what to do instead…",
         quickActions: OWNER_QUICK_ACTIONS,
         ...(props.stored ? { stored: props.stored } : {}),
         ...props.settings,
@@ -366,6 +408,57 @@ const answeredStep = (
   reply(said),
 ]
 
+/** An `ask_open` call in one of its states. */
+const askOpen = (
+  about: string,
+  extra: { result?: unknown; isError?: boolean } = {}
+) => ({
+  args: { about },
+  isError: extra.isError,
+  result: extra.result,
+  toolCallId: `open_${about}_${extra.isError ? "error" : extra.result ? "done" : "open"}`,
+  toolName: "ask_open",
+  type: "tool-call" as const,
+})
+
+const ASK_OPEN_STATES: ThreadMessageLike[] = [
+  ...answeredStep(
+    "Which areas do you cover?",
+    askOpen("service_area.text", {
+      result: { answer: "stated", text: "Leeds and about ten miles round" },
+    }),
+    "Leeds and about ten miles round"
+  ),
+  ...answeredStep(
+    "Who are your customers?",
+    askOpen("business.audience", { result: { answer: "skipped" } }),
+    "Skipped"
+  ),
+  {
+    content: [
+      askOpen("business.proof", {
+        isError: true,
+        result: { error: TOOL_CALL_CANCELLED },
+      }),
+    ],
+    role: "assistant",
+    status: DONE,
+  },
+]
+
+const ASK_OPEN_OPEN: ThreadMessageLike[] = [
+  {
+    content: [
+      question(
+        "To quote a clean, what do you need to know first? Rooms, how often, anything else."
+      ),
+      askOpen("quote.form"),
+    ],
+    role: "assistant",
+    status: WAITING,
+  },
+]
+
 const ASK_FACT_STATES: ThreadMessageLike[] = [
   ...answeredStep(
     "What is your business called?",
@@ -386,7 +479,7 @@ const ASK_FACT_STATES: ThreadMessageLike[] = [
       result: { answer: "skipped" },
       skippable: true,
     }),
-    "Skip for now"
+    "Skipped"
   ),
   {
     content: [
@@ -404,13 +497,21 @@ const ASK_FACT_STATES: ThreadMessageLike[] = [
     role: "assistant",
     status: DONE,
   },
+]
+
+/** The questions still open, each docked in a thread of its own. */
+const ASK_FACT_OPEN: ThreadMessageLike[] = [
   {
-    content: [askFact("business.name", { prefill: { name: "Brightclean" } })],
+    content: [
+      askFact("business.email", {
+        prefill: { address: "hello@brightclean.test" },
+      }),
+    ],
     role: "assistant",
     status: WAITING,
   },
   {
-    content: [askFact("business.tagline", { skippable: true })],
+    content: [askFact("hours.weekday", { skippable: true })],
     role: "assistant",
     status: WAITING,
   },
@@ -424,12 +525,14 @@ const askDetails = (
     isError?: boolean
     skippable?: boolean
     prefill?: unknown[]
+    ideas?: string[]
   } = {}
 ) => ({
   args: {
     step,
     prefill: (extra.prefill ?? []) as [],
     skippable: extra.skippable ?? false,
+    ...(extra.ideas ? { ideas: extra.ideas } : {}),
   },
   isError: extra.isError,
   result: extra.result,
@@ -455,7 +558,7 @@ const ASK_DETAILS_STATES: ThreadMessageLike[] = [
         ],
       },
     }),
-    "07700 900123, sam@brightclean.example"
+    "07700 900123 · sam@brightclean.example"
   ),
   ...answeredStep(
     "And your assistant?",
@@ -463,7 +566,7 @@ const ASK_DETAILS_STATES: ThreadMessageLike[] = [
       result: { answer: "skipped" },
       skippable: true,
     }),
-    "Skip for now"
+    "Skipped"
   ),
   {
     content: [
@@ -476,6 +579,10 @@ const ASK_DETAILS_STATES: ThreadMessageLike[] = [
     role: "assistant",
     status: DONE,
   },
+]
+
+/** The questions still open, each docked in a thread of its own. */
+const ASK_DETAILS_OPEN: ThreadMessageLike[] = [
   {
     content: [
       question(
@@ -489,7 +596,38 @@ const ASK_DETAILS_STATES: ThreadMessageLike[] = [
   {
     content: [
       question("Last thing: what should your assistant be called?"),
-      askDetails("assistant", { skippable: true }),
+      askDetails("assistant", {
+        skippable: true,
+        ideas: ["Marcus", "Priya"],
+      }),
+    ],
+    role: "assistant",
+    status: WAITING,
+  },
+  {
+    content: [
+      question("Ava it is. How should she look?"),
+      askDetails("assistant", {
+        prefill: [
+          { key: "assistant.name", value: { name: "Ava" } },
+          { key: "assistant.pronouns", value: { id: "she_her" } },
+        ],
+      }),
+    ],
+    role: "assistant",
+    status: WAITING,
+  },
+  {
+    content: [
+      question("Here's your assistant as it comes. Change anything you like."),
+      askDetails("assistant", {
+        prefill: [
+          { key: "assistant.name", value: { name: "Reme" } },
+          { key: "assistant.pronouns", value: { id: "they_them" } },
+          { key: "assistant.avatar", value: { id: "reme" } },
+          { key: "assistant.tone", value: { id: "friendly" } },
+        ],
+      }),
     ],
     role: "assistant",
     status: WAITING,
@@ -554,7 +692,7 @@ const COLOUR_CARD = {
     label: "Your own colour",
     placeholder: "A colour code, or describe your colours",
   },
-  initial: ["ocean", "lagoon", "sunset", "damson"],
+  initial: ["mint", "mist_teal", "garden", "stone_sage"],
   color: true,
 }
 const FONT_OPTIONS = FONTS.map((each) => ({
@@ -586,15 +724,15 @@ const COLOUR_STATES: [string, Parameters<typeof ChoiceForm>[0]["start"]][] = [
   ["Four first", undefined],
   [
     "After Show other colours",
-    { shown: ["harbour", "sage", "cardinal", "graphite"] },
+    { shown: ["deep_sea", "forest_calm", "ocean_deep", "charcoal"] },
   ],
-  ["Own colour, picked", { other: brandOf("harbour") }],
+  ["Own colour, picked", { other: brandOf("mineral") }],
   [
     "Own colour, too light for white text",
     {
       other:
-        PALETTES.find((each) => each.id === "sunset")?.swatches[1] ??
-        brandOf("sunset"),
+        PALETTES.find((each) => each.id === "fern")?.swatches[0] ??
+        brandOf("fern"),
     },
   ],
   ["Own colour, in words", { other: "Navy and gold, like our vans" }],
@@ -617,7 +755,7 @@ const ASK_CHOICE_STATES: ThreadMessageLike[] = [
       result: { answer: "skipped" },
       skippable: true,
     }),
-    "Skip for now"
+    "Skipped"
   ),
   {
     content: [
@@ -630,6 +768,10 @@ const ASK_CHOICE_STATES: ThreadMessageLike[] = [
     role: "assistant",
     status: DONE,
   },
+]
+
+/** The questions still open, each docked in a thread of its own. */
+const ASK_CHOICE_OPEN: ThreadMessageLike[] = [
   {
     content: [
       question("What kind of business is Brightclean?"),
@@ -668,6 +810,19 @@ const ASK_CHOICE_STATES: ThreadMessageLike[] = [
     content: [
       question("Which layout suits you best?"),
       askChoice("template", TEMPLATE_OPTIONS, { preselected: ["modern"] }),
+    ],
+    role: "assistant",
+    status: WAITING,
+  },
+  {
+    content: [
+      question(
+        "Your website turns visitors into enquiries. Shall I build it for you?"
+      ),
+      askChoice("build_for_me", [
+        { id: "yes", label: "Yes, build it for me" },
+        { id: "skip", label: "Skip" },
+      ]),
     ],
     role: "assistant",
     status: WAITING,
@@ -723,7 +878,7 @@ const ASK_UPLOAD_STATES: ThreadMessageLike[] = [
   ...answeredStep(
     "And one of your team at work?",
     askUpload("skipped", { result: { answer: "skipped" } }),
-    "Skip for now"
+    "Skipped"
   ),
   {
     content: [
@@ -735,6 +890,10 @@ const ASK_UPLOAD_STATES: ThreadMessageLike[] = [
     role: "assistant",
     status: DONE,
   },
+]
+
+/** The questions still open, each docked in a thread of its own. */
+const ASK_UPLOAD_OPEN: ThreadMessageLike[] = [
   {
     content: [
       question(
@@ -765,101 +924,16 @@ const quoteField = (
 const LIMOUSINE_QUESTIONS = [
   quoteField("pickup", "Pick-up address", "text", { hint: "Street and town" }),
   quoteField("dropoff", "Drop-off address", "text"),
-  quoteField("journey_date", "Date of the journey", "date"),
+  quoteField("journey_date", "Date and time of the journey", "datetime"),
   quoteField("passengers", "Passengers", "number"),
+  quoteField("vehicle", "Vehicle", "radio", {
+    options: ["Saloon", "Stretch limousine", "Minibus"],
+  }),
   quoteField("occasion", "Occasion", "select", {
     required: false,
     options: ["Wedding", "Airport transfer", "Night out", "Business"],
   }),
   quoteField("notes", "Anything else", "textarea", { required: false }),
-]
-
-/** A `review_blueprint` call in one of its states. */
-const reviewBlueprint = (
-  label: string,
-  plan: Blueprint,
-  extra: { result?: unknown; isError?: boolean } = {}
-) => ({
-  args: { blueprint: plan },
-  isError: extra.isError,
-  result: extra.result,
-  toolCallId: `blueprint_${label}`,
-  toolName: "review_blueprint",
-  type: "tool-call" as const,
-})
-
-const PLANNED =
-  "Here is the plan for your site. Read it, then build it or change it."
-
-const REVIEW_BLUEPRINT_STATES: ThreadMessageLike[] = [
-  ...answeredStep(
-    PLANNED,
-    reviewBlueprint("built", BLUEPRINT, { result: { decision: "build" } }),
-    "Build it"
-  ),
-  {
-    content: [
-      reviewBlueprint("cancelled", BLUEPRINT, {
-        isError: true,
-        result: { error: TOOL_CALL_CANCELLED },
-      }),
-      reviewBlueprint("error", BLUEPRINT, {
-        isError: true,
-        result: { error: BROKEN },
-      }),
-    ],
-    role: "assistant",
-    status: DONE,
-  },
-  // A re-plan: the first plan was changed, so the second marks what differs.
-  {
-    content: [
-      question(PLANNED),
-      reviewBlueprint("first", BLUEPRINT, {
-        result: {
-          decision: "change",
-          note: "Add a gallery page and make the colours warmer",
-        },
-      }),
-    ],
-    role: "assistant",
-    status: DONE,
-  },
-  reply("Add a gallery page and make the colours warmer"),
-  {
-    content: [
-      question("Updated. The changed lines are marked."),
-      reviewBlueprint("replan", REPLAN),
-    ],
-    role: "assistant",
-    status: WAITING,
-  },
-]
-
-/** The plan card by itself: title, props, and an optional width. */
-const BLUEPRINT_CARDS: [string, BlueprintCardProps, string?][] = [
-  ["Feature plan", { blueprint: BLUEPRINT, onBuild: noop }],
-  ["Collapsed", { blueprint: BLUEPRINT, defaultOpen: false, onBuild: noop }],
-  [
-    "After a re-plan, changed rows marked",
-    { blueprint: REPLAN, previous: BLUEPRINT, onBuild: noop },
-  ],
-  [
-    "Read-only, as the panel keeps it",
-    { blueprint: BLUEPRINT, readOnly: true },
-  ],
-  [
-    "Your own colour, photos written in",
-    {
-      blueprint: {
-        ...BLUEPRINT,
-        palette: { kind: "brand", brand: PALETTES[3]?.brand ?? "" },
-      },
-      photoDirection: "Daylight, tidy rooms, hands at work, never faces.",
-      onBuild: noop,
-    },
-  ],
-  ["Phone width", { blueprint: BLUEPRINT, onBuild: noop }, "max-w-[22.5rem]"],
 ]
 
 /** A `review_quote_form` call in one of its states. */
@@ -894,7 +968,7 @@ const REVIEW_QUOTE_STATES: ThreadMessageLike[] = [
         fields: LIMOUSINE_QUESTIONS.slice(0, 4),
       },
     }),
-    "Your quote form asks 4 questions: Pick-up address, Drop-off address, Date of the journey, Passengers."
+    "Looks good"
   ),
   ...answeredStep(
     PROPOSED,
@@ -920,6 +994,10 @@ const REVIEW_QUOTE_STATES: ThreadMessageLike[] = [
     role: "assistant",
     status: DONE,
   },
+]
+
+/** The questions still open, each docked in a thread of its own. */
+const REVIEW_QUOTE_OPEN: ThreadMessageLike[] = [
   {
     content: [question(PROPOSED), reviewQuote("open", LIMOUSINE_QUESTIONS)],
     role: "assistant",
@@ -932,9 +1010,8 @@ const REVIEW_QUOTE_STATES: ThreadMessageLike[] = [
         "minimum",
         [
           quoteField("rooms", "How many rooms", "number"),
-          quoteField("access", "How we get in", "textarea", {
+          quoteField("photos", "Photos of the rooms", "photos", {
             required: false,
-            hint: "A key safe, a neighbour or someone at home",
           }),
         ],
         { note: null }
@@ -957,7 +1034,6 @@ const fakeUpload = async (files: File[]) => {
   }
 }
 
-const ONBOARDING_GOAL = "Build my website from the details I gave you."
 const BUILD_AT = "2026-09-27T10:00:00.000Z"
 
 const requestChange = (
@@ -1027,7 +1103,7 @@ const REQUEST_CHANGE_STATES: ThreadMessageLike[] = [
   requestChange("responding", "Add Saturday hours, 9 to 1.", {
     approved: true,
   }),
-  requestChange("started", ONBOARDING_GOAL, {
+  requestChange("started", "Add a page for end of tenancy cleans.", {
     approved: true,
     result: build(null),
   }),
@@ -1043,8 +1119,8 @@ const REQUEST_CHANGE_STATES: ThreadMessageLike[] = [
     result: {
       error: {
         class: "validation",
-        code: "change.question_open",
-        message: "A build is waiting on your answer. Answer it first.",
+        code: "change.build_busy",
+        message: "A build is finishing. Try again once it settles.",
       },
       outcome: "refused",
     },
@@ -1580,6 +1656,31 @@ const CONNECT_GOOGLE_STATES: ThreadMessageLike[] = [
   }),
 ]
 
+/** The reply to the assistant set-up, after Pick for me: the persona as set. */
+const PERSONA: ThreadMessageLike[] = [
+  ask("Pick for me"),
+  {
+    content: [
+      {
+        text: "I've gone with Reme, she/her, with a professional manner.",
+        type: "text",
+      },
+      {
+        type: "data",
+        name: "persona",
+        data: {
+          name: "Reme",
+          pronouns: "she_her",
+          avatar: "she_1",
+          tone: "professional",
+        },
+      },
+    ],
+    role: "assistant",
+    status: DONE,
+  },
+]
+
 /** A reply that opens with what the assistant remembered since the owner last looked. */
 const REMEMBERED: ThreadMessageLike[] = [
   ask("Thanks, that is all."),
@@ -1611,6 +1712,71 @@ const REMEMBERED: ThreadMessageLike[] = [
     status: DONE,
   },
 ]
+
+/** A change asked for in the panel: the owner's words, then the resolved line. */
+const CHANGE_ASKED: ThreadMessageLike[] = [
+  ask("Make the hero say end of tenancy cleans."),
+  {
+    content: [
+      {
+        type: "data",
+        name: "change_asked",
+        data: { text: "Make the hero say end of tenancy cleans." },
+      },
+    ],
+    role: "assistant",
+    status: DONE,
+  },
+]
+
+/** Three questions a build waits on, posted by the assistant as one stack. */
+const BUILD_QUESTIONS: ThreadMessageLike[] = [
+  {
+    content: [
+      {
+        text: "Three quick things before I finish your website.",
+        type: "text",
+      },
+      {
+        type: "data",
+        name: "build_questions",
+        data: {
+          kind: "build",
+          assignment_id: "00000000-0000-4000-8000-0000000000b1",
+          questions: [
+            {
+              id: "00000000-0000-4000-8000-0000000000c1",
+              text: "What hours are you open on weekdays?",
+              input: { kind: "fact", key: "hours.weekday" },
+              skippable: false,
+            },
+            {
+              id: "00000000-0000-4000-8000-0000000000c2",
+              text: "How often do most customers book you?",
+              input: {
+                kind: "choice",
+                options: ["Weekly", "Fortnightly", "Monthly"],
+              },
+              skippable: true,
+            },
+            {
+              id: "00000000-0000-4000-8000-0000000000c3",
+              text: "Is there anywhere customers should park?",
+              input: { kind: "text", maxLength: 200, email: false },
+              skippable: true,
+            },
+          ],
+        },
+      },
+    ],
+    role: "assistant",
+    status: DONE,
+  },
+]
+
+/** Stores every answer after a moment, so the tick and the move on show. */
+const answerSlowly = () =>
+  new Promise<null>((done) => setTimeout(() => done(null), 400))
 
 /** Messages the assistant posted on its own, each with the button it can carry. */
 const POSTED: ThreadMessageLike[] = [
@@ -1873,7 +2039,7 @@ const CONVERSATION: ThreadMessageLike[] = [
 const RUNNING: ThreadMessageLike[] = [
   ask("What is waiting on me?"),
   {
-    content: [{ text: "Version 4 is ready for you to", type: "text" }],
+    content: [{ text: "A new version is ready for you to", type: "text" }],
     role: "assistant",
     status: { type: "running" },
   },
@@ -2032,7 +2198,8 @@ function ConversationSample({ stored }: { stored?: string }) {
         messages={[]}
         {...(stored ? { stored } : {})}
         settings={{
-          briefing: "v3 is live. Version 4 is ready for you to approve.",
+          briefing:
+            "Your website is live. Your latest changes are ready to publish.",
         }}
         suggestions={SUGGESTIONS}
       />
@@ -2068,6 +2235,21 @@ function TooltipSample() {
       </TooltipProvider>
     </div>
   )
+}
+
+/** A first version ready to review, with its pictures and a preview. */
+const READY = {
+  title: "Brightclean website",
+  meta: "Not published · Today, 4:05 pm",
+  pictures: {
+    laptop: KITCHEN,
+    "laptop-2": KITCHEN,
+    phone: KITCHEN,
+    icon: ICON,
+  },
+  preview: { url: "https://preview.example.invalid/" },
+  onApprove: noop,
+  onMakeChanges: noop,
 }
 
 const assistantCatalog = [
@@ -2130,22 +2312,45 @@ const assistantCatalog = [
       />
     ),
   },
+  // An open question, and the tray parts every ask is drawn with.
+  ...(["AskOpen", "Docked", "TrayNote"] as const).map((name) => ({
+    name,
+    render: () => (
+      <TrayStates
+        height="h-[36rem]"
+        open={ASK_OPEN_OPEN}
+        settled={ASK_OPEN_STATES}
+      />
+    ),
+  })),
   {
     name: "AskFact",
     render: () => (
-      <FixtureThread height="h-[72rem]" messages={ASK_FACT_STATES} />
+      <TrayStates
+        height="h-[50rem]"
+        open={ASK_FACT_OPEN}
+        settled={ASK_FACT_STATES}
+      />
     ),
   },
   {
     name: "AskDetails",
     render: () => (
-      <FixtureThread height="h-[88rem]" messages={ASK_DETAILS_STATES} />
+      <TrayStates
+        height="h-[40rem]"
+        open={ASK_DETAILS_OPEN}
+        settled={ASK_DETAILS_STATES}
+      />
     ),
   },
   {
     name: "AskChoice",
     render: () => (
-      <FixtureThread height="h-[150rem]" messages={ASK_CHOICE_STATES} />
+      <TrayStates
+        height="h-[56rem]"
+        open={ASK_CHOICE_OPEN}
+        settled={ASK_CHOICE_STATES}
+      />
     ),
   },
   {
@@ -2157,43 +2362,27 @@ const assistantCatalog = [
             <h3 className="font-medium text-muted-foreground text-xs">
               {title}
             </h3>
-            <ChoiceForm input={COLOUR_INPUT} onAnswer={noop} start={start} />
+            <TrayFrame
+              collapsed={false}
+              onCollapsedChange={noop}
+              question="Which colours feel right?"
+              submit={{ label: "Submit" }}
+            >
+              <ChoiceForm input={COLOUR_INPUT} onAnswer={noop} start={start} />
+            </TrayFrame>
           </section>
         ))}
       </div>
     ),
   },
   {
-    name: "ReviewBlueprint",
-    render: () => (
-      <FixtureThread height="h-[60rem]" messages={REVIEW_BLUEPRINT_STATES} />
-    ),
-  },
-  // The plan card on its own, in the states a card can be in.
-  ...(["BlueprintCard", "SiteNameProvider"] as const).map((name) => ({
-    name,
-    render: () => (
-      <SiteNameProvider value="Mop & Pail Cleaning">
-        <div className="flex max-w-2xl flex-col gap-8">
-          {BLUEPRINT_CARDS.map(([title, props, width]) => (
-            <section
-              className={`flex flex-col gap-3 ${width ?? ""}`}
-              key={title}
-            >
-              <h3 className="font-medium text-muted-foreground text-xs">
-                {title}
-              </h3>
-              <BlueprintCard {...props} />
-            </section>
-          ))}
-        </div>
-      </SiteNameProvider>
-    ),
-  })),
-  {
     name: "ReviewQuoteForm",
     render: () => (
-      <FixtureThread height="h-[150rem]" messages={REVIEW_QUOTE_STATES} />
+      <TrayStates
+        height="h-[44rem]"
+        open={REVIEW_QUOTE_OPEN}
+        settled={REVIEW_QUOTE_STATES}
+      />
     ),
   },
   // The upload card and the provider that gives it the app's upload.
@@ -2201,7 +2390,11 @@ const assistantCatalog = [
     name,
     render: () => (
       <UploadPhotosProvider value={fakeUpload}>
-        <FixtureThread height="h-[60rem]" messages={ASK_UPLOAD_STATES} />
+        <TrayStates
+          height="h-[48rem]"
+          open={ASK_UPLOAD_OPEN}
+          settled={ASK_UPLOAD_STATES}
+        />
       </UploadPhotosProvider>
     ),
   })),
@@ -2217,7 +2410,7 @@ const assistantCatalog = [
           isDisabled={false}
           settings={{
             placeholder: "Ask Fern anything…",
-            questionPlaceholder: "Or tell Fern something else…",
+            questionPlaceholder: "Tell Fern what to do instead…",
           }}
           messages={[
             {
@@ -2238,36 +2431,42 @@ const assistantCatalog = [
     ),
   })),
   {
-    name: "GeneratedPhotos",
+    name: "SitePictures",
     render: () => (
-      <div className="max-w-xl">
-        <GeneratedPhotos
-          actions={{ onRemove: noop, onTryAnother: noop, onUseOwn: noop }}
-          photos={[
-            {
-              alt: "A bright kitchen after a clean",
-              section: "hero",
-              slot_id: "hero",
-              src: KITCHEN,
-            },
-            {
-              alt: "The team at work",
-              section: "about",
-              slot_id: "about",
-            },
-          ]}
-        />
-      </div>
+      <SitePictures
+        actions={{ onRemove: noop, onTryAnother: noop, onUseOwn: noop }}
+        logo={KITCHEN}
+        maker="Ava"
+        onReplaceLogo={noop}
+        pictures={[
+          {
+            alt: "A bright kitchen after a clean",
+            section: "hero",
+            slot_id: "hero",
+            generated: true,
+            src: KITCHEN,
+          },
+          {
+            alt: "The team at work",
+            section: "about",
+            slot_id: "about",
+            generated: false,
+            src: null,
+          },
+        ]}
+        status="Sent. A new version replaces this one."
+      />
     ),
   },
-  // At the end of an open thread, then its other states on their own:
-  // approving, refused and approved.
+  // At the end of an open thread, docked once the owner has written since,
+  // then its other states on their own: approving, refused, preview not
+  // ready and approved.
   {
     name: "SiteReady",
     render: () => (
       <div className="flex flex-col gap-6">
         <FixtureThread
-          height="h-[30rem]"
+          height="h-[34rem]"
           messages={[
             ask("Can you add a line about pets?"),
             {
@@ -2281,66 +2480,99 @@ const assistantCatalog = [
               status: DONE,
             },
           ]}
-          settings={{
-            after: (
-              <SiteReady
-                onApprove={noop}
-                onMakeChanges={noop}
-                onSeePreview={noop}
-                version={1}
-              />
-            ),
-          }}
+          settings={{ after: <SiteReady {...READY} /> }}
+        />
+        <FixtureThread
+          height="h-[34rem]"
+          messages={[ask("Hi")]}
+          settings={{ after: <SiteReady {...READY} docked /> }}
         />
         <div className="flex max-w-xl flex-col gap-6">
+          <SiteReady {...READY} pending />
           <SiteReady
-            onApprove={noop}
-            onMakeChanges={noop}
-            onSeePreview={noop}
-            pending
-            version={2}
-          />
-          <SiteReady
+            {...READY}
             error="A newer version replaced that one. Check the latest before you decide."
-            onApprove={noop}
-            onMakeChanges={noop}
-            onSeePreview={noop}
-            version={2}
           />
-          <SiteReady
-            approved
-            onApprove={noop}
-            onMakeChanges={noop}
-            onSeePreview={noop}
-            version={3}
-          />
+          <SiteReady {...READY} preview="error" />
+          <SiteReady {...READY} pictures={null} preview="loading" />
+          <SiteReady {...READY} approved />
         </div>
       </div>
     ),
   },
-  {
-    // The photos the build made, each from its own thumbnail.
-    name: "SiteReady with photos",
+  // The ready card's own parts: the site's icon and the way to its preview.
+  ...(["SiteIcon", "PreviewLink"] as const).map((name) => ({
+    name,
     render: () => (
-      <div className="max-w-2xl">
-        <SiteReady
-          onApprove={noop}
-          onMakeChanges={noop}
-          onSeePreview={noop}
-          photoActions={{ onRemove: noop, onTryAnother: noop, onUseOwn: noop }}
-          photos={[
-            {
-              alt: "A bright, tidy living room in morning light",
-              section: "hero",
-              slot_id: "hero",
-              src: KITCHEN,
-            },
-          ]}
-          version={2}
-        />
+      <div className="max-w-xl">
+        <SiteReady {...READY} />
       </div>
     ),
-  },
+  })),
+  // A new chat's updates: the site to publish, a question and a reminder,
+  // one in front with the other two as edges under it, each a row of its own.
+  ...(["UpdateDeck", "UpdateRow", "UpdateKindIcon"] as const).map((name) => ({
+    name,
+    render: () => (
+      <FixtureThread
+        height="h-[34rem]"
+        messages={[]}
+        settings={{
+          briefing: "Your website is ready to go live.",
+          updates: (
+            <UpdateDeck
+              updates={[
+                {
+                  id: "site",
+                  content: (
+                    <SiteReady
+                      meta="Not published · Today, 4:05 pm"
+                      onApprove={noop}
+                      onMakeChanges={noop}
+                      pictures={{
+                        laptop: KITCHEN,
+                        "laptop-2": KITCHEN,
+                        phone: KITCHEN,
+                        icon: ICON,
+                      }}
+                      preview="loading"
+                      row
+                      title="Brightclean website"
+                    />
+                  ),
+                },
+                {
+                  id: "question",
+                  content: (
+                    <UpdateRow
+                      action={
+                        <Button size="sm" variant="outline">
+                          Answer
+                        </Button>
+                      }
+                      icon={<UpdateKindIcon kind="question" />}
+                      meta="Sam asked"
+                      title="Which areas do you cover?"
+                    />
+                  ),
+                },
+                {
+                  id: "reminder",
+                  content: (
+                    <UpdateRow
+                      icon={<UpdateKindIcon kind="reminder" />}
+                      meta="Reminder"
+                      title="Call the window supplier"
+                    />
+                  ),
+                },
+              ]}
+            />
+          ),
+        }}
+      />
+    ),
+  })),
   {
     name: "RequestChange",
     render: () => (
@@ -2439,11 +2671,44 @@ const assistantCatalog = [
       </FixtureThread>
     ),
   },
+  // The question stack and the provider that gives it the app's answer call.
+  ...(["BuildQuestionsUI", "AnswerBuildQuestionProvider"] as const).map(
+    (name) => ({
+      name,
+      render: () => (
+        <AnswerBuildQuestionProvider value={answerSlowly}>
+          <OwnerThread
+            height="h-[40rem]"
+            messages={BUILD_QUESTIONS}
+            stored="00000000-0000-4000-8000-0000000000a1"
+          >
+            <BuildQuestionsUI />
+          </OwnerThread>
+        </AnswerBuildQuestionProvider>
+      ),
+    })
+  ),
+  {
+    name: "ChangeAskedUI",
+    render: () => (
+      <FixtureThread height="h-[26rem]" messages={CHANGE_ASKED}>
+        <ChangeAskedUI />
+      </FixtureThread>
+    ),
+  },
   {
     name: "MemoryChipUI",
     render: () => (
       <FixtureThread height="h-[24rem]" messages={REMEMBERED}>
         <MemoryChipUI />
+      </FixtureThread>
+    ),
+  },
+  {
+    name: "PersonaCardUI",
+    render: () => (
+      <FixtureThread height="h-[28rem]" messages={PERSONA}>
+        <PersonaCardUI />
       </FixtureThread>
     ),
   },
@@ -2464,7 +2729,8 @@ const assistantCatalog = [
         isDisabled={false}
         messages={[]}
         settings={{
-          briefing: "v3 is live. Version 4 is ready for you to approve.",
+          briefing:
+            "Your website is live. Your latest changes are ready to publish.",
         }}
         suggestions={SUGGESTIONS}
       />

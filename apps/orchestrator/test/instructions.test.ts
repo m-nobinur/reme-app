@@ -172,6 +172,39 @@ describe("the instructions' cache order", () => {
     expect(other).toContain("This is a revision")
   })
 
+  it("carries a retry on from the failed build's site, as the build it was", () => {
+    const carried = instructions(
+      {
+        ...brief([cleaning], "sites/x/checkpoint.tar.zst"),
+        continues: "build",
+      },
+      20
+    )
+    expect(carried).toContain("carries on from the last attempt")
+    expect(carried).not.toContain("This is a revision")
+    expect(carried).toContain("Assignment goal: Build the site")
+  })
+
+  it("names the retry.context signal only on a retry, after the mark", () => {
+    const prefix = (text: string) => text.slice(0, text.indexOf(BUILD_MARK))
+    const first = instructions(brief([cleaning]), 20)
+    const retry = instructions(
+      {
+        ...brief([cleaning]),
+        previous: {
+          report_id: "r",
+          failed: [{ gate: "claims", message: "m" }],
+          cause: "unfinished",
+          rounds: 3,
+        },
+      },
+      20
+    )
+    expect(first).not.toContain("retry.context")
+    expect(at(retry, "retry.context")).toBeGreaterThan(at(retry, BUILD_MARK))
+    expect(prefix(retry)).toBe(prefix(first))
+  })
+
   it("keeps ADR-033 whole: no claim without a fact, the owner decides what is shown", () => {
     const text = instructions(brief([cleaning], "sites/x/source.tar.zst"), 20)
     expect(text).toContain("The site never shows a price")

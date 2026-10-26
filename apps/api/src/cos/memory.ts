@@ -95,7 +95,7 @@ const stem = (word: string) =>
           : word
 
 /** The content words of `text`: letters and digits apart, lower case, stems, no stopwords. */
-const contentWords = (text: string) =>
+export const contentWords = (text: string) =>
   (text.toLowerCase().match(/[\p{L}\p{M}]+|\p{N}+/gu) ?? [])
     .filter((w) => !STOP.has(w))
     .map(stem)

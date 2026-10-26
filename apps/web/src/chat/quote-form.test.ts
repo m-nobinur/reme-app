@@ -12,14 +12,9 @@ import {
   dropField,
   keptFields,
   labelProblem,
-  QUOTE_LABEL_MAX,
-  quoteSummary,
-  renameField,
-  restoreField,
   setRequired,
-  waitsOnQuoteForm,
 } from "@workspace/ui/lib/quote-form"
-import { reviewQuoteFormView } from "@workspace/ui/lib/tool-state"
+import { reviewQuoteFormView, waitsOnTray } from "@workspace/ui/lib/tool-state"
 import { describe, expect, it } from "vitest"
 import { toUIMessage } from "./history"
 import type { ChatMessage } from "./message"
@@ -47,8 +42,12 @@ const LIMOUSINE = [
   }),
 ]
 
+/** The proposal with one question's label changed, as a model could write it. */
+const relabel = (fields: QuoteField[], key: string, label: string) =>
+  fields.map((each) => (each.key === key ? { ...each, label } : each))
+
 describe("editing a proposed quote form", () => {
-  it("drops and restores a question in its place", () => {
+  it("drops a question and keeps its place", () => {
     const dropped = dropField(draftOf(LIMOUSINE), "dropoff")
     expect(keptFields(dropped).map((f) => f.key)).toEqual([
       "pickup",
@@ -58,7 +57,6 @@ describe("editing a proposed quote form", () => {
     expect(dropped.map((row) => row.field.key)).toEqual(
       LIMOUSINE.map((f) => f.key)
     )
-    expect(keptFields(restoreField(dropped, "dropoff"))).toEqual(LIMOUSINE)
   })
 
   it("never drops below the contract's minimum", () => {
@@ -69,25 +67,14 @@ describe("editing a proposed quote form", () => {
     expect(keptFields(draft)).toHaveLength(QUOTE_FIELDS_MIN)
     expect(canDrop(draft)).toBe(false)
     expect(dropField(draft, "occasion")).toBe(draft)
-    expect(canDrop(restoreField(draft, "pickup"))).toBe(true)
-  })
-
-  it("renames a label, keeps its key and caps its length", () => {
-    const draft = renameField(draftOf(LIMOUSINE), "pickup", "Collection point")
-    expect(keptFields(draft)[0]).toEqual({
-      ...LIMOUSINE[0],
-      label: "Collection point",
-    })
-    const long = renameField(draft, "pickup", "x".repeat(200))
-    expect(keptFields(long)[0]?.label).toHaveLength(QUOTE_LABEL_MAX)
   })
 
   it("refuses a blank or a repeated label, and lets a dropped one repeat", () => {
-    const blank = renameField(draftOf(LIMOUSINE), "pickup", "   ")
+    const blank = draftOf(relabel(LIMOUSINE, "pickup", "   "))
     expect(labelProblem(blank, "pickup")).toBe("Give this question a label.")
     expect(confirmedFields(blank)).toHaveProperty("problem")
 
-    const twice = renameField(draftOf(LIMOUSINE), "dropoff", "pick-up ADDRESS")
+    const twice = draftOf(relabel(LIMOUSINE, "dropoff", "pick-up ADDRESS"))
     expect(labelProblem(twice, "dropoff")).toBe(
       "Two questions have this label."
     )
@@ -97,10 +84,9 @@ describe("editing a proposed quote form", () => {
 
   it("confirms the kept list, trimmed, with unique keys the contract takes", () => {
     const draft = setRequired(
-      renameField(
-        dropField(draftOf(LIMOUSINE), "occasion"),
-        "passengers",
-        "  How many travelling  "
+      dropField(
+        draftOf(relabel(LIMOUSINE, "passengers", "  How many travelling  ")),
+        "occasion"
       ),
       "dropoff",
       false
@@ -114,12 +100,6 @@ describe("editing a proposed quote form", () => {
     ])
     expect(QuoteFields.safeParse(result.fields).success).toBe(true)
     expect(new Set(result.fields.map((f) => f.key)).size).toBe(3)
-  })
-
-  it("reads the confirmed list back with its count and labels", () => {
-    expect(quoteSummary(LIMOUSINE.slice(0, 2))).toBe(
-      "Your quote form asks 2 questions: Pick-up address, Drop-off address."
-    )
   })
 })
 
@@ -183,7 +163,7 @@ describe("the review card's turn", () => {
     const reply = replyTo(waiting, { toolCallId: "call_quote", output })
     expect(reply).toEqual({
       role: "user",
-      parts: [{ type: "text", text: quoteSummary(LIMOUSINE) }],
+      parts: [{ type: "text", text: "Looks good" }],
       metadata: { reply: true },
     })
     // The reply sends it, never the SDK on its own.
@@ -195,7 +175,7 @@ describe("the review card's turn", () => {
         kind: "results",
         message_id: "msg_assistant",
         results: [{ kind: "answer", tool_call_id: "call_quote", output }],
-        reply: { message_id: "msg_reply", text: quoteSummary(LIMOUSINE) },
+        reply: { message_id: "msg_reply", text: "Looks good" },
       }
     )
   })
@@ -231,6 +211,13 @@ describe("the review card's turn", () => {
 
   it("leaves a message alone that is a website change, too long, or has no card to answer", () => {
     const waiting = [assistant(review("input-available"))]
+    // The questions as the owner left them on the pills go with the words.
+    const kept = LIMOUSINE.slice(0, 3)
+    expect(
+      quoteChanges(waiting, "Looks good", undefined, (id) =>
+        id === "call_quote" ? kept : undefined
+      )?.output
+    ).toEqual({ answer: "changes", text: "Looks good", fields: kept })
     expect(quoteChanges(waiting, "Add Saturday hours", "site_change")).toBe(
       null
     )
@@ -287,12 +274,23 @@ describe("the review card's turn", () => {
   })
 })
 
-it("tells the composer a proposed form waits, from the thread's own parts", () => {
+it("tells the composer a question waits in the tray, from the thread's own parts", () => {
   const call = { type: "tool-call", toolName: "review_quote_form" }
-  expect(waitsOnQuoteForm([call])).toBe(true)
-  expect(waitsOnQuoteForm([{ ...call, result: { answer: "changes" } }])).toBe(
-    false
-  )
-  expect(waitsOnQuoteForm([{ ...call, isError: true }])).toBe(false)
-  expect(waitsOnQuoteForm(undefined)).toBe(false)
+  expect(waitsOnTray([call])).toBe(true)
+  // Answered in the composer, so nothing waits in the tray.
+  expect(waitsOnTray([{ ...call, toolName: "ask_open" }])).toBe(false)
+  expect(
+    waitsOnTray([
+      { ...call, toolName: "ask_fact", args: { key: "service_area.text" } },
+    ])
+  ).toBe(false)
+  expect(
+    waitsOnTray([
+      { ...call, toolName: "ask_fact", args: { key: "business.phone" } },
+    ])
+  ).toBe(true)
+  expect(waitsOnTray([{ ...call, toolName: "connect_domain" }])).toBe(false)
+  expect(waitsOnTray([{ ...call, result: { answer: "changes" } }])).toBe(false)
+  expect(waitsOnTray([{ ...call, isError: true }])).toBe(false)
+  expect(waitsOnTray(undefined)).toBe(false)
 })

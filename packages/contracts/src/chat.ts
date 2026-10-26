@@ -1,17 +1,29 @@
 import { z } from "zod"
 import { Uuid } from "./common.ts"
 import { ConversationMessage } from "./conversation.ts"
-import { Blueprint, SectionVariant } from "./design.ts"
+import { SectionVariant } from "./design.ts"
 import { ToolCallId } from "./ids.ts"
 import {
   Asset,
+  AvatarId,
   HexColour,
+  PaletteFromImage,
+  PronounId,
   QuoteFields,
+  ToneId,
   UPLOAD_MAX_BYTES,
   UPLOAD_MAX_FILES,
   UPLOAD_TYPES,
 } from "./onboarding.ts"
-import { ANSWER_TEXT_MAX, BuildSummary, FactValue, GOAL_MAX } from "./owner.ts"
+import {
+  ANSWER_TEXT_MAX,
+  BuildSummary,
+  FactValue,
+  type FactValueKey,
+  GOAL_MAX,
+  REVIEW_FACT_KEYS,
+  type ReviewFactKey,
+} from "./owner.ts"
 import { Refused } from "./refused.ts"
 import { Text } from "./text.ts"
 
@@ -23,7 +35,7 @@ const ApprovalId = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/)
  * The most an onboarding turn waits on its planner, every attempt included,
  * before the script answers it instead (`apps/api`'s `PLANNER.totalMs`).
  */
-export const PLANNER_TURN_MS = 30_000
+export const PLANNER_TURN_MS = 60_000
 
 /**
  * How long `POST /chat` may take to start answering, for the web's proxy to
@@ -46,6 +58,28 @@ export const TOOL_CALL_CANCELLED =
  * as cancelled, so it reads the stored message again and shows the outcome.
  */
 export const CARD_ANSWERED = "data-card_answered"
+
+/**
+ * The stored part the reply to the assistant set-up carries: the persona the
+ * owner settled on, or the assistant chose for them, as `PersonaCard`.
+ */
+export const PERSONA_CARD = "data-persona"
+
+/** A `PERSONA_CARD` part's data: the `assistant.*` facts' values. */
+export const PersonaCard = z.strictObject({
+  name: Text(40),
+  pronouns: PronounId,
+  avatar: AvatarId,
+  tone: ToneId,
+})
+
+/**
+ * The transient chunk a turn's stream carries before its reply: an
+ * `OnboardingStatus`, from the onboarding planner, or the heading of the
+ * model's current thought on any turn. It is never stored, and it goes when
+ * the first word of the reply arrives.
+ */
+export const ONBOARDING_STATUS = "data-onboarding_status"
 
 /**
  * How a Chief of Staff tool's error text begins (ADR-034). `TOOL_FAILED`
@@ -114,6 +148,33 @@ export const AskFactOutput = z.discriminatedUnion("answer", [
   z.strictObject({ answer: z.literal("skipped") }),
 ])
 
+/**
+ * `ask_open`'s input: a question the owner answers in their own words, by the
+ * fact it is after or "quote.form". The assistant's message asks it; the
+ * tray's title is the web's copy for `about`. `skippable` marks a question
+ * the owner may pass on; a call without it, as stored before it, is required.
+ */
+type OpenKey = Exclude<FactValueKey, "media.uploads" | ReviewFactKey>
+
+export const AskOpenInput = z.strictObject({
+  about: z.enum(
+    FactValue.options
+      .map((o) => o.shape.key.value)
+      .filter(
+        (key) =>
+          key !== "media.uploads" &&
+          !(REVIEW_FACT_KEYS as readonly string[]).includes(key)
+      ) as [OpenKey, ...OpenKey[]]
+  ),
+  skippable: z.boolean().optional(),
+})
+
+/** `ask_open`'s output: the owner's words, or a skip. */
+export const AskOpenOutput = z.discriminatedUnion("answer", [
+  z.strictObject({ answer: z.literal("stated"), text: Text(1000) }),
+  z.strictObject({ answer: z.literal("skipped") }),
+])
+
 /** The step of onboarding an `ask_choice` card is for. The api reads the answer by it. */
 export const ChoiceStep = z.enum([
   "industry",
@@ -166,7 +227,7 @@ export const AskChoiceInput = z
         })
       )
       .min(2)
-      .max(24),
+      .max(48),
     /** Whether more than one may be picked. */
     multiple: z.boolean(),
     /** Options ticked when the card opens. */
@@ -216,8 +277,33 @@ export const AskChoiceOutput = z.discriminatedUnion("answer", [
   z.strictObject({ answer: z.literal("skipped") }),
 ])
 
-/** What a design question shows beside its options. */
-export const DesignVisual = z.enum(["palette", "font_pair", "layout", "text"])
+/**
+ * `ask_upload`'s input: a drop zone for the owner's photos. The limits ride
+ * on the wire so the web enforces what the api will.
+ */
+export const AskUploadInput = z.strictObject({
+  accept: z.array(z.enum(UPLOAD_TYPES)).min(1),
+  max_files: z.int().min(1).max(UPLOAD_MAX_FILES),
+  max_bytes: z.int().positive().max(UPLOAD_MAX_BYTES),
+  skippable: z.boolean(),
+})
+
+/**
+ * What a design question shows beside its options. `logo` and `photos` are
+ * pages of their own: an upload or the assistant making one, with `upload`
+ * on the question for the drop zone's limits.
+ */
+export const DesignVisual = z.enum([
+  "palette",
+  "font_pair",
+  "layout",
+  "text",
+  "logo",
+  "photos",
+])
+
+/** A logo page's two ways: the owner's own logo, or the assistant making one. */
+export const LogoPath = z.enum(["upload", "create"])
 
 /** A question id: how an answer finds its question. */
 const QuestionId = z.string().regex(/^[a-z][a-z0-9_]{1,39}$/)
@@ -242,22 +328,75 @@ export const AskDesignInput = z.strictObject({
         /** The question the tray shows; absent only in calls written before it existed. */
         question: Text(120).optional(),
         visual: DesignVisual,
+        /**
+         * A logo or photos question's card offers `upload` and `create`, so
+         * the tray reads every question alike; its answer is a `logo` or
+         * `photos` one below, never a pick.
+         */
         card: AskChoiceInput,
+        /** The drop zone's limits, on a logo or photos question only. */
+        upload: AskUploadInput.optional(),
+        /**
+         * What the org already holds for a logo or photos question, so the
+         * tray opens with it: the logo, or the photos and their review.
+         */
+        held: z.array(Asset).max(UPLOAD_MAX_FILES).optional(),
+        /**
+         * The way the owner chose in words, on a logo question only: the
+         * tray opens on it. Absent, the tray asks; the card's `preselected`
+         * is only the default.
+         */
+        path: LogoPath.optional(),
       })
     )
     .min(1)
-    .max(DESIGN_QUESTIONS_MAX),
+    .max(DESIGN_QUESTIONS_MAX)
+    .refine(
+      (questions) =>
+        questions.every(
+          (q) =>
+            (q.visual === "logo" || q.visual === "photos") ===
+            (q.upload !== undefined)
+        ),
+      {
+        message:
+          "upload belongs to a logo or photos question, and each needs it",
+      }
+    )
+    .refine(
+      (questions) =>
+        questions.every((q) => q.path === undefined || q.visual === "logo"),
+      { message: "path belongs to a logo question" }
+    ),
 })
 
 /**
  * One answer in the tray: an option's id, several on a `multiple` card, the
- * owner's own words, or a skip.
+ * owner's own words, a skip, or what a logo, photos or picture palette page
+ * settled.
  */
 const DesignAnswer = z.union([
   z.strictObject({ choice: Text(40) }),
   z.strictObject({ choices: z.array(Text(40)).min(1).max(16) }),
   z.strictObject({ own: Text(200) }),
   z.strictObject({ skipped: z.literal(true) }),
+  /** A palette read from the owner's picture (`POST /palettes/from-image`). */
+  z.strictObject({ palette: PaletteFromImage }),
+  /** The logo question: the logo kept by `POST /logos/{id}/keep`. */
+  z.strictObject({ logo: Asset }),
+  /**
+   * The photos question: the photos sent and reviewed, and whether the
+   * assistant makes the ones still missing. `create` with no photos is
+   * "Create them for me".
+   */
+  z
+    .strictObject({
+      photos: z.array(Asset).max(UPLOAD_MAX_FILES),
+      create: z.boolean(),
+    })
+    .refine((answer) => answer.create || answer.photos.length > 0, {
+      message: "send a photo or leave them to the assistant",
+    }),
 ])
 
 /**
@@ -269,41 +408,6 @@ const DesignAnswer = z.union([
 export const AskDesignOutput = z.strictObject({
   answers: z.record(QuestionId, DesignAnswer),
   skip_all: z.boolean(),
-})
-
-/**
- * `review_blueprint`'s input: the plan the owner reads before a build starts.
- * `revision_of` is the assignment this plan revises, when it is a re-plan.
- */
-export const BlueprintReviewInput = z.strictObject({
-  blueprint: Blueprint,
-  revision_of: Uuid.optional(),
-})
-
-/** Build it as planned, or change it: `note` is the owner's words and is data. */
-export const BlueprintReviewOutput = z.discriminatedUnion("decision", [
-  z.strictObject({ decision: z.literal("build"), note: Text(500).optional() }),
-  z.strictObject({ decision: z.literal("change"), note: Text(500) }),
-])
-
-/**
- * What `POST /builds/:id/blueprint` answers (202): the round decided and the
- * decision on record. Not the build's state, which the decision has not moved yet.
- */
-export const BlueprintReceipt = z.strictObject({
-  round: z.int().positive(),
-  decision: z.enum(["build", "change"]),
-})
-
-/**
- * `ask_upload`'s input: a drop zone for the owner's photos. The limits ride
- * on the wire so the web enforces what the api will.
- */
-export const AskUploadInput = z.strictObject({
-  accept: z.array(z.enum(UPLOAD_TYPES)).min(1),
-  max_files: z.int().min(1).max(UPLOAD_MAX_FILES),
-  max_bytes: z.int().positive().max(UPLOAD_MAX_BYTES),
-  skippable: z.boolean(),
 })
 
 /**
@@ -324,7 +428,12 @@ export const DetailsStep = z.enum(["contact", "assistant"])
 /** The facts each details card asks for, in the order the card shows them. */
 export const DETAILS_KEYS = {
   contact: ["business.phone", "business.email"],
-  assistant: ["assistant.name", "assistant.pronouns", "assistant.tone"],
+  assistant: [
+    "assistant.name",
+    "assistant.pronouns",
+    "assistant.avatar",
+    "assistant.tone",
+  ],
 } as const satisfies Record<z.infer<typeof DetailsStep>, readonly string[]>
 
 /**
@@ -336,8 +445,10 @@ export const DETAILS_KEYS = {
 export const AskDetailsInput = z
   .strictObject({
     step: DetailsStep,
-    prefill: z.array(FactValue).max(3),
+    prefill: z.array(FactValue).max(4),
     skippable: z.boolean(),
+    /** Names written for this business's assistant, offered after Reme. The assistant step only. */
+    ideas: z.array(z.string().trim().min(1).max(40)).max(3).optional(),
   })
   .refine(
     (card) =>
@@ -350,12 +461,14 @@ export const AskDetailsInput = z
 /**
  * `ask_details`'s output: the facts the owner stated, at least one. The api
  * refuses a key outside the call's step, a key stated twice, and a skip of a
- * card that is not skippable.
+ * card that is not skippable. `skip_all`, as on `AskDesignOutput`: the owner
+ * pressed Pick for me, so the facts are the assistant's choice.
  */
 export const AskDetailsOutput = z.discriminatedUnion("answer", [
   z.strictObject({
     answer: z.literal("stated"),
-    facts: z.array(FactValue).min(1).max(3),
+    facts: z.array(FactValue).min(1).max(4),
+    skip_all: z.boolean().optional(),
   }),
   z.strictObject({ answer: z.literal("skipped") }),
 ])
@@ -375,12 +488,18 @@ export const ReviewQuoteFormInput = z.strictObject({
 /**
  * `review_quote_form`'s output. `confirmed` carries the list the owner
  * settled on, which the api checks as `QuoteFields` and stores as the
- * `quote.form` fact. `changes` is what the owner wants different, as data for
- * the assistant's next proposal.
+ * `quote.form` fact. `changes` is the owner's words, typed while the
+ * proposal waited, as data for the assistant: they may accept it or ask for
+ * something different. `fields` is the proposal as the owner left it, after
+ * any question they dropped or made optional on the card.
  */
 export const ReviewQuoteFormOutput = z.discriminatedUnion("answer", [
   z.strictObject({ answer: z.literal("confirmed"), fields: QuoteFields }),
-  z.strictObject({ answer: z.literal("changes"), text: Text(ANSWER_TEXT_MAX) }),
+  z.strictObject({
+    answer: z.literal("changes"),
+    text: Text(ANSWER_TEXT_MAX),
+    fields: QuoteFields.optional(),
+  }),
 ])
 
 /**
@@ -394,8 +513,8 @@ export const RequestChangeOutput = z.discriminatedUnion("outcome", [
 ])
 
 /**
- * The owner's resolution of one pending call: an answer to `ask_fact`,
- * `ask_details`, `ask_choice`, `ask_upload` or `review_quote_form`, or a yes or no on a
+ * The owner's resolution of one pending call: an answer to `ask_open`,
+ * `ask_fact`, `ask_details`, `ask_choice`, `ask_upload` or `review_quote_form`, or a yes or no on a
  * call that needs approval.
  * The api reads `output` against the call's own tool.
  */
@@ -404,11 +523,11 @@ const ChatResult = z.discriminatedUnion("kind", [
     kind: z.literal("answer"),
     tool_call_id: ToolCallId,
     output: z.union([
+      AskOpenOutput,
       AskFactOutput,
       AskDetailsOutput,
       AskChoiceOutput,
       AskDesignOutput,
-      BlueprintReviewOutput,
       AskUploadOutput,
       ReviewQuoteFormOutput,
     ]),
@@ -488,10 +607,8 @@ export const ChatRequest = z.strictObject({
 export type ChoiceStep = z.infer<typeof ChoiceStep>
 export type AskChoiceInput = z.infer<typeof AskChoiceInput>
 export type AskChoiceOutput = z.infer<typeof AskChoiceOutput>
+export type LogoPath = z.infer<typeof LogoPath>
 export type AskDesignInput = z.infer<typeof AskDesignInput>
-export type BlueprintReviewInput = z.infer<typeof BlueprintReviewInput>
-export type BlueprintReviewOutput = z.infer<typeof BlueprintReviewOutput>
-export type BlueprintReceipt = z.infer<typeof BlueprintReceipt>
 export type AskDesignOutput = z.infer<typeof AskDesignOutput>
 export type ReviewQuoteFormInput = z.infer<typeof ReviewQuoteFormInput>
 export type ReviewQuoteFormOutput = z.infer<typeof ReviewQuoteFormOutput>
@@ -501,7 +618,10 @@ export type AskFactInput = z.infer<typeof AskFactInput>
 export type DetailsStep = z.infer<typeof DetailsStep>
 export type AskDetailsInput = z.infer<typeof AskDetailsInput>
 export type AskDetailsOutput = z.infer<typeof AskDetailsOutput>
+export type PersonaCard = z.infer<typeof PersonaCard>
 export type AskFactOutput = z.infer<typeof AskFactOutput>
+export type AskOpenInput = z.infer<typeof AskOpenInput>
+export type AskOpenOutput = z.infer<typeof AskOpenOutput>
 export type RequestChangeOutput = z.infer<typeof RequestChangeOutput>
 export type ChatRequest = z.infer<typeof ChatRequest>
 export type ChatResult = z.infer<typeof ChatResult>

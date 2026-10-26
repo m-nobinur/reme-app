@@ -5,6 +5,7 @@ import { AuthCard, AuthForm } from "@workspace/ui/components/auth-card"
 import { Field } from "@workspace/ui/components/field"
 import { Logo } from "@workspace/ui/components/logo"
 import { SubmitButton } from "@workspace/ui/components/submit-button"
+import { hasBusiness } from "@/lib/api/server"
 import { nameBusiness } from "@/lib/auth/actions"
 import { safeReturnTo } from "@/lib/auth/redirect-target"
 import { useSubmit } from "@/lib/auth/use-submit"
@@ -22,8 +23,9 @@ export const Route = createFileRoute("/name-your-business")({
   loaderDeps: ({ search }) => ({ returnTo: safeReturnTo(search.returnTo) }),
   loader: async ({ location, deps }) => {
     const owner = await requireOwner(location.href)
-    // One already: nothing to name.
-    if (owner.orgId) throw redirect({ href: deps.returnTo })
+    // One already: nothing to name. Asked of the api, since a WorkOS
+    // organization alone is not a business we hold.
+    if (await hasBusiness()) throw redirect({ href: deps.returnTo })
     return { email: owner.email }
   },
   head: () => ({ meta: [{ title: "Name your business · Reme" }] }),
@@ -33,7 +35,7 @@ export const Route = createFileRoute("/name-your-business")({
 function NameYourBusiness() {
   const { email } = Route.useLoaderData()
   const returnTo = safeReturnTo(Route.useSearch().returnTo)
-  const { run, pending, result } = useSubmit(nameBusiness)
+  const { run, pending, result, setResult } = useSubmit(nameBusiness)
   const failure = result?.status === "failed" ? result.failure : undefined
 
   return (
@@ -62,8 +64,11 @@ function NameYourBusiness() {
       }
       title="What's your business called?"
     >
+      {/* An error goes as soon as the owner types or tries again. */}
       <AuthForm
+        onInput={() => setResult(null)}
         onSubmit={async (values) => {
+          setResult(null)
           const outcome = await run({
             data: { businessName: values.businessName, returnTo },
           })
@@ -82,7 +87,8 @@ function NameYourBusiness() {
           maxLength={120}
           name="businessName"
           placeholder="Sparkle Cleaning Co."
-          required
+          // Not `required`: an empty name gets the same message, in the same
+          // place, as one of spaces, rather than the browser's own bubble.
         />
         <SubmitButton pending={pending} pendingLabel="Setting up…">
           Continue

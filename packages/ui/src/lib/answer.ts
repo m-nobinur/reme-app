@@ -1,9 +1,9 @@
 import {
-  ANSWER_TEXT_MAX,
   type AskableFactKey,
+  dialable,
   FactValue,
-  FactValueKey,
-  TextAnswerSchema,
+  type FactValueKey,
+  toE164,
 } from "@workspace/contracts"
 
 /**
@@ -27,24 +27,14 @@ export type FactInput = {
   max?: number
   step?: string
   autoComplete?: string
+  /** An example answer, shown in the empty input. */
+  placeholder?: string
+  /** What to say when the value is wrong, in place of "Check the {label}." */
+  invalid?: string
+  /** A check of its own beyond the contract's, on the parsed value. */
+  check?: (value: unknown) => boolean
   /** The field's value from what the input holds. Trimmed text by default. */
   parse?: (raw: string) => unknown
-}
-
-/**
- * A UK number as the owner types it, to E.164. Anything it does not
- * recognise goes through unchanged, and `FactValue` refuses it.
- */
-export function toE164(raw: string): string {
-  // "+44 (0)7700 900123": the bracketed trunk zero is dropped after a
-  // country code, or it would land inside the number.
-  const digits = raw
-    .replace(/^(\s*(?:\+|00)\d{1,3})\s*\(0\)/, "$1")
-    .replace(/[\s().-]/g, "")
-  if (digits.startsWith("+")) return digits
-  if (digits.startsWith("00")) return `+${digits.slice(2)}`
-  if (digits.startsWith("0")) return `+44${digits.slice(1)}`
-  return digits
 }
 
 const number = (raw: string) => (raw.trim() === "" ? Number.NaN : Number(raw))
@@ -85,7 +75,11 @@ export const FACT_INPUTS = {
         label: "Phone number",
         type: "tel",
         autoComplete: "tel",
-        parse: toE164,
+        placeholder: "+44 161 496 0000",
+        invalid: "Enter a valid number customers can ring.",
+        check: (value) => typeof value === "string" && dialable(value),
+        // What cannot be read stays as typed, for the check to name.
+        parse: (raw) => toE164(raw) ?? raw,
       },
     ],
   },
@@ -98,6 +92,8 @@ export const FACT_INPUTS = {
         type: "email",
         maxLength: 254,
         autoComplete: "email",
+        placeholder: "hello@yourbusiness.co.uk",
+        invalid: "Enter a valid email address.",
       },
     ],
   },
@@ -116,6 +112,7 @@ export const FACT_INPUTS = {
         label: "Town or postcode you work from",
         type: "text",
         maxLength: 80,
+        placeholder: "Leeds, or LS1 4AP",
       },
       {
         name: "radius_km",
@@ -124,6 +121,8 @@ export const FACT_INPUTS = {
         min: 1,
         max: 200,
         step: "1",
+        placeholder: "25",
+        invalid: "Enter a distance between 1 and 200 km.",
         parse: number,
       },
     ],
@@ -154,7 +153,7 @@ export const FACT_INPUTS = {
     fields: line("text", "How you work", 800),
   },
   "business.proof": {
-    ask: "What sets you apart from others in your trade?",
+    ask: "What helps new customers trust you?",
     fields: line("text", "Years trading, accreditations, guarantees", 600),
   },
   "business.disclaimer": {
@@ -167,7 +166,15 @@ export const FACT_INPUTS = {
   },
   "assistant.name": {
     ask: "What would you like to call your assistant?",
-    fields: line("name", "Assistant's name", 40),
+    fields: [
+      {
+        name: "name",
+        label: "Assistant's name",
+        type: "text",
+        maxLength: 40,
+        placeholder: "Reme",
+      },
+    ],
   },
   "owner.preferred_name": {
     ask: "What should your assistant call you?",
@@ -186,23 +193,13 @@ export const FACT_INPUTS = {
 export const askable = (key: FactValueKey): key is AskableFactKey =>
   key in FACT_INPUTS
 
-/** The spec for one `InformationRequest`, from its own fields. */
-export function answerSpecOf(request: {
-  field: string
-  answer_schema: unknown
-  options: string[] | null
-}): AnswerSpec {
-  const key = FactValueKey.safeParse(request.field)
-  if (key.success && askable(key.data)) return { kind: "fact", key: key.data }
-  if (request.options?.length) {
-    return { kind: "choice", options: request.options }
-  }
-  const schema = TextAnswerSchema.safeParse(request.answer_schema)
-  return {
-    kind: "text",
-    maxLength: schema.data?.maxLength ?? ANSWER_TEXT_MAX,
-    email: schema.data?.format === "email",
-  }
+/**
+ * Whether the owner simply says this fact in the chat: one plain text field,
+ * with nothing a native input checks. Those get no card.
+ */
+export const saidInChat = (key: AskableFactKey) => {
+  const fields: readonly FactInput[] = FACT_INPUTS[key].fields
+  return fields.length === 1 && fields[0]?.type === "text"
 }
 
 type Parsed = { value: unknown } | { error: string }
@@ -236,13 +233,18 @@ export function answerValue(
     }
     return { value: text }
   }
-  const { fields } = FACT_INPUTS[spec.key]
+  const fields: readonly FactInput[] = FACT_INPUTS[spec.key].fields
   const value = Object.fromEntries(
     fields.map((input: FactInput) => {
       const raw = read(input.name)
       return [input.name, input.parse ? input.parse(raw) : raw.trim()]
     })
   )
+  // A field's own check first, so its message is the one the owner reads.
+  const failed = fields.find(
+    (input: FactInput) => input.check && !input.check(value[input.name])
+  )
+  if (failed) return { error: failed.invalid ?? "Check the answer." }
   const parsed = FactValue.safeParse({ key: spec.key, value })
   if (parsed.success) return { value }
   const issue = parsed.error.issues[0]
@@ -258,7 +260,7 @@ export function answerValue(
   const field = fields.find((each: FactInput) => each.name === name)
   return {
     error: field
-      ? `Check the ${field.label.toLowerCase()}.`
+      ? (field.invalid ?? `Check the ${field.label.toLowerCase()}.`)
       : "Check the answer.",
   }
 }

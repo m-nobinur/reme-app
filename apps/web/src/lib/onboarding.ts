@@ -19,3 +19,13 @@ export function onboardingFor(
     )?.id ?? null
   )
 }
+
+/**
+ * Whether setup is still open: the onboarding segment is there and not done.
+ * It ends with a build started or a website skipped, unlike `onboardingFor`,
+ * which waits for something built.
+ */
+export const settingUp = (workspace: Workspace | null) =>
+  workspace?.activity?.journey.some(
+    (segment) => segment.kind === "onboarding" && segment.state !== "done"
+  ) ?? false

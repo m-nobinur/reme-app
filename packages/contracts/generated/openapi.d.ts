@@ -7,6 +7,284 @@ export type paths = Record<string, never>
 export type webhooks = Record<string, never>
 export interface components {
   schemas: {
+    Activity: {
+      journey: {
+        id: string
+        /** @enum {string} */
+        kind:
+          | "onboarding"
+          | "website"
+          | "golive"
+          | "change"
+          | "domain"
+          | "purchase"
+          | "google"
+          | "reminder"
+          | "review"
+          | "question"
+          | "checkin"
+          | "turn"
+        /** @enum {string} */
+        state: "upcoming" | "now" | "waiting" | "done" | "failed"
+        steps: {
+          id: string
+          /** @enum {string} */
+          state: "done" | "now" | "waiting" | "next" | "skipped"
+          value?: string
+          count?: {
+            done: number
+            total: number
+          }
+        }[]
+        /** Format: date-time */
+        at: string
+        /** Format: date-time */
+        deadline?: string
+        names?: {
+          business?: string
+          host?: string
+          domain?: string
+          change?: string
+        }
+        step?: string
+        usual_seconds?: number
+        late_seconds?: number
+        /** @constant */
+        restarted?: true
+        /** Format: date-time */
+        synced_at?: string
+      }[]
+      now: {
+        id: string
+        /** @enum {string} */
+        kind:
+          | "onboarding"
+          | "website"
+          | "golive"
+          | "change"
+          | "domain"
+          | "purchase"
+          | "google"
+          | "reminder"
+          | "review"
+          | "question"
+          | "checkin"
+          | "turn"
+        /** @enum {string} */
+        state: "upcoming" | "now" | "waiting" | "done" | "failed"
+        steps: {
+          id: string
+          /** @enum {string} */
+          state: "done" | "now" | "waiting" | "next" | "skipped"
+          value?: string
+          count?: {
+            done: number
+            total: number
+          }
+        }[]
+        /** Format: date-time */
+        at: string
+        /** Format: date-time */
+        deadline?: string
+        names?: {
+          business?: string
+          host?: string
+          domain?: string
+          change?: string
+        }
+        step?: string
+        usual_seconds?: number
+        late_seconds?: number
+        /** @constant */
+        restarted?: true
+        /** Format: date-time */
+        synced_at?: string
+      }[]
+      waiting: {
+        id: string
+        /** @enum {string} */
+        kind:
+          | "onboarding"
+          | "website"
+          | "golive"
+          | "change"
+          | "domain"
+          | "purchase"
+          | "google"
+          | "reminder"
+          | "review"
+          | "question"
+          | "checkin"
+          | "turn"
+        /** @enum {string} */
+        state: "upcoming" | "now" | "waiting" | "done" | "failed"
+        steps: {
+          id: string
+          /** @enum {string} */
+          state: "done" | "now" | "waiting" | "next" | "skipped"
+          value?: string
+          count?: {
+            done: number
+            total: number
+          }
+        }[]
+        /** Format: date-time */
+        at: string
+        /** Format: date-time */
+        deadline?: string
+        names?: {
+          business?: string
+          host?: string
+          domain?: string
+          change?: string
+        }
+        step?: string
+        usual_seconds?: number
+        late_seconds?: number
+        /** @constant */
+        restarted?: true
+        /** Format: date-time */
+        synced_at?: string
+      }[]
+      upcoming: {
+        id: string
+        /** @enum {string} */
+        kind:
+          | "onboarding"
+          | "website"
+          | "golive"
+          | "change"
+          | "domain"
+          | "purchase"
+          | "google"
+          | "reminder"
+          | "review"
+          | "question"
+          | "checkin"
+          | "turn"
+        /** @enum {string} */
+        state: "upcoming" | "now" | "waiting" | "done" | "failed"
+        steps: {
+          id: string
+          /** @enum {string} */
+          state: "done" | "now" | "waiting" | "next" | "skipped"
+          value?: string
+          count?: {
+            done: number
+            total: number
+          }
+        }[]
+        /** Format: date-time */
+        at: string
+        /** Format: date-time */
+        deadline?: string
+        names?: {
+          business?: string
+          host?: string
+          domain?: string
+          change?: string
+        }
+        step?: string
+        usual_seconds?: number
+        late_seconds?: number
+        /** @constant */
+        restarted?: true
+        /** Format: date-time */
+        synced_at?: string
+      }[]
+      done: {
+        id: string
+        /** @enum {string} */
+        kind:
+          | "onboarding"
+          | "website"
+          | "golive"
+          | "change"
+          | "domain"
+          | "purchase"
+          | "google"
+          | "reminder"
+          | "review"
+          | "question"
+          | "checkin"
+          | "turn"
+        /** @enum {string} */
+        state: "upcoming" | "now" | "waiting" | "done" | "failed"
+        steps: {
+          id: string
+          /** @enum {string} */
+          state: "done" | "now" | "waiting" | "next" | "skipped"
+          value?: string
+          count?: {
+            done: number
+            total: number
+          }
+        }[]
+        /** Format: date-time */
+        at: string
+        /** Format: date-time */
+        deadline?: string
+        names?: {
+          business?: string
+          host?: string
+          domain?: string
+          change?: string
+        }
+        step?: string
+        usual_seconds?: number
+        late_seconds?: number
+        /** @constant */
+        restarted?: true
+        /** Format: date-time */
+        synced_at?: string
+      }[]
+      standing?: {
+        id: string
+        /** @enum {string} */
+        kind:
+          | "onboarding"
+          | "website"
+          | "golive"
+          | "change"
+          | "domain"
+          | "purchase"
+          | "google"
+          | "reminder"
+          | "review"
+          | "question"
+          | "checkin"
+          | "turn"
+        /** @enum {string} */
+        state: "upcoming" | "now" | "waiting" | "done" | "failed"
+        steps: {
+          id: string
+          /** @enum {string} */
+          state: "done" | "now" | "waiting" | "next" | "skipped"
+          value?: string
+          count?: {
+            done: number
+            total: number
+          }
+        }[]
+        /** Format: date-time */
+        at: string
+        /** Format: date-time */
+        deadline?: string
+        names?: {
+          business?: string
+          host?: string
+          domain?: string
+          change?: string
+        }
+        step?: string
+        usual_seconds?: number
+        late_seconds?: number
+        /** @constant */
+        restarted?: true
+        /** Format: date-time */
+        synced_at?: string
+      }[]
+    }
     ActivityFeed: {
       items: (
         | {
@@ -46,6 +324,34 @@ export interface components {
               | "other"
           }
       )[]
+    }
+    AgentNote: {
+      /** @enum {string} */
+      kind: "problem" | "resumed" | "retrying" | "stopped" | "done"
+      key: string
+      /** Format: uuid */
+      assignment_id: string
+      attempt: number
+      of: number
+      cause:
+        | ("stalled" | "unfinished" | "unanswered" | "service" | "other")
+        | null
+      /** @enum {string} */
+      next: "repairing" | "retrying" | "waiting_owner" | "none"
+      failed: (
+        | "build"
+        | "types"
+        | "links"
+        | "structured_data"
+        | "content"
+        | "claims"
+        | "copy"
+        | "a11y"
+        | "size"
+      )[]
+      /** Format: uuid */
+      retry_id?: string
+      pages?: string[]
     }
     AnswerQuestionInput: {
       /** Format: uuid */
@@ -179,6 +485,24 @@ export interface components {
               }
             | {
                 /** @constant */
+                key: "assistant.avatar"
+                value: {
+                  /** @enum {string} */
+                  id:
+                    | "reme"
+                    | "she_1"
+                    | "she_2"
+                    | "she_3"
+                    | "he_1"
+                    | "he_2"
+                    | "he_3"
+                    | "they_1"
+                    | "they_2"
+                    | "they_3"
+                }
+              }
+            | {
+                /** @constant */
                 key: "assistant.tone"
                 value: {
                   /** @enum {string} */
@@ -237,10 +561,42 @@ export interface components {
                         | "pebble"
                         | "counsel"
                         | "after_dark"
+                        | "terracotta"
+                        | "ember"
+                        | "fern"
+                        | "sage_slate"
+                        | "seafoam"
+                        | "evergreen"
+                        | "ocean_deep"
+                        | "mineral"
+                        | "olive_clay"
+                        | "dusty_rose"
+                        | "caramel"
+                        | "charcoal"
+                        | "harbor_blue"
+                        | "slate_mist"
+                        | "garden"
+                        | "teal_tide"
+                        | "mist_teal"
+                        | "stone_sage"
+                        | "night_forest"
+                        | "olive_grove"
+                        | "lagoon_blue"
+                        | "deep_sea"
+                        | "forest_calm"
+                        | "steel_teal"
                       )
                     | "custom"
                   custom?: string
                   brand?: string
+                  roles?: {
+                    paper: string
+                    ink: string
+                    primary: string
+                    tint: string
+                    accent: string
+                    line: string
+                  }
                 }
               }
             | {
@@ -303,6 +659,8 @@ export interface components {
                     content_type: "image/jpeg" | "image/png" | "image/webp"
                     bytes: number
                     alt?: string
+                    /** @enum {string} */
+                    use?: "logo" | "hero" | "work" | "team"
                   }[]
                 }
               }
@@ -319,7 +677,11 @@ export interface components {
                       | "textarea"
                       | "number"
                       | "date"
+                      | "datetime"
                       | "select"
+                      | "radio"
+                      | "checkbox"
+                      | "photos"
                       | "tel"
                       | "email"
                     required: boolean
@@ -592,7 +954,7 @@ export interface components {
         id: string
         question?: string
         /** @enum {string} */
-        visual: "palette" | "font_pair" | "layout" | "text"
+        visual: "palette" | "font_pair" | "layout" | "text" | "logo" | "photos"
         card: {
           /** @enum {string} */
           step:
@@ -698,6 +1060,25 @@ export interface components {
           initial?: string[]
           color?: boolean
         }
+        upload?: {
+          accept: ("image/jpeg" | "image/png" | "image/webp")[]
+          max_files: number
+          max_bytes: number
+          skippable: boolean
+        }
+        held?: {
+          /** Format: uuid */
+          id: string
+          name: string
+          /** @enum {string} */
+          content_type: "image/jpeg" | "image/png" | "image/webp"
+          bytes: number
+          alt?: string
+          /** @enum {string} */
+          use?: "logo" | "hero" | "work" | "team"
+        }[]
+        /** @enum {string} */
+        path?: "upload" | "create"
       }[]
     }
     AskDesignOutput: {
@@ -715,6 +1096,44 @@ export interface components {
           | {
               /** @constant */
               skipped: true
+            }
+          | {
+              palette: {
+                name: string
+                stops: {
+                  paper: string
+                  tint: string
+                  primary: string
+                  ink: string
+                }
+              }
+            }
+          | {
+              logo: {
+                /** Format: uuid */
+                id: string
+                name: string
+                /** @enum {string} */
+                content_type: "image/jpeg" | "image/png" | "image/webp"
+                bytes: number
+                alt?: string
+                /** @enum {string} */
+                use?: "logo" | "hero" | "work" | "team"
+              }
+            }
+          | {
+              photos: {
+                /** Format: uuid */
+                id: string
+                name: string
+                /** @enum {string} */
+                content_type: "image/jpeg" | "image/png" | "image/webp"
+                bytes: number
+                alt?: string
+                /** @enum {string} */
+                use?: "logo" | "hero" | "work" | "team"
+              }[]
+              create: boolean
             }
       }
       skip_all: boolean
@@ -850,6 +1269,24 @@ export interface components {
           }
         | {
             /** @constant */
+            key: "assistant.avatar"
+            value: {
+              /** @enum {string} */
+              id:
+                | "reme"
+                | "she_1"
+                | "she_2"
+                | "she_3"
+                | "he_1"
+                | "he_2"
+                | "he_3"
+                | "they_1"
+                | "they_2"
+                | "they_3"
+            }
+          }
+        | {
+            /** @constant */
             key: "assistant.tone"
             value: {
               /** @enum {string} */
@@ -908,10 +1345,42 @@ export interface components {
                     | "pebble"
                     | "counsel"
                     | "after_dark"
+                    | "terracotta"
+                    | "ember"
+                    | "fern"
+                    | "sage_slate"
+                    | "seafoam"
+                    | "evergreen"
+                    | "ocean_deep"
+                    | "mineral"
+                    | "olive_clay"
+                    | "dusty_rose"
+                    | "caramel"
+                    | "charcoal"
+                    | "harbor_blue"
+                    | "slate_mist"
+                    | "garden"
+                    | "teal_tide"
+                    | "mist_teal"
+                    | "stone_sage"
+                    | "night_forest"
+                    | "olive_grove"
+                    | "lagoon_blue"
+                    | "deep_sea"
+                    | "forest_calm"
+                    | "steel_teal"
                   )
                 | "custom"
               custom?: string
               brand?: string
+              roles?: {
+                paper: string
+                ink: string
+                primary: string
+                tint: string
+                accent: string
+                line: string
+              }
             }
           }
         | {
@@ -971,6 +1440,8 @@ export interface components {
                 content_type: "image/jpeg" | "image/png" | "image/webp"
                 bytes: number
                 alt?: string
+                /** @enum {string} */
+                use?: "logo" | "hero" | "work" | "team"
               }[]
             }
           }
@@ -987,7 +1458,11 @@ export interface components {
                   | "textarea"
                   | "number"
                   | "date"
+                  | "datetime"
                   | "select"
+                  | "radio"
+                  | "checkbox"
+                  | "photos"
                   | "tel"
                   | "email"
                 required: boolean
@@ -1018,6 +1493,7 @@ export interface components {
           }
       )[]
       skippable: boolean
+      ideas?: string[]
     }
     AskDetailsOutput:
       | {
@@ -1151,6 +1627,24 @@ export interface components {
               }
             | {
                 /** @constant */
+                key: "assistant.avatar"
+                value: {
+                  /** @enum {string} */
+                  id:
+                    | "reme"
+                    | "she_1"
+                    | "she_2"
+                    | "she_3"
+                    | "he_1"
+                    | "he_2"
+                    | "he_3"
+                    | "they_1"
+                    | "they_2"
+                    | "they_3"
+                }
+              }
+            | {
+                /** @constant */
                 key: "assistant.tone"
                 value: {
                   /** @enum {string} */
@@ -1209,10 +1703,42 @@ export interface components {
                         | "pebble"
                         | "counsel"
                         | "after_dark"
+                        | "terracotta"
+                        | "ember"
+                        | "fern"
+                        | "sage_slate"
+                        | "seafoam"
+                        | "evergreen"
+                        | "ocean_deep"
+                        | "mineral"
+                        | "olive_clay"
+                        | "dusty_rose"
+                        | "caramel"
+                        | "charcoal"
+                        | "harbor_blue"
+                        | "slate_mist"
+                        | "garden"
+                        | "teal_tide"
+                        | "mist_teal"
+                        | "stone_sage"
+                        | "night_forest"
+                        | "olive_grove"
+                        | "lagoon_blue"
+                        | "deep_sea"
+                        | "forest_calm"
+                        | "steel_teal"
                       )
                     | "custom"
                   custom?: string
                   brand?: string
+                  roles?: {
+                    paper: string
+                    ink: string
+                    primary: string
+                    tint: string
+                    accent: string
+                    line: string
+                  }
                 }
               }
             | {
@@ -1275,6 +1801,8 @@ export interface components {
                     content_type: "image/jpeg" | "image/png" | "image/webp"
                     bytes: number
                     alt?: string
+                    /** @enum {string} */
+                    use?: "logo" | "hero" | "work" | "team"
                   }[]
                 }
               }
@@ -1291,7 +1819,11 @@ export interface components {
                       | "textarea"
                       | "number"
                       | "date"
+                      | "datetime"
                       | "select"
+                      | "radio"
+                      | "checkbox"
+                      | "photos"
                       | "tel"
                       | "email"
                     required: boolean
@@ -1321,6 +1853,7 @@ export interface components {
                 }
               }
           )[]
+          skip_all?: boolean
         }
       | {
           /** @constant */
@@ -1469,6 +2002,25 @@ export interface components {
         }
       | {
           /** @constant */
+          key: "assistant.avatar"
+          skippable: boolean
+          prefill: {
+            /** @enum {string} */
+            id:
+              | "reme"
+              | "she_1"
+              | "she_2"
+              | "she_3"
+              | "he_1"
+              | "he_2"
+              | "he_3"
+              | "they_1"
+              | "they_2"
+              | "they_3"
+          } | null
+        }
+      | {
+          /** @constant */
           key: "assistant.tone"
           skippable: boolean
           prefill: {
@@ -1532,10 +2084,42 @@ export interface components {
                   | "pebble"
                   | "counsel"
                   | "after_dark"
+                  | "terracotta"
+                  | "ember"
+                  | "fern"
+                  | "sage_slate"
+                  | "seafoam"
+                  | "evergreen"
+                  | "ocean_deep"
+                  | "mineral"
+                  | "olive_clay"
+                  | "dusty_rose"
+                  | "caramel"
+                  | "charcoal"
+                  | "harbor_blue"
+                  | "slate_mist"
+                  | "garden"
+                  | "teal_tide"
+                  | "mist_teal"
+                  | "stone_sage"
+                  | "night_forest"
+                  | "olive_grove"
+                  | "lagoon_blue"
+                  | "deep_sea"
+                  | "forest_calm"
+                  | "steel_teal"
                 )
               | "custom"
             custom?: string
             brand?: string
+            roles?: {
+              paper: string
+              ink: string
+              primary: string
+              tint: string
+              accent: string
+              line: string
+            }
           } | null
         }
       | {
@@ -1599,6 +2183,8 @@ export interface components {
               content_type: "image/jpeg" | "image/png" | "image/webp"
               bytes: number
               alt?: string
+              /** @enum {string} */
+              use?: "logo" | "hero" | "work" | "team"
             }[]
           } | null
         }
@@ -1616,7 +2202,11 @@ export interface components {
                 | "textarea"
                 | "number"
                 | "date"
+                | "datetime"
                 | "select"
+                | "radio"
+                | "checkbox"
+                | "photos"
                 | "tel"
                 | "email"
               required: boolean
@@ -1779,6 +2369,24 @@ export interface components {
               }
             | {
                 /** @constant */
+                key: "assistant.avatar"
+                value: {
+                  /** @enum {string} */
+                  id:
+                    | "reme"
+                    | "she_1"
+                    | "she_2"
+                    | "she_3"
+                    | "he_1"
+                    | "he_2"
+                    | "he_3"
+                    | "they_1"
+                    | "they_2"
+                    | "they_3"
+                }
+              }
+            | {
+                /** @constant */
                 key: "assistant.tone"
                 value: {
                   /** @enum {string} */
@@ -1837,10 +2445,42 @@ export interface components {
                         | "pebble"
                         | "counsel"
                         | "after_dark"
+                        | "terracotta"
+                        | "ember"
+                        | "fern"
+                        | "sage_slate"
+                        | "seafoam"
+                        | "evergreen"
+                        | "ocean_deep"
+                        | "mineral"
+                        | "olive_clay"
+                        | "dusty_rose"
+                        | "caramel"
+                        | "charcoal"
+                        | "harbor_blue"
+                        | "slate_mist"
+                        | "garden"
+                        | "teal_tide"
+                        | "mist_teal"
+                        | "stone_sage"
+                        | "night_forest"
+                        | "olive_grove"
+                        | "lagoon_blue"
+                        | "deep_sea"
+                        | "forest_calm"
+                        | "steel_teal"
                       )
                     | "custom"
                   custom?: string
                   brand?: string
+                  roles?: {
+                    paper: string
+                    ink: string
+                    primary: string
+                    tint: string
+                    accent: string
+                    line: string
+                  }
                 }
               }
             | {
@@ -1903,6 +2543,8 @@ export interface components {
                     content_type: "image/jpeg" | "image/png" | "image/webp"
                     bytes: number
                     alt?: string
+                    /** @enum {string} */
+                    use?: "logo" | "hero" | "work" | "team"
                   }[]
                 }
               }
@@ -1919,7 +2561,11 @@ export interface components {
                       | "textarea"
                       | "number"
                       | "date"
+                      | "datetime"
                       | "select"
+                      | "radio"
+                      | "checkbox"
+                      | "photos"
                       | "tel"
                       | "email"
                     required: boolean
@@ -1953,6 +2599,46 @@ export interface components {
           /** @constant */
           answer: "skipped"
         }
+    AskOpenInput: {
+      /** @enum {string} */
+      about:
+        | "business.name"
+        | "business.phone"
+        | "business.email"
+        | "hours.weekday"
+        | "service_area.radius"
+        | "business.tagline"
+        | "business.industry"
+        | "business.offerings"
+        | "business.audience"
+        | "business.overview"
+        | "business.proof"
+        | "business.disclaimer"
+        | "service_area.text"
+        | "assistant.name"
+        | "assistant.pronouns"
+        | "assistant.avatar"
+        | "assistant.tone"
+        | "owner.preferred_name"
+        | "site.build_mode"
+        | "site.template"
+        | "site.palette"
+        | "site.font"
+        | "site.direction"
+        | "site.pages"
+        | "quote.form"
+      skippable?: boolean
+    }
+    AskOpenOutput:
+      | {
+          /** @constant */
+          answer: "stated"
+          text: string
+        }
+      | {
+          /** @constant */
+          answer: "skipped"
+        }
     AskUploadInput: {
       accept: ("image/jpeg" | "image/png" | "image/webp")[]
       max_files: number
@@ -1971,6 +2657,8 @@ export interface components {
             content_type: "image/jpeg" | "image/png" | "image/webp"
             bytes: number
             alt?: string
+            /** @enum {string} */
+            use?: "logo" | "hero" | "work" | "team"
           }[]
         }
       | {
@@ -1985,6 +2673,8 @@ export interface components {
       content_type: "image/jpeg" | "image/png" | "image/webp"
       bytes: number
       alt?: string
+      /** @enum {string} */
+      use?: "logo" | "hero" | "work" | "team"
     }
     Assignment: {
       /** Format: uuid */
@@ -2049,6 +2739,7 @@ export interface components {
             requested_by_staff_id: string
             field: string
             why: string
+            question?: string
             answer_schema: {
               [key: string]: unknown
             }
@@ -2193,11 +2884,48 @@ export interface components {
               | "pebble"
               | "counsel"
               | "after_dark"
+              | "terracotta"
+              | "ember"
+              | "fern"
+              | "sage_slate"
+              | "seafoam"
+              | "evergreen"
+              | "ocean_deep"
+              | "mineral"
+              | "olive_clay"
+              | "dusty_rose"
+              | "caramel"
+              | "charcoal"
+              | "harbor_blue"
+              | "slate_mist"
+              | "garden"
+              | "teal_tide"
+              | "mist_teal"
+              | "stone_sage"
+              | "night_forest"
+              | "olive_grove"
+              | "lagoon_blue"
+              | "deep_sea"
+              | "forest_calm"
+              | "steel_teal"
           }
         | {
             /** @constant */
             kind: "brand"
             brand: string
+          }
+        | {
+            /** @constant */
+            kind: "roles"
+            name: string
+            roles: {
+              paper: string
+              ink: string
+              primary: string
+              tint: string
+              accent: string
+              line: string
+            }
           }
       pages: {
         /** @enum {string} */
@@ -2422,295 +3150,73 @@ export interface components {
         purpose: string
       }[]
     }
-    BlueprintReceipt: {
-      round: number
-      /** @enum {string} */
-      decision: "build" | "change"
-    }
-    BlueprintReviewInput: {
-      blueprint: {
-        direction: string
+    BuildQuestionsPart: {
+      /** @constant */
+      type: "data-build_questions"
+      data: {
         /** @enum {string} */
-        fonts:
-          | "outfit_figtree"
-          | "dmsans_fraunces"
-          | "instrument_worksans"
-          | "sora_manrope"
-          | "syne_jakarta"
-          | "newsreader_inter"
-          | "cormorant_manrope"
-          | "fraunces_figtree"
-        palette:
-          | {
-              /** @constant */
-              kind: "preset"
-              /** @enum {string} */
-              id:
-                | "ocean"
-                | "classic_blue"
-                | "harbour"
-                | "lagoon"
-                | "forest"
-                | "sage"
-                | "sunset"
-                | "mocha"
-                | "cardinal"
-                | "berry"
-                | "burgundy"
-                | "midnight"
-                | "damson"
-                | "ultra_violet"
-                | "graphite"
-                | "onyx"
-                | "mint"
-                | "royal"
-                | "meadow"
-                | "pebble"
-                | "counsel"
-                | "after_dark"
-            }
-          | {
-              /** @constant */
-              kind: "brand"
-              brand: string
-            }
-        pages: {
-          /** @enum {string} */
-          page:
-            | "home"
-            | "services"
-            | "about"
-            | "gallery"
-            | "testimonials"
-            | "faq"
-            | "service_area"
-            | "contact"
-            | "quote"
-            | "service"
-          sections: (
+        kind: "build" | "offer"
+        /** Format: uuid */
+        assignment_id: string
+        questions: {
+          /** Format: uuid */
+          id: string
+          text: string
+          input:
             | {
                 /** @constant */
-                kind: "hero"
+                kind: "fact"
                 /** @enum {string} */
-                variant:
-                  | "wash"
-                  | "split_arch"
-                  | "split_frame"
-                  | "dark_center"
-                  | "text_led"
-                purpose: string
-                content_notes: string | null
+                key:
+                  | "business.name"
+                  | "business.phone"
+                  | "business.email"
+                  | "hours.weekday"
+                  | "service_area.radius"
+                  | "business.tagline"
+                  | "business.offerings"
+                  | "business.audience"
+                  | "business.overview"
+                  | "business.proof"
+                  | "business.disclaimer"
+                  | "service_area.text"
+                  | "assistant.name"
+                  | "owner.preferred_name"
               }
             | {
                 /** @constant */
-                kind: "trust_strip"
-                /** @enum {string} */
-                variant: "icons" | "phrases"
-                purpose: string
-                content_notes: string | null
+                kind: "choice"
+                options: string[]
               }
             | {
                 /** @constant */
-                kind: "service_cards"
-                /** @enum {string} */
-                variant:
-                  | "photo_cards"
-                  | "numbered_rows"
-                  | "alternating"
-                  | "fleet"
-                  | "practice_list"
-                purpose: string
-                content_notes: string | null
+                kind: "text"
+                maxLength: number
+                email: boolean
+              }
+          skippable: boolean
+          answer?:
+            | {
+                /** @constant */
+                kind: "value"
+                value:
+                  | string
+                  | {
+                      [key: string]: unknown
+                    }
               }
             | {
                 /** @constant */
-                kind: "value_props"
-                /** @enum {string} */
-                variant: "default"
-                purpose: string
-                content_notes: string | null
+                kind: "skipped"
               }
             | {
                 /** @constant */
-                kind: "steps"
-                /** @enum {string} */
-                variant: "circles" | "dark_band" | "timeline"
-                purpose: string
-                content_notes: string | null
+                kind: "closed"
               }
-            | {
-                /** @constant */
-                kind: "about"
-                /** @enum {string} */
-                variant: "default"
-                purpose: string
-                content_notes: string | null
-              }
-            | {
-                /** @constant */
-                kind: "testimonials"
-                /** @enum {string} */
-                variant: "featured" | "wall"
-                purpose: string
-                content_notes: string | null
-              }
-            | {
-                /** @constant */
-                kind: "gallery"
-                /** @enum {string} */
-                variant: "default"
-                purpose: string
-                content_notes: string | null
-              }
-            | {
-                /** @constant */
-                kind: "service_area"
-                /** @enum {string} */
-                variant: "default"
-                purpose: string
-                content_notes: string | null
-              }
-            | {
-                /** @constant */
-                kind: "faq"
-                /** @enum {string} */
-                variant: "split" | "stacked"
-                purpose: string
-                content_notes: string | null
-              }
-            | {
-                /** @constant */
-                kind: "cta_band"
-                /** @enum {string} */
-                variant: "solid" | "photo"
-                purpose: string
-                content_notes: string | null
-              }
-            | {
-                /** @constant */
-                kind: "contact"
-                /** @enum {string} */
-                variant: "default"
-                purpose: string
-                content_notes: string | null
-              }
-            | {
-                /** @constant */
-                kind: "quote_form"
-                /** @enum {string} */
-                variant: "default"
-                purpose: string
-                content_notes: string | null
-              }
-          )[]
-        }[]
-        images: (
-          | {
-              id: string
-              /** @enum {string} */
-              page:
-                | "home"
-                | "services"
-                | "about"
-                | "gallery"
-                | "testimonials"
-                | "faq"
-                | "service_area"
-                | "contact"
-                | "quote"
-                | "service"
-              /** @enum {string} */
-              section:
-                | "hero"
-                | "trust_strip"
-                | "service_cards"
-                | "value_props"
-                | "steps"
-                | "about"
-                | "testimonials"
-                | "gallery"
-                | "service_area"
-                | "faq"
-                | "cta_band"
-                | "contact"
-                | "quote_form"
-              /** @enum {string} */
-              aspect: "16:9" | "4:3" | "3:4" | "1:1" | "21:9"
-              /** @enum {string} */
-              resolution: "1K" | "2K"
-              subject: string
-              /** @enum {string} */
-              text_side?: "left" | "right" | "none"
-              alt: string
-              /** @constant */
-              source: "upload"
-              /** Format: uuid */
-              asset_id: string
-            }
-          | {
-              id: string
-              /** @enum {string} */
-              page:
-                | "home"
-                | "services"
-                | "about"
-                | "gallery"
-                | "testimonials"
-                | "faq"
-                | "service_area"
-                | "contact"
-                | "quote"
-                | "service"
-              /** @enum {string} */
-              section:
-                | "hero"
-                | "trust_strip"
-                | "service_cards"
-                | "value_props"
-                | "steps"
-                | "about"
-                | "testimonials"
-                | "gallery"
-                | "service_area"
-                | "faq"
-                | "cta_band"
-                | "contact"
-                | "quote_form"
-              /** @enum {string} */
-              aspect: "16:9" | "4:3" | "3:4" | "1:1" | "21:9"
-              /** @enum {string} */
-              resolution: "1K" | "2K"
-              subject: string
-              /** @enum {string} */
-              text_side?: "left" | "right" | "none"
-              alt: string
-              /** @constant */
-              source: "generated"
-              /** Format: uuid */
-              asset_id?: string
-            }
-        )[]
-        voice: string
-        features: string[]
-        custom_sections?: {
-          name: string
-          purpose: string
+          field?: string
         }[]
       }
-      /** Format: uuid */
-      revision_of?: string
     }
-    BlueprintReviewOutput:
-      | {
-          /** @constant */
-          decision: "build"
-          note?: string
-        }
-      | {
-          /** @constant */
-          decision: "change"
-          note: string
-        }
     BuildSummary: {
       /** Format: uuid */
       assignment_id: string
@@ -2735,9 +3241,14 @@ export interface components {
         | "failed"
         | "cancelled"
       goal: string
+      label?: string
       /** @enum {string} */
       lane?: "full" | "quick"
       fell_through?: boolean
+      /** @constant */
+      retry?: true
+      /** @constant */
+      restarted?: true
       activity?: {
         id: string
         label: string
@@ -2745,9 +3256,13 @@ export interface components {
         total: number
         /** @constant */
         now?: true
+        /** @constant */
+        skipped?: true
         items?: {
           label: string
           done: boolean
+          /** @constant */
+          working?: true
         }[]
       }[]
       revision: {
@@ -2796,11 +3311,48 @@ export interface components {
                   | "pebble"
                   | "counsel"
                   | "after_dark"
+                  | "terracotta"
+                  | "ember"
+                  | "fern"
+                  | "sage_slate"
+                  | "seafoam"
+                  | "evergreen"
+                  | "ocean_deep"
+                  | "mineral"
+                  | "olive_clay"
+                  | "dusty_rose"
+                  | "caramel"
+                  | "charcoal"
+                  | "harbor_blue"
+                  | "slate_mist"
+                  | "garden"
+                  | "teal_tide"
+                  | "mist_teal"
+                  | "stone_sage"
+                  | "night_forest"
+                  | "olive_grove"
+                  | "lagoon_blue"
+                  | "deep_sea"
+                  | "forest_calm"
+                  | "steel_teal"
               }
             | {
                 /** @constant */
                 kind: "brand"
                 brand: string
+              }
+            | {
+                /** @constant */
+                kind: "roles"
+                name: string
+                roles: {
+                  paper: string
+                  ink: string
+                  primary: string
+                  tint: string
+                  accent: string
+                  line: string
+                }
               }
           pages: {
             /** @enum {string} */
@@ -3066,11 +3618,48 @@ export interface components {
                   | "pebble"
                   | "counsel"
                   | "after_dark"
+                  | "terracotta"
+                  | "ember"
+                  | "fern"
+                  | "sage_slate"
+                  | "seafoam"
+                  | "evergreen"
+                  | "ocean_deep"
+                  | "mineral"
+                  | "olive_clay"
+                  | "dusty_rose"
+                  | "caramel"
+                  | "charcoal"
+                  | "harbor_blue"
+                  | "slate_mist"
+                  | "garden"
+                  | "teal_tide"
+                  | "mist_teal"
+                  | "stone_sage"
+                  | "night_forest"
+                  | "olive_grove"
+                  | "lagoon_blue"
+                  | "deep_sea"
+                  | "forest_calm"
+                  | "steel_teal"
               }
             | {
                 /** @constant */
                 kind: "brand"
                 brand: string
+              }
+            | {
+                /** @constant */
+                kind: "roles"
+                name: string
+                roles: {
+                  paper: string
+                  ink: string
+                  primary: string
+                  tint: string
+                  accent: string
+                  line: string
+                }
               }
           pages: {
             /** @enum {string} */
@@ -3295,7 +3884,6 @@ export interface components {
             purpose: string
           }[]
         } | null
-        awaiting: boolean
       }
       photos?: {
         slot_id: string
@@ -3411,6 +3999,17 @@ export interface components {
                   kind: "answer"
                   tool_call_id: string
                   output:
+                    | (
+                        | {
+                            /** @constant */
+                            answer: "stated"
+                            text: string
+                          }
+                        | {
+                            /** @constant */
+                            answer: "skipped"
+                          }
+                      )
                     | (
                         | {
                             /** @constant */
@@ -3543,6 +4142,24 @@ export interface components {
                                 }
                               | {
                                   /** @constant */
+                                  key: "assistant.avatar"
+                                  value: {
+                                    /** @enum {string} */
+                                    id:
+                                      | "reme"
+                                      | "she_1"
+                                      | "she_2"
+                                      | "she_3"
+                                      | "he_1"
+                                      | "he_2"
+                                      | "he_3"
+                                      | "they_1"
+                                      | "they_2"
+                                      | "they_3"
+                                  }
+                                }
+                              | {
+                                  /** @constant */
                                   key: "assistant.tone"
                                   value: {
                                     /** @enum {string} */
@@ -3601,10 +4218,42 @@ export interface components {
                                           | "pebble"
                                           | "counsel"
                                           | "after_dark"
+                                          | "terracotta"
+                                          | "ember"
+                                          | "fern"
+                                          | "sage_slate"
+                                          | "seafoam"
+                                          | "evergreen"
+                                          | "ocean_deep"
+                                          | "mineral"
+                                          | "olive_clay"
+                                          | "dusty_rose"
+                                          | "caramel"
+                                          | "charcoal"
+                                          | "harbor_blue"
+                                          | "slate_mist"
+                                          | "garden"
+                                          | "teal_tide"
+                                          | "mist_teal"
+                                          | "stone_sage"
+                                          | "night_forest"
+                                          | "olive_grove"
+                                          | "lagoon_blue"
+                                          | "deep_sea"
+                                          | "forest_calm"
+                                          | "steel_teal"
                                         )
                                       | "custom"
                                     custom?: string
                                     brand?: string
+                                    roles?: {
+                                      paper: string
+                                      ink: string
+                                      primary: string
+                                      tint: string
+                                      accent: string
+                                      line: string
+                                    }
                                   }
                                 }
                               | {
@@ -3674,6 +4323,8 @@ export interface components {
                                         | "image/webp"
                                       bytes: number
                                       alt?: string
+                                      /** @enum {string} */
+                                      use?: "logo" | "hero" | "work" | "team"
                                     }[]
                                   }
                                 }
@@ -3690,7 +4341,11 @@ export interface components {
                                         | "textarea"
                                         | "number"
                                         | "date"
+                                        | "datetime"
                                         | "select"
+                                        | "radio"
+                                        | "checkbox"
+                                        | "photos"
                                         | "tel"
                                         | "email"
                                       required: boolean
@@ -3857,6 +4512,24 @@ export interface components {
                                 }
                               | {
                                   /** @constant */
+                                  key: "assistant.avatar"
+                                  value: {
+                                    /** @enum {string} */
+                                    id:
+                                      | "reme"
+                                      | "she_1"
+                                      | "she_2"
+                                      | "she_3"
+                                      | "he_1"
+                                      | "he_2"
+                                      | "he_3"
+                                      | "they_1"
+                                      | "they_2"
+                                      | "they_3"
+                                  }
+                                }
+                              | {
+                                  /** @constant */
                                   key: "assistant.tone"
                                   value: {
                                     /** @enum {string} */
@@ -3915,10 +4588,42 @@ export interface components {
                                           | "pebble"
                                           | "counsel"
                                           | "after_dark"
+                                          | "terracotta"
+                                          | "ember"
+                                          | "fern"
+                                          | "sage_slate"
+                                          | "seafoam"
+                                          | "evergreen"
+                                          | "ocean_deep"
+                                          | "mineral"
+                                          | "olive_clay"
+                                          | "dusty_rose"
+                                          | "caramel"
+                                          | "charcoal"
+                                          | "harbor_blue"
+                                          | "slate_mist"
+                                          | "garden"
+                                          | "teal_tide"
+                                          | "mist_teal"
+                                          | "stone_sage"
+                                          | "night_forest"
+                                          | "olive_grove"
+                                          | "lagoon_blue"
+                                          | "deep_sea"
+                                          | "forest_calm"
+                                          | "steel_teal"
                                         )
                                       | "custom"
                                     custom?: string
                                     brand?: string
+                                    roles?: {
+                                      paper: string
+                                      ink: string
+                                      primary: string
+                                      tint: string
+                                      accent: string
+                                      line: string
+                                    }
                                   }
                                 }
                               | {
@@ -3988,6 +4693,8 @@ export interface components {
                                         | "image/webp"
                                       bytes: number
                                       alt?: string
+                                      /** @enum {string} */
+                                      use?: "logo" | "hero" | "work" | "team"
                                     }[]
                                   }
                                 }
@@ -4004,7 +4711,11 @@ export interface components {
                                         | "textarea"
                                         | "number"
                                         | "date"
+                                        | "datetime"
                                         | "select"
+                                        | "radio"
+                                        | "checkbox"
+                                        | "photos"
                                         | "tel"
                                         | "email"
                                       required: boolean
@@ -4034,6 +4745,7 @@ export interface components {
                                   }
                                 }
                             )[]
+                            skip_all?: boolean
                           }
                         | {
                             /** @constant */
@@ -4068,21 +4780,53 @@ export interface components {
                                 /** @constant */
                                 skipped: true
                               }
+                            | {
+                                palette: {
+                                  name: string
+                                  stops: {
+                                    paper: string
+                                    tint: string
+                                    primary: string
+                                    ink: string
+                                  }
+                                }
+                              }
+                            | {
+                                logo: {
+                                  /** Format: uuid */
+                                  id: string
+                                  name: string
+                                  /** @enum {string} */
+                                  content_type:
+                                    | "image/jpeg"
+                                    | "image/png"
+                                    | "image/webp"
+                                  bytes: number
+                                  alt?: string
+                                  /** @enum {string} */
+                                  use?: "logo" | "hero" | "work" | "team"
+                                }
+                              }
+                            | {
+                                photos: {
+                                  /** Format: uuid */
+                                  id: string
+                                  name: string
+                                  /** @enum {string} */
+                                  content_type:
+                                    | "image/jpeg"
+                                    | "image/png"
+                                    | "image/webp"
+                                  bytes: number
+                                  alt?: string
+                                  /** @enum {string} */
+                                  use?: "logo" | "hero" | "work" | "team"
+                                }[]
+                                create: boolean
+                              }
                         }
                         skip_all: boolean
                       }
-                    | (
-                        | {
-                            /** @constant */
-                            decision: "build"
-                            note?: string
-                          }
-                        | {
-                            /** @constant */
-                            decision: "change"
-                            note: string
-                          }
-                      )
                     | (
                         | {
                             /** @constant */
@@ -4098,6 +4842,8 @@ export interface components {
                                 | "image/webp"
                               bytes: number
                               alt?: string
+                              /** @enum {string} */
+                              use?: "logo" | "hero" | "work" | "team"
                             }[]
                           }
                         | {
@@ -4118,7 +4864,11 @@ export interface components {
                                 | "textarea"
                                 | "number"
                                 | "date"
+                                | "datetime"
                                 | "select"
+                                | "radio"
+                                | "checkbox"
+                                | "photos"
                                 | "tel"
                                 | "email"
                               required: boolean
@@ -4130,6 +4880,26 @@ export interface components {
                             /** @constant */
                             answer: "changes"
                             text: string
+                            fields?: {
+                              key: string
+                              label: string
+                              /** @enum {string} */
+                              type:
+                                | "text"
+                                | "textarea"
+                                | "number"
+                                | "date"
+                                | "datetime"
+                                | "select"
+                                | "radio"
+                                | "checkbox"
+                                | "photos"
+                                | "tel"
+                                | "email"
+                              required: boolean
+                              hint: string | null
+                              options: string[] | null
+                            }[]
                           }
                       )
                 }
@@ -4242,6 +5012,15 @@ export interface components {
       }[]
       risks: string[]
       decisions_needed: string[]
+      left_out?: {
+        field: string
+        answer_schema: {
+          [key: string]: unknown
+        }
+        options: string[] | null
+        question: string
+      }[]
+      as_asked?: boolean
       /** Format: date-time */
       reported_at: string
     }
@@ -4591,6 +5370,24 @@ export interface components {
           }
         | {
             /** @constant */
+            key: "assistant.avatar"
+            value: {
+              /** @enum {string} */
+              id:
+                | "reme"
+                | "she_1"
+                | "she_2"
+                | "she_3"
+                | "he_1"
+                | "he_2"
+                | "he_3"
+                | "they_1"
+                | "they_2"
+                | "they_3"
+            }
+          }
+        | {
+            /** @constant */
             key: "assistant.tone"
             value: {
               /** @enum {string} */
@@ -4649,10 +5446,42 @@ export interface components {
                     | "pebble"
                     | "counsel"
                     | "after_dark"
+                    | "terracotta"
+                    | "ember"
+                    | "fern"
+                    | "sage_slate"
+                    | "seafoam"
+                    | "evergreen"
+                    | "ocean_deep"
+                    | "mineral"
+                    | "olive_clay"
+                    | "dusty_rose"
+                    | "caramel"
+                    | "charcoal"
+                    | "harbor_blue"
+                    | "slate_mist"
+                    | "garden"
+                    | "teal_tide"
+                    | "mist_teal"
+                    | "stone_sage"
+                    | "night_forest"
+                    | "olive_grove"
+                    | "lagoon_blue"
+                    | "deep_sea"
+                    | "forest_calm"
+                    | "steel_teal"
                   )
                 | "custom"
               custom?: string
               brand?: string
+              roles?: {
+                paper: string
+                ink: string
+                primary: string
+                tint: string
+                accent: string
+                line: string
+              }
             }
           }
         | {
@@ -4712,6 +5541,8 @@ export interface components {
                 content_type: "image/jpeg" | "image/png" | "image/webp"
                 bytes: number
                 alt?: string
+                /** @enum {string} */
+                use?: "logo" | "hero" | "work" | "team"
               }[]
             }
           }
@@ -4728,7 +5559,11 @@ export interface components {
                   | "textarea"
                   | "number"
                   | "date"
+                  | "datetime"
                   | "select"
+                  | "radio"
+                  | "checkbox"
+                  | "photos"
                   | "tel"
                   | "email"
                 required: boolean
@@ -4859,6 +5694,66 @@ export interface components {
               lane?: "full" | "quick"
               goal: string
               version: number | null
+              retry?: boolean
+              fixing?: {
+                round: number
+                checks: (
+                  | "build"
+                  | "types"
+                  | "links"
+                  | "structured_data"
+                  | "content"
+                  | "claims"
+                  | "copy"
+                  | "a11y"
+                  | "size"
+                )[]
+              }
+              progress?: {
+                step: string
+                done: number
+                total: number
+                now: boolean
+              }[]
+              timing?: {
+                running_minutes: number
+                quiet_minutes: number
+                overdue: boolean
+                range: string
+              }
+              restarted?: {
+                minutes_ago: number
+                /** @enum {string} */
+                cause:
+                  | "stalled"
+                  | "unfinished"
+                  | "unanswered"
+                  | "service"
+                  | "other"
+                working: boolean
+              }
+            }[]
+            stopped?: {
+              /** @enum {string} */
+              cause:
+                | "stalled"
+                | "unfinished"
+                | "unanswered"
+                | "service"
+                | "other"
+              /** Format: date-time */
+              at: string
+              checks?: (
+                | "build"
+                | "types"
+                | "links"
+                | "structured_data"
+                | "content"
+                | "claims"
+                | "copy"
+                | "a11y"
+                | "size"
+              )[]
             }[]
             questions: {
               /** Format: uuid */
@@ -4889,6 +5784,7 @@ export interface components {
               | "service_area.text"
               | "assistant.name"
               | "assistant.pronouns"
+              | "assistant.avatar"
               | "assistant.tone"
               | "owner.preferred_name"
               | "site.build_mode"
@@ -4961,6 +5857,10 @@ export interface components {
                 p50: number
                 p95: number
               }
+            }
+            expected_range?: {
+              quick: string
+              full: string
             }
           }
         }
@@ -5098,6 +5998,24 @@ export interface components {
                 }
               | {
                   /** @constant */
+                  key: "assistant.avatar"
+                  value: {
+                    /** @enum {string} */
+                    id:
+                      | "reme"
+                      | "she_1"
+                      | "she_2"
+                      | "she_3"
+                      | "he_1"
+                      | "he_2"
+                      | "he_3"
+                      | "they_1"
+                      | "they_2"
+                      | "they_3"
+                  }
+                }
+              | {
+                  /** @constant */
                   key: "assistant.tone"
                   value: {
                     /** @enum {string} */
@@ -5156,10 +6074,42 @@ export interface components {
                           | "pebble"
                           | "counsel"
                           | "after_dark"
+                          | "terracotta"
+                          | "ember"
+                          | "fern"
+                          | "sage_slate"
+                          | "seafoam"
+                          | "evergreen"
+                          | "ocean_deep"
+                          | "mineral"
+                          | "olive_clay"
+                          | "dusty_rose"
+                          | "caramel"
+                          | "charcoal"
+                          | "harbor_blue"
+                          | "slate_mist"
+                          | "garden"
+                          | "teal_tide"
+                          | "mist_teal"
+                          | "stone_sage"
+                          | "night_forest"
+                          | "olive_grove"
+                          | "lagoon_blue"
+                          | "deep_sea"
+                          | "forest_calm"
+                          | "steel_teal"
                         )
                       | "custom"
                     custom?: string
                     brand?: string
+                    roles?: {
+                      paper: string
+                      ink: string
+                      primary: string
+                      tint: string
+                      accent: string
+                      line: string
+                    }
                   }
                 }
               | {
@@ -5222,6 +6172,8 @@ export interface components {
                       content_type: "image/jpeg" | "image/png" | "image/webp"
                       bytes: number
                       alt?: string
+                      /** @enum {string} */
+                      use?: "logo" | "hero" | "work" | "team"
                     }[]
                   }
                 }
@@ -5238,7 +6190,11 @@ export interface components {
                         | "textarea"
                         | "number"
                         | "date"
+                        | "datetime"
                         | "select"
+                        | "radio"
+                        | "checkbox"
+                        | "photos"
                         | "tel"
                         | "email"
                       required: boolean
@@ -5337,9 +6293,14 @@ export interface components {
                     | "failed"
                     | "cancelled"
                   goal: string
+                  label?: string
                   /** @enum {string} */
                   lane?: "full" | "quick"
                   fell_through?: boolean
+                  /** @constant */
+                  retry?: true
+                  /** @constant */
+                  restarted?: true
                   activity?: {
                     id: string
                     label: string
@@ -5347,9 +6308,13 @@ export interface components {
                     total: number
                     /** @constant */
                     now?: true
+                    /** @constant */
+                    skipped?: true
                     items?: {
                       label: string
                       done: boolean
+                      /** @constant */
+                      working?: true
                     }[]
                   }[]
                   revision: {
@@ -5398,11 +6363,48 @@ export interface components {
                               | "pebble"
                               | "counsel"
                               | "after_dark"
+                              | "terracotta"
+                              | "ember"
+                              | "fern"
+                              | "sage_slate"
+                              | "seafoam"
+                              | "evergreen"
+                              | "ocean_deep"
+                              | "mineral"
+                              | "olive_clay"
+                              | "dusty_rose"
+                              | "caramel"
+                              | "charcoal"
+                              | "harbor_blue"
+                              | "slate_mist"
+                              | "garden"
+                              | "teal_tide"
+                              | "mist_teal"
+                              | "stone_sage"
+                              | "night_forest"
+                              | "olive_grove"
+                              | "lagoon_blue"
+                              | "deep_sea"
+                              | "forest_calm"
+                              | "steel_teal"
                           }
                         | {
                             /** @constant */
                             kind: "brand"
                             brand: string
+                          }
+                        | {
+                            /** @constant */
+                            kind: "roles"
+                            name: string
+                            roles: {
+                              paper: string
+                              ink: string
+                              primary: string
+                              tint: string
+                              accent: string
+                              line: string
+                            }
                           }
                       pages: {
                         /** @enum {string} */
@@ -5668,11 +6670,48 @@ export interface components {
                               | "pebble"
                               | "counsel"
                               | "after_dark"
+                              | "terracotta"
+                              | "ember"
+                              | "fern"
+                              | "sage_slate"
+                              | "seafoam"
+                              | "evergreen"
+                              | "ocean_deep"
+                              | "mineral"
+                              | "olive_clay"
+                              | "dusty_rose"
+                              | "caramel"
+                              | "charcoal"
+                              | "harbor_blue"
+                              | "slate_mist"
+                              | "garden"
+                              | "teal_tide"
+                              | "mist_teal"
+                              | "stone_sage"
+                              | "night_forest"
+                              | "olive_grove"
+                              | "lagoon_blue"
+                              | "deep_sea"
+                              | "forest_calm"
+                              | "steel_teal"
                           }
                         | {
                             /** @constant */
                             kind: "brand"
                             brand: string
+                          }
+                        | {
+                            /** @constant */
+                            kind: "roles"
+                            name: string
+                            roles: {
+                              paper: string
+                              ink: string
+                              primary: string
+                              tint: string
+                              accent: string
+                              line: string
+                            }
                           }
                       pages: {
                         /** @enum {string} */
@@ -5897,7 +6936,6 @@ export interface components {
                         purpose: string
                       }[]
                     } | null
-                    awaiting: boolean
                   }
                   photos?: {
                     slot_id: string
@@ -6645,6 +7683,56 @@ export interface components {
         lane?: "full" | "quick"
         goal: string
         version: number | null
+        retry?: boolean
+        fixing?: {
+          round: number
+          checks: (
+            | "build"
+            | "types"
+            | "links"
+            | "structured_data"
+            | "content"
+            | "claims"
+            | "copy"
+            | "a11y"
+            | "size"
+          )[]
+        }
+        progress?: {
+          step: string
+          done: number
+          total: number
+          now: boolean
+        }[]
+        timing?: {
+          running_minutes: number
+          quiet_minutes: number
+          overdue: boolean
+          range: string
+        }
+        restarted?: {
+          minutes_ago: number
+          /** @enum {string} */
+          cause: "stalled" | "unfinished" | "unanswered" | "service" | "other"
+          working: boolean
+        }
+      }[]
+      stopped?: {
+        /** @enum {string} */
+        cause: "stalled" | "unfinished" | "unanswered" | "service" | "other"
+        /** Format: date-time */
+        at: string
+        checks?: (
+          | "build"
+          | "types"
+          | "links"
+          | "structured_data"
+          | "content"
+          | "claims"
+          | "copy"
+          | "a11y"
+          | "size"
+        )[]
       }[]
       questions: {
         /** Format: uuid */
@@ -6675,6 +7763,7 @@ export interface components {
         | "service_area.text"
         | "assistant.name"
         | "assistant.pronouns"
+        | "assistant.avatar"
         | "assistant.tone"
         | "owner.preferred_name"
         | "site.build_mode"
@@ -6747,6 +7836,10 @@ export interface components {
           p50: number
           p95: number
         }
+      }
+      expected_range?: {
+        quick: string
+        full: string
       }
     }
     CreateOrgRequest: {
@@ -6869,6 +7962,7 @@ export interface components {
             | "service_area.text"
             | "assistant.name"
             | "assistant.pronouns"
+            | "assistant.avatar"
             | "assistant.tone"
             | "owner.preferred_name"
             | "site.build_mode"
@@ -6933,6 +8027,30 @@ export interface components {
         | "pebble"
         | "counsel"
         | "after_dark"
+        | "terracotta"
+        | "ember"
+        | "fern"
+        | "sage_slate"
+        | "seafoam"
+        | "evergreen"
+        | "ocean_deep"
+        | "mineral"
+        | "olive_clay"
+        | "dusty_rose"
+        | "caramel"
+        | "charcoal"
+        | "harbor_blue"
+        | "slate_mist"
+        | "garden"
+        | "teal_tide"
+        | "mist_teal"
+        | "stone_sage"
+        | "night_forest"
+        | "olive_grove"
+        | "lagoon_blue"
+        | "deep_sea"
+        | "forest_calm"
+        | "steel_teal"
       )[]
       /** @enum {string} */
       hero: "wash" | "split_arch" | "split_frame" | "dark_center" | "text_led"
@@ -7129,6 +8247,35 @@ export interface components {
       checkout_session: string
       payment_intent?: string
       subscription?: string
+    }
+    DrawLogosRequest: {
+      tool_call_id: string
+      brief: {
+        description: string | ""
+        colors: string[]
+        /** @enum {string} */
+        type:
+          | "lockup"
+          | "icon"
+          | "wordmark"
+          | "monogram"
+          | "emblem"
+          | "abstract"
+        /** @enum {string} */
+        style:
+          | "minimal"
+          | "geometric"
+          | "gradient"
+          | "mascot"
+          | "hand_drawn"
+          | "luxury"
+          | "retro"
+          | "three_d"
+          | "surprise"
+      }
+      changes?: string
+      /** Format: uuid */
+      base?: string
     }
     ErrorEnvelope: {
       /** @enum {string} */
@@ -7383,6 +8530,24 @@ export interface components {
         }
       | {
           /** @constant */
+          key: "assistant.avatar"
+          value: {
+            /** @enum {string} */
+            id:
+              | "reme"
+              | "she_1"
+              | "she_2"
+              | "she_3"
+              | "he_1"
+              | "he_2"
+              | "he_3"
+              | "they_1"
+              | "they_2"
+              | "they_3"
+          }
+        }
+      | {
+          /** @constant */
           key: "assistant.tone"
           value: {
             /** @enum {string} */
@@ -7441,10 +8606,42 @@ export interface components {
                   | "pebble"
                   | "counsel"
                   | "after_dark"
+                  | "terracotta"
+                  | "ember"
+                  | "fern"
+                  | "sage_slate"
+                  | "seafoam"
+                  | "evergreen"
+                  | "ocean_deep"
+                  | "mineral"
+                  | "olive_clay"
+                  | "dusty_rose"
+                  | "caramel"
+                  | "charcoal"
+                  | "harbor_blue"
+                  | "slate_mist"
+                  | "garden"
+                  | "teal_tide"
+                  | "mist_teal"
+                  | "stone_sage"
+                  | "night_forest"
+                  | "olive_grove"
+                  | "lagoon_blue"
+                  | "deep_sea"
+                  | "forest_calm"
+                  | "steel_teal"
                 )
               | "custom"
             custom?: string
             brand?: string
+            roles?: {
+              paper: string
+              ink: string
+              primary: string
+              tint: string
+              accent: string
+              line: string
+            }
           }
         }
       | {
@@ -7504,6 +8701,8 @@ export interface components {
               content_type: "image/jpeg" | "image/png" | "image/webp"
               bytes: number
               alt?: string
+              /** @enum {string} */
+              use?: "logo" | "hero" | "work" | "team"
             }[]
           }
         }
@@ -7520,7 +8719,11 @@ export interface components {
                 | "textarea"
                 | "number"
                 | "date"
+                | "datetime"
                 | "select"
+                | "radio"
+                | "checkbox"
+                | "photos"
                 | "tel"
                 | "email"
               required: boolean
@@ -7887,6 +9090,7 @@ export interface components {
       requested_by_staff_id: string
       field: string
       why: string
+      question?: string
       answer_schema: {
         [key: string]: unknown
       }
@@ -7906,6 +9110,69 @@ export interface components {
       /** @enum {string} */
       outcome: "ok" | "skipped" | "failed"
       detail: string | null
+    }
+    KeptLogo: {
+      asset: {
+        /** Format: uuid */
+        id: string
+        name: string
+        /** @enum {string} */
+        content_type: "image/jpeg" | "image/png" | "image/webp"
+        bytes: number
+        alt?: string
+        /** @enum {string} */
+        use?: "logo" | "hero" | "work" | "team"
+      }
+    }
+    LogoPalettes: {
+      palettes: {
+        name: string
+        stops: {
+          paper: string
+          tint: string
+          primary: string
+          ink: string
+        }
+      }[]
+    }
+    LogoPalettesRequest: {
+      /** Format: uuid */
+      asset_id: string
+    }
+    LogoRounds: {
+      rounds: {
+        round: number
+        /** @enum {string} */
+        status: "drawing" | "ready" | "failed"
+        variants: {
+          /** Format: uuid */
+          id: string
+        }[]
+        brief: {
+          description: string | ""
+          colors: string[]
+          /** @enum {string} */
+          type:
+            | "lockup"
+            | "icon"
+            | "wordmark"
+            | "monogram"
+            | "emblem"
+            | "abstract"
+          /** @enum {string} */
+          style:
+            | "minimal"
+            | "geometric"
+            | "gradient"
+            | "mascot"
+            | "hand_drawn"
+            | "luxury"
+            | "retro"
+            | "three_d"
+            | "surprise"
+        }
+      }[]
+      next_at?: string | null
     }
     MemoryChip: {
       version: number
@@ -7989,6 +9256,138 @@ export interface components {
       /** @enum {string} */
       rating: "up" | "down"
     }
+    OnboardingStatus: {
+      on:
+        | {
+            /** @constant */
+            kind: "doing"
+            text: string
+          }
+        | {
+            /** @constant */
+            kind: "thinking"
+            text: string
+          }
+        | {
+            /** @constant */
+            kind: "step"
+            /** @enum {string} */
+            step:
+              | "business.name"
+              | "business.phone"
+              | "business.email"
+              | "hours.weekday"
+              | "service_area.radius"
+              | "business.tagline"
+              | "business.industry"
+              | "business.offerings"
+              | "business.audience"
+              | "business.overview"
+              | "business.proof"
+              | "business.disclaimer"
+              | "service_area.text"
+              | "assistant.name"
+              | "assistant.pronouns"
+              | "assistant.tone"
+              | "owner.preferred_name"
+              | "site.build_mode"
+              | "site.template"
+              | "site.palette"
+              | "site.font"
+              | "site.direction"
+              | "site.pages"
+              | "industry"
+              | "pronouns"
+              | "tone"
+              | "build_for_me"
+              | "manual_builder"
+              | "template"
+              | "palette"
+              | "font"
+              | "pages"
+              | "contact"
+              | "assistant"
+              | "quote_form"
+              | "design"
+              | "upload"
+            answered: boolean
+          }
+        | {
+            /** @constant */
+            kind: "reading"
+            /** @enum {string} */
+            about: "answer" | "change" | "question"
+          }
+        | {
+            /** @constant */
+            kind: "fact"
+            /** @enum {string} */
+            key:
+              | "business.name"
+              | "business.phone"
+              | "business.email"
+              | "hours.weekday"
+              | "service_area.radius"
+              | "business.tagline"
+              | "business.industry"
+              | "business.offerings"
+              | "business.audience"
+              | "business.overview"
+              | "business.proof"
+              | "business.disclaimer"
+              | "service_area.text"
+              | "assistant.name"
+              | "assistant.pronouns"
+              | "assistant.tone"
+              | "owner.preferred_name"
+              | "site.build_mode"
+              | "site.template"
+              | "site.palette"
+              | "site.font"
+              | "site.direction"
+              | "site.pages"
+          }
+        | {
+            /** @constant */
+            kind: "next"
+            /** @enum {string} */
+            next:
+              | "ask_open"
+              | "ask_choice"
+              | "ask_design"
+              | "ask_fact"
+              | "ask_details"
+              | "ask_upload"
+              | "review_quote_form"
+              | "start_build"
+              | "answer_only"
+          }
+      facts: (
+        | "business.name"
+        | "business.phone"
+        | "business.email"
+        | "hours.weekday"
+        | "service_area.radius"
+        | "business.tagline"
+        | "business.industry"
+        | "business.offerings"
+        | "business.audience"
+        | "business.overview"
+        | "business.proof"
+        | "business.disclaimer"
+        | "service_area.text"
+        | "assistant.name"
+        | "assistant.pronouns"
+        | "assistant.tone"
+        | "owner.preferred_name"
+        | "site.build_mode"
+        | "site.template"
+        | "site.palette"
+        | "site.font"
+        | "site.direction"
+        | "site.pages"
+      )[]
+    }
     Org: {
       /** Format: uuid */
       org_id: string
@@ -8011,6 +9410,13 @@ export interface components {
        * @enum {string}
        */
       change_kind?: "copy" | "style" | "section" | "photo" | "creative"
+      /** @description A short name for the change in the owner's terms, as the panel and the ready line say it after "updating": "your hero title", "your phone number", "the colours". */
+      label?: string
+      /** @description Set when the owner wrote the words in the panel: once the change starts they are also posted in this conversation, or in the newest one when none is named. */
+      chat?: {
+        /** Format: uuid */
+        conversation_id?: string
+      }
     }
     OwnerMemoryReview: {
       ask_first: boolean
@@ -8062,6 +9468,30 @@ export interface components {
         | "pebble"
         | "counsel"
         | "after_dark"
+        | "terracotta"
+        | "ember"
+        | "fern"
+        | "sage_slate"
+        | "seafoam"
+        | "evergreen"
+        | "ocean_deep"
+        | "mineral"
+        | "olive_clay"
+        | "dusty_rose"
+        | "caramel"
+        | "charcoal"
+        | "harbor_blue"
+        | "slate_mist"
+        | "garden"
+        | "teal_tide"
+        | "mist_teal"
+        | "stone_sage"
+        | "night_forest"
+        | "olive_grove"
+        | "lagoon_blue"
+        | "deep_sea"
+        | "forest_calm"
+        | "steel_teal"
       label: string
       paper: string
       ink: string
@@ -8069,6 +9499,15 @@ export interface components {
       tint: string
       accent: string
       line: string
+    }
+    PaletteFromImage: {
+      name: string
+      stops: {
+        paper: string
+        tint: string
+        primary: string
+        ink: string
+      }
     }
     PreviewClaim: {
       /** Format: uuid */
@@ -8138,11 +9577,41 @@ export interface components {
       /** Format: uuid */
       id: string
     }
+    QuestionReply: {
+      message_id: string
+      /** Format: uuid */
+      question_id: string
+      answer:
+        | {
+            /** @constant */
+            kind: "value"
+            value:
+              | string
+              | {
+                  [key: string]: unknown
+                }
+          }
+        | {
+            /** @constant */
+            kind: "skipped"
+          }
+    }
     QuoteField: {
       key: string
       label: string
       /** @enum {string} */
-      type: "text" | "textarea" | "number" | "date" | "select" | "tel" | "email"
+      type:
+        | "text"
+        | "textarea"
+        | "number"
+        | "date"
+        | "datetime"
+        | "select"
+        | "radio"
+        | "checkbox"
+        | "photos"
+        | "tel"
+        | "email"
       required: boolean
       hint: string | null
       options: string[] | null
@@ -8301,9 +9770,14 @@ export interface components {
               | "failed"
               | "cancelled"
             goal: string
+            label?: string
             /** @enum {string} */
             lane?: "full" | "quick"
             fell_through?: boolean
+            /** @constant */
+            retry?: true
+            /** @constant */
+            restarted?: true
             activity?: {
               id: string
               label: string
@@ -8311,9 +9785,13 @@ export interface components {
               total: number
               /** @constant */
               now?: true
+              /** @constant */
+              skipped?: true
               items?: {
                 label: string
                 done: boolean
+                /** @constant */
+                working?: true
               }[]
             }[]
             revision: {
@@ -8362,11 +9840,48 @@ export interface components {
                         | "pebble"
                         | "counsel"
                         | "after_dark"
+                        | "terracotta"
+                        | "ember"
+                        | "fern"
+                        | "sage_slate"
+                        | "seafoam"
+                        | "evergreen"
+                        | "ocean_deep"
+                        | "mineral"
+                        | "olive_clay"
+                        | "dusty_rose"
+                        | "caramel"
+                        | "charcoal"
+                        | "harbor_blue"
+                        | "slate_mist"
+                        | "garden"
+                        | "teal_tide"
+                        | "mist_teal"
+                        | "stone_sage"
+                        | "night_forest"
+                        | "olive_grove"
+                        | "lagoon_blue"
+                        | "deep_sea"
+                        | "forest_calm"
+                        | "steel_teal"
                     }
                   | {
                       /** @constant */
                       kind: "brand"
                       brand: string
+                    }
+                  | {
+                      /** @constant */
+                      kind: "roles"
+                      name: string
+                      roles: {
+                        paper: string
+                        ink: string
+                        primary: string
+                        tint: string
+                        accent: string
+                        line: string
+                      }
                     }
                 pages: {
                   /** @enum {string} */
@@ -8632,11 +10147,48 @@ export interface components {
                         | "pebble"
                         | "counsel"
                         | "after_dark"
+                        | "terracotta"
+                        | "ember"
+                        | "fern"
+                        | "sage_slate"
+                        | "seafoam"
+                        | "evergreen"
+                        | "ocean_deep"
+                        | "mineral"
+                        | "olive_clay"
+                        | "dusty_rose"
+                        | "caramel"
+                        | "charcoal"
+                        | "harbor_blue"
+                        | "slate_mist"
+                        | "garden"
+                        | "teal_tide"
+                        | "mist_teal"
+                        | "stone_sage"
+                        | "night_forest"
+                        | "olive_grove"
+                        | "lagoon_blue"
+                        | "deep_sea"
+                        | "forest_calm"
+                        | "steel_teal"
                     }
                   | {
                       /** @constant */
                       kind: "brand"
                       brand: string
+                    }
+                  | {
+                      /** @constant */
+                      kind: "roles"
+                      name: string
+                      roles: {
+                        paper: string
+                        ink: string
+                        primary: string
+                        tint: string
+                        accent: string
+                        line: string
+                      }
                     }
                 pages: {
                   /** @enum {string} */
@@ -8861,7 +10413,6 @@ export interface components {
                   purpose: string
                 }[]
               } | null
-              awaiting: boolean
             }
             photos?: {
               slot_id: string
@@ -8897,6 +10448,9 @@ export interface components {
             message: string
           }
         }
+    ReviewPhotosRequest: {
+      asset_ids: string[]
+    }
     ReviewQuoteFormInput: {
       fields: {
         key: string
@@ -8907,7 +10461,11 @@ export interface components {
           | "textarea"
           | "number"
           | "date"
+          | "datetime"
           | "select"
+          | "radio"
+          | "checkbox"
+          | "photos"
           | "tel"
           | "email"
         required: boolean
@@ -8929,7 +10487,11 @@ export interface components {
               | "textarea"
               | "number"
               | "date"
+              | "datetime"
               | "select"
+              | "radio"
+              | "checkbox"
+              | "photos"
               | "tel"
               | "email"
             required: boolean
@@ -8941,7 +10503,49 @@ export interface components {
           /** @constant */
           answer: "changes"
           text: string
+          fields?: {
+            key: string
+            label: string
+            /** @enum {string} */
+            type:
+              | "text"
+              | "textarea"
+              | "number"
+              | "date"
+              | "datetime"
+              | "select"
+              | "radio"
+              | "checkbox"
+              | "photos"
+              | "tel"
+              | "email"
+            required: boolean
+            hint: string | null
+            options: string[] | null
+          }[]
         }
+    ReviewedPhotos: {
+      photos: {
+        asset: {
+          /** Format: uuid */
+          id: string
+          name: string
+          /** @enum {string} */
+          content_type: "image/jpeg" | "image/png" | "image/webp"
+          bytes: number
+          alt?: string
+          /** @enum {string} */
+          use?: "logo" | "hero" | "work" | "team"
+        }
+        usable: boolean
+        note: string | null
+      }[]
+      missing: {
+        /** @enum {string} */
+        need: "hero" | "work" | "team"
+        count: number
+      }[]
+    }
     RuntimeSpec: {
       /** Format: uuid */
       spec_id: string
@@ -9085,6 +10689,69 @@ export interface components {
               url: string
             }
       }
+      questions?: {
+        /** @enum {string} */
+        kind: "build" | "offer"
+        /** Format: uuid */
+        assignment_id: string
+        questions: {
+          /** Format: uuid */
+          id: string
+          text: string
+          input:
+            | {
+                /** @constant */
+                kind: "fact"
+                /** @enum {string} */
+                key:
+                  | "business.name"
+                  | "business.phone"
+                  | "business.email"
+                  | "hours.weekday"
+                  | "service_area.radius"
+                  | "business.tagline"
+                  | "business.offerings"
+                  | "business.audience"
+                  | "business.overview"
+                  | "business.proof"
+                  | "business.disclaimer"
+                  | "service_area.text"
+                  | "assistant.name"
+                  | "owner.preferred_name"
+              }
+            | {
+                /** @constant */
+                kind: "choice"
+                options: string[]
+              }
+            | {
+                /** @constant */
+                kind: "text"
+                maxLength: number
+                email: boolean
+              }
+          skippable: boolean
+          answer?:
+            | {
+                /** @constant */
+                kind: "value"
+                value:
+                  | string
+                  | {
+                      [key: string]: unknown
+                    }
+              }
+            | {
+                /** @constant */
+                kind: "skipped"
+              }
+            | {
+                /** @constant */
+                kind: "closed"
+              }
+          field?: string
+        }[]
+      }
     }
     SetFactsRequest: {
       facts: (
@@ -9215,6 +10882,24 @@ export interface components {
           }
         | {
             /** @constant */
+            key: "assistant.avatar"
+            value: {
+              /** @enum {string} */
+              id:
+                | "reme"
+                | "she_1"
+                | "she_2"
+                | "she_3"
+                | "he_1"
+                | "he_2"
+                | "he_3"
+                | "they_1"
+                | "they_2"
+                | "they_3"
+            }
+          }
+        | {
+            /** @constant */
             key: "assistant.tone"
             value: {
               /** @enum {string} */
@@ -9273,10 +10958,42 @@ export interface components {
                     | "pebble"
                     | "counsel"
                     | "after_dark"
+                    | "terracotta"
+                    | "ember"
+                    | "fern"
+                    | "sage_slate"
+                    | "seafoam"
+                    | "evergreen"
+                    | "ocean_deep"
+                    | "mineral"
+                    | "olive_clay"
+                    | "dusty_rose"
+                    | "caramel"
+                    | "charcoal"
+                    | "harbor_blue"
+                    | "slate_mist"
+                    | "garden"
+                    | "teal_tide"
+                    | "mist_teal"
+                    | "stone_sage"
+                    | "night_forest"
+                    | "olive_grove"
+                    | "lagoon_blue"
+                    | "deep_sea"
+                    | "forest_calm"
+                    | "steel_teal"
                   )
                 | "custom"
               custom?: string
               brand?: string
+              roles?: {
+                paper: string
+                ink: string
+                primary: string
+                tint: string
+                accent: string
+                line: string
+              }
             }
           }
         | {
@@ -9336,6 +11053,8 @@ export interface components {
                 content_type: "image/jpeg" | "image/png" | "image/webp"
                 bytes: number
                 alt?: string
+                /** @enum {string} */
+                use?: "logo" | "hero" | "work" | "team"
               }[]
             }
           }
@@ -9352,7 +11071,11 @@ export interface components {
                   | "textarea"
                   | "number"
                   | "date"
+                  | "datetime"
                   | "select"
+                  | "radio"
+                  | "checkbox"
+                  | "photos"
                   | "tel"
                   | "email"
                 required: boolean
@@ -9383,6 +11106,9 @@ export interface components {
           }
       )[]
     }
+    SetTimeZoneRequest: {
+      time_zone: string
+    }
     SiteFields: {
       [key: string]:
         | {
@@ -9395,6 +11121,26 @@ export interface components {
             /** @constant */
             kind: "composed"
           }
+    }
+    SiteMedia: {
+      logo: {
+        /** Format: uuid */
+        id: string
+        name: string
+        /** @enum {string} */
+        content_type: "image/jpeg" | "image/png" | "image/webp"
+        bytes: number
+        alt?: string
+        /** @enum {string} */
+        use?: "logo" | "hero" | "work" | "team"
+      } | null
+      photos: {
+        slot_id: string
+        section: string
+        alt: string
+        generated: boolean
+        thumbnail: string | null
+      }[]
     }
     SitePointer: {
       /** Format: uuid */
@@ -9501,6 +11247,8 @@ export interface components {
         content_type: "image/jpeg" | "image/png" | "image/webp"
         bytes: number
         alt?: string
+        /** @enum {string} */
+        use?: "logo" | "hero" | "work" | "team"
       }[]
     }
     UrlStatus: {
@@ -9580,9 +11328,14 @@ export interface components {
           | "failed"
           | "cancelled"
         goal: string
+        label?: string
         /** @enum {string} */
         lane?: "full" | "quick"
         fell_through?: boolean
+        /** @constant */
+        retry?: true
+        /** @constant */
+        restarted?: true
         activity?: {
           id: string
           label: string
@@ -9590,9 +11343,13 @@ export interface components {
           total: number
           /** @constant */
           now?: true
+          /** @constant */
+          skipped?: true
           items?: {
             label: string
             done: boolean
+            /** @constant */
+            working?: true
           }[]
         }[]
         revision: {
@@ -9641,11 +11398,48 @@ export interface components {
                     | "pebble"
                     | "counsel"
                     | "after_dark"
+                    | "terracotta"
+                    | "ember"
+                    | "fern"
+                    | "sage_slate"
+                    | "seafoam"
+                    | "evergreen"
+                    | "ocean_deep"
+                    | "mineral"
+                    | "olive_clay"
+                    | "dusty_rose"
+                    | "caramel"
+                    | "charcoal"
+                    | "harbor_blue"
+                    | "slate_mist"
+                    | "garden"
+                    | "teal_tide"
+                    | "mist_teal"
+                    | "stone_sage"
+                    | "night_forest"
+                    | "olive_grove"
+                    | "lagoon_blue"
+                    | "deep_sea"
+                    | "forest_calm"
+                    | "steel_teal"
                 }
               | {
                   /** @constant */
                   kind: "brand"
                   brand: string
+                }
+              | {
+                  /** @constant */
+                  kind: "roles"
+                  name: string
+                  roles: {
+                    paper: string
+                    ink: string
+                    primary: string
+                    tint: string
+                    accent: string
+                    line: string
+                  }
                 }
             pages: {
               /** @enum {string} */
@@ -9911,11 +11705,48 @@ export interface components {
                     | "pebble"
                     | "counsel"
                     | "after_dark"
+                    | "terracotta"
+                    | "ember"
+                    | "fern"
+                    | "sage_slate"
+                    | "seafoam"
+                    | "evergreen"
+                    | "ocean_deep"
+                    | "mineral"
+                    | "olive_clay"
+                    | "dusty_rose"
+                    | "caramel"
+                    | "charcoal"
+                    | "harbor_blue"
+                    | "slate_mist"
+                    | "garden"
+                    | "teal_tide"
+                    | "mist_teal"
+                    | "stone_sage"
+                    | "night_forest"
+                    | "olive_grove"
+                    | "lagoon_blue"
+                    | "deep_sea"
+                    | "forest_calm"
+                    | "steel_teal"
                 }
               | {
                   /** @constant */
                   kind: "brand"
                   brand: string
+                }
+              | {
+                  /** @constant */
+                  kind: "roles"
+                  name: string
+                  roles: {
+                    paper: string
+                    ink: string
+                    primary: string
+                    tint: string
+                    accent: string
+                    line: string
+                  }
                 }
             pages: {
               /** @enum {string} */
@@ -10140,7 +11971,6 @@ export interface components {
               purpose: string
             }[]
           } | null
-          awaiting: boolean
         }
         photos?: {
           slot_id: string
@@ -10182,6 +12012,7 @@ export interface components {
               requested_by_staff_id: string
               field: string
               why: string
+              question?: string
               answer_schema: {
                 [key: string]: unknown
               }
@@ -10308,6 +12139,7 @@ export interface components {
         | "service_area.text"
         | "assistant.name"
         | "assistant.pronouns"
+        | "assistant.avatar"
         | "assistant.tone"
         | "owner.preferred_name"
         | "site.build_mode"
@@ -10322,6 +12154,20 @@ export interface components {
         | "testimonials.review_2"
       )[]
       assistant_name: string | null
+      assistant_avatar:
+        | (
+            | "reme"
+            | "she_1"
+            | "she_2"
+            | "she_3"
+            | "he_1"
+            | "he_2"
+            | "he_3"
+            | "they_1"
+            | "they_2"
+            | "they_3"
+          )
+        | null
       reminders: {
         notes: {
           /** Format: uuid */
@@ -10379,6 +12225,7 @@ export interface components {
                 | "service_area.text"
                 | "assistant.name"
                 | "assistant.pronouns"
+                | "assistant.avatar"
                 | "assistant.tone"
                 | "owner.preferred_name"
                 | "site.build_mode"
@@ -10394,6 +12241,284 @@ export interface components {
               )[]
             }
         )[]
+      }
+      activity?: {
+        journey: {
+          id: string
+          /** @enum {string} */
+          kind:
+            | "onboarding"
+            | "website"
+            | "golive"
+            | "change"
+            | "domain"
+            | "purchase"
+            | "google"
+            | "reminder"
+            | "review"
+            | "question"
+            | "checkin"
+            | "turn"
+          /** @enum {string} */
+          state: "upcoming" | "now" | "waiting" | "done" | "failed"
+          steps: {
+            id: string
+            /** @enum {string} */
+            state: "done" | "now" | "waiting" | "next" | "skipped"
+            value?: string
+            count?: {
+              done: number
+              total: number
+            }
+          }[]
+          /** Format: date-time */
+          at: string
+          /** Format: date-time */
+          deadline?: string
+          names?: {
+            business?: string
+            host?: string
+            domain?: string
+            change?: string
+          }
+          step?: string
+          usual_seconds?: number
+          late_seconds?: number
+          /** @constant */
+          restarted?: true
+          /** Format: date-time */
+          synced_at?: string
+        }[]
+        now: {
+          id: string
+          /** @enum {string} */
+          kind:
+            | "onboarding"
+            | "website"
+            | "golive"
+            | "change"
+            | "domain"
+            | "purchase"
+            | "google"
+            | "reminder"
+            | "review"
+            | "question"
+            | "checkin"
+            | "turn"
+          /** @enum {string} */
+          state: "upcoming" | "now" | "waiting" | "done" | "failed"
+          steps: {
+            id: string
+            /** @enum {string} */
+            state: "done" | "now" | "waiting" | "next" | "skipped"
+            value?: string
+            count?: {
+              done: number
+              total: number
+            }
+          }[]
+          /** Format: date-time */
+          at: string
+          /** Format: date-time */
+          deadline?: string
+          names?: {
+            business?: string
+            host?: string
+            domain?: string
+            change?: string
+          }
+          step?: string
+          usual_seconds?: number
+          late_seconds?: number
+          /** @constant */
+          restarted?: true
+          /** Format: date-time */
+          synced_at?: string
+        }[]
+        waiting: {
+          id: string
+          /** @enum {string} */
+          kind:
+            | "onboarding"
+            | "website"
+            | "golive"
+            | "change"
+            | "domain"
+            | "purchase"
+            | "google"
+            | "reminder"
+            | "review"
+            | "question"
+            | "checkin"
+            | "turn"
+          /** @enum {string} */
+          state: "upcoming" | "now" | "waiting" | "done" | "failed"
+          steps: {
+            id: string
+            /** @enum {string} */
+            state: "done" | "now" | "waiting" | "next" | "skipped"
+            value?: string
+            count?: {
+              done: number
+              total: number
+            }
+          }[]
+          /** Format: date-time */
+          at: string
+          /** Format: date-time */
+          deadline?: string
+          names?: {
+            business?: string
+            host?: string
+            domain?: string
+            change?: string
+          }
+          step?: string
+          usual_seconds?: number
+          late_seconds?: number
+          /** @constant */
+          restarted?: true
+          /** Format: date-time */
+          synced_at?: string
+        }[]
+        upcoming: {
+          id: string
+          /** @enum {string} */
+          kind:
+            | "onboarding"
+            | "website"
+            | "golive"
+            | "change"
+            | "domain"
+            | "purchase"
+            | "google"
+            | "reminder"
+            | "review"
+            | "question"
+            | "checkin"
+            | "turn"
+          /** @enum {string} */
+          state: "upcoming" | "now" | "waiting" | "done" | "failed"
+          steps: {
+            id: string
+            /** @enum {string} */
+            state: "done" | "now" | "waiting" | "next" | "skipped"
+            value?: string
+            count?: {
+              done: number
+              total: number
+            }
+          }[]
+          /** Format: date-time */
+          at: string
+          /** Format: date-time */
+          deadline?: string
+          names?: {
+            business?: string
+            host?: string
+            domain?: string
+            change?: string
+          }
+          step?: string
+          usual_seconds?: number
+          late_seconds?: number
+          /** @constant */
+          restarted?: true
+          /** Format: date-time */
+          synced_at?: string
+        }[]
+        done: {
+          id: string
+          /** @enum {string} */
+          kind:
+            | "onboarding"
+            | "website"
+            | "golive"
+            | "change"
+            | "domain"
+            | "purchase"
+            | "google"
+            | "reminder"
+            | "review"
+            | "question"
+            | "checkin"
+            | "turn"
+          /** @enum {string} */
+          state: "upcoming" | "now" | "waiting" | "done" | "failed"
+          steps: {
+            id: string
+            /** @enum {string} */
+            state: "done" | "now" | "waiting" | "next" | "skipped"
+            value?: string
+            count?: {
+              done: number
+              total: number
+            }
+          }[]
+          /** Format: date-time */
+          at: string
+          /** Format: date-time */
+          deadline?: string
+          names?: {
+            business?: string
+            host?: string
+            domain?: string
+            change?: string
+          }
+          step?: string
+          usual_seconds?: number
+          late_seconds?: number
+          /** @constant */
+          restarted?: true
+          /** Format: date-time */
+          synced_at?: string
+        }[]
+        standing?: {
+          id: string
+          /** @enum {string} */
+          kind:
+            | "onboarding"
+            | "website"
+            | "golive"
+            | "change"
+            | "domain"
+            | "purchase"
+            | "google"
+            | "reminder"
+            | "review"
+            | "question"
+            | "checkin"
+            | "turn"
+          /** @enum {string} */
+          state: "upcoming" | "now" | "waiting" | "done" | "failed"
+          steps: {
+            id: string
+            /** @enum {string} */
+            state: "done" | "now" | "waiting" | "next" | "skipped"
+            value?: string
+            count?: {
+              done: number
+              total: number
+            }
+          }[]
+          /** Format: date-time */
+          at: string
+          /** Format: date-time */
+          deadline?: string
+          names?: {
+            business?: string
+            host?: string
+            domain?: string
+            change?: string
+          }
+          step?: string
+          usual_seconds?: number
+          late_seconds?: number
+          /** @constant */
+          restarted?: true
+          /** Format: date-time */
+          synced_at?: string
+        }[]
       }
     }
   }

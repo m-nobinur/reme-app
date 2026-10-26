@@ -15,8 +15,8 @@
   },
   "dependencies": {
     "@ai-sdk/react": "4.0.147",
-    "@assistant-ui/react": "0.15.29",
-    "@assistant-ui/react-ai-sdk": "1.4.18",
+    "@assistant-ui/react": "0.15.31",
+    "@assistant-ui/react-ai-sdk": "1.4.20",
     "@phosphor-icons/react": "^2.1.10",
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/react-router": "1.170.45",

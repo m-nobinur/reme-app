@@ -1,4 +1,6 @@
+export * from "./activity.ts"
 export * from "./assignment.ts"
+export * from "./build-notes.ts"
 export * from "./chat.ts"
 export * from "./common.ts"
 export * from "./conversation.ts"

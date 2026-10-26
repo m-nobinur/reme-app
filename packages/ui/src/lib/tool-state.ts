@@ -8,12 +8,12 @@ import {
   AskDetailsOutput,
   AskFactInput,
   AskFactOutput,
+  AskOpenInput,
+  AskOpenOutput,
   AskUploadInput,
   AskUploadOutput,
-  BlueprintReviewInput,
-  BlueprintReviewOutput,
   type FactValue,
-  type FactValueKey,
+  FactValueKey,
   PRONOUNS,
   ReviewQuoteFormInput,
   ReviewQuoteFormOutput,
@@ -21,6 +21,7 @@ import {
   TOOL_CALL_CANCELLED,
   toolErrorKind,
 } from "@workspace/contracts"
+import { askable, saidInChat } from "@workspace/ui/lib/answer"
 import { factText } from "@workspace/ui/lib/facts"
 
 /**
@@ -303,6 +304,14 @@ export type AskDetailsView = AskView<
 export const askDetailsView = (part: ToolPartView): AskDetailsView =>
   askView(part, AskDetailsInput, AskDetailsOutput)
 
+/** An `ask_open` question: answered in the owner's own words, or skipped. */
+export type AskOpenView = AskView<
+  AskOpenInput,
+  Extract<AskOpenOutput, { answer: "stated" }>
+>
+export const askOpenView = (part: ToolPartView): AskOpenView =>
+  askView(part, AskOpenInput, AskOpenOutput)
+
 /**
  * A UK number as it is written at home: `+447700900123` as `07700 900123`.
  * Any other number stays as it is.
@@ -321,25 +330,29 @@ export function phoneText(e164: string): string {
     : `${national.slice(0, 5)} ${national.slice(5)}`
 }
 
+/** A preset's label by id; an id no longer offered reads as itself. */
+export const presetLabel = (
+  presets: readonly { id: string; label: string }[],
+  id: string
+) => presets.find((each) => each.id === id)?.label ?? id
+
 /**
- * Details as the owner gave them, in the card's order and the words it
- * showed: "07700 900123, hello@example.com" or "Ava, she/her, Friendly".
+ * Details as the owner gave them, in the tray's order and the words it
+ * showed: "07700 900123 · hello@example.com" or "Ava · she/her · Friendly".
+ * The face is a picture, so it has no words here.
  */
 export function detailsText(facts: readonly FactValue[]): string {
   return facts
+    .filter((fact) => fact.key !== "assistant.avatar")
     .map((fact) => {
       if (fact.key === "business.phone") return phoneText(fact.value.e164)
-      if (fact.key === "assistant.pronouns" || fact.key === "assistant.tone") {
-        const presets: readonly { id: string; label: string }[] =
-          fact.key === "assistant.pronouns" ? PRONOUNS : TONES
-        return (
-          presets.find((each) => each.id === fact.value.id)?.label ??
-          fact.value.id
-        )
-      }
+      if (fact.key === "assistant.pronouns")
+        return presetLabel(PRONOUNS, fact.value.id)
+      if (fact.key === "assistant.tone")
+        return presetLabel(TONES, fact.value.id)
       return factText(fact.key, fact.value)
     })
-    .join(", ")
+    .join(" · ")
 }
 
 /**
@@ -353,44 +366,6 @@ export type ReviewQuoteFormView = AskView<
 >
 export const reviewQuoteFormView = (part: ToolPartView): ReviewQuoteFormView =>
   askView(part, ReviewQuoteFormInput, ReviewQuoteFormOutput)
-
-/**
- * A `review_blueprint` card: the plan waiting for the owner's build or change,
- * their decision, overtaken by a typed message, or broken. It has no skip: a
- * plan the owner does not want is a change.
- */
-export type BlueprintReviewView =
-  | { state: "pending"; input: BlueprintReviewInput }
-  | {
-      state: "answered"
-      input: BlueprintReviewInput | null
-      output: BlueprintReviewOutput
-    }
-  | { state: "cancelled" }
-  | { state: "error"; message: string }
-
-export function blueprintReviewView(part: ToolPartView): BlueprintReviewView {
-  const args = BlueprintReviewInput.safeParse(part.args)
-  if (part.isError) {
-    const message = errorOf(part.result)
-    return message === TOOL_CALL_CANCELLED
-      ? { state: "cancelled" }
-      : { state: "error", message: message || BROKEN }
-  }
-  if (part.result === undefined) {
-    return args.success
-      ? { state: "pending", input: args.data }
-      : { state: "error", message: BROKEN }
-  }
-  const output = BlueprintReviewOutput.safeParse(part.result)
-  return output.success
-    ? {
-        state: "answered",
-        input: args.success ? args.data : null,
-        output: output.data,
-      }
-    : { state: "error", message: BROKEN }
-}
 
 /**
  * A choice as the owner reads it back: the labels they picked, in the card's
@@ -408,32 +383,82 @@ export function choiceText(
 }
 
 /**
- * A finished design tray as the owner's words: each answered question as
- * "Question: answer", their own words as typed. A question skipped or never
- * opened is left out, and Skip all with nothing answered says so.
+ * What a layout looks like, in words an owner would use: its hero, then how
+ * the services sit under it. The option's own label is the direction's name,
+ * which means nothing to an owner, so it is not shown. A variant not listed
+ * here has no description and the label stands in.
+ */
+const HERO_LOOK: Record<string, string> = {
+  split_frame: "Text left, photo right",
+  split_arch: "Text left, photo in an arch",
+  wash: "Big photo, heading over it",
+  dark_center: "Big photo, centred heading",
+  text_led: "Large heading, small photo",
+}
+const SERVICES_LOOK: Record<string, string> = {
+  photo_cards: "Services as photo cards",
+  numbered_rows: "Services as numbered rows",
+  alternating: "Services as photo and text rows",
+  fleet: "Services as wide cards",
+  practice_list: "Services as a numbered list",
+}
+
+type DesignOption =
+  AskDesignInput["questions"][number]["card"]["options"][number]
+
+export function layoutLook(option: DesignOption) {
+  const { visual } = option
+  if (visual?.kind !== "layout") return null
+  const hero = HERO_LOOK[visual.hero]
+  return hero ? { hero, services: SERVICES_LOOK[visual.services] } : null
+}
+
+/** A skipped question, as the owner's reply shows it, muted. */
+export const SKIPPED = "Skipped"
+
+/** The tray button that leaves the rest to the assistant, and the owner's reply when pressed. */
+export const PICK_FOR_ME = "Pick for me"
+
+/**
+ * A finished design tray as the owner's words: what they picked on each
+ * question, in the tray's order and the words it showed, "Ocean · Outfit and
+ * Figtree · Text left, photo right", their own words as typed. A question
+ * skipped or never opened is left out; with nothing picked it reads Skipped.
+ * Pick for me reads as itself: the owner asked the assistant to choose.
  */
 export function designText(
   input: AskDesignInput | null,
   output: AskDesignOutput
 ): string {
-  const lines = (input?.questions ?? []).flatMap((each) => {
+  if (output.skip_all) return PICK_FOR_ME
+  const picked = (input?.questions ?? []).flatMap((each) => {
     const answer = output.answers[each.id]
     if (!answer || "skipped" in answer) return []
-    const label = (id: string) =>
-      each.card.options.find((option) => option.id === id)?.label ?? id
-    const said =
+    const label = (id: string) => {
+      const option = each.card.options.find((o) => o.id === id)
+      return option ? (layoutLook(option)?.hero ?? option.label) : id
+    }
+    const photos = (count: number) =>
+      count === 1 ? "1 photo" : `${count} photos`
+    return [
       "own" in answer
         ? answer.own
         : "choices" in answer
           ? answer.choices.map(label).join(", ")
-          : label(answer.choice)
-    // A question's own "?" before the colon read as "business?: Classic blue".
-    return [`${(each.question ?? each.id).replace(/\?$/, "")}: ${said}`]
+          : "palette" in answer
+            ? answer.palette.name
+            : "logo" in answer
+              ? "Logo"
+              : "photos" in answer
+                ? answer.photos.length === 0
+                  ? "Photos made for me"
+                  : answer.create
+                    ? `${photos(answer.photos.length)}, the rest made for me`
+                    : photos(answer.photos.length)
+                : label(answer.choice),
+    ]
   })
-  if (lines.length > 0) return lines.join("\n")
-  return output.skip_all
-    ? "Skip all: you choose the look."
-    : "No preferences on the look."
+  return picked.length > 0 ? picked.join(" · ") : SKIPPED
 }
 
 /** The fields of a message part `isHeld` reads. */
@@ -472,22 +497,80 @@ export function isHeld(parts: readonly object[], toolCallId: string): boolean {
   )
 }
 
+/**
+ * Whether this call was refused and the same tool was called again later in
+ * the message: the assistant corrected itself, so the refusal is noise the
+ * owner need not read ("The build could not be started." above a change that
+ * started, 2026-10-25).
+ */
+export function isRetried(
+  parts: readonly object[],
+  toolCallId: string
+): boolean {
+  const calls = (parts as (CallPart & { toolName?: string })[]).filter(
+    (p) => p.type === "tool-call"
+  )
+  const at = calls.findIndex((p) => p.toolCallId === toolCallId)
+  const self = calls[at]
+  return (
+    self !== undefined &&
+    (self.result as { outcome?: string } | undefined)?.outcome === "refused" &&
+    calls.slice(at + 1).some((p) => p.toolName === self.toolName)
+  )
+}
+
+/**
+ * Whether a running reply already shows how it is getting on, so a trailing
+ * status line would stack on it: its words, or a call still at work, which
+ * draws its own line or card. `quiet` names the calls that draw nothing.
+ * A line under the words also pushed the reply down a line as each turn
+ * ended on a question (2026-10-25).
+ */
+export function showsProgress(
+  parts: readonly object[],
+  quiet: Readonly<Record<string, unknown>>
+): boolean {
+  return (parts as (CallPart & { toolName?: string })[]).some((p) =>
+    p.type === "tool-call"
+      ? unresolved(p) && !Object.hasOwn(quiet, p.toolName ?? "")
+      : p.type === "text"
+  )
+}
+
 /** What a held answer says, on every card that can be held. */
 export const heldText = (approved: boolean) =>
   `${approved ? "You said yes." : "You said not now."} Sent once you answer the other cards.`
 
-/** Whether these parts, a message's, hold design questions still waiting on the owner. */
-export const waitsOnDesign = (parts: readonly object[] | undefined) =>
+/** The calls the question tray answers; `ask_open` and a plain-text fact are answered in the composer. */
+export const TRAY_TOOLS: readonly string[] = [
+  "ask_fact",
+  "ask_details",
+  "ask_choice",
+  "ask_upload",
+  "ask_design",
+  "review_quote_form",
+]
+
+/** Whether these parts, a message's, hold a question in the tray still waiting on the owner. */
+export const waitsOnTray = (parts: readonly object[] | undefined) =>
   (parts ?? []).some((part) => {
     const p = part as {
       type?: string
       toolName?: string
+      args?: { key?: unknown } | null
       result?: unknown
       isError?: boolean
     }
+    const key = FactValueKey.safeParse(p.args?.key)
+    const spoken =
+      p.toolName === "ask_fact" &&
+      key.success &&
+      askable(key.data) &&
+      saidInChat(key.data)
     return (
       p.type === "tool-call" &&
-      p.toolName === "ask_design" &&
+      TRAY_TOOLS.includes(p.toolName ?? "") &&
+      !spoken &&
       p.result === undefined &&
       !p.isError
     )

@@ -39,6 +39,7 @@ export const FILLED: Record<string, string> = {
   tagline: "Weekly cleaning for homes in Fairhaven",
   homeIntro: "We clean homes on a schedule the household picks.",
   heroNote: "Tell us about the home and we reply with a quote.",
+  heroEyebrow: "Trusted home cleaners",
   homeAboutHeading: "The cleaners behind *Fairhaven homes*",
   service1Detail:
     "A weekly visit from the same cleaner, who learns the home and keeps the kitchen, bathrooms and floors in order.",
@@ -230,8 +231,8 @@ export const LIMOUSINE_FORM = {
     },
     {
       key: "pickup_date",
-      label: "Date of the journey",
-      type: "date",
+      label: "Date and time of the journey",
+      type: "datetime",
       required: true,
       hint: null,
       options: null,
@@ -243,6 +244,14 @@ export const LIMOUSINE_FORM = {
       required: true,
       hint: null,
       options: null,
+    },
+    {
+      key: "vehicle",
+      label: "Vehicle",
+      type: "radio",
+      required: true,
+      hint: null,
+      options: ["Saloon", "Stretch limousine", "Minibus"],
     },
     {
       key: "occasion",

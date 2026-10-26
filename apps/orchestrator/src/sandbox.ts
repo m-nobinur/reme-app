@@ -4,6 +4,7 @@ import {
   CROP_WIDTHS,
   CROPS_MAX,
   cropKey,
+  PAGE_WIDTH,
   SHOTS_SCRIPT,
   VIEWPORTS,
 } from "./shots.ts"
@@ -59,10 +60,88 @@ export class PoolExhaustedError extends Error {
   }
 }
 
+/** How long one file call into the sandbox may take. */
+export const FILE_CALL_MS = 60_000
+/** A command's deadline when it sets no timeout of its own: just under the stall watchdog. */
+export const EXEC_CALL_MS = 9 * 60_000
+/** Past a command's own timeout, how long its call may take to come back. */
+export const EXEC_GRACE_MS = 30_000
+
+/** A sandbox call that ran out of time. */
+export class SandboxCallTimeout extends Error {
+  constructor(call: string, ms: number) {
+    super(`sandbox ${call} gave no answer in ${ms} ms`)
+    this.name = "SandboxCallTimeout"
+  }
+}
+
+/** `call` within `ms`, tried once more when the first attempt runs out of time. */
+export async function withDeadline<T>(
+  call: () => Promise<T>,
+  ms: number,
+  name: string
+): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const late = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new SandboxCallTimeout(name, ms)), ms)
+    })
+    try {
+      return await Promise.race([call(), late])
+    } catch (error) {
+      if (!(error instanceof SandboxCallTimeout) || attempt === 2) throw error
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+}
+
+const FILE_CALLS: ReadonlySet<PropertyKey> = new Set([
+  "readFile",
+  "writeFile",
+  "exists",
+  "mkdir",
+])
+
+type Call = (...args: unknown[]) => Promise<unknown>
+
+/**
+ * The stub with a deadline and one retry on every command and file call,
+ * whoever makes it: the Developer's tools through flue's adapter, the build
+ * tail and the Workflow's own steps. A call that never settles (a readFile
+ * in the upload, 2026-10-23; a page write, 2026-10-25) otherwise held the
+ * build until the stall watchdog, and every restart hung the same way. A
+ * command's deadline is its own timeout plus `EXEC_GRACE_MS`. Anything else
+ * on the stub passes through.
+ */
+export function bounded<S extends object>(stub: S): S {
+  return new Proxy(stub, {
+    get(target, name) {
+      // Called on the stub itself: a Durable Object stub reads `.call` or
+      // `.apply` on one of its methods as another RPC method, not Function's.
+      const method = (key: PropertyKey) =>
+        (target as Record<PropertyKey, Call>)[key] as Call
+      if (name === "exec") {
+        return (command: unknown, options?: { timeout?: number }) =>
+          withDeadline(
+            () => method("exec")(command, options),
+            (options?.timeout ?? EXEC_CALL_MS) + EXEC_GRACE_MS,
+            "exec"
+          )
+      }
+      if (FILE_CALLS.has(name)) {
+        return (...args: unknown[]) =>
+          withDeadline(() => method(name)(...args), FILE_CALL_MS, String(name))
+      }
+      return (target as Record<PropertyKey, unknown>)[name]
+    },
+  })
+}
+
 // `wrangler types` cannot see the class behind the binding, so the namespace
 // arrives untyped and is narrowed here, once.
 export const sandboxFor = (env: Env, id: string) =>
-  (env.SANDBOX as DurableObjectNamespace<RemeSandbox>).getByName(id)
+  bounded((env.SANDBOX as DurableObjectNamespace<RemeSandbox>).getByName(id))
 
 /**
  * The site's sandbox as the build tail reads it (`tail.ts`), for a step that
@@ -259,19 +338,24 @@ export async function takeWarm(sandbox: {
 export const checkpointKey = (ids: Ids) =>
   `sites/${ids.orgId}/checkpoints/${ids.assignmentId}.tar.zst`
 
+/** Where a build that failed its checks leaves its site for the retry to carry on from. */
+export const workKey = (ids: Ids) =>
+  `sites/${ids.orgId}/work/${ids.assignmentId}.tar.zst`
+
 /**
  * The site as the Developer left it when it asked, in R2, so the container
  * can stop while the question waits: a sleeping container comes back with
  * the image's disk, and a question can wait days. Taken at the block, before
  * `SLEEP_AFTER` can run out. Uncommitted edits and `.git` both travel.
+ * A failed build's site is taken the same way, under `workKey`.
  */
 export async function checkpoint(
   env: Env,
-  ids: Ids
+  ids: Ids,
+  key = checkpointKey(ids)
 ): Promise<{ taken: boolean; key: string; bytes: number; ms: number }> {
   const started = Date.now()
   const sandbox = sandboxFor(env, ids.orgId)
-  const key = checkpointKey(ids)
   // The container can sleep before this runs, and `exec` then starts a fresh
   // one from the image with no site on it. There is nothing left to save, so
   // say so: the caller fails the assignment, which releases the site lock,
@@ -293,6 +377,25 @@ export async function checkpoint(
   const body = Uint8Array.from(atob(file.content), (c) => c.charCodeAt(0))
   await env.SITES.put(key, body)
   return { taken: true, key, bytes: body.length, ms: Date.now() - started }
+}
+
+/**
+ * Moves the failed build's site to the retry's own checkpoint, whose
+ * lifetime is the retry's (`endSandbox`), and says whether the retry has one
+ * to start from. A replayed step finds the move already made.
+ */
+export async function takeWork(
+  sites: Env["SITES"],
+  failed: Ids,
+  ids: Ids
+): Promise<boolean> {
+  const work = await sites.get(workKey(failed))
+  if (work) {
+    await sites.put(checkpointKey(ids), await work.arrayBuffer())
+    await sites.delete(workKey(failed))
+    return true
+  }
+  return (await sites.head(checkpointKey(ids))) !== null
 }
 
 /**
@@ -430,7 +533,8 @@ export async function probe(env: Env, label: string): Promise<ProbeResult> {
 
 /**
  * The home page at three widths, from the build the sandbox still holds,
- * stored under the revision's prefix, and for the design critic its first
+ * stored under the revision's prefix, the first screen of a second page on
+ * a laptop for the review card, and for the design critic its first
  * viewport-height pieces per width (a full page is too tall for it). Taken after the preview is ready: the
  * owner's preview does not wait for them, and the review card shows them as
  * they land. Never throws; a screenshot that was not taken is a 404 the card
@@ -459,7 +563,7 @@ export async function takeScreenshots(
     ].join("; ")
     await sandbox.writeFile("/tmp/shots.mjs", SHOTS_SCRIPT)
     await sandbox.exec(
-      `cd ${SITE_ROOT} && rm -f /tmp/home-*.png /tmp/crop-*.png /tmp/crop-*.jpg; ${script}`,
+      `cd ${SITE_ROOT} && rm -f /tmp/home-*.png /tmp/page-*.png /tmp/crop-*.png /tmp/crop-*.jpg; ${script}`,
       { timeout: 120_000 }
     )
     const bytes = async (path: string) => {
@@ -476,6 +580,10 @@ export async function takeScreenshots(
         await env.SITES.put(`${prefix}screenshots/home-${w}.png`, full)
         taken++
       }
+    }
+    const page = await bytes(`/tmp/page-${PAGE_WIDTH}.png`)
+    if (page) {
+      await env.SITES.put(`${prefix}screenshots/page-${PAGE_WIDTH}.png`, page)
     }
     for (const w of CROP_WIDTHS) {
       const parts = await Promise.all(

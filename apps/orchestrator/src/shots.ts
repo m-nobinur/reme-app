@@ -6,6 +6,9 @@
 /** The widths the preview's screenshots are taken at; the router serves them by these names. */
 export const VIEWPORTS = [390, 768, 1440] as const
 
+/** The width a second page's first screen is taken at, for the review card (`PAGE_WIDTH` in shots.mjs). */
+export const PAGE_WIDTH = 1440
+
 /** The widths the critic is shown: phone and desktop. A picture costs its pixels, and a tablet width added a third of them. */
 export const CROP_WIDTHS = [390, 1440] as const
 

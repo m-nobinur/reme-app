@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import { defineConfig } from "vitest/config"
 
 // Plain node, not workerd. The routing case builds a `Request` and calls the
@@ -11,4 +12,20 @@ import { defineConfig } from "vitest/config"
 // authenticated API sits inside the blocking gate rather than beside it. An
 // `include` written from the package root would be resolved against `--dir` and
 // match nothing.
-export default defineConfig({ test: {} })
+//
+// A `.webp` imports as its bytes, as wrangler's `Data` rule makes it in the
+// Worker (`logo-references.ts`); vite would hand back a URL.
+const webpAsBytes = {
+  name: "webp-as-bytes",
+  enforce: "pre" as const,
+  load(id: string) {
+    if (!id.endsWith(".webp")) return null
+    const base64 = readFileSync(id).toString("base64")
+    return `export default Uint8Array.from(atob("${base64}"), (c) => c.charCodeAt(0)).buffer`
+  },
+}
+
+export default defineConfig({
+  plugins: [webpAsBytes],
+  test: { setupFiles: ["./test/no-pacing.ts"] },
+})

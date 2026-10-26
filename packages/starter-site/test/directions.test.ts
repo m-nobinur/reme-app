@@ -259,7 +259,7 @@ describe("a direction", () => {
     expect(css).not.toMatch(/gallery-grid \{[^}]*auto-fit/)
     // A logo keeps its own shape, at a fixed height.
     expect(css).toMatch(
-      /\n\.site-logo \{[^}]*height: 2\.5rem;[^}]*object-fit: contain;/
+      /\n\.site-logo \{[^}]*height: 4rem;[^}]*object-fit: contain;/
     )
   })
 
@@ -275,8 +275,8 @@ describe("a direction", () => {
     )
   })
 
-  test("shows the industry above the heading", () => {
-    expect(home("fresh_modern").texts).toContain(FILLED.industry)
+  test("shows the hero's eyebrow above the heading", () => {
+    expect(home("fresh_modern").texts).toContain(FILLED.heroEyebrow)
   })
 
   test("carries the chosen type and colour in the head", () => {

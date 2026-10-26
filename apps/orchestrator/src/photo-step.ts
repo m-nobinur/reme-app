@@ -86,6 +86,10 @@ function paletteWords(plan: Blueprint): string {
   if (plan.palette.kind === "brand") {
     return `the owner's brand colour ${plan.palette.brand}`
   }
+  if (plan.palette.kind === "roles") {
+    const { name, roles } = plan.palette
+    return `${name}: paper ${roles.paper}, primary ${roles.primary}, accent ${roles.accent}, ink ${roles.ink}`
+  }
   const id = plan.palette.id
   const p = PALETTES.find((each) => each.id === id)
   return p

@@ -5,6 +5,7 @@ import {
   ErrorEnvelope,
   FactList,
   InformationAnswer,
+  SiteMedia,
   WorkspaceStatus,
 } from "@workspace/contracts"
 import {
@@ -149,6 +150,8 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
   let busy: Owner
   let asker: Owner
   let changes: Owner
+  /** A live site, where a change to a draft still turns its review down. */
+  let revising: Owner
   let busyIds: Record<string, string>
   let askIds: Record<string, string>
 
@@ -159,6 +162,13 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     busy = await owner(kit, url as string, "busy")
     asker = await owner(kit, url as string, "asker")
     changes = await owner(kit, url as string, "changes")
+    revising = await owner(kit, url as string, "revising")
+    {
+      const s = seed(kit, revising)
+      const live = await s.assignment("published")
+      const revision = await s.revision(live, 1)
+      await s.deployment(revision, await s.approval(live, revision, 1, true))
+    }
 
     // The busy org: a live site, a review whose request expired before the
     // hourly sweep parked it, a cancelled build's undecided request, a
@@ -285,13 +295,20 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
   it("shows a new org nothing running and the five facts to ask for", async () => {
     const response = await workspace(fresh)
     expect(response.status).toBe(200)
-    const body = WorkspaceStatus.parse(await response.json())
+    const { activity, ...body } = WorkspaceStatus.parse(await response.json())
+    // The journey is AV2's: workspace-activity.test.ts holds its content.
+    expect(activity?.journey.map((segment) => segment.id)).toEqual([
+      "onboarding",
+      "website",
+      "golive",
+    ])
     expect(body).toEqual({
       site: { host: null, url: null, live: null },
       builds: [],
       attention: [],
       missing_facts: REQUIRED,
       assistant_name: null,
+      assistant_avatar: null,
       expected_seconds: EXPECTED_SECONDS,
       reminders: {
         notes: [],
@@ -477,7 +494,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     expect(Math.round((shown?.review_ms ?? 0) / 60_000)).toBe(15)
 
     // The lead reports, though no page builder said so: the pages tick, and
-    // the design look is the step it is on until it answers.
+    // the design look, a step of polishing, is where it is until it answers.
     const stepsNow = async () => {
       const now = WorkspaceStatus.parse(await (await workspace(who)).json())
       const rows = now.builds[0]?.activity ?? []
@@ -485,7 +502,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     }
     await s.event(build, "assignment.completion_reported", { risks: [] })
     const looking = await stepsNow()
-    expect(looking.at).toBe("design")
+    expect(looking.at).toBe("polishing")
     expect(
       looking.rows.find((r) => r.id === "writing")?.items?.map((i) => i.done)
     ).toEqual([true, true])
@@ -498,22 +515,21 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     await s.event(build, "assignment.completion_reported", { risks: [] })
     expect((await stepsNow()).at).toBe("checking")
 
-    // The gates send it back: a repair of its own, until the lead reports again.
+    // The gates send it back: the repair is part of checking, which stays the
+    // stage it is on, and the six stages stay listed.
     await s.event(build, "assignment.state_changed", {
       from: "validating",
       to: "repairing",
     })
     const fixing = await stepsNow()
-    expect(fixing.at).toBe("fixing")
+    expect(fixing.at).toBe("checking")
     expect(fixing.rows.map((r) => r.id)).toEqual([
       "planning",
       "photos",
       "writing",
-      "assembling",
-      "design",
       "polishing",
-      "fixing",
       "checking",
+      "ready",
     ])
     await s.event(build, "assignment.completion_reported", { risks: [] })
     expect((await stepsNow()).at).toBe("checking")
@@ -731,15 +747,21 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     )
   })
 
-  it("names the assistant once the owner chose a name", async () => {
+  it("names the assistant and its face once the owner chose them", async () => {
     const set = await fresh.call(
       stubOrchestrator(),
       "/facts",
-      json({ facts: [{ key: "assistant.name", value: { name: "Ava" } }] })
+      json({
+        facts: [
+          { key: "assistant.name", value: { name: "Ava" } },
+          { key: "assistant.avatar", value: { id: "she_2" } },
+        ],
+      })
     )
     expect(set.status).toBe(200)
     const body = WorkspaceStatus.parse(await (await workspace(fresh)).json())
     expect(body.assistant_name).toBe("Ava")
+    expect(body.assistant_avatar).toBe("she_2")
   })
 
   it("changes the tag when a reminder comes due, with no row changed", async () => {
@@ -850,7 +872,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     })
   })
 
-  it("reads the workspace in one transaction of ten statements", async () => {
+  it("reads the workspace in one transaction of eleven statements", async () => {
     let transactions = 0
     let statements = 0
     const counted: Tenancy = {
@@ -872,8 +894,10 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     await readWorkspace(counted, busy.orgId, { SITE_HOST_SUFFIX: SUFFIX })
     expect(transactions).toBe(1)
     // The tenth reads the generated photos of the waiting approval; the
-    // reminders that came due and the paused jobs are one each.
-    expect(statements).toBe(10)
+    // reminders that came due and the paused jobs are one each, and the
+    // eleventh is the activity view's domain, Google, heartbeat and first
+    // publish rows.
+    expect(statements).toBe(11)
   })
 
   it("lists a reminder once it is due and until it is done, after the questions and before the alerts", async () => {
@@ -954,6 +978,31 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     ])
   })
 
+  it("lists the pictures on the version in review, and nothing before a build placed any", async () => {
+    const media = async (who: Owner) => {
+      const response = await who.call(stubOrchestrator(), "/site/media")
+      expect(response.status).toBe(200)
+      return SiteMedia.parse(await response.json())
+    }
+    expect(await media(fresh)).toEqual({ logo: null, photos: [] })
+    expect((await media(busy)).photos).toEqual([
+      {
+        slot_id: "hero_room",
+        section: "hero",
+        alt: "A sunlit room",
+        generated: true,
+        thumbnail: `/api/photos/${PHOTO_ID}`,
+      },
+      {
+        slot_id: "owner_team",
+        section: "about",
+        alt: "Our team",
+        generated: false,
+        thumbnail: null,
+      },
+    ])
+  })
+
   describe("facts", () => {
     const facts = async (who: Owner) =>
       FactList.parse(
@@ -979,11 +1028,12 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
           .where(eq(staff.staffCode, "OWN-001"))
       )
       const written = await facts(changes)
-      // The name is sign-up's, stated the same way.
+      // The names are sign-up's, stated the same way.
       expect(written.map((f) => f.key)).toEqual([
         "business.name",
         "business.phone",
         "hours.weekday",
+        "owner.preferred_name",
       ])
       for (const fact of written) {
         expect(fact.provenance.source).toBe("owner_stated")
@@ -1060,13 +1110,17 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     // that fails before its own clean-up must not leave a build behind for
     // the next one to route around.
     afterEach(() =>
-      kit.withOrg({ orgId: changes.orgId }, (db) =>
-        db
-          .update(assignments)
-          .set({ state: "cancelled", updatedAt: new Date() })
-          .where(
-            sql`${assignments.state} not in ('published', 'failed', 'cancelled')`
+      Promise.all(
+        [changes, revising].map((who) =>
+          kit.withOrg({ orgId: who.orgId }, (db) =>
+            db
+              .update(assignments)
+              .set({ state: "cancelled", updatedAt: new Date() })
+              .where(
+                sql`${assignments.state} not in ('published', 'failed', 'cancelled')`
+              )
           )
+        )
       )
     )
 
@@ -1176,20 +1230,22 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       expect(stub.calls[0]?.request.headers.get("idempotency-key")).toBe(key)
     })
 
-    it("refuses while a question is open, without the binding", async () => {
+    it("steers the build waiting on an answer", async () => {
       const s = seed(kit, changes)
       const asking = await s.assignment("blocked_on_information")
-      const stub = creating(changes)
+      const stub = stubOrchestrator(() =>
+        Response.json(
+          { assignment_id: asking, submission_id: null },
+          { status: 202 }
+        )
+      )
       const response = await changes.call(
         stub,
         "/changes",
         json({ text: "Change the hero." })
       )
-      expect(response.status).toBe(409)
-      expect(ErrorEnvelope.parse(await response.json()).code).toBe(
-        "change.question_open"
-      )
-      expect(stub.calls).toHaveLength(0)
+      expect(response.status).toBe(202)
+      expect(paths(stub)).toEqual([`/assignments/${asking}/steer`])
       await s.state(asking, "cancelled")
     })
 
@@ -1198,7 +1254,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       hours: number,
       version: number
     ) => {
-      const s = seed(kit, changes)
+      const s = seed(kit, revising)
       const reviewing = await s.assignment(state)
       const revision = await s.revision(reviewing, version)
       await s.approval(reviewing, revision, hours)
@@ -1207,14 +1263,36 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     const paths = (stub: Stub) =>
       stub.calls.map((c) => new URL(c.request.url).pathname)
 
+    it("revises the owner's draft before the site is live, naming it, in one call", async () => {
+      const s = seed(kit, changes)
+      const reviewing = await s.assignment("awaiting_review")
+      const revision = await s.revision(reviewing, 9)
+      await s.approval(reviewing, revision, 72)
+      const stub = creating(changes)
+      const response = await changes.call(
+        stub,
+        "/changes",
+        json({ text: "Change the hero.", change_kind: "copy" })
+      )
+      expect(response.status).toBe(201)
+      expect(paths(stub)).toEqual(["/assignments/"])
+      expect(stub.calls[0]?.body).toEqual({
+        kind: "site.revise",
+        goal: "Change the hero.",
+        change_kind: "copy",
+        draft_revision_id: revision,
+      })
+      await s.state(reviewing, "cancelled")
+    })
+
     it("builds first, then turns down the open review", async () => {
       const { s, reviewing, revision } = await reviewIn(
         "awaiting_review",
         72,
         10
       )
-      const stub = creating(changes)
-      const response = await changes.call(
+      const stub = creating(revising)
+      const response = await revising.call(
         stub,
         "/changes",
         json({ text: "Change the hero." })
@@ -1231,7 +1309,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     it("leaves the review open when the build is refused", async () => {
       const { s, reviewing } = await reviewIn("awaiting_review", 72, 11)
       const stub = stubOrchestrator(() => capped())
-      const response = await changes.call(
+      const response = await revising.call(
         stub,
         "/changes",
         json({ text: "Change the hero." })
@@ -1243,8 +1321,8 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
 
     it("turns down a review the sweep parked", async () => {
       const { s, reviewing } = await reviewIn("blocked_on_approval", -2, 12)
-      const stub = creating(changes)
-      await changes.call(stub, "/changes", json({ text: "Change the hero." }))
+      const stub = creating(revising)
+      await revising.call(stub, "/changes", json({ text: "Change the hero." }))
       expect(paths(stub)).toEqual([
         "/assignments/",
         `/assignments/${reviewing}/reject`,
@@ -1255,11 +1333,11 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     it("hides a review that expired before the sweep, and waits it out", async () => {
       const { s, reviewing } = await reviewIn("awaiting_review", -1, 13)
       const panel = WorkspaceStatus.parse(
-        await (await workspace(changes)).json()
+        await (await workspace(revising)).json()
       )
       expect(panel.attention.filter((i) => i.kind === "approval")).toEqual([])
-      const stub = creating(changes)
-      const response = await changes.call(
+      const stub = creating(revising)
+      const response = await revising.call(
         stub,
         "/changes",
         json({ text: "Change the hero." })
@@ -1307,14 +1385,14 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
         const stub = stubOrchestrator(async (request) => {
           const path = new URL(request.url).pathname
           if (path === "/assignments/") {
-            const body = created(changes, await request.clone().json())
+            const body = created(revising, await request.clone().json())
             made = body.assignment_id
             return Response.json(body, { status: 201 })
           }
           if (path.endsWith("/reject")) return refusal()
           return Response.json({ assignment_id: made, state: "cancelled" })
         })
-        const response = await changes.call(
+        const response = await revising.call(
           stub,
           "/changes",
           json({ text: "Change the hero." })
@@ -1357,7 +1435,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
           const key = request.headers.get("idempotency-key") ?? ""
           made.id = await s.assignment("queued", { key })
           if (plan.create === "hang") return never()
-          const body = created(changes, await request.clone().json())
+          const body = created(revising, await request.clone().json())
           return Response.json(
             { ...body, assignment_id: made.id },
             { status: 201 }
@@ -1377,7 +1455,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       return { stub, made }
     }
     const stateOf = async (id: string) => {
-      const [row] = await kit.withOrg({ orgId: changes.orgId }, (db) =>
+      const [row] = await kit.withOrg({ orgId: revising.orgId }, (db) =>
         db
           .select({ state: assignments.state })
           .from(assignments)
@@ -1397,7 +1475,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
         const first = replacing(s, reviewing, plan)
         const timer = deadline(1_000)
         try {
-          const response = await changes.call(
+          const response = await revising.call(
             first.stub,
             "/changes",
             json({ text: "Change the hero." }, key)
@@ -1417,7 +1495,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
         )
         expect(await stateOf(first.made.id)).toBe("queued")
         const retry = replacing(s, reviewing)
-        const again = await changes.call(
+        const again = await revising.call(
           retry.stub,
           "/changes",
           json({ text: "Change the hero." }, key)
@@ -1439,7 +1517,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       const first = replacing(s, reviewing, { end: "refuse", cancel: "hang" })
       const timer = deadline(1_000)
       try {
-        const response = await changes.call(
+        const response = await revising.call(
           first.stub,
           "/changes",
           json({ text: "Change the hero." }, key)
@@ -1454,7 +1532,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
         `/assignments/${first.made.id}/cancel`,
       ])
       const retry = replacing(s, reviewing)
-      const again = await changes.call(
+      const again = await revising.call(
         retry.stub,
         "/changes",
         json({ text: "Change the hero." }, key)
@@ -1479,7 +1557,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       })
       const timer = deadline(1_000)
       try {
-        const response = await changes.call(
+        const response = await revising.call(
           stub,
           "/changes",
           json({ text: "Change the hero." })
@@ -1616,7 +1694,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
         .spyOn(console, "error")
         .mockImplementation(() => undefined)
       try {
-        const response = await changes.call(
+        const response = await revising.call(
           stub,
           "/changes",
           json({ text: "Change the hero." })
@@ -1641,6 +1719,26 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       await s.state(made.id, "cancelled")
     })
 
+    it("leaves out a draft a change holds, and lists it again once nothing holds it", async () => {
+      const s = seed(kit, changes)
+      const held = await s.assignment("paused")
+      const change = await s.assignment("implementing", { kind: "site.revise" })
+      await kit.withOrg({ orgId: changes.orgId }, (db) =>
+        db
+          .update(assignments)
+          .set({ revisionOfAssignmentId: held })
+          .where(eq(assignments.id, change))
+      )
+      const builds = async () =>
+        WorkspaceStatus.parse(
+          await (await workspace(changes)).json()
+        ).builds.map((b) => b.assignment_id)
+      expect(await builds()).toEqual([change])
+      await s.state(change, "cancelled")
+      expect(await builds()).toEqual([held])
+      await s.state(held, "cancelled")
+    })
+
     it("routes on every unfinished build, not the panel's ten", async () => {
       const s = seed(kit, changes)
       const asking = await s.assignment("blocked_on_information")
@@ -1651,16 +1749,19 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       )
       expect(panel.builds).toHaveLength(10)
       expect(panel.builds.map((b) => b.assignment_id)).not.toContain(asking)
-      const stub = creating(changes)
+      const stub = stubOrchestrator(() =>
+        Response.json(
+          { assignment_id: asking, submission_id: null },
+          { status: 202 }
+        )
+      )
       const response = await changes.call(
         stub,
         "/changes",
         json({ text: "Change the hero." })
       )
-      expect(ErrorEnvelope.parse(await response.json()).code).toBe(
-        "change.question_open"
-      )
-      expect(stub.calls).toHaveLength(0)
+      expect(response.status).toBe(202)
+      expect(paths(stub)).toEqual([`/assignments/${asking}/steer`])
       for (const id of [asking, ...queued]) await s.state(id, "cancelled")
     })
 
@@ -1888,21 +1989,6 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
       expect(response.status).toBe(202)
       expect(InformationAnswer.parse(await response.json())).toEqual(receipt)
       expect(stub.calls).toHaveLength(1)
-    })
-
-    it("relays the builder's receipt for a Blueprint decision", async () => {
-      // What the orchestrator's `/blueprint` answers: the round and the decision.
-      const stub = stubOrchestrator(() =>
-        Response.json({ round: 1, decision: "build" }, { status: 202 })
-      )
-      const response = await asker.call(
-        stub,
-        `/builds/${askIds.asking}/blueprint`,
-        json({ decision: "build" }, "blueprint-1")
-      )
-      expect(response.status).toBe(202)
-      expect(await response.json()).toEqual({ round: 1, decision: "build" })
-      expect(stub.calls[0]?.body).toEqual({ decision: "build" })
     })
 
     it("relays a preview that opens on the local router", async () => {

@@ -22,7 +22,9 @@ import { factsForContent, maskContentClaims } from "./text.ts"
  * - An **identity** phrase ("family-run", "independent", "local team", "run
  *   by a local", "small team") passes when any non-`inferred` fact carries
  *   the same phrase, whatever its key: who the business is comes from what
- *   the owner said, never from the writer.
+ *   the owner said, never from the writer. A bare "local" ("your local
+ *   cleaners", "Local and fully insured") passes when any such fact says
+ *   "local" at all; "the local area" and the like name a place, not the firm.
  * - An **absolute** word ("fully", "completely", "comprehensive", "full")
  *   directly before a claim word or a coverage word ("insured", "insurance",
  *   "covered") widens it past what a fact usually states: "Insured up to $5
@@ -100,11 +102,16 @@ export const CLAIM_VOCABULARY = {
     "trained",
     "registered with",
   ],
-  // Who the business is: true only when a fact says so. Phrases, not bare "local".
+  // Who the business is: true only when a fact says so. Phrases here; a bare "local" is `LOCAL`.
   identity: [
     "family-run",
     "family-owned",
     "family business",
+    "family firm",
+    "family company",
+    "family enterprise",
+    "family-led",
+    "family-founded",
     "independent",
     "independently owned",
     "owner-run",
@@ -271,6 +278,10 @@ const PHRASE_CLAIMS = (
     }))
 )
 
+/** "local" as who the business is; "local area", "local press" and other places and people are not. */
+const LOCAL =
+  /(?<![a-z0-9])local(?![a-z0-9])(?!\s+(?:areas?|authorit(?:y|ies)|councils?|towns?|communit(?:y|ies)|knowledge|landmarks?|press|streets?|homes?|residents?|neighbourhoods?|customers?|famil(?:y|ies)))/gi
+
 /** "fully insured", "comprehensive coverage", "completely guaranteed": an absolute word and the word it widens. */
 const ABSOLUTE_CLAIMS = (() => {
   const words = [
@@ -305,6 +316,8 @@ function claimsIn(text: string): Found[] {
     for (const m of masked.matchAll(pattern))
       found.push({ kind, text: m[0].trim() })
   }
+  for (const m of masked.matchAll(LOCAL))
+    found.push({ kind: "identity", text: m[0] })
   for (const m of masked.matchAll(ABSOLUTE_CLAIMS))
     found.push({ kind: "credential", text: m[0].trim() })
   for (const m of text.matchAll(QUOTED))

@@ -14,18 +14,24 @@ import {
 import { Approval } from "@workspace/ui/components/assistant/approval"
 import { SaveDesignAnswerProvider } from "@workspace/ui/components/assistant/ask-design"
 import { UploadPhotosProvider } from "@workspace/ui/components/assistant/ask-upload"
+import {
+  AnswerBuildQuestionProvider,
+  BuildQuestionsUI,
+} from "@workspace/ui/components/assistant/build-questions"
 import { DomainPurchaseProvider } from "@workspace/ui/components/assistant/buy-domain"
+import { ChangeAskedUI } from "@workspace/ui/components/assistant/change-asked"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
 import { MemoryChipUI } from "@workspace/ui/components/assistant/memory-chip"
+import { PersonaCardUI } from "@workspace/ui/components/assistant/persona-card"
 import { ServerButtonUI } from "@workspace/ui/components/assistant/server-button"
 import {
   OWNER_QUICK_ACTIONS,
   SITE_CHANGE_MODE,
   Thread,
 } from "@workspace/ui/components/assistant/thread"
+import { TrayServicesProvider } from "@workspace/ui/components/assistant/tray-services"
 import { buttonVariants } from "@workspace/ui/components/button"
 import { EmptyState } from "@workspace/ui/components/empty-state"
-import { browserZone } from "@workspace/ui/lib/zone"
 import {
   useEffect,
   useMemo,
@@ -36,14 +42,18 @@ import {
 import { assistantOf, briefingOf } from "@/lib/briefing"
 import { OPENING_REVEAL } from "@/lib/reveal"
 import { useLiveWorkspace } from "@/lib/workspace"
-import { usePlanCard } from "./blueprint-plan"
+import { answerBuildQuestion } from "./build-questions"
 import { BuildStopped } from "./build-stopped"
 import { conversationList, unstored } from "./conversations"
+import { cosTools, questionTitles } from "./cos-tools"
 import { saveDesignAnswer } from "./design"
 import { domainPurchase } from "./domain-purchase"
 import { asked, missingConversations, startsNewChat, tailOf } from "./history"
 import { useConversationRuntime } from "./runtime"
-import { SiteReadyCard } from "./site-ready"
+import { ChatSiteReadyCard } from "./site-ready"
+import { StillWorking } from "./still-working"
+import { trayServices } from "./tray-services"
+import { ChatUpdates } from "./updates"
 import { uploadPhotos } from "./upload"
 
 const frame = getRouteApi("/app")
@@ -93,11 +103,6 @@ export function ChatPage() {
   )
   const intent = useRef<"site_change" | undefined>(undefined)
   intent.current = siteChange ? "site_change" : undefined
-  // A Blueprint waiting on the owner, from the polled workspace like the
-  // ready card; a typed "Change the plan: …" goes to it.
-  const plan = usePlanCard(live)
-  const planChange = useRef(plan.change)
-  planChange.current = plan.change
   // A message the assistant posted on its own, named by the polled tag. Set
   // here, where the workspace re-renders, for the runtime hook to follow.
   const tail = useRef<{ current: string | null; moved?: () => void }>({
@@ -125,8 +130,8 @@ export function ChatPage() {
       suggestions: briefing.suggestions,
       intent,
       onIntentSent: () => setSiteChange(null),
-      planChange,
       tail,
+      refresh: live.refresh,
     })
   const runtime = useRemoteThreadListRuntime({
     adapter: conversationList,
@@ -168,19 +173,11 @@ export function ChatPage() {
     () => false
   )
 
-  // The cards name the question an answer goes to, from the workspace the
-  // panel already reads, and times in the zone each turn carries.
-  const questions = live.workspace?.attention
-  const tools = useMemo(
-    () => ({
-      zone: browserZone(),
-      question: (requestId: string) =>
-        questions?.find(
-          (item) => item.kind === "question" && item.id === requestId
-        )?.title ?? null,
-    }),
-    [questions]
-  )
+  // The cards name the question an answer goes to, and times in the zone each
+  // turn carries. Keyed on the titles, so a poll that changes neither redraws
+  // no card.
+  const titles = questionTitles(live.workspace?.attention)
+  const tools = useMemo(() => cosTools(titles), [titles])
 
   const assistant = assistantOf(live.workspace)
   const ideas = useMemo(
@@ -195,7 +192,10 @@ export function ChatPage() {
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <ServerButtonUI />
+      <ChangeAskedUI />
+      <BuildQuestionsUI />
       <MemoryChipUI />
+      <PersonaCardUI />
       {/* The shell's main scrolls; the thread owns its own scroll instead. */}
       <div className="h-full">
         {missing ? (
@@ -218,28 +218,34 @@ export function ChatPage() {
         ) : (
           <CosToolsProvider value={tools}>
             <UploadPhotosProvider value={uploadPhotos}>
-              <SaveDesignAnswerProvider value={saveDesignAnswer}>
-                <DomainPurchaseProvider value={domainPurchase}>
-                  <Thread
-                    after={
-                      <>
-                        {plan.card}
-                        <SiteReadyCard />
-                        <BuildStopped />
-                      </>
-                    }
-                    briefing={briefing.line}
-                    components={{ ToolFallback: Approval }}
-                    mode={mode}
-                    placeholder={`Ask ${assistant} anything…`}
-                    placeholderIdeas={ideas}
-                    questionPlaceholder={`Or tell ${assistant} something else…`}
-                    quickActions={OWNER_QUICK_ACTIONS}
-                    reveal={onboarding ? OPENING_REVEAL : undefined}
-                    stored={id}
-                  />
-                </DomainPurchaseProvider>
-              </SaveDesignAnswerProvider>
+              <TrayServicesProvider value={trayServices}>
+                <SaveDesignAnswerProvider value={saveDesignAnswer}>
+                  <DomainPurchaseProvider value={domainPurchase}>
+                    <AnswerBuildQuestionProvider value={answerBuildQuestion}>
+                      <Thread
+                        after={
+                          <>
+                            <StillWorking />
+                            <ChatSiteReadyCard />
+                            <BuildStopped />
+                          </>
+                        }
+                        assistant={live.workspace?.assistantName}
+                        briefing={briefing.line}
+                        components={{ ToolFallback: Approval }}
+                        mode={mode}
+                        placeholder={`Ask ${assistant} anything…`}
+                        placeholderIdeas={ideas}
+                        questionPlaceholder={`Tell ${assistant} what to do instead…`}
+                        quickActions={OWNER_QUICK_ACTIONS}
+                        reveal={onboarding ? OPENING_REVEAL : undefined}
+                        stored={id}
+                        updates={<ChatUpdates />}
+                      />
+                    </AnswerBuildQuestionProvider>
+                  </DomainPurchaseProvider>
+                </SaveDesignAnswerProvider>
+              </TrayServicesProvider>
             </UploadPhotosProvider>
           </CosToolsProvider>
         )}

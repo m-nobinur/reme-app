@@ -19,7 +19,7 @@ import {
 } from "@tanstack/react-router"
 import type { Conversation } from "@workspace/contracts"
 import { railItemClass } from "@workspace/ui/components/app-shell"
-import { SiteNameProvider } from "@workspace/ui/components/assistant/blueprint-card"
+import { avatarIcons } from "@workspace/ui/components/assistant-avatar"
 import {
   ChatHistory,
   type HistoryEntry,
@@ -35,11 +35,13 @@ import {
   WorkspaceShell,
 } from "@workspace/ui/components/workspace-shell"
 import { formatDate } from "@workspace/ui/lib/format"
-import { useCallback, useEffect, useState } from "react"
+import { SiteNameProvider } from "@workspace/ui/lib/site-name"
+import { useCallback, useEffect, useId, useState } from "react"
 import { lastChat } from "@/chat/history"
 import { getWorkspaceFrame, pollWorkspace } from "@/lib/api/server"
 import type { WorkspacePoll } from "@/lib/api/types"
 import { retryOrgWrite } from "@/lib/auth/actions"
+import { useAutoPanel } from "@/lib/auto-panel"
 import {
   GoogleNotice,
   type GoogleResult,
@@ -52,12 +54,17 @@ import {
   notificationsOf,
   unreadCount,
 } from "@/lib/notifications"
-import { onboardingFor } from "@/lib/onboarding"
+import { onboardingFor, settingUp } from "@/lib/onboarding"
 import { OwnerSettings } from "@/lib/owner-settings"
 import { anchorOf } from "@/lib/reminders"
+import { tabBadge, useTabBadge } from "@/lib/tab-icon"
 import { requireOwner } from "@/lib/tenant"
+import { useSyncTimeZone } from "@/lib/time-zone"
 import { LiveWorkspaceProvider, useLiveWorkspaceState } from "@/lib/workspace"
 import {
+  ChatLink,
+  firstAsk,
+  IdleAssistant,
   PanelAnnouncer,
   useBrowserZone,
   usePanel,
@@ -73,6 +80,13 @@ export const Route = createFileRoute("/app")({
   loader: async ({ location }) => {
     const owner = await requireOwner(location.href)
     const frame = await getWorkspaceFrame()
+    // A WorkOS organization we hold no business for, and no signup write to
+    // retry: name it first. No return address, so a new business lands in
+    // onboarding at /app. A session with no organization at all stays: its
+    // panel's next step is naming one, and the e2e probe signs in that way.
+    if (owner.orgId && !frame.active && !frame.orgPending) {
+      throw redirect({ to: "/name-your-business", search: {} })
+    }
     // A new owner lands in onboarding. Here rather than in the index route,
     // which has no loader of its own (a second one on the same navigation
     // races on a cold dev server). Only the bare address: "New chat" carries
@@ -91,6 +105,33 @@ export const Route = createFileRoute("/app")({
     }
     return { owner, ...frame }
   },
+  // The tab names the assistant and the business, and shows the face the
+  // owner picked in place of the app's icons (the root leaves them out).
+  head: ({ loaderData }) => {
+    const business = loaderData?.active?.name
+    const assistant = loaderData?.workspace?.assistantName?.trim() || "Reme"
+    const icons = avatarIcons(loaderData?.workspace?.assistantAvatar)
+    return {
+      meta: business ? [{ title: `${assistant} | ${business}` }] : [],
+      links: icons
+        ? [
+            {
+              rel: "icon",
+              href: icons.small,
+              sizes: "32x32",
+              type: "image/png",
+            },
+            {
+              rel: "icon",
+              href: icons.large,
+              sizes: "64x64",
+              type: "image/png",
+            },
+            { rel: "apple-touch-icon", href: icons.home },
+          ]
+        : [],
+    }
+  },
   // `?google=` is where the Google connect callback sends the owner back.
   validateSearch: (
     search: Record<string, unknown>
@@ -108,6 +149,10 @@ const SECTIONS = [
   { to: "/app/reminders", label: "Reminders", icon: AlarmIcon },
   { to: "/app/tasks", label: "Tasks", icon: ListChecksIcon },
 ] as const
+
+/** Why a new conversation waits for setup, in the rail's tooltip. */
+const SETUP_FIRST =
+  "Your assistant needs to know your business before it can help with anything else."
 
 /** How many notifications the rail's bell lists before "View all". */
 const MENU_ITEMS = 6
@@ -138,9 +183,15 @@ function AppLayout() {
     seenAt,
   } = Route.useLoaderData()
   const live = useLiveWorkspaceState(workspace, readWorkspace)
+  useSyncTimeZone(active !== null)
+  useTabBadge(
+    avatarIcons(live.workspace?.assistantAvatar)?.large,
+    tabBadge(live.workspace)
+  )
   // What the panel says on this page; with nothing to say there is no panel.
   // A workspace that did not load still shows one, which says so.
   const panel = usePanel(live.workspace)
+  const auto = useAutoPanel(live.workspace)
   const hasPanel = panel !== null || live.workspace === null
   const orgName = active?.name ?? "No organisation"
   const notifications = notificationsOf(
@@ -174,9 +225,12 @@ function AppLayout() {
   const { id } = useParams({ strict: false })
   // A new conversation has no activity to show beside it yet: the composer
   // takes the page, and the panel appears once the first message stores it.
-  const showPanel = hasPanel && !(conversation && !id)
+  // With no business, naming one is the next step, so the panel stays.
+  const showPanel = hasPanel && !(conversation && !id && active)
   // Getting started stays in the help menu until the first build.
   const onboarding = onboardingFor(live.workspace, conversations)
+  const setupOpen = settingUp(live.workspace)
+  const setupFirstId = useId()
   const router = useRouter()
   // A signup whose organisation was not written: write it now, then read
   // every loader again under the session that carries it. Once per page
@@ -241,17 +295,46 @@ function AppLayout() {
     )
   // The rail's Chat icon: current only inside this conversation.
   const last = lastChat(conversations)
+  // Away from the conversation the panel floats, with a way back to the chat
+  // the work is in: getting started's own while it runs, else the latest.
+  const floating = !conversation
+  const chat = onboarding ?? last?.id
+  const continues = panel?.suggestions.some(
+    (each) => each.kind === "onboarding"
+  )
 
   return (
     <LiveWorkspaceProvider value={live}>
-      {/* The plan card names the business wherever it shows: chat, panel, approvals. */}
+      {/* The plan card in the panel names the business. */}
       <SiteNameProvider value={active?.name ?? null}>
         <WorkspaceShell
+          autoPanel={auto.request}
           defaultPanelOpen={panelOpen}
           defaultRailOpen={railOpen}
+          onPanelToggle={auto.toggled}
+          floating={floating}
           openPanel={press}
           panel={showPanel ? <WorkspacePanel panel={panel} /> : null}
-          panelLine={showPanel ? <WorkspacePanelLine panel={panel} /> : null}
+          // Not beside Continue getting started, which goes to the same chat.
+          panelFooter={chat && !continues ? <ChatLink id={chat} /> : null}
+          panelFocus={firstAsk(panel)}
+          panelIdle={
+            chat ? (
+              <IdleAssistant
+                avatar={live.workspace?.assistantAvatar ?? null}
+                id={chat}
+                name={live.workspace?.assistantName ?? "Reme"}
+              />
+            ) : null
+          }
+          panelLine={
+            showPanel ? (
+              <WorkspacePanelLine
+                avatar={live.workspace?.assistantAvatar ?? null}
+                panel={panel}
+              />
+            ) : null
+          }
           rail={
             <>
               <nav aria-label="Main" className="flex flex-col gap-2">
@@ -285,19 +368,43 @@ function AppLayout() {
                     </button>
                   </Hint>
                 )}
-                <Hint label="New conversation" side="right">
-                  {/* The new-conversation screen is home, so this is current only on
-                    the bare address, and a fresh state starts one each time. */}
-                  <Link
-                    activeOptions={{ exact: true }}
-                    className={railItemClass}
-                    state={() => ({ chat: crypto.randomUUID() })}
-                    to="/app"
+                {setupOpen ? (
+                  <Hint
+                    detail={SETUP_FIRST}
+                    label="Finish setting up first"
+                    side="right"
                   >
-                    <NotePencilIcon aria-hidden />
-                    <span data-slot="rail-label">New conversation</span>
-                  </Link>
-                </Hint>
+                    {/* Not until setup is done: the assistant needs the
+                      business first. A button that does nothing, still
+                      reachable, so a keyboard hears why. */}
+                    <button
+                      aria-describedby={setupFirstId}
+                      aria-disabled="true"
+                      className={`${railItemClass} cursor-default opacity-50`}
+                      type="button"
+                    >
+                      <NotePencilIcon aria-hidden />
+                      <span data-slot="rail-label">New conversation</span>
+                      <span className="sr-only" id={setupFirstId}>
+                        {SETUP_FIRST}
+                      </span>
+                    </button>
+                  </Hint>
+                ) : (
+                  <Hint label="New conversation" side="right">
+                    {/* The new-conversation screen is home, so this is current only on
+                      the bare address, and a fresh state starts one each time. */}
+                    <Link
+                      activeOptions={{ exact: true }}
+                      className={railItemClass}
+                      state={() => ({ chat: crypto.randomUUID() })}
+                      to="/app"
+                    >
+                      <NotePencilIcon aria-hidden />
+                      <span data-slot="rail-label">New conversation</span>
+                    </Link>
+                  </Hint>
+                )}
                 {SECTIONS.map((item) => (
                   <Hint key={item.to} label={item.label} side="right">
                     <Link className={railItemClass} to={item.to}>

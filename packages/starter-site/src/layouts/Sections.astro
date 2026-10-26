@@ -139,7 +139,7 @@ const sections: LayoutSection[] =
           <Hero
             variant={pagePhoto ? (v ?? "split_frame") : v}
             inner={!home}
-            eyebrow={home ? site.industry : ""}
+            eyebrow={home ? site.heroEyebrow || site.industry : ""}
             heading={heading}
             lede={lede}
             image={

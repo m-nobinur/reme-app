@@ -1,24 +1,32 @@
 import {
+  type AskDesignInput,
   type FactValue,
   OnboardingPlan,
+  PERSONA_CARD,
   type OnboardingPlan as Plan,
+  SKIP_REPLY,
 } from "@workspace/contracts"
 import { convertArrayToReadableStream, MockLanguageModelV4 } from "ai/test"
 import { describe, expect, it } from "vitest"
-import type { ToolPart } from "../src/chat.ts"
+import type { Part, ToolPart } from "../src/chat.ts"
 import { priceOf } from "../src/cos/agent.ts"
 import {
   applied,
+  call,
   cardAnswer,
   choiceCard,
+  designCard,
+  designPrefill,
+  detailsCard,
   type Onboarding,
-  uploadCard,
+  reopenCard,
 } from "../src/onboarding.ts"
 import {
   askedSoFar,
   buildMissing,
   checkPlan,
   DEFAULT_ONBOARDING_MODEL,
+  doingLine,
   type PlanState,
   plannerInstructions,
   plannerModel,
@@ -28,6 +36,7 @@ import {
   sayProblems,
   transcriptOf,
   turnData,
+  typedOverForm,
 } from "../src/onboarding-agent.ts"
 
 const counter = () => {
@@ -131,11 +140,15 @@ const errorsOf = (p: Plan, s: PlanState) => {
   return checked.ok ? [] : checked.errors
 }
 
-/** Ready to build: every fact, photos closed, the quote form confirmed. */
-const ready = () => onboarding([...EVERYTHING, QUOTE], { closed: ["upload"] })
+/** Ready to build: every fact, the quote form confirmed. */
+const ready = () => onboarding([...EVERYTHING, QUOTE])
+
+/** At the design, which comes last: the quote form confirmed. */
+const atDesign = (facts: FactValue[], over: Partial<Onboarding> = {}) =>
+  onboarding([...facts, QUOTE], over)
 
 describe("the plan's checks", () => {
-  it("starts a build only when every fact, the photos and the quote form are settled", () => {
+  it("starts a build only when every fact and the quote form are settled", () => {
     const start = plan({ say: "Starting now.", next: { kind: "start_build" } })
     expect(errorsOf(start, typed("go", ready()))).toEqual([])
     expect(buildMissing(ready())).toEqual([])
@@ -148,17 +161,14 @@ describe("the plan's checks", () => {
     )
     expect(missing).toContainEqual(
       expect.stringMatching(
-        /build cannot start.*business\.phone.*site\.font.*photos.*quote\.form/
+        /build cannot start.*business\.phone.*site\.font.*quote\.form/
       )
     )
     // A quote form the owner declined is settled too.
     expect(
       errorsOf(
         start,
-        typed(
-          "go",
-          onboarding(EVERYTHING, { closed: ["upload", "quote_form"] })
-        )
+        typed("go", onboarding(EVERYTHING, { closed: ["quote_form"] }))
       )
     ).toEqual([])
     // Never twice.
@@ -178,6 +188,11 @@ describe("the plan's checks", () => {
       "One thing — then another.",
       "## Heading",
       "I will handpick stock photos for you.",
+      // The replies to "how much does it cost?" on 2026-10-26.
+      "Building the website is included as part of our service, so there is no extra charge.",
+      "There is nothing extra to pay for the website, John.",
+      "It's free of charge.",
+      "The site comes with your plan at no extra cost.",
       "x".repeat(SAY_MAX + 1),
       "   ",
     ]) {
@@ -188,6 +203,15 @@ describe("the plan's checks", () => {
         "Lovely, Dave. Customers will use Request a quote, so every enquiry arrives with what you need."
       )
     ).toEqual([])
+    // Ordinary words around free, included and charge.
+    for (const fine of [
+      "I can free up your evenings by answering enquiries.",
+      "You are free to pick another name.",
+      "I've included a question about pets.",
+      "The site includes a Request a quote page, and you stay in charge of every reply.",
+    ]) {
+      expect(sayProblems(fine), fine).toEqual([])
+    }
   })
 
   it("takes facts only as FactValue, and contact details only as the owner typed them", () => {
@@ -210,6 +234,13 @@ describe("the plan's checks", () => {
         s
       )[0]
     ).toMatch(/not a number the owner typed/)
+    // Seen live: 00 is the international prefix, so this was never +44 0195 899933.
+    expect(
+      errorsOf(
+        plan({ facts: { "business.phone": { e164: "+440195899933" } } }),
+        typed("00195 899933")
+      )[0]
+    ).toMatch(/ask them to check it/)
     expect(
       errorsOf(
         plan({
@@ -244,7 +275,7 @@ describe("the plan's checks", () => {
           initial: [],
         } as Plan["next"],
       })
-    const building = onboarding(without("site.template", "site.palette"), {
+    const building = atDesign(without("site.template", "site.palette"), {
       oldDesign: true,
     })
     expect(errorsOf(ask("template"), typed("ok", building))).toEqual([])
@@ -266,7 +297,7 @@ describe("the plan's checks", () => {
 
   it("asks the design tray where the order says, builds it from the industry, and not twice", () => {
     const design = plan({ next: { kind: "ask_design" } as Plan["next"] })
-    const open = onboarding(
+    const open = atDesign(
       without("site.template", "site.palette", "site.font", "site.pages")
     )
     const s = typed("ok", open)
@@ -302,8 +333,424 @@ describe("the plan's checks", () => {
     ).toMatch(/next step is ask_design/)
   })
 
+  it("keeps the design tray open on words that answer part of it, and starts the build once the rest is left to the assistant", () => {
+    const o = atDesign(
+      without("site.template", "site.palette", "site.font", "site.pages")
+    )
+    const tray = designCard(o, counter())
+    const prefill = designPrefill(tray, o.facts)
+    expect(prefill.map((f) => f.key).sort()).toEqual([
+      "site.direction",
+      "site.font",
+      "site.pages",
+      "site.palette",
+    ])
+    const start = plan({
+      pending_card: "answered",
+      say: "That's everything I need. I've started on the website.",
+      next: { kind: "start_build" },
+    })
+    // The planner reads the ticks it keeps for what it is left.
+    expect(turnData(typed("skip", o, tray))).toContain(
+      `"waiting_card":{"card":"ask_design","prefill":${JSON.stringify(prefill)}}`
+    )
+    // The replies of 2026-10-26: one question answered, or one passed over.
+    for (const words of ["no logo, make one for me", "skip"]) {
+      expect(errorsOf(start, typed(words, o, tray)).join()).toMatch(
+        /design tray still asks site.palette, site.font, site.direction, site.pages/
+      )
+    }
+    const again = plan({
+      pending_card: "answered",
+      say: "I'll create a logo for you. Now the colours.",
+      next: { kind: "ask_design", logo: "create" },
+    })
+    const s = typed("no logo, make one for me", o, tray)
+    const shown = checkPlan(again, s)
+    if (!shown.ok) throw new Error(shown.errors.join("; "))
+    expect(shown.checked.after.closed).not.toContain("design")
+    expect(planParts(shown.checked, s, counter()).map((p) => p.type)).toEqual([
+      "text",
+      "tool-ask_design",
+    ])
+    // The rest left to the assistant: the tray's own ticks, as its choice.
+    const deferred = plan({
+      ...start,
+      facts: Object.fromEntries(prefill.map((f) => [f.key, f.value])),
+      chosen_for_owner: prefill.map((f) => f.key) as Plan["chosen_for_owner"],
+    })
+    const done = checkPlan(deferred, typed("dealer's choice", o, tray))
+    if (!done.ok) throw new Error(done.errors.join("; "))
+    expect(done.checked.chosen).toEqual(prefill)
+    // A bare yes, no or skip answers the question the owner is on, never
+    // the rest: the live run of 2026-10-26 built on "skip" and on "yes".
+    for (const words of ["skip", "Yes!", "no thanks"]) {
+      const errors = errorsOf(deferred, typed(words, o, tray)).join()
+      expect(errors, words).toMatch(/bare yes, no or skip/)
+      expect(errors, words).toMatch(/design tray still asks/)
+    }
+    // The owner's layout and the rest left to it.
+    const second = String(
+      (tray.input as AskDesignInput).questions.find(
+        (q) => q.id === "arrangement"
+      )?.card.options[1]?.id
+    )
+    const mixed = plan({
+      ...deferred,
+      facts: { ...deferred.facts, "site.direction": { id: second } },
+      chosen_for_owner: ["site.palette", "site.font", "site.pages"],
+    })
+    expect(
+      errorsOf(mixed, typed("the second layout, rest up to you", o, tray))
+    ).toEqual([])
+    // A choice of its own, not the tray's, is refused.
+    expect(
+      errorsOf(
+        plan({
+          ...deferred,
+          facts: {
+            ...deferred.facts,
+            "site.direction": { id: second },
+          },
+        }),
+        typed("dealer's choice", o, tray)
+      ).join()
+    ).toMatch(/site.direction is not what the card holds/)
+  })
+
+  it("opens the tray on the logo's way the owner's words chose, and on none for a bare word", () => {
+    const o = atDesign(
+      without("site.template", "site.palette", "site.font", "site.pages")
+    )
+    const tray = designCard(o, counter())
+    const logoOf = (part: Part | undefined) =>
+      ((part as ToolPart).input as AskDesignInput).questions.find(
+        (q) => q.id === "logo"
+      )
+    // The default is only a default: no way chosen.
+    expect(logoOf(tray)?.path).toBeUndefined()
+    expect(logoOf(tray)?.card.preselected).toEqual(["create"])
+    const shown = (words: string, logo?: "upload" | "create") => {
+      const s = typed(words, o, tray)
+      const checked = checkPlan(
+        plan({
+          pending_card: "answered",
+          say: "Noted. Now the colours.",
+          next: { kind: "ask_design", ...(logo && { logo }) },
+        }),
+        s
+      )
+      if (!checked.ok) throw new Error(checked.errors.join("; "))
+      return logoOf(planParts(checked.checked, s, counter())[1])
+    }
+    expect(shown("no logo, make one for me", "create")?.path).toBe("create")
+    expect(shown("I'll upload mine", "upload")?.path).toBe("upload")
+    expect(shown("the second layout")?.path).toBeUndefined()
+    // A bare yes, no, ok or skip chooses no way.
+    for (const words of ["skip", "Yes!", "ok", "no"]) {
+      expect(
+        errorsOf(
+          plan({
+            pending_card: "answered",
+            say: "Noted.",
+            next: { kind: "ask_design", logo: "create" },
+          }),
+          typed(words, o, tray)
+        ).join(),
+        words
+      ).toMatch(/they chose none/)
+    }
+    // Shown again over other words, the tray keeps the way chosen before.
+    const chosen = designCard(o, counter(), "upload")
+    const s = typed("which colours suit a window cleaner?", o, chosen)
+    const checked = checkPlan(
+      plan({ pending_card: "unanswered", say: "Calm blues suit it." }),
+      s
+    )
+    if (!checked.ok) throw new Error(checked.errors.join("; "))
+    expect(logoOf(planParts(checked.checked, s, counter())[1])?.path).toBe(
+      "upload"
+    )
+  })
+
+  it("refuses a reply that promises the logo while no way is chosen or held", () => {
+    const o = atDesign(
+      without("site.template", "site.palette", "site.font", "site.pages")
+    )
+    const said = (
+      say: string,
+      s = typed("skip", o, designCard(o, counter()))
+    ) =>
+      errorsOf(
+        plan({ pending_card: "answered", say, next: { kind: "ask_design" } }),
+        s
+      ).filter((e) => e.includes("logo"))
+    // The live replies of 2026-10-26, to "skip" and to words with no way set.
+    expect(said("No problem, I will create a logo for you.")[0]).toMatch(
+      /promises to make or use the owner's logo/
+    )
+    expect(said("I will design the logo for you.")).toHaveLength(1)
+    expect(said("Got it, I'll use your logo.")).toHaveLength(1)
+    // An offer or a question promises nothing.
+    expect(said("Upload a logo or I'll create one.")).toEqual([])
+    expect(said("Shall I design a logo for you?")).toEqual([])
+    // A way the tray carries, or a logo held, may be promised.
+    const chosen = designCard(o, counter(), "create")
+    expect(
+      said("I'll create a logo for you.", typed("skip", o, chosen))
+    ).toEqual([])
+    const held = atDesign([
+      ...without("site.template", "site.palette", "site.font", "site.pages"),
+      {
+        key: "media.uploads",
+        value: {
+          items: [
+            {
+              id: "0d9e0f10-2131-4a2b-9c3d-4e5f60718293",
+              name: "logo.png",
+              content_type: "image/png",
+              bytes: 4821,
+              use: "logo",
+            },
+          ],
+        },
+      },
+    ])
+    expect(
+      said(
+        "I'll use your logo.",
+        typed("skip", held, designCard(held, counter()))
+      )
+    ).toEqual([])
+  })
+
+  it("keeps the assistant card's own values for what the owner left to it, and a name to fit the pronouns they asked for", () => {
+    const o = onboarding(
+      without("assistant.name", "assistant.pronouns", "assistant.tone")
+    )
+    const card = detailsCard("assistant", o, counter())
+    const left = (facts: Plan["facts"], picked: string[]) =>
+      errorsOf(
+        plan({
+          facts,
+          chosen_for_owner: picked as Plan["chosen_for_owner"],
+          pending_card: "answered",
+        }),
+        typed("dealer's choice", o, card)
+      ).filter((e) => e.startsWith("assistant."))
+    const asCome = {
+      "assistant.name": { name: "Reme" },
+      "assistant.pronouns": { id: "she_her" },
+      "assistant.tone": { id: "professional" },
+    } as Plan["facts"]
+    const all = ["assistant.name", "assistant.pronouns", "assistant.tone"]
+    expect(left(asCome, all)).toEqual([])
+    // Measured: "dealer's choice" and "elige tú" chose friendly.
+    expect(
+      left({ ...asCome, "assistant.tone": { id: "friendly" } }, all)
+    ).toEqual([
+      'assistant.tone is not what the card holds, {"id":"professional"}: if the owner\'s words asked for this, it is their answer, so leave it out of chosen_for_owner; if they left it to you, keep the card\'s',
+    ])
+    // "You choose, but make it a man": he/him is the owner's, and the name
+    // and face follow it. The live run kept Reme, she/her on the old refusal.
+    const man = {
+      ...asCome,
+      "assistant.name": { name: "Arthur" },
+      "assistant.pronouns": { id: "he_him" },
+    } as Plan["facts"]
+    const chosen = ["assistant.name", "assistant.tone"]
+    expect(left(man, chosen)).toEqual([])
+    const checked = checkPlan(
+      plan({
+        facts: man,
+        chosen_for_owner: chosen as Plan["chosen_for_owner"],
+        pending_card: "answered",
+      }),
+      typed("you choose, but make it a man", o, card)
+    )
+    expect(checked.ok && checked.checked.chosen).toContainEqual({
+      key: "assistant.avatar",
+      value: { id: "he_1" },
+    })
+    expect(
+      left({ ...man, "assistant.name": { name: "Reme" } }, chosen)[0]
+    ).toMatch(/does not fit the pronouns/)
+    // Listed as its own choice, the refusal says a value they asked for is theirs.
+    expect(left(man, all).join()).toMatch(
+      /assistant.pronouns is not what the card holds.*leave it out of chosen_for_owner/
+    )
+  })
+
+  it("saves a persona changed in words at a later step whole, and the card shows it", () => {
+    // Bramble Window Care, 2026-10-25: Pick for me settled Reme, she/her,
+    // she_1, then "make it male" over the website card wrote only James.
+    const o = onboarding([
+      ...without(
+        "assistant.name",
+        "assistant.pronouns",
+        "site.build_mode",
+        "site.template",
+        "site.palette",
+        "site.font",
+        "site.pages"
+      ),
+      { key: "assistant.name", value: { name: "Reme" } },
+      { key: "assistant.pronouns", value: { id: "she_her" } },
+      { key: "assistant.avatar", value: { id: "she_1" } },
+      QUOTE,
+    ])
+    const website = choiceCard("build_for_me", o, counter())
+    const s = typed("make it male", o, website)
+    const male = plan({
+      facts: {
+        "assistant.name": { name: "James" },
+        "assistant.pronouns": { id: "he_him" },
+      },
+      chosen_for_owner: ["assistant.name"],
+      pending_card: "unanswered",
+      say: "I have switched my pronouns to he/him and taken the name James, keeping a professional tone.\n\nNow, back to the website. Would you like me to build it for Regal Rides?",
+    })
+    const checked = checkPlan(male, s)
+    if (!checked.ok) throw new Error(checked.errors.join("; "))
+    expect(checked.checked.stated).toEqual([
+      { key: "assistant.pronouns", value: { id: "he_him" } },
+    ])
+    expect(checked.checked.chosen).toEqual([
+      { key: "assistant.name", value: { name: "James" } },
+      { key: "assistant.avatar", value: { id: "he_1" } },
+    ])
+    const parts = planParts(checked.checked, s, counter())
+    expect(parts.map((p) => p.type)).toEqual([
+      "text",
+      PERSONA_CARD,
+      "text",
+      "tool-ask_choice",
+    ])
+    expect(parts[1]).toMatchObject({
+      data: {
+        name: "James",
+        pronouns: "he_him",
+        avatar: "he_1",
+        tone: "professional",
+      },
+    })
+    // "friendlier please" is the owner's tone, wherever they are.
+    const friendly = checkPlan(
+      plan({
+        facts: { "assistant.tone": { id: "friendly" } },
+        pending_card: "unanswered",
+      }),
+      typed("friendlier please", o, website)
+    )
+    expect(friendly.ok && friendly.checked.stated).toEqual([
+      { key: "assistant.tone", value: { id: "friendly" } },
+    ])
+    // A name the card or the assistant chose came with the old pronouns.
+    expect(
+      errorsOf(
+        plan({
+          facts: { "assistant.pronouns": { id: "he_him" } },
+          pending_card: "unanswered",
+        }),
+        s
+      ).join()
+    ).toMatch(/assistant.name Reme came with the old pronouns/)
+    // One the owner gave stays theirs.
+    expect(
+      errorsOf(
+        plan({
+          facts: { "assistant.pronouns": { id: "they_them" } },
+          pending_card: "unanswered",
+        }),
+        {
+          ...typed("use they/them", o, website),
+          rows: [
+            {
+              role: "user",
+              parts: [{ type: "text", text: "call her Reme", state: "done" }],
+            },
+          ],
+        }
+      )
+    ).toEqual([])
+    // A face of no pronouns fits any.
+    const robot = onboarding([
+      ...(o.facts as FactValue[]).filter((f) => f.key !== "assistant.avatar"),
+      { key: "assistant.avatar", value: { id: "reme" } },
+    ])
+    const kept = checkPlan(male, typed("make it male", robot, website))
+    expect(kept.ok && kept.checked.chosen.map((f) => f.key)).toEqual([
+      "assistant.name",
+    ])
+    // Over the reopened assistant card, the face follows as well.
+    const reopened = reopenCard("assistant", o, counter())
+    const over = checkPlan(
+      plan({ ...male, pending_card: "answered" }),
+      typed("make it male", o, reopened)
+    )
+    expect(over.ok && over.checked.chosen).toContainEqual({
+      key: "assistant.avatar",
+      value: { id: "he_1" },
+    })
+    // A change it recorded is shown by the persona card, not reopened.
+    expect(
+      errorsOf(
+        plan({ ...male, next: { kind: "reopen", step: "assistant" } }),
+        s
+      ).join()
+    ).toMatch(/carry on with the step you were on/)
+  })
+
+  it("refuses a reply that names a persona the plan does not write or hold", () => {
+    const o = onboarding([
+      ...without(
+        "site.build_mode",
+        "site.template",
+        "site.palette",
+        "site.font",
+        "site.pages"
+      ),
+      QUOTE,
+    ])
+    const website = choiceCard("build_for_me", o, counter())
+    const s = typed("make it female", o, website)
+    const said = (say: string, facts: Plan["facts"] = {}) =>
+      errorsOf(plan({ facts, say, pending_card: "unanswered" }), s).filter(
+        (e) => e.includes("for you")
+      )
+    // The measured retry: the change dropped, the claim kept.
+    expect(
+      said(
+        "I have switched my pronouns to she/her and taken the name Maya, keeping a professional tone."
+      )
+    ).toEqual([
+      "say names she/her for you, but the plan neither writes nor holds it: record it in facts or leave it out of say",
+    ])
+    expect(said("I'm Maya, she/her, from now on.")[0]).toMatch(/names she\/her/)
+    expect(said("Call me Maya from now on.")[0]).toMatch(/names Maya/)
+    expect(said("I'll keep a friendly tone with you.")[0]).toMatch(
+      /names a friendly tone/
+    )
+    // What the plan writes, and what is held, may be named.
+    expect(
+      said(
+        "I have switched from he/him to she/her and taken the name Maya, in a professional manner.",
+        {
+          "assistant.name": { name: "Maya" },
+          "assistant.pronouns": { id: "she_her" },
+        }
+      )
+    ).toEqual([])
+    // A question offers, and the business's own name is not the assistant's.
+    expect(
+      said(
+        "Would you like she/her or they/them, and a friendly tone? The name Regal Rides goes in the header."
+      )
+    ).toEqual([])
+  })
+
   it("lets the plan choose the palettes shown first, from the pool, three or four of them", () => {
-    const o = onboarding(without("site.palette"))
+    const o = atDesign(without("site.palette"))
     const palette = (initial: string[], step = "palette") =>
       plan({
         next: {
@@ -343,7 +790,7 @@ describe("the plan's checks", () => {
   })
 
   it("never asks again what the facts hold, and asks each kind of fact on its own card", () => {
-    const o = onboarding(without("assistant.tone", "owner.preferred_name"))
+    const o = onboarding(without("assistant.tone"))
     const open = (about: string) =>
       plan({ next: { kind: "ask_open", about } as Plan["next"] })
     expect(errorsOf(open("business.phone"), typed("hi", o))).toContainEqual(
@@ -374,7 +821,7 @@ describe("the plan's checks", () => {
     ).toContain("ask for that with the ask_details assistant card")
     expect(
       errorsOf(open("owner.preferred_name"), typed("hi", o))
-    ).toContainEqual(expect.stringMatching(/ask_fact owner\.preferred_name/))
+    ).toContainEqual(expect.stringMatching(/the next step is/))
     expect(
       errorsOf(
         plan({
@@ -390,7 +837,7 @@ describe("the plan's checks", () => {
     ).toContainEqual(expect.stringMatching(/already in the facts/))
   })
 
-  it("covers the business and the assistant before the website, and follows a skip with the builder question", () => {
+  it("covers the business and the assistant before the website, and closes once the website is skipped", () => {
     const website = plan({
       next: {
         kind: "ask_choice",
@@ -402,7 +849,10 @@ describe("the plan's checks", () => {
     expect(
       errorsOf(
         website,
-        typed("hi", onboarding(without("site.build_mode", "business.email")))
+        typed(
+          "hi",
+          onboarding([...without("site.build_mode", "business.email"), QUOTE])
+        )
       )
     ).toEqual(
       expect.arrayContaining([
@@ -410,34 +860,39 @@ describe("the plan's checks", () => {
         expect.stringMatching(/the next step is ask_details contact/),
       ])
     )
+    // What a quote needs is part of the business, asked before the website.
+    expect(
+      errorsOf(website, typed("hi", onboarding(without("site.build_mode"))))
+    ).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/still missing: quote\.form/),
+        expect.stringMatching(/the next step is ask_open quote\.form/),
+      ])
+    )
     const card = choiceCard("build_for_me", onboarding(), counter())
     const skipped = plan({
       facts: { "site.build_mode": { mode: "manual" } },
       pending_card: "answered",
     })
+    // A skip ends onboarding in the same turn, with a plain reply and no
+    // builder question.
     expect(
       errorsOf(
         skipped,
         typed("no thanks", onboarding(without("site.build_mode")), card)
       )
-    ).toContain(
-      "the owner skipped the website, so ask ask_choice manual_builder now"
-    )
-    // Once the builder question is answered, onboarding is over.
-    const closed = onboarding(
-      [
-        ...without("site.build_mode"),
-        { key: "site.build_mode", value: { mode: "manual" } },
-      ],
-      { closed: ["manual_builder"] }
-    )
+    ).toEqual([])
+    const closed = onboarding([
+      ...without("site.build_mode"),
+      { key: "site.build_mode", value: { mode: "manual" } },
+    ])
     expect(
       errorsOf(
         plan({ next: { kind: "ask_open", about: "business.tagline" } }),
         typed("ok", closed)
       )
     ).toContain(
-      "the owner has answered the builder question, so onboarding is over: next must be answer_only"
+      "the owner skipped the website, so onboarding is over: next must be answer_only"
     )
   })
 
@@ -490,7 +945,7 @@ describe("the plan's checks", () => {
   })
 
   it("lets the assistant choose only what the card the owner typed over asks, and records it as its own", () => {
-    const o = onboarding(without("site.palette", "site.font"))
+    const o = atDesign(without("site.palette", "site.font"))
     const card = choiceCard("palette", onboarding(), counter())
     const delegated = plan({
       facts: { "site.palette": { id: "forest" } },
@@ -530,7 +985,7 @@ describe("the plan's checks", () => {
         typed("what's a palette?", o, card)
       )
     ).toContain(
-      "pending_card unanswered shows the waiting card again, so next must be answer_only"
+      "pending_card unanswered shows the waiting card again, so next must be answer_only or reopen"
     )
     // Answered with nothing recorded: the palette is still missing, so it is asked again.
     const blank = checkPlan(
@@ -540,22 +995,38 @@ describe("the plan's checks", () => {
     expect(blank.ok && buildMissing(blank.checked.after)).toContain(
       "site.palette"
     )
+    // A photo card from before the photos joined the tray still reads.
+    const oldUpload = call(
+      "tool-ask_upload",
+      {
+        accept: ["image/jpeg"],
+        max_files: 12,
+        max_bytes: 10_000_000,
+        skippable: true,
+      },
+      counter()
+    )
     expect(
       errorsOf(
         plan({ pending_card: "answered" }),
-        typed("no photos", onboarding(EVERYTHING), uploadCard(counter()))
+        typed("no photos", onboarding(EVERYTHING), oldUpload)
       )[0]
     ).toMatch(/photos can only be added on the card/)
   })
 
-  it("asks for photos with a logo welcome, and proposes a quote form without contact questions", () => {
+  it("asks for photos only on the tray, and proposes a quote form without contact questions", () => {
     const o = onboarding([...EVERYTHING])
     expect(
       errorsOf(
-        plan({ say: "Any photos of the fleet?", next: { kind: "ask_upload" } }),
+        plan({
+          say: "Any photos? A logo too.",
+          next: { kind: "ask_upload" },
+        }),
         typed("ok", o)
       )
-    ).toContain("the photo question must say a logo is welcome too")
+    ).toContain(
+      "the logo and photos are questions on the design tray; don't ask ask_upload"
+    )
     const proposal = (fields: typeof FIELDS) =>
       plan({ next: { kind: "review_quote_form", fields, note: null } })
     expect(
@@ -603,15 +1074,36 @@ describe("what the planner reads and how often it asks", () => {
     })
   })
 
+  it("sends the facts it holds, read from full fact records", () => {
+    const record = {
+      fact_id: "01JFACT0000000000000000000",
+      key: "business.phone",
+      value: { e164: "+447700900123" },
+      provenance: "owner_stated",
+      updated_at: "2026-10-26T09:00:00.000Z",
+    }
+    const o = { ...onboarding(), facts: [record] } as unknown as Onboarding
+    const json = JSON.parse(
+      (turnData(typed("hello", o)).split("\n")[2] as string).replace(
+        /\\u003c/g,
+        "<"
+      )
+    ) as { facts: unknown }
+    expect(json.facts).toEqual({ "business.phone": { e164: "+447700900123" } })
+  })
+
   it("never holds the build for optional details, and asks who the customers are once", () => {
     expect(
       buildMissing(
         onboarding(without("business.audience"), {
-          closed: ["upload", "quote_form"],
+          closed: ["quote_form"],
         })
       )
     ).toEqual([])
-    const o = onboarding(without("business.audience", "business.phone"))
+    const o = onboarding([
+      ...without("business.audience", "business.phone"),
+      QUOTE,
+    ])
     const audience = plan({
       next: { kind: "ask_open", about: "business.audience" },
     })
@@ -638,7 +1130,10 @@ describe("what the planner reads and how often it asks", () => {
   })
 
   it("asks what sets the business apart once, and never lets the assistant choose it", () => {
-    const o = onboarding(without("business.proof", "site.build_mode"))
+    const o = onboarding([
+      ...without("business.proof", "site.build_mode"),
+      QUOTE,
+    ])
     const proof = plan({ next: { kind: "ask_open", about: "business.proof" } })
     expect(errorsOf(proof, typed("ok", o))).toEqual([])
     expect(turnData(typed("ok", o))).toContain(
@@ -719,9 +1214,10 @@ describe("what the planner reads and how often it asks", () => {
   })
 
   it("keeps to the script's order: each code step's own card next", () => {
-    const o = onboarding(
-      without("assistant.name", "assistant.pronouns", "assistant.tone")
-    )
+    const o = onboarding([
+      ...without("assistant.name", "assistant.pronouns", "assistant.tone"),
+      QUOTE,
+    ])
     expect(
       errorsOf(
         plan({
@@ -748,7 +1244,10 @@ describe("what the planner reads and how often it asks", () => {
   })
 
   it("asks each optional detail once before the website, unless the owner already gave it", () => {
-    const o = onboarding(without("site.build_mode", "business.audience"))
+    const o = onboarding([
+      ...without("site.build_mode", "business.audience"),
+      QUOTE,
+    ])
     const website = plan({
       next: {
         kind: "ask_choice",
@@ -771,7 +1270,7 @@ describe("what the planner reads and how often it asks", () => {
     // Asked once, and the owner said nothing of it: that is an answer.
     expect(errorsOf(website, at({ "business.audience": 1 }))).toEqual([])
     // Given in the owner's own words: never asked.
-    const held = onboarding(without("site.build_mode"))
+    const held = onboarding([...without("site.build_mode"), QUOTE])
     expect(errorsOf(website, at({}, held))).toEqual([])
   })
 
@@ -791,6 +1290,158 @@ describe("what the planner reads and how often it asks", () => {
   })
 })
 
+describe("going back to a step", () => {
+  /** At the website question: the business and the assistant answered. */
+  const atWebsite = () =>
+    onboarding([
+      ...without(
+        "site.build_mode",
+        "site.template",
+        "site.palette",
+        "site.font",
+        "site.pages"
+      ),
+      QUOTE,
+    ])
+
+  it("reopens the assistant's card as it was over the website question, which stays due", () => {
+    const o = atWebsite()
+    const card = choiceCard("build_for_me", o, counter())
+    const s = typed("I want to set my assistant again", o, card)
+    const checked = checkPlan(
+      plan({
+        pending_card: "unanswered",
+        say: "Here it is, change whatever you like.",
+        next: { kind: "reopen", step: "assistant" },
+      }),
+      s
+    )
+    if (!checked.ok) throw new Error(checked.errors.join("; "))
+    const [said, reopened] = planParts(checked.checked, s, () => "fresh")
+    expect(said).toMatchObject({
+      text: "Here it is, change whatever you like.",
+    })
+    expect(reopened).toMatchObject({
+      type: "tool-ask_details",
+      toolCallId: "fresh",
+      input: {
+        step: "assistant",
+        prefill: expect.arrayContaining([
+          { key: "assistant.name", value: { name: "Jeeves" } },
+          { key: "assistant.tone", value: { id: "professional" } },
+        ]),
+      },
+    })
+    const data = JSON.parse(
+      turnData(s)
+        .split("\n")[2]
+        ?.replace(/\\u003c/g, "<") ?? "{}"
+    )
+    expect(data.due_next).toEqual(["ask_choice build_for_me"])
+    expect(data.can_go_back_to).toContain("assistant")
+  })
+
+  it("reopens a fact and the quote form filled with what is held", () => {
+    const s = typed("can I change my services", atWebsite())
+    const parts = (step: "business.offerings" | "quote_form") => {
+      const checked = checkPlan(
+        plan({ say: "Sure, here they are.", next: { kind: "reopen", step } }),
+        s
+      )
+      if (!checked.ok) throw new Error(checked.errors.join("; "))
+      return planParts(checked.checked, s, counter())[1]
+    }
+    expect(parts("business.offerings")).toMatchObject({
+      type: "tool-ask_fact",
+      input: {
+        key: "business.offerings",
+        prefill: { items: ["Wedding cars"] },
+      },
+    })
+    expect(parts("quote_form")).toMatchObject({
+      type: "tool-review_quote_form",
+      input: { fields: FIELDS },
+    })
+  })
+
+  it("redrafts a reopened quote form from the owner's words and shows it for a yes", () => {
+    // Observed 2026-10-25: "seperate number of rooms" on the reopened form.
+    const o = atWebsite()
+    const form = call(
+      "tool-review_quote_form",
+      { fields: FIELDS, note: null },
+      counter()
+    )
+    const words = typedOverForm(form, {
+      answer: "changes",
+      text: "seperate number of rooms",
+    })
+    if (!words) throw new Error("not read as words")
+    const s = typed(words.text, o, words.form)
+    const redrafted = [
+      ...FIELDS,
+      {
+        key: "rooms",
+        label: "Number of rooms",
+        type: "number" as const,
+        required: false,
+        hint: null,
+        options: null,
+      },
+    ]
+    const checked = checkPlan(
+      plan({
+        pending_card: "declined",
+        say: "Rooms are a question of their own now. Does this look right?",
+        next: { kind: "review_quote_form", fields: redrafted, note: null },
+      }),
+      s
+    )
+    if (!checked.ok) throw new Error(checked.errors.join("; "))
+    expect(planParts(checked.checked, s, counter())[1]).toMatchObject({
+      type: "tool-review_quote_form",
+      state: "input-available",
+      input: { fields: redrafted },
+    })
+  })
+
+  it("comes back to a step in new words, never a sentence already said", () => {
+    const asked =
+      "I have a good picture of Regal Rides now. How should customers get in touch?"
+    const s: PlanState = {
+      ...typed("Looks good", onboarding(without("business.phone"))),
+      rows: [
+        {
+          role: "assistant",
+          parts: [{ type: "text", text: asked, state: "done" }],
+        },
+      ],
+    }
+    const back = (say: string) =>
+      errorsOf(
+        plan({ say, next: { kind: "ask_details", step: "contact" } }),
+        s
+      ).filter((e) => e.includes("which you already said"))
+    expect(back(asked)).toHaveLength(1)
+    expect(back("Now, back to how customers reach Regal Rides.")).toEqual([])
+  })
+
+  it("refuses to reopen a step not answered yet", () => {
+    const o = onboarding([
+      ...without("business.phone", "business.email"),
+      QUOTE,
+    ])
+    expect(
+      errorsOf(
+        plan({ next: { kind: "reopen", step: "contact" } }),
+        typed("change my number", o)
+      )
+    ).toContain(
+      "contact is not answered yet, so there is nothing to go back to; ask it in its turn"
+    )
+  })
+})
+
 describe("the plan's parts", () => {
   it("shows the waiting card again under a new id after a side question", () => {
     const o = onboarding(without("site.palette"))
@@ -799,7 +1450,7 @@ describe("the plan's parts", () => {
     const checked = checkPlan(
       plan({
         pending_card: "unanswered",
-        say: "No, the site comes with your plan. Now, the colours.",
+        say: "That is yours to set, not mine. Now, the colours.",
       }),
       s
     )
@@ -808,7 +1459,7 @@ describe("the plan's parts", () => {
     expect(parts).toEqual([
       {
         type: "text",
-        text: "No, the site comes with your plan. Now, the colours.",
+        text: "That is yours to set, not mine. Now, the colours.",
         state: "done",
       },
       { ...card, toolCallId: "fresh" },
@@ -816,7 +1467,10 @@ describe("the plan's parts", () => {
   })
 
   it("builds a details card with what is held and the sign-in email filled in", () => {
-    const o = onboarding(without("business.phone", "business.email"))
+    const o = onboarding([
+      ...without("business.phone", "business.email"),
+      QUOTE,
+    ])
     const s = typed("ok", o)
     const checked = checkPlan(
       plan({
@@ -843,21 +1497,7 @@ describe("the plan's parts", () => {
     ])
   })
 
-  it("builds cards from the contracts: the owner's name prefilled by code, the quote form, a pending build", () => {
-    const o = onboarding(without("owner.preferred_name"), { ownerName: "" })
-    const ask = checkPlan(
-      plan({
-        say: "What should Jeeves call you?",
-        next: { kind: "ask_fact", key: "owner.preferred_name" },
-      }),
-      typed("ok", o)
-    )
-    if (!ask.ok) throw new Error(ask.errors.join("; "))
-    // No session name, so the email's local part.
-    expect(planParts(ask.checked, typed("ok", o), counter())[1]).toMatchObject({
-      type: "tool-ask_fact",
-      input: { key: "owner.preferred_name", prefill: { name: "dave" } },
-    })
+  it("builds cards from the contracts: the quote form, a pending build", () => {
     const quote = checkPlan(
       plan({
         next: {
@@ -883,6 +1523,98 @@ describe("the plan's parts", () => {
     expect(
       planParts(build.checked, typed("go", ready()), counter())
     ).toMatchObject([{ type: "tool-request_change", state: "input-available" }])
+  })
+
+  it("reads Pick for me as the owner's ask and shows the persona under the reply", () => {
+    const persona = [
+      { key: "assistant.name", value: { name: "Reme" } },
+      { key: "assistant.pronouns", value: { id: "she_her" } },
+      { key: "assistant.avatar", value: { id: "reme" } },
+      { key: "assistant.tone", value: { id: "professional" } },
+    ] as FactValue[]
+    const before = onboarding([
+      ...without(
+        ...persona.map((f) => f.key),
+        "site.build_mode",
+        "site.template",
+        "site.palette",
+        "site.font",
+        "site.pages"
+      ),
+      QUOTE,
+    ])
+    const card = detailsCard("assistant", before, counter())
+    const output = { answer: "stated", facts: persona, skip_all: true }
+    const meant = cardAnswer(card, output, [])
+    const s: PlanState = {
+      onboarding: applied(before, meant as NonNullable<typeof meant>),
+      pending: null,
+      input: { kind: "card", card, output },
+      rows: [],
+    }
+    expect(turnData(s)).toContain("with Pick for me]")
+    const checked = checkPlan(
+      plan({
+        say: "I've gone with Reme, she/her, with a professional manner.",
+        next: {
+          kind: "ask_choice",
+          step: "build_for_me",
+          preselected: [],
+          initial: [],
+        },
+      }),
+      s
+    )
+    if (!checked.ok) throw new Error(checked.errors.join("; "))
+    expect(planParts(checked.checked, s, counter()).slice(0, 2)).toEqual([
+      {
+        type: "text",
+        text: "I've gone with Reme, she/her, with a professional manner.",
+        state: "done",
+      },
+      {
+        type: PERSONA_CARD,
+        data: {
+          name: "Reme",
+          pronouns: "she_her",
+          avatar: "reme",
+          tone: "professional",
+        },
+      },
+    ])
+    // A typed turn that leaves the persona as it was shows none.
+    expect(
+      planParts(checked.checked, typed("ok", s.onboarding), counter())[1]
+    ).toMatchObject({ type: "tool-ask_choice" })
+  })
+
+  it("shows the persona card between the intro and the next question when words settle it", () => {
+    const o = onboarding(
+      without("assistant.name", "assistant.pronouns", "assistant.tone")
+    )
+    const card = detailsCard("assistant", o, counter())
+    const man = plan({
+      facts: {
+        "assistant.name": { name: "Oliver" },
+        "assistant.pronouns": { id: "he_him" },
+        "assistant.tone": { id: "professional" },
+      },
+      chosen_for_owner: ["assistant.name", "assistant.tone"],
+      pending_card: "answered",
+      say: "I've gone with Oliver, he/him.\n\nNext, what should your quote form ask?",
+      next: { kind: "ask_open", about: "quote.form" },
+    })
+    const s = typed("you choose, but make it a man", o, card)
+    const checked = checkPlan(man, s)
+    if (!checked.ok) throw new Error(checked.errors.join("; "))
+    expect(planParts(checked.checked, s, counter()).map((p) => p.type)).toEqual(
+      ["text", PERSONA_CARD, "text", "tool-ask_open"]
+    )
+    // Words that change nothing the card holds add no card.
+    const held = typed("thanks", checked.checked.after)
+    expect(
+      planParts(checked.checked, held, counter()).map((p) => p.type)
+    ).toEqual(["text", "tool-ask_open"])
   })
 
   it("puts the owner's words in a data block the model cannot close", () => {
@@ -929,13 +1661,33 @@ const ordered = (p: Plan) =>
  * A planner model that streams each call's answer in turn, seven characters
  * a chunk: a plan (keys in the asked order), raw text, an Error, or a hang.
  */
-function planner(answers: (Plan | string | Error | "hang")[]) {
+/** A call that thinks in `thinks` for `ms` before writing `writes`. */
+type Thinking = { thinks: string[]; ms: number; writes: Plan }
+
+function planner(
+  answers: (Plan | Thinking | string | Error | "hang" | "stall")[]
+) {
   const prompts: unknown[] = []
   const model = new MockLanguageModelV4({
     doStream: async (options) => {
       const answer = answers[prompts.length] ?? answers.at(-1)
       prompts.push(options.prompt)
       if (answer instanceof Error) throw answer
+      // Begins writing, then goes quiet until it is stopped.
+      if (answer === "stall") {
+        return {
+          stream: new ReadableStream({
+            start(c) {
+              c.enqueue({ type: "stream-start", warnings: [] })
+              c.enqueue({ type: "text-start", id: "t" })
+              c.enqueue({ type: "text-delta", id: "t", delta: "{" })
+              options.abortSignal?.addEventListener("abort", () =>
+                c.error(options.abortSignal?.reason)
+              )
+            },
+          }) as never,
+        }
+      }
       if (answer === "hang") {
         await new Promise((_, reject) =>
           options.abortSignal?.addEventListener("abort", () =>
@@ -943,28 +1695,58 @@ function planner(answers: (Plan | string | Error | "hang")[]) {
           )
         )
       }
-      const text = typeof answer === "string" ? answer : ordered(answer as Plan)
+      const thinking =
+        typeof answer === "object" && "thinks" in answer ? answer : null
+      const text =
+        typeof answer === "string"
+          ? answer
+          : ordered((thinking?.writes ?? answer) as Plan)
       const deltas = text.match(/[\s\S]{1,7}/g) ?? []
-      return {
-        stream: convertArrayToReadableStream([
-          { type: "stream-start", warnings: [] },
-          { type: "text-start", id: "t" },
-          ...deltas.map((delta) => ({ type: "text-delta", id: "t", delta })),
-          { type: "text-end", id: "t" },
-          {
-            type: "finish",
-            finishReason: { unified: "stop", raw: undefined },
-            usage: {
-              inputTokens: {
-                total: 4000,
-                noCache: 3000,
-                cacheRead: 1000,
-                cacheWrite: undefined,
-              },
-              outputTokens: { total: 300, text: 300, reasoning: undefined },
+      const parts = [
+        { type: "stream-start", warnings: [] },
+        ...(thinking
+          ? [
+              { type: "reasoning-start", id: "r" },
+              ...thinking.thinks.map((delta) => ({
+                type: "reasoning-delta",
+                id: "r",
+                delta,
+              })),
+              { type: "reasoning-end", id: "r" },
+            ]
+          : []),
+        { type: "text-start", id: "t" },
+        ...deltas.map((delta) => ({ type: "text-delta", id: "t", delta })),
+        { type: "text-end", id: "t" },
+        {
+          type: "finish",
+          finishReason: { unified: "stop", raw: undefined },
+          usage: {
+            inputTokens: {
+              total: 4000,
+              noCache: 3000,
+              cacheRead: 1000,
+              cacheWrite: undefined,
             },
+            outputTokens: { total: 300, text: 300, reasoning: undefined },
           },
-        ]) as never,
+        },
+      ]
+      if (!thinking) {
+        return { stream: convertArrayToReadableStream(parts) as never }
+      }
+      // Its thoughts at once, its first text only after `ms`.
+      return {
+        stream: new ReadableStream({
+          async pull(c) {
+            const part = parts.shift()
+            if (!part) return c.close()
+            if (part.type === "text-start") {
+              await new Promise((resolve) => setTimeout(resolve, thinking.ms))
+            }
+            c.enqueue(part)
+          },
+        }) as never,
       }
     },
   })
@@ -1060,7 +1842,7 @@ describe("a planned turn", () => {
     })
   })
 
-  it("retries once with the problems fed back, then falls back", async () => {
+  it("retries with the problems fed back, then falls back", async () => {
     const bad = plan({
       say: "Our prices are fair.",
       next: { kind: "start_build" },
@@ -1074,22 +1856,47 @@ describe("a planned turn", () => {
     expect(second).toContain("That plan was refused")
     expect(second).toContain("the build cannot start yet")
 
-    const twice = planner([bad, bad])
-    const fell = await planTurn(twice.model, PRICE, typed("hello"))
+    const thrice = planner([bad, bad, bad])
+    const fell = await planTurn(thrice.model, PRICE, typed("hello"))
     expect(fell).toMatchObject({ ok: false, reason: "invalid" })
-    expect(fell.calls).toHaveLength(2)
+    expect(fell.calls).toHaveLength(3)
 
     // Not JSON at all is a refused plan too.
     const prose = planner(["Sure! Here's my plan...", good])
     expect((await planTurn(prose.model, PRICE, typed("hello"))).ok).toBe(true)
   })
 
-  it("falls back at once on a provider error or a slow call, counting the call at its worst", async () => {
-    const broken = planner([new Error("503")])
+  it("keeps a plan refused only for its words, with the script's question after what was read", async () => {
+    // Every attempt asks the right thing in a phrase the checks refuse.
+    const worded = plan({
+      say: "Glad to have you. It gives you peace of mind.",
+      next: { kind: "ask_open", about: "business.offerings" },
+    })
+    const said: string[] = []
+    const kept = await planTurn(
+      planner([worded, worded, worded]).model,
+      PRICE,
+      typed("hello"),
+      undefined,
+      (text) => said.push(text)
+    )
+    expect(kept.ok).toBe(true)
+    expect(kept.calls).toHaveLength(3)
+    const whole = said.join("")
+    expect(whole.startsWith("Glad to have you.")).toBe(true)
+    expect(whole).not.toContain("peace of mind")
+    expect(whole).toContain("?")
+    if (kept.ok) expect(kept.checked.plan.say).toBe(whole)
+  })
+
+  it("asks again once after a provider error, and falls back on a second or a slow call, booking a call stopped before its first byte at nothing", async () => {
+    const blip = planner([new Error("503"), plan({ say: "Noted." })])
+    expect((await planTurn(blip.model, PRICE, typed("hello"))).ok).toBe(true)
+    const broken = planner([new Error("503"), new Error("503")])
     const failed = await planTurn(broken.model, PRICE, typed("hello"))
     expect(failed).toMatchObject({ ok: false, reason: "provider" })
-    expect(broken.prompts).toHaveLength(1)
-    expect(failed.calls[0]?.costUsd).toBeGreaterThan(0)
+    expect(broken.prompts).toHaveLength(2)
+    expect(failed.calls[0]?.costUsd).toBe(0)
 
     const slow = planner(["hang"])
     const started = Date.now()
@@ -1099,9 +1906,23 @@ describe("a planned turn", () => {
     })
     expect(late).toMatchObject({ ok: false, reason: "timeout" })
     expect(Date.now() - started).toBeLessThan(1_500)
+    expect(late.calls[0]?.costUsd).toBe(0)
+
+    // A call that began writing may bill, so it counts at its worst.
+    const writing = await planTurn(
+      planner(["stall"]).model,
+      PRICE,
+      typed("hello"),
+      {
+        callMs: 50,
+        totalMs: 2_000,
+      }
+    )
+    expect(writing).toMatchObject({ ok: false, reason: "timeout" })
+    expect(writing.calls[0]?.costUsd).toBeGreaterThan(0.01)
 
     // Stopped from outside: it ends at once, shows nothing, and the call
-    // still counts at its worst.
+    // bills nothing, as none was written.
     const stop = new AbortController()
     const held = planner(["hang"])
     const said: string[] = []
@@ -1116,7 +1937,7 @@ describe("a planned turn", () => {
     setTimeout(() => stop.abort(), 20)
     expect(await stopped).toMatchObject({ ok: false, shown: "" })
     expect(said).toEqual([])
-    expect((await stopped).calls[0]?.costUsd).toBeGreaterThan(0)
+    expect((await stopped).calls[0]?.costUsd).toBe(0)
     expect(held.prompts).toHaveLength(1)
   })
 
@@ -1136,9 +1957,8 @@ describe("a planned turn", () => {
     })
     expect(out).toMatchObject({ ok: true })
     expect(stalled.prompts).toHaveLength(2)
-    // The raced call may still bill, so it is counted.
+    // The raced call was stopped before its first byte, so only the kept one bills.
     expect(out.calls).toHaveLength(1)
-    expect(out.calls[0]?.costUsd).toBeGreaterThan(0)
 
     const quick = planner([
       plan({
@@ -1147,8 +1967,45 @@ describe("a planned turn", () => {
         next: { kind: "ask_open", about: "service_area.text" },
       }),
     ])
-    expect((await planTurn(quick.model, PRICE, typed("hello"))).ok).toBe(true)
+    const unraced = await planTurn(quick.model, PRICE, typed("hello"))
+    expect(unraced.ok).toBe(true)
     expect(quick.prompts).toHaveLength(1)
+    expect(out.calls[0]?.costUsd).toBeGreaterThan(0)
+    expect(out.calls[0]?.costUsd).toBe(unraced.calls[0]?.costUsd)
+  })
+
+  it("lets a thinking call keep its time, and sends its thoughts' headings", async () => {
+    const seen: unknown[] = []
+    const thinker = planner([
+      {
+        thinks: [
+          "**Evaluating Service Models**\n\nThe owner offers regular cleans.",
+        ],
+        ms: 200,
+        writes: plan({
+          facts: {},
+          say: "Got it. Which areas do you cover?",
+          next: { kind: "ask_open", about: "service_area.text" },
+        }),
+      },
+    ])
+    const out = await planTurn(
+      thinker.model,
+      PRICE,
+      typed("hello"),
+      { callMs: 5_000, totalMs: 10_000, hedgeMs: 50 },
+      () => undefined,
+      undefined,
+      { send: (status) => seen.push(status), commit: async () => [] }
+    )
+    expect(out).toMatchObject({ ok: true })
+    // Past the hedge, but thinking: never raced.
+    expect(thinker.prompts).toHaveLength(1)
+    expect(seen[0]).toEqual({
+      on: { kind: "thinking", text: "Evaluating service models" },
+      facts: [],
+    })
+    expect(JSON.stringify(seen)).not.toContain("regular cleans")
   })
 
   it("never lets the owner's instructions past the checks", async () => {
@@ -1184,7 +2041,7 @@ describe("a planned turn", () => {
   })
 
   it("proposes a quote form, reads the owner's changes, and states the confirmed form", async () => {
-    const o = onboarding(EVERYTHING, { closed: ["upload"] })
+    const o = onboarding(EVERYTHING)
     const proposal = plan({
       say: "Here is what the form would ask.",
       next: { kind: "review_quote_form", fields: FIELDS, note: null },
@@ -1203,7 +2060,11 @@ describe("a planned turn", () => {
 
     // Changes come back as the owner's words, and a new proposal follows.
     const changes = { answer: "changes", text: "Add the date" }
-    expect(cardAnswer(card, changes, [])).toEqual({ kind: "facts", facts: [] })
+    expect(cardAnswer(card, changes, [])).toEqual({
+      kind: "facts",
+      facts: [],
+      changing: FIELDS,
+    })
     const dated = [
       ...FIELDS,
       {
@@ -1215,22 +2076,51 @@ describe("a planned turn", () => {
         options: null,
       },
     ]
+    // The owner's words read as a message over the form as they left it:
+    // here they made the passengers optional on the card first.
+    const left = FIELDS.map((f) =>
+      f.key === "passengers" ? { ...f, required: false } : f
+    )
+    const typedOver = typedOverForm(card, { ...changes, fields: left })
+    if (!typedOver) throw new Error("not read as words over the form")
+    expect(typedOver.text).toBe("Add the date")
+    expect((typedOver.form.input as { fields: unknown }).fields).toEqual(left)
+    // Without fields, the form stands as proposed; other cards are not words.
+    expect(typedOverForm(card, changes)?.form.input).toMatchObject({
+      fields: FIELDS,
+    })
+    expect(
+      typedOverForm(card, { answer: "confirmed", fields: FIELDS })
+    ).toBeNull()
+    const over = typed(typedOver.text, o, typedOver.form)
     const again = await planTurn(
       planner([
         plan({
           say: "Added the date.",
+          pending_card: "declined",
           next: { kind: "review_quote_form", fields: dated, note: null },
         }),
       ]).model,
       PRICE,
-      {
-        onboarding: o,
-        pending: null,
-        input: { kind: "card", card, output: changes },
-        rows: [],
-      }
+      over
     )
     expect(again.ok).toBe(true)
+    // The step stays open for the new proposal rather than reading as skipped.
+    expect(again.ok && again.checked.after.closed).not.toContain("quote_form")
+    // The planner sees the whole form it is changing, as the owner left it.
+    expect(turnData(over)).toContain(
+      `"waiting_card":${JSON.stringify({ card: "review_quote_form", fields: left })}`
+    )
+    // Words that accept it state the form as the owner left it.
+    const accepted = await planTurn(
+      planner([plan({ say: "Noted.", pending_card: "answered" })]).model,
+      PRICE,
+      typed("looks good", o, typedOver.form)
+    )
+    expect(accepted.ok && accepted.checked.stated).toContainEqual({
+      key: "quote.form",
+      value: { fields: left },
+    })
 
     // Confirmed on the card: the fact is the owner's list, then the build may start.
     const confirmed = { answer: "confirmed", fields: dated }
@@ -1263,6 +2153,128 @@ describe("a planned turn", () => {
       typed("looks good", o, card)
     )
     expect(words.ok && words.checked.stated).toEqual([QUOTE])
+  })
+})
+
+describe("a question in words", () => {
+  const asking = async () => {
+    const o = onboarding(without("business.audience", "business.phone"))
+    const out = await planTurn(
+      planner([
+        plan({
+          say: "Who books you most?",
+          next: { kind: "ask_open", about: "business.audience" },
+        }),
+      ]).model,
+      PRICE,
+      typed("We do weddings", o)
+    )
+    if (!out.ok) throw new Error("no plan")
+    const [said, card] = planParts(out.checked, typed("x", o), counter())
+    return { o, said, card: card as ToolPart }
+  }
+
+  it("docks in the tray as an ask_open card after the message", async () => {
+    const { said, card } = await asking()
+    expect(said).toMatchObject({ type: "text", text: "Who books you most?" })
+    expect(card).toMatchObject({
+      type: "tool-ask_open",
+      state: "input-available",
+      input: { about: "business.audience", skippable: true },
+    })
+  })
+
+  it("marks only an optional question as one the owner may skip", () => {
+    const o = onboarding(without("service_area.text", "business.phone"))
+    const s = typed("We do weddings", o)
+    const checked = checkPlan(
+      plan({
+        say: "Where are you based?",
+        next: { kind: "ask_open", about: "service_area.text" },
+      }),
+      s
+    )
+    if (!checked.ok) throw new Error(checked.errors.join("; "))
+    expect(planParts(checked.checked, s, counter())[1]).toMatchObject({
+      input: { about: "service_area.text", skippable: false },
+    })
+  })
+
+  it("gives the planner the owner's words, which it may state facts from", async () => {
+    const { o, card } = await asking()
+    const output = { answer: "stated", text: "Couples. Call 07700 900412." }
+    expect(cardAnswer(card, output, [])).toEqual({ kind: "facts", facts: [] })
+    const s: PlanState = {
+      onboarding: o,
+      pending: null,
+      input: { kind: "card", card, output },
+      rows: [],
+    }
+    expect(turnData(s)).toContain(
+      "answered in their words: Couples. Call 07700 900412."
+    )
+    const stated = await planTurn(
+      planner([
+        plan({
+          facts: {
+            "business.audience": { text: "Couples" },
+            "business.phone": { e164: "+447700900412" },
+          },
+          say: "Couples, noted.",
+        }),
+      ]).model,
+      PRICE,
+      s
+    )
+    expect(stated.ok && stated.checked.stated.map((f) => f.key).sort()).toEqual(
+      ["business.audience", "business.phone"]
+    )
+  })
+
+  it("passes an optional fact on a skip, and leaves any other skip to the planner", async () => {
+    const { card } = await asking()
+    const skipped = { answer: "skipped" }
+    expect(cardAnswer(card, skipped, [])).toEqual({
+      kind: "passed",
+      step: "business.audience",
+    })
+    const required = { ...card, input: { about: "service_area.text" } }
+    expect(cardAnswer(required, skipped, [])).toEqual({
+      kind: "facts",
+      facts: [],
+    })
+    expect(cardAnswer(card, { answer: "stated" }, [])).toBeNull()
+  })
+
+  it("reads the Skip this one message as a skip at every optional question", () => {
+    for (const key of ["business.audience", "business.proof"] as const) {
+      const o = onboarding(without(key, "business.phone"))
+      for (const card of [
+        call("tool-ask_open", { about: key }, counter()),
+        call(
+          "tool-ask_fact",
+          { key, skippable: true, prefill: null },
+          counter()
+        ),
+      ]) {
+        const s = typed(SKIP_REPLY, o, card)
+        const skip = `the owner tapped Skip on ${key}: set pending_card declined, record nothing for it and move on`
+        expect(
+          errorsOf(
+            plan({
+              pending_card: "answered",
+              facts: { [key]: { text: SKIP_REPLY } },
+            }),
+            s
+          ),
+          card.type
+        ).toContain(skip)
+        expect(
+          errorsOf(plan({ pending_card: "declined" }), s),
+          card.type
+        ).not.toContain(skip)
+      }
+    }
   })
 })
 
@@ -1336,6 +2348,124 @@ describe("a streamed turn", () => {
     expect(said.length).toBeGreaterThan(1)
     expect(said.slice(0, -1).every((s) => /[.?!]$/.test(s.trim()))).toBe(true)
     expect(out.firstChunkMs).not.toBeNull()
+  })
+
+  it("says what the plan is on before its message, and names its facts once they are committed", async () => {
+    const { model } = planner([
+      plan({
+        facts: { "business.offerings": { items: ["Weddings", "Proms"] } },
+        say: "Weddings and proms. Who books you most?",
+        next: { kind: "ask_open", about: "business.audience" },
+      }),
+    ])
+    const seen: [string, unknown][] = []
+    const out = await planTurn(
+      model,
+      PRICE,
+      typed("We do weddings and proms"),
+      undefined,
+      (text) => seen.push(["say", text]),
+      undefined,
+      {
+        send: (status) => seen.push(["status", status]),
+        commit: async (checked) => {
+          const keys = checked.stated.map((f) => f.key)
+          seen.push(["commit", keys])
+          return keys
+        },
+      }
+    )
+    expect(out.ok).toBe(true)
+    expect(seen.slice(0, 3)).toEqual([
+      [
+        "status",
+        { on: { kind: "fact", key: "business.offerings" }, facts: [] },
+      ],
+      ["commit", ["business.offerings"]],
+      [
+        "status",
+        {
+          on: { kind: "next", next: "ask_open" },
+          facts: ["business.offerings"],
+        },
+      ],
+    ])
+    expect(seen.slice(3).map(([kind]) => kind)).toEqual(
+      expect.arrayContaining(["say"])
+    )
+    expect(seen.slice(3).every(([kind]) => kind === "say")).toBe(true)
+  })
+
+  it("shows the plan's own line for the turn first, when it reads as one", async () => {
+    const seen: unknown[] = []
+    await planTurn(
+      // Written first, as the model is told to.
+      planner([
+        JSON.stringify({
+          doing: "Looking at the services you offer.",
+          ...plan({
+            facts: { "business.offerings": { items: ["Weddings", "Proms"] } },
+            say: "Weddings and proms. Who books you most?",
+            next: { kind: "ask_open", about: "business.audience" },
+          }),
+        }),
+      ]).model,
+      PRICE,
+      typed("We do weddings and proms"),
+      undefined,
+      () => undefined,
+      undefined,
+      { send: (status) => seen.push(status), commit: async () => [] }
+    )
+    expect(seen[0]).toEqual({
+      on: { kind: "doing", text: "Looking at the services you offer" },
+      facts: [],
+    })
+    expect(doingLine("")).toBeNull()
+    expect(doingLine("Saving business.audience")).toBeNull()
+    expect(doingLine("Noting an amazing answer")).toBeNull()
+    expect(doingLine("  Drafting quote   questions ")).toBe(
+      "Drafting quote questions"
+    )
+  })
+
+  it("writes no facts ahead of a build, and still says it is getting ready", async () => {
+    const seen: unknown[] = []
+    await planTurn(
+      planner([plan({ say: "Starting now.", next: { kind: "start_build" } })])
+        .model,
+      PRICE,
+      typed("go ahead", ready()),
+      undefined,
+      () => undefined,
+      undefined,
+      {
+        send: (status) => seen.push(status),
+        commit: async () => {
+          throw new Error("no early write before a build")
+        },
+      }
+    )
+    expect(seen).toEqual([
+      { on: { kind: "next", next: "start_build" }, facts: [] },
+    ])
+  })
+
+  it("retries a message with ceremony or praise, and hears it in the retry's instructions", async () => {
+    const praise = plan({ say: "Wonderful, it's an honour to be on the team." })
+    const good = plan({ say: "Noted. What area do you cover?" })
+    const run = planner([praise, good])
+    const out = await planTurn(run.model, PRICE, typed("hello"))
+    expect(out.ok).toBe(true)
+    expect(out.calls.map((c) => c.errors.length > 0)).toEqual([true, false])
+    expect(JSON.stringify(run.prompts[1])).toContain("ceremony or praise")
+    expect(await plannerInstructions()).toContain("How you sound")
+  })
+
+  it("offers no photo move: the photos are a tray question", async () => {
+    const instructions = await plannerInstructions()
+    expect(instructions).not.toContain("ask_upload")
+    expect(instructions).toContain("review_quote_form")
   })
 
   it("shows nothing of a plan whose next move is refused, and streams the retry", async () => {
@@ -1494,12 +2624,13 @@ describe("the planner's request", () => {
     )
   })
 
-  it("puts say last in the schema it shows the model", async () => {
+  it("puts doing first and say last in the schema it shows the model", async () => {
     const shown = await plannerInstructions()
     const schema = JSON.parse(
       shown.slice(shown.indexOf("key order:\n") + "key order:\n".length)
     ) as { properties: Record<string, unknown> }
     expect(Object.keys(schema.properties)).toEqual([
+      "doing",
       "pending_card",
       "facts",
       "chosen_for_owner",

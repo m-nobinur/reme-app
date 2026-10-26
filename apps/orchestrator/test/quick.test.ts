@@ -33,9 +33,15 @@ vi.mock("@workspace/db", async (importOriginal) => ({
 const tail = { fails: false as boolean }
 vi.mock("../src/tail.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/tail.ts")>()),
-  finishRevision: async () => {
+  finishRevision: async ({
+    steps,
+  }: {
+    steps: { do: <T>(name: string, fn: () => Promise<T>) => Promise<T> }
+  }) => {
+    await steps.do("astro check", async () => 0)
     if (tail.fails)
       throw new Error("astro build failed, fix it before reporting")
+    await steps.do("upload dist", async () => 0)
     const check = { exit_code: 0, output: "", ms: 1 }
     return {
       revisionId: "20000000-0000-4000-8000-000000000001",
@@ -52,7 +58,7 @@ vi.mock("../src/tail.ts", async (importOriginal) => ({
   },
 }))
 
-const { applyQuick, copyFindings, pickLane, quickEdit, quickPrompt } =
+const { applyQuick, copyFindings, pickLane, quickEdit, quickPrompt, wordsOf } =
   await import("../src/quick.ts")
 
 const CONFIG =
@@ -111,6 +117,21 @@ describe("quickPrompt", () => {
     expect(user).not.toContain("theme.css")
     // The same for every edit, so it caches.
     expect(quickPrompt("style", {}, [], "x").system).toBe(system)
+  })
+})
+
+describe("wordsOf", () => {
+  it("reads the new wording out of the one copy edit, and nothing else", () => {
+    expect(applyQuick("copy", FILES, reply([HERO])).words).toBe(
+      "Come home to breathing room"
+    )
+    expect(wordsOf([{ newText: "Professional home cleaning" }])).toBe(
+      "Professional home cleaning"
+    )
+    // Several edits, code and a long block are not words to quote.
+    expect(wordsOf([{ newText: "One" }, { newText: "Two" }])).toBeNull()
+    expect(wordsOf([{ newText: "heroHeading: () => <h1>x</h1>" }])).toBeNull()
+    expect(wordsOf([{ newText: "a".repeat(81) }])).toBeNull()
   })
 })
 
@@ -219,6 +240,13 @@ describe("quickEdit", () => {
     expect(report?.payload).toMatchObject({
       changes: [{ path: "src/site-config.ts" }],
       risks: ["[copy-check] /index.html: em dash in heading"],
+    })
+    // The panel's rows follow the steps it tells, and the ready line gets the words.
+    expect(
+      appended.filter((e) => e.type === "quick.step").map((e) => e.payload.step)
+    ).toEqual(["edit", "check", "preview"])
+    expect(appended.find((e) => e.type === "quick.edited")?.payload).toEqual({
+      words: "Come home to breathing room",
     })
     // Metered like a build turn, so the budget sees it.
     expect(appended.filter((e) => e.type === "runtime.turn")).toHaveLength(1)

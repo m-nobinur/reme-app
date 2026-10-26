@@ -6,6 +6,7 @@ import { EmptyState } from "@workspace/ui/components/empty-state"
 import { ReminderList } from "@workspace/ui/components/live-panel"
 import { META } from "@workspace/ui/lib/utils"
 import { type ReactNode, useEffect, useRef, useState } from "react"
+import { assistantOf } from "@/lib/briefing"
 import { groupReminders, type Needed } from "@/lib/reminders"
 import { useLiveWorkspace } from "@/lib/workspace"
 import { Completable, useBrowserZone } from "@/panel/workspace-panel"
@@ -17,7 +18,7 @@ import { Completable, useBrowserZone } from "@/panel/workspace-panel"
  * exactly as the panel completes it.
  */
 export const Route = createFileRoute("/app/reminders")({
-  component: RemindersPage,
+  component: Reminders,
 })
 
 const ACTION = buttonVariants({ variant: "outline", size: "sm" })
@@ -100,7 +101,7 @@ function Reminders() {
             Try again
           </Button>
         }
-        description="Reminders could not be loaded. Nothing was changed."
+        description="Couldn't load your reminders. Nothing was changed."
         icon={<ClockIcon />}
         role="alert"
         title="Something went wrong"
@@ -113,13 +114,14 @@ function Reminders() {
     workspace.reminderNotes,
     workspace.derivedReminders,
     workspace.attention,
-    zone
+    zone,
+    assistantOf(workspace)
   )
 
   return (
     <>
       <PageHeader
-        description="What needs you now, and the reminders you or Reme wrote down, by when they are due."
+        description={`What needs you now, then reminders from you and ${assistantOf(workspace)}, soonest first.`}
         title="Reminders"
       />
 
@@ -180,17 +182,5 @@ function Reminders() {
         </div>
       )}
     </>
-  )
-}
-
-/**
- * The page keeps to the composer's width and the left edge every page title
- * shares, so its actions stay clear of the panel floating at the top right.
- */
-function RemindersPage() {
-  return (
-    <div className="max-w-2xl">
-      <Reminders />
-    </div>
   )
 }

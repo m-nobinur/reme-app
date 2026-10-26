@@ -28,10 +28,11 @@ import {
   it,
   vi,
 } from "vitest"
+import { settleCard } from "../src/build-questions.ts"
 import { remember } from "../src/cos/memory.ts"
 import { getIndexing, getSearchPerformance } from "../src/cos/search-tools.ts"
 import {
-  answerQuestion,
+  answerQuestion as answerTool,
   buyDomain,
   CONNECT_RETRY_MS,
   checkDomain,
@@ -41,9 +42,13 @@ import {
   getFacts,
   getPreview,
   getWorkspace,
+  newContact,
+  ownersAnswer,
+  paceOf,
   recordReview,
   removeDomain,
   requestChange,
+  statedIn,
   type ToolContext,
   ToolFailed,
 } from "../src/cos/tools.ts"
@@ -114,6 +119,117 @@ const deadline = (ms: number) => {
 }
 const never = () => new Promise<Response>(() => undefined)
 
+describe("a claim the owner stated", () => {
+  it.each([
+    ["Local and fully insured", "we're local and fully insured", true],
+    ["Not VAT registered", "We are not VAT registered", true],
+    ["Insured", "we're not insured yet", false],
+    ["Fully insured", "We aren't fully insured", false],
+    ["Fully insured since 2009", "fully insured", false],
+  ])("%s from %s: %s", (proof, message, stated) => {
+    expect(statedIn(proof, message)).toBe(stated)
+  })
+})
+
+describe("an answer the owner gave", () => {
+  const said = ["Ring 0117 496 0125. We park on the street outside."]
+
+  it("is their words, or the number they typed", () => {
+    expect(ownersAnswer("street outside", said)).toBe(true)
+    expect(ownersAnswer("a car park", said)).toBe(false)
+    // Nothing of its own to check is no proof.
+    expect(ownersAnswer("the", said)).toBe(false)
+    // Every part of a value from one message, never pieced together.
+    const area = { key: "service_area.text", value: { text: "Bristol" } }
+    expect(ownersAnswer(area as never, ["Bristol and Bath"])).toBe(true)
+    expect(
+      ownersAnswer(
+        {
+          key: "service_area.radius",
+          value: { centre: "Leeds", radius_km: 25 },
+        } as never,
+        ["We're in Leeds.", "About 25 miles out."]
+      )
+    ).toBe(false)
+    const phone = (e164: string) =>
+      ownersAnswer({ key: "business.phone", value: { e164 } }, said)
+    expect(phone("+441174960125")).toBe(true)
+    expect(phone("+441174960999")).toBe(false)
+    expect(
+      ownersAnswer(
+        { key: "business.proof", value: { text: "Family run since 2009" } },
+        said
+      )
+    ).toBe(false)
+  })
+})
+
+describe("a build's pace", () => {
+  const now = Date.parse("2026-10-25T01:00:00.000Z")
+  const ago = (minutes: number) => now - minutes * 60_000
+  const build = {
+    state: "implementing" as const,
+    lane: "full" as const,
+    created_at: new Date(ago(40)).toISOString(),
+    review_ms: 2 * 60_000,
+  }
+  const expected = {
+    full: { p50: 420, p95: 900 },
+    quick: { p50: 15, p95: 45 },
+  }
+
+  it("counts the minutes run without the owner's reviews, and the quiet since the last work", () => {
+    const life = { work_ms: ago(12), resumed_ms: null, cause: null }
+    expect(paceOf(build, life, expected, now)).toEqual({
+      timing: {
+        running_minutes: 38,
+        quiet_minutes: 12,
+        overdue: true,
+        range: "about 39 to 47 minutes",
+      },
+    })
+    expect(
+      paceOf(
+        { ...build, created_at: new Date(ago(10)).toISOString() },
+        undefined,
+        expected,
+        now
+      )
+    ).toEqual({
+      timing: {
+        running_minutes: 8,
+        quiet_minutes: 10,
+        overdue: false,
+        range: "about 7 to 15 minutes",
+      },
+    })
+  })
+
+  it("names the last restart, and whether the build has worked since", () => {
+    const life = { work_ms: ago(1), resumed_ms: ago(3), cause: "stalled" }
+    expect(paceOf(build, life, expected, now).restarted).toEqual({
+      minutes_ago: 3,
+      cause: "stalled",
+      working: true,
+    })
+    expect(
+      paceOf(build, { ...life, work_ms: ago(14), cause: "x" }, expected, now)
+        .restarted
+    ).toEqual({ minutes_ago: 3, cause: "other", working: false })
+  })
+
+  it("says nothing of a build waiting on the owner, and falls back to the measured lanes", () => {
+    expect(
+      paceOf({ ...build, state: "awaiting_review" }, undefined, expected, now)
+    ).toEqual({})
+    // 38 minutes is past the measured 6 to 10, so the range moves above it.
+    expect(paceOf(build, undefined, undefined, now).timing).toMatchObject({
+      overdue: true,
+      range: "about 39 to 43 minutes",
+    })
+  })
+})
+
 describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
   const kit: Tenancy = tenancy(url as string, { max: 2 })
   let realFetch: typeof fetch
@@ -159,6 +275,7 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       SITE_HOST_SUFFIX: SUFFIX,
     } as unknown as Env,
     kit,
+    settleCard,
     owner: {
       orgId: who.orgId,
       session: {
@@ -307,11 +424,16 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       expect(output).toEqual({
         site: { host: null, live_version: null },
         builds: [],
+        stopped: [],
         questions: [],
         approvals: [],
         missing_facts: expect.any(Array),
         domains: [],
         expected_seconds: expect.any(Object),
+        expected_range: {
+          quick: "about 1 to 2 minutes",
+          full: "about 6 to 10 minutes",
+        },
       })
       expect(output.missing_facts.length).toBeGreaterThan(0)
     })
@@ -348,6 +470,33 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       await s.blocked(asking, request.request_id, 4)
       const output = kept("get_workspace", await getWorkspace(context(me), {}))
       expect(output.questions[0]?.why).toBe("x".repeat(499))
+    })
+
+    it("says how long a working build has run, its quiet and its last restart", async () => {
+      const s = seed(kit, me)
+      const working = await s.assignment("implementing")
+      await s.event(working, "runtime.turn", {}, 0.25)
+      await s.event(
+        working,
+        "agent.note",
+        { kind: "resumed", cause: "stalled" },
+        0.1
+      )
+      const paceNow = async () =>
+        kept("get_workspace", await getWorkspace(context(me), {})).builds.find(
+          (b) => b.assignment_id === working
+        )
+      // The note is not work: the build has been quiet since the turn.
+      expect(await paceNow()).toMatchObject({
+        timing: { running_minutes: 0, quiet_minutes: 15, overdue: false },
+        restarted: { minutes_ago: 6, cause: "stalled", working: false },
+      })
+      await s.event(working, "runtime.turn", {})
+      expect(await paceNow()).toMatchObject({
+        timing: { quiet_minutes: 0 },
+        restarted: { working: true },
+      })
+      await s.state(working, "cancelled")
     })
 
     it("shows another org nothing of this one's", async () => {
@@ -575,6 +724,29 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       )
     })
 
+    it("sends the change's label with the build and returns it on the summary", async () => {
+      const stub = creating(me)
+      const output = kept(
+        "request_change",
+        await requestChange(
+          context(me, stub),
+          {
+            text: "Make the hero title more professional",
+            label: "your hero title",
+          },
+          crypto.randomUUID(),
+          await turnOf(me)
+        )
+      )
+      expect(output).toMatchObject({
+        outcome: "started",
+        build: { label: "your hero title" },
+      })
+      expect(stub.calls[0]?.body).toMatchObject({
+        label: "your hero title",
+      })
+    })
+
     it("throws, never refuses, on an unknown outcome, and the rerun finds the one build", async () => {
       const approval = crypto.randomUUID()
       const hung = creating(me, true)
@@ -698,30 +870,38 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       expect(await versions()).toBe(before)
     })
 
-    it("starts a change whose text never touches contact, dropping the contact the model added", async () => {
-      const before = await phoneNow()
-      const turn = await turnOf(me, ['Change the hero to say "Spotless homes"'])
-      const stub = creating(me)
-      const output = kept(
-        "request_change",
-        await requestChange(
-          context(me, stub),
-          {
-            text: 'Change the hero to say "Spotless homes"',
-            change_kind: "copy",
-            contact: { phone: "+447700900222", email: "made@up.example" },
-          },
-          crypto.randomUUID(),
-          turn
+    it.each([
+      'Change the hero to say "Spotless homes"',
+      "Don't call us a family firm, just say we're local",
+    ])(
+      "starts a change whose text never touches contact, dropping the contact the model added: %s",
+      async (text) => {
+        const before = await phoneNow()
+        const turn = await turnOf(me, [text])
+        const stub = creating(me)
+        const output = kept(
+          "request_change",
+          await requestChange(
+            context(me, stub),
+            {
+              text,
+              change_kind: "copy",
+              contact: { phone: "+447700900222", email: "made@up.example" },
+            },
+            crypto.randomUUID(),
+            turn
+          )
         )
-      )
-      expect(output).toMatchObject({ outcome: "started" })
-      expect(await phoneNow()).toEqual(before)
-    })
+        expect(output).toMatchObject({ outcome: "started" })
+        expect(await phoneNow()).toEqual(before)
+      }
+    )
 
+    // The owner typed a phone number: a different one is refused for the
+    // model to correct. An email when they typed none is dropped (above).
     it.each([
       ["phone", { phone: "+441174960199" }],
-      ["email", { email: "someone@invented.example" }],
+      ["email", { email: "someone@invented.example", phone: "+441174960199" }],
     ])(
       "refuses a %s the owner never typed, changes no fact and starts nothing",
       async (_what, contact) => {
@@ -752,6 +932,20 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       }
     )
 
+    it("drops a phone and email the owner never typed anywhere, so the change needs no yes", async () => {
+      const said = "Add our opening hours to the contact page"
+      expect(
+        await newContact(
+          context(me),
+          {
+            text: "Add opening hours to the contact page",
+            contact: { phone: "+441423555019", email: "hello@example.co.uk" },
+          },
+          said
+        )
+      ).toBeNull()
+    })
+
     it("refuses a typed number the change text the owner approves does not name", async () => {
       const turn = await turnOf(me, [
         "Change the phone number to 0117 496 0125",
@@ -771,6 +965,100 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         error: { code: "contact.not_typed" },
       })
       expect(stub.calls).toHaveLength(0)
+    })
+
+    const proofNow = async () =>
+      (await getFacts(context(me), {})).facts.find(
+        (f) => f.key === "business.proof"
+      )?.value
+
+    it("records the owner's claims as their proof before the change starts, once, after what the site already says", async () => {
+      await kit.withOrg({ orgId: me.orgId }, (db) =>
+        supersedeFact(db, {
+          orgId: me.orgId,
+          key: "business.proof",
+          factType: "business",
+          value: { text: "Family run since 2009." },
+          provenance: { source: "owner_stated", confidence: 1 },
+        })
+      )
+      const input = {
+        text: "Say we're local and fully insured",
+        change_kind: "copy" as const,
+        proof: "Local and fully insured, with £5 million public liability",
+      }
+      const turn = await turnOf(me, [
+        "Can you say we're local and fully insured? 5 million pounds public liability.",
+      ])
+      // A retry records nothing twice.
+      const key = crypto.randomUUID()
+      for (const _ of [1, 2]) {
+        const output = kept(
+          "request_change",
+          await requestChange(context(me, creating(me)), input, key, turn)
+        )
+        expect(output).toMatchObject({ outcome: "started" })
+      }
+      expect(await proofNow()).toEqual({
+        text: "Family run since 2009. Local and fully insured, with £5 million public liability",
+      })
+    })
+
+    it.each([
+      ["Remove it", "Yes, remove it please."],
+      ["Please start again", "Please start again, it got stuck."],
+    ])(
+      "drops the instruction %s as a claim and still starts the change",
+      async (proof, said) => {
+        const before = await proofNow()
+        const output = kept(
+          "request_change",
+          await requestChange(
+            context(me, creating(me)),
+            { text: "Remove the stray text from the facts", proof },
+            crypto.randomUUID(),
+            await turnOf(me, [said])
+          )
+        )
+        expect(output).toMatchObject({ outcome: "started" })
+        expect(await proofNow()).toEqual(before)
+      }
+    )
+
+    it("drops a claim that is only the change restated, and still starts the change", async () => {
+      const before = await proofNow()
+      const turn = await turnOf(me, [
+        "That build got stuck, please start the website again.",
+      ])
+      const output = kept(
+        "request_change",
+        await requestChange(
+          context(me, creating(me)),
+          { text: "Build the website again", proof: "Build the website again" },
+          crypto.randomUUID(),
+          turn
+        )
+      )
+      expect(output).toMatchObject({ outcome: "started" })
+      expect(await proofNow()).toEqual(before)
+    })
+
+    it("drops a claim with a word the owner never wrote, records nothing and still starts the change", async () => {
+      const before = await proofNow()
+      const turn = await turnOf(me, ["Say we're insured"])
+      const stub = creating(me)
+      const output = kept(
+        "request_change",
+        await requestChange(
+          context(me, stub),
+          { text: "Say we're insured", proof: "Fully insured since 2001" },
+          crypto.randomUUID(),
+          turn
+        )
+      )
+      expect(output).toMatchObject({ outcome: "started" })
+      expect(stub.calls).toHaveLength(1)
+      expect(await proofNow()).toEqual(before)
     })
 
     it("refuses as the closed shape, detail dropped", async () => {
@@ -815,6 +1103,41 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       key: "business.email",
       value: { address: "owner@cos-probe.invalid" },
     } as const
+
+    /** A turn whose owner wrote every answer these cases give. */
+    let spoke: Promise<{ sessionId: string }> | undefined
+    const answerQuestion = async (
+      ctx: Parameters<typeof answerTool>[0],
+      input: Parameters<typeof answerTool>[1],
+      key: string,
+      turn?: { sessionId: string }
+    ) => {
+      spoke ??= turnOf(me, [
+        "Ring 01234 567890 or email owner@cos-probe.invalid. We're shut on Mondays.",
+      ])
+      return answerTool(ctx, input, key, turn ?? (await spoke))
+    }
+
+    it("refuses an answer the owner never wrote, without calling the orchestrator", async () => {
+      const { s, asking, waited } = await blocked(me)
+      const stub = answering({ [waited.request_id]: waited.field })
+      const typed = await turnOf(me, ["Our number is changing soon."])
+      const output = kept(
+        "answer_question",
+        await answerQuestion(
+          context(me, stub),
+          { request_id: waited.request_id, value: PHONE },
+          crypto.randomUUID(),
+          typed
+        )
+      )
+      expect(output).toMatchObject({
+        outcome: "refused",
+        error: { code: "answer.not_owners" },
+      })
+      expect(stub.calls).toHaveLength(0)
+      await s.state(asking, "cancelled")
+    })
 
     /**
      * The orchestrator's `/answer` as it reads a value (`answers` in its

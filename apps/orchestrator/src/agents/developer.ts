@@ -47,7 +47,7 @@ import {
 } from "@workspace/facade"
 import { cloudflareSandbox } from "@workspace/facade/cloudflare"
 import { z } from "zod"
-import type { Brief } from "../brief.ts"
+import { type Brief, retryContextSignal } from "../brief.ts"
 import {
   copyInstructions,
   FAN_OUT,
@@ -111,19 +111,40 @@ type Session = {
   /** Operations already reported as interrupted, so one failure wakes the Workflow once. */
   interruptions: Set<string>
   budgetExhausted: boolean
+  /** The running delivery's abort signal: the stall watchdog's stop wakes the Workflow itself. */
+  signal?: AbortSignal
 }
 const sessions = new Map<string, Session>()
 
 // One tee and one budget guard per conversation, found by the instance id
-// every event and interception carries. Registered once per isolate.
-observe((observation, ctx) => {
+// every event and interception carries. One subscriber per isolate: a module
+// evaluated again (vite reloading it in dev) replaces it, never adds a second.
+const OBSERVER = Symbol.for("reme.developer.observer")
+const held = globalThis as { [OBSERVER]?: () => void }
+held[OBSERVER]?.()
+held[OBSERVER] = observe(observed)
+
+export function observed(...[observation, ctx]: Parameters<Observer>) {
+  // A submission that throws outside any turn (its container not running
+  // yet, measured locally 2026-10-25) settles with no operation event, so
+  // nothing else would wake the Workflow before its 45 minute watchdog.
+  const o = observation as {
+    type?: string
+    operation?: string
+    submissionId?: string
+  }
+  if (o.type === "submission_recovery" && o.operation === "process_submission")
+    return unstarted.has(ctx.id)
+      ? undefined
+      : tell(ctx.id, "interrupted", SANDBOX_UPDATING, o.submissionId)
   const found = sessions.get(ctx.id)
   if (!found) return
   found.tee.subscriber(observation)
   // Typed void | Promise<void>, but the budget guard's observer is synchronous.
   void found.budget.instrumentation.observe(observation, ctx)
   interrupted(found, observation)
-})
+}
+type Observer = Parameters<typeof observe>[0]
 
 /**
  * A run that ends in an error (a provider stream that breaks, measured on
@@ -325,21 +346,30 @@ export function Developer(props: AgentProps) {
   try {
     return render(props)
   } catch (error) {
-    startFailed(props.id, error)
+    unstarted.add(props.id)
+    tell(props.id, "start_failed", String(error).slice(0, 300))
     throw error
   }
 }
 
-function startFailed(id: string, error: unknown) {
-  const reason = String(error).slice(0, 300)
+/** Instances whose render threw: their failed submission is already told. */
+const unstarted = new Set<string>()
+
+/** A failure no turn reports: logged first, then the Workflow is woken with it. */
+function tell(
+  id: string,
+  kind: "start_failed" | "interrupted",
+  reason: string,
+  key?: string
+) {
   const found = sessions.get(id)
-  found?.tee.emit("developer.start_failed", { reason })
+  found?.tee.emit(`developer.${kind}`, { reason })
   Promise.resolve(found?.tee.flush())
     .then(() => workflow(id))
     .then((instance) =>
       instance.sendEvent({
         type: "developer",
-        payload: { kind: "start_failed", reason },
+        payload: { kind, reason, ...(key ? { key } : {}) },
       })
     )
     .catch(() => undefined)
@@ -368,7 +398,8 @@ function render({ id }: AgentProps) {
     false
   )
   const askedForFallback =
-    delivery.kind === "signal" && delivery.attributes?.model === "fallback"
+    brief.fallback === true ||
+    (delivery.kind === "signal" && delivery.attributes?.model === "fallback")
   // QE4: a section change starts on the quick section role (Sonnet, low) and
   // moves to the build role, for good, when the Workflow's resume or repair
   // signal asks for it: the quick lane's last step up.
@@ -420,11 +451,12 @@ function render({ id }: AgentProps) {
     false
   )
 
-  useAgentStart(async ({ harness }) => {
+  useAgentStart(async ({ append, harness, signal }) => {
     // Every delivery is a new turn, so a turn a terminal tool ended reopens
     // here, and a failure that woke the Workflow before may wake it again.
     current.gate.open()
     current.interruptions.clear()
+    current.signal = signal
     if (askedForBuildRole && brief.role && !onBuildRole) {
       setOnBuildRole(true)
       current.tee.emit("model.switched", {
@@ -451,6 +483,9 @@ function render({ id }: AgentProps) {
         instructions: shown(),
       })
       setSegmentLogged(true)
+      // The first delivery only: a retry hears what failed last time.
+      const previous = retryContextSignal(brief)
+      if (previous) append(previous)
     }
     // biome-ignore lint/suspicious/noUnnecessaryConditions: same, the persisted value
     if (restored && (await siteKept(current))) return
@@ -536,13 +571,19 @@ function render({ id }: AgentProps) {
 
   useResponseFinish(({ response }) => {
     // A turn that wakes the Workflow ends in an accepted report or a
-    // question, or woke it on the way (a failure, the budget). One that ends
-    // any other way, the lead giving up after refused reports or running out
-    // of turns, would leave the build waiting on a wake that never comes.
+    // question, or woke it on the way (a failure, the budget, the stall
+    // watchdog's stop). One that ends any other way, the lead giving up after
+    // refused reports or running out of turns, would leave the build waiting
+    // on a wake that never comes.
     const reported = response.toolCalls.some(
       (call) => !call.isError && WAKING_TOOLS.has(call.tool)
     )
-    if (reported || current.budgetExhausted || current.interruptions.size > 0)
+    if (
+      reported ||
+      current.budgetExhausted ||
+      current.interruptions.size > 0 ||
+      current.signal?.aborted
+    )
       current.tee.flush().catch(() => undefined)
     else wake(current, "unreported", "developer.no_report", "unreported")
   })
@@ -630,6 +671,7 @@ const writePagesTool = (current: Session) =>
       const tasks = writerTasks(plan, serviceCount(brief))
       const total = plan.pages.length
       const shown = new Set<string>()
+      const started = new Set<string>()
       current.tee.emit("build.progress", { stage: "pages", item: null, total })
 
       // One change at a time, through the assignment's queue for this file.
@@ -640,10 +682,15 @@ const writePagesTool = (current: Session) =>
           if (next !== content) await stub.writeFile(CONFIG, next)
           return next
         })
-      const roles = {
-        page: roleOf(spec, "page"),
-        copy: roleOf(spec, "copy"),
+      // A retry after a provider failure writes on the fallback model too.
+      const writer = (role: "page" | "copy") => {
+        const routed = roleOf(spec, role)
+        const { fallback } = current.runtime
+        return brief.fallback && fallback
+          ? { ...routed, model: fallback }
+          : routed
       }
+      const roles = { page: writer("page"), copy: writer("copy") }
       // One string per agent, so siblings share a cached prefix.
       const systems = {
         page: pageInstructions(brief),
@@ -713,6 +760,19 @@ const writePagesTool = (current: Session) =>
         staggerMs: 3000,
         call,
         edit,
+        // A page is at work from its first writer's start and written at its
+        // first writer's end; `working` rows never count as written.
+        onStarted: (task) => {
+          const page = pageOfPrompt(task.prompt)
+          if (!page || started.has(page)) return
+          started.add(page)
+          current.tee.emit("build.progress", {
+            stage: "pages",
+            item: page,
+            total,
+            working: true,
+          })
+        },
         onWritten: (task) => {
           warm.kick()
           const page = pageOfPrompt(task.prompt)
@@ -778,6 +838,7 @@ export const askChief = (current: Session) =>
         requested_by_staff_id: spec.staff_id,
         field: data.field,
         why: data.why,
+        question: data.question,
         answer_schema: data.answer_schema,
         options: askedOptions(data),
         blocking: data.blocking,
@@ -814,18 +875,25 @@ export const reportComplete = (current: Session) =>
   defineTool({
     name: "report_complete",
     description:
-      "Report the build done. Runs astro check and astro build, uploads the site, and ends your turn. Call it only when every claim on the site traces to a fact and the site builds.",
+      "Report the build done. Runs astro check and astro build, uploads the site, and ends your turn. Call it only when every claim on the site traces to a fact and the site builds. In left_out, list each claim or section you left off or left empty because no fact supports it (opening hours, an overview, a guarantee), as one question for the owner in ask_chief's shape (field, question, answer_schema, options); the owner is offered them once the draft is ready. Anything left out goes in left_out, never only in risks. Set as_asked to false when a change could not be made the way the owner asked and you made the nearest change instead.",
     input: toolInput(
       CompletionReport.pick({
         summary: true,
         changes: true,
         risks: true,
         decisions_needed: true,
+        left_out: true,
+        as_asked: true,
       })
     ),
     harness: true,
     durable: true,
     async run({ data, harness, step }) {
+      // Thrown before the build runs, so the model fixes the list and calls again.
+      for (const item of data.left_out ?? []) {
+        const refusal = refuseQuestion(item)
+        if (refusal) throw new Error(`left_out ${item.field}: ${refusal}`)
+      }
       const { spec } = current.runtime
       const orgId = spec.org_id
       const assignmentId = current.brief.snapshot.assignment_id
@@ -870,6 +938,13 @@ export const reportComplete = (current: Session) =>
         checks: checksOf({ check, build, custom }),
         risks: data.risks,
         decisions_needed: data.decisions_needed,
+        ...(data.left_out?.length && {
+          left_out: data.left_out.map((item) => ({
+            ...item,
+            options: askedOptions(item),
+          })),
+        }),
+        ...(data.as_asked === false && { as_asked: false }),
         reported_at: new Date().toISOString(),
       })
       // Model output: nothing downstream may promote it (§28.3).

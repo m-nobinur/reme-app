@@ -10,6 +10,7 @@ import {
   checkContent,
   checkLinks,
   checkPlannedPages,
+  checkPlannedSections,
   checkStructuredData,
   checkTypes,
   factsForContent,
@@ -448,6 +449,38 @@ describe("the planned pages", () => {
     expect(result?.message).toContain(
       "restore src/pages/services.astro, src/pages/service-area.astro"
     )
+    expect(GateResult.parse(result)).toEqual(result)
+  })
+})
+
+describe("the planned sections", () => {
+  const plan = (...kinds: string[]) =>
+    ({
+      pages: [{ page: "home", sections: kinds.map((kind) => ({ kind })) }],
+    }) as never
+  const page = (html: string) => [{ file: "index.html", html }]
+
+  it("passes when the gallery is drawn, and when none is planned", () => {
+    const drawn = page(
+      '<main><section class="band gallery"><ul></ul></section>'
+    )
+    expect(checkPlannedSections(plan("hero", "gallery"), drawn)).toBeNull()
+    expect(checkPlannedSections(plan("hero"), page("<main></main>"))).toBeNull()
+  })
+
+  it("fails the build gate when the plan holds a gallery the page does not draw", () => {
+    const result = checkPlannedSections(
+      plan("hero", "gallery"),
+      page(
+        '<section class="band section"><ul class="gallery-grid"></ul></section>'
+      )
+    )
+    expect(result).toMatchObject({
+      gate: "build",
+      passed: false,
+      offending_node: "home",
+    })
+    expect(result?.message).toContain("site.photo1Src")
     expect(GateResult.parse(result)).toEqual(result)
   })
 })

@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
+import type { QuestionReply } from "@workspace/contracts"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { EMPTY_WORKSPACE } from "../attention"
 import { apiSource, treeOf } from "./client"
@@ -148,6 +149,7 @@ const workspace = {
   attention: [approval, question, alert, report],
   missing_facts: [],
   assistant_name: null,
+  assistant_avatar: null,
   reminders: { notes: [], derived: [] },
 }
 const staff = {
@@ -267,7 +269,7 @@ it("reads attention from the workspace, in its order and the owner's words", asy
     {
       kind: "approval",
       id: APPROVAL,
-      title: "Version 4 is ready to publish",
+      title: "Your website is ready for you to review",
       raisedBy: "Alex",
       expiresAt: EXPIRES,
     },
@@ -563,6 +565,7 @@ it("reads a changed workspace with its tag, builds, facts and reminders", async 
       attention: [],
       missing_facts: ["business.phone"],
       assistant_name: "Ava",
+      assistant_avatar: "she_2",
       reminders: {
         notes: [],
         derived: [{ rule: "facts_missing", keys: ["business.phone"] }],
@@ -580,6 +583,7 @@ it("reads a changed workspace with its tag, builds, facts and reminders", async 
     url: "http://fictional.reme.localhost:3004",
     missingFacts: ["business.phone"],
     assistantName: "Ava",
+    assistantAvatar: "she_2",
     derivedReminders: [{ rule: "facts_missing", keys: ["business.phone"] }],
   })
   // Nothing to name, so the directory is not read.
@@ -630,8 +634,6 @@ it("polls in one request, naming the asker by id for the frame to resolve", asyn
   expect(read !== "unchanged" && read.attention[0]).toMatchObject({
     kind: "question",
     raisedById: DEV,
-    assignmentId: ASSIGNMENT,
-    answer: { kind: "fact", key: "hours.weekday" },
   })
 })
 
@@ -649,7 +651,7 @@ it("counts a queued build as open but not working", async () => {
 
 it("refuses an id that is not a uuid before any request is made", async () => {
   // `new URL` collapses dot segments, so ".." would reach another route.
-  await expect(apiSource.answer("..", REQUEST, "x", "k")).rejects.toThrow()
+  await expect(apiSource.answer("..", reply("x"), "k")).rejects.toThrow()
   await expect(apiSource.cancelBuild("../changes")).rejects.toThrow()
   await expect(apiSource.preview(".")).rejects.toThrow()
   await expect(apiSource.conversation("..")).rejects.toThrow()
@@ -684,60 +686,42 @@ it("shows the question /workspace says the build waits on, and no other", async 
   )
 })
 
-it("sends an answer to the build it blocks, with the caller's key", async () => {
-  answers[`POST /builds/${ASSIGNMENT}/answer`] = Response.json(
-    {},
-    { status: 202 }
-  )
+/** The owner's answer to the question `REQUEST` in message `msg-1`. */
+const reply = (value: string | Record<string, string>): QuestionReply => ({
+  message_id: "msg-1",
+  question_id: REQUEST,
+  answer: { kind: "value", value },
+})
+
+const QUESTIONS = `POST /conversations/${CONVERSATION}/questions`
+
+it("sends an answer to the conversation that asked, with the caller's key", async () => {
+  answers[QUESTIONS] = Response.json({})
   const value = { open: "08:00", close: "17:00" }
-  expect(await apiSource.answer(ASSIGNMENT, REQUEST, value, "k-1")).toEqual({
+  expect(await apiSource.answer(CONVERSATION, reply(value), "k-1")).toEqual({
     done: true,
   })
-  expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
-    request_id: REQUEST,
-    value,
-  })
+  expect(JSON.parse(String(calls[0]?.init?.body))).toEqual(reply(value))
   expect(headerOf(calls[0], "idempotency-key")).toBe("k-1")
 })
 
 it("says why an answer was refused, including one already answered differently", async () => {
-  answers[`POST /builds/${ASSIGNMENT}/answer`] = refusal(400, "answer.invalid")
-  expect(await apiSource.answer(ASSIGNMENT, REQUEST, "x", "k")).toEqual({
+  answers[QUESTIONS] = refusal(400, "answer.invalid")
+  expect(await apiSource.answer(CONVERSATION, reply("x"), "k")).toEqual({
     done: false,
     reason: expect.stringContaining("does not fit the question"),
   })
-  answers[`POST /builds/${ASSIGNMENT}/answer`] = refusal(
-    409,
-    "answer.already_given"
-  )
+  answers[QUESTIONS] = refusal(409, "answer.already_given")
   // A different answer is on record: this one was not, and the question is
-  // gone from the build.
-  expect(await apiSource.answer(ASSIGNMENT, REQUEST, "x", "k")).toEqual({
+  // settled.
+  expect(await apiSource.answer(CONVERSATION, reply("x"), "k")).toEqual({
     done: false,
     gone: true,
     reason: expect.stringContaining("already answered"),
   })
-  answers[`POST /builds/${ASSIGNMENT}/answer`] = new Response(null, {
-    status: 502,
-  })
+  answers[QUESTIONS] = new Response(null, { status: 502 })
   await expect(
-    apiSource.answer(ASSIGNMENT, REQUEST, "x", "k")
-  ).rejects.toThrow()
-})
-
-it("sends the owner's decision on a plan with their own key, and words a stale one", async () => {
-  answers[`POST /builds/${ASSIGNMENT}/blueprint`] = {
-    assignment_id: ASSIGNMENT,
-    state: "implementing",
-  }
-  const change = { decision: "change" as const, note: "Add a gallery page" }
-  expect(await apiSource.decideBlueprint(ASSIGNMENT, change, "k1")).toEqual({
-    done: true,
-  })
-  expect(JSON.parse(String(calls[0]?.init?.body))).toEqual(change)
-  expect(headerOf(calls[0], "idempotency-key")).toBe("k1")
-  await expect(
-    apiSource.decideBlueprint("../changes", change, "k1")
+    apiSource.answer(CONVERSATION, reply("x"), "k")
   ).rejects.toThrow()
 })
 
@@ -767,7 +751,7 @@ it("deletes the account with DELETE and one key, and words the refusals", async 
   await expect(apiSource.deleteAccount()).rejects.toThrow()
 })
 
-it("reads a build's preview and its three screenshots", async () => {
+it("reads a build's preview link, leaving its screenshots to the revision's own path", async () => {
   const link = {
     revision_id: REVISION,
     url: "https://preview.example.invalid/?t=a",
@@ -780,16 +764,15 @@ it("reads a build's preview and its three screenshots", async () => {
   expect(await apiSource.preview(ASSIGNMENT)).toEqual({
     revisionId: REVISION,
     url: link.url,
-    screenshots: link.screenshots,
     expiresAt: EXPIRES,
   })
 })
 
 it("sends a change in the owner's words, and says why one is refused", async () => {
-  answers["POST /changes"] = refusal(409, "change.question_open")
+  answers["POST /changes"] = refusal(409, "change.build_busy")
   expect(await apiSource.requestChange("Bigger logo", "k-2")).toEqual({
     done: false,
-    reason: expect.stringContaining("Answer it first"),
+    reason: expect.stringContaining("Ask again once"),
   })
   expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
     text: "Bigger logo",
@@ -797,11 +780,22 @@ it("sends a change in the owner's words, and says why one is refused", async () 
 })
 
 it("sends the change kind a photo action names", async () => {
-  answers["POST /changes"] = refusal(409, "change.question_open")
+  answers["POST /changes"] = refusal(409, "change.build_busy")
   await apiSource.requestChange("Try another photo", "k-4", "photo")
   expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
     text: "Try another photo",
     change_kind: "photo",
+  })
+})
+
+it("asks the api to post a panel note in the chat, in the conversation named", async () => {
+  answers["POST /changes"] = refusal(409, "change.build_busy")
+  await apiSource.requestChange("Bigger logo", "k-5", undefined, {
+    conversation_id: REQUEST,
+  })
+  expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
+    text: "Bigger logo",
+    chat: { conversation_id: REQUEST },
   })
 })
 

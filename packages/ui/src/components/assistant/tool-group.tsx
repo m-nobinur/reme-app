@@ -1,10 +1,12 @@
 import { type MessagePrimitive, useScrollLock } from "@assistant-ui/react"
-import { CaretDownIcon, SpinnerGapIcon } from "@phosphor-icons/react"
+import { CaretDownIcon } from "@phosphor-icons/react"
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@workspace/ui/components/collapsible"
+import { StatusLine } from "@workspace/ui/components/status-line"
+import { groupLine } from "@workspace/ui/lib/activity-copy"
 import { cn } from "@workspace/ui/lib/utils"
 import {
   type FC,
@@ -16,7 +18,8 @@ import {
 
 type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart
 
-const ANIMATION_DURATION = 200
+// The enter token, in milliseconds for the scroll lock.
+const ANIMATION_DURATION = 250
 
 type ToolGroupRootProps = Omit<
   React.ComponentProps<typeof Collapsible>,
@@ -84,10 +87,6 @@ function ToolGroupTrigger({
   count: number
   active?: boolean
 }) {
-  // The owner's words: the assistant checks things, it does not "call
-  // tools". Present tense while it still is, past once it has.
-  const label = `${active ? "Checking" : "Checked"} ${count} ${count === 1 ? "thing" : "things"}`
-
   return (
     <CollapsibleTrigger
       data-slot="tool-group-trigger"
@@ -98,26 +97,24 @@ function ToolGroupTrigger({
       )}
       {...props}
     >
-      {active && (
-        <SpinnerGapIcon
-          data-slot="tool-group-trigger-loader"
-          className="aui-tool-group-trigger-loader size-3 shrink-0 animate-spin [animation-duration:0.6s]"
-        />
-      )}
       <span
         data-slot="tool-group-trigger-label"
-        className={cn(
-          "aui-tool-group-trigger-label-wrapper inline-block text-start leading-none",
-          active && "shimmer motion-reduce:animate-none"
-        )}
+        className="aui-tool-group-trigger-label-wrapper inline-block text-start leading-none"
       >
-        {label}
+        {/* A trigger is a control, so it is there from the first paint. */}
+        <StatusLine
+          announce={false}
+          delay={0}
+          kind="checking"
+          label={groupLine(count, active)}
+          state={active ? "working" : "done"}
+        />
       </span>
       <CaretDownIcon
         data-slot="tool-group-trigger-chevron"
         className={cn(
           "aui-tool-group-trigger-chevron size-3 shrink-0",
-          "transition-transform duration-(--animation-duration) ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
+          "transition-transform duration-(--animation-duration) ease-standard motion-reduce:transition-none",
           "-rotate-90",
           "group-data-open/trigger:rotate-0",
           "group-data-panel-open/trigger:rotate-0"
@@ -137,7 +134,7 @@ function ToolGroupContent({
       data-slot="tool-group-content"
       className={cn(
         "aui-tool-group-content relative overflow-hidden text-sm outline-none",
-        "group/collapsible-content ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:animate-none",
+        "group/collapsible-content ease-standard motion-reduce:animate-none",
         "data-closed:animate-collapsible-up",
         "data-open:animate-collapsible-down",
         "data-closed:fill-mode-forwards",
@@ -150,7 +147,7 @@ function ToolGroupContent({
       <div
         className={cn(
           "mt-1 flex flex-col gap-1",
-          "[&>*]:fade-in-0 [&>*]:slide-in-from-top-1 [&>*]:animation-duration-(--animation-duration) [&>*]:animate-in [&>*]:blur-in-[2px] [&>*]:ease-[cubic-bezier(0.32,0.72,0,1)]",
+          "[&>*]:fade-in-0 [&>*]:slide-in-from-top-1 [&>*]:animation-duration-(--animation-duration) [&>*]:animate-in [&>*]:blur-in-[2px] [&>*]:ease-standard",
           "[&>*]:motion-reduce:animate-none",
           "[&>*:nth-child(2)]:[animation-delay:40ms]",
           "[&>*:nth-child(3)]:[animation-delay:80ms]",
@@ -165,7 +162,7 @@ function ToolGroupContent({
 }
 
 /**
- * A consecutive run of tool calls, as one disclosure. This is the shape
+ * A consecutive run of tool calls at work, as one disclosure. This is the shape
  * `Thread`'s `ToolGroup` slot passes, so the composition lives here rather than
  * inline in the thread.
  */
@@ -174,8 +171,12 @@ const ToolGroup: FC<PropsWithChildren<{ group: ThreadGroupPart }>> = ({
   children,
 }) => {
   // A "1 tool call" disclosure wrapping one tool call's own disclosure costs
-  // the reader two taps to see one thing. Group only what there is a group of.
-  if (group.indices.length < 2) return children
+  // the reader two taps to see one thing. Group only what there is a group of,
+  // and only while it runs: once done, reads draw nothing and a card stands
+  // on its own, so "Checked 3 things" would open onto nothing.
+  if (group.indices.length < 2 || group.status.type !== "running") {
+    return children
+  }
 
   return (
     <ToolGroupRoot>

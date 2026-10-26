@@ -1,6 +1,6 @@
 import {
-  BlueprintReviewOutput,
   type BuildLane,
+  BuildSummary,
   type ChangeKind,
   type EnvelopeBody,
   envelope,
@@ -26,6 +26,7 @@ import {
   events,
   facts,
   logFailure,
+  type OrgScopedDb,
   orgs,
   resolveOrgBySlug,
   STAFF_CODE,
@@ -34,7 +35,6 @@ import {
   staff,
   steerByKey,
   steerKeyHash,
-  supersedeFact,
   type Tenancy,
   tenancy,
   toAssignment,
@@ -43,7 +43,12 @@ import {
   toSiteRevision,
   waitedOn,
 } from "@workspace/db"
-import { canonical, init, SubmissionConflictError } from "@workspace/facade"
+import {
+  canonical,
+  getAgentInstance,
+  init,
+  SubmissionConflictError,
+} from "@workspace/facade"
 import {
   PREVIEW_TTL_S,
   SCREENSHOTS,
@@ -69,7 +74,6 @@ import {
   remove,
   revokeDomains,
 } from "./domain-flow.ts"
-import { PLAN_ROUNDS } from "./planner.ts"
 import {
   activeDeployment,
   clearPointers,
@@ -80,7 +84,8 @@ import {
 } from "./publish.ts"
 import { answers } from "./question.ts"
 import { pickLane } from "./quick.ts"
-import { publishedSource } from "./revise.ts"
+import { recordAnswer } from "./relay.ts"
+import { holdDraft, publishedSource } from "./revise.ts"
 import { endSandbox, endSite, probe } from "./sandbox.ts"
 import { connectGoogle } from "./search.ts"
 import { liveInspect, livePerformance } from "./search-read.ts"
@@ -294,7 +299,8 @@ bridge.post("/", async (c) => {
     model?: unknown
     withhold?: unknown
     change_kind?: unknown
-    review?: unknown
+    draft_revision_id?: unknown
+    label?: unknown
   }
   const kind = typeof body.kind === "string" ? body.kind : "site.build"
   // Both are the console's test levers; an owner gets the defaults.
@@ -336,19 +342,156 @@ bridge.post("/", async (c) => {
       detail: { length: goal.length, max: GOAL_MAX },
     })
   }
+  const label = BuildSummary.shape.label.safeParse(
+    typeof body.label === "string" ? body.label.trim() : undefined
+  ).data
+  // A change to a site not live yet names the draft it starts from.
+  const draft = body.draft_revision_id
+  if (
+    draft !== undefined &&
+    (kind !== "site.revise" || !Uuid.safeParse(draft).success)
+  ) {
+    return failure(c, 400, {
+      class: "validation",
+      code: "assignment.draft_invalid",
+      message: "draft_revision_id is a revision id, and only on a site.revise.",
+      detail: {},
+    })
+  }
   return createAssignment(c, key, {
     kind,
     goal,
     model,
     withhold,
     ...pickLane(kind, body.change_kind),
-    // "Skip all" in onboarding (ADR-038): the plan is built without the card's wait.
-    skip_review: body.review === "skip",
+    ...(typeof draft === "string" ? { draft } : {}),
+    // A label that does not fit is dropped, never a reason to refuse the change.
+    ...(label ? { label } : {}),
   })
 })
 
 /** Builds an owner may start in 24 hours (open item 76: a guess until someone hits it). */
 const OWNER_DAILY_BUILDS = 20
+
+export type NewAssignment = {
+  kind: string
+  goal: string
+  model: "A" | "B"
+  withhold: string[]
+  lane: BuildLane
+  change_kind: ChangeKind | null
+  /** The failed build this one starts again (retry.ts), whose plan it keeps. */
+  retry_of?: { assignment_id: string; blueprint: unknown }
+  /** The owner's draft a change starts from, before the site is live (`holdDraft`). */
+  draft?: string
+  /** A change's short name in the owner's terms, for the panel and the ready line. */
+  label?: string
+}
+
+/** The row and its `assignment.created` event, or why not, in the caller's transaction. */
+export async function insertAssignment(
+  db: OrgScopedDb,
+  orgId: string,
+  key: string,
+  owner: boolean,
+  input: NewAssignment
+): Promise<
+  | { row: typeof assignments.$inferSelect; replayed: boolean }
+  | { capped: true }
+  | { unpublished: true }
+  | { missing: true }
+  | { draft_moved: true }
+> {
+  const { kind, goal, model, withhold, lane, change_kind } = input
+  const taint: TaintLabel[] =
+    owner || kind === "site.revise" ? ["untrusted_input"] : []
+  const [existing] = await db
+    .select()
+    .from(assignments)
+    .where(eq(assignments.idempotencyKey, key))
+  if (existing) return { row: existing, replayed: true }
+  if (owner) {
+    // The owner's own builds only, read off each recent row's created
+    // event, so console and harness builds on the org use none of it.
+    // ponytail: count-then-insert, so k concurrent creates at 19 can all
+    // pass and overshoot by k - 1. An advisory lock per org if that matters.
+    const [today] = await db
+      .select({ built: sql<number>`count(*)::int` })
+      .from(assignments)
+      .innerJoin(
+        events,
+        sql`${events.assignmentId} = ${assignments.id} and ${events.type} = 'assignment.created'`
+      )
+      .where(
+        sql`${assignments.createdAt} > now() - interval '24 hours' and ${events.payload}->>'origin' = 'owner'`
+      )
+    if ((today?.built ?? 0) >= OWNER_DAILY_BUILDS) {
+      return { capped: true as const }
+    }
+  }
+  const codes = await db
+    .select({ id: staff.id, code: staff.staffCode })
+    .from(staff)
+    .where(
+      sql`${staff.staffCode} in (${STAFF_CODE.developer}, ${STAFF_CODE.chief})`
+    )
+  const developer = codes.find((s) => s.code === STAFF_CODE.developer)
+  const chief = codes.find((s) => s.code === STAFF_CODE.chief)
+  if (!developer || !chief) return { missing: true as const }
+  // Last before the insert: holding the draft pauses it in this transaction.
+  const source = input.draft
+    ? await holdDraft(db, orgId, input.draft)
+    : kind === "site.revise"
+      ? await publishedSource(db, orgId)
+      : null
+  if (input.draft && !source) return { draft_moved: true as const }
+  if (kind === "site.revise" && !source) return { unpublished: true as const }
+  const [row] = await db
+    .insert(assignments)
+    .values({
+      orgId,
+      staffId: developer.id,
+      createdByStaffId: chief.id,
+      kind,
+      goal,
+      revisionOfAssignmentId: source?.assignment_id ?? null,
+      acceptanceCriteria: [
+        "Every price, hour and service area on the site matches a canonical fact",
+        "The site builds and every gate passes",
+      ],
+      // A placeholder: the Workflow's first step takes the snapshot and
+      // writes its id here (`takeSnapshot`).
+      factSnapshotId: crypto.randomUUID(),
+      packRefs: [{ key: "cleaning", version: "0.1.0" }],
+      budgetUsd: 20,
+      idempotencyKey: key,
+      ...(input.retry_of ? { blueprint: input.retry_of.blueprint } : {}),
+    })
+    .returning()
+  if (!row) throw new Error("insert returned no row")
+  await appendEvent(db, {
+    orgId,
+    assignmentId: row.id,
+    staffId: chief.id,
+    type: "assignment.created",
+    payload: {
+      kind,
+      model,
+      goal,
+      withhold,
+      // The lane is chosen once, here, and read back by the Workflow and EV3.
+      lane,
+      change_kind,
+      origin: owner ? "owner" : "console",
+      ...(source ? { revises_revision_id: source.revision_id } : {}),
+      ...(input.draft ? { draft_revision_id: input.draft } : {}),
+      ...(input.label ? { label: input.label } : {}),
+      ...(input.retry_of ? { retry_of: input.retry_of.assignment_id } : {}),
+    },
+    taint,
+  })
+  return { row, replayed: false }
+}
 
 /**
  * The row, its `assignment.created` event and the instance, replayed by
@@ -362,101 +505,14 @@ const OWNER_DAILY_BUILDS = 20
 async function createAssignment(
   c: Context<ConsoleEnv>,
   key: string,
-  input: {
-    kind: string
-    goal: string
-    model: "A" | "B"
-    withhold: string[]
-    lane: BuildLane
-    change_kind: ChangeKind | null
-    skip_review: boolean
-  }
+  input: NewAssignment
 ) {
-  const { kind, goal, model, withhold, lane, change_kind, skip_review } = input
   const orgId = c.get("orgId")
-  const owner = byOwner(c)
-  const taint: TaintLabel[] =
-    owner || kind === "site.revise" ? ["untrusted_input"] : []
-  const result = await c.get("kit").withOrg({ orgId }, async (db) => {
-    const [existing] = await db
-      .select()
-      .from(assignments)
-      .where(eq(assignments.idempotencyKey, key))
-    if (existing) return { row: existing, replayed: true }
-    if (owner) {
-      // The owner's own builds only, read off each recent row's created
-      // event, so console and harness builds on the org use none of it.
-      // ponytail: count-then-insert, so k concurrent creates at 19 can all
-      // pass and overshoot by k - 1. An advisory lock per org if that matters.
-      const [today] = await db
-        .select({ built: sql<number>`count(*)::int` })
-        .from(assignments)
-        .innerJoin(
-          events,
-          sql`${events.assignmentId} = ${assignments.id} and ${events.type} = 'assignment.created'`
-        )
-        .where(
-          sql`${assignments.createdAt} > now() - interval '24 hours' and ${events.payload}->>'origin' = 'owner'`
-        )
-      if ((today?.built ?? 0) >= OWNER_DAILY_BUILDS) {
-        return { capped: true as const }
-      }
-    }
-    const source =
-      kind === "site.revise" ? await publishedSource(db, orgId) : null
-    if (kind === "site.revise" && !source) return { unpublished: true as const }
-    const codes = await db
-      .select({ id: staff.id, code: staff.staffCode })
-      .from(staff)
-      .where(
-        sql`${staff.staffCode} in (${STAFF_CODE.developer}, ${STAFF_CODE.chief})`
-      )
-    const developer = codes.find((s) => s.code === STAFF_CODE.developer)
-    const chief = codes.find((s) => s.code === STAFF_CODE.chief)
-    if (!developer || !chief) return { missing: true as const }
-    const [row] = await db
-      .insert(assignments)
-      .values({
-        orgId,
-        staffId: developer.id,
-        createdByStaffId: chief.id,
-        kind,
-        goal,
-        revisionOfAssignmentId: source?.assignment_id ?? null,
-        acceptanceCriteria: [
-          "Every price, hour and service area on the site matches a canonical fact",
-          "The site builds and every gate passes",
-        ],
-        // A placeholder: the Workflow's first step takes the snapshot and
-        // writes its id here (`takeSnapshot`).
-        factSnapshotId: crypto.randomUUID(),
-        packRefs: [{ key: "cleaning", version: "0.1.0" }],
-        budgetUsd: 20,
-        idempotencyKey: key,
-      })
-      .returning()
-    if (!row) throw new Error("insert returned no row")
-    await appendEvent(db, {
-      orgId,
-      assignmentId: row.id,
-      staffId: chief.id,
-      type: "assignment.created",
-      payload: {
-        kind,
-        model,
-        goal,
-        withhold,
-        // The lane is chosen once, here, and read back by the Workflow and EV3.
-        lane,
-        change_kind,
-        ...(skip_review ? { review: "skip" } : {}),
-        origin: owner ? "owner" : "console",
-        ...(source ? { revises_revision_id: source.revision_id } : {}),
-      },
-      taint,
-    })
-    return { row, replayed: false }
-  })
+  const result = await c
+    .get("kit")
+    .withOrg({ orgId }, (db) =>
+      insertAssignment(db, orgId, key, byOwner(c), input)
+    )
   if ("unpublished" in result) {
     return failure(c, 409, {
       class: "validation",
@@ -471,6 +527,14 @@ async function createAssignment(
       code: "builds.daily_cap",
       message: `A business starts at most ${OWNER_DAILY_BUILDS} builds in 24 hours.`,
       detail: { max: OWNER_DAILY_BUILDS },
+    })
+  }
+  if ("draft_moved" in result) {
+    return failure(c, 409, {
+      class: "validation",
+      code: "change.draft_moved",
+      message: "The draft changed while the change was asked for. Ask again.",
+      detail: {},
     })
   }
   if ("missing" in result) {
@@ -1036,41 +1100,13 @@ bridge.post("/:id/answer", async (c) => {
     const question = { ...waited.request, field }
     const value = tried.find((v) => answers(question, v))
     if (value === undefined) return { invalid: field }
-    const [root] = owner
-      ? await db
-          .select({ id: staff.id })
-          .from(staff)
-          .where(sql`${staff.kind} = 'human' and ${staff.managerId} is null`)
-      : []
-    const [existing] = await db
-      .select({ factType: facts.factType })
-      .from(facts)
-      .where(sql`${facts.key} = ${field} and ${facts.validTo} is null`)
-    const written = await supersedeFact(db, {
+    const answer = await recordAnswer(db, {
       orgId,
-      key: field,
-      factType: existing?.factType ?? field.split(".")[0] ?? "answer",
-      value,
-      provenance: {
-        source: "owner_stated",
-        confidence: 1,
-        verifiedByStaffId: root?.id ?? row.createdByStaffId,
-      },
-    })
-    const answer = InformationAnswer.parse({
-      answer_id: crypto.randomUUID(),
-      org_id: orgId,
-      assignment_id: id,
-      request_id: requestId,
-      fact_id: written.factId,
-      answered_at: new Date().toISOString(),
-    })
-    await appendEvent(db, {
-      orgId,
-      assignmentId: id,
-      staffId: row.createdByStaffId,
-      type: "information.answered",
-      payload: answer,
+      assignment: row,
+      requestId,
+      field,
+      given: { value },
+      verifier: owner ? "owner" : "maker",
     })
     return { answer, nudge: true }
   })
@@ -1131,125 +1167,6 @@ bridge.post("/:id/answer", async (c) => {
 })
 
 /**
- * The owner's decision on the Blueprint card (ADR-038, OI4): "Build it" or
- * "Change something" with their words. Stored as `blueprint.decided` for the
- * round the build waits on; the `blueprint` event only nudges the Workflow to
- * look. The same decision again is a retry and gets the same answer; a
- * different one for a decided round is refused. A change past the last
- * re-plan is refused, so the owner builds or cancels.
- */
-bridge.post("/:id/blueprint", async (c) => {
-  const id = c.req.param("id")
-  const orgId = c.get("orgId")
-  const parsed = BlueprintReviewOutput.safeParse(
-    await c.req.json().catch(() => null)
-  )
-  if (!parsed.success) {
-    return failure(c, 400, {
-      class: "validation",
-      code: "blueprint.decision_malformed",
-      message:
-        'A decision is {decision: "build"} or {decision: "change", note}.',
-      detail: {},
-    })
-  }
-  const decided = parsed.data
-  const result = await c.get("kit").withOrg({ orgId }, async (db) => {
-    // Locked first, so two decisions on one round queue here.
-    const [row] = await db
-      .select()
-      .from(assignments)
-      .where(eq(assignments.id, id))
-      .for("update")
-    if (!row) return { missing: true as const }
-    const [proposed] = await db
-      .select({ payload: events.payload })
-      .from(events)
-      .where(
-        sql`${events.assignmentId} = ${id} and ${events.type} = 'blueprint.proposed'`
-      )
-      .orderBy(sql`${events.eventId} desc`)
-      .limit(1)
-    const round = Number(proposed?.payload.round)
-    if (proposed?.payload.review !== true || !round) {
-      return { state: row.state }
-    }
-    const [given] = await db
-      .select({ payload: events.payload })
-      .from(events)
-      .where(
-        sql`${events.assignmentId} = ${id} and ${events.type} = 'blueprint.decided' and (${events.payload}->>'round')::int = ${round}`
-      )
-      .limit(1)
-    if (given) {
-      return given.payload.decision === decided.decision
-        ? { round, nudge: row.state === "planning" }
-        : { given: given.payload.decision as string }
-    }
-    if (row.state !== "planning") return { state: row.state }
-    if (decided.decision === "change" && round >= PLAN_ROUNDS) {
-      return { exhausted: round }
-    }
-    await appendEvent(db, {
-      orgId,
-      assignmentId: id,
-      staffId: row.createdByStaffId,
-      type: "blueprint.decided",
-      payload: { round, ...decided },
-      // The note is the owner's words, read by the planner as data (§28.3).
-      taint: decided.note ? ["untrusted_input"] : [],
-    })
-    return { round, nudge: true }
-  })
-  if ("missing" in result) return notFound(c, id)
-  if ("state" in result) {
-    return failure(c, 409, {
-      class: "validation",
-      code: "blueprint.not_waiting",
-      message: "This build is not waiting on a decision about its plan.",
-      detail: { state: result.state },
-    })
-  }
-  if ("given" in result) {
-    return failure(c, 409, {
-      class: "validation",
-      code: "blueprint.already_decided",
-      message: "This plan already has a decision.",
-      detail: { decision: result.given },
-    })
-  }
-  if ("exhausted" in result) {
-    return failure(c, 409, {
-      class: "validation",
-      code: "blueprint.replans_exhausted",
-      message: `A build is planned at most ${PLAN_ROUNDS} times. Build this plan or cancel the build.`,
-      detail: { round: result.exhausted, max: PLAN_ROUNDS },
-    })
-  }
-  if (result.nudge) {
-    // The decision is committed; a lost nudge costs only time, since the
-    // Workflow looks again within six hours.
-    try {
-      const instance = await c.env.ASSIGNMENTS.get(id)
-      await instance.sendEvent({
-        type: "blueprint",
-        payload: { round: result.round },
-      })
-    } catch (error) {
-      console.error(
-        JSON.stringify({
-          code: "blueprint.nudge_failed",
-          assignment_id: id,
-          round: result.round,
-          error: error instanceof Error ? error.name : "unknown",
-        })
-      )
-    }
-  }
-  return c.json({ round: result.round, decision: decided.decision }, 202)
-})
-
-/**
  * A message into the running conversation; flue joins it at the next turn
  * boundary. An owner's message is their own words, tainted as a goal is.
  */
@@ -1278,6 +1195,10 @@ bridge.post("/:id/steer", async (c) => {
     })
   }
   const taint: TaintLabel[] = byOwner(c) ? ["untrusted_input"] : []
+  // A build with no Developer (the quick lane's one call, or one not yet
+  // admitted) has nothing to steer. An unconditional send created one with no
+  // brief, whose submission failed at render and was recovered again and again.
+  const uid = (await getAgentInstance(Developer, id))?.uid
   const reused = () =>
     failure(c, 409, {
       class: "validation",
@@ -1302,13 +1223,17 @@ bridge.post("/:id/steer", async (c) => {
       }
       throw error
     }
+    const held = found.state === "blocked_on_information"
+    if (!held && !uid) return { idle: true as const }
     const steered = await steerByKey(db, key)
     if (steered) {
       const same =
         steered.assignment_id === id &&
         steered.message === message &&
         canonical(steered.taint) === canonical(taint)
-      return same ? { replayed: true as const } : { reused: true as const }
+      return same
+        ? { replayed: true as const, held }
+        : { reused: true as const }
     }
     await appendEvent(db, {
       orgId,
@@ -1318,17 +1243,32 @@ bridge.post("/:id/steer", async (c) => {
       payload: { message, key_sha256: steerKeyHash(key) },
       taint,
     })
-    return { logged: true as const }
+    return { logged: true as const, held }
   })
   if ("missing" in result) return notFound(c, id)
   if ("reused" in result) return reused()
+  if ("idle" in result) {
+    return failure(c, 409, {
+      class: "validation",
+      code: "steer.not_running",
+      message:
+        "This build is finishing and takes no more changes. Try again once it is ready.",
+      detail: {},
+    })
+  }
+  // A build waiting on the owner's answer gets the steer with that answer
+  // (cloudflare.ts `resume`), so its Developer never wakes mid-wait.
+  if (result.held) {
+    return c.json({ assignment_id: id, submission_id: null }, 202)
+  }
   // An owner's words reach the model the way a change request does: as a
   // tainted signal, never as a user turn (§28.3). The console's stay a turn.
   // Delivered under the same key, so flue admits it once and a replay gets
   // the first receipt back without a second turn.
   let receipt: { submissionId: string }
   try {
-    receipt = await init(Developer, { id }).dispatch({
+    // Continues that incarnation only, so a Developer gone since is never made anew.
+    receipt = await init(Developer, { id, uid }).dispatch({
       message: byOwner(c)
         ? {
             kind: "signal",

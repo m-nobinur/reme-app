@@ -24,7 +24,9 @@ import { landingCatalog } from "./landing-entries"
 import { notificationCatalog } from "./notification-entries"
 import { panelCatalog } from "./panel-entries"
 import { productCatalog } from "./product-entries"
+import { statusLineCatalog } from "./status-line-entries"
 import { trayCatalog } from "./tray-entries"
+import { trayPhotosCatalog } from "./tray-photos-entries"
 import { workspaceCatalog } from "./workspace-entries"
 
 type CatalogEntry = {
@@ -308,10 +310,12 @@ const catalog: CatalogEntry[] = [
   },
   ...workspaceCatalog,
   ...panelCatalog,
+  ...statusLineCatalog,
   ...notificationCatalog,
   ...productCatalog,
   ...assistantCatalog,
   ...trayCatalog,
+  ...trayPhotosCatalog,
   ...landingCatalog,
 ]
 

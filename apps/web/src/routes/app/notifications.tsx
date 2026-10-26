@@ -41,9 +41,7 @@ function actionOf(item: AttentionItem) {
         state={() => ({ panel: { key: crypto.randomUUID(), focus } })}
         to="/app"
       >
-        {item.kind === "approval"
-          ? `Review version ${item.version}`
-          : "Answer in the panel"}
+        {item.kind === "approval" ? "Review and publish" : "Show the question"}
       </Link>
     )
   }

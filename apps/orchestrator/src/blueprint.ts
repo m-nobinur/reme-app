@@ -71,13 +71,20 @@ export function blueprintLines(
   plan: Blueprint,
   files?: readonly PhotoFile[]
 ): string[] {
+  const { palette } = plan
   const preset =
-    plan.palette.kind === "preset"
-      ? PALETTES.find((p) => p.id === (plan.palette as { id: string }).id)
+    palette.kind === "preset"
+      ? PALETTES.find((p) => p.id === palette.id)
       : undefined
+  const roles = (r: Record<(typeof ROLES)[number], string>) =>
+    ROLES.map((role) => `${role}:${r[role]}`).join(" ")
   const colour = preset
-    ? `palette to "${ROLES.map((role) => `${role}:${preset[role]}`).join(" ")}" (${preset.id})`
-    : `brandColor to ${(plan.palette as { brand: string }).brand}, the owner's own colour, and palette to ""`
+    ? `palette to "${roles(preset)}" (${preset.id})`
+    : palette.kind === "roles"
+      ? `palette to "${roles(palette.roles)}" (the owner's ${palette.name}) and brandColor to ${palette.roles.primary}`
+      : palette.kind === "brand"
+        ? `brandColor to ${palette.brand}, the owner's own colour, and palette to ""`
+        : ""
   return [
     "Blueprint, the plan the owner approved. Build exactly this. Where it differs from the owner's choices above on layout, type or colour, the Blueprint wins: it already applies them.",
     `- In src/site-config.ts set direction to "${plan.direction}", font to "${plan.fonts}" and ${colour}.`,

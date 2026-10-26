@@ -2,7 +2,12 @@ import type { FlueObservation } from "@flue/runtime"
 import { EventEnvelope } from "@workspace/contracts"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { contextHash, deriveContext } from "../src/derive.ts"
-import { createTee, type EventSink, redact } from "../src/tee.ts"
+import {
+  createTee,
+  type EventSink,
+  redact,
+  SINK_TIMEOUT_MS,
+} from "../src/tee.ts"
 
 const uuid = (n: number) =>
   `10000001-0000-4000-8000-${String(n).padStart(12, "0")}`
@@ -142,6 +147,31 @@ describe("the observe tee", () => {
     tee.subscriber(observation("agent_start"))
     await Promise.all(waited)
     expect(rows).toHaveLength(0)
+    tee.subscriber(observation("agent_end"))
+    await tee.flush()
+    expect(rows.map((r) => [r.type, r.seq])).toEqual([
+      ["runtime.agent_start", 1],
+      ["runtime.agent_end", 2],
+    ])
+  })
+
+  it("fails a write that never settles, so the events after it still land", async () => {
+    vi.useFakeTimers()
+    let hang = true
+    const { sink, rows } = memorySink(0)
+    const hanging: EventSink = {
+      lastSeq: sink.lastSeq,
+      append: (batch) => {
+        if (!hang) return sink.append(batch)
+        hang = false
+        return new Promise(() => undefined)
+      },
+    }
+    const tee = createTee({ sink: hanging, ids, waitUntil: () => undefined })
+    tee.subscriber(observation("agent_start"))
+    const stuck = tee.flush()
+    await vi.advanceTimersByTimeAsync(SINK_TIMEOUT_MS)
+    await stuck
     tee.subscriber(observation("agent_end"))
     await tee.flush()
     expect(rows.map((r) => [r.type, r.seq])).toEqual([

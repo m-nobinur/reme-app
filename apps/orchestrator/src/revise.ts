@@ -2,14 +2,16 @@ import { Blueprint, type FactRecord } from "@workspace/contracts"
 import {
   assignments,
   eq,
+  events,
   type OrgScopedDb,
   siteRevisions,
   sql,
 } from "@workspace/db"
-import { ownerPhotos } from "./developer-rules.ts"
+import { ownerUploads } from "./developer-rules.ts"
 import { photoFile, photoKey } from "./photo-files.ts"
 import { activeDeployment } from "./publish.ts"
 import { repoMap } from "./repo-map.ts"
+import { type Ids, lockRow, transition } from "./state.ts"
 
 /**
  * Revising a published site (ADR-032, open item 49): a new `site.revise`
@@ -26,15 +28,17 @@ import { repoMap } from "./repo-map.ts"
 /** Where the site lives in the container. `/opt/astro` is the toolchain, read-only. */
 export const SITE_ROOT = "/workspace/site"
 
+type Source = {
+  revision_id: string
+  assignment_id: string
+  source_key: string
+}
+
 /** The revision a revise starts from: what the site serves now, or null before the first publish. */
 export async function publishedSource(
   db: OrgScopedDb,
   siteId: string
-): Promise<{
-  revision_id: string
-  assignment_id: string
-  source_key: string
-} | null> {
+): Promise<Source | null> {
   const active = await activeDeployment(db, siteId)
   if (!active) return null
   const [row] = await db
@@ -50,6 +54,78 @@ export async function publishedSource(
     assignment_id: row.assignmentId,
     source_key: row.sourceKey,
   }
+}
+
+/** The states a draft waits on the owner in: its review, or the park a lapsed review moves it to. */
+const DRAFT_STATES = ["awaiting_review", "blocked_on_approval"]
+
+/**
+ * A change to a site that is not live yet starts from the owner's draft, its
+ * source and the photos drawn into it, not from nothing. The draft's build
+ * is paused in the transaction that creates the change, which frees the
+ * site for it, and stays the owner's until the change has a draft of its
+ * own: `transition` brings it back if the change ends without one. Null
+ * when the revision is not a draft waiting on the owner.
+ */
+export async function holdDraft(
+  db: OrgScopedDb,
+  orgId: string,
+  revisionId: string
+): Promise<Source | null> {
+  const [revision] = await db
+    .select({
+      assignmentId: siteRevisions.assignmentId,
+      sourceKey: siteRevisions.sourceKey,
+      status: siteRevisions.status,
+    })
+    .from(siteRevisions)
+    .where(eq(siteRevisions.id, revisionId))
+  if (revision?.status !== "preview") return null
+  const draft = await lockRow(db, revision.assignmentId)
+  if (!DRAFT_STATES.includes(draft.state)) return null
+  await transition(db, {
+    orgId,
+    assignmentId: draft.id,
+    to: "paused",
+    expectedVersion: draft.version,
+    reason: "change.held",
+  })
+  return {
+    revision_id: revisionId,
+    assignment_id: draft.id,
+    source_key: revision.sourceKey,
+  }
+}
+
+/** The revision a `site.revise` starts from: the draft it was asked on, else what the site serves. */
+export async function reviseSource(
+  db: OrgScopedDb,
+  ids: Ids
+): Promise<Source | null> {
+  const [created] = await db
+    .select({
+      draft: sql<string | null>`${events.payload}->>'draft_revision_id'`,
+    })
+    .from(events)
+    .where(
+      sql`${events.assignmentId} = ${ids.assignmentId} and ${events.type} = 'assignment.created'`
+    )
+    .limit(1)
+  if (!created?.draft) return publishedSource(db, ids.orgId)
+  const [row] = await db
+    .select({
+      assignmentId: siteRevisions.assignmentId,
+      sourceKey: siteRevisions.sourceKey,
+    })
+    .from(siteRevisions)
+    .where(eq(siteRevisions.id, created.draft))
+  return row
+    ? {
+        revision_id: created.draft,
+        assignment_id: row.assignmentId,
+        source_key: row.sourceKey,
+      }
+    : null
 }
 
 /**
@@ -136,7 +212,7 @@ export async function mapSite(sandbox: Restorable): Promise<string> {
 }
 
 /**
- * Copies the owner's photos from the bucket into the site's `src/assets/`,
+ * Copies the owner's photos and logo from the bucket into the site's `src/assets/`,
  * where `astro:assets` resizes them and the source snapshot keeps them for a revise. The
  * sandbox reaches no network, so the bytes go in through the SDK. Returns
  * the ids it could not find, for the log.
@@ -154,7 +230,7 @@ export async function placePhotos(
   orgId: string,
   facts: readonly FactRecord[]
 ): Promise<string[]> {
-  const photos = ownerPhotos(facts)
+  const photos = ownerUploads(facts)
   if (photos.length === 0) return []
   await sandbox.exec(`mkdir -p ${SITE_ROOT}/src/assets/uploads`)
   const missing: string[] = []

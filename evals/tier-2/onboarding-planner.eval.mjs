@@ -1,5 +1,6 @@
-import { appendFileSync } from "node:fs"
+import { appendFileSync, writeFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
+import { DETAILS_KEYS } from "@workspace/contracts"
 import { priceOf } from "../../apps/api/src/cos/agent.ts"
 import {
   again,
@@ -8,6 +9,7 @@ import {
   built,
   cardAnswer,
   contactFields,
+  designDone,
   ended,
   onboardingStep,
   opening,
@@ -25,10 +27,18 @@ import {
   REQUIRED,
   sayProblems,
 } from "../../apps/api/src/onboarding-agent.ts"
+import { voiceProblems } from "../../apps/api/src/voice.ts"
 import models from "../../packages/facade/src/models/openrouter.models.json" with {
   type: "json",
 }
-import { MISLEADING, PERSONAS, SKIPPER } from "../onboarding-personas.mjs"
+import {
+  CONVERSATIONS,
+  CORRECTS_TWICE,
+  MISLEADING,
+  PERSONAS,
+  SKIPPER,
+  SKIPS_EVERYTHING,
+} from "../onboarding-personas.mjs"
 
 /**
  * Tier 2 (§16.3), live: the onboarding planner against the real model, over
@@ -47,6 +57,13 @@ import { MISLEADING, PERSONAS, SKIPPER } from "../onboarding-personas.mjs"
  * the owner with a rate, currency, link or dash, no build started before the
  * checklist allowed it, the quote form asks business-specific questions and
  * never the contact details, and it took at most `MAX_TURNS` owner turns.
+ * The twelve conversations (`ONBOARDING_EVAL_PERSONAS=conversations`) also
+ * hold four assertions each: no fact asked twice, no `voiceProblems` hit in
+ * any line the owner reads, no question about a fact already held, and the
+ * build starts within one turn of the design tray's last answer. Every
+ * question the planner can ask is answered: the design tray (picked or
+ * skipped), an open question (stated or skipped), a fact, details, a choice,
+ * the photo upload (skipped) and the quote form (accepted).
  * It prints every transcript so a person can read the tone, and a table per
  * model: owners passed, fallbacks, first plans refused, cost per onboarding
  * and call latency.
@@ -55,8 +72,10 @@ import { MISLEADING, PERSONAS, SKIPPER } from "../onboarding-personas.mjs"
  *     evals/tier-2/onboarding-planner.eval.mjs
  *
  * `ONBOARDING_EVAL_MODELS` (comma list, default the api's default),
- * `ONBOARDING_EVAL_PERSONAS` (comma list of ids, default all) and
- * `ONBOARDING_EVAL_CAP_USD` (default 3) narrow a run. Skipped without
+ * `ONBOARDING_EVAL_PERSONAS` (comma list of ids, or `conversations` for the
+ * twelve; default all), `ONBOARDING_EVAL_CAP_USD` (default 3) and
+ * `ONBOARDING_EVAL_RECORD` (a path: every line the owner read, per owner,
+ * written as JSON for `evals/voice.mjs`) narrow or extend a run. Skipped without
  * `OPENROUTER_API_KEY`, so `pnpm eval` runs everywhere.
  */
 
@@ -66,6 +85,9 @@ const CAP_USD = Number(process.env.ONBOARDING_EVAL_CAP_USD ?? 3)
 // Not passed through turbo: a task that saw the key would run the facade's live tests.
 // biome-ignore lint/suspicious/noUndeclaredEnvVars: not read by any turbo task
 const KEY = process.env.OPENROUTER_API_KEY ?? ""
+
+// biome-ignore lint/suspicious/noUndeclaredEnvVars: a file path, not read by any turbo task
+const RECORD = process.env.ONBOARDING_EVAL_RECORD
 
 let spent = 0
 
@@ -118,6 +140,31 @@ const counter = (prefix) => {
   return () => `${prefix}${++n}`
 }
 
+/** The fact each choice step states, and the facts the design tray states (as `onboarding-agent.ts` counts them). */
+const STEP_FACT = {
+  industry: "business.industry",
+  pronouns: "assistant.pronouns",
+  tone: "assistant.tone",
+  build_for_me: "site.build_mode",
+  template: "site.template",
+  palette: "site.palette",
+  font: "site.font",
+  pages: "site.pages",
+}
+const TRAY = ["site.palette", "site.font", "site.direction", "site.pages"]
+
+/** The facts a card asks for; none for a card that asks for no fact (photos, the quote form). */
+function askedKeys(part) {
+  const input = part.input ?? {}
+  if (part.type === "tool-ask_fact") return input.key ? [input.key] : []
+  if (part.type === "tool-ask_details") return DETAILS_KEYS[input.step] ?? []
+  if (part.type === "tool-ask_choice")
+    return STEP_FACT[input.step] ? [STEP_FACT[input.step]] : []
+  if (part.type === "tool-ask_design") return TRAY
+  if (part.type === "tool-ask_open") return [input.about]
+  return []
+}
+
 /** The script rows `readScript` would read from these messages. */
 function scriptRows(rows) {
   return rows.flatMap((row, i) => {
@@ -149,6 +196,8 @@ function waitingCard(tail) {
         "tool-ask_fact",
         "tool-ask_details",
         "tool-ask_choice",
+        "tool-ask_design",
+        "tool-ask_open",
         "tool-ask_upload",
         "tool-review_quote_form",
       ].includes(p.type) && p.state === "input-available"
@@ -222,15 +271,55 @@ async function onboard(persona, spec) {
   let refusedFirst = 0
   let turns = 0
   let quoteChanged = false
+  let trayTurn = null
+  let buildTurn = null
+  const asks = {}
+  const flag = (problem) => {
+    if (!problems.includes(problem)) problems.push(problem)
+  }
+
+  /**
+   * Counts the questions a step asks. A card the owner left unanswered and
+   * the step asks again is a retry, not a second question, so `pending`
+   * names the keys to leave out. A fact already held is never asked.
+   */
+  const asked = (keys, pending = []) => {
+    const fresh = keys.filter((k) => !pending.includes(k))
+    if (fresh.length === 0) return
+    if (fresh.every((k) => sim.facts.some((f) => f.key === k)))
+      flag(`asked about ${fresh.join(", ")}, already held`)
+    for (const k of fresh) {
+      asks[k] = (asks[k] ?? 0) + 1
+      if (asks[k] === 2) flag(`asked ${k} twice`)
+    }
+  }
+  const askedIn = (parts, pending) => {
+    for (const part of parts)
+      if (part.type !== "tool-ask_open") asked(askedKeys(part), pending)
+  }
+
+  /** Every line the owner reads, planner or script, checked against the voice. */
+  const spoken = (parts) => {
+    const assistantNamed = sim.facts.some((f) => f.key === "assistant.name")
+    for (const part of parts) {
+      if (part.type !== "text") continue
+      heard.push({ text: part.text, named: assistantNamed })
+      const { hard, soft } = voiceProblems(part.text, { assistantNamed })
+      for (const problem of [...hard, ...soft]) flag(`say: ${problem}`)
+    }
+  }
+  const heard = []
   sim.rows.push({
     role: "assistant",
     parts: [{ type: "step-start" }, ...opening(onboardingOf(), newId)],
   })
+  spoken(sim.rows[0].parts)
 
   /** A built step: the fake orchestrator always starts it. */
   const start = (o, parts, said) => {
     const pending = buildCall(parts)
     if (!pending) return parts
+    buildTurn ??= turns
     const missing = buildMissing(o)
     if (missing.length > 0 && !said.script)
       problems.push(`build started with ${missing.join(", ")} missing`)
@@ -279,8 +368,11 @@ async function onboard(persona, spec) {
     put([...checked.stated, ...checked.chosen])
     says.push(checked.plan.say)
     plans.push(checked.plan)
-    for (const problem of sayProblems(checked.plan.say))
-      problems.push(`say: ${problem}`)
+    for (const problem of sayProblems(checked.plan.say)) flag(`say: ${problem}`)
+    // A re-docked card after a side question (answer_only) is not a new ask.
+    if (checked.plan.next.kind === "ask_open") asked([checked.plan.next.about])
+    else if (checked.plan.next.kind !== "answer_only")
+      askedIn(parts, s.pending ? askedKeys(s.pending) : [])
     if (checked.plan.next.kind === "review_quote_form") {
       const contact = contactFields(checked.plan.next.fields)
       if (contact.length > 0)
@@ -307,13 +399,12 @@ async function onboard(persona, spec) {
       else {
         if (reply?.kind === "facts") put(reply.facts)
         const next = reply ? applied(o, reply) : o
-        step = start(
-          next,
-          onboardingStep({ ...next, facts: sim.facts }, newId),
-          { script: true }
-        )
+        step = onboardingStep({ ...next, facts: sim.facts }, newId)
+        askedIn(step, card ? askedKeys(card) : [])
+        step = start(next, step, { script: true })
       }
     }
+    spoken(step)
     sim.rows.push({
       role: "assistant",
       parts: [{ type: "step-start" }, ...step],
@@ -323,7 +414,7 @@ async function onboard(persona, spec) {
   const answered = async (card, output) => {
     const o = onboardingOf()
     const uploads = factOf(sim.facts, "media.uploads")?.items ?? []
-    const meant = cardAnswer(card, output, uploads)
+    const meant = cardAnswer(card, output, uploads, sim.facts)
     if (!meant || meant.kind === "retry") {
       problems.push(`the simulator's answer to ${card.type} was refused`)
       return false
@@ -337,12 +428,12 @@ async function onboard(persona, spec) {
         : null
     Object.assign(card, { state: "output-available", output })
     if (meant.kind === "facts") put(meant.facts)
-    if (!step)
-      step = start(
-        current,
-        onboardingStep({ ...current, facts: sim.facts }, newId),
-        { script: true }
-      )
+    if (!step) {
+      step = onboardingStep({ ...current, facts: sim.facts }, newId)
+      askedIn(step)
+      step = start(current, step, { script: true })
+    }
+    spoken(step)
     sim.rows.at(-1).parts.push({ type: "step-start" }, ...step)
     return true
   }
@@ -357,7 +448,15 @@ async function onboard(persona, spec) {
         }))
     )
 
+  // The turn the design tray stopped waiting, answered, skipped or settled by words.
+  const noteTray = () => {
+    const o = onboardingOf()
+    if (trayTurn === null && (o.closed.includes("design") || designDone(o)))
+      trayTurn = turns
+  }
+
   while (turns < MAX_TURNS && !ended(onboardingOf())) {
+    noteTray()
     if (spent > CAP_USD) throw new Error(`spend cap $${CAP_USD} reached`)
     turns += 1
     const tail = sim.rows.at(-1)
@@ -374,8 +473,29 @@ async function onboard(persona, spec) {
       await typed(scripted)
       continue
     }
-    const act = card ? cardAction(persona, card, { quoteChanged }) : null
+    let act = card ? cardAction(persona, card, { quoteChanged }) : null
+    if (act?.kind === "open") {
+      act = {
+        kind: "answer",
+        output: {
+          answer: "stated",
+          text: await ownerSays(persona, lines(), shown),
+        },
+      }
+    }
     if (act?.kind === "answer") {
+      // Until the api reads an open question's answer, the words go to the planner as typed.
+      if (
+        card.type === "tool-ask_open" &&
+        !cardAnswer(card, act.output, [], sim.facts)
+      ) {
+        await typed(
+          act.output.answer === "stated"
+            ? act.output.text
+            : "I'd rather skip that one."
+        )
+        continue
+      }
       if (
         card.type === "tool-review_quote_form" &&
         act.output.answer === "changes"
@@ -390,7 +510,17 @@ async function onboard(persona, spec) {
     await typed(act?.text ?? (await ownerSays(persona, lines(), shown)))
   }
 
+  noteTray()
   const end = onboardingOf()
+  // The build follows the tray's last answer within one turn.
+  if (trayTurn !== null && !persona.manual) {
+    if (buildTurn === null)
+      flag("the build never started after the design tray")
+    else if (buildTurn - trayTurn > 1)
+      flag(
+        `the build started ${buildTurn - trayTurn} turns after the design tray (turn ${trayTurn} to ${buildTurn})`
+      )
+  }
   // What the owner ended with.
   const t = { ...persona.truth, ...(persona.truthAfter ?? {}) }
   if (persona.manual) {
@@ -429,9 +559,6 @@ async function onboard(persona, spec) {
   }
   if (!t.name.test(factOf(sim.facts, "business.name")?.name ?? ""))
     problems.push("business name lost")
-  const callMe = factOf(sim.facts, "owner.preferred_name")?.name ?? ""
-  if (callMe.toLowerCase() !== t.callMe.toLowerCase())
-    problems.push(`owner name ${callMe} is not ${t.callMe}`)
   if (
     t.assistant &&
     !t.assistant.test(factOf(sim.facts, "assistant.name")?.name ?? "")
@@ -503,6 +630,7 @@ async function onboard(persona, spec) {
     refusedFirst,
     turns,
     transcript: lines(),
+    heard,
     form,
   }
 }
@@ -513,6 +641,10 @@ function describe(card) {
     return `choice card ${input.step}: ${input.options.map((o) => o.label).join(" / ")}${input.other ? " / Something else" : ""}`
   if (card.type === "tool-ask_fact")
     return `form for ${input.key}${input.prefill ? `, prefilled ${JSON.stringify(input.prefill)}` : ""}`
+  if (card.type === "tool-ask_design")
+    return `design tray: ${input.questions.map((q) => q.id).join(", ")}`
+  if (card.type === "tool-ask_open")
+    return `open question about ${input.about}, skippable`
   if (card.type === "tool-ask_upload") return "photo upload, skippable"
   if (card.type === "tool-ask_details")
     return input.step === "contact"
@@ -543,6 +675,39 @@ function cardAction(persona, card, { quoteChanged }) {
   const input = card.input
   const typed = (rule) =>
     rule?.startsWith("type:") ? { kind: "type", text: rule.slice(5) } : null
+  if (persona.skipAll && input.skippable && card.type !== "tool-ask_design") {
+    return { kind: "answer", output: { answer: "skipped" } }
+  }
+  if (card.type === "tool-ask_design") {
+    if (persona.cards.design === "skip")
+      return { kind: "answer", output: { answers: {}, skip_all: true } }
+    // One option per question: the owner's own preset when the tray offers it, else the first; a ticked page set stays as the tray proposed it.
+    const answers = Object.fromEntries(
+      input.questions.map((q) => {
+        const ids = q.card.options.map((o) => o.id)
+        const mine = [persona.cards[q.id], persona.cards[q.card.step]].find(
+          (id) => id && ids.includes(id)
+        )
+        const pick = mine ?? q.card.preselected[0] ?? ids[0]
+        return [
+          q.id,
+          q.card.multiple
+            ? {
+                choices: q.card.preselected.length
+                  ? q.card.preselected
+                  : [pick],
+              }
+            : { choice: pick },
+        ]
+      })
+    )
+    return { kind: "answer", output: { answers, skip_all: false } }
+  }
+  if (card.type === "tool-ask_open") {
+    return persona.cards.open === "skip" || persona.skipAll
+      ? { kind: "answer", output: { answer: "skipped" } }
+      : { kind: "open" }
+  }
   if (card.type === "tool-ask_choice") {
     const rule = persona.cards[input.step]
     if (rule === undefined) {
@@ -563,13 +728,11 @@ function cardAction(persona, card, { quoteChanged }) {
   if (card.type === "tool-ask_fact") {
     const truth = { ...persona.truth, ...(persona.truthAfter ?? {}) }
     const value =
-      input.key === "owner.preferred_name"
-        ? { name: truth.callMe }
-        : input.key === "business.phone"
-          ? { e164: truth.phone }
-          : input.key === "business.email"
-            ? { address: truth.email }
-            : null
+      input.key === "business.phone"
+        ? { e164: truth.phone }
+        : input.key === "business.email"
+          ? { address: truth.email }
+          : null
     return value
       ? {
           kind: "answer",
@@ -647,10 +810,16 @@ export default async function run() {
   const ids = (
     process.env.ONBOARDING_EVAL_MODELS ?? DEFAULT_ONBOARDING_MODEL
   ).split(",")
-  const only = process.env.ONBOARDING_EVAL_PERSONAS?.split(",")
-  const personas = [...PERSONAS, ...MISLEADING, SKIPPER].filter(
-    (p) => !only || only.includes(p.id)
+  const only = process.env.ONBOARDING_EVAL_PERSONAS?.split(",").flatMap((id) =>
+    id === "conversations" ? CONVERSATIONS : [id]
   )
+  const personas = [
+    ...PERSONAS,
+    ...MISLEADING,
+    SKIPPER,
+    SKIPS_EVERYTHING,
+    CORRECTS_TWICE,
+  ].filter((p) => !only || only.includes(p.id))
   const results = []
   for (const modelId of ids) {
     if (!priceOf(modelId.split("@")[0]))
@@ -703,6 +872,21 @@ export default async function run() {
   console.log(table.join("\n"))
   if (process.env.GITHUB_STEP_SUMMARY)
     appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${table.join("\n")}\n`)
+  // What the owner read, for the voice eval: one entry per conversation.
+  if (RECORD) {
+    writeFileSync(
+      RECORD,
+      `${JSON.stringify(
+        results.map((r) => ({
+          persona: r.persona,
+          model: r.modelId,
+          says: r.heard,
+        })),
+        null,
+        2
+      )}\n`
+    )
+  }
   const failed = results.filter((r) => r.problems.length > 0)
   if (failed.length > 0) {
     throw new Error(

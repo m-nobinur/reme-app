@@ -3,8 +3,10 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import type { Workspace, WorkspacePoll } from "./api/types"
 import { EMPTY_WORKSPACE } from "./attention"
 import {
+  afterFrameRead,
   BUILDING_BACKOFF,
   INTERVAL,
+  JUST_READY_MS,
   type Poller,
   READ_LIMIT_MS,
   startPolling,
@@ -135,9 +137,9 @@ it("keeps what it has on a 304", async () => {
   expect(changes).toEqual([])
 })
 
-it("backs off 3, 5, 8, 10 s on unchanged reads and holds at 10 s", async () => {
+it("eases from 3 s to 4 s on unchanged reads and holds at 4 s", async () => {
   start(building)
-  for (const step of [3_000, 5_000, 8_000, 10_000, 10_000]) {
+  for (const step of [3_000, 3_000, 4_000, 4_000, 4_000]) {
     const before = tags.length
     await wait(step - 1)
     expect(tags).toHaveLength(before)
@@ -148,20 +150,20 @@ it("backs off 3, 5, 8, 10 s on unchanged reads and holds at 10 s", async () => {
 
 it("snaps back to 3 s on a change, a focus and an owner action", async () => {
   start(building)
-  await wait(3_000 + 5_000) // two unchanged reads: the next is 8 s away
+  await wait(3_000 + 3_000) // two unchanged reads: the next is 4 s away
   answers = [{ ...building, etag: '"moved"' }]
-  await wait(8_000)
+  await wait(4_000)
   expect(changes).toHaveLength(1)
   let n = tags.length
   await wait(INTERVAL.building)
   expect(tags).toHaveLength(n + 1)
-  await wait(5_000) // unchanged again: the next is 8 s away
+  await wait(3_000) // unchanged again: the next is 4 s away
   page.focus()
   await wait(0)
   n = tags.length
   await wait(INTERVAL.building)
   expect(tags).toHaveLength(n + 1)
-  await wait(5_000)
+  await wait(3_000)
   void poller.refresh()
   await wait(0)
   n = tags.length
@@ -178,9 +180,31 @@ it("backs off to 60 s after a failed read, and keeps the last workspace", async 
   expect(tags).toHaveLength(1)
   await wait(1)
   expect(tags).toHaveLength(2)
-  // Recovered: the first unchanged read leaves the next one 5 s away.
+  // Recovered: the first unchanged read leaves the next one 3 s away.
   await wait(BUILDING_BACKOFF[1])
   expect(tags).toHaveLength(3)
+})
+
+it("keeps a build's pace while a built draft takes its screenshots", async () => {
+  start({ ...idle, builds: [{ ...BUILD, state: "preview_ready" }] })
+  await wait(INTERVAL.building)
+  expect(tags).toHaveLength(1)
+})
+
+it("keeps a build's pace for a minute after a review opens, then idles", async () => {
+  const review = {
+    ...idle,
+    attention: [
+      { kind: "approval", raisedAt: new Date(Date.now()).toISOString() },
+    ],
+  } as unknown as Workspace
+  start(review)
+  await wait(INTERVAL.building)
+  expect(tags).toHaveLength(1)
+  await wait(JUST_READY_MS)
+  const n = tags.length
+  await wait(INTERVAL.building * 2)
+  expect(tags).toHaveLength(n)
 })
 
 it("stops on a hidden idle tab and reads at once when it comes back", async () => {
@@ -196,7 +220,7 @@ it("stops on a hidden idle tab and reads at once when it comes back", async () =
 it("keeps its pace on a hidden tab while a build is in flight", async () => {
   start(building)
   page.flip(true)
-  await wait(3_000 + 5_000 + 8_000)
+  await wait(3_000 + 3_000 + 4_000)
   expect(tags).toHaveLength(3)
 })
 
@@ -322,4 +346,15 @@ it("ignores a poll that was under way when a newer read was adopted", async () =
   // The adopted read sets the pace: a build is running.
   answers = []
   await wait(0)
+})
+
+it("keeps the workspace on screen when the frame's read fails", () => {
+  expect(afterFrameRead(building, null)).toEqual({
+    workspace: building,
+    failed: true,
+  })
+  expect(afterFrameRead(idle, building)).toEqual({
+    workspace: building,
+    failed: false,
+  })
 })

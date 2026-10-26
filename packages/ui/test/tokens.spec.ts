@@ -45,8 +45,8 @@ test("a second package gets the tokens and none of the app's Tailwind", () => {
     )
     const css = readFileSync(resolved, "utf8")
 
-    expect(declared(css, ":root")).toHaveLength(27)
-    expect(declared(css, ".dark")).toHaveLength(26)
+    expect(declared(css, ":root")).toHaveLength(30)
+    expect(declared(css, ".dark")).toHaveLength(27)
     // Any of these would hand the consumer Tailwind, shadcn's preset or the
     // `@source "../../../apps/**"` scan that globals.css carries.
     expect(css).not.toMatch(

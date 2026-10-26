@@ -5,7 +5,13 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import type { Workspace } from "@/lib/api/types"
 import { EMPTY_WORKSPACE } from "@/lib/attention"
-import { PanelAnnouncer, usePanel, WorkspacePanel } from "./workspace-panel"
+import {
+  firstAsk,
+  PanelAnnouncer,
+  useAnnouncement,
+  usePanel,
+  WorkspacePanel,
+} from "./workspace-panel"
 
 /**
  * Where each blank section's next step goes, as the app wires it. The
@@ -103,7 +109,7 @@ const link = (name: string) =>
     (anchor) => anchor.textContent === name
   )
 
-it('sends "Continue getting started" to the onboarding conversation', async () => {
+it('sends "Finish setting up" to the onboarding conversation', async () => {
   loader.conversations = [
     {
       id: ONBOARDING,
@@ -112,7 +118,7 @@ it('sends "Continue getting started" to the onboarding conversation', async () =
     } as unknown as Conversation,
   ]
   await render()
-  const next = link("Continue getting started")
+  const next = link("Finish setting up")
   expect(next?.dataset.to).toBe("/app/c/$id")
   expect(JSON.parse(next?.dataset.params ?? "null")).toEqual({
     id: ONBOARDING,
@@ -139,18 +145,33 @@ it('reads the workspace again on "Try again"', async () => {
   expect(refresh).toHaveBeenCalledOnce()
 })
 
-it("opens with where things stand, and no waiting list when nothing waits", async () => {
+it("says what finished, and no Now list when nothing waits", async () => {
   live.workspace = {
     ...EMPTY_WORKSPACE,
     live: 2,
     host: "fixture.example.invalid",
+    activity: {
+      journey: [],
+      now: [],
+      waiting: [],
+      upcoming: [],
+      done: [
+        {
+          id: "checkin:last",
+          kind: "checkin",
+          state: "done",
+          steps: [{ id: "message", state: "skipped" }],
+          at: new Date().toISOString(),
+        },
+      ],
+    },
   }
   await render()
-  const digest = container.querySelector('[data-slot="panel-digest"]')
-  expect(digest?.textContent).toBe(
-    "All caught up. Your site is live on version 2."
+  expect(container.textContent).toContain("Completed")
+  expect(container.textContent).toContain(
+    "Your assistant checked in, all clear"
   )
-  expect(container.textContent).not.toContain("Waiting on you")
+  expect(container.textContent).not.toContain("Now")
 })
 
 const note = (id: string, title: string, due_at: string | null): Reminder => ({
@@ -247,7 +268,7 @@ it("links the live site by name, where the api says it opens, with the host as i
   expect(visit?.title).toBe("brightclean-demo.reme.localhost")
   expect(visit?.target).toBe("_blank")
   expect(visit?.rel).toBe("noreferrer")
-  expect(container.textContent).toContain("Version 3 is live")
+  expect(container.textContent).toContain("Your website is live")
 })
 
 it("Request changes puts the chat's composer into website change mode", async () => {
@@ -297,7 +318,7 @@ it("shows a reminder done at once, and puts it back when that fails", async () =
   await act(async () => write.reject(new Error("offline")))
   expect(row()?.getAttribute("data-state")).toBe("open")
   expect(row()?.querySelector('[role="alert"]')?.textContent).toBe(
-    "That did not go through. Try again."
+    "That didn't go through. Try again."
   )
   expect(live.refresh).not.toHaveBeenCalled()
 
@@ -327,7 +348,7 @@ it("moves focus to the Activity tab when the last reminder is done", async () =>
   expect(tab("Activity")?.getAttribute("aria-selected")).toBe("true")
 })
 
-it("offers the next steps a live site has, and they do what they say", async () => {
+it("offers a live site's one next step", async () => {
   live.workspace = {
     ...EMPTY_WORKSPACE,
     live: 3,
@@ -340,15 +361,7 @@ it("offers the next steps a live site has, and they do what they say", async () 
     [...(steps?.querySelectorAll("a, button") ?? [])].map(
       (element) => element.textContent
     )
-  ).toEqual(["Request a change", "Visit your website (opens in a new tab)"])
-  await act(async () => buttonNamed("Request a change")?.click())
-  expect(router.navigate).toHaveBeenLastCalledWith({
-    to: "/app",
-    state: {
-      chat: expect.any(String),
-      compose: { mode: "site_change", key: expect.any(String) },
-    },
-  })
+  ).toEqual(["Visit your website (opens in a new tab)"])
 })
 
 it("announces a new line on the same page, and not a build's next stage", async () => {
@@ -360,23 +373,40 @@ it("announces a new line on the same page, and not a build's next stage", async 
       root.render(createElement(PanelAnnouncer, { panel: panel(lead, detail) }))
     )
   const status = () => container.querySelector('[role="status"]')?.textContent
-  await say("Building version 4,", "reading your brief")
+  await say("Ellie is building your website", "")
   expect(status()).toBe("")
-  await say("Building version 4,", "checking the site")
+  await say("Ellie is building your website", "")
   expect(status()).toBe("")
-  await say("Version 4 is ready", "for your review")
-  expect(status()).toBe("Version 4 is ready for your review")
+  await say("A new version is ready", "for your review")
+  expect(status()).toBe("A new version is ready for your review")
 })
 
 it("says once that a quick edit moved to a longer build, and says nothing for any other", async () => {
   const now = new Date().toISOString()
+  const ID = "00000000-0000-4000-8000-0000000000b1"
   const build = (extra: Record<string, unknown>) => ({
     ...EMPTY_WORKSPACE,
+    live: 1,
     building: true,
     open: true,
+    activity: {
+      journey: [],
+      now: [
+        {
+          id: `change:${ID}`,
+          kind: "change",
+          state: "now",
+          steps: [{ id: "making", state: "now" }],
+          at: now,
+        },
+      ],
+      waiting: [],
+      upcoming: [],
+      done: [],
+    },
     builds: [
       {
-        assignment_id: "00000000-0000-4000-8000-0000000000b1",
+        assignment_id: ID,
         kind: "site.revise",
         state: "implementing",
         goal: "Move the FAQ above the steps",
@@ -393,12 +423,70 @@ it("says once that a quick edit moved to a longer build, and says nothing for an
   await render()
   expect(line()).toHaveLength(1)
   expect(line()[0]?.textContent).toContain("needs more than a quick edit")
-  // The lane it runs in now is the full one, so the stepper is back.
-  expect(
-    container.querySelector('[aria-label="Build progress"]')
-  ).not.toBeNull()
+  // The change runs as its segment, with its Stop.
+  expect(container.querySelector('[data-slot="panel-segment"]')).not.toBeNull()
+  expect(container.querySelector('[data-slot="stop-build"]')).not.toBeNull()
+
+  // A quick edit checking its pages after its preview can still be stopped;
+  // a full build with its preview made has nothing left to stop.
+  const stop = () =>
+    [...container.querySelectorAll('[data-slot="stop-build"] button')].some(
+      (b) => b.textContent === "Stop"
+    )
+  live.workspace = build({ lane: "quick", state: "preview_ready" }) as Workspace
+  await act(async () => root.render(createElement(Frame)))
+  expect(stop()).toBe(true)
+  live.workspace = build({ state: "preview_ready" }) as Workspace
+  await act(async () => root.render(createElement(Frame)))
+  expect(stop()).toBe(false)
 
   live.workspace = build({}) as Workspace
   await act(async () => root.render(createElement(Frame)))
   expect(line()).toHaveLength(0)
+})
+
+it("keeps what the owner did until the state it describes moves on", async () => {
+  let say: (text: string) => void = () => undefined
+  const Harness = ({ workspace }: { workspace: Workspace }) => {
+    const [text, announce] = useAnnouncement(workspace)
+    say = announce
+    return createElement("p", { role: "status" }, text)
+  }
+  const at = (over: Partial<Workspace>): Workspace => ({
+    ...EMPTY_WORKSPACE,
+    ...over,
+  })
+  root = createRoot(container)
+  const show = (workspace: Workspace) =>
+    act(async () => root.render(createElement(Harness, { workspace })))
+  const status = () => container.querySelector('[role="status"]')?.textContent
+  const sent = "Sent. A new version replaces this one."
+
+  await show(at({ live: 1 }))
+  await act(async () => say(sent))
+  expect(status()).toBe(sent)
+  // The read after the write shows the change under way: still said.
+  const building = [{ assignment_id: "a", state: "revising" }] as never
+  await show(at({ live: 1, builds: building }))
+  expect(status()).toBe(sent)
+  // The version goes live: the line no longer describes anything.
+  await show(at({ live: 2 }))
+  expect(status()).toBe("")
+})
+
+it("opens the floating pill on the review, else the first question waiting", () => {
+  const panel = (over: object) => over as Parameters<typeof firstAsk>[0]
+  expect(firstAsk(null)).toBeUndefined()
+  expect(firstAsk(panel({ review: null, waiting: [] }))).toBeUndefined()
+  expect(
+    firstAsk(panel({ review: null, waiting: [{ kind: "question", id: "q" }] }))
+  ).toBe("question-q")
+  expect(
+    firstAsk(
+      panel({
+        review: { kind: "approval", id: "r" },
+        waiting: [{ kind: "question", id: "q" }],
+      })
+    )
+  ).toBe("approval-r")
 })

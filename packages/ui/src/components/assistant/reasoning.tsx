@@ -3,13 +3,15 @@ import {
   type ReasoningMessagePartComponent,
   useScrollLock,
 } from "@assistant-ui/react"
-import { BrainIcon, CaretDownIcon } from "@phosphor-icons/react"
+import { CaretDownIcon } from "@phosphor-icons/react"
 import { MarkdownText } from "@workspace/ui/components/assistant/markdown-text"
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@workspace/ui/components/collapsible"
+import { StatusLine } from "@workspace/ui/components/status-line"
+import { reasoningLine } from "@workspace/ui/lib/activity-copy"
 import { cn } from "@workspace/ui/lib/utils"
 import {
   createContext,
@@ -26,7 +28,8 @@ import {
 
 type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart
 
-const ANIMATION_DURATION = 200
+// The enter token, in milliseconds for the scroll lock.
+const ANIMATION_DURATION = 250
 
 const ReasoningPreviewContext = createContext(false)
 
@@ -160,8 +163,6 @@ function ReasoningTrigger({
   active?: boolean
   duration?: number
 }) {
-  const durationText = duration ? ` (${duration}s)` : ""
-
   return (
     <CollapsibleTrigger
       data-slot="reasoning-trigger"
@@ -172,24 +173,23 @@ function ReasoningTrigger({
       )}
       {...props}
     >
-      <BrainIcon
-        data-slot="reasoning-trigger-icon"
-        className="aui-reasoning-trigger-icon size-4 shrink-0"
-      />
-      <span
+      {/* A trigger is a control, so it is there from the first paint. */}
+      <StatusLine
+        announce={false}
         data-slot="reasoning-trigger-label"
-        className={cn(
-          "aui-reasoning-trigger-label-wrapper inline-block tabular-nums leading-none",
-          active && "shimmer motion-reduce:animate-none"
-        )}
-      >
-        Reasoning{durationText}
-      </span>
+        delay={0}
+        kind="thinking"
+        label={reasoningLine(Boolean(active))}
+        state={active ? "working" : "done"}
+        {...(duration
+          ? { clockAfter: 0, elapsed: duration * 1000 }
+          : { clockAfter: null })}
+      />
       <CaretDownIcon
         data-slot="reasoning-trigger-chevron"
         className={cn(
           "aui-reasoning-trigger-chevron mt-0.5 size-4 shrink-0",
-          "transition-transform duration-(--animation-duration) ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
+          "transition-transform duration-(--animation-duration) ease-standard motion-reduce:transition-none",
           "-rotate-90",
           "group-data-open/trigger:rotate-0",
           "group-data-panel-open/trigger:rotate-0"
@@ -211,7 +211,7 @@ function ReasoningContent({
       data-slot="reasoning-content"
       className={cn(
         "aui-reasoning-content relative overflow-hidden text-muted-foreground text-sm outline-none",
-        "group/collapsible-content ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:animate-none",
+        "group/collapsible-content ease-standard motion-reduce:animate-none",
         "data-closed:animate-collapsible-up",
         "data-open:animate-collapsible-down",
         "data-closed:fill-mode-forwards",
@@ -287,7 +287,7 @@ function ReasoningText({
       data-slot="reasoning-text"
       className={cn(
         "aui-reasoning-text relative z-0 max-h-64 overflow-y-auto text-pretty ps-6 pt-2 pb-2 leading-relaxed",
-        "transform-gpu transition-[transform,opacity] ease-[cubic-bezier(0.32,0.72,0,1)]",
+        "transform-gpu transition-[transform,opacity] ease-standard",
         "motion-reduce:animate-none",
         "group-data-open/collapsible-content:animate-in",
         "group-data-closed/collapsible-content:animate-out",

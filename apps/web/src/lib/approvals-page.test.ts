@@ -29,6 +29,8 @@ vi.mock("@tanstack/react-router", () => ({
   }),
   getRouteApi: () => ({ useLoaderData: () => ({ names: {} }) }),
   Link: () => null,
+  // The panel reads the open conversation, which no page here has.
+  useParams: () => ({}),
 }))
 const refresh = vi.fn(async () => undefined)
 vi.mock("@/lib/workspace", () => ({
@@ -44,7 +46,7 @@ const APPROVAL = vi.hoisted(
     ({
       kind: "approval",
       id: "7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c0d",
-      title: "Version 4 is ready to publish",
+      title: "Your new version is ready to publish",
       version: 4,
       detail: "The hero now leads with end of tenancy cleans.",
       raisedBy: "Reme",
@@ -81,9 +83,8 @@ it("decides the way the panel does, and reads the workspace again", async () => 
     [...container.querySelectorAll("button")].find(
       (each) => each.textContent === name
     )
-  expect(button("Ask for changes")).toBeDefined()
-  await act(async () => button("Approve and publish v4")?.click())
-  expect(button("Publishing v4")?.disabled).toBe(true)
+  await act(async () => button("Publish")?.click())
+  expect(button("Publishing")?.disabled).toBe(true)
   expect(server.decideApproval).toHaveBeenCalledWith({
     data: {
       approvalId: "7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c0d",
@@ -94,7 +95,7 @@ it("decides the way the panel does, and reads the workspace again", async () => 
   await act(async () => record({ recorded: true }))
   expect(refresh).toHaveBeenCalledOnce()
   expect(container.querySelector('[role="status"]')?.textContent).toBe(
-    "Approved v4. It is being published."
+    "Approved. Your website is being published."
   )
   await act(async () => root.unmount())
   container.remove()

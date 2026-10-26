@@ -1,4 +1,6 @@
 import {
+  type AskOpenInput,
+  BuildQuestionsPart,
   BuildSummary,
   CARD_ANSWERED,
   ChatRequest,
@@ -9,7 +11,13 @@ import {
   ErrorEnvelope,
   type FactRecord,
   type MemoryChip,
+  type MessageReading,
+  ONBOARDING_STATUS,
   OnboardingPlan,
+  type OnboardingStatus,
+  OnboardingStep,
+  PERSONA_CARD,
+  type PersonaCard,
   RequestChangeOutput,
   TOOL_CALL_CANCELLED,
 } from "@workspace/contracts"
@@ -23,7 +31,6 @@ import {
   newUlid,
   type OrgScopedDb,
   orgs,
-  recomputeOrgJobs,
   sql,
   type Tenancy,
 } from "@workspace/db"
@@ -36,6 +43,7 @@ import {
   type UIMessageChunk,
 } from "ai"
 import { enqueueAfterTurn } from "./after-turn.ts"
+import { settleCard } from "./build-questions.ts"
 import { type Owner, stateFacts } from "./changes.ts"
 import { holdsNul, notFound } from "./conversations.ts"
 import {
@@ -103,6 +111,7 @@ import {
   type JevDecision,
   jev,
   jevApproval,
+  jevReading,
   matched,
   readReply,
   type Verdict,
@@ -127,7 +136,9 @@ import {
   progressOf,
   type ScriptRow,
   ended as scriptEnded,
+  stepOf,
   text as textPart,
+  trayLogoPath,
   trayOption,
   typedAnswer,
   voiceOf,
@@ -151,10 +162,13 @@ import {
   planReservation,
   planTurn,
   turnData,
+  typedOverForm,
 } from "./onboarding-agent.ts"
 import { notStarted } from "./onboarding-copy.ts"
 import { prepare, readPrepared } from "./onboarding-prepare.ts"
+import { type Pace, pace } from "./pacing.ts"
 import { ownerStaffId } from "./staff.ts"
+import { rememberZone } from "./time-zone.ts"
 import { readFacts } from "./workspace.ts"
 
 /**
@@ -203,6 +217,7 @@ const FORMAT = "ai-sdk/v6"
 
 export type ToolPart = {
   type:
+    | "tool-ask_open"
     | "tool-ask_fact"
     | "tool-ask_details"
     | "tool-ask_choice"
@@ -225,6 +240,7 @@ export type ToolPart = {
 export type Part =
   | { type: "step-start" }
   | { type: "text"; text: string; state: "done" }
+  | { type: typeof PERSONA_CARD; data: PersonaCard }
   | ToolPart
 type Content = { role: "user" | "assistant"; parts: Part[] }
 
@@ -272,6 +288,7 @@ function made(part: Part): UIMessageChunk[] {
       { type: "text-end", id: "text" },
     ]
   }
+  if (part.type === PERSONA_CARD) return [part]
   const { toolCallId } = part
   const call: UIMessageChunk[] = [
     {
@@ -331,13 +348,50 @@ function stream(
     { type: "finish-step" },
     { type: "finish" },
   ]
-  const frames = chunks.map(
-    (chunk) => `data: ${JSON.stringify(chunk, sortedKeys)}\n\n`
-  )
-  return new Response(`${frames.join("")}data: [DONE]\n\n`, {
+  return new Response(`${chunks.map(frame).join("")}${DONE}`, {
     headers: UI_MESSAGE_STREAM_HEADERS,
   })
 }
+
+const frame = (chunk: UIMessageChunk) =>
+  `data: ${JSON.stringify(chunk, sortedKeys)}\n\n`
+const DONE = "data: [DONE]\n\n"
+
+/**
+ * A scripted turn's response, written the way a model would stream it
+ * (`pace`). The turn is stored and its lock released before this runs, so
+ * the waits hold nothing; a closed tab only stops the waiting. Anything but
+ * a stream passes through, and a model's stream is never given here.
+ */
+async function paced(response: Response, how: Pace): Promise<Response> {
+  if (!response.headers.get("content-type")?.includes("text/event-stream")) {
+    return response
+  }
+  const chunks = await framesOf(response)
+  const encoder = new TextEncoder()
+  let open = true
+  const body = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      await pace(
+        chunks,
+        (chunk) => open && controller.enqueue(encoder.encode(frame(chunk))),
+        how
+      )
+      if (open) {
+        controller.enqueue(encoder.encode(DONE))
+        controller.close()
+      }
+    },
+    cancel() {
+      open = false
+    },
+  })
+  return new Response(body, { headers: response.headers })
+}
+
+/** The characters the owner typed on a turn, which the reading beat scales with. */
+const typedChars = (turn: ChatRequest["turn"]) =>
+  turn.kind === "message" ? turn.text.length : (turn.reply?.text.length ?? 0)
 
 /** The step that followed `call` in the stored row, as it was first made. */
 function stepAfter(parts: Part[], call: ToolPart): Part[] {
@@ -427,7 +481,7 @@ export async function readScript(
     sql`select
       p->>'type' as type,
       p->>'state' as state,
-      coalesce(p->'input'->>'key', p->'input'->>'step') as step,
+      coalesce(p->'input'->>'key', p->'input'->>'step', p->'input'->>'about') as step,
       p->'output'->>'answer' as answer,
       p->'output'->'ids'->>0 as choice,
       case when p->>'state' = 'output-error' then (
@@ -562,6 +616,13 @@ export type ChatDeps = {
    * key. Tests pass one.
    */
   approval?: ((card: string, reply: string) => Promise<Verdict | null>) | null
+  /**
+   * What a typed message is doing, for the waiting line only: left out, Jev
+   * on OpenRouter when the api holds a key. Tests pass one.
+   */
+  reading?:
+    | ((asked: string | null, said: string) => Promise<MessageReading | null>)
+    | null
 }
 
 /** What a turn is, read before its lock: whether onboarding runs, and the card it waits on. */
@@ -631,17 +692,19 @@ const gated = (card: ToolPart | undefined): card is ToolPart =>
   card?.type === "tool-ask_choice" || card?.type === "tool-ask_details"
 
 /**
- * Whether the planner reads this onboarding turn: a typed message, and a
- * quote form sent back with changes in the owner's words. Every other card
- * answer is the script's, with no model call.
+ * Whether the planner reads this onboarding turn: a typed message, a quote
+ * form sent back with changes in the owner's words, and an `ask_open`
+ * answered in them. Every other card answer is the script's, with no model
+ * call.
  */
 function plannerReads({ turn }: ChatRequest): boolean {
   if (turn.kind === "message") return true
   const [result, ...more] = turn.results
+  if (more.length > 0 || result?.kind !== "answer") return false
+  const output = result.output as { answer?: string; text?: unknown }
   return (
-    more.length === 0 &&
-    result?.kind === "answer" &&
-    (result.output as { answer?: string }).answer === "changes"
+    output.answer === "changes" ||
+    (output.answer === "stated" && typeof output.text === "string")
   )
 }
 
@@ -669,23 +732,6 @@ async function gateAnswer(
 /** A typed reply already read, by Jev and code, with the state it was read on. */
 type Given = { onboarding: Onboarding; answer: Answer }
 
-/**
- * The org's time zone after a turn that carried the browser's. A new zone is
- * written and the org's recurring jobs move into it in the same transaction;
- * `next` is the earliest of them, for `lowerNextDue` after the commit.
- */
-async function rememberZone(
-  db: OrgScopedDb,
-  orgId: string,
-  browser: string | undefined
-): Promise<{ zone: string | null; next: Date | null }> {
-  const [org] = await db.select({ zone: orgs.timeZone }).from(orgs)
-  const held = org?.zone ?? null
-  if (!browser || browser === held) return { zone: held, next: null }
-  await db.update(orgs).set({ timeZone: browser }).where(eq(orgs.id, orgId))
-  return { zone: browser, next: await recomputeOrgJobs(db, browser) }
-}
-
 export async function chat(
   request: Request,
   env: Env,
@@ -698,12 +744,16 @@ export async function chat(
   const body = await readBody(request)
   const parsed = ChatRequest.safeParse(body)
   if (!parsed.success) return invalid(parsed.error.issues)
+  const how: Pace = {
+    typed: typedChars(parsed.data.turn),
+    since: arrived.getTime(),
+  }
   // Postgres refuses NUL in text and jsonb, and a refusal there is a 500.
   if (holdsNul(parsed.data)) return invalid([{ path: ["turn"] }])
   const { conversation_id: id, mode, turn, time_zone: browser } = parsed.data
   if (browser && !knownZone(browser)) return invalid([{ path: ["time_zone"] }])
   const scope = { orgId: owner.orgId, workosUserId: owner.session.workosUserId }
-  const tools = { env, kit, owner }
+  const tools = { env, kit, owner, settleCard }
   // Read before the turn's lock is taken, beside `lookAhead`; the CoS's
   // context is built from it. An onboarding turn reads it and drops it.
   const loading = loadWorkspace(tools)
@@ -731,6 +781,20 @@ export async function chat(
         ? (card: ToolPart, asked: string, reply: string) =>
             jev(env.OPENROUTER_API_KEY as string, card, asked, reply)
         : null
+  const readingOf =
+    deps.reading !== undefined
+      ? deps.reading
+      : env.OPENROUTER_API_KEY
+        ? (asked: string | null, said: string) =>
+            jevReading(env.OPENROUTER_API_KEY as string, asked, said)
+        : null
+  // A typed message's general waiting line, read beside the whole turn and
+  // never waited for: a real line or the reply's words make it moot.
+  const reading =
+    turn.kind === "message" && readingOf
+      ? readingOf(ahead.card && ahead.asked ? ahead.asked : null, turn.text)
+      : null
+  reading?.catch(() => undefined)
   const approvalOf =
     deps.approval !== undefined
       ? deps.approval
@@ -942,7 +1006,7 @@ export async function chat(
     if (error instanceof NoSuchSession) return notFound()
     throw error
   }
-  if (opened instanceof Response) return prepareLater(opened)
+  if (opened instanceof Response) return paced(prepareLater(opened), how)
   if ("plan" in opened) {
     // The response streams before the turn commits, so the copy call waits
     // for the commit rather than for the response.
@@ -959,6 +1023,7 @@ export async function chat(
       modelId: plannerId,
       price: planPrice as NonNullable<typeof planPrice>,
       gate: racing,
+      reading,
       waitUntil,
       committed: () => void prepareLater(new Response(null)),
     })
@@ -985,6 +1050,8 @@ export async function chat(
     modelId,
     newId,
     waitUntil,
+    how,
+    reading,
   })
 }
 
@@ -1410,6 +1477,9 @@ type Answering = {
   modelId: string
   newId: () => string
   waitUntil: (promise: Promise<unknown>) => void
+  /** What paces a reply the script writes in the model's place. */
+  how: Pace
+  reading: Promise<MessageReading | null> | null
 }
 
 /**
@@ -1470,7 +1540,7 @@ async function fellBack(
 ): Promise<Response> {
   const response = await fallbackTurn(run, a, rows, payload)
   a.waitUntil(enqueueAfterTurn(a.env, run.turn))
-  return response
+  return paced(response, a.how)
 }
 
 /** The model's run over the history the log derives now, which `settle` left caught up. */
@@ -1491,6 +1561,7 @@ async function startModel(
     newMessageId: a.newId,
     lead: tail ? settledLead(messages, tail.id) : answeredChunk(a.opened.typed),
     chip: a.opened.chip,
+    reading: a.reading,
     rows,
     // The stream's reader ends after `closeRun`, so the turn is closed here.
     waitUntil: (reading) =>
@@ -1586,9 +1657,20 @@ async function unloggedPosts(db: OrgScopedDb, id: string) {
   return rows.map((row) => ({
     id: row.id,
     role: row.role,
-    parts: row.parts.filter(
-      (p) => p.type === "step-start" || p.type === "text"
-    ),
+    parts: row.parts.flatMap((p): Part[] => {
+      if (p.type === "step-start" || p.type === "text") return [p]
+      // A card's questions, as the words the owner read, so a typed answer is recognised.
+      const asked = BuildQuestionsPart.safeParse(p).data?.data.questions
+      return asked
+        ? [
+            {
+              type: "text",
+              text: `On a card I asked: ${asked.map((q) => q.text).join(" ")}`,
+              state: "done",
+            },
+          ]
+        : []
+    }),
   }))
 }
 
@@ -1771,7 +1853,9 @@ async function ownerThenStep(
 }
 
 /** The card the tail's last step waits on, if it waits on one. */
-function waitingCard(tail: Tail | null): ToolPart | undefined {
+export function waitingCard(
+  tail: { content: Content } | null
+): ToolPart | undefined {
   if (tail?.content.role !== "assistant") return undefined
   const { parts } = tail.content
   const last = parts.slice(parts.map((p) => p.type).lastIndexOf("step-start"))
@@ -1795,23 +1879,32 @@ async function advance(
   reply: Answer | undefined,
   newId: () => string
 ): Promise<Part[]> {
-  if (reply?.kind === "facts" || reply?.kind === "design") {
-    await stateFacts(
-      db,
-      owner,
-      reply.facts,
-      onboarding.facts as FactRecord[],
-      reply.kind === "facts" && reply.chose ? "inferred" : "owner_stated"
-    )
-  }
   const next = reply ? withAnswer(onboarding, reply) : onboarding
-  const step = withChoice(
-    reply,
-    next,
-    nextStep({ onboarding: next, message: null, newId })
-  )
+  const step = nextStep({ onboarding: next, message: null, newId })
   const build = buildCall(step)
-  if (!build) return step
+  if (reply?.kind === "facts" || reply?.kind === "design") {
+    const source =
+      reply.kind === "facts" && reply.chose ? "inferred" : "owner_stated"
+    // The build's orchestrator reads the facts over its own connection, so
+    // an answer that starts it is committed first, in a transaction of its
+    // own; a retry finds it held and writes nothing.
+    if (build) {
+      await kit.withOrg(
+        { orgId: owner.orgId, workosUserId: owner.session.workosUserId },
+        (own) => stateFacts(own, owner, reply.facts, undefined, source)
+      )
+    } else {
+      await stateFacts(
+        db,
+        owner,
+        reply.facts,
+        onboarding.facts as FactRecord[],
+        source
+      )
+    }
+  }
+  // What the assistant picked leads the reply, a build's outcome included.
+  if (!build) return withChoice(reply, next, step)
   const output = await changed(
     env,
     kit,
@@ -1821,7 +1914,7 @@ async function advance(
     `onboarding:${id}`
   )
   if (output instanceof Response) throw new Refusal(output)
-  return built(next, build, output)
+  return withChoice(reply, next, built(next, build, output))
 }
 
 /** The tail's call this turn names, or a response saying why not. */
@@ -1911,7 +2004,8 @@ async function answer(
     // the facts are stated, and the next save rebuilds them all.
     const ticked = designCard(
       withAnswer(onboarding, meant),
-      () => call.toolCallId
+      () => call.toolCallId,
+      trayLogoPath(call)
     )
     await swapTail(db, id, tail, {
       ...tail.content,
@@ -2157,7 +2251,11 @@ async function openPlan(
     const answered = answerOf(held, turn, onboarding)
     if (!answered) return null
     current = withAnswer(onboarding, answered.meant)
-    input = { kind: "card", card: answered.call, output: answered.output }
+    const words = typedOverForm(answered.call, answered.output)
+    if (words) waitingOn = words.form
+    input = words
+      ? { kind: "message", text: words.text }
+      : { kind: "card", card: answered.call, output: answered.output }
   }
   const state: PlanState = {
     onboarding: current,
@@ -2241,6 +2339,8 @@ type Planning = {
   price: NonNullable<ReturnType<typeof priceOf>>
   /** Jev's reading of a typed reply, still on its way while the planner runs. */
   gate: Promise<Gate | null> | null
+  /** Jev's reading of what a typed message is doing, for the waiting line. */
+  reading: Promise<MessageReading | null> | null
   /** Where the stream's reader goes after the response: `ctx.waitUntil`. */
   waitUntil: (promise: Promise<unknown>) => void
   /** Called once the turn's rows have committed. */
@@ -2339,8 +2439,8 @@ const PLANNED_ERROR = "Something went wrong on our side. Try again."
 async function framesOf(response: Response): Promise<UIMessageChunk[]> {
   return (await response.text())
     .split("\n\n")
-    .filter((frame) => frame.startsWith("data: ") && frame !== "data: [DONE]")
-    .map((frame) => JSON.parse(frame.slice("data: ".length)) as UIMessageChunk)
+    .filter((sse) => sse.startsWith("data: ") && sse !== "data: [DONE]")
+    .map((sse) => JSON.parse(sse.slice("data: ".length)) as UIMessageChunk)
 }
 
 /** The owner-facing words of a refusal the api would have answered with. */
@@ -2399,19 +2499,47 @@ function planned(job: PlanJob, p: Planning): Response {
   })
 }
 
+/**
+ * The step a planned turn is on, for the waiting line before the planner
+ * writes: the card just answered. Null for a typed message, whose step a
+ * card in view only guesses, and for a step no line names.
+ */
+export function stepStatus(s: PlanState): OnboardingStatus | null {
+  if (s.input.kind !== "card") return null
+  const { card } = s.input
+  const about =
+    card.type === "tool-ask_open" ? (card.input as AskOpenInput).about : null
+  const on = OnboardingStep.safeParse(
+    about === "quote.form" ? "quote_form" : (about ?? stepOf(card))
+  )
+  return on.success
+    ? { on: { kind: "step", step: on.data, answered: true }, facts: [] }
+    : null
+}
+
 async function plannedTurn(
   job: PlanJob,
   p: Planning,
   write: (chunk: UIMessageChunk) => void
 ): Promise<void> {
   const { turn } = p.request
+  const how: Pace = { typed: typedChars(turn), since: p.sentAt.getTime() }
   // A results turn without a reply continues the card's own message.
   const continued =
     turn.kind === "results" && !turn.reply ? (job.tail?.id ?? null) : null
   write({ type: "start", messageId: continued ?? p.rowId })
+  // The waiting line names an answered card's step at once; the plan's own
+  // lines follow.
+  const status = (data: OnboardingStatus) =>
+    write({ type: ONBOARDING_STATUS, data, transient: true })
+  const on = stepStatus(job.state)
+  if (on) status(on)
   let stepOpen = false
   let textOpen = false
+  // A plan's line or word has shown: a general line would be a step back.
+  let real = false
   const say = (delta: string) => {
+    real = true
     if (!stepOpen) write({ type: "start-step" })
     if (!textOpen) write({ type: "text-start", id: "text" })
     stepOpen = textOpen = true
@@ -2423,6 +2551,13 @@ async function plannedTurn(
   // has shown, or the planner is done, Jev is ignored.
   const stop = new AbortController()
   let planning = true
+  void p.reading?.then((about) => {
+    if (about && planning && !real) {
+      status({ on: { kind: "reading", about }, facts: [] })
+    }
+  })
+  // Facts written before the message, as a shown word does, keep the plan.
+  let early = false
   let gate = null as Gate | null
   void p.gate?.then((found) => {
     const card = waitingCard(job.tail)
@@ -2430,6 +2565,7 @@ async function plannedTurn(
       found &&
       planning &&
       !textOpen &&
+      !early &&
       card?.toolCallId === found.callId &&
       decidedAnswer(card, found.decision, job.state.onboarding)
     ) {
@@ -2437,13 +2573,50 @@ async function plannedTurn(
       stop.abort()
     }
   })
+  const scope = {
+    orgId: p.owner.orgId,
+    workosUserId: p.owner.session.workosUserId,
+  }
   const outcome = await planTurn(
     p.model,
     p.price,
     job.state,
     PLANNER,
     say,
-    stop.signal
+    stop.signal,
+    {
+      send: (line) => {
+        real = true
+        status(line)
+      },
+      // Written again, as a no-op, with the turn's rows; a failure here
+      // only leaves them to that write.
+      commit: async (checked) => {
+        early = true
+        try {
+          const written = await p.kit.withOrg(scope, async (db) => {
+            const held = await read(db, p.id)
+            if (
+              held instanceof Response ||
+              JSON.stringify(held.tail) !== JSON.stringify(job.tail)
+            ) {
+              return null
+            }
+            return planFacts(db, held, job, checked.plan, p)
+          })
+          return written?.keys ?? []
+        } catch (error) {
+          console.error(
+            JSON.stringify({
+              code: "onboarding.early_facts_failed",
+              turn_id: job.turn.turnId,
+              error: error instanceof Error ? error.name : "unknown",
+            })
+          )
+          return []
+        }
+      },
+    }
   )
   planning = false
   if (textOpen) write({ type: "text-end", id: "text" })
@@ -2464,10 +2637,6 @@ async function plannedTurn(
   // reading, when it has one, is still the best reading of the reply. Waited
   // for here, outside the transaction; `gateAnswer` checks it still applies.
   if (!outcome.ok && !gate && p.gate) gate = await p.gate
-  const scope = {
-    orgId: p.owner.orgId,
-    workosUserId: p.owner.session.workosUserId,
-  }
   const steps = await callEvents(job.turn, outcome.calls)
   let logged = false
   const close = (db: OrgScopedDb, ended: PlanEnded) =>
@@ -2479,12 +2648,11 @@ async function plannedTurn(
       },
     ])
   /** The step's parts as chunks, after the message already streamed. */
-  const finish = (parts: Part[], lead: UIMessageChunk[]) => {
+  const finish = async (parts: Part[], lead: UIMessageChunk[]) => {
     if (!stepOpen) write({ type: "start-step" })
-    for (const chunk of lead) write(chunk)
     const rest =
       outcome.shown && parts[0]?.type === "text" ? parts.slice(1) : parts
-    for (const part of rest) for (const chunk of made(part)) write(chunk)
+    await pace([...lead, ...rest.flatMap(made)], write, how, !!outcome.shown)
     if (!continued) write(writtenAt())
     write({ type: "finish-step" })
     write({ type: "finish" })
@@ -2535,8 +2703,12 @@ async function plannedTurn(
       const boundary = stepOpen
         ? chunks.findIndex((c) => c.type === "start-step")
         : -1
-      for (const [i, chunk] of chunks.entries())
-        if (i !== boundary) write(chunk)
+      await pace(
+        chunks.filter((_, i) => i !== boundary),
+        write,
+        how,
+        !!outcome.shown
+      )
       return
     }
     const step = staged.build
@@ -2544,7 +2716,7 @@ async function plannedTurn(
           close(db, "answered")
         )
       : staged.step
-    finish(step, staged.lead)
+    await finish(step, staged.lead)
   } catch (error) {
     await p.kit
       .withOrg(scope, (db) => close(db, "error"))
@@ -2650,13 +2822,20 @@ async function startPlannedBuild(
  * checked again on what this transaction reads, and null (the script
  * answers) when it no longer holds.
  */
-async function commitPlan(
+/**
+ * A plan's facts and a card answer's, written as the owner's, with the
+ * state the plan was checked again against and the keys written. Null when
+ * the plan no longer fits. Its message is not checked again: `planTurn`
+ * checked it against the turn's state, and facts this function wrote
+ * earlier in the turn would make a correction read as no change.
+ */
+async function planFacts(
   db: OrgScopedDb,
   held: Read,
   job: PlanJob,
-  outcome: Extract<PlanOutcome, { ok: true }>,
+  plan: OnboardingPlan,
   p: Planning
-): Promise<Staged | null> {
+) {
   const onboarding = await onboardingOf(db, held, p.id, p.owner)
   if (!onboarding) throw new Refusal(stale())
   const { turn } = p.request
@@ -2667,7 +2846,7 @@ async function commitPlan(
     ...job.state,
     onboarding: answered ? withAnswer(onboarding, answered.meant) : onboarding,
   }
-  const rechecked = checkPlan(outcome.checked.plan, state)
+  const rechecked = checkPlan(plan, state, false)
   if (!rechecked.ok) return null
   const c = rechecked.checked
   const card = answered?.meant.kind === "facts" ? answered.meant.facts : []
@@ -2683,7 +2862,28 @@ async function commitPlan(
   if (c.chosen.length > 0) {
     await stateFacts(db, p.owner, c.chosen, undefined, "inferred")
   }
-  const parts = planParts(c, state, p.newId)
+  return {
+    answered,
+    state,
+    c,
+    keys: [...byKey.keys(), ...c.chosen.map((f) => f.key)],
+  }
+}
+
+async function commitPlan(
+  db: OrgScopedDb,
+  held: Read,
+  job: PlanJob,
+  outcome: Extract<PlanOutcome, { ok: true }>,
+  p: Planning
+): Promise<Staged | null> {
+  const facts = await planFacts(db, held, job, outcome.checked.plan, p)
+  if (!facts) return null
+  const { answered, c } = facts
+  const { turn } = p.request
+  // The turn's own start, not `state`: facts written mid-stream are already
+  // in that read, which would hide what this turn changed.
+  const parts = planParts(c, job.state, p.newId)
   // A build's message goes after its outcome, unless it already streamed.
   const step =
     outcome.shown && parts[0]?.type !== "text"

@@ -384,7 +384,7 @@ describe.skipIf(!url)("the heartbeat", () => {
           orgId,
           key: `${key}:email`,
           channel: "email",
-          subject: "An update from Reme",
+          subject: "An update on your business",
           text: "Your boiler engineer call is tomorrow at 07:00.",
         },
       ])

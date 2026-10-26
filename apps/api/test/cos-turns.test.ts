@@ -428,6 +428,7 @@ describe.skipIf(!url)("the CoS turn writers, on a live connection", () => {
         questions: [],
         approvals: [],
         missing_facts: [],
+        stopped: [],
       },
     }
     // Keys in the order the SDK writes a tool part, which jsonb does not keep.

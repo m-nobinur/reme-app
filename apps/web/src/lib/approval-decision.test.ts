@@ -30,6 +30,11 @@ vi.mock("@tanstack/react-start", () => ({
     return builder
   },
 }))
+// The panel reads the open conversation, which no page here has.
+vi.mock("@tanstack/react-router", async (actual) => ({
+  ...(await actual<object>()),
+  useParams: () => ({}),
+}))
 vi.mock("@tanstack/react-start/server", () => ({
   getCookie: (name: string) => (name === "wos-session" ? "sealed" : undefined),
   setCookie: () => undefined,
@@ -121,8 +126,9 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-/** The short id the row shows beside its button. */
-const shortIdOn = (text: string) => /ID ([0-9a-f]{8})/.exec(text)?.[1] ?? null
+/** The revision the row is bound to: read off the page, never printed on it. */
+const revisionOn = (container: HTMLElement) =>
+  container.querySelector("[data-revision]")?.getAttribute("data-revision")
 
 const noop = () => undefined
 
@@ -161,6 +167,7 @@ it("sends only the revision shown beside Approve, pressed in the panel", async (
           })),
           missing_facts: [],
           assistant_name: null,
+          assistant_avatar: null,
           reminders: { notes: [], derived: [] },
         }
         const workspace = await apiSource.pollWorkspace(null)
@@ -184,13 +191,11 @@ it("sends only the revision shown beside Approve, pressed in the panel", async (
             )
           })
           const approve = [...container.querySelectorAll("button")].find(
-            (button) => button.textContent?.startsWith("Approve and publish")
+            (button) => button.textContent === "Publish"
           )
-          expect(approve?.textContent).toBe(
-            `Approve and publish v${item.version}`
-          )
+          expect(approve?.textContent).toBe("Publish")
           expect(approve?.disabled).toBe(false)
-          const shown = shortIdOn(container.textContent ?? "")
+          const shown = revisionOn(container)
 
           posted = []
           await act(async () => {
@@ -203,7 +208,7 @@ it("sends only the revision shown beside Approve, pressed in the panel", async (
           expect(sent?.path).toBe(
             `/approvals/${item.request.approval_id}/decision`
           )
-          expect(sent?.body.revision_id.slice(0, 8)).toBe(shown)
+          expect(sent?.body.revision_id).toBe(shown)
           expect(sent?.body.revision_id).toBe(item.request.target.revision_id)
           if (live !== item.request.target.revision_id) {
             expect(sent?.body.revision_id).not.toBe(live)
@@ -224,18 +229,17 @@ it("disables Approve for anything but a revision", () => {
       const html = renderToStaticMarkup(
         createElement(ApprovalItem, {
           target: generated,
-          version: 1,
-          rationale: "r",
-          expiresAt: EXPIRES,
-          onExpiry: "o",
+          title: "t",
+          pictures: null,
           preview: "loading",
           onApprove: noop,
-          onAskForChanges: noop,
         })
       )
       // The attribute, not the class: every button's class names `disabled:`.
       const enabled =
-        !/<button(?=[^>]*\sdisabled="")[^>]*>Approve and publish/.test(html)
+        !/<button(?=[^>]*\sdisabled="")[^>]*>(?:<svg.*?<\/svg>)?Publish/.test(
+          html
+        )
       expect(enabled).toBe(generated.kind === "revision")
     })
   )

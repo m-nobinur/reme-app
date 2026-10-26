@@ -15,6 +15,7 @@ import {
   UsersThreeIcon,
 } from "@phosphor-icons/react"
 import { railItemClass } from "@workspace/ui/components/app-shell"
+import { AssistantAvatar } from "@workspace/ui/components/assistant-avatar"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { DefinitionList } from "@workspace/ui/components/definition-list"
 import {
@@ -49,6 +50,7 @@ import {
   WorkspacePage,
   WorkspaceShell,
 } from "@workspace/ui/components/workspace-shell"
+import { cn } from "@workspace/ui/lib/utils"
 import type { ReactNode } from "react"
 import { BellSample } from "./notification-entries"
 import { SamplePanel, SamplePanelLine } from "./panel-entries"
@@ -153,7 +155,7 @@ const SETTINGS: SettingsSection[] = [
     id: "help",
     label: "Help & support",
     icon: <QuestionIcon aria-hidden />,
-    content: <p className="text-muted-foreground">Ask Reme in the chat.</p>,
+    content: <p className="text-muted-foreground">Ask Ellie in the chat.</p>,
   },
   {
     id: "legal",
@@ -263,11 +265,25 @@ function HintSample() {
   )
 }
 
-function ShellSample() {
+/** A page away from the conversation, where the panel floats as a pill. */
+function ShellSample({ floating = false }: { floating?: boolean }) {
   return (
     <WorkspaceShell
       className="h-[40rem] border border-border"
+      floating={floating}
       panel={<SamplePanel />}
+      panelFooter={
+        <a
+          className={cn(
+            buttonVariants({ variant: "outline", size: "sm" }),
+            "grow"
+          )}
+          href="#chat"
+        >
+          <ChatCircleTextIcon aria-hidden />
+          Go to conversation
+        </a>
+      }
       panelLine={<SamplePanelLine />}
       rail={<Rail />}
     >
@@ -325,6 +341,37 @@ function ActionMenuSample() {
 
 const workspaceCatalog: Entry[] = [
   { name: "WorkspaceShell", render: () => <ShellSample /> },
+  {
+    // Away from the conversation: a pill at the bottom right that keeps no room.
+    name: "WorkspaceShell floating",
+    render: () => <ShellSample floating />,
+  },
+  {
+    // Floating with nothing under way: the assistant's face alone, a way to the chat.
+    name: "WorkspaceShell floating idle",
+    render: () => (
+      <WorkspaceShell
+        className="h-[24rem] border border-border"
+        floating
+        panel={null}
+        panelIdle={
+          <a
+            className="flex size-11 items-center justify-center rounded-full border border-border bg-popover shadow-lg"
+            href="#chat"
+          >
+            <AssistantAvatar className="size-6" id={null} sway />
+            <span className="sr-only">Chat with Reme</span>
+          </a>
+        }
+        panelLine={null}
+        rail={<Rail />}
+      >
+        <WorkspacePage>
+          <h1 className="mb-6 font-semibold text-2xl">Staff</h1>
+        </WorkspacePage>
+      </WorkspaceShell>
+    ),
+  },
   {
     // A page with nothing for the panel to say: no card, no space kept.
     name: "WorkspaceShell without a panel",

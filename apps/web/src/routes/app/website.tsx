@@ -1,18 +1,51 @@
-import { ArrowSquareOutIcon, GlobeIcon } from "@phosphor-icons/react"
-import { createFileRoute, getRouteApi, Link } from "@tanstack/react-router"
+import {
+  ArrowSquareOutIcon,
+  ChatCircleDotsIcon,
+  CheckCircleIcon,
+  CircleIcon,
+  GlobeIcon,
+  WarningCircleIcon,
+} from "@phosphor-icons/react"
+import {
+  createFileRoute,
+  getRouteApi,
+  Link,
+  useRouter,
+} from "@tanstack/react-router"
 import type { BuildSummary } from "@workspace/contracts"
 import { PageHeader } from "@workspace/ui/components/app-shell"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { EmptyState } from "@workspace/ui/components/empty-state"
 import { YourWebsite } from "@workspace/ui/components/live-panel"
+import { SitePictures } from "@workspace/ui/components/site-pictures"
+import { BuildingIcon } from "@workspace/ui/components/status-icons"
+import { StatusIcon, StatusLine } from "@workspace/ui/components/status-line"
+import { segmentKind, workLine } from "@workspace/ui/lib/activity-copy"
 import { cn } from "@workspace/ui/lib/utils"
+import { useEffect, useRef, useState } from "react"
+import { SiteReadyCard } from "@/chat/site-ready"
+import { getSiteMedia } from "@/lib/api/server"
+import type { Workspace, WriteOutcome } from "@/lib/api/types"
+import { assistantOf, leading } from "@/lib/briefing"
 import { currentBuild } from "@/lib/panel"
 import { anchorOf } from "@/lib/reminders"
+import { readyForReview } from "@/lib/site-ready"
+import {
+  type CheckRow,
+  checklistFor,
+  type RowAction,
+} from "@/lib/website-checklist"
 import { useLiveWorkspace } from "@/lib/workspace"
-import { useLiveThumbnail, useRequestChanges } from "@/panel/workspace-panel"
+import { photoActions, replaceLogo } from "@/panel/photo-actions"
+import {
+  liveThumbnail,
+  useBrowserZone,
+  useRequestChanges,
+} from "@/panel/workspace-panel"
 
 export const Route = createFileRoute("/app/website")({
-  component: WebsitePage,
+  loader: async () => await getSiteMedia(),
+  component: Website,
 })
 
 const frame = getRouteApi("/app")
@@ -35,16 +68,152 @@ function BuildLink({ build }: { build: BuildSummary }) {
   )
 }
 
+/** The mark the panel's steps use for the same state. */
+function RowMark({ row }: { row: CheckRow }) {
+  switch (row.mark) {
+    case "done":
+      return <CheckCircleIcon className="size-4 text-primary" weight="fill" />
+    case "now":
+      return <StatusIcon className="text-primary" kind={row.status} />
+    case "waiting":
+      return (
+        <ChatCircleDotsIcon className="size-4 animate-status-fade text-primary motion-reduce:animate-none" />
+      )
+    case "failed":
+      return <WarningCircleIcon className="size-4 text-destructive" />
+    default:
+      return <CircleIcon className="size-4 text-muted-foreground/60" />
+  }
+}
+
+function RowActionLink({ action }: { action: RowAction }) {
+  switch (action.kind) {
+    case "visit":
+      return (
+        <a className={LINK} href={action.href} rel="noreferrer" target="_blank">
+          {action.label}
+          <span className="sr-only"> (opens in a new tab)</span>
+          <ArrowSquareOutIcon aria-hidden />
+        </a>
+      )
+    case "review":
+      return (
+        <Link className={LINK} to="/app/approvals">
+          {action.label}
+        </Link>
+      )
+    case "ask":
+      return (
+        <Link
+          className={LINK}
+          state={() => ({ chat: crypto.randomUUID(), ask: action.ask })}
+          to="/app"
+        >
+          {action.label}
+        </Link>
+      )
+  }
+}
+
+/** Where the site stands: published, its address and Google, each with its next action. */
+function Checklist({ rows }: { rows: CheckRow[] }) {
+  return (
+    <section aria-labelledby="standing" className="flex flex-col gap-1">
+      <h2 className="font-medium text-sm" id="standing">
+        Where things stand
+      </h2>
+      <ul className="flex flex-col divide-y divide-border">
+        {rows.map((row) => (
+          <li className="flex items-start gap-2.5 py-3" key={row.id}>
+            <span aria-hidden className="mt-0.5 flex size-4 shrink-0">
+              <RowMark row={row} />
+            </span>
+            <div className="flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-3">
+              <div className="flex min-w-0 flex-col">
+                <span className="truncate text-sm">{row.title}</span>
+                <span
+                  className={cn(
+                    "text-[0.8125rem] text-muted-foreground",
+                    row.mark === "now" &&
+                      "shimmer shimmer-color-foreground motion-reduce:animate-none"
+                  )}
+                >
+                  {row.line}
+                </span>
+              </div>
+              {row.action ? <RowActionLink action={row.action} /> : null}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
 /**
- * The owner's website, read from the frame's live workspace: the address,
- * the live version and its screenshot, and Request changes, which does what
- * the panel's does.
+ * The site's logo and pictures, each changed by a request like any other
+ * change. A new version brings its own pictures, so they are read again
+ * when the version on show changes.
+ */
+function Pictures({ workspace }: { workspace: Workspace }) {
+  const media = Route.useLoaderData()
+  const router = useRouter()
+  const [pending, setPending] = useState(false)
+  const [status, setStatus] = useState<string | null>(null)
+  const shown =
+    readyForReview(workspace)?.revisionId ??
+    workspace.liveRevision?.revisionId ??
+    null
+  const seen = useRef(shown)
+  useEffect(() => {
+    if (seen.current === shown) return
+    seen.current = shown
+    void router.invalidate({ filter: (match) => match.routeId === Route.id })
+  }, [router, shown])
+
+  const send = (write: () => Promise<WriteOutcome>) => {
+    setPending(true)
+    setStatus(null)
+    write()
+      .then((outcome) =>
+        setStatus(
+          outcome.done
+            ? "Sent. A new version replaces this one."
+            : outcome.reason
+        )
+      )
+      .catch(() => setStatus("That did not go through. Try again."))
+      .finally(() => setPending(false))
+  }
+
+  if (!media) return null
+  return (
+    <SitePictures
+      actions={photoActions(send)}
+      disabled={pending}
+      logo={media.logo ? `/api/photos/${media.logo.id}` : null}
+      maker={assistantOf(workspace)}
+      onReplaceLogo={(file) => send(replaceLogo(file))}
+      pictures={media.photos.map(({ thumbnail, ...photo }) => ({
+        ...photo,
+        src: thumbnail,
+      }))}
+      status={status}
+    />
+  )
+}
+
+/**
+ * The owner's website, read from the frame's live workspace: its screenshot,
+ * Request changes, which does what the panel's does, and the rows of where
+ * the site stands, read from the same activity as the panel.
  */
 function Website() {
   const { active } = frame.useLoaderData()
   const { workspace, refresh } = useLiveWorkspace()
-  const thumbnail = useLiveThumbnail(workspace?.liveRevision ?? null)
+  const thumbnail = liveThumbnail(workspace?.liveRevision ?? null)
   const requestChanges = useRequestChanges()
+  const zone = useBrowserZone()
 
   if (!workspace) {
     return (
@@ -62,18 +231,35 @@ function Website() {
     )
   }
 
-  const { live, host, url, open, builds } = workspace
+  const { live, host, open, builds } = workspace
   const build = open ? currentBuild(builds) : undefined
+  // The segment doing the work, whose step the page says: the first
+  // website's, or a change's.
+  const work = [
+    ...(workspace.activity?.journey ?? []),
+    ...(workspace.activity?.now ?? []),
+  ].find((s) => s.kind === "website" || s.kind === "change")
+  const step = work ? workLine(work) : null
+  // A version waiting on the owner, which the page shows before anything else.
+  const review = readyForReview(workspace)
 
   if (live === null && host === null) {
     return (
       <>
         <PageHeader title="Website" />
-        {build ? (
+        {review ? (
+          <div className="flex flex-col gap-8">
+            <SiteReadyCard />
+            <Pictures workspace={workspace} />
+          </div>
+        ) : build ? (
           <EmptyState
-            action={<BuildLink build={build} />}
-            description="Reme is building the first version. You review it before it goes live."
-            icon={<GlobeIcon />}
+            description={
+              step
+                ? `${step}. You review it before it goes live.`
+                : `${leading(assistantOf(workspace))} is building the first version. You review it before it goes live.`
+            }
+            icon={<BuildingIcon animated className="text-primary" />}
             title="Your website is under way"
           />
         ) : (
@@ -96,7 +282,7 @@ function Website() {
                 </Link>
               )
             }
-            description="Reme builds a website for your business from what you tell it in the chat. You review every version before it goes live."
+            description={`${leading(assistantOf(workspace))} builds a website for your business from what you share in the chat. You review every version before it goes live.`}
             icon={<GlobeIcon />}
             title={
               active ? `${active.name} has no website yet` : "No website yet"
@@ -118,43 +304,35 @@ function Website() {
         description="What your customers see, and where to ask for a change."
         title="Website"
       />
-      <div className="flex max-w-xl flex-col gap-4">
-        {host && url ? (
-          <a
-            className={cn(LINK, "self-start")}
-            href={url}
-            rel="noreferrer"
-            target="_blank"
-          >
-            {host}
-            <span className="sr-only"> (opens in a new tab)</span>
-            <ArrowSquareOutIcon aria-hidden />
-          </a>
-        ) : null}
+      {review ? <SiteReadyCard className="mb-6" /> : null}
+      {/* The screenshot beside the checklist once there is room for both. */}
+      <div className="grid items-start gap-4 lg:grid-cols-2 lg:gap-6">
         {build ? (
-          <p className="flex flex-wrap items-center gap-x-2 text-muted-foreground text-sm">
-            {live
-              ? "A change to your website is being built."
-              : "Your first version is being built."}
+          <p className="flex flex-wrap items-center gap-x-3 text-sm lg:col-span-2">
+            <StatusLine
+              announce={false}
+              clockAfter={null}
+              delay={0}
+              kind={work ? segmentKind(work) : "building"}
+              label={
+                step ??
+                (live
+                  ? "A change to your website is being built"
+                  : "Your first version is being built")
+              }
+              state={work?.state === "waiting" ? "waiting" : "working"}
+            />
             <BuildLink build={build} />
           </p>
         ) : null}
         {/* The screenshot and version line only: the address and Request
             changes sit above, where the page puts its actions. */}
         <YourWebsite host={null} live={live} thumbnail={thumbnail} />
+        <Checklist rows={checklistFor(workspace, zone, new Date())} />
+      </div>
+      <div className="mt-8">
+        <Pictures workspace={workspace} />
       </div>
     </>
-  )
-}
-
-/**
- * The page keeps to the composer's width and the left edge every page title
- * shares, so its actions stay clear of the panel floating at the top right.
- */
-function WebsitePage() {
-  return (
-    <div className="max-w-2xl">
-      <Website />
-    </div>
   )
 }

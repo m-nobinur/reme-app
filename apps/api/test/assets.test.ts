@@ -6,7 +6,13 @@ import {
 } from "@workspace/contracts"
 import { type Tenancy, tenancy } from "@workspace/db"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { cleanName, readPhoto, sniff, uploadKey } from "../src/assets.ts"
+import {
+  cleanName,
+  readPhoto,
+  readRevisionPicture,
+  sniff,
+  uploadKey,
+} from "../src/assets.ts"
 import type { Owner } from "../src/changes.ts"
 import { owner, stubOrchestrator } from "./owner-fixture.ts"
 import { stubJwksFetch } from "./sealed-session.ts"
@@ -47,17 +53,111 @@ describe("an uploaded photo's type and name", () => {
   })
 })
 
+describe("GET /revisions/:id/:picture", () => {
+  const rev = "3e4f5a6b-7c8d-4e9f-8a1b-2c3d4e5f6a7b"
+  const keys = [
+    `sites/org-a/${rev}/screenshots/home-1440.png`,
+    `sites/org-a/${rev}/screenshots/home-390.png`,
+    `sites/org-a/${rev}/critic/home-1440-2.jpg`,
+    `sites/org-a/${rev}/dist/icon-192.png`,
+  ]
+  const asked: unknown[] = []
+  const env = (images: boolean) =>
+    ({
+      SITES: {
+        get: async (key: string) =>
+          keys.includes(key)
+            ? { key, body: new Blob([new Uint8Array(9)]).stream() }
+            : null,
+      },
+      IMAGES: images
+        ? {
+            input: (stream: ReadableStream) => {
+              void stream.cancel()
+              const handle = {
+                transform: (t: unknown) => {
+                  asked.push(t)
+                  return handle
+                },
+                output: async () => ({
+                  image: () => new Blob([new Uint8Array(1)]).stream(),
+                  contentType: () => "image/webp",
+                }),
+              }
+              return handle
+            },
+          }
+        : undefined,
+    }) as unknown as Env
+  const mine = { orgId: "org-a" } as Owner
+  const read = (images: boolean, picture: string, as = mine) =>
+    readRevisionPicture(env(images), as, rev, picture)
+
+  it("cuts each picture from the home page's shots, cached for good", async () => {
+    for (const picture of ["laptop", "laptop-2", "phone"]) {
+      const response = await read(true, picture)
+      expect(response.headers.get("content-type")).toBe("image/webp")
+      expect(response.headers.get("cache-control")).toContain("immutable")
+      await response.arrayBuffer()
+    }
+    const cover = { fit: "cover", gravity: "top" }
+    expect(asked).toEqual([
+      { width: 1200, height: 750, ...cover },
+      { width: 1200, height: 750, ...cover },
+      { width: 390, height: 844, ...cover },
+    ])
+  })
+
+  it("serves the icon, and with no binding each picture as stored", async () => {
+    for (const [picture, type] of [
+      ["icon", "image/png"],
+      ["laptop", "image/png"],
+      ["laptop-2", "image/jpeg"],
+    ]) {
+      const response = await read(false, picture as string)
+      expect(response.headers.get("content-type")).toBe(type)
+      expect((await response.arrayBuffer()).byteLength).toBe(9)
+    }
+  })
+
+  it("takes a second page for the laptop's second picture where the build kept one", async () => {
+    keys.push(`sites/org-a/${rev}/screenshots/page-1440.png`)
+    try {
+      const response = await read(false, "laptop-2")
+      expect(response.headers.get("content-type")).toBe("image/png")
+      await response.arrayBuffer()
+    } finally {
+      keys.pop()
+    }
+  })
+
+  it("is a 404 for another org's version and for a name it does not serve", async () => {
+    const theirs = { orgId: "org-b" } as Owner
+    expect((await read(true, "icon", theirs)).status).toBe(404)
+    expect((await read(true, "manifest")).status).toBe(404)
+  })
+})
+
 describe("GET /photos/:id's thumbnail", () => {
   const id = "0b9c4a1e-2f3d-4c5b-8a6e-7d8f9a0b1c2d"
   const ORIGINAL = new Uint8Array(2000)
   const THUMB = new Uint8Array([1, 2, 3])
+  const upload = "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f"
+  const logo = "2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f6a"
   const mine = { orgId: "org-a" } as Owner
+  const stored: Record<string, Record<string, string>> = {
+    [`generated/org-a/${id}.png`]: {},
+    [`uploads/org-a/${upload}`]: {},
+    [`generated/org-a/${logo}.png`]: { use: "logo" },
+  }
   const sites = {
     get: async (key: string) =>
-      key === `generated/org-a/${id}.png`
+      key in stored
         ? {
+            key,
             body: new Blob([ORIGINAL]).stream(),
             httpMetadata: { contentType: "image/png" },
+            customMetadata: stored[key],
           }
         : null,
   }
@@ -88,6 +188,22 @@ describe("GET /photos/:id's thumbnail", () => {
     expect(response.headers.get("cache-control")).toContain("immutable")
     expect(await bytes(response)).toEqual(THUMB)
     expect(asked).toEqual([{ width: 320 }])
+  })
+
+  it("serves an owner's upload and a drawn logo at the tray's 512 px", async () => {
+    asked.length = 0
+    for (const each of [upload, logo]) {
+      const response = await readPhoto(env({ IMAGES: images }), mine, each)
+      expect(response.status).toBe(200)
+      await response.arrayBuffer()
+    }
+    expect(asked).toEqual([{ width: 512 }, { width: 512 }])
+    const theirs = await readPhoto(
+      env({ IMAGES: images }),
+      { orgId: "org-b" } as Owner,
+      upload
+    )
+    expect(theirs.status).toBe(404)
   })
 
   it("is the original where there is no binding", async () => {
@@ -331,6 +447,7 @@ describe.skipIf(!url)("GET /photos/:id, on a live connection", () => {
       get: async (asked: string) =>
         asked === key
           ? {
+              key,
               body: new Blob([WEBP]).stream(),
               httpMetadata: { contentType: "image/webp" },
             }

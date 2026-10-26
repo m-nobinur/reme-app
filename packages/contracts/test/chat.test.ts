@@ -519,21 +519,44 @@ describe("the quote form review", () => {
       "options on a text",
       [field({ options: ["a", "b"] }), field({ key: "b_b" })],
     ],
+    [
+      "a checkbox with no options",
+      [field({ type: "checkbox" }), field({ key: "b_b" })],
+    ],
+    [
+      "options on photos",
+      [field({ type: "photos", options: ["a", "b"] }), field({ key: "b_b" })],
+    ],
   ])("refuses %s in Zod", (_name, fields) => {
     expect(ReviewQuoteFormInput.safeParse({ fields, note: null }).success).toBe(
       false
     )
   })
 
-  it("accepts a select with its options", () => {
-    const select = field({
-      key: "frequency",
-      type: "select",
-      options: ["Weekly", "One-off"],
-    })
+  it.each(["select", "radio", "checkbox"])(
+    "accepts a %s with its options",
+    (type) => {
+      const choice = field({
+        key: "frequency",
+        type,
+        options: ["Weekly", "One-off"],
+      })
+      expect(
+        verdict("ReviewQuoteFormInput", ReviewQuoteFormInput, {
+          fields: [choice, ...two],
+          note: null,
+        })
+      ).toEqual(ACCEPTED)
+    }
+  )
+
+  it("accepts photos and a date and time", () => {
     expect(
       verdict("ReviewQuoteFormInput", ReviewQuoteFormInput, {
-        fields: [select, ...two],
+        fields: [
+          field({ key: "photos", type: "photos" }),
+          field({ key: "pick_up", type: "datetime" }),
+        ],
         note: null,
       })
     ).toEqual(ACCEPTED)

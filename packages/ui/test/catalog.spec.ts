@@ -115,31 +115,39 @@ for (const theme of ["light", "dark"] as const) {
   test(`catalog has no accessibility violations in ${theme}`, async ({
     page,
   }) => {
-    // One axe run per entry: with the live panel's states the catalog took
-    // 25 to 30 s on a loaded machine, against the 30 s default, and with the
-    // onboarding cards and thread fixtures it passed 90 s under a full suite.
-    // With the rail and settings entries it took 2.6 min alone and passed 3
-    // under the pre-push suite (2026-10-19).
-    test.setTimeout(300_000)
+    // One axe run over every entry, each violation named by the entry it is
+    // in. A run per entry loaded axe 300 times and took about 4 min against
+    // the 5 min this allowed (2026-10-24).
+    test.setTimeout(120_000)
     // Entries fade in, and a scan mid-fade reads text at a fraction of its
     // colour; every entrance is `motion-safe:`, so reduced motion shows it
     // settled.
     await page.emulateMedia({ reducedMotion: "reduce" })
     await page.goto(`/?theme=${theme}`)
+    await page.locator("[data-entry]").first().waitFor()
 
-    for (const name of await entryNames(page)) {
-      const results = await new AxeBuilder({ page })
-        .withTags(WCAG)
-        .include(`[data-entry="${name}"]`)
-        .analyze()
-
-      expect
-        .soft(
-          results.violations.map((violation) => `${name}: ${violation.id}`),
-          JSON.stringify(results.violations, null, 2)
-        )
-        .toEqual([])
-    }
+    const { violations } = await new AxeBuilder({ page })
+      .withTags(WCAG)
+      .include("[data-entry]")
+      .analyze()
+    const found = await page.evaluate(
+      (each) =>
+        each.flatMap(({ id, targets }) =>
+          targets.map((target) => {
+            const entry = document
+              .querySelector(target)
+              ?.closest("[data-entry]")
+              ?.getAttribute("data-entry")
+            return `${entry ?? target}: ${id}`
+          })
+        ),
+      violations.map((violation) => ({
+        id: violation.id,
+        // A target in a shadow root or frame is a path; its host names the entry.
+        targets: violation.nodes.map((node) => String(node.target[0])),
+      }))
+    )
+    expect([...new Set(found)], JSON.stringify(violations, null, 2)).toEqual([])
   })
 
   test(`catalog matches its snapshots in ${theme}`, async ({ page }) => {

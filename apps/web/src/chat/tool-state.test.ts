@@ -12,13 +12,16 @@ import {
   askChoiceView,
   askDetailsView,
   askFactView,
+  askOpenView,
   askUploadView,
   choiceText,
   decisionView,
   detailsText,
   isHeld,
+  isRetried,
   phoneText,
   readView,
+  showsProgress,
   UNCONFIRMED,
 } from "@workspace/ui/lib/tool-state"
 import { expect, it } from "vitest"
@@ -106,15 +109,15 @@ it("reads a change the owner is asked to start, in every state", () => {
         outcome: "refused",
         error: {
           class: "validation",
-          code: "change.question_open",
-          message: "Answer the open question first.",
+          code: "change.build_busy",
+          message: "A build is finishing.",
         },
       },
     })
   ).toEqual({
     state: "refused",
     input: CHANGE,
-    code: "change.question_open",
+    code: "change.build_busy",
   })
   expect(
     change({
@@ -261,8 +264,8 @@ it("a yes is held only while another card in its message still waits", () => {
 })
 
 it("says a refusal in the owner's words, never the api's", () => {
-  expect(refusalText("change.question_open", "Fallback.")).toBe(
-    "A build is waiting on your answer. Answer it first."
+  expect(refusalText("change.build_busy", "Fallback.")).toBe(
+    "A build is finishing. Ask again once it is ready for you."
   )
   expect(refusalText("request.not_found", "Fallback.")).toBe(
     "That question is no longer waiting on you."
@@ -310,6 +313,27 @@ it("reads every ask_choice state, and the answer in the owner's words", () => {
   expect(askChoiceView({ args: { step: "nope" } }).state).toBe("error")
   expect(
     askChoiceView({ args: CHOICE, result: { answer: "chosen" } }).state
+  ).toBe("error")
+})
+
+it("reads every ask_open state", () => {
+  const args = { about: "quote.form" }
+  expect(askOpenView({ args })).toEqual({ state: "pending", input: args })
+  const stated = { answer: "stated", text: "Rooms and how often" }
+  expect(askOpenView({ args, result: stated })).toEqual({
+    state: "answered",
+    input: args,
+    output: stated,
+  })
+  expect(askOpenView({ args, result: { answer: "skipped" } }).state).toBe(
+    "skipped"
+  )
+  expect(
+    askOpenView({ args, isError: true, result: { error: CANCELLED } }).state
+  ).toBe("cancelled")
+  expect(askOpenView({ args: { about: "media.uploads" } }).state).toBe("error")
+  expect(
+    askOpenView({ args, result: { answer: "stated", text: " " } }).state
   ).toBe("error")
 })
 
@@ -392,7 +416,9 @@ it("reads every ask_details state, and the answer in the owner's words", () => {
     output: stated,
   })
   if (answered.state === "answered") {
-    expect(detailsText(answered.output.facts)).toBe("07700 900123, a@b.example")
+    expect(detailsText(answered.output.facts)).toBe(
+      "07700 900123 · a@b.example"
+    )
   }
   expect(
     detailsText([
@@ -400,7 +426,7 @@ it("reads every ask_details state, and the answer in the owner's words", () => {
       { key: "assistant.pronouns", value: { id: "she_her" } },
       { key: "assistant.tone", value: { id: "friendly" } },
     ])
-  ).toBe("Ava, she/her, Friendly")
+  ).toBe("Ava · she/her · Friendly")
   expect(
     askDetailsView({ args: contact, result: { answer: "skipped" } }).state
   ).toBe("skipped")
@@ -430,4 +456,41 @@ it("writes a UK number the way it is written at home, and leaves others", () => 
   expect(phoneText("+447700900123")).toBe("07700 900123")
   expect(phoneText("+442079460000")).toBe("020 7946 0000")
   expect(phoneText("+14155550100")).toBe("+14155550100")
+})
+
+it("hides a refusal the same tool was called again after, and only that", () => {
+  const changeCall = (id: string, outcome?: string) =>
+    call(id, {
+      toolName: "request_change",
+      ...(outcome && { result: { outcome } }),
+    })
+  const parts = [changeCall("a", "refused"), changeCall("b", "started")]
+  expect(isRetried(parts, "a")).toBe(true)
+  expect(isRetried(parts, "b")).toBe(false)
+  expect(isRetried([changeCall("a", "refused")], "a")).toBe(false)
+  expect(
+    isRetried(
+      [changeCall("a", "refused"), call("b", { toolName: "get_workspace" })],
+      "a"
+    )
+  ).toBe(false)
+})
+
+it("leaves the reply's status line to a reply with nothing at work on screen", () => {
+  const quiet = { remember: () => null }
+  const text = { type: "text", text: "Lovely." }
+  expect(showsProgress([], quiet)).toBe(false)
+  expect(
+    showsProgress([call("a", { toolName: "get_workspace", result: {} })], quiet)
+  ).toBe(false)
+  expect(
+    showsProgress([call("a", { toolName: "request_change" })], quiet)
+  ).toBe(true)
+  expect(showsProgress([text], quiet)).toBe(true)
+  expect(showsProgress([call("b", { toolName: "remember" })], quiet)).toBe(
+    false
+  )
+  expect(
+    showsProgress([call("c", { toolName: "x", isError: true })], quiet)
+  ).toBe(false)
 })

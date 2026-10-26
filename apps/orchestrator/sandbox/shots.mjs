@@ -2,7 +2,9 @@
 // (apps/orchestrator/src/shots.ts): `node /tmp/shots.mjs <url> <outDir> <cropMax>`.
 //
 // Per width: the whole home page as `home-<w>.png` (the review card's image),
-// and, at the critic's widths only, viewport-height pieces of it, top to
+// at the laptop width the first screen of a second page as `page-<w>.png`
+// (the card's second picture: the page the site's own menu names first,
+// services before any other), and, at the critic's widths only, viewport-height pieces of it, top to
 // bottom, as `crop-<w>-<n>.jpg` from 1, at most `cropMax` of them (the design
 // critic's pictures: a model refuses an image over 8000 px and scales a tall
 // one to about 1568 px on its long edge, so a full page reaches it unreadable;
@@ -15,6 +17,7 @@ export const WIDTHS = [390, 768, 1440]
 export const CROP_WIDTHS = [390, 1440]
 export const CROP_QUALITY = 70
 export const HEIGHT = 900
+export const PAGE_WIDTH = 1440
 
 // Runs in the page. A full-page capture never scrolls, so a lazy image below
 // the fold stays an empty box. Here the capture alone makes every image eager
@@ -54,6 +57,17 @@ export async function inPage() {
   window.scrollTo(0, 0)
 }
 
+// Runs in the page: the path of the page the site's header or menu links
+// first, a services page before any other, or null when it links none.
+export function secondPage() {
+  const here = location.pathname
+  const paths = [...document.querySelectorAll("header a[href], nav a[href]")]
+    .map((a) => new URL(a.getAttribute("href"), location.href))
+    .filter((u) => u.origin === location.origin && u.pathname !== here)
+    .map((u) => u.pathname)
+  return paths.find((path) => /servic/i.test(path)) ?? paths[0] ?? null
+}
+
 export async function shoot(browser, url, dir, cropMax) {
   let failed = false
   for (const width of WIDTHS) {
@@ -84,6 +98,18 @@ export async function shoot(browser, url, dir, cropMax) {
           fullPage: true,
           clip: { x: 0, y, width, height: Math.min(HEIGHT, total - y) },
         })
+      }
+      const next = width === PAGE_WIDTH ? await page.evaluate(secondPage) : null
+      // Only the card's second picture rides on it, so a page that will not
+      // open leaves the home page's shots standing.
+      if (next) {
+        try {
+          await page.goto(new URL(next, url).href, { waitUntil: "load" })
+          await page.evaluate(inPage)
+          await page.screenshot({ path: `${dir}/page-${width}.png` })
+        } catch (error) {
+          console.error(`${next}: ${error}`)
+        }
       }
       await context.close()
     } catch (error) {

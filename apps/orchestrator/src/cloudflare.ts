@@ -8,8 +8,10 @@ import { NonRetryableError } from "cloudflare:workflows"
 import {
   Blueprint,
   type BuildLane,
+  buildFailure,
   type ChangeKind,
   siteUrl,
+  WORKFLOW_ERRORED,
 } from "@workspace/contracts"
 import {
   appendEvent,
@@ -18,6 +20,7 @@ import {
   facts,
   failureCode,
   listOrgIds,
+  type Posted,
   type Tenancy,
   tenancy,
   toFactRecord,
@@ -36,7 +39,9 @@ import { type ConsoleEnv, noRoute, ownerRoutes } from "./app.ts"
 import {
   type Brief,
   creationChoices,
+  failureReason,
   issueSpec,
+  retryContext,
   takeSnapshot,
 } from "./brief.ts"
 import { critiqueRound, type Fix, repairMessage } from "./critic.ts"
@@ -50,7 +55,7 @@ import { postStatus, type Say, sweepDomains } from "./domain-flow.ts"
 import { SAY_RETRIES } from "./domain-workflow.ts"
 import { JOBS_QUEUES, jobsBatch } from "./jobs.ts"
 import { makePhotos } from "./photo-step.ts"
-import { PLAN_ROUNDS, planRound, readDecision } from "./planner.ts"
+import { planRound } from "./planner.ts"
 import {
   accessible,
   activate,
@@ -69,16 +74,27 @@ import {
   writePointer,
 } from "./publish.ts"
 import { quickEdit } from "./quick.ts"
+import { askOwner, heldSteers, relayQuestion } from "./relay.ts"
 import { retireOthers, type SweepCounts, sweepOrg } from "./retention.ts"
+import {
+  afterFailure,
+  type Note,
+  noteProblem,
+  noteResumed,
+  postNote,
+  readyNote,
+  sayReady,
+} from "./retry.ts"
 import {
   latestBlueprint,
   mapSite,
-  publishedSource,
   restoreAndMap,
+  reviseSource,
   SITE_ROOT,
 } from "./revise.ts"
 import {
   checkpoint,
+  checkpointKey,
   endSandbox,
   keepWarm,
   PoolExhaustedError,
@@ -88,7 +104,9 @@ import {
   tailSandbox,
   takeScreenshots,
   takeWarm,
+  takeWork,
   whileHeld,
+  workKey,
 } from "./sandbox.ts"
 import { type JobsQueueMessage, SCHEDULE_CRON, scanDue } from "./schedule.ts"
 import { afterPublish, startDueSyncs } from "./search-sync.ts"
@@ -100,7 +118,7 @@ import {
   TransitionError,
 } from "./state.ts"
 import { GIT, runAxe } from "./tail.ts"
-import { LEAD_TURN_MS, logTiming, since, type ToolTimings } from "./timing.ts"
+import { logTiming, STALL_QUIET_MS, since, type ToolTimings } from "./timing.ts"
 import { checkUptime, UPTIME_CRON } from "./uptime.ts"
 import { assignmentFacts, checkA11y, validateRevision } from "./validate.ts"
 
@@ -138,7 +156,8 @@ type DeveloperEvent =
       timings?: ToolTimings
     }
   | { kind: "budget"; cap_usd: number; spent_usd: number }
-  | { kind: "interrupted"; reason: string }
+  /** `key` names the failure, so a second wake for it resumes nothing. */
+  | { kind: "interrupted"; reason: string; key?: string }
   | { kind: "unreported"; reason: string }
   | { kind: "start_failed"; reason: string }
 
@@ -154,6 +173,10 @@ type DeveloperEvent =
  */
 const ANSWER_DEADLINE_MS = 7 * 24 * 60 * 60 * 1000
 const LOOK_EVERY_MS = 6 * 60 * 60 * 1000
+/** How soon a question the chat could not take yet is posted again. */
+const POST_AGAIN_MS = 2 * 60 * 1000
+/** Posts the chat will take later: the question is posted again. */
+const QUEUED: ReadonlySet<Posted> = new Set(["busy", "waiting"])
 
 /** How long a queued assignment waits for the site lock: 20 × 30 s. */
 const CLAIM_ATTEMPTS = 20
@@ -183,8 +206,15 @@ const withKit = async <T>(
   }
 }
 
-/** Reasons the turn gate names itself; any other interruption is the provider's. */
-const GATE_REASONS = new Set([REPEATING_FAILURE, SANDBOX_UPDATING])
+/** The watchdog's reason for a Developer that went quiet (`STALL_QUIET_MS`). */
+const DEVELOPER_STALLED = "developer.stalled"
+
+/** Reasons the turn gate or the watchdog names itself; any other interruption is the provider's. */
+const GATE_REASONS = new Set([
+  REPEATING_FAILURE,
+  SANDBOX_UPDATING,
+  DEVELOPER_STALLED,
+])
 
 /** Information round trips per assignment before the Workflow stops waiting. */
 const ROUNDS = 20
@@ -200,6 +230,52 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
   AssignmentParams
 > {
   async run(event: WorkflowEvent<AssignmentParams>, step: WorkflowStep) {
+    try {
+      return await this.build(event, step)
+    } catch (error) {
+      // A step out of retries ends the Workflow. Without this the build reads
+      // as at work for ever (2026-10-25: a reload mid-build); it ends failed,
+      // gives up its sandbox and gets the usual retry and chat line instead.
+      const ids = {
+        orgId: event.payload.org_id,
+        assignmentId: event.payload.assignment_id,
+      }
+      const run = <T>(fn: (kit: Tenancy) => Promise<T>) => withKit(this.env, fn)
+      const ended = await step
+        .do("fail errored", () =>
+          run((kit) =>
+            advance(kit, ids, "failed", { reason: WORKFLOW_ERRORED })
+          )
+        )
+        .then(() => true)
+        .catch(() => false)
+      if (!ended) throw error
+      await step
+        .do("destroy sandbox errored", async () => {
+          await endSandbox(this.env, ids)
+          return { destroyed: ids.assignmentId }
+        })
+        .catch(() => null)
+      const { note } = await step
+        .do("retry errored", () =>
+          run((kit) => afterFailure(this.env, kit, ids))
+        )
+        .catch(() => ({ note: null }))
+      if (note) {
+        await step
+          .do("say errored", SAY_RETRIES, () =>
+            run((kit) => postNote(kit, ids.orgId, note))
+          )
+          .catch(() => null)
+      }
+      return { outcome: "failed" as const }
+    }
+  }
+
+  private async build(
+    event: WorkflowEvent<AssignmentParams>,
+    step: WorkflowStep
+  ) {
     const ids = {
       orgId: event.payload.org_id,
       assignmentId: event.payload.assignment_id,
@@ -226,6 +302,39 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
     }
     if (!claimed) return { outcome: "queued" }
 
+    // An owner's build that failed on our side starts once more, and the chat
+    // hears what happened (retry.ts). Nothing here changes how this build ended.
+    const followUp = async (kept: boolean) => {
+      try {
+        const { note, retry_id } = await step.do("retry", () =>
+          run((kit) => afterFailure(this.env, kit, ids))
+        )
+        if (kept && !retry_id) {
+          await step.do("drop work", () => this.env.SITES.delete(workKey(ids)))
+        }
+        if (note) {
+          await step.do("say failed", SAY_RETRIES, () =>
+            run((kit) => postNote(kit, ids.orgId, note))
+          )
+        }
+      } catch {
+        // The failure stands, and the panel shows it.
+      }
+    }
+    // A retry of failed checks carries on from the site, so it is kept before
+    // the sandbox goes; without it the retry starts afresh.
+    const keepWork = async (reason: string) => {
+      if (buildFailure(reason).retry !== "fix_forward") return false
+      await step
+        .do("keep work", async () => {
+          const kept = await whileHeld(this.env, ids, () =>
+            checkpoint(this.env, ids, workKey(ids))
+          )
+          return { taken: kept?.taken ?? false }
+        })
+        .catch(() => null)
+      return true
+    }
     // A build that cannot continue ends in `failed` and destroys its sandbox,
     // if it holds one (`endSandbox` leaves a warm one another build holds),
     // which releases the site lock (§13): a provider that keeps failing, a
@@ -235,94 +344,45 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
       await step.do(`fail ${name}`, () =>
         run((kit) => advance(kit, ids, "failed", { reason }))
       )
+      const kept = await keepWork(reason)
       await step.do("destroy sandbox", async () => {
         await endSandbox(this.env, ids)
         return { destroyed: ids.assignmentId }
       })
+      await followUp(kept)
       return { outcome: "failed" as const }
     }
 
     // The lane rides the planning step's return rather than a step of its
     // own, so a full build keeps its step list. An instance replayed from
     // before lanes existed gets the old return, with no lane: full.
-    // `plan` and `review` ride it the same way: an instance from before
-    // planning gets neither and builds as it did.
+    // `plan` rides it the same way: an instance from before planning gets
+    // none and builds as it did.
     const route: {
       lane?: BuildLane
       change_kind?: ChangeKind | null
       plan?: boolean
-      review?: boolean
     } = await step.do("planning", () =>
       run(async (kit) => {
         await advance(kit, ids, "planning")
-        const { lane, change_kind, kind, origin, skip_review } =
-          await kit.withOrg({ orgId: ids.orgId }, (db) =>
-            creationChoices(db, ids)
-          )
+        const { lane, change_kind, kind } = await kit.withOrg(
+          { orgId: ids.orgId },
+          (db) => creationChoices(db, ids)
+        )
         // ADR-038: a first build plans, and so does a creative change; the
-        // quick lane never does. Only an owner's build waits on the card,
-        // and "Skip all" in onboarding skips that wait.
+        // quick lane never does. The plan is approved as it is made: the
+        // owner is never asked to review one, and an instance that was
+        // waiting on a decision before this goes straight on to the build.
         const plan =
           lane === "full" &&
           (kind === "site.build" || change_kind === "creative")
-        return {
-          lane,
-          change_kind,
-          plan,
-          review: plan && origin === "owner" && !skip_review,
-        }
+        return { lane, change_kind, plan }
       })
     )
     if (route.plan) {
-      for (let round = 1; round <= PLAN_ROUNDS; round++) {
-        await step.do(`plan ${round}`, () =>
-          run((kit) =>
-            planRound({
-              env: this.env,
-              kit,
-              ids,
-              round,
-              review: route.review === true,
-            })
-          )
-        )
-        if (!route.review) break
-        // The owner's "Build it" or "Change something" is a row the bridge
-        // writes; the `blueprint` event only nudges a look, as an answer's
-        // does, and the six-hourly look recovers a nudge that never came.
-        const deadline = await step.do(
-          `plan deadline ${round}`,
-          async () => Date.now() + ANSWER_DEADLINE_MS
-        )
-        let decision: "build" | "change" | null = null
-        for (let look = 1; decision === null; look++) {
-          const seen = await step.do(
-            `plan look ${round}.${look}`,
-            async () => ({
-              decision: await run((kit) =>
-                kit.withOrg({ orgId: ids.orgId }, (db) =>
-                  readDecision(db, ids.assignmentId, round)
-                )
-              ),
-              left: deadline - Date.now(),
-            })
-          )
-          decision = seen.decision
-          if (decision) break
-          if (seen.left <= 0) {
-            return fail(`undecided ${round}`, "blueprint.undecided")
-          }
-          try {
-            await step.waitForEvent(`blueprint ${round}.${look}`, {
-              type: "blueprint",
-              timeout: Math.min(LOOK_EVERY_MS, seen.left),
-            })
-          } catch {
-            // No nudge in time: look anyway.
-          }
-        }
-        if (decision === "build") break
-      }
+      await step.do("plan 1", () =>
+        run((kit) => planRound({ env: this.env, kit, ids }))
+      )
     }
     // The container, after the site lock and the owner's plan decision and
     // not before: the lock is one org's, the pool is everyone's, so the
@@ -402,7 +462,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
      */
     const prepare = async (role: "quick_section" | null, handedOn: boolean) => {
       const briefStarted = Date.now()
-      const { brief, origin, kind, from, left } = await run((kit) =>
+      const { brief, origin, kind, from, left, retry } = await run((kit) =>
         kit.withOrg({ orgId: ids.orgId }, async (db) => {
           const [row] = await db
             .select()
@@ -412,11 +472,10 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           const choices = await creationChoices(db, ids)
           const snapshot = await takeSnapshot(db, ids, choices.withhold)
           const spec = await issueSpec(db, this.env, row, choices.model)
-          // A revise starts from what the site serves (ADR-032), never a preview.
+          // A revise starts from what the site serves (ADR-032), or before
+          // the site is live from the owner's draft it was asked on.
           const source =
-            row.kind === "site.revise"
-              ? await publishedSource(db, ids.orgId)
-              : null
+            row.kind === "site.revise" ? await reviseSource(db, ids) : null
           if (row.kind === "site.revise" && !source) {
             throw new NonRetryableError("site.not_published")
           }
@@ -424,6 +483,16 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           // and may not have marked it yet: it is still taking screenshots.
           const previewed = superseded
             ? await latestRevision(db, superseded)
+            : null
+          const previous = choices.retry_of
+            ? await retryContext(db, choices.retry_of)
+            : undefined
+          const retryOf = choices.retry_of
+            ? {
+                of: choices.retry_of,
+                mode: buildFailure(await failureReason(db, choices.retry_of))
+                  .retry,
+              }
             : null
           const built: Brief = {
             spec,
@@ -440,6 +509,8 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             ...(role === "quick_section"
               ? { site_plan: await latestBlueprint(db) }
               : {}),
+            ...(previous ? { previous } : {}),
+            ...(retryOf?.mode === "fallback_model" ? { fallback: true } : {}),
           }
           return {
             brief: built,
@@ -447,9 +518,22 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             kind: row.kind,
             from: source?.revision_id ?? null,
             left: previewed?.status === "preview" ? previewed.id : null,
+            retry: retryOf,
           }
         })
       )
+      // The retry of failed checks starts from the site the failed build left.
+      const carried =
+        retry?.mode === "fix_forward" &&
+        (await takeWork(
+          this.env.SITES,
+          { orgId: ids.orgId, assignmentId: retry.of },
+          ids
+        ))
+      if (carried) {
+        brief.restore_key = checkpointKey(ids)
+        brief.continues = kind === "site.revise" ? "revise" : "build"
+      }
       const briefMs = since(briefStarted)
       const restoreStarted = Date.now()
       // The container is provisioned. A warm one that holds the revision this
@@ -466,7 +550,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
       ) {
         held = left
       }
-      const warm = from !== null && held === from
+      const warm = !carried && from !== null && held === from
       if (brief.restore_key) {
         brief.map = warm
           ? await mapSite(sandbox)
@@ -489,35 +573,39 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
     // The admission in one step, create-only, so a retried step cannot admit
     // the Developer twice: the second attempt finds the instance and returns.
     const admit = (role: "quick_section" | null, handedOn: boolean) =>
-      step.do("developer", async () => {
-        const { brief, ...timing } = await prepare(role, handedOn)
-        const origin = timing.origin
-        try {
-          const receipt = await init(Developer, {
-            id: ids.assignmentId,
-            uid: null,
-          }).dispatch({
-            // An owner's words are data, not an instruction: a revise's change
-            // request and an owner's build goal travel as a signal, tainted on
-            // the log (§28.3). A console goal keeps its plain message.
-            message: brief.goal_tainted
-              ? {
-                  kind: "signal",
-                  type: "site.change_requested",
-                  body: brief.goal,
-                  attributes: { taint: "untrusted_input" },
-                }
-              : `Build the site from the canonical facts. ${brief.goal}`,
-            initialData: brief,
-          })
-          return { submission_id: receipt.submissionId, ...timing, origin }
-        } catch (error) {
-          if (error instanceof AgentInstanceExistsError) {
-            return { submission_id: null, ...timing, origin }
+      step
+        .do("developer", async () => {
+          const { brief, ...timing } = await prepare(role, handedOn)
+          const origin = timing.origin
+          try {
+            const receipt = await init(Developer, {
+              id: ids.assignmentId,
+              uid: null,
+            }).dispatch({
+              // An owner's words are data, not an instruction: a revise's change
+              // request and an owner's build goal travel as a signal, tainted on
+              // the log (§28.3). A console goal keeps its plain message.
+              message: brief.goal_tainted
+                ? {
+                    kind: "signal",
+                    type: "site.change_requested",
+                    body: brief.goal,
+                    attributes: { taint: "untrusted_input" },
+                  }
+                : `Build the site from the canonical facts. ${brief.goal}`,
+              initialData: brief,
+            })
+            return { submission_id: receipt.submissionId, ...timing, origin }
+          } catch (error) {
+            if (error instanceof AgentInstanceExistsError) {
+              return { submission_id: null, ...timing, origin }
+            }
+            throw error
           }
-          throw error
-        }
-      })
+        })
+        // Out of retries: the Developer never started, so nothing would wake
+        // this build again. Null, for the caller to end it as failed.
+        .catch(() => null)
 
     // QE4, the quick lane. A copy or style change is one model call and one
     // build, with no Developer; a section change is the Developer at low
@@ -577,6 +665,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
     } else {
       admitted = await admit(section ? "quick_section" : null, false)
     }
+    if (!admitted) return fail("start", "developer.start_failed")
     /** The resume and repair signals' attributes that move a section run to the build role, once. */
     const escalate = (): Record<string, string> => {
       if (!section) return {}
@@ -587,6 +676,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
     // The nanoclaw pair (§8.3): the tools wake this Workflow with an id, the
     // Workflow answers the Developer with a new submission.
     let resumes = 0
+    const resumedFor = new Set<string>()
     let looks = 0
     let asked: Fix[] = []
     let shotsOf: { revision_id: string; taken: number; ms: number } | null =
@@ -598,11 +688,11 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         woke = { payload: pending }
         pending = null
       } else {
-        // The watchdog: a wait that times out looks at the build's log, and
-        // a build that has logged nothing for a whole lead turn is stalled.
-        // A lead still working logs every model call and tool, so it waits
-        // again for what is left of the window.
-        let wait = LEAD_TURN_MS
+        // The watchdog: a wait that times out looks at the build's log. A
+        // lead still working logs every model call and tool, so it waits
+        // again for what is left of the window; one that logged nothing for
+        // all of it is stopped, and resumed below as an interrupted one.
+        let wait = STALL_QUIET_MS
         let got: { payload: DeveloperEvent } | null = null
         for (let n = 1; !got; n++) {
           try {
@@ -617,12 +707,20 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
                   lastEventAt(db, ids.assignmentId)
                 )
               )
-              return Date.now() - at
+              const quietMs = Date.now() - at
+              // Stopped in this step, so a replay never stops the resumed run.
+              if (quietMs >= STALL_QUIET_MS) {
+                await init(Developer, { id: ids.assignmentId }).abort()
+              }
+              return quietMs
             })
-            if (quiet >= LEAD_TURN_MS) {
-              return fail(`stalled ${round}`, "developer.stalled")
+            if (quiet >= STALL_QUIET_MS) {
+              got = {
+                payload: { kind: "interrupted", reason: DEVELOPER_STALLED },
+              }
+            } else {
+              wait = STALL_QUIET_MS - quiet
             }
-            wait = LEAD_TURN_MS - quiet
           }
         }
         woke = got
@@ -640,6 +738,10 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         return fail(`start ${round}`, "developer.start_failed")
       }
       if (payload.kind === "interrupted") {
+        // One failure told twice (a second isolate, a redelivered event) is one
+        // resume, not two: a repeat would spend the resume budget for nothing.
+        if (payload.key && resumedFor.has(payload.key)) continue
+        if (payload.key) resumedFor.add(payload.key)
         const reason = GATE_REASONS.has(payload.reason)
           ? payload.reason
           : "provider.unavailable"
@@ -669,6 +771,15 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
               },
             },
           })
+          // After the resume is sent, and never failing it: a retried step's
+          // note is the same row and its chat line the same message.
+          await run((kit) =>
+            noteResumed(this.env, kit, ids, {
+              attempt: resumes,
+              of: RESUMES,
+              reason: payload.reason,
+            })
+          ).catch(() => undefined)
           return { resumed: resumes, fallback }
         })
         continue
@@ -850,6 +961,8 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           quick = "fell"
           section = true
           admitted = await admit("quick_section", true)
+          if (!admitted)
+            return fail(`start ${round}.quick`, "developer.start_failed")
           // A fall-through for axe carries its findings (rule, impact, page,
           // targets, summary, html) to the Developer, who reruns the gate's
           // script until it is clean.
@@ -877,6 +990,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           // answer does; the Developer fixes them and reports again.
           const lift = escalate()
           await step.do(`repair ${round}`, async () => {
+            await run((kit) => noteProblem(kit, ids, verdict.failed))
             await init(Developer, { id: ids.assignmentId }).dispatch({
               idempotencyKey: `${ids.assignmentId}:repair-${round}`,
               message: {
@@ -903,8 +1017,9 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         // cancelled since the gates has nothing to review and ends as it is.
         // The console asks for its own review, so its builds stop at
         // `preview_ready` as before.
+        let reviewed = false
         if (warmAfter && admitted.origin === "owner") {
-          await step.do("review", () =>
+          const opened = await step.do("review", () =>
             run(async (kit) => {
               try {
                 const { request } = await requestReview(kit, ids)
@@ -920,6 +1035,29 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
               }
             })
           )
+          reviewed = opened.approval_id !== null
+        }
+        // The ready line goes out with the review, so the chat's card lands
+        // with the panel's; a chat busy now is tried again once the build ends.
+        let readyLine: Note | null = null
+        let said = false
+        if (reviewed) {
+          try {
+            readyLine = await step.do("ready note", () =>
+              run((kit) => readyNote(kit, ids))
+            )
+            const note = readyLine
+            if (note) {
+              said = await step.do("say ready", () =>
+                run((kit) => sayReady(kit, ids, note)).then(
+                  () => true,
+                  () => false
+                )
+              )
+            }
+          } catch {
+            // The ready card says it as well; the chat misses one line.
+          }
         }
         // The screenshots come after the preview exists, not before it: the
         // review card above is already in front of the owner, and the
@@ -932,6 +1070,9 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
                 takeScreenshots(this.env, ids, payload.revision_id)
               )
           : null
+        const kept =
+          verdict.outcome === "failed" &&
+          (await keepWork("gates.repair_budget_exhausted"))
         const endMs = await step.do(
           warmAfter ? "keep warm" : "destroy sandbox",
           async () => {
@@ -992,6 +1133,18 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           [warmAfter ? "keep_warm_ms" : "destroy_ms"]: endMs,
           end_to_end_ms: done - t0,
         })
+        if (verdict.outcome === "failed") await followUp(kept)
+        // Last, so a chat busy for days holds up nothing.
+        const note = readyLine
+        if (note && !said) {
+          try {
+            await step.do("say ready again", SAY_RETRIES, () =>
+              run((kit) => sayReady(kit, ids, note))
+            )
+          } catch {
+            // The ready card says it as well; the chat misses one line.
+          }
+        }
         return { outcome: verdict.outcome }
       }
       if (payload.kind === "budget") {
@@ -1029,6 +1182,13 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         `deadline ${round}`,
         async () => Date.now() + ANSWER_DEADLINE_MS
       )
+      // The assistant answers what it already knows; only the rest is put
+      // to the owner, as a card in the chat.
+      const relayed = await step.do(`relay ${round}`, () =>
+        run((kit) => relayQuestion(this.env, kit, ids, payload.request_id))
+      )
+      const ask = relayed && "ask" in relayed ? relayed.ask : null
+      let posted = ask === null
       let factId = ""
       for (let look = 1; ; look++) {
         // The clock is read inside the step too, so a replay takes the same
@@ -1045,9 +1205,21 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             waited?.request.request_id === payload.request_id
               ? (waited.fact_id ?? "")
               : ""
-          return { factId: answered, left: deadline - Date.now() }
+          // The card, until the chat takes it: a busy chat, or one waiting
+          // on another card, is tried again at the next look.
+          const shown =
+            posted ||
+            Boolean(answered) ||
+            ask === null ||
+            !QUEUED.has(
+              await run((kit) =>
+                askOwner(kit, ids, payload.request_id, ask)
+              ).then((p) => p ?? "posted")
+            )
+          return { factId: answered, left: deadline - Date.now(), shown }
         })
         factId = seen.factId
+        posted = seen.shown
         if (factId) break
         // Seven days with no answer. `fail` releases the site lock and takes
         // the checkpoint out of R2 with the container.
@@ -1057,7 +1229,10 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         try {
           await step.waitForEvent(`answer ${round}.${look}`, {
             type: "answer",
-            timeout: Math.min(LOOK_EVERY_MS, seen.left),
+            timeout: Math.min(
+              posted ? LOOK_EVERY_MS : POST_AGAIN_MS,
+              seen.left
+            ),
           })
         } catch {
           // No nudge in time: look anyway.
@@ -1094,6 +1269,26 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
             attributes: { field: fact.key },
           },
         })
+        // What the owner asked for while it waited, after the answer, as the
+        // steer route would have sent it.
+        const steers = await run((kit) =>
+          kit.withOrg({ orgId: ids.orgId }, (db) =>
+            heldSteers(db, ids.assignmentId)
+          )
+        )
+        for (const held of steers) {
+          await init(Developer, { id: ids.assignmentId }).dispatch({
+            idempotencyKey: `${ids.assignmentId}:held-${held.event_id}`,
+            message: held.owner
+              ? {
+                  kind: "signal",
+                  type: "site.change_requested",
+                  body: held.message,
+                  attributes: { taint: "untrusted_input" },
+                }
+              : { kind: "user", body: held.message },
+          })
+        }
         return { fact_id: fact.fact_id }
       })
     }

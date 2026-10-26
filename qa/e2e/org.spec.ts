@@ -100,7 +100,7 @@ test("an owner with an org sees its team and the fact it stated @probe-org", asy
   expect(workspace.missing_facts).not.toContain("business.phone")
   expect(workspace.missing_facts.length).toBeGreaterThan(0)
 
-  // The name signup collected, and the phone set above.
+  // The names signup collected, and the phone set above.
   const { facts } = await read("/facts")
   expect(facts).toEqual(
     expect.arrayContaining([
@@ -114,9 +114,10 @@ test("an owner with an org sees its team and the fact it stated @probe-org", asy
         key: "business.phone",
         value: { e164: PHONE },
       }),
+      expect.objectContaining({ org_id: orgId, key: "owner.preferred_name" }),
     ])
   )
-  expect(facts).toHaveLength(2)
+  expect(facts).toHaveLength(3)
 
   // The feed shows publishes and rollbacks, and this org has neither.
   expect(await read("/activity")).toEqual({ items: [] })
@@ -124,22 +125,8 @@ test("an owner with an org sees its team and the fact it stated @probe-org", asy
   // A new owner lands in onboarding, with the org's own first steps beside it.
   await visit(page, "/app")
   await expect(page).toHaveURL(/\/app\/c\/[0-9a-f-]{36}$/)
-  // The rail names the organisation beside its mark.
-  await expect(
-    page
-      .getByRole("complementary", { name: "Workspace" })
-      .getByRole("link", { name, exact: true })
-  ).toBeVisible()
-  const steps = panel(page)
-    .getByRole("region", { name: "First steps" })
-    .getByRole("listitem")
-  await expect(steps).toHaveCount(workspace.missing_facts.length + 1)
-  await expect(steps.last()).toHaveText("To do: Build your first version")
-  await expect(steps.filter({ hasText: "Phone number" })).toHaveCount(0)
-  // Worded for this business, and no link to the chat the owner is in.
-  await expect(
-    panel(page).getByText(`Getting ${name} ready for its first website.`)
-  ).toBeVisible()
+  // The panel beside it, with no link to the chat the owner is in.
+  await expect(panel(page)).toBeVisible()
   await expect(
     panel(page).getByRole("link", { name: "Continue getting started" })
   ).toHaveCount(0)
@@ -161,5 +148,8 @@ test("an owner with an org sees its team and the fact it stated @probe-org", asy
   await expect(
     main.getByRole("definition").filter({ hasText: PHONE })
   ).toBeVisible()
-  await expect(main.getByText(/^You told Reme/)).toHaveCount(2)
+  // The name and the phone at least; the first name signup kept may show too.
+  await expect
+    .poll(() => main.getByText(/^You said this/).count())
+    .toBeGreaterThanOrEqual(2)
 })

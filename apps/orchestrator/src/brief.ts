@@ -1,13 +1,18 @@
 import {
   type Blueprint,
   type BuildLane,
+  type BuildStopCause,
+  buildFailure,
   ChangeKind,
   FactSnapshot,
+  type GateName,
   type RuntimeSpec,
+  ValidationReport,
 } from "@workspace/contracts"
 import {
   appendEvent,
   assignments,
+  assignmentTransitions,
   chiefStaffId,
   currentFacts,
   eq,
@@ -26,7 +31,7 @@ import {
 import { HIDDEN_FACTS_KEY } from "@workspace/gates"
 import type { PhotoFile } from "./photo-step.ts"
 import { NPM_REGISTRY_HOST } from "./sandbox.ts"
-import type { Ids } from "./state.ts"
+import { type Ids, repairsSoFar } from "./state.ts"
 
 /** The owner's decision: model spend is capped at $20 per assignment. */
 export const ASSIGNMENT_CAP_USD = 20
@@ -54,6 +59,87 @@ export type Brief = {
   site_plan?: Blueprint | null
   /** The plan's generated photos the Workflow made, which the Developer copies into the site (BA4). */
   photos?: PhotoFile[]
+  /** A retry's account of the build it starts again, sent as its first signal. */
+  previous?: RetryContext
+  /** A retry restored from the site its failed build left, by what that build was. */
+  continues?: "build" | "revise"
+  /** A retry after a provider failure: the Developer starts on the fallback model. */
+  fallback?: true
+}
+
+/**
+ * What failed on the attempt a retry starts again: the shape of a
+ * `validation.failed` body plus the cause and the repair rounds it used.
+ * Gate messages are code-written; `offending_node`, which quotes the model,
+ * stays out.
+ */
+export type RetryContext = {
+  report_id: string
+  failed: { gate: GateName; message: string | null }[]
+  cause: BuildStopCause
+  rounds: number
+}
+
+/** The reason on an assignment's latest `failed` transition. */
+export async function failureReason(
+  db: OrgScopedDb,
+  assignmentId: string
+): Promise<string | null> {
+  const [last] = await db
+    .select({ reason: assignmentTransitions.reason })
+    .from(assignmentTransitions)
+    .where(
+      sql`${assignmentTransitions.assignmentId} = ${assignmentId} and ${assignmentTransitions.toState} = 'failed'`
+    )
+    .orderBy(sql`${assignmentTransitions.version} desc`)
+    .limit(1)
+  return last?.reason ?? null
+}
+
+/** An assignment's latest gate report, if it had one. */
+export async function lastReport(
+  db: OrgScopedDb,
+  assignmentId: string
+): Promise<ValidationReport | null> {
+  const [row] = await db
+    .select({ payload: events.payload })
+    .from(events)
+    .where(
+      sql`${events.assignmentId} = ${assignmentId} and ${events.type} = 'assignment.validation_reported'`
+    )
+    .orderBy(sql`${events.eventId} desc`)
+    .limit(1)
+  return ValidationReport.safeParse(row?.payload).data ?? null
+}
+
+/** The failed build's last failing gates, or none when no gate failed. */
+export async function retryContext(
+  db: OrgScopedDb,
+  failedId: string
+): Promise<RetryContext | undefined> {
+  const report = await lastReport(db, failedId)
+  const failed = report?.gates.filter((g) => !g.passed) ?? []
+  if (!report || failed.length === 0) return undefined
+  return {
+    report_id: report.report_id,
+    failed: failed.map((g) => ({
+      gate: g.gate,
+      message: g.message?.slice(0, 1_000) ?? null,
+    })),
+    cause: buildFailure(await failureReason(db, failedId)).cause,
+    rounds: await repairsSoFar(db, failedId),
+  }
+}
+
+/** A retry's first signal, appended once before the Developer's first turn. */
+export function retryContextSignal(brief: Brief) {
+  if (!brief.previous) return null
+  return {
+    kind: "signal" as const,
+    type: "retry.context",
+    body: JSON.stringify(brief.previous),
+    attributes: { report_id: brief.previous.report_id, taint: "inferred" },
+  }
 }
 
 /**
@@ -106,8 +192,8 @@ export async function creationChoices(
   lane: BuildLane
   change_kind: ChangeKind | null
   kind: string
-  /** The owner chose "Skip all" in onboarding: build from the plan without the card's wait. */
-  skip_review: boolean
+  /** The failed build this one starts again (retry.ts). */
+  retry_of: string | null
 }> {
   const [row] = await db
     .select({ payload: events.payload })
@@ -128,7 +214,7 @@ export async function creationChoices(
     lane: payload.lane === "quick" ? "quick" : "full",
     change_kind: ChangeKind.safeParse(payload.change_kind).data ?? null,
     kind: typeof payload.kind === "string" ? payload.kind : "site.build",
-    skip_review: payload.review === "skip",
+    retry_of: typeof payload.retry_of === "string" ? payload.retry_of : null,
   }
 }
 

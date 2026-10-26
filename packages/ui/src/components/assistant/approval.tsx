@@ -12,8 +12,8 @@ import { AskChoice } from "@workspace/ui/components/assistant/ask-choice"
 import { AskDesign } from "@workspace/ui/components/assistant/ask-design"
 import { AskDetails } from "@workspace/ui/components/assistant/ask-details"
 import { AskFact } from "@workspace/ui/components/assistant/ask-fact"
+import { AskOpen } from "@workspace/ui/components/assistant/ask-open"
 import { AskUpload } from "@workspace/ui/components/assistant/ask-upload"
-import { ReviewBlueprint } from "@workspace/ui/components/assistant/blueprint-card"
 import {
   COS_CARDS,
   COS_QUIET,
@@ -147,13 +147,13 @@ function ApprovalDecision({ approved }: { approved: boolean }) {
  * them out of tool groups, reading this same map.
  */
 export const OWNER_CARDS: Record<string, ToolCallMessagePartComponent> = {
+  ask_open: AskOpen,
   ask_fact: AskFact,
   ask_details: AskDetails,
   ask_choice: AskChoice,
   ask_design: AskDesign,
   ask_upload: AskUpload,
   review_quote_form: ReviewQuoteForm,
-  review_blueprint: ReviewBlueprint,
   request_change: RequestChange,
   ...COS_CARDS,
 }

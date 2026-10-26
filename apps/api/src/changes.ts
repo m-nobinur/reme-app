@@ -230,10 +230,15 @@ export const notFound = (noun: "assignment" | "approval") =>
   })
 
 /** The build as the panel shows it, from the row the orchestrator returned. */
-const summary = (body: unknown, lane?: BuildLane): BuildSummary => {
+const summary = (
+  body: unknown,
+  lane?: BuildLane,
+  label?: string
+): BuildSummary => {
   const row = Assignment.parse(body)
   return {
     ...(lane ? { lane } : {}),
+    ...(label ? { label } : {}),
     assignment_id: row.assignment_id,
     kind: row.kind as BuildSummary["kind"],
     state: row.state,
@@ -254,10 +259,12 @@ export type ChangeInput = {
 
 type ChangeRoute =
   | { route: "build" | "revise" }
+  /** Revise the owner's draft before the site is live, holding it until the change's own is ready. */
+  | { route: "draft"; revision_id: string }
   | { route: "steer"; assignment_id: string }
   | {
       route: "refuse"
-      reason: "question_open" | "build_busy"
+      reason: "build_busy"
       assignment_id: string
     }
   | {
@@ -282,10 +289,12 @@ const STEERABLE: readonly AssignmentState[] = [
 ]
 
 /**
- * Where an owner's change goes, from the site's state alone. A question
- * blocks everything, since the answer is what the build is waiting for. A
- * build waiting on a decision the orchestrator would take now (a review in
- * date, or one the sweep parked) is replaced: its review is turned down. A
+ * Where an owner's change goes, from the site's state alone. A build
+ * waiting on the owner's answer takes the change as a steer, which reaches
+ * its Developer once the answer resumes it. A build waiting on a decision
+ * the orchestrator would take now (a review in date, or one the sweep
+ * parked) is replaced: its review is turned down, or before the site is
+ * live the change revises that draft instead. A
  * build parked on its budget is replaced by cancelling it. A working build
  * takes the change as a steer. A build settling on its own (queued,
  * previewed, publishing, paused from the console, or a review that expired
@@ -295,13 +304,7 @@ const STEERABLE: readonly AssignmentState[] = [
  */
 export function routeChange(site: ChangeInput): ChangeRoute {
   const asking = site.builds.find((b) => b.state === "blocked_on_information")
-  if (asking) {
-    return {
-      route: "refuse",
-      reason: "question_open",
-      assignment_id: asking.assignment_id,
-    }
-  }
+  if (asking) return { route: "steer", assignment_id: asking.assignment_id }
   const rebuild = site.live ? "site.revise" : "site.build"
   for (const build of site.builds) {
     const review = site.reviews.find(
@@ -309,6 +312,7 @@ export function routeChange(site: ChangeInput): ChangeRoute {
     )
     const parked = build.state === "blocked_on_approval"
     if (review && (parked || build.state === "awaiting_review")) {
+      if (!site.live) return { route: "draft", revision_id: review.revision_id }
       return {
         route: "replace",
         via: "reject",
@@ -412,7 +416,9 @@ export async function startChange(
   text: string,
   key: string,
   /** The CoS's read of the change's size; the orchestrator picks the lane from it. */
-  changeKind?: ChangeKind
+  changeKind?: ChangeKind,
+  /** The change's short name in the owner's terms, kept with the build it makes. */
+  label?: string
 ): Promise<Response> {
   // One deadline for the whole change: its reads and every call it makes
   // share it, so a replace's three calls end within it too.
@@ -512,9 +518,10 @@ export async function startChange(
       () => null
     )
     if (ended.ok) {
-      return Response.json(summary(build, await laneOf(build.assignment_id)), {
-        status,
-      })
+      return Response.json(
+        summary(build, await laneOf(build.assignment_id), label),
+        { status }
+      )
     }
     if (ended.status >= 500) return ended
     // The old build keeps the site, so nothing would release the new one.
@@ -559,31 +566,30 @@ export async function startChange(
     if (made.state === "queued" && route.route === "replace") {
       return end(made, 200, route)
     }
-    return Response.json(summary(made))
+    return Response.json(summary(made, undefined, label))
   }
   // A steer ignores the kind: a working build takes the change whatever its size.
-  const createBody = (kind: "site.build" | "site.revise") => ({
+  const createBody = (kind: "site.build" | "site.revise", draft?: string) => ({
     kind,
     goal: text,
     ...(changeKind ? { change_kind: changeKind } : {}),
+    ...(label ? { label } : {}),
+    ...(draft ? { draft_revision_id: draft } : {}),
   })
-  const create = async (kind: "site.build" | "site.revise") => {
-    const result = await call("/", createBody(kind))
+  const create = async (kind: "site.build" | "site.revise", draft?: string) => {
+    const result = await call("/", createBody(kind, draft))
     const parsed = Assignment.safeParse(result.body)
     const lane = parsed.success
       ? await laneOf(parsed.data.assignment_id)
       : undefined
-    return relay(result, (body) => summary(body, lane))
+    return relay(result, (body) => summary(body, lane, label))
   }
   switch (route.route) {
     case "refuse":
       return failure(409, {
         class: "validation",
         code: `change.${route.reason}`,
-        message:
-          route.reason === "question_open"
-            ? "A build is waiting on your answer. Answer it first."
-            : "A build is finishing. Try again once it settles.",
+        message: "A build is finishing. Try again once it settles.",
         detail: { assignment_id: route.assignment_id },
       })
     case "steer": {
@@ -612,6 +618,8 @@ export async function startChange(
       return create("site.build")
     case "revise":
       return create("site.revise")
+    case "draft":
+      return create("site.revise", route.revision_id)
   }
 }
 

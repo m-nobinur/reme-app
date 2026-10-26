@@ -19,6 +19,9 @@ import {
   assignmentGoal,
   COPY_RULES,
   ownerChoices,
+  ownerLogo,
+  ownerPhotos,
+  ownerUploads,
   paletteRoles,
   siteRules,
 } from "../src/developer-rules.ts"
@@ -78,8 +81,10 @@ describe("the Developer's site rules", () => {
     expect(rules).toContain("not appear on the site: service_area.text.")
   })
 
-  it("sends a requested claim no fact supports to ask_chief", () => {
-    expect(text(true)).toContain("call ask_chief for it rather than writing it")
+  it("leaves out a requested claim no fact supports, for the owner to be offered", () => {
+    expect(text(true)).toContain(
+      "leave it out and list it in left_out rather than writing it"
+    )
   })
 
   it("says how the copy reads, the page heads and the icons", () => {
@@ -99,14 +104,11 @@ describe("the Developer's site rules", () => {
     expect(rules).toContain("Never write, shorten or correct a review")
   })
 
-  it("keeps proof to what the owner said and asks the owner rarely", () => {
+  it("keeps proof to what the owner said and never asks beyond the required facts", () => {
     const rules = text(false)
     expect(rules).toContain("business.proof is the only source")
     expect(rules).toContain("never add to it")
-    expect(rules).toContain("once a build at most")
-    expect(rules).toContain(
-      "Never ask for a nice-to-have or for business.proof"
-    )
+    expect(rules).toContain("Beyond the required facts, never call ask_chief")
   })
 
   it("bans the copy check's own stock phrases", () => {
@@ -283,6 +285,7 @@ describe("the owner's onboarding choices in the rules", () => {
     expect(rules).toContain(
       "Home and Request a quote, plus About. Gallery is a section on the home page, not a page: build no page file for it, and the Blueprint says which the home page holds. Delete src/pages/services.astro, src/pages/services/[slug].astro, src/pages/service-area.astro, src/pages/contact.astro: the owner did not pick those pages"
     )
+    expect(rules).toContain("site.photo1Src to site.photo3Src")
     expect(rules).toContain(
       "Build any other extra page from the existing components"
     )
@@ -357,12 +360,14 @@ describe("the owner's onboarding choices in the rules", () => {
     expect(photoFile(PHOTO)).toBe(`uploads/${PHOTO.id}.jpg`)
     expect(rules).toContain(`/uploads/${PHOTO.id}.jpg ("Our van.jpg")`)
     expect(rules).toContain(
-      "Of the photos, the best, widest one goes in the home page's hero through site.heroImage and site.heroImageAlt"
+      "hero in the home page's hero through site.heroImage and site.heroImageAlt"
+    )
+    expect(rules).toContain(
+      "with no hero photo the best, widest one is the hero"
     )
     expect(rules).toContain("site.photo1Src to site.photo3Src")
-    expect(rules).toContain(
-      "A logo, judged from its name, its alt text and what it shows, goes in the header and footer through site.logo and site.logoAlt and nowhere else, never the hero or the gallery"
-    )
+    // A logo is never judged from its name: only the logo page sets one.
+    expect(rules).not.toContain("Logo:")
     expect(rules).toContain(
       "With up to four photos use every one, and never the same photo twice on a page"
     )
@@ -370,6 +375,28 @@ describe("the owner's onboarding choices in the rules", () => {
     expect(rules).toContain("Name any photo you left out, and why, in risks")
     expect(rules).toContain('never the file name and never "image"')
     expect(ownerChoices([]).join("\n")).not.toContain("Photos:")
+  })
+
+  it("puts the kept logo in the header and footer, never among the photos, and each photo by its use", () => {
+    const logo = { ...PHOTO, id: crypto.randomUUID(), use: "logo" as const }
+    const hero = { ...PHOTO, use: "hero" as const }
+    const facts = [
+      fact("business.name", { name: "Bright Clean" }),
+      fact("media.uploads", { items: [logo, hero] }),
+    ]
+    const rules = ownerChoices(facts).join("\n")
+    expect(rules).toContain(
+      `- Logo: the owner's own, /uploads/${logo.id}.jpg. Set site.logo to that path and site.logoAlt to "Bright Clean logo".`
+    )
+    expect(rules).toContain(`/uploads/${hero.id}.jpg ("Our van.jpg", use hero)`)
+    expect(rules.split("Photos:")[1]).not.toContain(logo.id)
+    expect(ownerPhotos(facts)).toEqual([hero])
+    expect(ownerUploads(facts)).toEqual([logo, hero])
+    expect(ownerLogo(facts)).toEqual(logo)
+    // A logo alone is no photo.
+    expect(
+      ownerChoices([fact("media.uploads", { items: [logo] })]).join("\n")
+    ).not.toContain("Photos:")
   })
 
   it("tells the writer never to mention facts or gaps, to leave a question out, and names the gate", () => {

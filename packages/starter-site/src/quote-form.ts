@@ -16,10 +16,21 @@ export const QUOTE_FIELD_TYPES = [
   "textarea",
   "number",
   "date",
+  "datetime",
   "select",
+  "radio",
+  "checkbox",
+  "photos",
   "tel",
   "email",
 ] as const
+
+/** The types a question offers options for. */
+export const QUOTE_CHOICE_TYPES: readonly string[] = [
+  "select",
+  "radio",
+  "checkbox",
+]
 
 export type QuoteField = {
   key: string
@@ -67,8 +78,8 @@ function problem(field: unknown): string | null {
       return "needs 2 to 12 options of 1 to 60 characters, or null"
     }
   }
-  if ((f.type === "select") !== (f.options !== null)) {
-    return "options belong to a select, and a select needs them"
+  if (QUOTE_CHOICE_TYPES.includes(f.type as string) !== (f.options !== null)) {
+    return "options belong to a select, radio or checkbox, and each of those needs them"
   }
   return null
 }

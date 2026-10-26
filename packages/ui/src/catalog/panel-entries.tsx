@@ -1,8 +1,12 @@
-import { ArrowSquareOutIcon } from "@phosphor-icons/react"
 import {
-  type ApprovalTarget,
-  AssignmentState,
-  FactValueKey,
+  ArrowSquareOutIcon,
+  CheckCircleIcon,
+  PulseIcon,
+} from "@phosphor-icons/react"
+import type {
+  ActivitySegment,
+  ApprovalTarget,
+  BuildActivity,
 } from "@workspace/contracts"
 import { buttonVariants } from "@workspace/ui/components/button"
 import {
@@ -10,13 +14,14 @@ import {
   ComingUp,
   LiveLine,
   NextSteps,
-  PanelBlank,
-  PanelDigest,
+  PanelSegment,
   QuestionItem,
   ReminderList,
   ReminderNote,
+  SECTION_ACTION,
+  StageDetail,
+  StopBuild,
   WaitingOnYou,
-  WorkingOn,
   YourWebsite,
 } from "@workspace/ui/components/live-panel"
 import {
@@ -25,15 +30,20 @@ import {
   TabsList,
   TabsTrigger,
 } from "@workspace/ui/components/tabs"
-import { type AnswerSpec, askable } from "@workspace/ui/lib/answer"
+import {
+  segmentKind,
+  segmentLine,
+  segmentTitle,
+  stepKind,
+  stepLabel,
+} from "@workspace/ui/lib/activity-copy"
 import { paletteStops } from "@workspace/ui/lib/blueprint"
 import type { ReactNode } from "react"
 import { BLUEPRINT } from "./blueprint-fixtures"
 
 /**
  * Catalog entries for the live panel. Every state a component has is its own
- * entry, and the states the contract defines are enumerated from it: every
- * `AssignmentState` on the stepper, every `FactValueKey` as a question.
+ * entry. Segments are worded by the copy table, as `apps/web` words them.
  * Brightclean and everything about it is invented; the screenshots are
  * drawn here, not taken of any site.
  */
@@ -42,10 +52,8 @@ type Entry = { name: string; render: () => ReactNode }
 
 const noop = () => undefined
 const STARTED = "2026-10-01T09:00:00.000Z"
-/** Four minutes ten seconds in, pinned so the snapshot does not tick. */
-const NOW = Date.parse(STARTED) + 250_000
-const NOW_ISO = new Date(NOW).toISOString()
-const EXPECTED = { p50: 180, p95: 330 }
+/** Four minutes ten seconds in. */
+const NOW_ISO = new Date(Date.parse(STARTED) + 250_000).toISOString()
 const EXPIRES = "2026-10-04T09:00:00.000Z"
 const REVISION: ApprovalTarget = {
   kind: "revision",
@@ -61,30 +69,27 @@ const page = (width: number) =>
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${width * 1.4}" viewBox="0 0 30 42"><rect width="30" height="6" fill-opacity=".45"/><rect x="3" y="10" width="18" height="3" fill-opacity=".7"/><rect x="3" y="16" width="24" height="1.5" fill-opacity=".3"/><rect x="3" y="19" width="22" height="1.5" fill-opacity=".3"/><rect x="3" y="22" width="16" height="1.5" fill-opacity=".3"/></svg>`
   )}`
 
-const PREVIEW = {
-  url: "https://preview.example.invalid/",
-  screenshots: [page(390), page(768), page(1440)],
-}
+const PREVIEW = { url: "https://preview.example.invalid/" }
 
-/** A blank section's next step, as `apps/web` draws its links. */
-const nextStep = (href: string, label: string) => (
-  <a
-    className={`${buttonVariants({ variant: "outline", size: "sm" })} self-start`}
-    href={href}
-  >
-    {label}
-  </a>
-)
+/** The site's mark as the starter draws it: its initial in a rounded square, grey by opacity alone. */
+export const ICON = `data:image/svg+xml,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill-opacity=".25"/><text x="16" y="22" font-family="sans-serif" font-size="17" font-weight="600" fill-opacity=".8" text-anchor="middle">B</text></svg>`
+)}`
+
+/** A version's pictures: the drawn page on a laptop, twice, and on a phone, and its icon. */
+const PICTURES = {
+  laptop: page(1440),
+  "laptop-2": page(1440),
+  phone: page(390),
+  icon: ICON,
+}
 
 /** A next step as `apps/web` draws it: an outline button, link or not. */
 const STEP = buttonVariants({ variant: "outline", size: "sm" })
 
-/** A live site's next steps, as the panel offers them on Home. */
+/** A live site's next step, as the panel offers it on Home. */
 const liveSteps = (
   <NextSteps>
-    <button className={STEP} key="change" type="button">
-      Request a change
-    </button>
     <a
       className={STEP}
       href="#visit"
@@ -104,33 +109,27 @@ const retry = () => new Promise<void>((done) => setTimeout(done, 400))
 /** The live site's home page on a laptop, as the panel's thumbnail. */
 const THUMBNAIL = { src: page(1440) }
 
-const ANSWER_EXPIRY = "The build waits on you until you answer."
-const APPROVAL_EXPIRY =
-  "Nothing is published without you. If it expires, the build waits until you decide."
-
-const question = (spec: AnswerSpec, title: string, extra = {}) => (
+const question = (title: string) => (
   <QuestionItem
-    askedBy="Alex"
-    expiresAt={null}
-    onAnswer={noop}
-    onExpiry={ANSWER_EXPIRY}
-    spec={spec}
+    action={
+      <button
+        className={buttonVariants({ variant: "outline", size: "sm" })}
+        type="button"
+      >
+        Answer in the chat
+      </button>
+    }
     title={title}
-    why="The contact section shows when you are open."
-    {...extra}
   />
 )
 
 const approval = (extra = {}) => (
   <ApprovalItem
-    expiresAt={EXPIRES}
     onApprove={noop}
-    onAskForChanges={noop}
-    onExpiry={APPROVAL_EXPIRY}
+    pictures={PICTURES}
     preview={PREVIEW}
-    rationale="The hero now leads with end of tenancy cleans."
     target={REVISION}
-    version={4}
+    title="Brightclean"
     {...extra}
   />
 )
@@ -158,17 +157,22 @@ const PLAN = {
   ],
 }
 
-const row = (id: string, label: string, done: number, total = 1) => ({
-  id,
-  label,
-  done,
-  total,
-})
+const row = (
+  id: string,
+  label: string,
+  done: number,
+  total = 1
+): BuildActivity => ({ id, label, done, total })
 
 /** The plan's six pages as the writing step names them, the first `done` written. */
+/** The plan's pages: `done` written, the next two being written side by side. */
 const pages = (done: number) =>
   ["Home", "Services", "About", "Request a quote", "Gallery", "Contact"].map(
-    (label, i) => ({ label, done: i < done })
+    (label, i) => ({
+      label,
+      done: i < done,
+      ...(i >= done && i < done + 2 && { working: true as const }),
+    })
   )
 
 /** A full build's steps as the api lists them, at `step` with these counts. */
@@ -226,42 +230,107 @@ const photo = (
   alt: string | null = "A bright room after a clean"
 ) => ({ slot_id, state, alt, thumbnail })
 
-/** A full build of the fixture plan, at `state`, with its steps, at the panel's width. */
-const building = (
-  state: AssignmentState,
-  activity: ReturnType<typeof steps>,
-  extra: Record<string, unknown> = {}
-) => (
-  <div className="max-w-[22rem]">
-    {working(state, {
-      build: {
-        goal: "Build my website from the details I gave you",
-        state,
-        version: null,
-        startedAt: STARTED,
-        lane: "full",
-        activity,
-        plan: PLAN,
-        ...extra,
-      },
-    })}
-  </div>
-)
+const CTX = { orgId: "brightclean", assistant: "Ellie" }
 
-const working = (state: AssignmentState, extra = {}) => (
-  <WorkingOn
-    build={{
-      goal: "Lead the hero with end of tenancy cleans",
-      state,
-      version: null,
-      startedAt: STARTED,
-    }}
-    now={NOW}
-    onStop={noop}
-    expectedSeconds={EXPECTED}
-    {...extra}
-  />
-)
+/** A step as the api sends it. */
+const stepAt = (
+  id: string,
+  state: ActivitySegment["steps"][number]["state"],
+  extra: Partial<ActivitySegment["steps"][number]> = {}
+) => ({ id, state, ...extra })
+
+/** The fixed steps of a kind, `here` the one at work and the rest after it. */
+const along = (
+  ids: readonly string[],
+  here: number,
+  state: "now" | "waiting" = "now"
+) =>
+  ids.map((id, i) =>
+    stepAt(id, i < here ? "done" : i === here ? state : "next")
+  )
+
+const WEBSITE = [
+  "planning",
+  "photos",
+  "writing",
+  "polishing",
+  "checking",
+  "ready",
+]
+
+/** A segment as `apps/web` draws it, worded by the copy table, at the panel's width. */
+const segment = (
+  s: Omit<ActivitySegment, "at"> & { at?: string },
+  extra: {
+    children?: ReactNode
+    details?: Record<string, ReactNode>
+  } = {}
+) => {
+  const full: ActivitySegment = { at: STARTED, ...s }
+  return (
+    <div className="max-w-[22rem]">
+      <PanelSegment
+        icon={segmentKind(full)}
+        line={segmentLine(full, CTX, { elapsedSeconds: 250, until: "11:50" })}
+        state={full.state}
+        steps={full.steps.flatMap((step) => {
+          const label = stepLabel(full, step)
+          return label
+            ? [
+                {
+                  id: step.id,
+                  label,
+                  state: step.state,
+                  kind: stepKind(full, step),
+                  detail: extra.details?.[step.id],
+                },
+              ]
+            : []
+        })}
+        title={segmentTitle(full, CTX) ?? ""}
+        working={segmentTitle({ ...full, state: "now" }, CTX) ?? ""}
+      >
+        {extra.children}
+      </PanelSegment>
+    </div>
+  )
+}
+
+const BUSINESS = { business: "Brightclean" }
+
+const ONBOARDING_STEPS = (last: "now" | "waiting" | "done") => [
+  stepAt("work", "done", { value: "Regular cleans, end of tenancy" }),
+  stepAt("area", "done", { value: "South Manchester, 10 miles" }),
+  stepAt("customers", "skipped"),
+  stepAt("contact", "done", { value: "0161 496 0000, hello@brightclean.test" }),
+  stepAt("assistant", "done", { value: "Ellie" }),
+  stepAt("quote_form", "done", { value: "6 questions" }),
+  stepAt("photos", last === "done" ? "done" : last, {
+    ...(last === "done" ? { value: "4 photos" } : {}),
+  }),
+  stepAt("look", last === "done" ? "done" : "next", {
+    ...(last === "done" ? { value: "Mint, Classic" } : {}),
+  }),
+]
+
+/** The website's stages with what each decided or made, as the panel draws them under the steps. */
+const stageDetails = (
+  activity: BuildActivity[],
+  photos: ReturnType<typeof photo>[] = []
+) =>
+  Object.fromEntries(
+    WEBSITE.map((stage, i) => [
+      stage,
+      <StageDetail
+        activity={activity}
+        key={stage}
+        photos={photos}
+        plan={PLAN}
+        stage={stage}
+        state={i < 2 ? "done" : "now"}
+      />,
+    ])
+  )
 
 /**
  * Reminders written down, one of each kind: the owner's due within the hour,
@@ -327,27 +396,40 @@ function SamplePanel() {
         </TabsTrigger>
         <TabsTrigger value="website">Website</TabsTrigger>
       </TabsList>
-      <TabsContent keepMounted value="activity">
-        {working("validating", {
-          build: {
-            goal: "Lead the hero with end of tenancy cleans",
-            state: "validating",
-            version: 4,
-            startedAt: STARTED,
-          },
-          queued: ["Add Saturday hours to the contact section"],
-        })}
-        <WaitingOnYou>
-          {target(
-            "question-sample",
-            question({ kind: "fact", key: "hours.weekday" }, "Weekday hours")
-          )}
+      <TabsContent className="gap-4" keepMounted value="activity">
+        <WaitingOnYou icon={PulseIcon} limit={3} title="Now">
+          {segment({
+            id: "change",
+            kind: "change",
+            state: "now",
+            steps: along(["understanding", "making", "checking", "ready"], 2),
+          })}
+          {target("question-sample", question("Weekday hours"))}
           {target("approval-sample", approval())}
+          {target("question-more", question("Phone number"))}
         </WaitingOnYou>
         <ComingUp
           items={[
-            { id: "a", text: "Your review of version 4 closes", at: EXPIRES },
+            {
+              id: "a",
+              text: "Call the supplier about eco sprays",
+              at: EXPIRES,
+            },
           ]}
+        />
+        <ComingUp
+          action={
+            <a className={SECTION_ACTION} href="#tasks">
+              View all
+            </a>
+          }
+          items={[
+            { id: "website", text: "Website built", at: STARTED },
+            { id: "setup", text: "Brightclean set up", at: STARTED },
+          ]}
+          ahead={false}
+          icon={CheckCircleIcon}
+          title="Completed"
         />
       </TabsContent>
       <TabsContent value="reminders">
@@ -370,13 +452,7 @@ function SamplePanel() {
 
 /** `SamplePanel` in one line, as `apps/web` words it for that state. */
 function SamplePanelLine() {
-  return (
-    <LiveLine
-      detail="checking the site"
-      lead="Building version 4,"
-      tone="working"
-    />
-  )
+  return <LiveLine lead="Ellie is updating your website" tone="working" />
 }
 
 const panelCatalog: Entry[] = [
@@ -392,304 +468,319 @@ const panelCatalog: Entry[] = [
     ),
   },
   {
-    name: "NextSteps on the reminders page",
-    render: () => (
-      <NextSteps>
-        <a className={STEP} href="#remind" key="remind">
-          Set a reminder
-        </a>
-      </NextSteps>
-    ),
-  },
-  {
-    // The Activity tab on Home with nothing waiting: where things stand,
-    // what went live today, and what to do next.
+    // The Activity tab on Home with nothing waiting: what finished, and
+    // the site.
     name: "Panel caught up",
     render: () => (
       <div className="flex max-w-88 flex-col gap-6">
-        <PanelDigest
-          sentences={["All caught up. Your site is live on version 3."]}
-        />
         <ComingUp
-          items={[{ id: "v3", text: "Published v3", at: STARTED }]}
-          title="Latest"
+          action={
+            <a className={SECTION_ACTION} href="#tasks">
+              View all
+            </a>
+          }
+          items={[
+            {
+              id: "golive",
+              text: "Website published at brightclean-demo.example.invalid",
+              at: STARTED,
+            },
+          ]}
+          ahead={false}
+          icon={CheckCircleIcon}
+          title="Completed"
         />
         {liveSteps}
       </div>
     ),
   },
   {
-    // The Activity tab while a new business gets started.
-    name: "Panel getting started",
+    // The first run: the website under way in Now, what is coming up, and
+    // getting started under Completed.
+    name: "Panel first run",
     render: () => (
       <div className="flex max-w-88 flex-col gap-6">
-        <PanelDigest
-          sentences={[
-            "Getting Brightclean ready for its first website.",
-            "2 details to go before Reme can build it.",
+        <WaitingOnYou icon={PulseIcon} title="Now">
+          {segment(
+            {
+              id: "website",
+              kind: "website",
+              state: "now",
+              steps: [
+                ...along(WEBSITE, 2).slice(0, 2),
+                stepAt("writing", "now", { count: { done: 3, total: 6 } }),
+                ...along(WEBSITE, 2).slice(3),
+              ],
+            },
+            {
+              details: stageDetails(steps("writing", { pages: 3 })),
+              children: <StopBuild onStop={noop} state="implementing" />,
+            }
+          )}
+        </WaitingOnYou>
+        <ComingUp
+          items={[
+            {
+              id: "a",
+              text: "Call the supplier about eco sprays",
+              at: EXPIRES,
+            },
+            {
+              id: "b",
+              text: "Send the Hartley Road quote",
+              at: "2026-10-05T09:00:00.000Z",
+            },
           ]}
         />
-        <PanelBlank
-          steps={[
-            { label: "Phone number", done: false },
-            { label: "Weekday hours", done: false },
-            { label: "Build your first version", done: false },
-          ]}
+        <ComingUp
+          action={
+            <a className={SECTION_ACTION} href="#tasks">
+              View all
+            </a>
+          }
+          items={[{ id: "setup", text: "Brightclean set up", at: STARTED }]}
+          ahead={false}
+          icon={CheckCircleIcon}
+          title="Completed"
         />
-        <NextSteps>
-          <a className={STEP} href="#getting-started" key="continue">
-            Continue getting started
-          </a>
-        </NextSteps>
       </div>
     ),
   },
   {
-    // A chat while a build runs: what Reme is doing, then the stepper.
-    name: "Panel in a chat while building",
-    render: () => (
-      <div className="flex max-w-88 flex-col gap-6">
-        <PanelDigest
-          sentences={[
-            "Reme is building version 4 while you chat.",
-            "Keep chatting. Nothing goes live until you approve it.",
-          ]}
-        />
-        {working("validating", {
-          build: {
-            goal: "Lead the hero with end of tenancy cleans",
-            state: "validating",
-            version: 4,
-            startedAt: STARTED,
-          },
-        })}
-      </div>
-    ),
-  },
-  {
-    name: "ComingUp latest",
-    render: () => (
-      <ComingUp
-        items={[
-          { id: "fail", text: "A build failed", at: NOW_ISO },
-          { id: "v3", text: "Published v3", at: STARTED },
-        ]}
-        title="Latest"
-      />
-    ),
-  },
-  { name: "WorkingOn", render: () => working("implementing") },
-  {
-    name: "WorkingOn with activity",
+    name: "PanelSegment getting started",
     render: () =>
-      working("implementing", {
-        build: {
-          goal: "Lead the hero with end of tenancy cleans",
-          state: "implementing",
-          version: null,
-          startedAt: STARTED,
-          lane: "full",
-          activity: [
-            { id: "planning", label: "Planning the layout", done: 1, total: 1 },
-            { id: "writing", label: "Writing the pages", done: 3, total: 5 },
-            { id: "photos", label: "Making photos", done: 0, total: 7 },
-          ],
-        },
+      segment({
+        id: "onboarding",
+        kind: "onboarding",
+        state: "now",
+        steps: ONBOARDING_STEPS("now"),
+        names: BUSINESS,
       }),
   },
-  // A full build's steps as it moves, from planning to ready.
   {
-    // No plan yet: nothing decided to show, so no photo or design step.
-    name: "WorkingOn planning",
+    // The owner's turn: the step pulses and points at the tray.
+    name: "PanelSegment getting started waiting",
     render: () =>
-      building(
-        "planning",
-        [
-          row("planning", "Planning the layout", 0),
-          row("writing", "Writing the pages", 0),
-          row("checking", "Checking the site", 0),
+      segment({
+        id: "onboarding",
+        kind: "onboarding",
+        state: "waiting",
+        steps: ONBOARDING_STEPS("waiting"),
+        names: BUSINESS,
+      }),
+  },
+  {
+    name: "PanelSegment before a business name",
+    render: () =>
+      segment({
+        id: "onboarding",
+        kind: "onboarding",
+        state: "now",
+        steps: along(
+          [
+            "work",
+            "area",
+            "customers",
+            "contact",
+            "assistant",
+            "quote_form",
+            "photos",
+            "look",
+          ],
+          0
+        ),
+      }),
+  },
+  {
+    // Done: one ticked line, no caret, nothing to open.
+    name: "PanelSegment done",
+    render: () =>
+      segment({
+        id: "onboarding",
+        kind: "onboarding",
+        state: "done",
+        steps: ONBOARDING_STEPS("done"),
+        names: BUSINESS,
+      }),
+  },
+  // A segment, and what each of its stages decided or made.
+  ...(
+    ["PanelSegment website photos", "PanelSegment", "StageDetail"] as const
+  ).map((name) => ({
+    name,
+    render: () =>
+      segment(
+        {
+          id: "website",
+          kind: "website",
+          state: "now",
+          steps: [
+            stepAt("planning", "done"),
+            stepAt("photos", "now", { count: { done: 2, total: 4 } }),
+            // The steps after photos, still to come.
+            ...along(WEBSITE, 1).slice(2),
+          ],
+        },
+        {
+          details: stageDetails(steps("photos", { photos: 2 }), [
+            photo("slot_1", "made", PHOTOS.hero),
+            photo("slot_3", "made", PHOTOS.kitchen),
+            photo("slot_4", "drawing"),
+            photo("slot_5", "drawing"),
+          ]),
+          children: <StopBuild onStop={noop} state="implementing" />,
+        }
+      ),
+  })),
+  {
+    // A stage that does not apply stays in the list, skipped.
+    name: "PanelSegment website skipped",
+    render: () =>
+      segment({
+        id: "website",
+        kind: "website",
+        state: "now",
+        steps: [
+          stepAt("planning", "done"),
+          stepAt("photos", "skipped"),
+          stepAt("writing", "done"),
+          stepAt("polishing", "skipped"),
+          stepAt("checking", "now"),
+          stepAt("ready", "next"),
         ],
-        { plan: undefined }
+      }),
+  },
+  {
+    name: "PanelSegment website failed",
+    render: () =>
+      segment({
+        id: "website",
+        kind: "website",
+        state: "failed",
+        steps: along(WEBSITE, 4),
+      }),
+  },
+  {
+    // The first version's review is the going-live segment's first step.
+    name: "PanelSegment going live",
+    render: () =>
+      segment(
+        {
+          id: "golive",
+          kind: "golive",
+          state: "waiting",
+          steps: along(["approval", "publishing", "loads"], 0, "waiting"),
+          names: BUSINESS,
+        },
+        { children: approval() }
       ),
   },
   {
-    name: "WorkingOn review wait",
+    name: "PanelSegment change",
     render: () =>
-      building("planning", steps("planning"), { awaitingReview: true }),
-  },
-  {
-    name: "WorkingOn photos",
-    render: () =>
-      building("implementing", steps("photos", { photos: 2 }), {
-        reviewMs: 95_000,
-        photos: [
-          photo("slot_1", "made", PHOTOS.hero),
-          photo("slot_3", "made", PHOTOS.kitchen),
-          photo("slot_4", "drawing"),
-          photo("slot_5", "drawing"),
-        ],
+      segment({
+        id: "change",
+        kind: "change",
+        state: "now",
+        steps: along(["understanding", "making", "checking", "ready"], 1),
       }),
   },
   {
-    name: "WorkingOn pages",
+    name: "PanelSegment domain",
     render: () =>
-      building("implementing", steps("writing", { pages: 3 }), {
-        reviewMs: 95_000,
-        photos: [
-          photo("slot_1", "made", PHOTOS.hero),
-          photo("slot_3", "made", PHOTOS.kitchen),
-          photo("slot_4", "made", PHOTOS.bath),
-          photo("slot_5", "fallback", null, null),
-        ],
+      segment({
+        id: "domain",
+        kind: "domain",
+        state: "waiting",
+        steps: along(["dns", "certificate", "loads"], 0, "waiting"),
+        names: { domain: "brightclean.example.invalid" },
       }),
   },
   {
-    name: "WorkingOn design look",
+    name: "PanelSegment purchase",
     render: () =>
-      building("implementing", steps("design"), {
-        reviewMs: 95_000,
-        photos: [
-          photo("slot_1", "made", PHOTOS.hero),
-          photo("slot_3", "made", PHOTOS.kitchen),
-          photo("slot_4", "made", PHOTOS.bath),
-          photo("slot_5", "made", PHOTOS.hero),
-        ],
+      segment({
+        id: "purchase",
+        kind: "purchase",
+        state: "waiting",
+        steps: along(
+          ["details", "payment", "registration", "connecting"],
+          1,
+          "waiting"
+        ),
+        names: { domain: "brightclean.example.invalid" },
+        deadline: EXPIRES,
       }),
   },
   {
-    name: "WorkingOn repair",
+    name: "PanelSegment Google",
     render: () =>
-      building("implementing", steps("fixing"), {
-        reviewMs: 95_000,
-        photos: [
-          photo("slot_1", "made", PHOTOS.hero),
-          photo("slot_3", "made", PHOTOS.kitchen),
-          photo("slot_4", "made", PHOTOS.bath),
-          photo("slot_5", "made", PHOTOS.hero),
-        ],
+      segment({
+        id: "google",
+        kind: "google",
+        state: "now",
+        steps: along(["sign_in", "verify", "sitemap"], 1),
       }),
   },
   {
-    name: "WorkingOn checking",
-    render: () =>
-      building("validating", steps("checking"), {
-        reviewMs: 95_000,
-        photos: [
-          photo("slot_1", "made", PHOTOS.hero),
-          photo("slot_3", "made", PHOTOS.kitchen),
-          photo("slot_4", "made", PHOTOS.bath),
-          photo("slot_5", "made", PHOTOS.hero),
-        ],
-      }),
-  },
-  {
-    // Ready: the api lists no steps, and the clock stopped when it got ready.
-    name: "WorkingOn ready",
-    render: () =>
-      building("awaiting_review", [], {
-        version: 2,
-        reviewMs: 95_000,
-        endedAt: new Date(Date.parse(STARTED) + 400_000).toISOString(),
-      }),
-  },
-  {
-    name: "WorkingOn quick lane",
-    render: () =>
-      working("revising", {
-        build: {
-          goal: "Change the hero title",
-          state: "revising",
-          version: null,
-          startedAt: STARTED,
-          lane: "quick",
-        },
-        expectedSeconds: { p50: 15, p95: 45 },
-      }),
-  },
-  {
-    name: "WorkingOn with a queue",
-    render: () =>
-      working("queued", {
-        queued: ["Add Saturday hours", "Change the phone number"],
-      }),
-  },
-  {
-    name: "WorkingOn confirming",
-    render: () => working("implementing", { defaultConfirming: true }),
-  },
-  {
-    name: "WorkingOn stopping",
-    render: () => working("implementing", { stopping: true }),
-  },
-  {
-    name: "WorkingOn error",
-    render: () =>
-      working("implementing", {
-        error: "That did not stop the build. Try again.",
-      }),
-  },
-  {
-    name: "WorkingOn states",
+    name: "ComingUp completed",
     render: () => (
-      <div className="grid gap-6 sm:grid-cols-2">
-        {AssignmentState.options.map((state) => (
-          <div key={state}>{working(state)}</div>
-        ))}
-      </div>
+      <ComingUp
+        items={[
+          {
+            id: "checkin",
+            text: "Ellie checked in, all clear",
+            at: NOW_ISO,
+          },
+          {
+            id: "domain",
+            text: "Brightclean.example.invalid connected",
+            at: STARTED,
+          },
+        ]}
+        ahead={false}
+        icon={CheckCircleIcon}
+        title="Completed"
+      />
     ),
   },
   {
-    name: "QuestionItem",
-    render: () =>
-      question({ kind: "fact", key: "hours.weekday" }, "Weekday hours"),
+    name: "StopBuild",
+    render: () => <StopBuild onStop={noop} state="implementing" />,
   },
   {
-    name: "QuestionItem kinds",
+    name: "StopBuild confirming",
     render: () => (
-      <div className="grid gap-4 sm:grid-cols-2">
-        {FactValueKey.options.filter(askable).map((key) => (
-          <div key={key}>{question({ kind: "fact", key }, key)}</div>
-        ))}
-        {question({ kind: "text", maxLength: 80, email: false }, "Parking")}
-        {question({ kind: "text", maxLength: 254, email: true }, "Bookings")}
-        {question(
-          { kind: "choice", options: ["Weekly", "Fortnightly", "Monthly"] },
-          "Visit frequency"
-        )}
-      </div>
+      <StopBuild defaultConfirming onStop={noop} state="implementing" />
     ),
   },
   {
-    name: "QuestionItem pending",
-    render: () =>
-      question({ kind: "fact", key: "business.phone" }, "Phone number", {
-        pending: true,
-      }),
+    name: "StopBuild stopping",
+    render: () => <StopBuild onStop={noop} state="implementing" stopping />,
   },
   {
-    name: "QuestionItem error",
-    render: () =>
-      question({ kind: "fact", key: "business.email" }, "Email address", {
-        error:
-          "That answer does not fit the question. Check it and send it again.",
-      }),
+    name: "StopBuild error",
+    render: () => (
+      <StopBuild
+        error="That did not stop the build. Try again."
+        onStop={noop}
+        state="implementing"
+      />
+    ),
   },
+  {
+    name: "StopBuild quick edit moved on",
+    render: () => <StopBuild fellThrough onStop={noop} state="implementing" />,
+  },
+  { name: "QuestionItem", render: () => question("Weekday hours") },
   { name: "ApprovalItem", render: () => approval() },
   {
     name: "ApprovalItem loading",
-    render: () => approval({ preview: "loading" }),
+    render: () => approval({ preview: "loading", pictures: null }),
   },
   {
     name: "ApprovalItem pending",
-    render: () => approval({ pending: "approve" }),
-  },
-  {
-    name: "ApprovalItem asking",
-    render: () => approval({ defaultAsking: true }),
-  },
-  {
-    name: "ApprovalItem change pending",
-    render: () => approval({ pending: "change" }),
+    render: () => approval({ pending: true }),
   },
   {
     name: "ApprovalItem error",
@@ -707,38 +798,6 @@ const panelCatalog: Entry[] = [
     name: "ApprovalItem preview unavailable",
     render: () => approval({ preview: "error", onRetryPreview: retry }),
   },
-  // Generated photos badged in the review: the hero from the laptop shot, the
-  // other a tile until it has a thumbnail of its own.
-  {
-    name: "ApprovalItem with generated photos",
-    render: () =>
-      approval({
-        photoActions: { onRemove: noop, onTryAnother: noop, onUseOwn: noop },
-        photos: [
-          {
-            alt: "A bright kitchen after a clean",
-            section: "hero",
-            slot_id: "hero",
-          },
-          { alt: "The team at work", section: "about", slot_id: "about" },
-        ],
-      }),
-  },
-  // The preview was read but its screenshots do not load: the link stays.
-  {
-    name: "ApprovalItem screenshots failed",
-    render: () =>
-      approval({
-        preview: {
-          url: PREVIEW.url,
-          screenshots: [
-            "/no-such-shot.png",
-            "/no-such-shot.png",
-            "/no-such-shot.png",
-          ],
-        },
-      }),
-  },
   {
     name: "ApprovalItem unbound",
     render: () =>
@@ -746,14 +805,15 @@ const panelCatalog: Entry[] = [
         target: { kind: "domain", hostname: "brightclean.example.invalid" },
       }),
   },
-  {
-    name: "WaitingOnYou",
+  // The section every panel list sits in.
+  ...(["WaitingOnYou", "PanelSection"] as const).map((name) => ({
+    name,
     render: () => (
       <WaitingOnYou status="Published v3.">
-        {question({ kind: "fact", key: "business.phone" }, "Phone number")}
+        {question("Phone number")}
       </WaitingOnYou>
     ),
-  },
+  })),
   {
     name: "WaitingOnYou error",
     render: () => (
@@ -765,7 +825,11 @@ const panelCatalog: Entry[] = [
     render: () => (
       <ComingUp
         items={[
-          { id: "a", text: "Your review of version 4 closes", at: EXPIRES },
+          {
+            id: "a",
+            text: "Your review of the new version closes",
+            at: EXPIRES,
+          },
           {
             id: "b",
             text: "The question about weekday hours closes",
@@ -795,7 +859,7 @@ const panelCatalog: Entry[] = [
   },
   { name: "ReminderNote", render: () => reminderNote(NOTES.owner) },
   {
-    name: "ReminderNote set by Reme",
+    name: "ReminderNote set by the assistant",
     render: () => reminderNote(NOTES.assistant),
   },
   { name: "ReminderNote undated", render: () => reminderNote(NOTES.undated) },
@@ -820,22 +884,29 @@ const panelCatalog: Entry[] = [
   {
     name: "LiveLine waiting",
     render: () => (
-      <LiveLine
-        detail="for your review"
-        lead="Version 4 is ready"
-        tone="live"
-      />
+      <LiveLine detail="are ready to publish" lead="Your changes" tone="live" />
     ),
   },
   {
-    // Minimised at 390, the step fraction stays in view as the words truncate.
     name: "LiveLine building",
     render: () => (
       <div className="w-64">
+        <LiveLine lead="Ellie is building your website" tone="working" />
+      </div>
+    ),
+  },
+  {
+    name: "LiveLine several jobs",
+    render: () => (
+      <div className="w-72">
         <LiveLine
-          detail="writing the pages"
-          lead="Building your first version,"
-          progress={{ done: 3, total: 5 }}
+          lead="Ellie is building your website"
+          lines={[
+            { lead: "Ellie is building your website" },
+            { lead: "Ellie is replying to a new enquiry" },
+            { lead: "Ellie is drafting a quote" },
+            { lead: "Your changes", detail: "are ready to publish" },
+          ]}
           tone="working"
         />
       </div>
@@ -843,9 +914,7 @@ const panelCatalog: Entry[] = [
   },
   {
     name: "LiveLine live",
-    render: () => (
-      <LiveLine detail="on version 3" lead="Your website is live" tone="live" />
-    ),
+    render: () => <LiveLine lead="Your website is live" tone="live" />,
   },
   {
     name: "LiveLine idle",
@@ -866,27 +935,9 @@ const panelCatalog: Entry[] = [
       </div>
     ),
   },
-  {
-    name: "PanelDigest",
-    render: () => (
-      <PanelDigest
-        sentences={[
-          "Reme is updating your website.",
-          "Version 4 is ready to review.",
-        ]}
-      />
-    ),
-  },
-  {
-    name: "PanelDigest caught up",
-    render: () => (
-      <PanelDigest
-        sentences={["All caught up. Your site is live on version 3."]}
-      />
-    ),
-  },
-  {
-    name: "YourWebsite",
+  // The screenshot, and the light it drifts on until it loads.
+  ...(["YourWebsite", "Shot", "Diffusing"] as const).map((name) => ({
+    name,
     render: () => (
       <YourWebsite
         host="brightclean-demo.example.invalid"
@@ -895,19 +946,7 @@ const panelCatalog: Entry[] = [
         thumbnail={THUMBNAIL}
       />
     ),
-  },
-  {
-    name: "YourWebsite with its plan",
-    render: () => (
-      <YourWebsite
-        blueprint={BLUEPRINT}
-        host="brightclean-demo.example.invalid"
-        live={3}
-        onRequestChanges={noop}
-        thumbnail={THUMBNAIL}
-      />
-    ),
-  },
+  })),
   {
     name: "YourWebsite loading",
     render: () => (
@@ -933,43 +972,6 @@ const panelCatalog: Entry[] = [
     name: "YourWebsite unpublished",
     render: () => (
       <YourWebsite host={null} live={null} onRequestChanges={noop} />
-    ),
-  },
-  {
-    name: "PanelBlank",
-    render: () => (
-      <PanelBlank
-        action={nextStep("#getting-started", "Continue getting started")}
-        description="Reme builds your website from what you tell it about your business. Share the details below in the chat to get started."
-        steps={[
-          { label: "Business name", done: true },
-          { label: "Phone number", done: false },
-          { label: "Weekday hours", done: false },
-          { label: "Build your first version", done: false },
-        ]}
-      />
-    ),
-  },
-  {
-    // Under a headline that already says what to do: the steps alone.
-    name: "PanelBlank steps only",
-    render: () => (
-      <PanelBlank
-        steps={[
-          { label: "Weekday hours", done: false },
-          { label: "Build your first version", done: false },
-        ]}
-      />
-    ),
-  },
-  {
-    name: "PanelBlank ready to build",
-    render: () => (
-      <PanelBlank
-        action={nextStep("#new-chat", "Start your website")}
-        description="Reme builds your website from a conversation with you. Ask for it in the chat, and you review every version before it goes live."
-        steps={[{ label: "Build your first version", done: false }]}
-      />
     ),
   },
 ]

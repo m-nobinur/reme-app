@@ -7,6 +7,8 @@ import {
   CosToolResult,
   CosTurn,
   CreateReminderRequest,
+  ONBOARDING_STATUS,
+  type OnboardingStatus,
   TOOL_FAILED,
   TOOL_UNKNOWN,
   toolErrorKind,
@@ -18,6 +20,7 @@ import {
   emailMessageId,
   eq,
   events,
+  facts,
   failureCode,
   postAssistantMessage,
   postOwnerEmail,
@@ -58,6 +61,7 @@ import {
   activeTools,
   binds,
   type CosAgent,
+  changeRepeated,
   contextOf,
   costOf,
   DEFAULT_MODEL,
@@ -72,6 +76,7 @@ import {
   priceOf,
   ROUTES,
   redacted,
+  repairedChange,
   reservation,
   routeOf,
   SITE_CHANGE_LINE,
@@ -144,6 +149,22 @@ vi.mock("../src/cos/history.ts", async (importOriginal) => {
       cut()
       return real.readSessionSince(...args)
     },
+  }
+})
+
+/**
+ * A change that sets a new phone or email is the one still shown on a card,
+ * so the card tests here stand in for that check: every change is carded
+ * unless a test turns it off.
+ */
+const contact = vi.hoisted(() => ({ carded: true }))
+
+vi.mock("../src/cos/tools.ts", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../src/cos/tools.ts")>()
+  return {
+    ...real,
+    newContact: async (...args: Parameters<typeof real.newContact>) =>
+      contact.carded ? { phone: "+447700900123" } : real.newContact(...args),
   }
 })
 
@@ -298,10 +319,79 @@ describe("the CoS's instructions", () => {
     )
   })
 
-  it("tell the model a started change already has the owner's yes", () => {
+  it("tell the model the owner's words are the yes and to speak of the work as its own", () => {
     expect(INSTRUCTIONS).toMatch(
-      /request_change comes back with outcome "started", the owner already said yes and the build has started[^\n]*Never ask them to approve it again/
+      /request_change in the owner's own words, one change per call, as soon as the owner asks for it: never ask them to confirm it first/
     )
+    expect(INSTRUCTIONS).toMatch(
+      /request_change comes back with outcome "started"[^\n]*never say queued[^\n]*Never ask them to approve it/
+    )
+    expect(INSTRUCTIONS).toContain('"I\'m putting your site together"')
+    expect(INSTRUCTIONS).not.toMatch(/such as "It's/)
+  })
+})
+
+describe("a change asked twice in one turn", () => {
+  const result = (text: string, outcome: string) => ({
+    toolName: "request_change",
+    input: { text },
+    output: { outcome },
+  })
+  const steps = (...each: ReturnType<typeof result>[]) =>
+    each.map((r) => ({ toolResults: [r] }))
+
+  it("lets the next step only write once the same change started twice", () => {
+    const once = result("Change the label", "started")
+    expect(changeRepeated(steps(once))).toBe(false)
+    expect(changeRepeated(steps(once, once))).toBe(true)
+  })
+
+  it("keeps the tools for a second change and for a fix after a refusal", () => {
+    expect(
+      changeRepeated(
+        steps(
+          result("Change the label", "started"),
+          result("Add our hours", "started")
+        )
+      )
+    ).toBe(false)
+    expect(
+      changeRepeated(
+        steps(
+          result("Change the label", "refused"),
+          result("Change the label", "started")
+        )
+      )
+    ).toBe(false)
+  })
+})
+
+describe("a change refused by its schema", () => {
+  const call = (input: unknown, toolName = "request_change") => ({
+    toolName,
+    input: JSON.stringify(input),
+  })
+
+  it("drops only a spare field that failed, so the change starts on this call", () => {
+    const repaired = repairedChange(
+      call({
+        text: "Make the hero title more professional",
+        label: "the main heading at the very top of your home page",
+        step: "Rewriting the hero title",
+      })
+    )
+    expect(JSON.parse(repaired?.input ?? "{}")).toEqual({
+      text: "Make the hero title more professional",
+      step: "Rewriting the hero title",
+    })
+  })
+
+  it("leaves any other failure, and any other tool, to the model", () => {
+    expect(repairedChange(call({ label: "your hero title" }))).toBeNull()
+    expect(repairedChange(call({ text: "x" }, "create_reminder"))).toBeNull()
+    expect(
+      repairedChange({ toolName: "request_change", input: "{" })
+    ).toBeNull()
   })
 })
 
@@ -319,19 +409,20 @@ describe("the CoS's change kinds", () => {
     }
   })
 
-  it("tells the model to quote the measured wait, not a fixed one", () => {
-    expect(INSTRUCTIONS).toContain("expected_seconds.quick.p50")
-    expect(INSTRUCTIONS).toContain("Never use a fixed time of your own")
+  it("tells the model to quote the measured wait as a range, not a fixed one", () => {
+    expect(INSTRUCTIONS).toContain("expected_range.quick")
+    expect(INSTRUCTIONS).toContain("Always a range, never one figure")
     // A quick edit can move to a longer build, so the time is never a promise.
     expect(INSTRUCTIONS).toContain("Never promise that time")
   })
 
-  it("carries expected_seconds and each build's lane in the workspace the model reads", () => {
+  it("carries each lane's range and each build's lane in the workspace the model reads", () => {
     const text = contextOf("act", {
       site: { host: null, live_version: null },
       questions: [],
       approvals: [],
       missing_facts: [],
+      stopped: [],
       builds: [
         {
           assignment_id: "3f2b9c1e-8a4d-4f6b-9c2a-1d5e7f8a9b0d",
@@ -340,14 +431,20 @@ describe("the CoS's change kinds", () => {
           lane: "quick",
           goal: "Change the headline.",
           version: null,
+          progress: [],
         },
       ],
       expected_seconds: {
         quick: { p50: 15, p95: 45 },
         full: { p50: 180, p95: 330 },
       },
+      expected_range: {
+        quick: "about 1 to 2 minutes",
+        full: "about 3 to 6 minutes",
+      },
     }).text
-    expect(text).toContain('"expected_seconds":{"quick":{"p50":15')
+    expect(text).toContain('"expected_range":{"quick":"about 1 to 2 minutes"')
+    expect(text).not.toContain("p50")
     expect(text).toContain('"lane":"quick"')
   })
 })
@@ -450,6 +547,7 @@ describe("the CoS's model and price", () => {
     questions: [],
     approvals: [],
     missing_facts: [],
+    stopped: [],
   }
 
   it("keeps text inside the workspace data from closing its tag", () => {
@@ -484,6 +582,7 @@ describe("the CoS's model and price", () => {
       state: "queued" as const,
       goal: "Add a Saturday slot.",
       version: null,
+      progress: [],
     }
     expect(contextOf("ask", EMPTY).taint).toEqual([])
     expect(contextOf("ask", { ...EMPTY, questions: [asked] }).taint).toEqual([
@@ -1244,7 +1343,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     ])
   })
 
-  it("asks the owner before every act tool, even with a value that parses as a fact", async () => {
+  it("asks the owner before a change and an answer that set a phone, and before a reminder", async () => {
     const s = seed(kit, me)
     const asking = await s.assignment("blocked_on_information")
     const q = question(me, asking)
@@ -1311,6 +1410,46 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     expect(log.find((e) => e.type === "cos.step")?.taint.sort()).toEqual([
       "inferred",
       "untrusted_input",
+    ])
+    await s.state(asking, "cancelled")
+  })
+
+  it("sends an answer in the owner's words at once, keyed by its turn and call", async () => {
+    const s = seed(kit, me)
+    const asking = await s.assignment("blocked_on_information")
+    const q = question(me, asking, "founding_year")
+    await s.event(asking, "information.requested", q)
+    await s.blocked(asking, q.request_id, 4)
+    const id = await conversation(me)
+    const stub = stubOrchestrator()
+    const { model } = scripted(
+      calls({
+        id: "functions.answer_question:0",
+        tool: "answer_question",
+        input: { request_id: q.request_id, value: "Since 2009" },
+      })
+    )
+    const done = await turn(
+      me,
+      typed(id, "We've been going since 2009."),
+      { model },
+      stub
+    )
+    expect(done.response.status, done.text).toBe(200)
+    expect(
+      done.chunks.filter((c) => c.type === "tool-approval-request")
+    ).toHaveLength(0)
+    const [turnRow] = await turnsOf(id)
+    expect(
+      stub.calls.map((c) => [
+        new URL(c.request.url).pathname,
+        c.request.headers.get("idempotency-key"),
+      ])
+    ).toEqual([
+      [
+        `/assignments/${asking}/answer`,
+        `${turnRow?.turn_id}:functions.answer_question:0`,
+      ],
     ])
     await s.state(asking, "cancelled")
   })
@@ -1687,11 +1826,11 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
   })
 
   /** A tail the CoS made, waiting on the four calls ADR-034's fallback proof resolves. */
-  async function fourApprovals(who: Owner, requestId: string) {
+  async function fourApprovals(who: Owner) {
     const id = await conversation(who)
     await turn(
       who,
-      typed(id, "Answer the phone question and make two changes."),
+      typed(id, "Make three changes and remind me to call the supplier."),
       {
         model: scripted(
           calls(
@@ -1701,15 +1840,9 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
               input: { text: "Add a Saturday slot." },
             },
             {
-              id: "call_aq",
-              tool: "answer_question",
-              input: {
-                request_id: requestId,
-                value: {
-                  key: "business.phone",
-                  value: { e164: "+441632960001" },
-                },
-              },
+              id: "call_rc3",
+              tool: "request_change",
+              input: { text: "Add Sundays." },
             },
             {
               id: "call_rc2",
@@ -1790,9 +1923,9 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     const q = question(me, asking)
     await s.event(asking, "information.requested", q)
     await s.state(asking, "cancelled")
-    const { id, tail, pending } = await fourApprovals(me, q.request_id)
+    const { id, tail, pending } = await fourApprovals(me)
     expect(pending).toHaveLength(4)
-    const [rc1, aq, rc2, cr] = pending as [
+    const [rc1, rc3, rc2, cr] = pending as [
       (typeof pending)[number],
       (typeof pending)[number],
       (typeof pending)[number],
@@ -1810,7 +1943,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
           message_id: tail.id,
           results: [
             { kind: "approval", approval_id: rc1.approval.id, approved: true },
-            { kind: "approval", approval_id: aq.approval.id, approved: true },
+            { kind: "approval", approval_id: rc3.approval.id, approved: true },
             {
               kind: "approval",
               approval_id: rc2.approval.id,
@@ -1827,7 +1960,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     expect(done.response.status, done.text).toBe(200)
     expect(
       stub.calls.map((c) => c.request.headers.get("idempotency-key"))
-    ).toEqual([rc1.approval.id, aq.approval.id])
+    ).toEqual([rc1.approval.id, rc3.approval.id])
     const added = (await logOf(id)).slice(before)
     const afterContext = added.slice(
       added.findIndex((e) => e.type === "cos.context")
@@ -1850,7 +1983,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
         }
       ).state
     expect(state(rc1.toolCallId)).toBe("output-available")
-    expect(state(aq.toolCallId)).toBe("output-available")
+    expect(state(rc3.toolCallId)).toBe("output-available")
     expect(state(rc2.toolCallId)).toBe("output-denied")
     expect(state(cr.toolCallId)).toBe("output-denied")
     expect(
@@ -2064,6 +2197,51 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     const after = await tailOf(me, id)
     expect(after.id).toBe(tail.id)
     expect(plain(await replay(tail, done.chunks))).toStrictEqual(plain(after))
+  })
+
+  it("starts a change the owner typed with no card, keyed by its turn and call, and drops a contact it carried", async () => {
+    contact.carded = false
+    try {
+      const id = await conversation(me)
+      const stub = orchestrator()
+      const { model, sent } = scripted(
+        calls({
+          id: "call_rc",
+          tool: "request_change",
+          input: {
+            text: "Add a Saturday slot.",
+            contact: { phone: "+447700900123" },
+          },
+        }),
+        said("I've started your change.")
+      )
+      const done = await turn(
+        me,
+        typed(id, "Add a Saturday slot."),
+        { model },
+        stub
+      )
+      expect(done.response.status, done.text).toBe(200)
+      expect(
+        done.chunks.filter((c) => c.type === "tool-approval-request")
+      ).toHaveLength(0)
+      expect(stub.calls).toHaveLength(1)
+      const [turnRow] = await turnsOf(id)
+      expect(stub.calls[0]?.request.headers.get("idempotency-key")).toBe(
+        `${turnRow?.turn_id}:call_rc`
+      )
+      expect(JSON.stringify(sent[1]?.prompt)).toContain('"outcome":"started"')
+      // The text never names a phone, so the number was never the owner's to set.
+      const phones = await kit.withOrg({ orgId: me.orgId }, (db) =>
+        db
+          .select()
+          .from(facts)
+          .where(sql`${facts.value}->>'e164' = '+447700900123'`)
+      )
+      expect(phones).toHaveLength(0)
+    } finally {
+      contact.carded = true
+    }
   })
 
   it("lets the next turn finish an approved change a dead turn ran, once, under its own token", async () => {
@@ -2497,12 +2675,46 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     expect((await turnsOf(id)).at(-1)?.outcome).toBe("answered")
   })
 
+  it("says what a typed message does while the model thinks, until a heading comes, and never once it writes", async () => {
+    const id = await conversation(me)
+    const statuses = (chunks: { type: string; data?: unknown }[]) =>
+      chunks.flatMap((c) =>
+        c.type === ONBOARDING_STATUS ? [(c.data as OnboardingStatus).on] : []
+      )
+    const asked: (string | null)[] = []
+    const thinking = await turn(me, typed(id, "Can we move it to Saturday?"), {
+      model: scripted(
+        reasoned(
+          "**Weighing The Saturday Slot**\nCheck the hours.",
+          said("Yes.")
+        )
+      ).model,
+      reading: async (held) => {
+        asked.push(held)
+        return "change"
+      },
+    })
+    expect(thinking.response.status, thinking.text).toBe(200)
+    // No question waits after onboarding, so the message is never an answer.
+    expect(asked).toEqual([null])
+    expect(statuses(thinking.chunks)).toEqual([
+      { kind: "reading", about: "change" },
+      { kind: "thinking", text: "Weighing the Saturday slot" },
+    ])
+    const writing = await turn(me, typed(id, "What do you charge?"), {
+      model: scripted(said("From £40.")).model,
+      reading: async () => "question",
+    })
+    expect(writing.response.status, writing.text).toBe(200)
+    expect(statuses(writing.chunks)).toEqual([])
+  })
+
   it("keeps reasoning in the log but out of the owner's stream and rows, and sends it back with an approval", async () => {
     const id = await conversation(me)
     const first = await turn(me, typed(id, "Add a Saturday slot."), {
       model: scripted(
         reasoned(
-          "The owner wants a change; propose it.",
+          "**Prioritizing The Saturday Slot**\nThe owner wants a change; propose it.",
           calls({
             id: "call_rc",
             tool: "request_change",
@@ -2513,8 +2725,22 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     })
     expect(first.response.status, first.text).toBe(200)
     expect(first.chunks.some((c) => c.type.startsWith("reasoning"))).toBe(false)
+    // Only the thought's heading reaches the owner, as a transient status.
+    const statuses = first.chunks.filter((c) => c.type === ONBOARDING_STATUS)
+    expect(statuses).toEqual([
+      {
+        type: ONBOARDING_STATUS,
+        data: {
+          on: { kind: "thinking", text: "Prioritising the Saturday slot" },
+          facts: [],
+        },
+        transient: true,
+      },
+    ])
+    expect(first.text).not.toContain("The owner wants a change")
     const tail = await tailOf(me, id)
     expect(tail.parts.some((p) => p.type === "reasoning")).toBe(false)
+    expect(JSON.stringify(tail)).not.toContain("Prioritising")
     const logged = (await logOf(id)).filter((e) => e.type === "cos.message")
     expect(JSON.stringify(logged.at(-1)?.payload)).toContain(
       "The owner wants a change"

@@ -1,4 +1,4 @@
-import { AskChoiceInput } from "@workspace/contracts"
+import { AskChoiceInput, MessageReading } from "@workspace/contracts"
 import { scrub } from "@workspace/facade/tee"
 import type { ToolPart } from "./chat.ts"
 
@@ -21,6 +21,8 @@ export const JEV = {
   url: "https://openrouter.ai/api/alpha/decisions",
   model: "typesafe/jev-1.13",
   timeoutMs: 1_000,
+  /** A message's reading is never waited for: it only fills the line until a real one comes. */
+  readingMs: 3_000,
   /** `answers_it` and the kind's confidence must both reach this. */
   sure: 0.9,
   /** The picked option's confidence must reach this. */
@@ -215,7 +217,8 @@ async function ask(
   apiKey: string,
   state: Record<string, string>,
   questions: Record<string, unknown>,
-  fetchImpl: typeof fetch
+  fetchImpl: typeof fetch,
+  timeoutMs: number = JEV.timeoutMs
 ): Promise<{ body: JevResponse | null; error: string | null }> {
   try {
     const response = await fetchImpl(JEV.url, {
@@ -232,7 +235,7 @@ async function ask(
         ),
         questions,
       }),
-      signal: AbortSignal.timeout(JEV.timeoutMs),
+      signal: AbortSignal.timeout(timeoutMs),
     })
     if (!response.ok) return { body: null, error: `status ${response.status}` }
     return { body: (await response.json()) as JevResponse, error: null }
@@ -353,4 +356,55 @@ export async function jevApproval(
     })
   )
   return verdict
+}
+
+/**
+ * What a typed message is doing, for the waiting line only: Jev decides
+ * nothing about the turn. `asked` is the question waiting, null when none
+ * is, so the message cannot be read as its answer. Null when unsure, on an
+ * error, a non-200 or the time limit. One log line per call.
+ */
+export async function jevReading(
+  apiKey: string,
+  asked: string | null,
+  said: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<MessageReading | null> {
+  const began = Date.now()
+  const { body, error } = await ask(
+    apiKey,
+    asked ? { assistant_asked: asked, owner_said: said } : { owner_said: said },
+    {
+      reading: {
+        type: "choice",
+        instructions: "What is the owner's message mainly doing?",
+        criteria: {
+          ...(asked ? { answer: "It answers the assistant's question" } : {}),
+          change: "It asks to change something already set, chosen or written",
+          question: "It asks the assistant a question",
+          other: "It does something else, or it is unclear",
+        },
+      },
+    },
+    fetchImpl,
+    JEV.readingMs
+  )
+  const { choice, confidence } = body?.answers?.reading ?? {}
+  const read = MessageReading.safeParse(choice)
+  const reading =
+    read.success &&
+    num(confidence) >= JEV.sure &&
+    (asked || read.data !== "answer")
+      ? read.data
+      : null
+  console.log(
+    JSON.stringify({
+      code: "reading.jev",
+      ms: Date.now() - began,
+      reading,
+      error,
+      cost_usd: costOf(body),
+    })
+  )
+  return reading
 }

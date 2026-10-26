@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { Activity } from "./activity.ts"
 import {
   ApprovalDecision,
   ApprovalRequest,
@@ -8,7 +9,7 @@ import {
 import { Timestamp, Ulid, Uuid } from "./common.ts"
 import { Blueprint, DirectionId, FontPairId } from "./design.ts"
 import { FactRecord } from "./fact.ts"
-import { choiceFacts } from "./onboarding.ts"
+import { Asset, AvatarId, choiceFacts } from "./onboarding.ts"
 import { SiteLink } from "./site.ts"
 import { Text } from "./text.ts"
 
@@ -45,6 +46,33 @@ export const ReviewValue = z.strictObject({
 })
 /** A phone number as the site stores it: E.164. */
 export const E164 = z.string().regex(/^\+[1-9]\d{6,14}$/)
+
+/**
+ * Whether an E.164 number can be dialled: a UK one has 9 or 10 digits after
+ * +44 and no trunk 0, a North American one ten digits whose area and
+ * exchange start from 2 to 9. Checked where an owner gives a number, not in
+ * `E164`, whose fixtures use short reserved numbers.
+ */
+// shortcut: UK and North American rules only, any other country is held to E.164's shape; libphonenumber when an owner elsewhere signs up.
+export const dialable = (e164: string) =>
+  E164.safeParse(e164).success &&
+  (e164.startsWith("+44")
+    ? /^\+44[1-9]\d{8,9}$/.test(e164)
+    : !e164.startsWith("+1") || /^\+1[2-9]\d{2}[2-9]\d{6}$/.test(e164))
+
+/**
+ * A number as an owner in the UK types it, in E.164, or null when it cannot
+ * be dialled. A leading 0 is the trunk prefix and drops after +44, also when
+ * typed after the country code ("+44 (0)7700 900123"); 00 is the
+ * international prefix.
+ */
+export function toE164(typed: string): string | null {
+  const digits = typed.replace(/[\s().-]/g, "").replace(/^00/, "+")
+  const e164 = (
+    digits.startsWith("0") ? `+44${digits.slice(1)}` : digits
+  ).replace(/^\+440/, "+44")
+  return dialable(e164) ? e164 : null
+}
 const fact = <K extends string, V extends z.ZodRawShape>(
   key: K,
   value: V,
@@ -101,6 +129,7 @@ export const FactValue = z.discriminatedUnion("key", [
   fact("service_area.text", { text: Text(200) }),
   fact("assistant.name", { name: Text(40) }),
   fact("assistant.pronouns", choiceFacts.pronouns),
+  fact("assistant.avatar", choiceFacts.avatar),
   fact("assistant.tone", choiceFacts.tone),
   fact("owner.preferred_name", { name: Text(60) }),
   fact("site.build_mode", choiceFacts.buildMode),
@@ -110,7 +139,9 @@ export const FactValue = z.discriminatedUnion("key", [
       (p) =>
         p.id === "custom"
           ? p.custom !== undefined || p.brand !== undefined
-          : p.custom === undefined && p.brand === undefined,
+          : p.custom === undefined &&
+            p.brand === undefined &&
+            p.roles === undefined,
       "a preset stands alone; custom needs the owner's words or a brand colour"
     )
   ),
@@ -148,6 +179,7 @@ export const FactValueKey = z.enum(
 export const CHOICE_FACT_KEYS = [
   "business.industry",
   "assistant.pronouns",
+  "assistant.avatar",
   "assistant.tone",
   "site.build_mode",
   "site.template",
@@ -231,6 +263,17 @@ export const OwnerChangeRequest = z.strictObject({
   change_kind: ChangeKind.optional().describe(
     "How big the change is. copy: words only, such as a headline, a phone number or a button label. style: colours, fonts or spacing across the site. section: add, remove or rework one section or page. photo: replace, add or remove a picture. creative: a new look, new pages or anything unclear. Omit it when unsure."
   ),
+  label: Text(40)
+    .optional()
+    .describe(
+      'A short name for the change in the owner\'s terms, as the panel and the ready line say it after "updating": "your hero title", "your phone number", "the colours".'
+    ),
+  chat: z
+    .strictObject({ conversation_id: Uuid.optional() })
+    .optional()
+    .describe(
+      "Set when the owner wrote the words in the panel: once the change starts they are also posted in this conversation, or in the newest one when none is named."
+    ),
 })
 
 /**
@@ -288,9 +331,21 @@ export const BuildActivity = z.strictObject({
    * written pages together and report.
    */
   now: z.literal(true).optional(),
-  /** What the row counts, by name, such as the plan's pages: fixed labels, never model text. */
+  /** The stage does not apply to this build (no photos to make, no polish asked); it stays in the list, never done. */
+  skipped: z.literal(true).optional(),
+  /**
+   * What the row counts, by name, such as the plan's pages, or the repair
+   * line under the checks: fixed labels, never model text. `working` is one
+   * begun and not yet done, such as a page whose writer has started.
+   */
   items: z
-    .array(z.strictObject({ label: Text(60), done: z.boolean() }))
+    .array(
+      z.strictObject({
+        label: Text(60),
+        done: z.boolean(),
+        working: z.literal(true).optional(),
+      })
+    )
     .max(9)
     .optional(),
 })
@@ -318,6 +373,41 @@ export const thumbnailOf = (assetId: string | null | undefined) =>
     : null
 
 /**
+ * The pictures of one version the api serves, cut from the orchestrator's
+ * screenshots: the home page's first screen on a laptop, a second page's
+ * (or, on an older build, the screen below the first), the home page's first
+ * screen on a phone, and the site's icon. They live
+ * under the revision's own prefix, so they last exactly as long as the
+ * revision does (retention deletes them with its files).
+ */
+export const REVISION_PICTURES = [
+  "laptop",
+  "laptop-2",
+  "phone",
+  "icon",
+] as const
+
+/** The path the api serves them at: `GET /revisions/{revision id}/{picture}`. */
+export const REVISION_PICTURE_PATH = new RegExp(
+  `^/revisions/(${PHOTO_ID})/(${REVISION_PICTURES.join("|")})$`
+)
+
+/**
+ * The api's cuts, named in each link: the pictures are cached for good, so
+ * a change to how the api cuts them bumps this, or a browser keeps the old.
+ */
+const PICTURE_CUT = 3
+
+/** One version's pictures as the app shows them, by name. */
+export const revisionPictures = (revisionId: string) =>
+  Object.fromEntries(
+    REVISION_PICTURES.map((name) => [
+      name,
+      `/api/revisions/${revisionId}/${name}?cut=${PICTURE_CUT}`,
+    ])
+  ) as Record<(typeof REVISION_PICTURES)[number], string>
+
+/**
  * One generated photo of a build while it is made: `drawing` until its slot
  * settles, then `made` with its thumbnail, or `fallback` when no model drew it
  * and its section uses its text layout. `alt` is the plan's, null once a
@@ -330,22 +420,41 @@ export const BuildPhoto = z.strictObject({
   thumbnail: PhotoThumbnail.nullable(),
 })
 
-/** The most progress rows a build shows at once: planning, photos, pages, putting them together, design, its polish, a repair and the checks. */
+/**
+ * One picture on the site, in the section it fills: one the assistant made,
+ * or the owner's own. `thumbnail` is null when the slot names no picture the
+ * api serves.
+ */
+export const SitePhoto = z.strictObject({
+  slot_id: z.string().min(1),
+  section: z.string().min(1),
+  alt: z.string().max(200),
+  generated: z.boolean(),
+  thumbnail: PhotoThumbnail.nullable(),
+})
+
+/**
+ * `GET /site/media`: the logo the org holds, and the pictures on its newest
+ * version, the one waiting for review or else the live one. No pictures
+ * before a build has placed any.
+ */
+export const SiteMedia = z.strictObject({
+  logo: Asset.nullable(),
+  photos: z.array(SitePhoto).max(24),
+})
+
+/** The most progress rows a build shows at once: its six stages (plan, photos, pages, polish, checks, ready), with room to spare. */
 export const BUILD_ACTIVITY_MAX = 8
 
 /**
- * The plan a build was given (ADR-038), for the Blueprint card. `round`
- * counts plans within the build: a "Change something" re-plans and adds one.
- * `previous` is the plan this one changed, a re-plan's last round or, for a
- * creative change, the plan the live site was built from; the card marks the
- * rows that differ. `awaiting` says the build waits on the owner's "Build it"
- * or "Change something" for this round.
+ * The plan a build was given (ADR-038), for the panel. `round` counts plans
+ * within the build and is 1 today. `previous` is the plan this one changed:
+ * for a creative change, the plan the live site was built from.
  */
 export const BuildBlueprint = z.strictObject({
   plan: Blueprint,
   round: z.int().positive(),
   previous: Blueprint.nullable(),
-  awaiting: z.boolean(),
 })
 
 /**
@@ -358,10 +467,16 @@ export const BuildSummary = z.strictObject({
   kind: z.enum(["site.build", "site.revise"]),
   state: AssignmentState,
   goal: z.string().min(1).max(GOAL_MAX),
+  /** A change's short name in the owner's terms, such as "your hero title"; absent on a first build or an older change. */
+  label: Text(40).optional(),
   /** The lane it runs in now: a quick edit that fell through reads `full`. */
   lane: BuildLane.optional(),
   /** A quick edit that could not be made quickly and moved to a fuller lane; the panel says so once. */
   fell_through: z.boolean().optional(),
+  /** Started again on its own after a build that stopped for a reason on our side. */
+  retry: z.literal(true).optional(),
+  /** The pipeline started its Developer again mid-build at least once, as the stall watchdog does. */
+  restarted: z.literal(true).optional(),
   activity: z.array(BuildActivity).max(BUILD_ACTIVITY_MAX).optional(),
   revision: RevisionRef.nullable(),
   /** Absent on a build that did not plan: a revise, the quick lane, an older row. */
@@ -555,11 +670,15 @@ export const WorkspaceStatus = z.strictObject({
   missing_facts: z.array(FactValueKey),
   /** The name the owner gave their assistant, or null before they chose one. */
   assistant_name: Text(40).nullable(),
+  /** The face the owner picked for their assistant, or null for Reme's own. */
+  assistant_avatar: AvatarId.nullable(),
   reminders: z.strictObject({
     /** Open ones only: soonest due first, undated after, then newest first. */
     notes: z.array(Reminder).max(REMINDER_NOTES_MAX),
     derived: z.array(DerivedReminder),
   }),
+  /** Every job as segments with fixed steps. Absent until the api fills it. */
+  activity: Activity.optional(),
 })
 
 export type FactValue = z.infer<typeof FactValue>
@@ -570,6 +689,8 @@ export type OwnerChangeRequest = z.infer<typeof OwnerChangeRequest>
 export type BuildLane = z.infer<typeof BuildLane>
 export type BuildActivity = z.infer<typeof BuildActivity>
 export type BuildPhoto = z.infer<typeof BuildPhoto>
+export type SitePhoto = z.infer<typeof SitePhoto>
+export type SiteMedia = z.infer<typeof SiteMedia>
 export type AnswerRequest = z.infer<typeof AnswerRequest>
 export type DecisionRequest = z.infer<typeof DecisionRequest>
 export type PreviewLink = z.infer<typeof PreviewLink>

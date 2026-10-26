@@ -2,7 +2,6 @@ import {
   ActivityFeed,
   ApprovalDecision,
   type AttentionItem as Attention,
-  type BlueprintReviewOutput,
   CHAT_TURN_MS,
   type ChangeKind,
   Conversation,
@@ -22,12 +21,14 @@ import {
   PushConfig,
   PushSubscribed,
   type PushSubscribeRequest,
+  type QuestionReply,
+  REVISION_PICTURES,
   type RegistrantDetails,
+  SiteMedia,
   StaffDirectory,
   Uuid,
   WorkspaceStatus,
 } from "@workspace/contracts"
-import { answerSpecOf } from "@workspace/ui/lib/answer"
 import { WORKING } from "@workspace/ui/lib/build-state"
 import { factLabel } from "@workspace/ui/lib/facts"
 import { refusalText } from "@workspace/ui/lib/refusal"
@@ -107,6 +108,9 @@ async function get(path: string): Promise<unknown | null> {
 /** How long a photo upload has before the api starts answering. */
 const UPLOAD_TIMEOUT_MS = 120_000
 
+/** How long a call that waits on a vision or image model has. */
+const MODEL_TIMEOUT_MS = 60_000
+
 const sessionCookie = (session: string) =>
   `${COOKIE}=${encodeURIComponent(session)}`
 
@@ -147,6 +151,34 @@ async function call(
         (init.body === undefined ? undefined : JSON.stringify(init.body)),
     },
     init.timeoutMs
+  )
+}
+
+/**
+ * A multipart body streamed through as the browser sent it, or null when
+ * there is no session. Only the session, the body's type and length and the
+ * press's key travel with it.
+ */
+async function multipart(
+  path: string,
+  upload: Parameters<OwnerDataSource["assets"]>[0],
+  timeoutMs: number
+): Promise<Response | null> {
+  const session = await forwardedSession()
+  if (!session) return null
+  return await apiFetch(
+    new URL(path, apiUrl()),
+    {
+      method: "POST",
+      headers: {
+        cookie: sessionCookie(session),
+        "content-type": upload.type,
+        "content-length": String(upload.length),
+        "idempotency-key": upload.key,
+      },
+      body: upload.body,
+    },
+    timeoutMs
   )
 }
 
@@ -264,8 +296,11 @@ function logged(item: Logged): { title: string; detail: string } {
 const APPROVAL_EXPIRY =
   "Nothing is published without you. If it expires, the build waits until you decide."
 
-const approvalTitle = (version: number) =>
-  `Version ${version} is ready to publish`
+/** A version waiting on the owner, as they would say it: the first website, or a change to the live one. */
+const approvalTitle = (live: boolean) =>
+  live
+    ? "Your website changes are ready for you to review"
+    : "Your website is ready for you to review"
 
 /**
  * `/workspace`, with the attention list trimmed. An approval whose target is
@@ -289,6 +324,7 @@ async function workspaceStatus(
         attention: [],
         missing_facts: [],
         assistant_name: null,
+        assistant_avatar: null,
         reminders: { notes: [], derived: [] },
       },
       etag: null,
@@ -315,7 +351,8 @@ const namesOf = (staff: StaffMember[]) =>
 
 function toAttention(
   item: Attention,
-  names: Map<string, string>
+  names: Map<string, string>,
+  live = false
 ): AttentionItem {
   switch (item.kind) {
     case "approval":
@@ -331,7 +368,7 @@ function toAttention(
             }
           : {}),
         id: item.request.approval_id,
-        title: approvalTitle(item.version),
+        title: approvalTitle(live),
         detail: item.request.rationale,
         raisedBy: names.get(item.request.requested_by_staff_id) ?? SYSTEM,
         raisedById: item.request.requested_by_staff_id,
@@ -342,8 +379,6 @@ function toAttention(
     case "question":
       return {
         kind: "question",
-        assignmentId: item.request.assignment_id,
-        answer: answerSpecOf(item.request),
         id: item.request.request_id,
         title: factLabel(item.request.field),
         detail: item.request.why,
@@ -389,7 +424,9 @@ function workspaceOf(
   names: Map<string, string>
 ): Workspace {
   return {
-    attention: status.attention.map((item) => toAttention(item, names)),
+    attention: status.attention.map((item) =>
+      toAttention(item, names, status.site.live !== null)
+    ),
     live: status.site.live?.version ?? null,
     liveRevision: status.site.live
       ? {
@@ -405,6 +442,8 @@ function workspaceOf(
     url: status.site.url,
     missingFacts: status.missing_facts,
     assistantName: status.assistant_name,
+    assistantAvatar: status.assistant_avatar,
+    activity: status.activity ?? null,
     derivedReminders: status.reminders.derived,
     reminderNotes: status.reminders.notes,
     etag,
@@ -493,27 +532,13 @@ function segment(id: string): string {
 }
 
 async function answer(
-  assignmentId: string,
-  requestId: string,
-  value: unknown,
+  conversationId: string,
+  reply: QuestionReply,
   key: string
 ): Promise<WriteOutcome> {
-  const path = `/builds/${segment(assignmentId)}/answer`
-  const response = await post(path, { request_id: requestId, value }, key)
-  // The same answer again is a retry and gets its receipt (202). A 409
-  // `answer.already_given` means a different answer is on record, so this
-  // one was not recorded.
-  return await outcome(response, path)
-}
-
-async function decideBlueprint(
-  assignmentId: string,
-  decision: BlueprintReviewOutput,
-  key: string
-): Promise<WriteOutcome> {
-  const path = `/builds/${segment(assignmentId)}/blueprint`
-  // The same decision again is a retry and gets its receipt.
-  return await outcome(await post(path, decision, key), path)
+  const path = `/conversations/${segment(conversationId)}/questions`
+  // The same answer again is a retry; a refusal says why in the owner's words.
+  return await outcome(await post(path, reply, key), path)
 }
 
 async function cancelBuild(assignmentId: string): Promise<WriteOutcome> {
@@ -542,18 +567,23 @@ async function preview(assignmentId: string): Promise<PreviewLinks | null> {
   return {
     revisionId: link.revision_id,
     url: link.url,
-    screenshots: link.screenshots,
     expiresAt: link.expires_at,
   }
+}
+
+async function siteMedia(): Promise<SiteMedia | null> {
+  const body = await get("/site/media")
+  return body === null ? null : SiteMedia.parse(body)
 }
 
 async function requestChange(
   text: string,
   key: string,
-  changeKind?: ChangeKind
+  changeKind?: ChangeKind,
+  chat?: { conversation_id?: string }
 ): Promise<WriteOutcome> {
   return await outcome(
-    await post("/changes", { text, change_kind: changeKind }, key),
+    await post("/changes", { text, change_kind: changeKind, chat }, key),
     "/changes"
   )
 }
@@ -695,6 +725,19 @@ async function unsubscribePush(id: string): Promise<WriteOutcome> {
   )
 }
 
+async function setTimeZone(zone: string): Promise<void> {
+  const response = await post(
+    "/time-zone",
+    { time_zone: zone },
+    crypto.randomUUID(),
+    "PUT"
+  )
+  // A refusal (an admin looking on, an unknown zone) leaves the org's zone as it was.
+  if (response.status >= 500) {
+    throw new Error(`apps/api answered ${response.status} for /time-zone`)
+  }
+}
+
 async function conversations(): Promise<Conversation[]> {
   const body = await get("/conversations")
   return body === null ? [] : ConversationList.parse(body).conversations
@@ -805,10 +848,10 @@ export const apiSource: OwnerDataSource = {
   },
   pollWorkspace,
   answer,
-  decideBlueprint,
   cancelBuild,
   deleteAccount,
   preview,
+  siteMedia,
   requestChange,
   createReminder,
   completeReminder,
@@ -818,6 +861,7 @@ export const apiSource: OwnerDataSource = {
   pushKey,
   subscribePush,
   unsubscribePush,
+  setTimeZone,
   domainCheckout,
   domainStatus,
   googleConnect,
@@ -831,26 +875,35 @@ export const apiSource: OwnerDataSource = {
   // answers; cut short, the owner's retry finds it still running (chat.busy).
   chat: (raw) =>
     call("/chat", { method: "POST", raw, timeoutMs: CHAT_TURN_MS }),
-  assets: async ({ body, type, length, key }) => {
-    const session = await forwardedSession()
-    if (!session) return null
-    return await apiFetch(
-      new URL("/assets", apiUrl()),
-      {
-        method: "POST",
-        headers: {
-          cookie: sessionCookie(session),
-          "content-type": type,
-          "content-length": String(length),
-          "idempotency-key": key,
-        },
-        body,
-      },
-      // The api answers once every byte is in, which a slow line takes a while to send.
-      UPLOAD_TIMEOUT_MS
-    )
-  },
+  // The api answers once every byte is in, which a slow line takes a while to send.
+  assets: (upload) => multipart("/assets", upload, UPLOAD_TIMEOUT_MS),
   photo: (assetId) => call(`/photos/${segment(assetId)}`),
+  // Only the names the api serves, so nothing else rides in the path.
+  revisionPicture: async (revisionId, picture) =>
+    (REVISION_PICTURES as readonly string[]).includes(picture)
+      ? call(`/revisions/${segment(revisionId)}/${picture}`)
+      : new Response(null, { status: 404 }),
+  reviewPhotos: (raw, key) =>
+    call("/assets/review", {
+      method: "POST",
+      raw,
+      key,
+      timeoutMs: MODEL_TIMEOUT_MS,
+    }),
+  paletteFromImage: (upload) =>
+    multipart("/palettes/from-image", upload, MODEL_TIMEOUT_MS),
+  logoPalettes: (raw) =>
+    call("/palettes/from-logo", {
+      method: "POST",
+      raw,
+      timeoutMs: MODEL_TIMEOUT_MS,
+    }),
+  drawLogos: (raw, key) =>
+    call("/logos", { method: "POST", raw, key, timeoutMs: MODEL_TIMEOUT_MS }),
+  logoRounds: (toolCallId) =>
+    call(`/logos?tool_call_id=${encodeURIComponent(toolCallId)}`),
+  keepLogo: (id, key) =>
+    call(`/logos/${segment(id)}/keep`, { method: "POST", key }),
   decideApproval: async (approvalId, revisionId, decision) => {
     const path = `/approvals/${segment(approvalId)}/decision`
     const response = await post(

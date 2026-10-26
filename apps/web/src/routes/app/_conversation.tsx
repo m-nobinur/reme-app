@@ -19,6 +19,9 @@ export const Route = createFileRoute("/app/_conversation")({
   component: import.meta.env.SSR
     ? () => null
     : lazyRouteComponent(() => import("@/chat/chat-page"), "ChatPage"),
+  // The component is already lazy. The router's own split would wrap it in a
+  // second lazy layer it never preloads, so the chat suspended on first render.
+  codeSplitGroupings: [],
   ssr: false,
   // The server renders this while the chat chunk loads. It is the thread's
   // own shape, and it shows at once: the router's default waits 1s before

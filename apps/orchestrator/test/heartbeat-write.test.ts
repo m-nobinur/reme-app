@@ -150,4 +150,13 @@ describe("the writer's instructions", () => {
     for (const prompt of [low, writerPrompt("default"), high])
       expect(prompt).toMatch(/\[quiet\]/)
   })
+
+  it("speaks as the name the owner chose, and as no name before that", () => {
+    expect(writerPrompt("default", "Ellie")).toMatch(
+      /^You are Ellie, the assistant/
+    )
+    expect(writerPrompt("default")).toMatch(/^You are the assistant/)
+    expect(writerPrompt("default", "Ellie")).not.toMatch(/Reme/)
+    expect(writerPrompt("default")).not.toMatch(/Reme/)
+  })
 })

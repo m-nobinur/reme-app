@@ -60,6 +60,8 @@ const { AgentInstanceExistsError } = vi.hoisted(() => {
   return { AgentInstanceExistsError: InstanceExists }
 })
 const dispatched: { message: unknown; photosSettled?: boolean }[] = []
+/** Each stop the stall watchdog asked of the Developer. */
+const aborted: string[] = []
 // Whether the photo step had settled when the Developer was dispatched,
 // whether it throws, and every event type the Workflow appended.
 const photoStep = vi.hoisted(() => ({
@@ -76,6 +78,9 @@ vi.mock("@workspace/facade", async (importOriginal) => ({
     dispatch: async (request: { message: unknown }) => {
       dispatched.push({ ...request, photosSettled: photoStep.settled })
       return { submissionId: "s" }
+    },
+    abort: async () => {
+      aborted.push("abort")
     },
   }),
 }))
@@ -132,11 +137,11 @@ vi.mock("../src/brief.ts", () => ({
     model: "A",
     origin: script.origin,
     kind: "site.build",
-    skip_review: script.skipReview,
     ...script.lane,
   }),
   takeSnapshot: async () => ({}),
   issueSpec: async () => ({}),
+  retryContext: async () => undefined,
 }))
 
 const SUPERSEDED = "10000001-0000-4000-8000-00000000aaaa"
@@ -155,11 +160,8 @@ const script = {
   lane: {} as { lane?: string; change_kind?: string | null },
   /** Whether the one-call quick edit gets to a report. */
   quickDone: true as boolean,
-  /** What each look at the plan's decision finds; none left is "build". */
-  decisions: [] as ("build" | "change" | null)[],
-  /** The owner chose "Skip all": the plan is built without the card's wait. */
-  skipReview: false as boolean,
-  planned: [] as number[],
+  /** Whether a failure is followed up with a retry and a line in the chat. */
+  followUp: false as boolean,
   /** The axe run each `validateRevision` call was handed. */
   gated: [] as unknown[],
   /** The fixes each look of the design critic finds; none left is none. */
@@ -249,7 +251,7 @@ vi.mock("../src/state.ts", () => ({
 vi.mock("../src/revise.ts", () => ({
   SITE_ROOT: "/workspace/site",
   latestBlueprint: async () => null,
-  publishedSource: async () =>
+  reviseSource: async () =>
     ROW.kind === "site.revise"
       ? { revision_id: "rev-live", assignment_id: "x", source_key: "k" }
       : null,
@@ -261,6 +263,12 @@ vi.mock("../src/revise.ts", () => ({
     prepared.push("warm")
     return ""
   },
+}))
+// The relay's bodies are driven in relay.test.ts; here the question is always the owner's.
+vi.mock("../src/relay.ts", () => ({
+  askOwner: async () => "posted",
+  heldSteers: async () => [],
+  relayQuestion: async () => ({ ask: "Do you have parking?" }),
 }))
 vi.mock("../src/quick.ts", () => ({
   quickEdit: async () =>
@@ -275,15 +283,9 @@ vi.mock("../src/quick.ts", () => ({
         }
       : { done: false, reason: "apply: no match", model_ms: 1 },
 }))
-// The planner's bodies are driven in planner.test.ts; here only its rounds.
+// The planner's bodies are driven in planner.test.ts; here only its step.
 vi.mock("../src/planner.ts", () => ({
-  PLAN_ROUNDS: 6,
-  planRound: async ({ round }: { round: number }) => {
-    script.planned.push(round)
-    return { round, source: "model", attempts: 1 }
-  },
-  readDecision: async () =>
-    script.decisions.length > 0 ? script.decisions.shift() : "build",
+  planRound: async () => ({ round: 1, source: "model", attempts: 1 }),
 }))
 // BA4's photos: one generated file, drawn over a few milliseconds, so the
 // Developer is seen to start before they settle.
@@ -346,6 +348,18 @@ vi.mock("../src/search-sync.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/search-sync.ts")>()),
   startDueSyncs: async () => 0,
 }))
+// The follow-up's bodies are driven in retry.test.ts; here only its steps.
+vi.mock("../src/retry.ts", () => ({
+  afterFailure: async () => ({
+    retry_id: script.followUp ? "retry" : null,
+    note: script.followUp ? { key: "k", text: "t" } : null,
+  }),
+  noteProblem: async () => undefined,
+  noteResumed: async () => undefined,
+  postNote: async () => undefined,
+  readyNote: async () => ({ key: "k", text: "t" }),
+  sayReady: async () => undefined,
+}))
 vi.mock("../src/validate.ts", () => ({
   assignmentFacts: async () => [],
   // What a quick edit's accessibility gate finds after its preview; none left is a pass.
@@ -405,13 +419,15 @@ type Wake = { payload: Record<string, unknown> } | "timeout"
 type Answer = { timeout?: true; after?: number }
 
 /** A recording step: names in order, callbacks run, sleeps skipped, waits scripted. */
-function drive(wakes: Wake[], answers: Answer[] = []) {
+function drive(wakes: Wake[], answers: Answer[] = [], failing: string[] = []) {
   const names: string[] = []
   /** The timeout each answer wait was given. */
   const waits: unknown[] = []
   const step = {
     do: async (name: string, a: unknown, b?: unknown) => {
       names.push(name)
+      // A step out of retries throws to the Workflow.
+      if (failing.includes(name)) throw new Error(`${name} failed`)
       const fn = (typeof a === "function" ? a : b) as () => Promise<unknown>
       return fn()
     },
@@ -423,7 +439,7 @@ function drive(wakes: Wake[], answers: Answer[] = []) {
       opts: { type: string; timeout?: unknown }
     ) => {
       names.push(name)
-      if (opts.type === "answer" || opts.type === "blueprint") {
+      if (opts.type === "answer") {
         waits.push(opts.timeout)
         const answer = answers.shift() ?? {}
         if (answer.after) vi.setSystemTime(Date.now() + answer.after)
@@ -482,11 +498,10 @@ type Setup = {
   origin?: "owner"
   lane?: typeof script.lane
   quickDone?: boolean
-  decisions?: typeof script.decisions
-  skipReview?: boolean
   critic?: typeof script.critic
   quiet?: number[]
   photosFail?: boolean
+  followUp?: boolean
 }
 const full = { lane: "full" }
 const copy = { lane: "quick", change_kind: "copy" }
@@ -512,6 +527,13 @@ const paths: [string, Wake[], Setup, { outcome: string }][] = [
     { looks: [unanswered] },
     { outcome: "preview_ready" },
   ],
+  // The owner's own build asks them, takes the answer and opens its review.
+  [
+    "owner question, then a ready draft",
+    [information, completion],
+    { origin: "owner", looks: [unanswered] },
+    { outcome: "preview_ready" },
+  ],
   // A nudge for an earlier question, or a repeat: one more look, then a wait.
   [
     "a stale nudge, then the answer",
@@ -529,6 +551,13 @@ const paths: [string, Wake[], Setup, { outcome: string }][] = [
     "gate failure ends failed",
     [completion],
     { verdicts: ["failed"] },
+    { outcome: "failed" },
+  ],
+  // An owner's build that failed on our side is started again, and said.
+  [
+    "owner build failed, then retried",
+    [completion],
+    { origin: "owner", verdicts: ["failed"], followUp: true },
     { outcome: "failed" },
   ],
   ["budget park", [budget], {}, { outcome: "blocked_on_approval" }],
@@ -586,13 +615,18 @@ const paths: [string, Wake[], Setup, { outcome: string }][] = [
     {},
     { outcome: "failed" },
   ],
-  // A whole lead turn with nothing in the log: the build is failed as stalled.
-  ["developer went quiet", ["timeout"], {}, { outcome: "failed" }],
-  // The lead logged ten minutes ago, so it is still at work: wait again.
+  // Ten minutes with nothing in the log: the lead is stopped and resumed.
+  [
+    "developer went quiet",
+    ["timeout", completion],
+    {},
+    { outcome: "preview_ready" },
+  ],
+  // The lead logged four minutes ago, so it is still at work: wait again.
   [
     "developer still working past a wait",
     ["timeout", completion],
-    { quiet: [10 * 60 * 1000] },
+    { quiet: [4 * 60 * 1000] },
     { outcome: "preview_ready" },
   ],
   // The lead's turn ended with no accepted report: fail now, not later.
@@ -651,36 +685,12 @@ const paths: [string, Wake[], Setup, { outcome: string }][] = [
     { lane: full, critic: [[FIX, FIX], []] },
     { outcome: "preview_ready" },
   ],
-  // An owner's waits on the card: the first look finds no decision, the
-  // nudge sends it to look again and finds "Build it".
+  // An owner's build plans and builds with no stop for a review.
   [
-    "owner reviews the plan",
+    "owner's planned build",
     [completion],
-    { origin: "owner", lane: full, decisions: [null, "build"] },
+    { origin: "owner", lane: full },
     { outcome: "preview_ready" },
-  ],
-  [
-    "owner changes the plan",
-    [completion],
-    { origin: "owner", lane: full, decisions: ["change", "build"] },
-    { outcome: "preview_ready" },
-  ],
-  [
-    "owner skipped the review",
-    [completion],
-    { origin: "owner", lane: full, skipReview: true },
-    { outcome: "preview_ready" },
-  ],
-  [
-    "nobody decided on the plan",
-    [],
-    {
-      origin: "owner",
-      lane: full,
-      decisions: Array(29).fill(null),
-      answers: Array(28).fill({ timeout: true, after: 6 * HOUR }),
-    },
-    { outcome: "failed" },
   ],
   [
     "nobody answered",
@@ -717,11 +727,9 @@ describe("the assignment Workflow's step names", () => {
     script.origin = setup.origin ?? "console"
     script.lane = setup.lane ?? {}
     script.quickDone = setup.quickDone ?? true
-    script.decisions = [...(setup.decisions ?? [])]
-    script.skipReview = setup.skipReview ?? false
-    script.planned = []
     script.critic = [...(setup.critic ?? [])]
     script.quiet = [...(setup.quiet ?? [])]
+    script.followUp = setup.followUp ?? false
     photoStep.fail = setup.photosFail ?? false
     photoStep.appended.length = 0
     const { names, run } = drive([...wakes], [...(setup.answers ?? [])])
@@ -923,10 +931,19 @@ describe("the assignment Workflow's step names", () => {
     script.reviewRefusal = "assignment.not_previewable"
     const { names, run } = drive([completion])
     expect(await run()).toMatchObject({ outcome: "preview_ready" })
-    expect(names).toEqual(expected["owner build"])
-    // Any other refusal is still final.
+    // No review opened, so no ready line either.
+    const at = names.indexOf("review") + 1
+    expect([
+      ...names.slice(0, at),
+      "ready note",
+      "say ready",
+      ...names.slice(at),
+    ]).toEqual(expected["owner build"])
+    // Any other refusal is still final: the build ends failed, not stranded.
     script.reviewRefusal = "revision.not_preview"
-    await expect(drive([completion]).run()).rejects.toThrow()
+    advanced.length = 0
+    expect(await drive([completion]).run()).toMatchObject({ outcome: "failed" })
+    expect(advanced.at(-1)).toEqual(["failed", "workflow.errored"])
     script.reviewRefusal = null
   })
 
@@ -936,8 +953,10 @@ describe("the assignment Workflow's step names", () => {
         "build",
         "owner build",
         "information round trip",
+        "owner question, then a ready draft",
         "gate failure repaired",
         "gate failure ends failed",
+        "owner build failed, then retried",
         "budget park",
         "interrupted then resumed",
         "interrupted past the resume budget",
@@ -961,10 +980,7 @@ describe("the assignment Workflow's step names", () => {
         "planned build",
         "photos failed",
         "design critique repaired",
-        "owner reviews the plan",
-        "owner changes the plan",
-        "owner skipped the review",
-        "nobody decided on the plan",
+        "owner's planned build",
       ].sort()
     )
   })
@@ -987,14 +1003,45 @@ describe("a Developer that stops without a report", () => {
     expect(advanced.at(-1)).toEqual(["failed", "developer.start_failed"])
   })
 
-  it("fails as developer.stalled only once a whole lead turn has nothing in the log", async () => {
+  it("fails as developer.start_failed when its start step runs out of retries", async () => {
     advanced.length = 0
-    // Forty minutes quiet: still inside a turn, so it waits again; the next
-    // check finds the full window empty.
-    script.quiet = [40 * 60 * 1000, 45 * 60 * 1000]
-    const { names, run } = drive(["timeout", "timeout"])
-    expect(await run()).toMatchObject({ outcome: "failed" })
+    expect(await drive([], [], ["developer"]).run()).toMatchObject({
+      outcome: "failed",
+    })
+    expect(advanced.at(-1)).toEqual(["failed", "developer.start_failed"])
+  })
+
+  it("ends failed as workflow.errored when any step runs out of retries", async () => {
+    advanced.length = 0
+    expect(await drive([], [], ["planning"]).run()).toMatchObject({
+      outcome: "failed",
+    })
+    expect(advanced.at(-1)).toEqual(["failed", "workflow.errored"])
+  })
+
+  it("stops and resumes a lead only once ten minutes have nothing in the log", async () => {
+    aborted.length = 0
+    dispatched.length = 0
+    // Eight minutes quiet: still at work, so it waits again; the next check
+    // finds the full window empty.
+    script.quiet = [8 * 60 * 1000, 10 * 60 * 1000]
+    const { names, run } = drive(["timeout", "timeout", completion])
+    expect(await run()).toMatchObject({ outcome: "preview_ready" })
     expect(names).toContain("developer 1.2")
+    expect(aborted).toEqual(["abort"])
+    const resumed = dispatched
+      .map((d) => d.message as { type?: string; body?: string })
+      .filter((m) => m.type === "run.interrupted")
+    expect(resumed.map((m) => JSON.parse(m.body ?? "{}"))).toEqual([
+      { reason: "developer.stalled" },
+    ])
+  })
+
+  it("fails as developer.stalled once a quiet lead has spent its resumes", async () => {
+    advanced.length = 0
+    expect(await drive(["timeout", "timeout", "timeout"]).run()).toMatchObject({
+      outcome: "failed",
+    })
     expect(advanced.at(-1)).toEqual(["failed", "developer.stalled"])
   })
 })
@@ -1010,6 +1057,19 @@ describe("an interrupted Developer run", () => {
       )
       .filter((m) => m.type === "run.interrupted")
       .map((m) => m.attributes ?? {})
+
+  // A failure told by two isolates, or an event delivered twice, resumes once:
+  // the repeats would otherwise spend the budget and fail a working build.
+  it("resumes once for one failure told three times", async () => {
+    dispatched.length = 0
+    advanced.length = 0
+    const told = {
+      payload: { kind: "interrupted", reason: "sandbox.updating", key: "s" },
+    } as Wake
+    const { run } = drive([told, told, told, completion])
+    expect(await run()).toMatchObject({ outcome: "preview_ready" })
+    expect(resumes()).toEqual([{ attempt: "1" }])
+  })
 
   it("fails as provider.unavailable after two resumes, the second on the fallback model", async () => {
     dispatched.length = 0

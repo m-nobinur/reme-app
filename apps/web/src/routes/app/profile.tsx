@@ -38,13 +38,13 @@ function Profile() {
   return (
     <>
       <PageHeader
-        description="What Reme knows about your business. Every line is a canonical fact with a source, not something it remembers you saying."
+        description="What your assistant knows about your business, and where each detail came from."
         title={profile?.org.name ?? "Business"}
       />
 
       {current.length === 0 ? (
         <EmptyState
-          description="Prices, hours, service area and contact details land here as you tell Reme about them."
+          description="Prices, hours, service area and contact details show here as you share them."
           icon={<BuildingsIcon />}
           title="Nothing recorded yet"
         />
@@ -66,11 +66,10 @@ function Profile() {
       {superseded.length > 0 ? (
         <section aria-labelledby="history" className="mt-8">
           <h2 className="mb-1 font-medium text-lg" id="history">
-            Superseded
+            Replaced
           </h2>
           <p className="mb-3 max-w-prose text-muted-foreground text-sm">
-            Facts are versioned rather than overwritten, so an answer Reme gave
-            last month can still be explained.
+            Older details stay here, so you can see what changed and when.
           </p>
           <Card>
             <CardContent>
@@ -84,7 +83,7 @@ function Profile() {
 }
 
 const SOURCE: Record<FactRecord["provenance"]["source"], string> = {
-  owner_stated: "You told Reme",
+  owner_stated: "You said this",
   document: "From a document you shared",
   integration: "From a connected account",
   inferred: "Inferred, not confirmed",
@@ -98,7 +97,6 @@ function toItem(fact: FactRecord): DefinitionItem {
     description: factText(fact.key, fact.value),
     meta: [
       SOURCE[fact.provenance.source],
-      `version ${fact.version}`,
       verified ? `checked ${verified}` : null,
       fact.valid_to ? `replaced ${formatDate(fact.valid_to)}` : null,
     ]

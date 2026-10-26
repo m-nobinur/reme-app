@@ -178,7 +178,11 @@ describe("the owner's reads are the owner's org", () => {
     const own = FactList.parse(
       await (await theirs.call(stubOrchestrator(), "/facts")).json()
     )
-    expect(own.facts.map((f) => f.key)).toEqual(["business.name"])
+    // Sign-up states both names, so onboarding does not ask them again.
+    expect(own.facts.map((f) => f.key)).toEqual([
+      "business.name",
+      "owner.preferred_name",
+    ])
   })
 })
 

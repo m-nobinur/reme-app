@@ -15,6 +15,8 @@ import type { ComponentProps } from "react"
  *
  * `aria-busy` and the spinner are what stop a slow network reading as a dead
  * button, and the label changes with the state so the answer is in words too.
+ * The wait shows only after 150ms: both labels share one cell and cross-fade
+ * late, so a refusal that comes back at once never flashes the spinner.
  */
 function SubmitButton({
   pending = false,
@@ -34,7 +36,7 @@ function SubmitButton({
       aria-disabled={pending || undefined}
       size="lg"
       className={cn(
-        "h-11 w-full rounded-xl aria-disabled:opacity-60",
+        "h-11 w-full rounded-xl aria-disabled:opacity-60 aria-disabled:delay-150",
         className
       )}
       onClick={(event) => {
@@ -47,8 +49,24 @@ function SubmitButton({
       type="submit"
       {...props}
     >
-      {pending ? <SpinnerGapIcon aria-hidden className="animate-spin" /> : null}
-      {pending ? pendingLabel : children}
+      <span className="grid place-items-center *:col-start-1 *:row-start-1">
+        <span
+          aria-hidden={pending || undefined}
+          className={
+            pending
+              ? "fade-out animate-out fill-mode-forwards delay-150"
+              : undefined
+          }
+        >
+          {children}
+        </span>
+        {pending ? (
+          <span className="fade-in flex animate-in items-center gap-2 fill-mode-backwards delay-150">
+            <SpinnerGapIcon aria-hidden className="animate-spin" />
+            {pendingLabel}
+          </span>
+        ) : null}
+      </span>
     </Button>
   )
 }

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { ServerMessage } from "@workspace/contracts"
+import { ChangeAskedPart, ServerMessage } from "@workspace/contracts"
 import { sql } from "drizzle-orm"
 import { conversationMessages, conversations, events } from "./schema.ts"
 import type { OrgScopedDb, Tenancy } from "./tenancy.ts"
@@ -54,7 +54,7 @@ export async function postAssistantMessage(
     conversationId?: string
   }
 ): Promise<Posted> {
-  const { id, text, button } = ServerMessage.parse({
+  const { id, text, button, questions } = ServerMessage.parse({
     ...message,
     id: serverMessageId(key),
   })
@@ -67,6 +67,7 @@ export async function postAssistantMessage(
       { type: "step-start" },
       ...text.map((words) => ({ type: "text", text: words, state: "done" })),
       ...(button ? [{ type: "data-button", data: button }] : []),
+      ...(questions ? [{ type: "data-build_questions", data: questions }] : []),
     ],
   })
 }
@@ -100,6 +101,43 @@ export const postOwnerEmail = (
     role: "user",
     parts: [{ type: "text", text }],
   })
+
+/**
+ * A change the owner asked for in the panel, written into the chat: their
+ * words as their own message, then a resolved line for the assistant's side.
+ * Both ids come from the request's key, so a retry stores nothing twice. The
+ * change has started whatever this answers: a conversation that is busy or
+ * waiting on a card keeps the change out of the chat, and `none` means the
+ * org has no such conversation. The caller never fails the change on it.
+ */
+export async function postChangeAsked(
+  kit: Tenancy,
+  {
+    orgId,
+    key,
+    text,
+    conversationId,
+  }: { orgId: string; key: string; text: string; conversationId?: string }
+): Promise<Posted> {
+  const asked = await post(kit, {
+    orgId,
+    id: `chg_${digest(key)}`,
+    conversationId,
+    role: "user",
+    parts: [{ type: "text", text }],
+  })
+  if (asked !== "posted" && asked !== "exists") return asked
+  return post(kit, {
+    orgId,
+    id: `chga_${digest(key)}`,
+    conversationId,
+    role: "assistant",
+    parts: [
+      { type: "step-start" },
+      ChangeAskedPart.parse({ type: "data-change_asked", data: { text } }),
+    ],
+  })
+}
 
 async function post(
   kit: Tenancy,

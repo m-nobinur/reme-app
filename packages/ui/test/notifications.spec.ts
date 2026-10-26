@@ -20,8 +20,8 @@ const ENTRIES = [
   "NotificationList error",
   "NotificationList failed",
   "WaitingOnYou error",
-  "PanelBlank",
-  "PanelBlank ready to build",
+  "PanelSegment getting started waiting",
+  "PanelSegment done",
 ]
 
 for (const theme of ["light", "dark"] as const) {
@@ -32,6 +32,19 @@ for (const theme of ["light", "dark"] as const) {
     for (const width of WIDTHS) {
       for (const entry of ENTRIES) {
         await open(page, entry, width, theme)
+        // A segment fades in; contrast is read once it has, not mid-fade.
+        await page.evaluate(() =>
+          Promise.all(
+            document
+              .getAnimations()
+              .filter(
+                (animation) =>
+                  animation.effect?.getTiming().iterations !==
+                  Number.POSITIVE_INFINITY
+              )
+              .map((animation) => animation.finished.catch(() => null))
+          )
+        )
         const results = await new AxeBuilder({ page })
           .withTags(WCAG)
           .include(`[data-entry="${entry}"]`)
@@ -59,10 +72,10 @@ test("the list shows one row of each kind the contract has, in its order", async
   ).toEqual(["question", "approval", "report", "alert", "reminder"])
   // A question and an approval link to where they are acted on.
   await expect(
-    page.getByRole("link", { name: "Answer in the panel" })
+    page.getByRole("link", { name: "Show the question" })
   ).toBeVisible()
   await expect(
-    page.getByRole("link", { name: "Review version 4" })
+    page.getByRole("link", { name: "Review and publish" })
   ).toBeVisible()
   await expect(page.getByRole("link", { name: "Open reminders" })).toBeVisible()
 })
@@ -81,17 +94,6 @@ test("the empty list says what lands there", async ({ page }) => {
     "Notifications did not load"
   )
 })
-
-for (const [entry, name, hash] of [
-  ["PanelBlank", "Continue getting started", "#getting-started"],
-  ["PanelBlank ready to build", "Start your website", "#new-chat"],
-] as const) {
-  test(`${entry} offers "${name}", and it goes there`, async ({ page }) => {
-    await open(page, entry)
-    await page.getByRole("link", { name }).click()
-    expect(new URL(page.url()).hash).toBe(hash)
-  })
-}
 
 test("a panel that did not load offers Try again, and it reads again", async ({
   page,

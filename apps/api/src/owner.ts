@@ -2,8 +2,6 @@ import {
   AnswerRequest,
   ApprovalDecision,
   Assignment,
-  BlueprintReceipt,
-  BlueprintReviewOutput,
   DecisionRequest,
   FactList,
   InformationAnswer,
@@ -11,10 +9,23 @@ import {
   OwnerChangeRequest,
   PHOTO_PATH,
   PreviewLink,
+  REVISION_PICTURE_PATH,
   SetFactsRequest,
 } from "@workspace/contracts"
-import { approvals, assignments, type Tenancy } from "@workspace/db"
-import { readPhoto, uploadAssets } from "./assets.ts"
+import {
+  approvals,
+  assignments,
+  failureCode,
+  postChangeAsked,
+  type Tenancy,
+} from "@workspace/db"
+import {
+  readPhoto,
+  readRevisionPicture,
+  readSiteMedia,
+  uploadAssets,
+} from "./assets.ts"
+import { answerQuestions } from "./build-questions.ts"
 import {
   bridge,
   holds,
@@ -31,10 +42,17 @@ import { removal } from "./cos/tools.ts"
 import { checkout, isOrgOwner, purchaseStatus } from "./domain-buy.ts"
 import { googleConnect } from "./google.ts"
 import { failure, invalid, keyMissing, readBody } from "./http.ts"
+import { drawLogos, keepLogo, readLogos } from "./logo.ts"
 import { pushRoute } from "./push.ts"
 import { reminderRoute } from "./reminders.ts"
+import { setTimeZone } from "./time-zone.ts"
+import { logoPalettes, paletteFromImage, reviewPhotos } from "./vision.ts"
 import { readActivity, readFacts, unchanged } from "./workspace.ts"
 import { readTaggedWorkspace } from "./workspace-tag.ts"
+
+/** `POST /logos/{id}/keep`, the id a UUID: a drawn variant's or an uploaded asset's. */
+const LOGO_KEEP_PATH =
+  /^\/logos\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/keep$/
 
 /**
  * The owner's routes. The org is the one `index.ts` resolved from the sealed
@@ -46,7 +64,7 @@ import { readTaggedWorkspace } from "./workspace-tag.ts"
 
 /** The routes `ownerRoute` answers, for `index.ts` to resolve an org before. */
 export const OWNER_PATH =
-  /^\/(workspace|facts|assets|photos\/[^/]+|changes|activity|builds\/[^/]+\/(answer|blueprint|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback))?)?|reminders(\/[^/]+)?|memory(\/(undo|review))?|push\/(config|subscriptions(\/[^/]+)?)|domains\/[^/]+(\/checkout)?|google\/(connect|disconnect)|chat)$/
+  /^\/(workspace|facts|assets(\/review)?|site\/media|photos\/[^/]+|revisions\/[^/]+\/[^/]+|logos(\/[^/]+\/keep)?|palettes\/from-(image|logo)|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback|questions))?)?|reminders(\/[^/]+)?|memory(\/(undo|review))?|push\/(config|subscriptions(\/[^/]+)?)|domains\/[^/]+(\/checkout)?|google\/(connect|disconnect)|time-zone|chat)$/
 
 async function setFacts(request: Request, kit: Tenancy, owner: Owner) {
   if (!idempotencyKey(request)) return keyMissing()
@@ -81,8 +99,33 @@ async function requestChange(
   if (!key) return keyMissing()
   const parsed = OwnerChangeRequest.safeParse(await readBody(request))
   if (!parsed.success) return invalid(parsed.error.issues)
-  const { text, change_kind } = parsed.data
-  return startChange(env, kit, owner, text, key, change_kind)
+  const { text, change_kind, label, chat: asked } = parsed.data
+  const response = await startChange(
+    env,
+    kit,
+    owner,
+    text,
+    key,
+    change_kind,
+    label
+  )
+  if (asked && response.ok) {
+    // The change has started: a note that cannot be posted must not undo it.
+    await postChangeAsked(kit, {
+      orgId: owner.orgId,
+      key,
+      text,
+      conversationId: asked.conversation_id,
+    }).catch((error: unknown) =>
+      console.error(
+        JSON.stringify({
+          code: "changes.post_failed",
+          error: failureCode(error),
+        })
+      )
+    )
+  }
+  return response
 }
 
 async function buildAction(
@@ -97,11 +140,9 @@ async function buildAction(
   if ((action === "preview") !== (method === "GET")) return null
   const key = idempotencyKey(request)
   if (method === "POST" && !key) return keyMissing()
-  let body: AnswerRequest | BlueprintReviewOutput | undefined
-  if (action === "answer" || action === "blueprint") {
-    const parsed = (
-      action === "answer" ? AnswerRequest : BlueprintReviewOutput
-    ).safeParse(await readBody(request))
+  let body: AnswerRequest | undefined
+  if (action === "answer") {
+    const parsed = AnswerRequest.safeParse(await readBody(request))
     if (!parsed.success) return invalid(parsed.error.issues)
     body = parsed.data
   }
@@ -118,8 +159,6 @@ async function buildAction(
   })
   if (action === "answer") return relay(result, InformationAnswer.parse)
   if (action === "preview") return relay(result, PreviewLink.parse)
-  // The plan's decision, which the orchestrator turns into `blueprint.decided`.
-  if (action === "blueprint") return relay(result, BlueprintReceipt.parse)
   // `/cancel` answers the id and the state it settled in.
   return relay(result, (b) =>
     Assignment.pick({ assignment_id: true, state: true }).parse(b)
@@ -222,14 +261,48 @@ export async function ownerRoute(
   if (pathname === "/assets" && method === "POST") {
     return uploadAssets(request, env, kit, owner)
   }
+  if (pathname === "/assets/review" && method === "POST") {
+    return reviewPhotos(request, env, kit, owner)
+  }
+  if (pathname === "/site/media" && method === "GET") {
+    return readSiteMedia(kit, owner)
+  }
+  const pictured = REVISION_PICTURE_PATH.exec(pathname)
+  if (pictured && method === "GET") {
+    return readRevisionPicture(
+      env,
+      owner,
+      pictured[1] as string,
+      pictured[2] as string
+    )
+  }
   if (PHOTO_PATH.test(pathname) && method === "GET") {
     return readPhoto(env, owner, pathname.slice("/photos/".length))
+  }
+  if (pathname === "/logos" && method === "POST") {
+    return drawLogos(request, env, kit, owner)
+  }
+  if (pathname === "/logos" && method === "GET") {
+    return readLogos(request, env, owner)
+  }
+  const kept = LOGO_KEEP_PATH.exec(pathname)
+  if (kept && method === "POST") {
+    return keepLogo(request, env, kit, owner, kept[1] as string)
+  }
+  if (pathname === "/palettes/from-image" && method === "POST") {
+    return paletteFromImage(request, env, owner)
+  }
+  if (pathname === "/palettes/from-logo" && method === "POST") {
+    return logoPalettes(request, env, kit, owner)
   }
   if (pathname === "/changes" && method === "POST") {
     return requestChange(request, env, kit, owner)
   }
   if (pathname === "/google/disconnect" && method === "POST") {
     return disconnectGoogle(request, env, kit, owner)
+  }
+  if (pathname === "/time-zone" && method === "PUT") {
+    return setTimeZone(request, env, kit, owner)
   }
   if (pathname === "/chat" && method === "POST") {
     return chat(request, env, kit, owner, { waitUntil })
@@ -243,6 +316,11 @@ export async function ownerRoute(
   const [, noun, id = "", action = ""] = pathname.split("/")
   if (noun === "builds") {
     return buildAction(request, env, kit, owner, id, action)
+  }
+  if (noun === "conversations" && action === "questions") {
+    return method === "POST"
+      ? answerQuestions(request, env, kit, owner, id)
+      : null
   }
   if (noun === "conversations") {
     return conversationRoute(request, kit, owner, id, action)

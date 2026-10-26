@@ -14,6 +14,7 @@ import {
 import { Hint, hintsShown } from "@workspace/ui/components/tooltip"
 import {
   PANEL_COOKIE,
+  type PanelAuto,
   type PanelPress,
   RAIL_COOKIE,
 } from "@workspace/ui/lib/panel"
@@ -133,8 +134,14 @@ function RailToggle({ open, onClick }: { open: boolean; onClick: () => void }) {
  * that. It floats over the page rather than taking a column, so the
  * conversation stays centred. From `lg` whether it is open is remembered;
  * below `lg` it starts minimised, since there it covers the conversation.
- * With no `panel` there is no card and no space kept for it. The rail and the
- * panel are slots, so this package still imports no router.
+ * With no `panel` there is no card and no space kept for it.
+ *
+ * `floating`, for the pages that are not the conversation, moves the panel to
+ * the bottom right as a pill that keeps no room: its line, opening upward
+ * into the card, with `panelFooter` under it. It starts minimised, folds on
+ * Escape or a press outside it, and a request to open from the app glows its
+ * ring instead. With no `panel` there, `panelIdle` sits in its place. The
+ * rail and the panel are slots, so this package still imports no router.
  */
 function WorkspaceShell({
   rail,
@@ -143,6 +150,12 @@ function WorkspaceShell({
   defaultRailOpen = true,
   defaultPanelOpen = true,
   openPanel,
+  autoPanel,
+  onPanelToggle,
+  floating = false,
+  panelFooter,
+  panelFocus,
+  panelIdle,
   children,
   className,
 }: {
@@ -161,6 +174,21 @@ function WorkspaceShell({
    * the key changes, even if they had minimised it.
    */
   openPanel?: PanelPress | undefined
+  /**
+   * The app opened or folded the panel for the owner, at `lg` and up. It is
+   * not remembered, so the next visit opens as the owner last left it.
+   */
+  autoPanel?: PanelAuto | undefined
+  /** The owner pressed the panel's header to open or close it. */
+  onPanelToggle?: ((open: boolean) => void) | undefined
+  /** The panel as a pill at the bottom right, keeping no room on the page. */
+  floating?: boolean
+  /** Under the floating card's content, such as a way back to the chat. */
+  panelFooter?: ReactNode
+  /** What the owner opening the floating pill moves focus to, such as a question waiting. */
+  panelFocus?: string | undefined
+  /** Floating with no `panel`: what sits in its place. */
+  panelIdle?: ReactNode
   children: ReactNode
   className?: string
 }) {
@@ -168,10 +196,18 @@ function WorkspaceShell({
   const [railSheet, setRailSheet] = useState(false)
   const [panelOpen, setPanelOpen] = useState(defaultPanelOpen)
   const [narrowOpen, setNarrowOpen] = useState(false)
+  const [floatOpen, setFloatOpen] = useState(false)
+  const [nudge, setNudge] = useState<string | null>(null)
   const wide = useWide()
-  const expanded = wide ? panelOpen : narrowOpen
+  const expanded = floating ? floatOpen : wide ? panelOpen : narrowOpen
   const panelId = useId()
+  const aside = useRef<HTMLElement>(null)
+  const head = useRef<HTMLButtonElement>(null)
+  // Read by the stable callbacks below, so moving between pages re-runs nothing.
+  const placed = useRef(floating)
+  placed.current = floating
   const hasPanel = panel !== null && panel !== undefined
+  const docked = hasPanel && !floating
   // Tailwind's `md`, the width the sheet hands the rail back to the layout.
   useCloseAt(
     "(min-width: 48rem)",
@@ -185,13 +221,50 @@ function WorkspaceShell({
   }
 
   const setPanel = useCallback((open: boolean) => {
-    if (window.matchMedia(WIDE).matches) {
+    if (placed.current) {
+      setFloatOpen(open)
+    } else if (window.matchMedia(WIDE).matches) {
       setPanelOpen(open)
       remember(PANEL_COOKIE, open)
     } else {
       setNarrowOpen(open)
     }
   }, [])
+
+  const autoKey = autoPanel?.key
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the key is the trigger; the request is read with it.
+  useEffect(() => {
+    if (!autoPanel) return
+    // Away from the conversation, news asks for a look rather than covering the page.
+    if (autoPanel.open && placed.current) setNudge(autoPanel.key)
+    else if (window.matchMedia(WIDE).matches) setPanelOpen(autoPanel.open)
+  }, [autoKey])
+
+  // The floating card folds on Escape or a press outside it, but not from a
+  // dialog it opened.
+  useEffect(() => {
+    if (!floating || !floatOpen) return
+    const fold = (event: KeyboardEvent | PointerEvent) => {
+      const target = event.target as Element
+      if (target.closest?.('[role="dialog"]')) return
+      if (
+        event instanceof KeyboardEvent
+          ? event.key === "Escape"
+          : !aside.current?.contains(target)
+      ) {
+        // Focus inside goes back to the pill rather than the page.
+        if (aside.current?.contains(document.activeElement))
+          head.current?.focus()
+        setFloatOpen(false)
+      }
+    }
+    document.addEventListener("keydown", fold)
+    document.addEventListener("pointerdown", fold)
+    return () => {
+      document.removeEventListener("keydown", fold)
+      document.removeEventListener("pointerdown", fold)
+    }
+  }, [floating, floatOpen])
 
   // Sent here to the panel: open it, whatever the width, then move focus to
   // what the owner came for once it shows.
@@ -238,7 +311,7 @@ function WorkspaceShell({
         <aside
           aria-label="Workspace"
           className={cn(
-            "hidden shrink-0 flex-col overflow-hidden border-border bg-rail text-rail-foreground transition-[width] duration-200 ease-out motion-reduce:transition-none md:flex",
+            "hidden shrink-0 flex-col overflow-hidden border-border bg-rail text-rail-foreground transition-[width] duration-enter motion-reduce:transition-none md:flex",
             railOpen ? "w-16 border-r" : "w-0",
             "[&_[data-slot=rail-label]]:sr-only"
           )}
@@ -289,18 +362,21 @@ function WorkspaceShell({
         </header>
 
         <main
-          // The panel floats over the page's top right. From lg it keeps
-          // `--panel-inset` free at the right, its width and a gap, which the
-          // conversation leaves clear. From md its line sits in the top bar, which
-          // has nothing at the right; on a phone it sits under the bar, so the
-          // page starts below it.
+          // Docked, the panel floats over the page's top right. From lg it
+          // keeps `--panel-inset` free at the right, its width and a gap,
+          // which the conversation leaves clear. From md its line sits in the
+          // top bar, which has nothing at the right; on a phone it sits under
+          // the bar, so the page starts below it. Floating, the page keeps
+          // only room at its end to scroll clear of the pill.
           className={cn(
             "min-h-0 flex-1 overflow-y-auto",
-            hasPanel &&
-              "max-md:pt-14 lg:[--panel-inset:calc(22rem+var(--gap)+0.5rem)]"
+            docked &&
+              "max-md:pt-14 lg:[--panel-inset:calc(22rem+var(--gap)+0.5rem)]",
+            floating && "pb-16"
           )}
           // The page scrolls here, not the window: the router resets and
           // restores this element by its id.
+          data-panel={docked ? (expanded ? "open" : "closed") : undefined}
           data-scroll-restoration-id="main"
           id="main"
         >
@@ -310,15 +386,39 @@ function WorkspaceShell({
         {hasPanel ? (
           <aside
             aria-label="Panel"
-            className="group/panel absolute top-[calc(var(--bar)+var(--gap))] right-(--gap) z-20 flex max-h-[calc(50svh+3rem)] w-[min(22rem,calc(100%-var(--gap)*2))] flex-col overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-lg md:top-(--gap)"
+            className={cn(
+              "group/panel absolute right-(--gap) z-20 flex max-w-[calc(100%-var(--gap)*2)] overflow-hidden border border-border bg-popover text-popover-foreground shadow-lg",
+              floating
+                ? "motion-safe:fade-in motion-safe:slide-in-from-bottom-2 bottom-(--gap) max-h-[min(70svh,40rem)] flex-col-reverse rounded-full data-[state=open]:w-88 data-[state=open]:rounded-2xl motion-safe:animate-in"
+                : "top-[calc(var(--bar)+var(--gap))] max-h-[calc(50svh+3rem)] w-88 flex-col rounded-2xl md:top-(--gap)"
+            )}
             data-state={expanded ? "open" : "closed"}
             id="workspace-panel"
+            ref={aside}
           >
+            {floating && !expanded && nudge ? (
+              <span
+                aria-hidden
+                className="pointer-events-none absolute inset-0 rounded-[inherit] opacity-0 ring-2 ring-primary ring-inset motion-safe:animate-panel-nudge"
+                // A new key per request replays the glow.
+                key={nudge}
+              />
+            ) : null}
             <button
               aria-controls={panelId}
               aria-expanded={expanded}
-              className="flex min-h-10 w-full min-w-0 shrink-0 items-center gap-2.5 rounded-t-[inherit] px-3.5 text-start outline-none transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-inset group-data-[state=closed]/panel:rounded-b-[inherit] motion-reduce:transition-none"
-              onClick={() => setPanel(!expanded)}
+              className={cn(
+                "flex min-h-10 w-full min-w-0 shrink-0 items-center gap-2.5 px-3.5 text-start outline-none transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-inset motion-reduce:transition-none",
+                floating
+                  ? "rounded-b-[inherit] group-data-[state=closed]/panel:rounded-t-[inherit]"
+                  : "rounded-t-[inherit] group-data-[state=closed]/panel:rounded-b-[inherit]"
+              )}
+              onClick={() => {
+                if (floating && !expanded) focusTarget.current = panelFocus
+                setPanel(!expanded)
+                onPanelToggle?.(!expanded)
+              }}
+              ref={head}
               type="button"
             >
               <span className="min-w-0 flex-1">{panelLine}</span>
@@ -328,8 +428,9 @@ function WorkspaceShell({
               <CaretDownIcon
                 aria-hidden
                 className={cn(
-                  "size-4 shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none",
-                  expanded && "rotate-180"
+                  "size-4 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none",
+                  // It points the way the card opens: down from the top, up from the bottom.
+                  expanded !== floating && "rotate-180"
                 )}
               />
             </button>
@@ -340,23 +441,45 @@ function WorkspaceShell({
             {/* biome-ignore lint/a11y/useKeyWithClickEvents: as above; Enter on a link is a click. */}
             <div
               className={cn(
-                "min-h-0 flex-col gap-6 overflow-y-auto overscroll-contain border-border border-t px-4 pt-2 pb-4",
-                wide
-                  ? panelOpen
-                    ? "hidden lg:flex"
-                    : "hidden"
-                  : narrowOpen
-                    ? "flex"
-                    : "hidden"
+                "min-h-0 flex-col gap-6 overflow-y-auto overflow-x-hidden overscroll-contain border-border px-4 pt-2 pb-4",
+                floating
+                  ? cn(
+                      "motion-safe:fade-in motion-safe:slide-in-from-bottom-1 border-b motion-safe:animate-in",
+                      floatOpen ? "flex" : "hidden"
+                    )
+                  : cn(
+                      "border-t",
+                      wide
+                        ? panelOpen
+                          ? "hidden lg:flex"
+                          : "hidden"
+                        : narrowOpen
+                          ? "flex"
+                          : "hidden"
+                    )
               )}
               id={panelId}
               onClick={
-                wide ? undefined : closeOnLink(() => setNarrowOpen(false))
+                floating
+                  ? closeOnLink(() => setFloatOpen(false))
+                  : wide
+                    ? undefined
+                    : closeOnLink(() => setNarrowOpen(false))
               }
             >
               {panel}
+              {floating && panelFooter ? (
+                // Reaches down over the scroller's padding, so it stays in view.
+                <div className="sticky -bottom-4 -mx-4 -mt-2 -mb-4 flex border-border border-t bg-popover px-4 py-3">
+                  {panelFooter}
+                </div>
+              ) : null}
             </div>
           </aside>
+        ) : floating && panelIdle ? (
+          <div className="motion-safe:fade-in motion-safe:slide-in-from-bottom-2 absolute right-(--gap) bottom-(--gap) z-20 motion-safe:animate-in">
+            {panelIdle}
+          </div>
         ) : null}
       </div>
     </div>
@@ -365,13 +488,19 @@ function WorkspaceShell({
 
 /**
  * The padded column a page that is not the conversation renders into, so the
- * approvals, pipeline, staff and profile screens keep the frame they had.
+ * approvals, pipeline, staff and profile screens keep the frame they had. It
+ * leaves the open panel's room free from lg, so a table never runs under it.
  */
 function WorkspacePage({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
       className={cn(
-        "mx-auto w-full max-w-5xl px-4 pt-2 pb-10 md:px-10",
+        // The panel floats over the page's right edge while open, and the page
+        // stays centred. Its content keeps clear of the part of the panel's
+        // room that the page's own side margin (the width over 64rem, the
+        // max-w-5xl below, halved) does not already cover; a percentage in
+        // padding is the width of main.
+        "mx-auto w-full max-w-5xl px-4 pt-2 pb-10 md:px-10 lg:in-data-[panel=open]:pe-[clamp(0px,calc(var(--panel-inset,0px)_-_(100%_-_64rem)_/_2),var(--panel-inset,0px))]",
         className
       )}
       data-slot="workspace-page"

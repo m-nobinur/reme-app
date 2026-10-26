@@ -147,6 +147,11 @@ const values = {
    */
   heroCaption: "",
   /**
+   * The small label above the home page's h1, a few words such as "Trusted
+   * home cleaners". Empty shows the trade's name (industry).
+   */
+  heroEyebrow: "",
+  /**
    * The home page's h1: the main service and the area, as "Weekly house
    * cleaning in Fairhaven". Falls back to the business name.
    */
@@ -705,6 +710,9 @@ const values = {
   quoteEmailLabel: "Email address",
   quotePhoneLabel: "Phone number",
   quoteChoose: "Choose one",
+  /** In the photo question's drop zone, once the form has an endpoint. */
+  quotePhotoDrop: "Drop photos here, or choose them",
+  quotePhotoLinks: "Links to photos, one per line",
   quoteOptional: "optional",
   quoteSubmit: "Send quote request",
   quoteNextSteps: "Your request comes straight to us.",

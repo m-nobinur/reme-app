@@ -98,14 +98,14 @@ const ONE_OF_EACH: Record<Kind, NotificationItem> = {
     onExpiry: "The build waits on you until you answer.",
     action: (
       <a className={ACTION} href="#answer">
-        Answer in the panel
+        Show the question
       </a>
     ),
   },
   approval: {
     id: "approval",
     kind: "approval",
-    title: "Version 4 is ready to publish",
+    title: "Your website is ready for you to review",
     detail: "The hero now leads with end of tenancy cleans.",
     at: hoursBefore(2),
     expiresAt: "2026-10-04T09:00:00.000Z",
@@ -113,7 +113,7 @@ const ONE_OF_EACH: Record<Kind, NotificationItem> = {
       "Nothing is published without you. If it expires, the build waits until you decide.",
     action: (
       <a className={ACTION} href="#approvals">
-        Review version 4
+        Review and publish
       </a>
     ),
   },

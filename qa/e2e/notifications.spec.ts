@@ -37,13 +37,13 @@ test("the bell opens a menu that links to every notification", async ({
 }) => {
   await visit(page, "/app/staff")
   const bell = page
-    .getByRole("banner")
+    .getByRole("complementary", { name: "Workspace" })
     .getByRole("button", { name: "Notifications", exact: true })
   await expect(bell).toBeVisible()
   await expect(page.locator('[data-slot="unread-count"]')).toHaveCount(0)
   await bell.click()
   await expect(page.getByText("You are all caught up.")).toBeVisible()
-  await page.getByRole("menuitem", { name: "View all notifications" }).click()
+  await page.getByRole("link", { name: "View all notifications" }).click()
   await expect(page).toHaveURL(/\/app\/notifications$/)
 })
 

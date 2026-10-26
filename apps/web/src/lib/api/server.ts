@@ -2,7 +2,6 @@ import { createServerFn } from "@tanstack/react-start"
 import { getCookie } from "@tanstack/react-start/server"
 import type { Conversation } from "@workspace/contracts"
 import {
-  BlueprintReviewOutput,
   ChangeKind,
   DomainName,
   type DomainPurchaseStatus,
@@ -12,8 +11,10 @@ import {
   type MemoryView,
   MessageFeedback,
   PushSubscribeRequest,
+  QuestionReply,
   RegistrantDetails,
   Reminder,
+  SetTimeZoneRequest,
   Timestamp,
   Uuid,
 } from "@workspace/contracts"
@@ -24,12 +25,12 @@ import { EMPTY_WORKSPACE, readWorkspace, waitingOnOwner } from "@/lib/attention"
 import { oneOf, record, text } from "@/lib/auth/input"
 import { orgIntentCookie } from "@/lib/auth/org-intent"
 import { seenAtOf, seenCookie } from "@/lib/notifications"
+import { settingUp } from "@/lib/onboarding"
 import { source } from "./source"
 import type {
   AttentionItem,
   BusinessProfile,
   DecisionOutcome,
-  Json,
   OrgNode,
   OrgSummary,
   PipelineItem,
@@ -125,7 +126,8 @@ export const getWorkspaceFrame = createServerFn({ method: "GET" }).handler(
       return {
         active,
         orgPending: getCookie(orgIntentCookie()) !== undefined,
-        panelOpen: getCookie(PANEL_COOKIE) !== "closed",
+        // A business about to be made opens on its setup, panel and all.
+        panelOpen: true,
         railOpen: getCookie(RAIL_COOKIE) !== "closed",
         workspace: EMPTY_WORKSPACE,
         conversations: [],
@@ -145,7 +147,8 @@ export const getWorkspaceFrame = createServerFn({ method: "GET" }).handler(
     return {
       active,
       orgPending: false,
-      panelOpen: getCookie(PANEL_COOKIE) !== "closed",
+      // Setup opens with the panel whatever was left from another business.
+      panelOpen: getCookie(PANEL_COOKIE) !== "closed" || settingUp(workspace),
       railOpen: getCookie(RAIL_COOKIE) !== "closed",
       workspace,
       conversations,
@@ -156,6 +159,14 @@ export const getWorkspaceFrame = createServerFn({ method: "GET" }).handler(
       ),
     }
   }
+)
+
+/**
+ * Whether `apps/api` holds a business for this session. False also for a
+ * WorkOS organization with no row of ours, which naming the business repairs.
+ */
+export const hasBusiness = createServerFn({ method: "GET" }).handler(
+  async (): Promise<boolean> => (await source.org()) !== null
 )
 
 /**
@@ -191,42 +202,17 @@ const ANSWER_BYTES = 2048
 export const answerQuestion = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const data = record(input)
-    if (JSON.stringify(data.value ?? null).length > ANSWER_BYTES) {
+    if (JSON.stringify(data.reply ?? null).length > ANSWER_BYTES) {
       throw new Error("That answer is too long.")
     }
     return {
-      assignmentId: id(data.assignmentId),
-      requestId: id(data.requestId),
-      value: data.value as Json,
+      conversationId: id(data.conversationId),
+      reply: QuestionReply.parse(data.reply),
       key: keyOf(data.key),
     }
   })
   .handler(async ({ data }): Promise<WriteOutcome> => {
-    return await source.answer(
-      data.assignmentId,
-      data.requestId,
-      data.value,
-      data.key
-    )
-  })
-
-export const decideBlueprint = createServerFn({ method: "POST" })
-  .validator((input: unknown) => {
-    const data = record(input)
-    const decision = BlueprintReviewOutput.safeParse(data.decision)
-    if (!decision.success) throw new Error("That is not a decision on a plan.")
-    return {
-      assignmentId: id(data.assignmentId),
-      decision: decision.data,
-      key: keyOf(data.key),
-    }
-  })
-  .handler(async ({ data }): Promise<WriteOutcome> => {
-    return await source.decideBlueprint(
-      data.assignmentId,
-      data.decision,
-      data.key
-    )
+    return await source.answer(data.conversationId, data.reply, data.key)
   })
 
 export const cancelBuild = createServerFn({ method: "POST" })
@@ -251,6 +237,10 @@ export const getPreview = createServerFn({ method: "GET" })
     return await source.preview(data.assignmentId)
   })
 
+export const getSiteMedia = createServerFn({ method: "GET" }).handler(
+  async () => await source.siteMedia()
+)
+
 export const askForChanges = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const data = record(input)
@@ -259,13 +249,26 @@ export const askForChanges = createServerFn({ method: "POST" })
       text: text(data.text, GOAL_MAX),
       key: keyOf(data.key),
       changeKind: kind.success ? kind.data : undefined,
+      // The panel's note also lands in the chat; a named conversation is checked.
+      chat: data.chat
+        ? {
+            conversation_id: record(data.chat).conversationId
+              ? id(record(data.chat).conversationId)
+              : undefined,
+          }
+        : undefined,
     }
   })
   .handler(async ({ data }): Promise<WriteOutcome> => {
     if (!data.text) {
       return { done: false, reason: "Write what should change first." }
     }
-    return await source.requestChange(data.text, data.key, data.changeKind)
+    return await source.requestChange(
+      data.text,
+      data.key,
+      data.changeKind,
+      data.chat
+    )
   })
 
 /**
@@ -378,6 +381,13 @@ export const removePushSubscription = createServerFn({ method: "POST" })
   .validator((input: unknown) => ({ id: id(record(input).id) }))
   .handler(async ({ data }): Promise<WriteOutcome> => {
     return await source.unsubscribePush(data.id)
+  })
+
+/** The zone this browser keeps, for the org's check-ins, quiet hours and reminders. */
+export const syncTimeZone = createServerFn({ method: "POST" })
+  .validator((input: unknown) => SetTimeZoneRequest.parse(record(input)))
+  .handler(async ({ data }): Promise<void> => {
+    await source.setTimeZone(data.time_zone)
   })
 
 export const listConversations = createServerFn({ method: "GET" }).handler(

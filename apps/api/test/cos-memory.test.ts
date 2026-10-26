@@ -18,6 +18,7 @@ import {
   tenancy,
 } from "@workspace/db"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
+import { settleCard } from "../src/build-questions.ts"
 import {
   applyOperations,
   diffLines,
@@ -306,6 +307,7 @@ describe.skipIf(!url)("the profile, on a live connection", () => {
       ORCHESTRATOR: stubOrchestrator(),
     } as unknown as Env,
     kit,
+    settleCard,
     owner: {
       orgId: me.orgId,
       session: {
@@ -579,7 +581,6 @@ describe("the readers of the facts table", () => {
       .map((file) => relative(root, file))
       .sort()
     expect(direct).toEqual([
-      "apps/orchestrator/src/app.ts",
       "apps/orchestrator/src/cloudflare.ts",
       "apps/orchestrator/src/heartbeat.ts",
       "apps/orchestrator/src/validate.ts",

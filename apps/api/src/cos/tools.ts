@@ -1,6 +1,8 @@
 import {
+  AGENT_NOTE,
   type AnswerQuestionInput,
   type AnswerQuestionOutput,
+  BuildStopCause,
   BuildSummary,
   type BuyDomainInput,
   BuyDomainOutput,
@@ -21,12 +23,14 @@ import {
   FactValueKey,
   type FindDomainInput,
   FindDomainOutput,
+  GateResult,
   type GetPreviewInput,
   GetPreviewOutput,
   InformationAnswer,
   OwnerAnswerText,
   PreviewLink,
   type ProfileLine,
+  type QuestionAnswer,
   REVIEW_FACT_KEYS,
   type RecordReviewInput,
   type RecordReviewOutput,
@@ -34,6 +38,8 @@ import {
   type RemoveDomainOutput,
   RequestChangeOutput,
   type ReviewFactKey,
+  TERMINAL_STATES,
+  type WorkspaceStatus,
 } from "@workspace/contracts"
 import {
   assignments,
@@ -41,10 +47,12 @@ import {
   eq,
   events,
   failureCode,
+  type OrgScopedDb,
   siteRevisions,
   sql,
   type Tenancy,
 } from "@workspace/db"
+import { rangeText } from "@workspace/ui/lib/activity-copy"
 import {
   type Bridged,
   bridge,
@@ -68,10 +76,10 @@ import {
   createReminder as storeReminder,
   wakeScheduler,
 } from "../reminders.ts"
-import { readFacts, statusWithFacts } from "../workspace.ts"
+import { EXPECTED_SECONDS, readFacts, statusWithFacts } from "../workspace.ts"
 import type { Opening } from "./agent.ts"
 import { readSession } from "./history.ts"
-import { readProfile } from "./memory.ts"
+import { contentWords, inOwnersWords, readProfile } from "./memory.ts"
 import { wallToUtc } from "./time.ts"
 import type { Turn } from "./turns.ts"
 
@@ -91,7 +99,20 @@ import type { Turn } from "./turns.ts"
  * approved call, and the repair could no longer rerun it under its key.
  */
 
-export type ToolContext = { env: Env; kit: Tenancy; owner: Owner }
+export type ToolContext = {
+  env: Env
+  kit: Tenancy
+  owner: Owner
+  /**
+   * Folds a chat card as answered. Passed in, because the card is a
+   * conversation row and this directory never reaches those (ADR-034).
+   */
+  settleCard: (
+    db: OrgScopedDb,
+    questionId: string,
+    answer: QuestionAnswer
+  ) => Promise<void>
+}
 
 type Empty = Record<string, never>
 type Refused = Extract<GetPreviewOutput, { outcome: "refused" }>
@@ -157,6 +178,70 @@ function optionsOf(requestId: string, options: string[] | null) {
 /** A domain the org still holds. */
 const live = sql`${domains.state} <> 'removed'`
 
+/** A Developer started again mid-build (the orchestrator's `noteResumed`). */
+const resumed = sql`e.type = ${AGENT_NOTE} and e.payload->>'kind' = 'resumed'`
+
+/** When a build last logged work and was last resumed, in epoch milliseconds. */
+type Life = {
+  work_ms: number | null
+  resumed_ms: number | null
+  cause: string | null
+}
+
+/** The states the pipeline works in, where how long a build has run means something. */
+const WORKING = new Set<string>([
+  "briefing",
+  "planning",
+  "implementing",
+  "validating",
+  "repairing",
+  "revising",
+])
+
+const wholeMinutes = (ms: number) => Math.max(0, Math.floor(ms / 60_000))
+
+/** A lane's wait in the panel's words, before any time has run. */
+const rangeOf = (
+  expected: WorkspaceStatus["expected_seconds"],
+  lane: "quick" | "full"
+) => {
+  const { p50, p95 } = (expected ?? EXPECTED_SECONDS)[lane]
+  return rangeText(p50, p95).text
+}
+
+/**
+ * How long a build the pipeline is working on has run, how long since it
+ * last logged work, and its last mid-build restart. The clock leaves out the
+ * owner's plan reviews, as the panel's does.
+ */
+export function paceOf(
+  build: Pick<BuildSummary, "state" | "lane" | "created_at" | "review_ms">,
+  life: Life | undefined,
+  expected: WorkspaceStatus["expected_seconds"],
+  now: number
+): Pick<CosWorkspace["builds"][number], "timing" | "restarted"> {
+  if (!WORKING.has(build.state)) return {}
+  const started = Date.parse(build.created_at)
+  const ran = now - started - (build.review_ms ?? 0)
+  const lane = (expected ?? EXPECTED_SECONDS)[build.lane ?? "full"]
+  const range = rangeText(lane.p50, lane.p95, Math.max(0, ran / 1000))
+  return {
+    timing: {
+      running_minutes: wholeMinutes(ran),
+      quiet_minutes: wholeMinutes(now - (life?.work_ms ?? started)),
+      overdue: range.longer,
+      range: range.text,
+    },
+    ...(life?.resumed_ms != null && {
+      restarted: {
+        minutes_ago: wholeMinutes(now - life.resumed_ms),
+        cause: BuildStopCause.catch("other").parse(life.cause),
+        working: (life.work_ms ?? 0) > life.resumed_ms,
+      },
+    }),
+  }
+}
+
 export async function getWorkspace(
   ctx: ToolContext,
   _input: Empty
@@ -176,11 +261,11 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
   /** The open reminders with a time, soonest first, for a conversation's first turn. */
   reminders: Opening["reminders"]
 }> {
-  const [{ status, facts }, rows, { lines: profile }] = await kit.withOrg(
-    { orgId: owner.orgId },
-    (db) =>
+  const now = new Date()
+  const [{ status, facts }, rows, { lines: profile }, reports, repairs, lives] =
+    await kit.withOrg({ orgId: owner.orgId }, (db) =>
       Promise.all([
-        statusWithFacts(db, env, new Date()),
+        statusWithFacts(db, env, now),
         db
           .select({
             name: domains.name,
@@ -192,8 +277,26 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
           .orderBy(sql`${domains.createdAt} desc`)
           .limit(10),
         readProfile(db),
+        // Each build's last check report from the day, for what a stopped one failed.
+        db.execute<{ assignment_id: string; gates: unknown }>(
+          sql`select distinct on (assignment_id) assignment_id, payload->'gates' as gates from events where type = 'assignment.validation_reported' and occurred_at > now() - interval '24 hours' order by assignment_id, event_id desc`
+        ),
+        db.execute<{ assignment_id: string; rounds: number }>(
+          sql`select assignment_id, count(*)::int as rounds from events where type = 'assignment.state_changed' and payload->>'to' = 'repairing' and occurred_at > now() - interval '24 hours' group by assignment_id`
+        ),
+        // Each open build's last logged work and last resume, for its pace.
+        db.execute<Life & { assignment_id: string }>(
+          sql`select e.assignment_id, (extract(epoch from max(e.occurred_at) filter (where e.type <> ${AGENT_NOTE})) * 1000)::float8 as work_ms, (extract(epoch from max(e.occurred_at) filter (where ${resumed})) * 1000)::float8 as resumed_ms, (array_agg(e.payload->>'cause' order by e.event_id desc) filter (where ${resumed}))[1] as cause from events e join assignments a on a.id = e.assignment_id where a.kind in ('site.build', 'site.revise') and a.state not in ${TERMINAL_STATES} group by e.assignment_id`
+        ),
       ])
-  )
+    )
+  const roundsOf = (assignmentId: string) =>
+    [...repairs].find((r) => r.assignment_id === assignmentId)?.rounds ?? 0
+  const failedChecks = (assignmentId: string | null) => {
+    const report = [...reports].find((r) => r.assignment_id === assignmentId)
+    const gates = GateResult.array().safeParse(report?.gates).data ?? []
+    return gates.filter((g) => !g.passed).map((g) => g.gate)
+  }
   const workspace = CosWorkspace.parse({
     site: {
       host: status.site.host,
@@ -206,7 +309,44 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
       lane: b.lane,
       goal: b.goal,
       version: b.revision?.version ?? null,
+      ...(b.retry ? { retry: true } : {}),
+      ...(roundsOf(b.assignment_id) > 0 &&
+      ["repairing", "implementing", "validating"].includes(b.state)
+        ? {
+            fixing: {
+              round: Math.min(roundsOf(b.assignment_id), 9),
+              checks: failedChecks(b.assignment_id),
+            },
+          }
+        : {}),
+      progress: (b.activity ?? [])
+        .filter((step) => !step.skipped)
+        .map((step) => ({
+          step: step.label,
+          done: step.done,
+          total: step.total,
+          now: step.now === true,
+        })),
+      ...paceOf(
+        b,
+        [...lives].find((l) => l.assignment_id === b.assignment_id),
+        status.expected_seconds,
+        now.getTime()
+      ),
     })),
+    stopped: status.attention
+      .flatMap((item) =>
+        item.kind === "alert" && item.reason === "build_failed"
+          ? [
+              {
+                cause: item.cause ?? "other",
+                at: item.at,
+                checks: failedChecks(item.assignment_id),
+              },
+            ]
+          : []
+      )
+      .slice(0, 5),
     questions: status.attention
       .flatMap((item) => (item.kind === "question" ? [item.request] : []))
       .slice(0, 10)
@@ -232,6 +372,10 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
       last_check: DomainCheck.safeParse(r.lastCheck).data ?? null,
     })),
     expected_seconds: status.expected_seconds,
+    expected_range: {
+      quick: rangeOf(status.expected_seconds, "quick"),
+      full: rangeOf(status.expected_seconds, "full"),
+    },
   })
   return {
     workspace,
@@ -319,8 +463,12 @@ export async function getPreview(
   })
 }
 
-/** Words or marks that put a change text near a phone or an email. */
-const ABOUT_CONTACT = /phone|number|mobile|call|e-?mail|contact|@|\d{3}/i
+/**
+ * Words or marks that put a change text near a phone or an email. "Call"
+ * only as in "call us on": "don't call us a family firm" is not about one.
+ */
+const ABOUT_CONTACT =
+  /phone|number|mobile|\bcall (?:us |me )?(?:on|at)\b|\bring\b|e-?mail|contact|@|\d{3}/i
 
 const untyped = (what: string) =>
   failure(400, {
@@ -331,6 +479,60 @@ const untyped = (what: string) =>
     message: `That ${what} is not one the owner typed in this conversation, or the change text does not name it. If the owner gave no new ${what}, propose the change again without contact. Otherwise name it in the change, as the owner typed it, then propose again.`,
     detail: {},
   })
+
+/** Something in the owner's words that could be a phone number or an email address. */
+const TYPED_PHONE = /\d[\d\s().-]{6,}\d/
+const TYPED_EMAIL = /\S@\S+\.\S/
+
+/**
+ * The phone and email in `input` the business does not hold yet: what a yes
+ * on the change would record, so the change shows its card. Null when there
+ * is none, or the change text never touches contact.
+ */
+export async function newContact(
+  { kit, owner }: Pick<ToolContext, "kit" | "owner">,
+  { contact, text }: CosChangeRequest,
+  /** Everything the owner wrote in the conversation, when the caller has it. */
+  said?: string
+): Promise<{ phone?: string; email?: string } | null> {
+  if (!contact?.phone && !contact?.email) return null
+  // The owner approves the change text, which is all the card shows. A text
+  // that never touches contact cannot depend on one, so a contact the model
+  // added to it was never approved: dropped, not refused. On staging the
+  // model filled `contact` on every hero change, invented or copied, and a
+  // refusal asked the owner for the same yes again.
+  // shortcut: a word test, not a parser; it errs towards "about contact", which keeps the refusal.
+  if (!ABOUT_CONTACT.test(text)) {
+    console.log(JSON.stringify({ code: "cos.contact_dropped" }))
+    return null
+  }
+  // A value the business already holds is no change: the model restates the
+  // current phone and email on unrelated changes (staging, 2026-10-22), and
+  // refusing those asked the owner for the same yes twice.
+  let heldPhone: string | undefined
+  let heldEmail: string | undefined
+  const rows = await kit.withOrg({ orgId: owner.orgId }, readFacts)
+  for (const fact of toCosFacts(rows).output.facts) {
+    if (fact.key === "business.phone") heldPhone = fact.value.e164
+    if (fact.key === "business.email") heldEmail = fact.value.address
+  }
+  // A phone or email when the owner typed none at all is made up: on
+  // 2026-10-25 "add our hours to the contact page" came with an invented
+  // phone and email and asked for a yes. Dropped, never carded. One that
+  // differs from what they typed is kept, for the refusal to correct.
+  const invented = (gave: RegExp) => said !== undefined && !gave.test(said)
+  const phone =
+    !contact.phone || contact.phone === heldPhone || invented(TYPED_PHONE)
+      ? undefined
+      : contact.phone
+  const email =
+    !contact.email ||
+    contact.email.toLowerCase() === heldEmail?.toLowerCase() ||
+    invented(TYPED_EMAIL)
+      ? undefined
+      : contact.email
+  return phone || email ? { phone, email } : null
+}
 
 /**
  * A new phone or email the owner typed in full, recorded as their fact
@@ -344,49 +546,13 @@ const untyped = (what: string) =>
 async function recordContact(
   { kit, owner }: Pick<ToolContext, "kit" | "owner">,
   sessionId: string,
-  { contact, text }: CosChangeRequest
+  input: CosChangeRequest
 ): Promise<Response | null> {
-  if (!contact?.phone && !contact?.email) return null
-  // The owner approves the change text, which is all the card shows. A text
-  // that never touches contact cannot depend on one, so a contact the model
-  // added to it was never approved: dropped, not refused. On staging the
-  // model filled `contact` on every hero change, invented or copied, and a
-  // refusal asked the owner for the same yes again.
-  // shortcut: a word test, not a parser; it errs towards "about contact", which keeps the refusal.
-  if (!ABOUT_CONTACT.test(text)) {
-    console.log(JSON.stringify({ code: "cos.contact_dropped" }))
-    return null
-  }
-  const [log, rows] = await kit.withOrg({ orgId: owner.orgId }, async (db) => [
-    await readSession(db, sessionId),
-    await readFacts(db),
-  ])
-  // A value the business already holds is no change: the model restates the
-  // current phone and email on unrelated changes (staging, 2026-10-22), and
-  // refusing those asked the owner for the same yes twice.
-  let heldPhone: string | undefined
-  let heldEmail: string | undefined
-  for (const fact of toCosFacts(rows).output.facts) {
-    if (fact.key === "business.phone") heldPhone = fact.value.e164
-    if (fact.key === "business.email") heldEmail = fact.value.address
-  }
-  const phone = contact.phone === heldPhone ? undefined : contact.phone
-  const email =
-    contact.email?.toLowerCase() === heldEmail?.toLowerCase()
-      ? undefined
-      : contact.email
-  if (!phone && !email) return null
-  const said = log
-    .flatMap((e) => {
-      const m =
-        e.type === "cos.message" ? CosMessage.safeParse(e.payload) : null
-      return m?.success && m.data.message.role === "user"
-        ? m.data.message.parts.flatMap((p) =>
-            p.type === "text" ? [p.text] : []
-          )
-        : []
-    })
-    .join("\n")
+  const said = (await ownerSaid({ kit, owner }, sessionId)).join("\n")
+  const fresh = await newContact({ kit, owner }, input, said)
+  if (!fresh) return null
+  const { phone, email } = fresh
+  const { text } = input
   const stated: FactValue[] = []
   if (phone) {
     if (!(phoneFromOwner(phone, said) && phoneFromOwner(phone, text)))
@@ -417,9 +583,122 @@ async function recordContact(
   return null
 }
 
+/** What the owner wrote in `sessionId`, message by message. */
+export async function ownerSaid(
+  { kit, owner }: Pick<ToolContext, "kit" | "owner">,
+  sessionId: string
+): Promise<string[]> {
+  const log = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+    readSession(db, sessionId)
+  )
+  return log.flatMap((e): string[] => {
+    const m = e.type === "cos.message" ? CosMessage.safeParse(e.payload) : null
+    return m?.success && m.data.message.role === "user"
+      ? m.data.message.parts.flatMap((p) =>
+          p.type === "text" && typeof p.text === "string" ? [p.text] : []
+        )
+      : []
+  })
+}
+
+/** A word that turns a claim around. */
+const NEGATION = /\b(?:not|no|never|none|nor|without)\b|n['’]t\b/i
+
+/**
+ * Whether `proof` is something the owner said in `message`: every word of it
+ * is one of the message's, and a message that negates something is used only
+ * by a claim that negates too, since dropping a "not" keeps every word and
+ * turns the claim around ("we're not insured yet" is not "Insured").
+ * shortcut: errs towards refusing, so "no call-out fee, fully insured" cannot back "Fully insured"; a span match if that refuses real claims.
+ */
+export const statedIn = (proof: string, message: string) =>
+  inOwnersWords(proof, [message], false) &&
+  (!NEGATION.test(message) || NEGATION.test(proof))
+
+/** A line that asks for something rather than saying something about the business ("Remove it"). */
+const INSTRUCTION =
+  /^\s*(?:please\s+)?(?:add|build|change|delete|do|drop|fix|make|move|put|rebuild|redo|remove|replace|restart|show|start|stop|take|try|update|use|can|could|would|will)\b/i
+
+/** How long `business.proof` may grow: its fact's bound. */
+const PROOF_MAX = 600
+
+class ProofFull extends Error {}
+
+/**
+ * What the owner claims in a change ("local and fully insured"), added to
+ * `business.proof` as their word before the build starts, so the build does
+ * not ask for it and the claims gate accepts it. Recorded only when every
+ * word of it is one the owner wrote in `sessionId`, so nothing the model
+ * made up becomes a claim; any other claim is dropped. Null unless saving
+ * failed, so the change starts whatever the model put in proof.
+ */
+async function recordProof(
+  { kit, owner }: Pick<ToolContext, "kit" | "owner">,
+  sessionId: string,
+  { proof, text: change }: CosChangeRequest
+): Promise<Response | null> {
+  if (!proof) return null
+  // An instruction, or the change itself, is not a claim about the business:
+  // logged 2026-10-25, "Build the website again" and then "Remove it" landed
+  // in the proof. Dropped, never refused, so the owner is not asked about it.
+  if (
+    INSTRUCTION.test(proof) ||
+    (inOwnersWords(proof, [change], false) &&
+      inOwnersWords(change, [proof], false))
+  ) {
+    return null
+  }
+  // A claim with a word the owner never wrote is dropped and the change
+  // starts: refusing it made the model retry its own paraphrase twice before
+  // the change began (2026-10-25). The change text still carries what they asked.
+  const said = await ownerSaid({ kit, owner }, sessionId)
+  if (!said.some((message) => statedIn(proof, message))) {
+    console.log(
+      JSON.stringify({ code: "cos.proof_dropped", reason: "not_owners" })
+    )
+    return null
+  }
+  try {
+    await kit.withOrg(
+      { orgId: owner.orgId, workosUserId: owner.session.workosUserId },
+      async (db) => {
+        const rows = await readFacts(db)
+        const held = toCosFacts(rows).output.facts.find(
+          (f) => f.key === "business.proof"
+        )?.value.text
+        if (held?.toLowerCase().includes(proof.toLowerCase())) return
+        const text = held ? `${held.replace(/[\s.]+$/, "")}. ${proof}` : proof
+        if (text.length > PROOF_MAX) throw new ProofFull()
+        await stateFacts(
+          db,
+          owner,
+          [{ key: "business.proof", value: { text } }],
+          rows
+        )
+      }
+    )
+  } catch (error) {
+    // Full is the server's to handle, not the model's: the change starts without it.
+    if (error instanceof ProofFull) {
+      console.log(JSON.stringify({ code: "cos.proof_dropped", reason: "full" }))
+      return null
+    }
+    console.error(
+      JSON.stringify({ code: "cos.proof_failed", error: failureCode(error) })
+    )
+    return failure(503, {
+      class: "transient",
+      code: "proof.unconfirmed",
+      message: "What the owner said about the business could not be saved.",
+      detail: {},
+    })
+  }
+  return null
+}
+
 /**
  * The owner's change, started as `/changes` starts it, keyed by the
- * approval, after any contact detail in it is recorded. Both ways a yes
+ * approval, after any contact detail and claim in it is recorded. Both ways a yes
  * reaches the change come here: the tool's body and the chat's approval.
  */
 export async function startOwnerChange(
@@ -430,13 +709,15 @@ export async function startOwnerChange(
 ): Promise<Response> {
   return (
     (await recordContact(context, sessionId, input)) ??
+    (await recordProof(context, sessionId, input)) ??
     startChange(
       context.env,
       context.kit,
       context.owner,
       input.text,
       approvalId,
-      input.change_kind
+      input.change_kind,
+      input.label
     )
   )
 }
@@ -477,6 +758,41 @@ const answerInvalid = () =>
     detail: {},
   })
 
+const notOwners = () =>
+  failure(400, {
+    class: "validation",
+    code: "answer.not_owners",
+    message:
+      "Answer only with what the owner wrote in this conversation, in their words, or the number or address they typed. Otherwise leave the question on its card for them.",
+    detail: {},
+  })
+
+/**
+ * Whether the answer is the owner's own word in `said`: text as `statedIn`
+ * reads a claim, a phone number or email address as they typed it, and the
+ * other parts of a fact's value all as words or figures of one message. So
+ * an answer the model made up, pieced together, or lifted from a page or a
+ * review never becomes a fact. Text with no words of its own proves nothing.
+ */
+export function ownersAnswer(
+  value: AnswerQuestionInput["value"],
+  said: readonly string[]
+): boolean {
+  const stated = (text: string, message: string) =>
+    contentWords(text).length > 0 && statedIn(text, message)
+  if (typeof value === "string") return said.some((m) => stated(value, m))
+  const all = said.join("\n")
+  if (value.key === "business.phone")
+    return phoneFromOwner(value.value.e164, all)
+  if (value.key === "business.email") {
+    return emailFromOwner(value.value.address, all)
+  }
+  const parts = Object.values(value.value).flat().map(String)
+  return (
+    parts.length > 0 && said.some((m) => parts.every((part) => stated(part, m)))
+  )
+}
+
 const reviewElsewhere = () =>
   failure(400, {
     class: "validation",
@@ -487,16 +803,18 @@ const reviewElsewhere = () =>
   })
 
 /**
- * The owner's answer, sent through the orchestrator's `/answer` keyed by the
- * approval. The id is looked up only to find the build that asked, which
+ * The owner's answer, taken from what they said in the chat with no card to
+ * approve it (their words are their yes), sent through the orchestrator's
+ * `/answer` under `key`, and written onto the chat's card for the question
+ * so it folds. The id is looked up only to find the build that asked, which
  * the bridge's path needs; an id the org never asked, another org's
  * included, is refused here and never reaches the orchestrator. Which
  * question may be answered is the orchestrator's to say, as on the owner's
  * route: it refuses any but the one the build waits on. A retry is replayed
  * by what it says, not by its key: the same request id with the same value
  * gets the stored receipt, even after the build has moved on to a newer
- * question, and another value gets 409 `answer.already_given`. The approval
- * id still goes as the idempotency key, for the bridge's own logs.
+ * question, and another value gets 409 `answer.already_given`. `key`
+ * goes as the idempotency key, for the bridge's own logs.
  *
  * The value goes as the orchestrator reads it for the question's field: a
  * fact's inner value, for a fact the question names, or the owner's text.
@@ -507,9 +825,10 @@ const reviewElsewhere = () =>
  * 'information.requested'` when that scan shows in the slow log.
  */
 export async function answerQuestion(
-  { env, kit, owner }: ToolContext,
+  { env, kit, owner, settleCard }: ToolContext,
   input: AnswerQuestionInput,
-  approvalId: string
+  key: string,
+  turn: Pick<Turn, "sessionId">
 ): Promise<AnswerQuestionOutput> {
   const [asked] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
     db
@@ -535,15 +854,35 @@ export async function answerQuestion(
   if (fact && (REVIEW_FACT_KEYS as readonly string[]).includes(fact.key)) {
     return refused(reviewElsewhere())
   }
+  if (!ownersAnswer(value, await ownerSaid({ kit, owner }, turn.sessionId))) {
+    return refused(notOwners())
+  }
   const answered = relay(
     await bridge(env, owner, `/${asked.assignmentId}/answer`, {
       body: { request_id: input.request_id, value: fact ? fact.value : value },
-      key: approvalId,
+      key,
     }),
     InformationAnswer.parse
   )
   if (!answered.ok) return refused(answered)
   const receipt = InformationAnswer.parse(await answered.json())
+  // The card asking it folds as answered. The build has its answer already,
+  // so a card that cannot be written is logged and never fails the tool.
+  await kit
+    .withOrg({ orgId: owner.orgId }, (db) =>
+      settleCard(db, input.request_id, {
+        kind: "value",
+        value: fact ? fact.value : (value as string),
+      })
+    )
+    .catch((error: unknown) =>
+      console.error(
+        JSON.stringify({
+          code: "cos.question_card_failed",
+          error: failureCode(error),
+        })
+      )
+    )
   return { outcome: "answered", request_id: receipt.request_id }
 }
 
@@ -706,7 +1045,7 @@ export async function connectDomain(
  * domain-flow.ts), which answers 204. `name` is a path segment as given.
  */
 export async function removal(
-  { env, kit, owner }: ToolContext,
+  { env, kit, owner }: Pick<ToolContext, "env" | "kit" | "owner">,
   name: string,
   key: string
 ): Promise<Response> {

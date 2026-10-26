@@ -261,11 +261,12 @@ picture {
   display: block;
 }
 
-/* The owner's logo, at a fixed height whatever its file's size. */
+/* The owner's logo, at a fixed height whatever its file's size. A drawn logo is
+   square with its name inside, so it needs room to read. */
 .site-logo {
   display: block;
   width: auto;
-  height: 2.5rem;
+  height: 4rem;
   max-width: 12rem;
   object-fit: contain;
 }
@@ -2208,8 +2209,22 @@ picture {
   font-size: var(--text-sm);
 }
 
+/* A choice question's legend reads as the other questions' labels. */
+.quote-field > legend {
+  margin-block-end: var(--space-3xs);
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 500;
+  letter-spacing: normal;
+}
+
 /* The field's edge reads at 3:1 against the page, as a control's must. */
-.quote-field :is(input, select, textarea) {
+.quote-field
+:is(
+  input:not([type="radio"], [type="checkbox"], [type="file"]),
+  select,
+  textarea
+) {
   width: 100%;
   min-height: 3rem;
   padding: var(--space-2xs) var(--space-xs);
@@ -2225,9 +2240,98 @@ picture {
   resize: vertical;
 }
 
-.quote-field :is(input, select, textarea):focus-visible {
+.quote-field :is(input, select, textarea):focus-visible,
+.quote-option:has(input:focus-visible) {
   outline: 2px solid var(--brand-text);
   outline-offset: 2px;
+}
+
+/* The chip carries the ring, not the small box inside it. */
+.quote-option input:focus-visible {
+  outline: none;
+}
+
+/* Each option a tappable chip; the picked ones take the brand colour. */
+.quote-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs);
+}
+
+.quote-option {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  min-height: 2.75rem;
+  padding: var(--space-3xs) var(--space-sm);
+  border: 1px solid
+    color-mix(in oklch, var(--foreground) 38%, var(--background));
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.quote-option:has(input:checked) {
+  border-color: var(--brand-text);
+  background: color-mix(in oklch, var(--brand-text) 10%, var(--background));
+}
+
+.quote-option input {
+  width: 1.125rem;
+  height: 1.125rem;
+  margin: 0;
+  accent-color: var(--brand-text);
+}
+
+/* The file input is the whole zone, so a dropped photo always lands on it,
+   and the browser's own line under the words says what was chosen. The
+   words sit at the start, in line with the button the browser draws. */
+.quote-drop {
+  position: relative;
+}
+
+.quote-drop input {
+  width: 100%;
+  min-height: 7.5rem;
+  padding: 3.25rem var(--space-sm) var(--space-sm);
+  border: 1.5px dashed
+    color-mix(in oklch, var(--foreground) 38%, var(--background));
+  border-radius: var(--radius-md);
+  background: var(--background);
+  color: var(--muted-foreground);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.quote-drop input:hover {
+  border-color: var(--brand-text);
+  background: color-mix(in oklch, var(--brand-text) 6%, var(--background));
+}
+
+.quote-drop input::file-selector-button {
+  margin-inline-end: var(--space-xs);
+  padding: var(--space-3xs) var(--space-sm);
+  border: 1px solid
+    color-mix(in oklch, var(--foreground) 38%, var(--background));
+  border-radius: var(--radius-md);
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+  cursor: pointer;
+}
+
+.quote-drop-label {
+  position: absolute;
+  inset-block-start: var(--space-md);
+  inset-inline: var(--space-sm);
+  font-weight: 500;
+  pointer-events: none;
+}
+
+.quote-sublabel {
+  margin-block-start: var(--space-2xs);
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
 }
 
 /* Only once the visitor has touched the field, so an empty form is calm. */
@@ -2562,7 +2666,7 @@ picture {
 }
 
 .site-footer .site-logo {
-  height: 2rem;
+  height: 3rem;
 }
 
 .footer-blurb {

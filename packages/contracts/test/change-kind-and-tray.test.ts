@@ -4,8 +4,6 @@ import { z } from "zod"
 import {
   AskDesignInput,
   AskDesignOutput,
-  BlueprintReviewInput,
-  BlueprintReviewOutput,
   ChatRequest,
   RequestChangeOutput,
 } from "../src/chat.ts"
@@ -16,6 +14,8 @@ import {
   ChangeKind,
   OwnerChangeRequest,
   PHOTO_PATH,
+  REVISION_PICTURE_PATH,
+  revisionPictures,
   thumbnailOf,
   WorkspaceStatus,
 } from "../src/owner.ts"
@@ -186,6 +186,24 @@ describe("AskDesignInput", () => {
     }
   })
 
+  it("takes a chosen path on the logo question only", () => {
+    const upload = {
+      accept: ["image/png"],
+      max_files: 1,
+      max_bytes: 1000,
+      skippable: false,
+    }
+    const logo = { ...first, visual: "logo", upload, path: "create" }
+    expect(AskDesignInput.safeParse({ questions: [logo] }).success).toBe(true)
+    for (const bad of [
+      { ...logo, path: "pick" },
+      { ...logo, visual: "photos" },
+      { ...first, path: "upload" },
+    ]) {
+      expect(AskDesignInput.safeParse({ questions: [bad] }).success).toBe(false)
+    }
+  })
+
   it("keeps every rule of the ordinary choice card on each question", () => {
     const card = first.card as Obj
     const bad = { ...card, initial: ["not_offered", "a", "b"] }
@@ -278,12 +296,11 @@ describe("lane and activity on a build", () => {
     expect(BuildSummary.safeParse(old).success).toBe(true)
   })
 
-  it("carries a plan for the Blueprint card, and refuses one that is not a Blueprint", () => {
+  it("carries a plan for the panel, and refuses one that is not a Blueprint", () => {
     const blueprint = {
       plan: sample("Blueprint"),
       round: 1,
       previous: null,
-      awaiting: true,
     }
     expect(BuildSummary.safeParse({ ...build, blueprint }).success).toBe(true)
     expect(
@@ -351,6 +368,26 @@ describe("lane and activity on a build", () => {
       expect(thumbnailOf(bad), String(bad)).toBeNull()
     }
     expect(PHOTO_PATH.test(`/photos/${id}/x`)).toBe(false)
+  })
+
+  it("serves a version's pictures at its own path, and nothing beside them", () => {
+    const id = "0b9c4a1e-2f3d-4c5b-8a6e-7d8f9a0b1c2d"
+    const pictures = revisionPictures(id)
+    for (const src of Object.values(pictures)) {
+      const { pathname } = new URL(src, "https://app.example")
+      expect(
+        REVISION_PICTURE_PATH.test(pathname.replace(/^\/api/, "")),
+        src
+      ).toBe(true)
+    }
+    expect(pictures.laptop).toMatch(
+      new RegExp(`^/api/revisions/${id}/laptop\\?cut=\\d+$`)
+    )
+    for (const bad of ["home-1440", "icon.png", "../manifest.json", "dist/x"]) {
+      expect(REVISION_PICTURE_PATH.test(`/revisions/${id}/${bad}`), bad).toBe(
+        false
+      )
+    }
   })
 
   it("refuses a lane nobody runs", () => {
@@ -437,45 +474,6 @@ describe("expected seconds on the workspace", () => {
     expect(parses({ full, quick: { p50: 20.5, p95: 45 } })).toBe(false)
     expect(parses({ full, quick: { p50: 20 } })).toBe(false)
     expect(parses({ full, quick, instant: quick })).toBe(false)
-  })
-})
-
-describe("BlueprintReview", () => {
-  const input = sample<{ blueprint: Obj }>("BlueprintReviewInput")
-  const okIn = (v: unknown) => BlueprintReviewInput.safeParse(v).success
-  const okOut = (v: unknown) => BlueprintReviewOutput.safeParse(v).success
-
-  it("takes a plan with and without the assignment it revises", () => {
-    expect(okIn(input)).toBe(true)
-    expect(okIn({ blueprint: input.blueprint })).toBe(true)
-  })
-
-  it("refuses a bad plan, a bad revision id and extra keys", () => {
-    expect(okIn({ blueprint: { ...input.blueprint, pages: [] } })).toBe(false)
-    expect(okIn({ ...input, revision_of: "nope" })).toBe(false)
-    expect(okIn({ ...input, extra: 1 })).toBe(false)
-  })
-
-  it("answers build, with or without a note, and change only with one", () => {
-    expect(okOut({ decision: "build" })).toBe(true)
-    expect(okOut({ decision: "build", note: "Looks good" })).toBe(true)
-    expect(okOut({ decision: "change", note: "More photos" })).toBe(true)
-    expect(okOut({ decision: "change" })).toBe(false)
-    expect(okOut({ decision: "change", note: "   " })).toBe(false)
-    expect(okOut({ decision: "build", note: "x".repeat(501) })).toBe(false)
-    expect(okOut({ decision: "maybe" })).toBe(false)
-  })
-
-  it("is an answer a chat turn can carry", () => {
-    const request = sample<{ turn: { results: Obj[] } }>("ChatRequest")
-    request.turn.results = [
-      {
-        kind: "answer",
-        tool_call_id: "call_5Hn2Wq8E",
-        output: { decision: "build" },
-      },
-    ]
-    expect(ChatRequest.safeParse(request).success).toBe(true)
   })
 })
 

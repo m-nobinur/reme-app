@@ -14,6 +14,7 @@ import {
   PAGES,
   PALETTES,
   type PageId,
+  type PaletteRoles,
   type SectionKind,
   TEMPLATES,
   TONES,
@@ -74,8 +75,11 @@ export const CUSTOM_SECTION_RULES = `- A custom section is written only when the
 
 /** A palette as `site.palette` takes it: the six roles, by name. */
 const ROLES = ["paper", "ink", "primary", "tint", "accent", "line"] as const
-export const paletteRoles = (palette: (typeof PALETTES)[number]) =>
+export const paletteRoles = (palette: PaletteRoles) =>
   ROLES.map((role) => `${role}:${palette[role]}`).join(" ")
+
+export const ownPaletteName = (custom: string | undefined) =>
+  custom?.split(":")[0]?.trim().slice(0, 40) || "Your colours"
 
 /**
  * The directions library as prompt lines, stable across every build: how to
@@ -144,8 +148,9 @@ export const COPY_RULES = [
   "- overviewBody and audienceBody put business.overview and business.audience in the site's voice: rephrase, never add, empty without the fact.",
   "- Each page's Title field (homeTitle, servicesTitle and so on) is 50 to 60 characters naming service, area and business; its Description field is 140 to 160 characters saying what the page offers and why to request a quote; both unique to the page. FAQ questions are what this trade's customers ask before booking, in their words.",
   `- The claims gate fails any of these unless a fact below carries it: ${WORDS}; and any rating, percentage, founding year or count of ${COUNTS}, unless that number is in a fact below. A widening word such as fully or comprehensive needs the fact to carry it too: "Insured up to $5 million" does not make "Fully insured". Write the line without the claim instead.`,
+  "- Write money the way a British reader says it: £5 million, £500, never 5 million pounds, GBP 5m or 5,000,000 pounds, whatever form the fact holds it in.",
   '- Who the business is comes from a fact or not at all: local, family-run, independent, owner-run, years in business, team size appear only when a fact says that very thing, in its words. Without one, write about the service and the place, never about who runs it ("Home cleaning in Bristol", not "run by a local"). A visit pattern the facts do not state, such as a weekly visit, is not written as the business\'s own.',
-  "- Beyond the required facts, call ask_chief only when a missing fact would leave a core section empty or wrong, such as no detail on any service: once a build at most, as one plain question with an example answer. Never ask for a nice-to-have or for business.proof; leave its section out.",
+  "- Beyond the required facts, never call ask_chief: leave out a claim or section no fact supports, and list what you left out in report_complete's left_out, each as one plain question to the owner.",
   "- astro build ends with a copy check. Fix every line it prints about text you wrote; a fact shown as given may stay.",
 ]
 
@@ -162,7 +167,7 @@ const range = (kind: CopyKind) =>
  */
 export const COPY_BRIEF = [
   "- The copy brief, per section. A section that renders reads as finished, specific copy for this business and place, written to the range below; never one thin line where the brief asks for a paragraph.",
-  `- Hero: heroHeading 4 to 9 words naming the main service or outcome and the place. homeIntro, the subhead, two or three sentences (${range("hero_lede")}): who the business serves, where, and what the customer gets. heroNote, under the buttons, one reassurance line under 12 words about how the next step works, never a promise no fact makes.`,
+  `- Hero: heroHeading 4 to 9 words naming the main service or outcome, with the place as supporting detail and never the whole heading. homeIntro, the subhead, two or three sentences (${range("hero_lede")}): who the business serves, where, and what the customer gets. heroNote, under the buttons, one reassurance line under 12 words about how the next step works, never a promise no fact makes. heroEyebrow, the small label above the heading, stays empty so the trade shows, unless the owner asks for a label.`,
   "- Trust strip: trust1 to trust3, under six words each, from business.proof only.",
   `- Service cards: serviceNName as a customer would search for it; serviceNBody ${range("service_body")}, the result first, then what the work covers in general terms. serviceCardsLink is a short label for the link to the services page.`,
   `- Each service's own page (/services/<slug>/, from serviceNName): serviceNHeading, its h1, 4 to 9 words naming the service and the area, never the bare name; serviceNTitle 50 to 60 characters and serviceNDescription 140 to 160, both its own; serviceNDetail ${range("service_detail")} on what the job involves and what the customer is left with; serviceNIncludes four to six lines of what such a service normally covers, in neutral wording: no guarantee, no named product or brand, no count or measure, nothing the facts rule out, and no promise about this business that a fact does not make; serviceNFor one or two sentences on who it suits, from business.audience; both are required, and the copy gate fails a service page without either; three or four steps of this service alone (serviceNStep1Title to serviceNStep4Body, each a title of 2 to 5 words and a body of ${range("step_body")}) under serviceNStepsHeading, sharing no words with the home page's steps or another service's; two to four questions about this service only (serviceNFaq1Question to serviceNFaq4Answer, each answer ${range("faq_answer")}) under serviceNFaqHeading; serviceNCtaHeading and serviceNCtaBody its closing band.`,
@@ -191,7 +196,7 @@ export function stableRules(): string[] {
     '- The site never shows a price, a rate, a fee or a pricing tier, even when a fact below holds one. Every call to action asks the visitor for a quote request and links it to /quote/. Label it with the wording of the industry pack ("Get a quote" for cleaning, "Book a consultation" for legal, "Reserve a car" for limousine, "Request a quote" otherwise) and use that one label everywhere.',
     "- src/quote-form.json is the quote form's questions exactly as the owner approved them, the quote.form fact below when there is one. The platform writes it and writes it again before every build, so never edit it, and never add questions anywhere else. Write quoteHeading, quoteIntro and quoteRequestLegend in src/site-config.ts from the business facts: what this business quotes for and what a visitor tells it to get one, in the site's voice.",
     "- Every file under src/layouts/ and src/components/, except your own custom sections in src/components/custom/, is the starter's and read-only, and so is src/structured-data.ts (the JSON-LD: never delete a field from it). The build compares them with the starter, puts a changed one back and fails the report. When a gate fails on one (a photo over the size line, say), fix what the page feeds it, never the file. The photos under src/assets/generated and src/assets/uploads are the photo pipeline's and read-only the same way: never replace, resize, remove or add one. A photo over the size line is the pipeline's to fix; leave it.",
-    "- If the change request asks for something checkable that no fact below supports, a rating, a review count, an award, a certification, a guarantee or a number of years, call ask_chief for it rather than writing it.",
+    "- If the change request asks for something checkable that no fact below supports, a rating, a review count, an award, a certification, a guarantee or a number of years, leave it out and list it in left_out rather than writing it. What business.proof says is the owner's own word and supports itself: when the change asks for it, write it, close to how they put it.",
     ...COPY_RULES,
     ...COPY_BRIEF,
     ...CONTENT_RULES,
@@ -281,9 +286,17 @@ const labelOf = (list: readonly { id: string; label: string }[], id: string) =>
 /** The owner's own words, quoted so they read as data. */
 const quoted = (words: string) => JSON.stringify(words)
 
-/** The owner's photos, from the `media.uploads` fact. */
-export const ownerPhotos = (facts: readonly FactRecord[]): Asset[] =>
+/** Every image the owner stored, from the `media.uploads` fact: the files a site carries. */
+export const ownerUploads = (facts: readonly FactRecord[]): Asset[] =>
   factValue(facts, "media.uploads")?.items ?? []
+
+/** The owner's photos: their uploads but the logo. */
+export const ownerPhotos = (facts: readonly FactRecord[]): Asset[] =>
+  ownerUploads(facts).filter((a) => a.use !== "logo")
+
+/** The owner's logo, kept by the design tray's logo page. */
+export const ownerLogo = (facts: readonly FactRecord[]): Asset | undefined =>
+  ownerUploads(facts).find((a) => a.use === "logo")
 
 /**
  * Where the words come from. A build once promised airport meet-and-greets
@@ -338,6 +351,8 @@ export function ownerChoices(facts: readonly FactRecord[]): string[] {
   const pages = factValue(facts, "site.pages")
   const tone = factValue(facts, "assistant.tone")
   const photos = ownerPhotos(facts)
+  const logo = ownerLogo(facts)
+  const business = factValue(facts, "business.name")?.name
   const preset = PALETTES.find((p) => p.id === palette?.id)
   const family = FONTS.find((f) => f.id === font?.id)
   // OI2's design tray stores a pair id; older onboarding a face.
@@ -374,13 +389,17 @@ export function ownerChoices(facts: readonly FactRecord[]): string[] {
       ? [
           `- Colour: the brand colour is ${preset.brand}, the owner's ${preset.label} palette, whatever the direction names. Set palette in src/site-config.ts to "${paletteRoles(preset)}" exactly; derive no colour.`,
         ]
-      : palette?.brand
-        ? [ownColour(palette.brand, palette.custom)]
-        : palette?.custom
-          ? [
-              `- Colour: the owner described their colours as ${quoted(palette.custom)}. Choose one brand colour that fits, with enough contrast for text.`,
-            ]
-          : []),
+      : palette?.roles
+        ? [
+            `- Colour: the owner's own ${ownPaletteName(palette.custom)} palette, read from their logo or a picture, whatever the direction names. Set palette in src/site-config.ts to "${paletteRoles(palette.roles)}" exactly and brandColor to ${palette.roles.primary}; derive no colour.`,
+          ]
+        : palette?.brand
+          ? [ownColour(palette.brand, palette.custom)]
+          : palette?.custom
+            ? [
+                `- Colour: the owner described their colours as ${quoted(palette.custom)}. Choose one brand colour that fits, with enough contrast for text.`,
+              ]
+            : []),
     ...(pair
       ? [
           `- Font: the owner chose the ${pair.label} pair, whatever the direction names; set font in src/site-config.ts to "${pair.id}". The pair's files come with the site; add no font files and no font links.`,
@@ -396,7 +415,7 @@ export function ownerChoices(facts: readonly FactRecord[]): string[] {
           : []),
     ...(pages
       ? [
-          `- Pages: Home and Request a quote, plus ${pagePicks?.length ? pagePicks.map((id) => labelOf(PAGES, id)).join(", ") : "nothing else"}. ${sections.length > 0 ? `${sections.map((id) => labelOf(PAGES, id)).join(", ")} ${sections.length > 1 ? "are sections" : "is a section"} on the home page, not ${sections.length > 1 ? "pages" : "a page"}: build no page file for ${sections.length > 1 ? "them" : "it"}, and the Blueprint says which the home page holds. ` : ""}${drop.length > 0 ? `Delete ${drop.join(", ")}: the owner did not pick ${drop.length > 1 ? "those pages" : "that page"}, and navigation follows the page files. ` : ""}Build any other extra page from the existing components and link it from the navigation.${pages.custom ? ` The owner also asked for ${quoted(pages.custom)}; add it if the facts can fill it, and say so in risks if not.` : ""}`,
+          `- Pages: Home and Request a quote, plus ${pagePicks?.length ? pagePicks.map((id) => labelOf(PAGES, id)).join(", ") : "nothing else"}. ${sections.length > 0 ? `${sections.map((id) => labelOf(PAGES, id)).join(", ")} ${sections.length > 1 ? "are sections" : "is a section"} on the home page, not ${sections.length > 1 ? "pages" : "a page"}: build no page file for ${sections.length > 1 ? "them" : "it"}, and the Blueprint says which the home page holds. ` : ""}${drop.length > 0 ? `Delete ${drop.join(", ")}: the owner did not pick ${drop.length > 1 ? "those pages" : "that page"}, and navigation follows the page files. ` : ""}${sections.includes("gallery") ? "A gallery the Blueprint plans draws only when site.photo1Src to site.photo3Src and photo1Alt to photo3Alt are set from the owner's photos, and the build fails without it. " : ""}Build any other extra page from the existing components and link it from the navigation.${pages.custom ? ` The owner also asked for ${quoted(pages.custom)}; add it if the facts can fill it, and say so in risks if not.` : ""}`,
         ]
       : []),
     ...(tone
@@ -404,9 +423,14 @@ export function ownerChoices(facts: readonly FactRecord[]): string[] {
           `- Voice: the site speaks in a ${labelOf(TONES, tone.id).toLowerCase()} tone. Friendly is warm and plain; professional is polished, with no exclamation marks; casual is relaxed, with contractions.`,
         ]
       : []),
+    ...(logo
+      ? [
+          `- Logo: the owner's own, /${photoFile(logo)}. Set site.logo to that path and site.logoAlt to ${quoted(`${business ?? "The business"} logo`)}. It shows in the header and footer and nowhere else; draw or write no other logo.`,
+        ]
+      : []),
     ...(photos.length > 0
       ? [
-          `- Photos: the owner's own, in src/assets/ and named by these paths: ${photos.map((p) => `/${photoFile(p)} (${quoted(p.alt ?? p.name)})`).join(", ")}. A logo, judged from its name, its alt text and what it shows, goes in the header and footer through site.logo and site.logoAlt and nowhere else, never the hero or the gallery. Of the photos, the best, widest one goes in the home page's hero through site.heroImage and site.heroImageAlt; when the names do not tell them apart, the first. The rest go in the gallery through site.photo1Src to site.photo3Src and their alt fields, or in the about section or a service card when the name says it shows that subject, as a Photo (import Photo from "../layouts/Photo.astro", with src, alt, class and sizes; never a raw img, which the build would not find) styled with width 100%, a fixed aspect-ratio and object-fit: cover. Never stretch a photo or give it a width and height that distort it. With up to four photos use every one, and never the same photo twice on a page. Give every photo alt text that says what it shows for this business, from its name and where you put it; never the file name and never "image". Use no other photos. Name any photo you left out, and why, in risks.`,
+          `- Photos: the owner's own, in src/assets/ and named by these paths, each with what it shows and, where the owner's photo review set one, its use: ${photos.map((p) => `/${photoFile(p)} (${quoted(p.alt ?? p.name)}${p.use ? `, use ${p.use}` : ""})`).join(", ")}. A photo's use places it: hero in the home page's hero through site.heroImage and site.heroImageAlt; work in the service cards and the gallery through site.photo1Src to site.photo3Src and their alt fields; team in the about section. A photo with no use goes where its name says it fits, and with no hero photo the best, widest one is the hero; when the names do not tell them apart, the first. A photo in a service card or the about section is a Photo (import Photo from "../layouts/Photo.astro", with src, alt, class and sizes; never a raw img, which the build would not find) styled with width 100%, a fixed aspect-ratio and object-fit: cover. Never stretch a photo or give it a width and height that distort it. With up to four photos use every one, and never the same photo twice on a page. Give every photo alt text that says what it shows for this business, from its name and where you put it; never the file name and never "image". Add no other photos than these and the Blueprint's generated ones. Name any photo you left out, and why, in risks.`,
         ]
       : []),
   ]

@@ -1,4 +1,5 @@
 import {
+  type Asset,
   BLUEPRINT_FEATURES_MAX,
   Blueprint,
   type DesignDirection,
@@ -42,6 +43,7 @@ import {
   factValue,
   industryOf,
   ownerPhotos,
+  ownPaletteName,
   packVoice,
   SECTION_PICKS,
 } from "./developer-rules.ts"
@@ -91,8 +93,8 @@ function packOf(industry: string | undefined) {
   return { id, ...pack, order }
 }
 
-/** How many plans one build may go through: the first and five changes. */
-export const PLAN_ROUNDS = 6
+/** A build is planned once; `blueprint.proposed` still names the round the panel and older rows read. */
+const ROUND = 1
 
 /** The most axes a Blueprint may move from its direction (VS6). */
 const AXES_MAX = 2
@@ -122,9 +124,15 @@ export function ownerChoices(facts: readonly FactRecord[]) {
     palette:
       palette && palette.id !== "custom"
         ? ({ kind: "preset", id: palette.id } as const)
-        : palette?.brand
-          ? ({ kind: "brand", brand: palette.brand } as const)
-          : undefined,
+        : palette?.roles
+          ? ({
+              kind: "roles",
+              name: ownPaletteName(palette.custom),
+              roles: palette.roles,
+            } as const)
+          : palette?.brand
+            ? ({ kind: "brand", brand: palette.brand } as const)
+            : undefined,
     fonts:
       pair ??
       (font && font.id !== "custom"
@@ -223,7 +231,12 @@ export function withOwnerChoices(
   return {
     ...blueprint,
     ...(owner.direction ? { direction: owner.direction } : {}),
-    ...(owner.palette ? { palette: owner.palette } : {}),
+    // A whole palette is the owner's alone: one the model wrote is its primary.
+    palette:
+      owner.palette ??
+      (blueprint.palette.kind === "roles"
+        ? { kind: "brand", brand: blueprint.palette.roles.primary }
+        : blueprint.palette),
     ...(owner.fonts ? { fonts: owner.fonts } : {}),
     pages,
     images: fitImages({ ...budgeted, pages }),
@@ -563,8 +576,9 @@ function fitImages(blueprint: Blueprint): Blueprint["images"] {
 /**
  * The plan code writes when the model's will not do: the pack's page order,
  * the least-used direction for the industry with the owner's answers over it,
- * and one hero photo when the hero takes one, the owner's first upload if
- * there is one. It always passes `problems`, which a test holds it to.
+ * and the photos: the owner's where their use places them, generated in
+ * every other slot that may be drawn. It always passes `problems`, which a
+ * test holds it to.
  */
 export function fallbackBlueprint(input: {
   facts: readonly FactRecord[]
@@ -610,28 +624,47 @@ export function fallbackBlueprint(input: {
   })
   const heroVariant = pages[0]?.sections.find((s) => s.kind === "hero")?.variant
   const aspect = heroVariant ? PHOTO_HERO[heroVariant] : undefined
-  const upload = uploads[0]
-  // The starter's gallery shows three; the hero keeps the first photo when others remain.
+  // Each photo where the owner's photo review placed it. One from before the
+  // review has no use: the first is the hero, the rest are the work.
+  const unread = uploads.filter((u) => !u.use)
+  const upload = uploads.find((u) => u.use === "hero") ?? unread[0]
+  const work = [
+    ...uploads.filter((u) => u.use === "work"),
+    ...unread.filter((u) => u !== upload),
+  ]
+  const team = uploads.find((u) => u.use === "team")
+  const ownShot = (
+    id: string,
+    page: PageId,
+    section: "gallery" | "service_cards" | "hero",
+    photo: Asset
+  ) => ({
+    id,
+    page,
+    section,
+    aspect: "4:3" as const,
+    resolution: "1K" as const,
+    subject: cap(photo.alt ?? photo.name, 300),
+    alt: cap(photo.alt ?? photo.name, 200),
+    source: "upload" as const,
+    asset_id: photo.id,
+  })
+  // The starter's gallery shows three: the work, or the hero when it is the only photo.
   const galleryOn = pages.find((p) =>
     p.sections.some((s) => s.kind === "gallery")
   )
-  const galleryPhotos = (uploads.length > 1 ? uploads.slice(1) : uploads).slice(
-    0,
-    3
-  )
   const galleryImages = galleryOn
-    ? galleryPhotos.map((photo, i) => ({
-        id: `gallery_${i + 1}`,
-        page: galleryOn.page,
-        section: "gallery" as const,
-        aspect: "4:3" as const,
-        resolution: "1K" as const,
-        subject: cap(photo.alt ?? photo.name, 300),
-        alt: cap(photo.alt ?? photo.name, 200),
-        source: "upload" as const,
-        asset_id: photo.id,
-      }))
+    ? (work.length > 0 ? work : uploads)
+        .slice(0, 3)
+        .map((photo, i) =>
+          ownShot(`gallery_${i + 1}`, galleryOn.page, "gallery", photo)
+        )
     : []
+  // The team photo heads the about page; never drawn, a person is a claim.
+  const aboutImages =
+    team && pages.some((p) => p.page === "about")
+      ? [ownShot("about_hero", "about", "hero", team)]
+      : []
   const slot = {
     id: "home_hero",
     page: "home" as const,
@@ -641,9 +674,11 @@ export function fallbackBlueprint(input: {
     subject: cap(direction.image_style, 300),
     alt: cap(upload?.alt ?? direction.image_style, 200),
   }
-  // With no uploads, each service gets a photo for its card where the home
-  // cards show one, and another of its own for its page header, drawn from
-  // its name in the direction's style. The budget trims the headers last.
+  // Each service gets a photo for its card where the home cards show one,
+  // the owner's work first, and another of its own for its page header,
+  // drawn from its name in the direction's style. The work goes to the
+  // gallery when there is one, so no photo shows twice on a page. The
+  // budget trims the headers last.
   const offerings = (factValue(facts, "business.offerings")?.items ?? []).slice(
     0,
     6
@@ -666,29 +701,27 @@ export function fallbackBlueprint(input: {
     alt: cap(`${name}, shown in a customer's space`, 200),
     source: "generated" as const,
   })
+  const cardPhotos = galleryOn ? [] : work
   const cardImages =
-    uploads.length === 0 &&
-    (homeServices === "photo_cards" || homeServices === "alternating")
-      ? offerings.map((name, i) =>
-          serviceShot(
-            `service_${i + 1}_card`,
-            name,
-            "done well",
-            "service_cards"
-          )
-        )
+    homeServices === "photo_cards" || homeServices === "alternating"
+      ? offerings.map((name, i) => {
+          const id = `service_${i + 1}_card`
+          const own = cardPhotos[i]
+          return own
+            ? ownShot(id, "home", "service_cards", own)
+            : serviceShot(id, name, "done well", "service_cards")
+        })
       : []
-  const headerImages =
-    uploads.length === 0 && pages.some((p) => p.page === "service")
-      ? offerings.map((name, i) =>
-          serviceShot(
-            `service_${i + 1}_hero`,
-            name,
-            "a closer view of the finished work",
-            "hero"
-          )
+  const headerImages = pages.some((p) => p.page === "service")
+    ? offerings.map((name, i) =>
+        serviceShot(
+          `service_${i + 1}_hero`,
+          name,
+          "a closer view of the finished work",
+          "hero"
         )
-      : []
+      )
+    : []
   const fonts = owner.fonts ?? direction.fonts
   const palette = owner.palette ?? {
     kind: "preset" as const,
@@ -698,7 +731,9 @@ export function fallbackBlueprint(input: {
   const colours =
     palette.kind === "preset"
       ? (PALETTES.find((p) => p.id === palette.id)?.label ?? palette.id)
-      : "your own"
+      : palette.kind === "roles"
+        ? palette.name
+        : "your own"
   const pageLabel = (page: PageId) =>
     PLANNED_PAGES.find((p) => p.id === page)?.label ?? page
   const features = [
@@ -727,6 +762,7 @@ export function fallbackBlueprint(input: {
         : []),
       ...cardImages,
       ...headerImages,
+      ...aboutImages,
       ...galleryImages,
     ],
     voice: direction.voice,
@@ -788,8 +824,9 @@ function mergeKinds(branches: unknown[]): Record<string, unknown> | null {
  * The Blueprint's shape for structured output: the contract's JSON Schema
  * without the keywords Claude's structured outputs refuse (string and array
  * lengths, patterns, number bounds), with `oneOf` as `anyOf` and the section
- * union merged (`mergeKinds`). `Blueprint` itself checks what was dropped,
- * so nothing is lost but the model's hint.
+ * union merged (`mergeKinds`), and without the owner's own palette, which
+ * only the owner picks. `Blueprint` itself checks what was dropped, so
+ * nothing is lost but the model's hint.
  */
 export function outputSchema(): Record<string, unknown> {
   const drop = new Set([
@@ -823,10 +860,16 @@ export function outputSchema(): Record<string, unknown> {
     const merged = Array.isArray(out.anyOf) ? mergeKinds(out.anyOf) : null
     return merged ?? out
   }
-  return clean(z.toJSONSchema(Blueprint, { io: "output" })) as Record<
-    string,
-    unknown
-  >
+  const schema = clean(z.toJSONSchema(Blueprint, { io: "output" })) as {
+    properties: { palette: { anyOf: { properties?: { kind?: unknown } }[] } }
+  }
+  const palette = schema.properties.palette
+  palette.anyOf = palette.anyOf.filter(
+    (branch) =>
+      (branch.properties?.kind as { const?: string } | undefined)?.const !==
+      "roles"
+  )
+  return schema as unknown as Record<string, unknown>
 }
 
 const SCHEMA = { name: "blueprint", schema: outputSchema() }
@@ -858,10 +901,10 @@ export function plannerPrompt(input: {
     "- Design like a studio, not a template. Pick the direction that fits this trade and this business's audience, a type pair with character, one dominant colour with one sharp accent. Vary the sections' order and variants from the pack's starting order where the facts make a different order read better, within the kinds each page may hold.",
     "- The site has exactly the pages listed under the business's pages. Every page holds only the kinds listed for it below, and each section's variant is one listed for its kind.",
     "- Plan a section only when the facts can fill it. No testimonials without testimonial facts; no gallery without the owner's photos; no proof strip without business.proof. A section the owner picked under 'Picked as home page sections' is the exception: plan it where they are listed as planned, and give a gallery one upload slot per photo, three at most.",
-    "- Images: plan a slot only where a section shows a picture: a hero other than text_led, photo service cards, a photo CTA band, the gallery, the header of a service, about or contact page. Use the owner's uploads first, as source upload with their asset id. A generated photo is atmosphere: rooms, surfaces, objects, hands at work. Never generate one for an about section, gallery, testimonials or a fleet: there a photo is a claim. Each subject names one concrete scene in plain words; the alt says what it shows. Code sets each slot's aspect to its section's box.",
+    "- Images: plan a slot only where a section shows a picture: a hero other than text_led, photo service cards, a photo CTA band, the gallery, the header of a service, about or contact page. Use the owner's uploads first, as source upload with their asset id, each where its use places it: hero in the home hero, work in the service cards or the gallery, team in the about page's header; never the same photo twice on a page. The upload with use logo is the logo, never a photo slot. A generated photo is atmosphere: rooms, surfaces, objects, hands at work. Never generate one for an about section, gallery, testimonials or a fleet: there a photo is a claim. Each subject names one concrete scene in plain words; the alt says what it shows. Code sets each slot's aspect to its section's box.",
     "- Plan generated photos as one photographer's shot list for one shoot. The hero is the establishing shot: the core service's finished result in the customer's own space (a whole room, a whole garden), never a street or skyline. Each service card is a different room, area or detail that shows that service at a glance (a worktop for regular cleaning, a bathroom for a deep clean), never the hero's scene again. A service's card and its page header show that service's own subject, indoors or out as the service is: gutters, fascias, soffits, roofs and windows seen from outside are exteriors in daylight, never a room. A photo CTA band is a calm texture (a wall in window light, foliage) that complements the rest. No two subjects share a room, a composition or a main prop. Prefer simple shapes (a worktop, a sink, a sofa, a bed, a desk) over mechanisms image models warp: oven doors, hinges, ladders, hands holding tools.",
-    "- With no uploads, a trade people want to see done well (a cleaned room, a finished job, a plate, a space) still gets pictures: the hero, a slot for each service card when you set photo_cards, and one for a photo CTA band. Plan up to 8 slots in all, drawn one per section, never a bare hero when the pages have more places for a photo.",
-    "- Page headers, with no uploads: each service's own page gets a header photo, a slot on page service, section hero, id service_<n>_hero, n being the service's place (1 to 6) in business.offerings, its subject a different room, area or detail from every other slot, in the same house style. A service's card slot (page home, section service_cards, id service_<n>_card) and its header slot are two photos of two different scenes: a page header never reuses its card's photo. Order the slots: the hero, every card, then the service headers, then About and Contact (page about or contact, section hero, ids about_hero and contact_hero): a calm place with no people, team, vehicle or result in it, such as a window in daylight or a tidy entrance, never the home hero's scene. A build draws eight photos and code drops the rest in that order, so a service page whose header slot did not fit shows a plain text header.",
+    "- Where the uploads leave a slot empty, a trade people want to see done well (a cleaned room, a finished job, a plate, a space) still gets pictures: the hero, a slot for each service card when you set photo_cards, and one for a photo CTA band. Plan up to 8 slots in all, drawn one per section, never a bare hero when the pages have more places for a photo.",
+    "- Page headers: each service's own page gets a header photo, a slot on page service, section hero, id service_<n>_hero, n being the service's place (1 to 6) in business.offerings, its subject a different room, area or detail from every other slot, in the same house style. A service's card slot (page home, section service_cards, id service_<n>_card) and its header slot are two photos of two different scenes: a page header never reuses its card's photo. Order the slots: the hero, every card, then the service headers, then About and Contact (page about or contact, section hero, ids about_hero and contact_hero): a calm place with no people, team, vehicle or result in it, such as a window in daylight or a tidy entrance, never the home hero's scene. A build draws eight photos and code drops the rest in that order, so a service page whose header slot did not fit shows a plain text header.",
     "- Services: photo_cards, and alternating on the home page, only when you plan a photo slot for every service; without one, set numbered_rows. Three alike cards with an icon each read as a template.",
     "- purpose says in one line what a section does for this business; content_notes says which facts fill it, or null.",
     "- features: four to ten lines the owner reads, each a plain sentence about what their site will have, under 140 characters, no jargon, no section or variant ids.",
@@ -1040,7 +1083,7 @@ export async function plan(input: {
 /** The step's answer: ids and counts only, the plan itself is on the row (R8). */
 type PlanStep = {
   round: number
-  source: "model" | "fallback"
+  source: "model" | "fallback" | "retry"
   attempts: number
 }
 
@@ -1051,28 +1094,24 @@ type PlannerEnv = ModelEnv & {
 }
 
 /**
- * One planning round inside a Workflow step. Reads the row, the facts, the
- * plan being changed and the owner's note; plans with no transaction open;
- * then stores the Blueprint on the row, a `runtime.turn` per call for the
- * meter, and `blueprint.proposed`. A retried step finds its round's event and
- * returns it, so a round plans once.
+ * The planning step inside a Workflow. Reads the row, the facts and the plan
+ * being changed; plans with no transaction open; then stores the Blueprint on
+ * the row, a `runtime.turn` per call for the meter, and `blueprint.proposed`.
+ * A retried step finds the event and returns it, so a build plans once.
  */
 export async function planRound(input: {
   env: PlannerEnv
   kit: Tenancy
   ids: Ids
-  round: number
-  /** Whether the owner reviews this round: the frame shows the card as waiting. */
-  review: boolean
   complete?: Complete
 }): Promise<PlanStep> {
-  const { env, kit, ids, round, review } = input
+  const { env, kit, ids } = input
   const read = await kit.withOrg({ orgId: ids.orgId }, async (db) => {
     const [done] = await db
       .select({ payload: events.payload })
       .from(events)
       .where(
-        sql`${events.assignmentId} = ${ids.assignmentId} and ${events.type} = 'blueprint.proposed' and (${events.payload}->>'round')::int = ${round}`
+        sql`${events.assignmentId} = ${ids.assignmentId} and ${events.type} = 'blueprint.proposed' and (${events.payload}->>'round')::int = ${ROUND}`
       )
       .limit(1)
     if (done) return { done: done.payload as PlanStep }
@@ -1082,6 +1121,18 @@ export async function planRound(input: {
       .where(eq(assignments.id, ids.assignmentId))
     if (!row) throw new Error("assignment.not_found")
     const choices = await creationChoices(db, ids)
+    // A retry builds the plan its failed build was given, with no new call.
+    if (choices.retry_of && Blueprint.safeParse(row.blueprint).success) {
+      const kept: PlanStep = { round: ROUND, source: "retry", attempts: 0 }
+      await appendEvent(db, {
+        orgId: ids.orgId,
+        assignmentId: ids.assignmentId,
+        staffId: row.staffId,
+        type: "blueprint.proposed",
+        payload: { ...kept, errors: [], previous: null },
+      })
+      return { done: kept }
+    }
     const facts = (await currentFacts(db))
       .filter((f) => !choices.withhold.includes(f.key))
       .map(toFactRecord)
@@ -1090,7 +1141,7 @@ export async function planRound(input: {
       row,
       choices,
       facts,
-      previous: await previousPlan(db, row, round),
+      previous: await previousPlan(db, row),
     }
   })
   if (read.done) return read.done
@@ -1111,7 +1162,7 @@ export async function planRound(input: {
     previous,
   })
   const result: PlanStep = {
-    round,
+    round: ROUND,
     source: planned.source,
     attempts: planned.calls.length,
   }
@@ -1140,7 +1191,6 @@ export async function planRound(input: {
       type: "blueprint.proposed",
       payload: {
         ...result,
-        review,
         errors: planned.errors,
         previous: previous?.plan ?? null,
       },
@@ -1152,31 +1202,13 @@ export async function planRound(input: {
 type Db = Parameters<Parameters<Tenancy["withOrg"]>[1]>[0]
 
 /**
- * What this round changes, if anything: the build's own last plan and the
- * owner's note on it after round 1, or on a creative revise the plan of the
+ * What the plan changes, if anything: on a creative revise the plan of the
  * newest build that had one, with the change request as the note.
  */
 async function previousPlan(
   db: Db,
-  row: { id: string; kind: string; goal: string; blueprint: unknown },
-  round: number
+  row: { id: string; kind: string; goal: string }
 ): Promise<{ plan: Blueprint; note: string | null } | null> {
-  if (round > 1) {
-    const current = Blueprint.safeParse(row.blueprint)
-    if (!current.success) return null
-    const [decided] = await db
-      .select({ payload: events.payload })
-      .from(events)
-      .where(
-        sql`${events.assignmentId} = ${row.id} and ${events.type} = 'blueprint.decided' and (${events.payload}->>'round')::int = ${round - 1}`
-      )
-      .limit(1)
-    const note = decided?.payload.note
-    return {
-      plan: current.data,
-      note: typeof note === "string" ? note : null,
-    }
-  }
   if (row.kind !== "site.revise") return null
   const [base] = await db
     .select({ blueprint: assignments.blueprint })
@@ -1188,21 +1220,4 @@ async function previousPlan(
     .limit(1)
   const parsed = Blueprint.safeParse(base?.blueprint)
   return parsed.success ? { plan: parsed.data, note: row.goal } : null
-}
-
-/** The owner's decision on one round, once the bridge has stored it. */
-export async function readDecision(
-  db: Db,
-  assignmentId: string,
-  round: number
-): Promise<"build" | "change" | null> {
-  const [row] = await db
-    .select({ payload: events.payload })
-    .from(events)
-    .where(
-      sql`${events.assignmentId} = ${assignmentId} and ${events.type} = 'blueprint.decided' and (${events.payload}->>'round')::int = ${round}`
-    )
-    .limit(1)
-  const decision = row?.payload.decision
-  return decision === "build" || decision === "change" ? decision : null
 }

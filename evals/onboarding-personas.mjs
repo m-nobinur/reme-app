@@ -11,6 +11,10 @@
  * instead of using the card, or for the photo card `upload` or `skip`.
  * `quote` is `confirm`, `change:<words>` (then confirm) or `type:<words>`.
  * `turns` types the given words at that owner turn, whatever is on screen.
+ * `design` answers the design tray: `pick` (default, one option per question)
+ * or `skip` (Skip all). `open` answers an open question: `state` (default, the
+ * simulator's words from the sheet) or `skip`. `skipAll` skips every skippable
+ * card and question.
  */
 export const PERSONAS = [
   {
@@ -23,7 +27,6 @@ export const PERSONAS = [
       name: /regal rides/i,
       phone: "+447700900412",
       email: "bookings@regalrides.invalid",
-      callMe: "Dave",
       assistant: /jeeves/i,
     },
     turns: {
@@ -56,7 +59,6 @@ export const PERSONAS = [
       name: /hartley/i,
       phone: "+441134960555",
       email: "priya@hartleylaw.invalid",
-      callMe: "Priya",
       assistant: /clara/i,
     },
     turns: {
@@ -90,7 +92,6 @@ export const PERSONAS = [
       name: /suds on wheels/i,
       phone: "+447700900733",
       email: "jess@sudsonwheels.invalid",
-      callMe: "Jess",
     },
     turns: { 1: "mobile dog groomer" },
     cards: {
@@ -114,7 +115,6 @@ export const PERSONAS = [
       name: /whitmore/i,
       phone: "+441632960321",
       email: "care@whitmorefunerals.invalid",
-      callMe: "Mr Whitmore",
       assistant: /grace/i,
     },
     turns: {},
@@ -145,7 +145,6 @@ export const PERSONAS = [
       name: /black lotus/i,
       phone: "+447700900950",
       email: "ink@blacklotus.invalid",
-      callMe: "Kai",
       assistant: /raven/i,
     },
     turns: {
@@ -178,7 +177,6 @@ export const PERSONAS = [
       name: /sparkle/i,
       phone: "+441184960777",
       email: "hello@sparkleshine.invalid",
-      callMe: "Maria",
       assistant: /mia/i,
     },
     turns: {
@@ -207,7 +205,6 @@ export const PERSONAS = [
       name: /skyframe/i,
       phone: "+442920180123",
       email: "tom@skyframe.invalid",
-      callMe: "Tom",
       assistant: /ava/i,
     },
     turns: {
@@ -241,7 +238,6 @@ export const PERSONAS = [
       name: /little bean/i,
       phone: "+441632960222",
       email: "hello@littlebean.invalid",
-      callMe: "Soph",
       assistant: /bean/i,
     },
     turns: {},
@@ -272,7 +268,6 @@ export const PERSONAS = [
       name: /petal/i,
       phone: "+447700900616",
       email: "amara@petalandstem.invalid",
-      callMe: "Amara",
       assistant: /flora/i,
     },
     turns: {
@@ -299,7 +294,6 @@ export const PERSONAS = [
       name: /fixright/i,
       phone: "+447700900188",
       email: "steve@fixright.invalid",
-      callMe: "Steve",
     },
     turns: {
       1: "plumber. derby. boilers leaks bathrooms emergencies. 07700900188",
@@ -330,7 +324,6 @@ export const PERSONAS = [
       name: /bright minds/i,
       phone: "+14165550147",
       email: "helen@brightminds.invalid",
-      callMe: "Helen",
       assistant: /newton/i,
     },
     turns: {},
@@ -363,7 +356,6 @@ export const PERSONAS = [
       name: /jb/i,
       phone: "+447700900555",
       email: "jb@jbservices.invalid",
-      callMe: "JB",
     },
     turns: { 1: "handyman" },
     cards: {
@@ -393,7 +385,6 @@ export const MISLEADING = [
       name: /bright cleaning/i,
       phone: "+441134960812",
       email: "ola@brightcleaning.invalid",
-      callMe: "Ola",
       assistant: /spoke/i,
     },
     turns: {},
@@ -425,7 +416,6 @@ export const MISLEADING = [
       name: /hollow oak/i,
       phone: "+441392496077",
       email: "ben@hollowoak.invalid",
-      callMe: "Ben",
       assistant: /oakley/i,
     },
     turns: {},
@@ -458,7 +448,6 @@ export const SKIPPER = {
     name: /oakfield/i,
     phone: "+441632960404",
     email: "nadia@oakfield.invalid",
-    callMe: "Nadia",
     assistant: /sam/i,
   },
   turns: {},
@@ -471,3 +460,84 @@ export const SKIPPER = {
   },
   manual: true,
 }
+
+/** An owner who skips everything that can be skipped, and still ends up with a site. */
+export const SKIPS_EVERYTHING = {
+  id: "skips-everything",
+  signIn: { orgName: "Voltline Electrical", ownerName: "Carl Mensah" },
+  sheet: `You are Carl, a self-employed electrician running Voltline Electrical in Norwich, UK. Services: rewires, consumer unit upgrades, EV charger installs, fault finding, landlord safety certificates. Customers: homeowners and landlords. A job: they call, you visit, quote, do the work, certificate at the end. Area: Norwich and 20 miles. Phone 07700 900 233. Email carl@voltline.invalid. Assistant: Sparky, he/him, casual. Call you Carl. To quote you need what the job is, the type of property and the postcode. You skip every optional question.`,
+  style: "Brief and a bit impatient. Skips whatever he is allowed to skip.",
+  truth: {
+    name: /voltline/i,
+    phone: "+447700900233",
+    email: "carl@voltline.invalid",
+    assistant: /sparky/i,
+  },
+  turns: {
+    1: "Voltline Electrical, Norwich. Rewires, consumer units, EV chargers, fault finding. 07700 900 233, carl@voltline.invalid",
+  },
+  cards: {
+    industry: "trades",
+    pronouns: "he_him",
+    tone: "casual",
+    build_for_me: "yes",
+    design: "skip",
+    open: "skip",
+    upload: "skip",
+  },
+  skipAll: true,
+  quote: "confirm",
+  quoteExpect: [/job|work/i, /property|house|flat/i, /postcode|address/i],
+}
+
+/** An owner who corrects the planner twice: an email, then a phone number. */
+export const CORRECTS_TWICE = {
+  id: "corrects-twice",
+  signIn: { orgName: "Fresh Start Cleaning", ownerName: "Adaeze Obi" },
+  sheet: `You are Adaeze, you run Fresh Start Cleaning in Bristol, UK, with 4 cleaners. Services: regular home cleans, deep cleans, end of tenancy cleans, office cleans. Customers: families, landlords and small offices. A job: a short call, a quote, same team each visit. Area: Bristol and Bath. Phone 0117 496 0321. Email hello@freshstart.invalid. No slogan. Assistant: Ellie, she/her, friendly. Call you Adaeze. To quote you need the number of bedrooms, how often, and whether it is a home or an office. What sets you apart: insured and vetted cleaners, and eco-friendly products.`,
+  style: "Warm and a little scattered; changes her mind.",
+  truth: {
+    name: /fresh start/i,
+    phone: "+441174960321",
+    email: "hello@freshstart.invalid",
+    assistant: /ellie/i,
+  },
+  turns: {
+    5: "Sorry, that email is wrong. Please use bookings@freshstart.invalid instead.",
+    9: "And one more thing, my phone is 0117 496 0654, not the one I gave you.",
+  },
+  truthAfter: {
+    phone: "+441174960654",
+    email: "bookings@freshstart.invalid",
+  },
+  cards: {
+    industry: "cleaning",
+    pronouns: "she_her",
+    tone: "friendly",
+    build_for_me: "yes",
+    upload: "skip",
+  },
+  quote: "confirm",
+  quoteExpect: [/bed/i, /often|frequen/i, /home|office/i],
+}
+
+/**
+ * The twelve conversations `tier-2/onboarding-planner.eval.mjs` records for the
+ * voice eval, in the order they run: cleaning, trades and trade-like work, three
+ * tones (friendly, professional, casual), one owner who skips everything and
+ * one who corrects twice.
+ */
+export const CONVERSATIONS = [
+  "cleaner",
+  "corrects-twice",
+  "plumber",
+  "skips-everything",
+  "limousine",
+  "family-lawyer",
+  "dog-groomer",
+  "tattoo-studio",
+  "cafe",
+  "wedding-florist",
+  "drone-photographer",
+  "tutor",
+]

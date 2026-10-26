@@ -7,6 +7,7 @@ import {
   sql,
   type Tenancy,
 } from "@workspace/db"
+import { assistantName } from "./assistant.ts"
 
 /**
  * Web push for the owner (ADR-043). The outbox sends nothing here by itself:
@@ -61,9 +62,13 @@ export async function pushFor(
   }
 ): Promise<{ key: string; delivery: PushDelivery } | null> {
   if (message.text[0]?.startsWith("[quiet]")) return null
-  const [subscribed] = await kit.withOrg({ orgId }, (db) =>
-    db.select({ id: pushSubscriptions.id }).from(pushSubscriptions).limit(1)
-  )
+  const { subscribed, name } = await kit.withOrg({ orgId }, async (db) => {
+    const [row] = await db
+      .select({ id: pushSubscriptions.id })
+      .from(pushSubscriptions)
+      .limit(1)
+    return { subscribed: row, name: row ? await assistantName(db) : null }
+  })
   if (!subscribed) return null
   const kind = key.split(":")[0] as string
   return {
@@ -71,7 +76,7 @@ export async function pushFor(
     delivery: {
       channel: "push",
       kind,
-      title: kind === "reminder" ? "Reminder" : "Reme",
+      title: kind === "reminder" ? "Reminder" : (name ?? "Your assistant"),
       body: clip(message.text.join(" "), BODY_MAX),
       ttl: kind === "reminder" ? TTL.reminder : TTL.other,
       conversationId,

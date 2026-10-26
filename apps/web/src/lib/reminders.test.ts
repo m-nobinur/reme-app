@@ -85,14 +85,18 @@ it("groups written reminders by the reader's calendar, around midnight", () => {
     note({ id: "midnight", due_at: "2026-06-30T14:00:00.000Z" }),
     note({ id: "undated", due_at: null }),
   ]
-  expect(ids(groupReminders(notes, [], [], "Australia/Sydney", NOW))).toEqual([
+  expect(
+    ids(groupReminders(notes, [], [], "Australia/Sydney", "Ellie", NOW))
+  ).toEqual([
     ["overdue", ["past"]],
     ["today", ["tonight"]],
     ["upcoming", ["midnight"]],
     ["undated", ["undated"]],
   ])
   // In London the same instants all fall on the same day, 30 June.
-  expect(ids(groupReminders(notes, [], [], "Europe/London", NOW))).toEqual([
+  expect(
+    ids(groupReminders(notes, [], [], "Europe/London", "Ellie", NOW))
+  ).toEqual([
     ["overdue", ["past"]],
     ["today", ["tonight", "midnight"]],
     ["undated", ["undated"]],
@@ -105,14 +109,14 @@ it("keeps dated reminders in one group until the zone is known", () => {
     note({ id: "later" }),
     note({ id: "undated", due_at: null }),
   ]
-  expect(ids(groupReminders(notes, [], [], null, NOW))).toEqual([
+  expect(ids(groupReminders(notes, [], [], null, "Ellie", NOW))).toEqual([
     ["dated", ["past", "later"]],
     ["undated", ["undated"]],
   ])
 })
 
 it("has no groups at all with nothing to show", () => {
-  expect(groupReminders([], [], [], "Europe/London", NOW)).toEqual({
+  expect(groupReminders([], [], [], "Europe/London", "Ellie", NOW)).toEqual({
     needed: [],
     groups: [],
   })
@@ -147,38 +151,62 @@ it("words each rule and points it where it is acted on", () => {
     derived,
     attention,
     "Europe/London",
+    "Ellie",
     NOW
   )
   expect(needed).toEqual([
     {
       key: `approval-${APPROVAL}`,
-      title: "Version 4 is waiting for your review",
-      detail: "Closes today, 4:30 pm.",
-      action: { label: "Review version 4", focus: `approval-${APPROVAL}` },
+      title: "Your website is ready to publish",
+      detail: "Publish by today, 4:30 pm.",
+      action: {
+        label: "Review and publish",
+        focus: `approval-${APPROVAL}`,
+      },
     },
     {
       key: `question-${REQUEST}`,
-      title: "The Developer asked about weekday hours",
-      detail: "Open for more than 12 hours.",
-      action: { label: "Answer in the panel", focus: `question-${REQUEST}` },
+      title: "Ellie asked about weekday hours",
+      detail: "Waiting for over 12 hours.",
+      action: { label: "Show the question", focus: `question-${REQUEST}` },
     },
     {
       key: `build-${BUILD}`,
-      title: "Version 5 is ready but not published",
-      detail: "Its preview has been ready for more than 12 hours.",
+      title: "Your changes aren't published yet",
+      detail: "Ready for over 12 hours.",
       action: { label: "Open in the panel", focus: `build-${BUILD}` },
     },
     {
       key: "facts",
-      title: "Reme still needs your phone number",
-      detail: "Your website is built from these. Tell Reme in a chat.",
-      action: { label: "Tell Reme", chat: true },
+      title: "Ellie still needs your phone number",
+      detail: "Your website uses these. Tell Ellie in a chat.",
+      action: { label: "Tell Ellie", chat: true },
     },
   ])
+  // An owner who has not named the assistant is told "your assistant".
+  const unnamed = groupReminders(
+    [],
+    derived.slice(3),
+    [],
+    null,
+    "your assistant",
+    NOW
+  )
+  expect(unnamed.needed[0]?.title).toBe(
+    "Your assistant still needs your phone number"
+  )
+  expect(unnamed.needed[0]?.action.label).toBe("Tell your assistant")
   // No time before the zone is known, and a question the panel lacks.
-  const bare = groupReminders([], derived.slice(0, 2), [], null, NOW).needed
+  const bare = groupReminders(
+    [],
+    derived.slice(0, 2),
+    [],
+    null,
+    "Ellie",
+    NOW
+  ).needed
   expect(bare.map((each) => [each.title, each.detail])).toEqual([
-    ["Version 4 is waiting for your review", "Closes within a day."],
-    ["A question is waiting for your answer", "Open for more than 12 hours."],
+    ["Your website is ready to publish", "Publish within a day."],
+    ["A question is waiting for your answer", "Waiting for over 12 hours."],
   ])
 })

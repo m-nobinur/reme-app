@@ -99,6 +99,27 @@ const BLUEPRINT = {
  * double as the worked example of each shape. All content is fictional (R8).
  */
 export const samples: Record<ContractName, unknown> = {
+  Activity: {
+    journey: [],
+    now: [
+      {
+        id: "website",
+        kind: "website",
+        state: "now",
+        at: NOW,
+        names: { business: "Brightclean Cleaning Co. (fixture)" },
+        steps: [
+          { id: "plan", state: "done" },
+          { id: "photos", state: "skipped" },
+          { id: "pages", state: "now", count: { done: 2, total: 5 } },
+          { id: "ready", state: "next" },
+        ],
+      },
+    ],
+    waiting: [],
+    upcoming: [],
+    done: [],
+  },
   ActivityFeed: {
     items: [
       {
@@ -296,6 +317,8 @@ export const samples: Record<ContractName, unknown> = {
       },
     ],
   },
+  AskOpenInput: { about: "service_area.text" },
+  AskOpenOutput: { answer: "stated", text: "Leeds and about ten miles round" },
   AskUploadOutput: {
     answer: "uploaded",
     assets: [
@@ -313,6 +336,94 @@ export const samples: Record<ContractName, unknown> = {
     content_type: "image/jpeg",
     bytes: 482113,
     alt: "Two black saloon cars outside a hotel",
+  },
+  ReviewPhotosRequest: {
+    asset_ids: ["8d9e0f10-2131-4a2b-9c3d-4e5f60718293"],
+  },
+  ReviewedPhotos: {
+    photos: [
+      {
+        asset: {
+          id: "8d9e0f10-2131-4a2b-9c3d-4e5f60718293",
+          name: "fleet-front.jpg",
+          content_type: "image/jpeg",
+          bytes: 482113,
+          alt: "Two black saloon cars outside a hotel",
+          use: "hero",
+        },
+        usable: true,
+        note: null,
+      },
+    ],
+    missing: [{ need: "work", count: 3 }],
+  },
+  PaletteFromImage: {
+    name: "Forest paper",
+    stops: {
+      paper: paletteSample.paper,
+      tint: paletteSample.tint,
+      primary: paletteSample.primary,
+      ink: paletteSample.ink,
+    },
+  },
+  DrawLogosRequest: {
+    tool_call_id: "call_design_1",
+    brief: {
+      description: "A simple car outline beside the name",
+      colors: [paletteSample.primary, paletteSample.accent],
+      type: "lockup",
+      style: "luxury",
+    },
+  },
+  LogoRounds: {
+    rounds: [
+      {
+        round: 1,
+        status: "ready",
+        variants: [{ id: "8d9e0f10-2131-4a2b-9c3d-4e5f60718293" }],
+        brief: {
+          description: "",
+          colors: [paletteSample.primary],
+          type: "lockup",
+          style: "minimal",
+        },
+      },
+    ],
+    next_at: null,
+  },
+  LogoPalettesRequest: { asset_id: "8d9e0f10-2131-4a2b-9c3d-4e5f60718293" },
+  LogoPalettes: {
+    palettes: [
+      {
+        name: "Forest paper",
+        stops: {
+          paper: paletteSample.paper,
+          tint: paletteSample.tint,
+          primary: paletteSample.primary,
+          ink: paletteSample.ink,
+        },
+      },
+    ],
+  },
+  AgentNote: {
+    kind: "retrying",
+    key: "retrying:8d9e0f10-2131-4a2b-9c3d-4e5f60718293",
+    assignment_id: "8d9e0f10-2131-4a2b-9c3d-4e5f60718293",
+    attempt: 1,
+    of: 2,
+    cause: "unfinished",
+    next: "retrying",
+    failed: ["types"],
+    retry_id: "9e0f1021-3142-4b3c-8d4e-5f6071829304",
+  },
+  KeptLogo: {
+    asset: {
+      id: "8d9e0f10-2131-4a2b-9c3d-4e5f60718293",
+      name: "logo.png",
+      content_type: "image/png",
+      bytes: 48211,
+      use: "logo",
+    },
   },
   UploadedAssets: {
     assets: [
@@ -364,12 +475,6 @@ export const samples: Record<ContractName, unknown> = {
     },
   },
   Blueprint: BLUEPRINT,
-  BlueprintReviewInput: {
-    blueprint: BLUEPRINT,
-    revision_of: ASSIGNMENT,
-  },
-  BlueprintReceipt: { round: 1, decision: "build" },
-  BlueprintReviewOutput: { decision: "change", note: "Add a gallery page" },
   BuildSummary: {
     assignment_id: ASSIGNMENT,
     kind: "site.revise",
@@ -653,8 +758,10 @@ export const samples: Record<ContractName, unknown> = {
         state: "blocked_on_information",
         goal: "Add Saturday hours.",
         version: null,
+        progress: [{ step: "Writing the pages", done: 3, total: 7, now: true }],
       },
     ],
+    stopped: [{ cause: "unfinished", at: LATER }],
     questions: [
       {
         request_id: "5e6f7081-92a3-4e0f-8021-5c6d7e8f9001",
@@ -1009,6 +1116,10 @@ export const samples: Record<ContractName, unknown> = {
     note: "Saved. This update is complete; do not repeat it.",
     fullness: "2%, 23/1,500 chars",
   },
+  OnboardingStatus: {
+    on: { kind: "fact", key: "business.phone" },
+    facts: ["business.phone"],
+  },
   Org: {
     org_id: ORG,
     slug: "brightclean",
@@ -1166,6 +1277,33 @@ export const samples: Record<ContractName, unknown> = {
       action: { kind: "open", url: "https://dcc.godaddy.com/manage/dns" },
     },
   },
+  BuildQuestionsPart: {
+    type: "data-build_questions",
+    data: {
+      kind: "offer",
+      assignment_id: "0b8a8e8e-3c1d-4a51-9a51-5f7a3c2d1e10",
+      questions: [
+        {
+          id: "6f1c2a3b-4d5e-4f60-8a71-b2c3d4e5f601",
+          text: "What helps new customers trust you, such as years trading or an accreditation?",
+          input: { kind: "fact", key: "business.proof" },
+          skippable: true,
+          answer: { kind: "value", value: { text: "Family run since 2009" } },
+        },
+        {
+          id: "6f1c2a3b-4d5e-4f60-8a71-b2c3d4e5f602",
+          text: "Do you bring your own cleaning products?",
+          input: { kind: "choice", options: ["Yes", "No"] },
+          skippable: true,
+        },
+      ],
+    },
+  },
+  QuestionReply: {
+    message_id: "srv_0c1f2b3a4d5e6f70",
+    question_id: "6f1c2a3b-4d5e-4f60-8a71-b2c3d4e5f602",
+    answer: { kind: "value", value: "Yes" },
+  },
   ServerMessage: {
     id: "domain-live-0c1f2b3a",
     text: ["brightclean.example is live."],
@@ -1174,6 +1312,7 @@ export const samples: Record<ContractName, unknown> = {
       action: { kind: "open", url: "https://brightclean.example" },
     },
   },
+  SetTimeZoneRequest: { time_zone: "Asia/Dhaka" },
   SetFactsRequest: {
     facts: [
       { key: "business.phone", value: { e164: "+15550142" } },
@@ -1184,6 +1323,24 @@ export const samples: Record<ContractName, unknown> = {
     name: { kind: "fact", fact_key: "business.name", required: true },
     phone: { kind: "fact", fact_key: "business.phone", required: true },
     tagline: { kind: "composed" },
+  },
+  SiteMedia: {
+    logo: {
+      id: "8d9e0f10-2131-4a2b-9c3d-4e5f60718293",
+      name: "logo.png",
+      content_type: "image/png",
+      bytes: 48211,
+      use: "logo",
+    },
+    photos: [
+      {
+        slot_id: "hero_image",
+        section: "hero",
+        alt: "A bright living room after a clean",
+        generated: true,
+        thumbnail: "/api/photos/2c4e6a80-1b3d-4f5a-8c7e-9d0f1a2b3c4d",
+      },
+    ],
   },
   SitePointer: {
     org_id: ORG,
@@ -1291,6 +1448,7 @@ export const samples: Record<ContractName, unknown> = {
     ],
     missing_facts: ["business.email"],
     assistant_name: "Ava",
+    assistant_avatar: "she_1",
     reminders: {
       notes: [
         {

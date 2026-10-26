@@ -25,7 +25,7 @@ import { useBrowserZone } from "@/panel/workspace-panel"
  */
 export const Route = createFileRoute("/app/memory")({
   loader: async () => await getMemory(),
-  component: MemoryPage,
+  component: Memory,
 })
 
 const SOURCE: Record<ProfileLine["source"], string> = {
@@ -50,7 +50,7 @@ function Memory() {
             Try again
           </Button>
         }
-        description="What Reme remembers could not be loaded. Nothing was changed."
+        description="Your memory could not be loaded. Nothing was changed."
         icon={<BrainIcon />}
         role="alert"
         title="Something went wrong"
@@ -104,7 +104,7 @@ function Memory() {
   return (
     <>
       <PageHeader
-        description="What Reme remembers about you and how you like to work. It reads these lines at the start of every conversation. Prices, hours and contact details are on the business page."
+        description="What your assistant remembers about you and how you like to work. It reads these lines at the start of every conversation. Prices, hours and contact details are on the business page."
         title="Memory"
       />
 
@@ -122,7 +122,7 @@ function Memory() {
           className="flex items-baseline gap-2 font-semibold text-sm"
           id="memory-lines"
         >
-          What Reme remembers
+          What your assistant remembers
           <span className="font-normal text-muted-foreground tabular-nums">
             {used.toLocaleString("en-GB")} of{" "}
             {PROFILE_MAX_CHARS.toLocaleString("en-GB")} characters
@@ -130,7 +130,7 @@ function Memory() {
         </h2>
         {view.lines.length === 0 ? (
           <EmptyState
-            description="When you tell Reme how you like to work, it is saved here."
+            description="When you say how you like to work, it is saved here."
             icon={<BrainIcon />}
             title="Nothing remembered yet"
           />
@@ -157,7 +157,7 @@ function Memory() {
 
       <section aria-labelledby="memory-ask" className="mb-8">
         <h2 className="font-semibold text-sm" id="memory-ask">
-          Saving what Reme learns from chat
+          Saving what your assistant learns from chat
         </h2>
         <label className="mt-2 inline-flex min-h-8 w-fit cursor-pointer items-center gap-2 text-sm">
           <input
@@ -282,13 +282,5 @@ function Memory() {
         .
       </p>
     </>
-  )
-}
-
-function MemoryPage() {
-  return (
-    <div className="max-w-2xl">
-      <Memory />
-    </div>
   )
 }

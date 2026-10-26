@@ -7,23 +7,19 @@ import {
   useScrollLock,
   useToolCallElapsed,
 } from "@assistant-ui/react"
-import {
-  CaretDownIcon,
-  CheckCircleIcon,
-  SpinnerGapIcon,
-  WarningCircleIcon,
-  XCircleIcon,
-} from "@phosphor-icons/react"
+import { CaretDownIcon } from "@phosphor-icons/react"
 import { Button } from "@workspace/ui/components/button"
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@workspace/ui/components/collapsible"
+import { ToolStatus } from "@workspace/ui/components/status-line"
 import { cn } from "@workspace/ui/lib/utils"
 import { memo, useCallback, useRef, useState } from "react"
 
-const ANIMATION_DURATION = 200
+// The enter token, in milliseconds for the scroll lock.
+const ANIMATION_DURATION = 250
 
 type ToolFallbackRootProps = Omit<
   React.ComponentProps<typeof Collapsible>,
@@ -82,15 +78,6 @@ function ToolFallbackRoot({
   )
 }
 
-type ToolStatus = ToolCallMessagePartStatus["type"]
-
-const statusIconMap: Record<ToolStatus, React.ElementType> = {
-  running: SpinnerGapIcon,
-  complete: CheckCircleIcon,
-  incomplete: XCircleIcon,
-  "requires-action": WarningCircleIcon,
-}
-
 const formatToolDuration = (ms: number) => {
   if (ms < 1000) return "<1s"
   const seconds = ms / 1000
@@ -130,12 +117,8 @@ function ToolFallbackTrigger({
   status?: ToolCallMessagePartStatus
 }) {
   const statusType = status?.type ?? "complete"
-  const isRunning = statusType === "running"
   const isCancelled =
     status?.type === "incomplete" && status.reason === "cancelled"
-
-  const Icon = statusIconMap[statusType]
-  const label = isCancelled ? "Cancelled tool" : "Used tool"
 
   return (
     <CollapsibleTrigger
@@ -147,30 +130,29 @@ function ToolFallbackTrigger({
       )}
       {...props}
     >
-      <Icon
-        data-slot="tool-fallback-trigger-icon"
-        className={cn(
-          "aui-tool-fallback-trigger-icon size-4 shrink-0",
-          isCancelled && "text-muted-foreground",
-          isRunning && "animate-spin [animation-duration:0.6s]"
-        )}
+      <ToolStatus
+        announce={false}
+        clockAfter={null}
+        delay={0}
+        tool={toolName}
+        state={
+          statusType === "running"
+            ? "working"
+            : statusType === "requires-action"
+              ? "waiting"
+              : statusType === "incomplete"
+                ? isCancelled
+                  ? "stopped"
+                  : "failed"
+                : "done"
+        }
       />
-      <span
-        data-slot="tool-fallback-trigger-label"
-        className={cn(
-          "aui-tool-fallback-trigger-label-wrapper inline-block text-start leading-none",
-          isCancelled && "text-muted-foreground line-through",
-          isRunning && "shimmer motion-reduce:animate-none"
-        )}
-      >
-        {label}: <b>{toolName}</b>
-      </span>
       <ToolFallbackDuration />
       <CaretDownIcon
         data-slot="tool-fallback-trigger-chevron"
         className={cn(
           "aui-tool-fallback-trigger-chevron size-4 shrink-0",
-          "transition-transform duration-(--animation-duration) ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
+          "transition-transform duration-(--animation-duration) ease-standard motion-reduce:transition-none",
           "-rotate-90",
           "group-data-open/trigger:rotate-0",
           "group-data-panel-open/trigger:rotate-0"
@@ -190,7 +172,7 @@ function ToolFallbackContent({
       data-slot="tool-fallback-content"
       className={cn(
         "aui-tool-fallback-content relative overflow-hidden text-sm outline-none",
-        "group/collapsible-content ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:animate-none",
+        "group/collapsible-content ease-standard motion-reduce:animate-none",
         "data-closed:animate-collapsible-up",
         "data-open:animate-collapsible-down",
         "data-closed:fill-mode-forwards",
@@ -202,7 +184,7 @@ function ToolFallbackContent({
     >
       <div
         className={cn(
-          "flex flex-col gap-2 ps-6 pt-1 pb-2 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:animate-none",
+          "flex flex-col gap-2 ps-6 pt-1 pb-2 ease-standard motion-reduce:animate-none",
           "group-data-open/collapsible-content:fade-in-0 group-data-open/collapsible-content:slide-in-from-top-1 group-data-open/collapsible-content:animate-in group-data-open/collapsible-content:blur-in-[2px]",
           "group-data-closed/collapsible-content:fade-out-0 group-data-closed/collapsible-content:slide-out-to-top-1 group-data-closed/collapsible-content:animate-out group-data-closed/collapsible-content:blur-out-[2px]",
           "group-data-closed/collapsible-content:animation-duration-(--animation-duration) group-data-open/collapsible-content:animation-duration-(--animation-duration)"

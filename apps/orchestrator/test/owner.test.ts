@@ -46,16 +46,20 @@ vi.mock("../src/agents/developer.ts", () => ({ Developer: {} }))
 // seen before with the same submission gets its first receipt back and
 // delivers nothing, and with any other submission throws
 // `SubmissionConflictError`, as flue does.
-const { dispatched, admitted, attempts } = vi.hoisted(() => ({
+const { dispatched, admitted, attempts, developer } = vi.hoisted(() => ({
   dispatched: [] as { message: unknown; idempotencyKey?: string }[],
   admitted: new Map<string, { message: string; submissionId: string }>(),
   /** Every dispatch call, admitted or not. */
   attempts: { count: 0 },
+  /** Whether the build's Developer exists, as `getAgentInstance` reads it. */
+  developer: { exists: true },
 }))
 vi.mock("@workspace/facade", async (importOriginal) => {
   const real = await importOriginal<typeof import("@workspace/facade")>()
   return {
     ...real,
+    getAgentInstance: async (_agent: unknown, id: string) =>
+      developer.exists ? { id, uid: "uid-1" } : null,
     init: () => ({
       dispatch: async (request: {
         message: unknown
@@ -86,6 +90,7 @@ const { OwnerApi } = await import("../src/cloudflare.ts")
 const { default: consoleApp } = await import("../src/app.ts")
 const { requestReview } = await import("../src/publish.ts")
 const { advance, cancel } = await import("../src/state.ts")
+const { heldSteers } = await import("../src/relay.ts")
 const { kit, previewed, stateOf } = await import("./site.ts")
 
 /**
@@ -267,6 +272,65 @@ live("an owner starting a build", () => {
       },
       { kind: "user", body: "Use the brand blue" },
     ])
+  })
+
+  it("holds a steer while the build waits on the owner, for the resume to deliver", async () => {
+    const { orgId } = await ownerOrg(kit)
+    const ids = await newAssignment(kit, orgId)
+    for (const to of ["briefing", "planning", "implementing"] as const) {
+      await advance(kit, ids, to)
+    }
+    await advance(kit, ids, "blocked_on_information", {
+      payload: { request_id: crypto.randomUUID() },
+    })
+    dispatched.length = 0
+    const steer = (message: string) =>
+      owner(orgId, `/${ids.assignmentId}/steer`, { message })
+    const held = await steer("Add our opening hours")
+    expect(held.status).toBe(202)
+    expect(dispatched).toHaveLength(0)
+    await advance(kit, ids, "implementing")
+    // Once it works again a steer goes straight to it, and is not held.
+    expect((await steer("Make the header green")).status).toBe(202)
+    expect(dispatched).toHaveLength(1)
+    const steers = await kit.withOrg({ orgId }, (db) =>
+      heldSteers(db, ids.assignmentId)
+    )
+    expect(steers).toEqual([
+      expect.objectContaining({
+        message: "Add our opening hours",
+        owner: true,
+      }),
+    ])
+  })
+
+  it("refuses a steer with no Developer to reach, and never makes one", async () => {
+    const { orgId } = await ownerOrg(kit)
+    const ids = await newAssignment(kit, orgId)
+    for (const to of ["briefing", "planning", "implementing"] as const) {
+      await advance(kit, ids, to)
+    }
+    dispatched.length = 0
+    developer.exists = false
+    try {
+      const steered = await owner(orgId, `/${ids.assignmentId}/steer`, {
+        message: "Make the header green",
+      })
+      expect(steered.status).toBe(409)
+      expect(await steered.json()).toMatchObject({ code: "steer.not_running" })
+    } finally {
+      developer.exists = true
+    }
+    expect(dispatched).toHaveLength(0)
+    const logged = await kit.withOrg({ orgId }, (db) =>
+      db
+        .select()
+        .from(events)
+        .where(
+          sql`${events.assignmentId} = ${ids.assignmentId} and ${events.type} = 'assignment.steered'`
+        )
+    )
+    expect(logged).toHaveLength(0)
   })
 
   it("delivers a steer once for its key, and gives a retry the same receipt", async () => {

@@ -1,37 +1,40 @@
 import {
   ArrowSquareOutIcon,
   CaretDownIcon,
+  CaretLeftIcon,
+  CaretRightIcon,
+  ChatCircleDotsIcon,
   CheckCircleIcon,
-  CheckIcon,
   CircleIcon,
-  CircleNotchIcon,
   ClockIcon,
+  GlobeIcon,
   ImageIcon,
+  MinusCircleIcon,
+  type Icon as PhosphorIcon,
+  RocketLaunchIcon,
+  SpinnerGapIcon,
+  WarningCircleIcon,
 } from "@phosphor-icons/react"
-import {
-  type ApprovalTarget,
-  type AssignmentState,
-  type Blueprint,
-  type BuildActivity,
-  type BuildLane,
-  type BuildPhoto,
-  type DecisionRequest,
-  GOAL_MAX,
+import type {
+  ApprovalTarget,
+  AssignmentState,
+  AvatarId,
+  Blueprint,
+  BuildActivity,
+  BuildLane,
+  BuildPhoto,
+  DecisionRequest,
 } from "@workspace/contracts"
-import { ApprovalTargetSummary } from "@workspace/ui/components/approval-target"
-import { BlueprintCard } from "@workspace/ui/components/assistant/blueprint-card"
+import { AssistantAvatar } from "@workspace/ui/components/assistant-avatar"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
+import { Diffusing } from "@workspace/ui/components/diffusing"
 import { Field } from "@workspace/ui/components/field"
-import {
-  type GeneratedPhoto,
-  GeneratedPhotos,
-  type PhotoActions,
-} from "@workspace/ui/components/generated-photos"
-import { PersonaAvatar } from "@workspace/ui/components/persona"
 import { Skeleton } from "@workspace/ui/components/skeleton"
+import { StatusIcon } from "@workspace/ui/components/status-line"
+import { useCycle } from "@workspace/ui/hooks/use-cycle"
+import { SKIPPED, type StatusKind } from "@workspace/ui/lib/activity-copy"
 import {
   type AnswerSpec,
-  answerValue,
   FACT_INPUTS,
   type FactInput,
 } from "@workspace/ui/lib/answer"
@@ -41,12 +44,10 @@ import {
   paletteName,
   paletteStops,
 } from "@workspace/ui/lib/blueprint"
-import { currentRow, WORKING } from "@workspace/ui/lib/build-state"
-import { formatDateTime } from "@workspace/ui/lib/format"
+import { formatDateTime, relativeTime } from "@workspace/ui/lib/format"
 import { cn, META } from "@workspace/ui/lib/utils"
 import {
   Children,
-  type FormEvent,
   isValidElement,
   type ReactNode,
   useEffect,
@@ -63,84 +64,78 @@ import {
  * imports no router and no client.
  */
 
-const LINK =
-  "inline-flex items-center gap-1 rounded-sm text-primary text-sm underline-offset-4 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring [&_svg]:size-3.5"
+/** A section's way to the rest of its list, beside its heading. */
+const SECTION_ACTION =
+  "text-[0.8125rem] text-muted-foreground underline-offset-4 outline-none transition-colors hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline"
 
+/** Sections after the first are set off by a hairline. */
 function PanelSection({
   title,
+  icon: Icon,
   count,
+  action,
   children,
 }: {
   title: string
+  /** A quiet mark before the heading. */
+  icon?: PhosphorIcon
   count?: number
+  /** A link or button to the rest of the list, at the heading's end. */
+  action?: ReactNode
   children: ReactNode
 }) {
   const id = useId()
   return (
-    <section aria-labelledby={id} className="flex flex-col gap-2">
-      <h2 className="flex items-baseline gap-2 font-semibold text-sm" id={id}>
-        {title}
-        {count ? (
-          <span className="font-normal text-muted-foreground tabular-nums">
-            {count}
-          </span>
-        ) : null}
-      </h2>
+    <section
+      aria-labelledby={id}
+      className="flex flex-col gap-3 border-border not-first:border-t not-first:pt-4"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="flex items-center gap-1 font-semibold text-sm" id={id}>
+          {Icon ? (
+            <Icon aria-hidden className="size-4 text-muted-foreground" />
+          ) : null}
+          {title}
+          {count ? (
+            <span className="ms-1 rounded-full bg-muted px-1.5 font-medium text-[0.6875rem] text-muted-foreground tabular-nums leading-4">
+              {count}
+            </span>
+          ) : null}
+        </h2>
+        {action}
+      </div>
       {children}
     </section>
   )
 }
 
-/** A link that opens outside the app, and says so to a screen reader. */
-function OutLink({ href, children }: { href: string; children: ReactNode }) {
-  return (
-    <a className={LINK} href={href} rel="noopener noreferrer" target="_blank">
-      {children}
-      <span className="sr-only"> (opens in a new tab)</span>
-      <ArrowSquareOutIcon aria-hidden />
-    </a>
-  )
-}
-
-const expiryLine = (expiresAt: string | null, onExpiry: string) => {
-  const expires = formatDateTime(expiresAt)
-  return expires ? `Open until ${expires}. ${onExpiry}` : onExpiry
-}
-
-/* Working on ---------------------------------------------------------- */
+/* Segments ----------------------------------------------------------- */
 
 const STEPS = ["Queued", "Building", "Checking", "Ready"] as const
 
 /**
- * Where each build state sits on the stepper and what the owner is told.
- * Whether it is doing work (the bar pulses) is `WORKING`'s to say. Every
- * state has a row, so a state added to the contract fails the build until it
- * is placed.
+ * Where each build state sits among the four steps a build's state is
+ * named by. Every state has a row, so a state added to the contract fails
+ * the build until it is placed.
  */
 const BUILD_STAGES = {
-  queued: { step: 0, note: "Waiting to start." },
-  briefing: { step: 1, note: "Reading your brief." },
-  planning: { step: 1, note: "Planning the changes." },
-  implementing: { step: 1, note: "Making the changes." },
-  revising: { step: 1, note: "Making your changes." },
-  repairing: { step: 1, note: "Fixing what the checks found." },
-  blocked_on_information: {
-    step: 1,
-    note: "Waiting on you: answer the question below.",
-  },
-  paused: { step: 1, note: "Paused. It spends nothing more." },
-  validating: { step: 2, note: "Checking the site." },
-  preview_ready: { step: 3, note: "Ready for you to look at." },
-  awaiting_review: { step: 3, note: "Ready for your review." },
-  blocked_on_approval: {
-    step: 3,
-    note: "Waiting on you: approve it below.",
-  },
-  release_candidate: { step: 3, note: "Publishing." },
-  published: { step: 3, note: "Live." },
-  failed: { step: 1, note: "It stopped: the build failed." },
-  cancelled: { step: 0, note: "Stopped." },
-} satisfies Record<AssignmentState, { step: 0 | 1 | 2 | 3; note: string }>
+  queued: 0,
+  briefing: 1,
+  planning: 1,
+  implementing: 1,
+  revising: 1,
+  repairing: 1,
+  blocked_on_information: 1,
+  paused: 1,
+  validating: 2,
+  preview_ready: 3,
+  awaiting_review: 3,
+  blocked_on_approval: 3,
+  release_candidate: 3,
+  published: 3,
+  failed: 1,
+  cancelled: 0,
+} satisfies Record<AssignmentState, 0 | 1 | 2 | 3>
 
 /** A build state in one or two words: its step, or why it waits. */
 function stageWord(state: AssignmentState): string {
@@ -148,35 +143,18 @@ function stageWord(state: AssignmentState): string {
     return "Waiting on you"
   }
   if (state === "paused") return "Paused"
-  return STEPS[BUILD_STAGES[state].step]
-}
-
-/** The states a Stop still means something in. */
-const STOPPABLE = (state: AssignmentState) =>
-  BUILD_STAGES[state].step < 3 && state !== "failed" && state !== "cancelled"
-
-function duration(ms: number): string {
-  const seconds = Math.max(0, Math.floor(ms / 1000))
-  const minutes = Math.floor(seconds / 60)
-  return minutes ? `${minutes} min ${seconds % 60} s` : `${seconds} s`
+  return STEPS[BUILD_STAGES[state]]
 }
 
 /**
- * The time since `startedAt`, ticking once a second. Null on the server and
- * on the first client render, so the markup the server sent still matches.
- * `now` pins it, for the catalog.
+ * The states a Stop still means something in. A quick edit checks its pages
+ * after its preview exists, and the panel still shows it checking.
  */
-function useElapsed(startedAt: string, now?: number): number | null {
-  const [clock, setClock] = useState<number | null>(null)
-  useEffect(() => {
-    if (now !== undefined) return
-    setClock(Date.now())
-    const timer = setInterval(() => setClock(Date.now()), 1000)
-    return () => clearInterval(timer)
-  }, [now])
-  const at = now ?? clock
-  return at === null ? null : at - Date.parse(startedAt)
-}
+const STOPPABLE = (state: AssignmentState, lane?: BuildLane) =>
+  (BUILD_STAGES[state] < 3 ||
+    (lane === "quick" && state === "preview_ready")) &&
+  state !== "failed" &&
+  state !== "cancelled"
 
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`
 
@@ -225,6 +203,15 @@ function Decided({ plan }: { plan: Blueprint }) {
 }
 
 /**
+ * A ref callback for an image the browser may have finished before React
+ * attached `onLoad`, as a cached one does after a hard reload.
+ */
+const loadedWhenCached =
+  (setLoaded: (loaded: boolean) => void) => (img: HTMLImageElement | null) => {
+    if (img?.complete && img.naturalWidth > 0) setLoaded(true)
+  }
+
+/**
  * One generated photo as the build makes it: a quiet shimmer while it is
  * drawn, the picture once it exists, and a plain note when no model drew it. A picture that does not load is a quiet tile, never a broken image.
  */
@@ -260,13 +247,14 @@ function PhotoTile({ photo }: { photo: BuildPhoto }) {
         <img
           alt={photo.alt ?? ""}
           className={cn(
-            "size-full object-cover transition-opacity duration-200 motion-reduce:transition-none",
+            "size-full object-cover transition-opacity duration-enter motion-reduce:transition-none",
             loaded ? "opacity-100" : "opacity-0"
           )}
           decoding="async"
           height={72}
           onError={() => setBroken(true)}
           onLoad={() => setLoaded(true)}
+          ref={loadedWhenCached(setLoaded)}
           src={photo.thumbnail}
           width={96}
         />
@@ -286,24 +274,18 @@ function StepDetail({
   at,
   plan,
   photos,
-  awaiting,
 }: {
   row: BuildActivity
   at: "done" | "now" | "next"
   plan?: Blueprint | undefined
   photos?: readonly BuildPhoto[] | undefined
-  awaiting: boolean
 }) {
   switch (row.id) {
     case "planning":
       return (
         <>
           {at === "now" ? (
-            <p className={META}>
-              {awaiting
-                ? "Waiting for your review. The plan is in the chat."
-                : "Choosing a look, colours and pages."}
-            </p>
+            <p className={META}>Choosing a look, colours and pages.</p>
           ) : null}
           {plan ? <Decided plan={plan} /> : null}
         </>
@@ -331,24 +313,43 @@ function StepDetail({
       )
     }
     case "writing":
+      // Waiting, being written (several at once, as the writers run side by
+      // side), written.
       return row.items?.length ? (
         <ul aria-label="Pages" className="flex flex-wrap gap-1.5">
           {row.items.map((item) => (
             <li
               className={cn(
                 "inline-flex h-6 items-center gap-1 rounded-md border px-2 text-xs",
-                item.done
+                item.done || item.working
                   ? "border-border text-foreground"
                   : "border-dashed text-muted-foreground"
               )}
-              data-state={item.done ? "done" : "next"}
+              data-state={item.done ? "done" : item.working ? "now" : "next"}
               key={item.label}
             >
               {item.done ? (
-                <CheckIcon aria-hidden className="size-3 text-primary" />
+                <CheckCircleIcon
+                  aria-hidden
+                  className="size-3 text-primary"
+                  weight="fill"
+                />
               ) : null}
-              {item.label}
-              {item.done ? <span className="sr-only"> (written)</span> : null}
+              {/* The shimmer masks its own box, so it takes the words, not the border. */}
+              <span
+                className={cn(
+                  !item.done &&
+                    item.working &&
+                    "shimmer shimmer-color-foreground motion-reduce:animate-none"
+                )}
+              >
+                {item.label}
+              </span>
+              {item.done ? (
+                <span className="sr-only"> (written)</span>
+              ) : item.working ? (
+                <span className="sr-only"> (being written)</span>
+              ) : null}
             </li>
           ))}
         </ul>
@@ -366,7 +367,7 @@ function StepDetail({
     case "fixing":
       return at === "now" ? (
         <p className={META}>
-          Putting right what the checks flagged, then checking again.
+          Fixing what the checks found, then checking again.
         </p>
       ) : null
     case "checking":
@@ -379,190 +380,295 @@ function StepDetail({
 }
 
 /**
- * Every step of a full build, in order: done ones ticked and folded, the one
- * it is on marked, moving and open, the rest quiet. A done step's detail
- * opens on demand. A screen reader hears the step change, never the counts
- * ticking.
+ * What a website stage decided or made, under its step: the plan, the
+ * photos, the pages. Nothing for a stage not reached yet.
  */
-function BuildSteps({
-  rows,
+function StageDetail({
+  stage,
+  state,
+  activity,
   plan,
   photos,
-  awaiting,
 }: {
-  rows: readonly BuildActivity[]
+  stage: string
+  state: SegmentStep["state"]
+  activity: readonly BuildActivity[]
   plan?: Blueprint | undefined
   photos?: readonly BuildPhoto[] | undefined
-  awaiting: boolean
 }) {
-  const now = currentRow(rows)
-  const current = rows[now]
-  const waiting = awaiting && current?.id === "planning"
+  // A website step is named by its build activity row.
+  const row = activity.find((each) => each.id === stage)
+  if (!row || state === "next" || state === "skipped") return null
   return (
-    <>
-      <p aria-live="polite" className="sr-only">
-        {current
-          ? `Now: ${waiting ? "waiting for your review" : current.label.toLowerCase()}.`
-          : ""}
-      </p>
-      <ol aria-label="Build steps" className="flex flex-col">
-        {rows.map((row, index) => {
-          const at =
-            index === now ? "now" : row.done >= row.total ? "done" : "next"
-          return (
-            <li
-              className="group relative flex gap-2.5 pb-3 last:pb-0"
-              data-state={at}
-              key={row.id}
-            >
-              {/* The rail between markers, quiet, ticked off as steps finish. */}
-              <span
-                aria-hidden
-                className={cn(
-                  "absolute top-5 bottom-0.5 left-[7.5px] w-px group-last:hidden",
-                  at === "done" ? "bg-primary/45" : "bg-border"
-                )}
-              />
-              <span aria-hidden className="mt-px flex size-4 shrink-0">
-                {at === "done" ? (
-                  <CheckCircleIcon
-                    className="size-4 text-primary"
-                    weight="fill"
-                  />
-                ) : at === "next" ? (
-                  <CircleIcon className="size-4 text-muted-foreground/60" />
-                ) : waiting ? (
-                  <ClockIcon className="size-4 text-primary" />
-                ) : (
-                  <CircleNotchIcon className="size-4 animate-spin text-primary motion-reduce:animate-none" />
-                )}
-              </span>
-              {at === "done" ? (
-                // A finished step folds to its line; its detail opens on demand.
-                <details className="group/step flex min-w-0 flex-1 flex-col">
-                  <summary className="flex cursor-pointer list-none items-baseline gap-1.5 rounded-sm text-[0.8125rem] focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
-                    <span className="min-w-0 flex-1 text-foreground">
-                      {row.label}
-                      <span className="sr-only"> (done)</span>
-                    </span>
-                    {row.total > 1 ? (
-                      <span className="shrink-0 text-muted-foreground tabular-nums">
-                        {row.done} of {row.total}
-                      </span>
-                    ) : null}
-                    <CaretDownIcon
-                      aria-hidden
-                      className="size-3 shrink-0 self-center text-muted-foreground transition-transform group-open/step:rotate-180 motion-reduce:transition-none"
-                    />
-                  </summary>
-                  <div className="flex flex-col gap-2 pt-2">
-                    <StepDetail
-                      at={at}
-                      awaiting={awaiting}
-                      photos={photos}
-                      plan={plan}
-                      row={row}
-                    />
-                  </div>
-                </details>
-              ) : (
-                <div className="flex min-w-0 flex-1 flex-col gap-2">
-                  <p className="flex items-baseline justify-between gap-2 text-[0.8125rem]">
-                    <span
-                      className={cn(
-                        at === "now"
-                          ? "font-medium text-foreground"
-                          : "text-muted-foreground"
-                      )}
-                    >
-                      {row.label}
-                      <span className="sr-only">
-                        {at === "now" ? " (now)" : " (next)"}
-                      </span>
-                    </span>
-                    {row.total > 1 && at !== "next" ? (
-                      <span className="shrink-0 text-muted-foreground tabular-nums">
-                        {row.done} of {row.total}
-                      </span>
-                    ) : null}
-                  </p>
-                  <StepDetail
-                    at={at}
-                    awaiting={awaiting}
-                    photos={photos}
-                    plan={plan}
-                    row={row}
-                  />
-                </div>
+    <StepDetail
+      at={state === "done" ? "done" : "now"}
+      photos={photos}
+      plan={plan}
+      row={row}
+    />
+  )
+}
+
+/** One step of a segment, as the panel draws it. */
+type SegmentStep = {
+  id: string
+  label: string
+  /** The label without its count: what a screen reader hears when this step becomes current. */
+  said?: string
+  state: "done" | "now" | "waiting" | "next" | "skipped"
+  /** The icon the step moves while it is at work. */
+  kind: StatusKind
+  /** What the step decided or made, under its row. */
+  detail?: ReactNode
+}
+
+/** How long a segment that finished on screen shows every step ticked before it folds. */
+const FOLD_PAUSE_MS = 1200
+
+/** Where a step stands, for a screen reader; a skipped step says so on screen. */
+const STEP_SAID: Record<SegmentStep["state"], string> = {
+  done: " (done)",
+  now: " (now)",
+  waiting: " (waiting on you)",
+  next: " (next)",
+  skipped: "",
+}
+
+function StepMark({ step, failed }: { step: SegmentStep; failed: boolean }) {
+  if (step.state === "done") {
+    return <CheckCircleIcon className="size-4 text-primary" weight="fill" />
+  }
+  if (failed && (step.state === "now" || step.state === "waiting")) {
+    return <WarningCircleIcon className="size-4 text-destructive" />
+  }
+  switch (step.state) {
+    // Neutral, so a step reads as part of its segment and the header's
+    // brand-coloured icon stays the one that leads.
+    case "now":
+      return <StatusIcon className="text-foreground/80" kind={step.kind} />
+    case "waiting":
+      return step.kind === "question" ? (
+        <StatusIcon className="text-foreground/80" kind="question" />
+      ) : (
+        <ChatCircleDotsIcon className="size-4 animate-status-fade text-foreground/80 motion-reduce:animate-none" />
+      )
+    case "skipped":
+      return <MinusCircleIcon className="size-4 text-muted-foreground" />
+    default:
+      return <CircleIcon className="size-4 text-muted-foreground/60" />
+  }
+}
+
+/**
+ * One piece of work in the panel: a header with its icon, title and one
+ * muted line, then its fixed steps, ticked as they finish. A caret folds the
+ * steps while it runs. When it finishes on screen every step ticks, it
+ * holds a moment, then the header turns to its done title and the steps
+ * fold; a done segment is one line that does not open. A failed one keeps
+ * its steps and marks the step that stopped. A screen reader hears the step
+ * change, never a count ticking.
+ */
+function PanelSegment({
+  icon,
+  state,
+  title,
+  working = title,
+  line = null,
+  steps,
+  children,
+}: {
+  icon: StatusKind
+  state: "upcoming" | "now" | "waiting" | "done" | "failed"
+  /** The title for where it stands: the done title once done. */
+  title: string
+  /** The working title, kept while a segment that just finished shows its steps. */
+  working?: string
+  line?: string | null
+  steps: readonly SegmentStep[]
+  /** What the owner can do in the segment: a review's buttons, Stop. */
+  children?: ReactNode
+}) {
+  const id = useId()
+  const done = state === "done"
+  const failed = state === "failed"
+  const [folded, setFolded] = useState(done)
+  const [open, setOpen] = useState(true)
+  useEffect(() => {
+    if (!done) {
+      setFolded(false)
+      return
+    }
+    const timer = setTimeout(() => setFolded(true), FOLD_PAUSE_MS)
+    return () => clearTimeout(timer)
+  }, [done])
+  const shown = open && !folded
+  const current = steps.find(
+    (step) => step.state === "now" || step.state === "waiting"
+  )
+  // What is behind and what is at work; the steps to come stay out of the
+  // list, and a rail fading out below says there are more.
+  const shownSteps = steps.filter((step) => step.state !== "next")
+  const more = shownSteps.length < steps.length
+  const acts = Children.toArray(children).length > 0
+  // Nothing begun and nothing to do draws no body: a rail alone is an empty block.
+  const body = shownSteps.length > 0 || acts
+  return (
+    <section
+      aria-labelledby={`${id}-title`}
+      className="fade-in flex animate-in flex-col duration-enter motion-reduce:animate-none"
+      data-slot="panel-segment"
+      data-state={folded ? "folded" : state}
+    >
+      <div className="flex items-start gap-1">
+        <span aria-hidden className="mt-0.5 flex size-4 shrink-0">
+          {folded ? (
+            <CheckCircleIcon className="size-4 text-primary" weight="fill" />
+          ) : failed ? (
+            <WarningCircleIcon className="size-4 text-destructive" />
+          ) : (
+            // Moving only while work runs; waiting on the owner, the step
+            // under it moves instead.
+            <StatusIcon
+              className="text-primary"
+              kind={icon}
+              still={state !== "now"}
+            />
+          )}
+        </span>
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          {/* The segment's title takes the brand sweep while it is under way;
+              its steps stay plain text. */}
+          <h3
+            className={cn(
+              "font-medium text-sm",
+              (state === "now" || state === "waiting") &&
+                "shimmer shimmer-color-foreground motion-reduce:animate-none"
+            )}
+            id={`${id}-title`}
+          >
+            {done && !folded ? working : title}
+          </h3>
+          {line && !done ? <p className={META}>{line}</p> : null}
+        </div>
+        {done || !body ? null : (
+          <button
+            aria-controls={`${id}-steps`}
+            aria-expanded={open}
+            aria-label={open ? "Hide the steps" : "Show the steps"}
+            className="-m-1 flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring"
+            onClick={() => setOpen((was) => !was)}
+            type="button"
+          >
+            <CaretDownIcon
+              aria-hidden
+              className={cn(
+                "size-3.5 transition-transform duration-150 motion-reduce:transition-none",
+                !open && "-rotate-90"
               )}
-            </li>
-          )
-        })}
-      </ol>
-    </>
+            />
+          </button>
+        )}
+      </div>
+      {body ? (
+        // Folds by its row's height, so the motion is the same for any list.
+        <div
+          aria-hidden={!shown}
+          className={cn(
+            "grid transition-[grid-template-rows] duration-enter ease-standard motion-reduce:transition-none",
+            shown ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+          )}
+          id={`${id}-steps`}
+          inert={!shown}
+        >
+          <div className="min-h-0 overflow-hidden">
+            {/* Set in a little from the header, so the steps read as the segment's own. */}
+            <div className="flex flex-col gap-3 ps-3 pt-2">
+              <p aria-live="polite" className="sr-only">
+                {current && !done
+                  ? `Now: ${current.said ?? current.label}.`
+                  : ""}
+              </p>
+              {shownSteps.length ? (
+                <ol aria-label="Steps" className="flex flex-col">
+                  {shownSteps.map((step) => (
+                    <li
+                      className="group relative flex gap-1.5 pb-3 last:pb-0"
+                      data-state={step.state}
+                      key={step.id}
+                    >
+                      {/* The rail between markers, quiet, ticked off as steps finish. */}
+                      <span
+                        aria-hidden
+                        className={cn(
+                          "absolute top-5 bottom-0.5 left-[7.5px] w-px group-last:hidden",
+                          step.state === "done" ? "bg-primary/45" : "bg-border"
+                        )}
+                      />
+                      <span aria-hidden className="mt-px flex size-4 shrink-0">
+                        <StepMark failed={failed} step={step} />
+                      </span>
+                      <div className="flex min-w-0 flex-1 flex-col gap-2">
+                        <p className="flex min-w-0 items-baseline gap-1.5 text-[0.8125rem]">
+                          <span
+                            className={cn(
+                              "min-w-0 truncate",
+                              (step.state === "next" ||
+                                step.state === "skipped") &&
+                                "text-muted-foreground"
+                            )}
+                          >
+                            {step.label}
+                            {step.state === "skipped" ? ` · ${SKIPPED}` : null}
+                            <span className="sr-only">
+                              {STEP_SAID[step.state]}
+                            </span>
+                          </span>
+                        </p>
+                        {step.state === "done" || step.state === "skipped"
+                          ? null
+                          : step.detail}
+                      </div>
+                    </li>
+                  ))}
+                  {more && !acts ? (
+                    <li aria-hidden className="relative h-5">
+                      <span className="absolute inset-y-0 left-[7.5px] w-px bg-linear-to-b from-border to-transparent" />
+                    </li>
+                  ) : null}
+                </ol>
+              ) : null}
+              {children}
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </section>
   )
 }
 
 /**
- * The live stepper: the build the team is on, tied to its real state, with
- * the time it has taken against the measured typical, a Stop, and what is
- * queued behind it. The one bold thing in the panel.
+ * Stop, for a build that can still be stopped: one press asks, and the
+ * question stays on screen, its buttons disabled, while the Stop is in
+ * flight. A quick edit that moved to a fuller lane says so once.
  */
-function WorkingOn({
-  build,
-  queued = [],
-  expectedSeconds,
-  now,
+function StopBuild({
+  state,
+  lane,
+  fellThrough = false,
   onStop,
   stopping = false,
   error = null,
   defaultConfirming = false,
 }: {
-  build: {
-    goal: string
-    state: AssignmentState
-    version: number | null
-    startedAt: string
-    /** A build with no lane is a full one. */
-    lane?: BuildLane
-    /** A quick edit that moved to a fuller lane, which the panel says once. */
-    fellThrough?: boolean
-    /** Fixed-string progress rows from the orchestrator; none shows only the stepper. */
-    activity?: BuildActivity[]
-    /** The plan, once one is made: what it decided shows under its step. */
-    plan?: Blueprint | undefined
-    /** The plan waits on the owner's review, which the clock leaves out. */
-    awaitingReview?: boolean
-    /** The photos it is making, as each settles. */
-    photos?: readonly BuildPhoto[] | undefined
-    /** Time spent on decided plan reviews, left out of the clock. */
-    reviewMs?: number | undefined
-    /** When the build last changed state: the clock stops there once it is ready. */
-    endedAt?: string | undefined
-  }
-  /** What the owner asked for in each build waiting behind this one. */
-  queued?: string[]
-  /** How long this build's lane usually takes, in seconds; absent says nothing about time. */
-  expectedSeconds?: { p50: number; p95: number }
-  now?: number
-  onStop?: () => void
+  state: AssignmentState
+  lane?: BuildLane | undefined
+  fellThrough?: boolean | undefined
+  onStop?: (() => void) | undefined
   stopping?: boolean
   error?: string | null
   /** Open on the Stop question, for the catalog. */
   defaultConfirming?: boolean
 }) {
-  const stage = BUILD_STAGES[build.state]
-  // A ready build's clock stops where it got ready.
-  const ended =
-    stage.step === 3 && build.endedAt ? Date.parse(build.endedAt) : undefined
-  const ran = useElapsed(build.startedAt, ended ?? now)
-  // "Built in" is the build's own time: claim to preview_ready less the wait
-  // on the owner's plan review. Perf run 2: 6 min 05 s less 16.6 s of review
-  // shows 5 min 48 s, which is right.
-  const elapsed = ran === null ? null : ran - (build.reviewMs ?? 0)
-  // "asking" once Stop is pressed, "kept" once the owner keeps building.
-  // A Stop in flight keeps the question on screen, with its buttons
-  // disabled, until the build is read again.
   const [asked, setAsked] = useState(defaultConfirming)
   const confirming = asked || stopping
   const keep = useRef<HTMLButtonElement>(null)
@@ -576,180 +682,93 @@ function WorkingOn({
     moveFocus.current = null
   }, [asked])
 
-  const quick = build.lane === "quick"
-  const long =
-    elapsed !== null &&
-    expectedSeconds !== undefined &&
-    elapsed > expectedSeconds.p95 * 1000
-  const usually = expectedSeconds
-    ? quick
-      ? `Usually about ${expectedSeconds.p50} seconds.`
-      : `Builds usually take ${Math.round(expectedSeconds.p50 / 60)} to ${Math.round(expectedSeconds.p95 / 60)} minutes.`
-    : null
-  // A quick edit has no stages to walk: one line while it works, the usual note when it waits.
-  const note =
-    quick && WORKING.has(build.state) ? "Updating your preview." : stage.note
-  // A full build walks its steps; one with none, or waiting, shows the stepper and its note.
-  const rows = quick ? [] : (build.activity ?? [])
-  const steps = rows.length > 0
-  const awaiting = build.awaitingReview === true && build.state === "planning"
-  const waiting = awaiting && steps
-
   return (
-    <PanelSection title="Working on">
-      <div className="flex flex-col gap-3" data-slot="working-on">
-        <p className="line-clamp-2 font-medium text-sm">
-          {build.version ? `Version ${build.version}: ` : null}
-          {build.goal}
+    <div className="flex flex-col gap-2" data-slot="stop-build">
+      {fellThrough ? (
+        <p className="text-sm" data-slot="fell-through">
+          This change needs more than a quick edit, so it will take a few
+          minutes.
         </p>
-        {quick || steps ? null : (
-          <ol aria-label="Build progress" className="grid grid-cols-4 gap-1">
-            {STEPS.map((label, index) => (
-              <li
-                aria-current={index === stage.step ? "step" : undefined}
-                className="flex flex-col gap-1.5"
-                key={label}
-              >
-                <span
-                  aria-hidden
-                  className={cn(
-                    "h-1 rounded-full transition-colors duration-200 motion-reduce:transition-none",
-                    index < stage.step && "bg-primary/45",
-                    index === stage.step && "bg-primary",
-                    index === stage.step &&
-                      WORKING.has(build.state) &&
-                      "animate-pulse motion-reduce:animate-none",
-                    index > stage.step && "bg-border"
-                  )}
-                  data-slot="step-bar"
-                />
-                <span
-                  className={cn(
-                    "text-[0.8125rem]",
-                    index === stage.step
-                      ? "font-medium text-foreground"
-                      : "text-muted-foreground"
-                  )}
-                >
-                  {label}
-                </span>
-              </li>
-            ))}
-          </ol>
-        )}
-        {steps ? (
-          <BuildSteps
-            awaiting={awaiting}
-            photos={build.photos}
-            plan={build.plan}
-            rows={rows}
-          />
-        ) : (
-          <p aria-live="polite" className="text-sm">
-            {note}
-          </p>
-        )}
-        {build.fellThrough ? (
-          <p className="text-sm" data-slot="fell-through">
-            This change needs more than a quick edit, so it will take a few
-            minutes.
-          </p>
-        ) : null}
-        <p className={cn(META, "tabular-nums")}>
-          {waiting
-            ? "The clock waits while you review the plan."
-            : ended !== undefined
-              ? elapsed === null
-                ? null
-                : `Built in ${duration(elapsed)}.`
-              : [
-                  elapsed === null ? null : `${duration(elapsed)} so far.`,
-                  long ? "This one is taking longer than usual." : usually,
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-        </p>
-        {onStop && STOPPABLE(build.state) ? (
-          confirming ? (
-            <div className="flex flex-wrap gap-2">
-              <Button
-                disabled={stopping}
-                onClick={onStop}
-                size="sm"
-                variant="destructive"
-              >
-                {stopping ? "Stopping" : "Stop this build"}
-              </Button>
-              <Button
-                disabled={stopping}
-                onClick={() => {
-                  moveFocus.current = "stop"
-                  setAsked(false)
-                }}
-                ref={keep}
-                size="sm"
-                variant="ghost"
-              >
-                Keep building
-              </Button>
-            </div>
-          ) : (
+      ) : null}
+      {onStop && STOPPABLE(state, lane) ? (
+        confirming ? (
+          <div className="flex flex-wrap gap-2">
             <Button
-              className="self-start"
-              onClick={() => {
-                moveFocus.current = "keep"
-                setAsked(true)
-              }}
-              ref={stop}
+              disabled={stopping}
+              onClick={onStop}
               size="sm"
-              variant="outline"
+              variant="destructive"
             >
-              Stop
+              {stopping ? "Stopping" : "Stop this build"}
             </Button>
-          )
-        ) : null}
-        {error ? (
-          <p className="text-[0.8125rem] text-destructive" role="alert">
-            {error}
-          </p>
-        ) : null}
-        {queued.length ? (
-          <ul className="flex flex-col gap-1 border-border border-t pt-2">
-            {queued.map((goal, index) => (
-              // Goals repeat, so the position is the identity.
-              // biome-ignore lint/suspicious/noArrayIndexKey: the list is only ever replaced whole.
-              <li className={cn(META, "line-clamp-1")} key={index}>
-                Next: {goal}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </div>
-    </PanelSection>
+            <Button
+              disabled={stopping}
+              onClick={() => {
+                moveFocus.current = "stop"
+                setAsked(false)
+              }}
+              ref={keep}
+              size="sm"
+              variant="ghost"
+            >
+              Keep building
+            </Button>
+          </div>
+        ) : (
+          <Button
+            className="self-start"
+            onClick={() => {
+              moveFocus.current = "keep"
+              setAsked(true)
+            }}
+            ref={stop}
+            size="sm"
+            variant="outline"
+          >
+            Stop
+          </Button>
+        )
+      ) : null}
+      {error ? (
+        <p className="text-[0.8125rem] text-destructive" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </div>
   )
 }
 
 /* Waiting on you ------------------------------------------------------ */
 
 /**
- * Questions and approvals, one per list row, answered in place. `status`
- * is the last thing the owner did, announced politely; `error` says the
- * list could not be read and is shown above whatever was read before. With
- * nothing in it and nothing to say, it renders nothing.
+ * Work under way and what waits on the owner, one per list row, answered in
+ * place. The first `limit` show; the rest open in place, and an item stays
+ * until it is done. `status` is the last thing the owner did, announced
+ * politely; `error` says the list could not be read and is shown above
+ * whatever was read before. With nothing in it and nothing to say, it
+ * renders nothing.
  */
 function WaitingOnYou({
   children,
+  title = "Waiting on you",
+  icon,
+  limit = Number.POSITIVE_INFINITY,
   status = null,
   error = null,
   onRetry,
 }: {
   children?: ReactNode
+  title?: string
+  icon?: PhosphorIcon
+  limit?: number
   status?: string | null
   error?: string | null
   /** Read the list again now, offered when it did not load. */
   onRetry?: () => Promise<void>
 }) {
+  const [all, setAll] = useState(false)
   const items = Children.toArray(children).filter(isValidElement)
+  const hidden = all ? 0 : Math.max(0, items.length - limit)
   // Only there when something waits: with nothing, the last thing the owner
   // did stays said, and there is no heading over an empty list.
   if (!items.length && !error) {
@@ -760,15 +779,33 @@ function WaitingOnYou({
     ) : null
   }
   return (
-    <PanelSection count={items.length} title="Waiting on you">
+    <PanelSection
+      action={
+        hidden ? (
+          <button
+            className={SECTION_ACTION}
+            onClick={() => setAll(true)}
+            type="button"
+          >
+            Show {hidden} more
+          </button>
+        ) : null
+      }
+      count={items.length}
+      {...(icon ? { icon } : {})}
+      title={title}
+    >
       <p className="text-sm empty:hidden" role="status">
         {status}
       </p>
       {error ? <p className={META}>{error}</p> : null}
       {items.length ? (
         <ul className="flex flex-col divide-y divide-border">
-          {items.map((item) => (
-            <li key={item.key}>{item}</li>
+          {items.slice(0, items.length - hidden).map((item) => (
+            // The list's ends sit on the heading and the next section, not padded off them.
+            <li className="first:*:pt-0 last:*:pb-0" key={item.key}>
+              {item}
+            </li>
           ))}
         </ul>
       ) : null}
@@ -777,14 +814,18 @@ function WaitingOnYou({
   )
 }
 
-/** A change note's text box, for a review and for the live site alike. */
-const NOTE =
-  "min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base outline-none transition-[color,box-shadow] placeholder:text-muted-foreground focus-visible:border-field-focus disabled:opacity-50 md:text-sm"
-
 const pending = (busy: boolean, idle: string, working: string) =>
   busy ? working : idle
 
-function Retry({ onRetry }: { onRetry: () => Promise<void> }) {
+function Retry({
+  onRetry,
+  label = "Try again",
+  busyLabel = "Trying again",
+}: {
+  onRetry: () => Promise<void>
+  label?: string
+  busyLabel?: string
+}) {
   const [busy, setBusy] = useState(false)
   return (
     <Button
@@ -797,7 +838,7 @@ function Retry({ onRetry }: { onRetry: () => Promise<void> }) {
       size="sm"
       variant="outline"
     >
-      {pending(busy, "Try again", "Trying again")}
+      {pending(busy, label, busyLabel)}
     </Button>
   )
 }
@@ -832,6 +873,7 @@ function FactField({
       min={min ?? input.min}
       name={input.name}
       onChange={onChange ? (event) => onChange(event.target.value) : undefined}
+      placeholder={input.placeholder}
       required
       step={input.step}
       type={input.type}
@@ -933,78 +975,22 @@ function AnswerInputs({
 }
 
 /**
- * A question from the team, answered in place with native inputs: `time`,
- * `tel` and `email` where the fact is one, a closed choice where the team
- * offered options, and text held to the question's own limits otherwise.
- * The value is checked the way the orchestrator checks it before it is sent.
+ * A question waiting on the owner. It is answered in the chat, never here:
+ * the row says it waits and `action` takes the owner to the card.
  */
-function QuestionItem({
-  title,
-  why,
-  askedBy,
-  expiresAt,
-  onExpiry,
-  spec,
-  onAnswer,
-  pending: busy = false,
-  error = null,
-}: {
-  title: string
-  /** The team's reason, shown as the text it is and never as markup. */
-  why: string
-  askedBy: string
-  expiresAt: string | null
-  onExpiry: string
-  spec: AnswerSpec
-  onAnswer: (value: unknown) => void
-  pending?: boolean
-  error?: string | null
-}) {
+function QuestionItem({ title, action }: { title: string; action: ReactNode }) {
   const id = useId()
-  const [invalid, setInvalid] = useState<string | null>(null)
-  const shown = invalid ?? error
-
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const form = new FormData(event.currentTarget)
-    const parsed = answerValue(spec, (name) => String(form.get(name) ?? ""))
-    if ("error" in parsed) {
-      setInvalid(parsed.error)
-      return
-    }
-    setInvalid(null)
-    onAnswer(parsed.value)
-  }
-
   return (
     <article
       aria-labelledby={`${id}-title`}
-      className="flex flex-col gap-2 py-3"
+      className="flex flex-col items-start gap-1 py-3"
       data-slot="question-item"
     >
       <h3 className="font-medium text-sm" id={`${id}-title`}>
         {title}
       </h3>
-      <p className={META}>
-        {askedBy} asked: {why}
-      </p>
-      <form className="flex flex-col gap-2" noValidate onSubmit={submit}>
-        <AnswerInputs
-          id={id}
-          invalid={shown !== null}
-          spec={spec}
-          title={title}
-        />
-        {shown ? (
-          <p className="text-[0.8125rem] text-destructive" role="alert">
-            {shown}
-          </p>
-        ) : null}
-        <Button className="self-start" disabled={busy} size="sm" type="submit">
-          {pending(busy, "Send answer", "Sending")}
-        </Button>
-      </form>
-      <p className={META}>{expiryLine(expiresAt, onExpiry)}</p>
+      <p className={META}>Waiting on your answer</p>
+      {action}
     </article>
   )
 }
@@ -1023,278 +1009,444 @@ function approvalDecision(
     : null
 }
 
-/** A signed preview: the page, and its home page at three widths. */
-type Preview = { url: string; screenshots: string[] }
+/** A signed preview of a version: the page to open. */
+type Preview = { url: string }
 
-const SHOTS = ["on a phone", "on a tablet", "on a laptop"] as const
+/** One version's pictures: its home page's first screen on a laptop, the screen below, its first screen on a phone, and its icon. */
+type VersionPictures = Record<"laptop" | "laptop-2" | "phone" | "icon", string>
 
 /** Screenshots land about 10 s after the preview does; look again every 5 s for half a minute. */
 const SHOT_RETRY_MS = 5000
 const SHOT_TRIES = 6
 
+/** The light a screenshot drifts in while it waits: the brand, faint, on the muted tile. */
+const SHOT_LIGHT = [
+  "color-mix(in oklab, var(--primary) 45%, transparent)",
+  "color-mix(in oklab, var(--muted-foreground) 30%, transparent)",
+]
+
 /**
- * One width of the home page. Until the image exists it is a quiet block of
- * the same size, never a broken image; a screenshot still missing after the
- * last look tells the caller.
+ * A screenshot of a version's home page. Until the image exists it is soft
+ * light drifting on a muted tile, never a broken image, and it fades in once
+ * it loads; still missing after the last look, it says there is no preview.
+ * No `src` yet is a wait that never gives up. With `still`, the wait is that
+ * node on the tile, motionless, and the picture fades in over it.
  */
 function Shot({
   src,
-  alt,
-  where,
-  onGiveUp,
+  alt = "",
+  still,
+  className,
 }: {
   src: string | undefined
-  alt: string
-  where: string
-  onGiveUp: () => void
+  alt?: string
+  still?: ReactNode
+  /** Its shape: the ratio and corners of where it sits. */
+  className?: string
 }) {
   const [tries, setTries] = useState(0)
   const [failed, setFailed] = useState(false)
   const [loaded, setLoaded] = useState(false)
+  const gaveUp = failed && tries + 1 >= SHOT_TRIES
   // A failed look waits before the next: a 404 comes back at once, and
   // retrying on it straight away spent every look in about a second.
   useEffect(() => {
-    if (loaded || !failed) return
-    if (tries + 1 >= SHOT_TRIES) {
-      onGiveUp()
-      return
-    }
+    if (loaded || !failed || tries + 1 >= SHOT_TRIES) return
     const timer = setTimeout(() => {
       setFailed(false)
       setTries(tries + 1)
     }, SHOT_RETRY_MS)
     return () => clearTimeout(timer)
-  }, [loaded, failed, tries, onGiveUp])
+  }, [loaded, failed, tries])
+  const note =
+    gaveUp && alt ? <span className={META}>No preview to show yet</span> : null
   return (
-    <div className="relative aspect-[3/4]">
-      {loaded ? null : (
-        <div
-          className="absolute inset-0 rounded-md border border-border bg-muted"
-          data-slot="screenshot-pending"
+    <span
+      className={cn("relative block overflow-hidden bg-muted", className)}
+      data-slot="shot"
+    >
+      {still !== undefined ? (
+        <span className="absolute inset-0 flex flex-col items-center justify-center gap-1 p-3 text-center">
+          {still}
+          {note}
+        </span>
+      ) : loaded ? null : (
+        <Diffusing
+          className="absolute inset-0"
+          colors={SHOT_LIGHT}
+          motion="motion-safe:animate-shot-drift"
+          paper="var(--muted)"
         >
-          <span className="sr-only">
-            Screenshot {where} is still being made
-          </span>
-        </div>
+          {note}
+        </Diffusing>
       )}
-      <img
-        alt={alt}
-        className={cn(
-          "size-full rounded-md border border-border bg-muted object-cover object-top",
-          !loaded && "invisible"
-        )}
-        height={160}
-        // A fresh element per look, so the browser asks again.
-        key={tries}
-        loading="lazy"
-        onError={() => setFailed(true)}
-        onLoad={() => setLoaded(true)}
-        src={src}
-        width={120}
-      />
-    </div>
+      {src && !gaveUp ? (
+        <img
+          alt={alt}
+          className={cn(
+            "relative size-full object-cover object-top transition-opacity duration-enter motion-reduce:transition-none",
+            loaded ? "opacity-100" : "opacity-0"
+          )}
+          height={250}
+          // A fresh element per look, so the browser asks again.
+          key={tries}
+          loading="lazy"
+          onError={() => setFailed(true)}
+          onLoad={() => setLoaded(true)}
+          ref={loadedWhenCached(setLoaded)}
+          src={src}
+          width={400}
+        />
+      ) : null}
+    </span>
   )
 }
 
-/**
- * The version's home page at three widths. A preview that could not be
- * read says so and can be read again, with no link implied where there is
- * none. Screenshots that fail to load say so, and the preview link beside
- * them still opens the version.
- */
-function Screenshots({
+/** The built site's own icon, or a globe until it loads and if it never does. */
+function SiteIcon({
+  src,
+  className,
+}: {
+  src: string | undefined
+  className?: string
+}) {
+  const [broken, setBroken] = useState<string | null>(null)
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        // A quarter round, the starter's own icon outline, so its corners never show past it.
+        "grid size-9 shrink-0 place-items-center overflow-hidden rounded-[25%] bg-primary/10 text-primary",
+        className
+      )}
+    >
+      {src && src !== broken ? (
+        <img
+          alt=""
+          className="size-full object-cover"
+          onError={() => setBroken(src)}
+          src={src}
+        />
+      ) : (
+        <GlobeIcon className="size-1/2" />
+      )}
+    </span>
+  )
+}
+
+/** Preview, opening the version in a new tab; a read that failed can be tried again. */
+function PreviewLink({
   preview,
-  version,
   onRetry,
+  iconOnly = false,
 }: {
   preview: Preview | "loading" | "error"
-  version: number
   onRetry?: (() => Promise<void>) | undefined
+  /** The icon alone, named for a screen reader and on hover. */
+  iconOnly?: boolean
 }) {
-  // Keyed by the preview, so a fresh read shows its own screenshots.
-  const [broken, setBroken] = useState<Preview | null>(null)
-  if (preview === "error") {
+  if (preview === "loading") {
+    // Faded in late, so a read that comes back quickly shows no placeholder.
     return (
-      <div className="flex flex-col gap-2">
-        <p className={META}>
-          The preview for version {version} isn't available yet. Try again in a
-          moment.
-        </p>
-        {onRetry ? <Retry onRetry={onRetry} /> : null}
+      <div className="fade-in shrink-0 animate-in fill-mode-backwards delay-300">
+        <Skeleton className={cn("h-8 rounded-md", iconOnly ? "w-8" : "w-22")} />
       </div>
     )
   }
-  if (preview !== "loading" && broken === preview) {
-    return (
-      <p className={META}>
-        The screenshots did not load. Open the preview to see version {version}.
-      </p>
-    )
+  if (preview === "error") {
+    return onRetry ? (
+      <Retry
+        busyLabel="Reading it again"
+        label="Retry preview"
+        onRetry={onRetry}
+      />
+    ) : null
   }
   return (
-    <div className="grid grid-cols-3 gap-2" data-slot="screenshots">
-      {SHOTS.map((where, index) =>
-        preview === "loading" ? (
-          <Skeleton className="aspect-[3/4] rounded-md" key={where} />
-        ) : (
-          <Shot
-            alt={`Version ${version}, home page ${where}`}
-            key={where}
-            onGiveUp={() => setBroken(preview)}
-            src={preview.screenshots[index]}
-            where={where}
-          />
-        )
+    <a
+      className={cn(
+        buttonVariants({
+          variant: iconOnly ? "outline" : "ghost",
+          size: iconOnly ? "icon-sm" : "sm",
+        }),
+        "shrink-0"
       )}
+      href={preview.url}
+      rel="noopener noreferrer"
+      target="_blank"
+      title={iconOnly ? "Preview" : undefined}
+    >
+      <span className={iconOnly ? "sr-only" : undefined}>Preview</span>
+      <span className="sr-only"> (opens in a new tab)</span>
+      <ArrowSquareOutIcon aria-hidden />
+    </a>
+  )
+}
+
+/** The deck's cards, the home page first. */
+const SLIDES = [
+  { picture: "laptop", alt: "Your home page" },
+  { picture: "laptop-2", alt: "Another page of your website" },
+  { picture: "phone", alt: "Your home page on a phone" },
+] as const
+
+/** The cards edging out behind the front one, by how far back: raised, narrower and dimmer, so only a top edge shows. */
+const BEHIND = [
+  "z-20 -translate-y-2 scale-[0.94] opacity-70",
+  "z-10 -translate-y-4 scale-[0.88] opacity-40",
+]
+
+/** A round control at the deck's side: quiet until it is hovered where there is a pointer, always there on touch. Centred by its margins, since a pressed button nudges its own translate. */
+const ARROW =
+  "absolute inset-y-0 z-10 my-auto size-7 rounded-full bg-background/60 shadow-sm backdrop-blur-sm transition-opacity focus-visible:opacity-100 motion-reduce:transition-none pointer-fine:opacity-0 pointer-fine:group-hover/stack:opacity-100"
+
+/**
+ * A phone holding the screenshot, whole and upright on the card: a hairline
+ * black bezel inside a fine metal edge, large rounded corners, a camera
+ * island over the screen, the action and volume keys on the left and the
+ * power key on the right, at a current phone's proportions, 0.48 wide to
+ * tall. Behind it, the same screenshot blurred into soft colour under a
+ * faint glow of the brand, so the phone sits in light, not on a flat tile. The bezel is in pixels: a percentage
+ * padding would be a share of the card's width, not the phone's.
+ */
+function PhoneMock({ src, alt }: { src: string | undefined; alt: string }) {
+  const key = "absolute w-0.5 bg-device ring-1 ring-foreground/15"
+  return (
+    <span className="relative block size-full overflow-hidden bg-muted">
+      {src ? (
+        <img
+          alt=""
+          className="absolute inset-0 size-full scale-125 object-cover opacity-35 blur-2xl"
+          src={src}
+        />
+      ) : null}
+      <span
+        aria-hidden
+        className="absolute inset-0 bg-[radial-gradient(55%_65%_at_50%_45%,color-mix(in_oklab,var(--primary)_28%,transparent),transparent_75%)]"
+      />
+      <span className="absolute top-[4%] left-1/2 aspect-[48/100] h-[82%] -translate-x-1/2 rounded-[17%/8.2%] bg-device p-[2.5px] shadow-2xl ring-1 ring-foreground/25">
+        <span
+          aria-hidden
+          className={cn(key, "top-[16%] -left-0.5 h-[4%] rounded-l-sm")}
+        />
+        <span
+          aria-hidden
+          className={cn(key, "top-[23%] -left-0.5 h-[7%] rounded-l-sm")}
+        />
+        <span
+          aria-hidden
+          className={cn(key, "top-[32%] -left-0.5 h-[7%] rounded-l-sm")}
+        />
+        <span
+          aria-hidden
+          className={cn(key, "top-[26%] -right-0.5 h-[11%] rounded-r-sm")}
+        />
+        <span className="relative block size-full overflow-hidden rounded-[15.5%/7.4%] bg-background">
+          <Shot alt={alt} className="size-full" src={src} />
+          <span
+            aria-hidden
+            className="absolute top-[2%] left-1/2 h-[3.4%] w-[30%] -translate-x-1/2 rounded-full bg-device"
+          />
+        </span>
+      </span>
+    </span>
+  )
+}
+
+/** One card's face: the screenshot, or the phone holding it. */
+function SlideFace({
+  slide,
+  src,
+  alt,
+}: {
+  slide: (typeof SLIDES)[number]
+  src: string | undefined
+  alt: string
+}) {
+  return slide.picture === "phone" ? (
+    <PhoneMock alt={alt} src={src} />
+  ) : (
+    <Shot alt={alt} className="size-full" src={src} />
+  )
+}
+
+/**
+ * The version as a small deck: the home page in front, the cards to come
+ * edging out behind. The arrows at its sides and the dots under it move to
+ * another card, which slides into the front; the front card opens the
+ * preview once there is one.
+ */
+function ShotStack({
+  pictures,
+  url,
+}: {
+  pictures: VersionPictures | null
+  url: string | null
+}) {
+  const [front, setFront] = useState(0)
+  const step = (by: number) =>
+    setFront((at) => (at + by + SLIDES.length) % SLIDES.length)
+  return (
+    <div className="group/stack relative isolate pt-4" data-slot="shot-stack">
+      {BEHIND.map((place, depth) => {
+        const slide = SLIDES[(front + depth + 1) % SLIDES.length] ?? SLIDES[0]
+        return (
+          <div
+            aria-hidden
+            className={cn(
+              "absolute inset-x-0 top-4 aspect-[16/10] origin-top overflow-hidden rounded-lg border border-border bg-muted",
+              place
+            )}
+            key={place}
+          >
+            <SlideFace alt="" slide={slide} src={pictures?.[slide.picture]} />
+          </div>
+        )
+      })}
+      <div className="relative z-30 aspect-[16/10] overflow-hidden rounded-lg border border-border bg-muted shadow-sm">
+        <div
+          className="flex size-full transition-transform duration-slow ease-standard motion-reduce:transition-none"
+          style={{ transform: `translateX(-${front * 100}%)` }}
+        >
+          {SLIDES.map((slide, at) => {
+            const shown = at === front
+            const face = (
+              <SlideFace
+                alt={shown ? slide.alt : ""}
+                slide={slide}
+                src={pictures?.[slide.picture]}
+              />
+            )
+            return (
+              <div
+                aria-hidden={!shown}
+                className="size-full shrink-0"
+                inert={!shown}
+                key={slide.picture}
+              >
+                {url && shown ? (
+                  // The same preview as the link above it, so a screen reader hears it once.
+                  <a
+                    className="block size-full"
+                    href={url}
+                    rel="noopener noreferrer"
+                    tabIndex={-1}
+                    target="_blank"
+                  >
+                    {face}
+                  </a>
+                ) : (
+                  face
+                )}
+              </div>
+            )
+          })}
+        </div>
+        <Button
+          aria-label="The previous picture"
+          className={cn(ARROW, "left-1.5")}
+          onClick={() => step(-1)}
+          size="icon-xs"
+          variant="ghost"
+        >
+          <CaretLeftIcon aria-hidden />
+        </Button>
+        <Button
+          aria-label="The next picture"
+          className={cn(ARROW, "right-1.5")}
+          onClick={() => step(1)}
+          size="icon-xs"
+          variant="ghost"
+        >
+          <CaretRightIcon aria-hidden />
+        </Button>
+        <div className="absolute inset-x-0 bottom-1.5 z-10 flex justify-center">
+          {/* Each dot's button is 20 px wide and 24 px from the next: a target a finger can hit, in a pill that stays small. */}
+          <div className="flex gap-1 rounded-full bg-background/60 px-1 backdrop-blur-sm">
+            {SLIDES.map((slide, at) => (
+              <button
+                aria-label={slide.alt}
+                aria-pressed={at === front}
+                className="group/dot grid h-4 w-5 place-items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                key={slide.picture}
+                onClick={() => setFront(at)}
+                type="button"
+              >
+                <span
+                  aria-hidden
+                  className={cn(
+                    "h-1.5 rounded-full transition-all duration-enter motion-reduce:transition-none",
+                    at === front
+                      ? "w-3 bg-foreground"
+                      : "w-1.5 bg-foreground/40 group-hover/dot:bg-foreground/70"
+                  )}
+                />
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+      <p aria-live="polite" className="sr-only">
+        {SLIDES[front]?.alt}
+      </p>
     </div>
   )
 }
 
 /**
- * A version ready to publish. The version and its short id sit directly
- * above the buttons that act on it, and Approve sends exactly that
- * revision. "Ask for changes" opens a note in place.
+ * A version ready to publish, in the panel, under the step that waits on
+ * it: the version as a stack of screenshots, then Publish, which
+ * sends exactly the revision the approval is bound to, and Preview.
  */
 function ApprovalItem({
   target,
-  version,
-  rationale,
-  expiresAt,
-  onExpiry,
+  title,
+  pictures,
   preview,
   onApprove,
-  onAskForChanges,
   onRetryPreview,
-  pending: busy = null,
+  pending: busy = false,
   error = null,
-  defaultAsking = false,
-  photos = [],
-  photoActions,
 }: {
   target: ApprovalTarget
-  version: number
-  rationale: string
-  expiresAt: string
-  onExpiry: string
+  /** The site's name, which names the card for a screen reader. */
+  title: string
+  pictures: VersionPictures | null
   preview: Preview | "loading" | "error"
   onApprove: (decision: DecisionRequest) => void
-  onAskForChanges: (text: string) => void
   /** Reads the preview again after it could not be read. */
   onRetryPreview?: (() => Promise<void>) | undefined
-  pending?: "approve" | "change" | null
+  pending?: boolean
   error?: string | null
-  /** Open on the change note, for the catalog. */
-  defaultAsking?: boolean
-  /** The pictures the assistant made for this version, to badge and offer changes on. */
-  photos?: readonly GeneratedPhoto[]
-  photoActions?: PhotoActions | undefined
 }) {
-  const id = useId()
   const decision = approvalDecision(target, "approved")
-  const [opened, setOpened] = useState(defaultAsking)
-  // A change in flight keeps its note on screen until the build is read
-  // again.
-  const asking = opened || busy === "change"
-  const note = useRef<HTMLTextAreaElement>(null)
-  const pressed = useRef(false)
-  useEffect(() => {
-    if (opened && pressed.current) note.current?.focus()
-    pressed.current = false
-  }, [opened])
-
-  const send = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const text = note.current?.value.trim() ?? ""
-    if (text) onAskForChanges(text)
-  }
-
   return (
     <article
-      aria-labelledby={`${id}-title`}
-      className="flex flex-col gap-3 py-3"
+      aria-label={title}
+      className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3"
+      data-revision={decision?.revision_id}
       data-slot="approval-item"
     >
-      <div className="flex flex-col gap-1">
-        <h3 className="font-medium text-sm" id={`${id}-title`}>
-          Version {version} is ready to publish
-        </h3>
-        <p className={META}>{rationale}</p>
-      </div>
-      <Screenshots
-        onRetry={onRetryPreview}
-        preview={preview}
-        version={version}
+      <ShotStack
+        pictures={pictures}
+        url={typeof preview === "object" ? preview.url : null}
       />
-      {typeof preview === "object" ? (
-        <OutLink href={preview.url}>Open preview</OutLink>
-      ) : null}
-      {photoActions ? (
-        <GeneratedPhotos
-          actions={photoActions}
-          disabled={busy !== null}
-          heroShot={
-            typeof preview === "object" ? preview.screenshots[2] : undefined
-          }
-          photos={photos}
-        />
-      ) : null}
-      <p className={META}>{expiryLine(expiresAt, onExpiry)}</p>
-      <ApprovalTargetSummary
-        className="bg-background"
-        target={target}
-        version={version}
-      />
-      <div className="flex flex-wrap gap-2">
+      <div className="flex gap-2">
         <Button
-          disabled={!decision || busy !== null}
-          onClick={() => {
-            if (decision) onApprove(decision)
-          }}
+          className="flex-1"
+          disabled={!decision || busy}
+          onClick={() => decision && onApprove(decision)}
           size="sm"
         >
-          {pending(
-            busy === "approve",
-            `Approve and publish v${version}`,
-            `Publishing v${version}`
+          {busy ? (
+            <SpinnerGapIcon aria-hidden className="animate-spin" />
+          ) : (
+            <RocketLaunchIcon aria-hidden />
           )}
+          {pending(busy, "Publish", "Publishing")}
         </Button>
-        <Button
-          aria-expanded={asking}
-          disabled={busy !== null}
-          onClick={() => {
-            pressed.current = true
-            setOpened(!opened)
-          }}
-          size="sm"
-          variant="outline"
-        >
-          Ask for changes
-        </Button>
+        <PreviewLink iconOnly onRetry={onRetryPreview} preview={preview} />
       </div>
-      {asking ? (
-        <form className="flex flex-col gap-2" onSubmit={send}>
-          <label className="font-medium text-sm" htmlFor={`${id}-change`}>
-            What should change?
-          </label>
-          <textarea
-            className={NOTE}
-            disabled={busy !== null}
-            id={`${id}-change`}
-            maxLength={GOAL_MAX}
-            name="change"
-            ref={note}
-            required
-          />
-          <Button
-            className="self-start"
-            disabled={busy !== null}
-            size="sm"
-            type="submit"
-          >
-            {pending(busy === "change", "Send changes", "Sending")}
-          </Button>
-        </form>
-      ) : null}
       {error ? (
         <p className="text-[0.8125rem] text-destructive" role="alert">
           {error}
@@ -1304,33 +1456,60 @@ function ApprovalItem({
   )
 }
 
-/* Coming up, your website, first steps -------------------------------- */
+/* Coming up, done today, your website ---------------------------------- */
 
 /**
  * Things with a time, in the order given: what closes or is due next under
- * "Coming up", or what just happened under another title. Times are in
- * `zone` once the reader's is known, UTC before. Nothing renders when the
- * list is empty.
+ * "Coming up", or what just happened under another title. Each row says how
+ * far off it is ("in 25 min", "2 hr ago") beside its text; the exact time,
+ * in `zone` once the reader's is known, is its tooltip. Nothing renders when
+ * the list is empty.
  */
 function ComingUp({
   items,
   title = "Coming up",
+  icon = ClockIcon,
+  count,
   zone,
+  action,
+  ahead = true,
 }: {
   items: { id: string; text: string; at: string }[]
   title?: string
+  icon?: PhosphorIcon
+  /** How many there are in all, when `items` are only the first. */
+  count?: number
   zone?: string | null
+  /** The way to the whole list, when these are only the first. */
+  action?: ReactNode
+  /** Times still to come: one that has passed is due now, never "ago". */
+  ahead?: boolean
 }) {
   if (items.length === 0) return null
   return (
-    <PanelSection title={title}>
-      <ul className="flex flex-col divide-y divide-border">
+    <PanelSection
+      action={action}
+      count={count ?? items.length}
+      icon={icon}
+      title={title}
+    >
+      {/* Under the heading's text, past its icon, so the rows read as the section's own. */}
+      <ul className="flex flex-col divide-y divide-border ps-5">
         {items.map((item) => (
-          <li className="flex flex-col py-2" key={item.id}>
-            <span className="wrap-break-word text-sm">{item.text}</span>
-            <span className={META}>
-              {formatDateTime(item.at, zone ?? undefined)}
-            </span>
+          <li
+            className="flex items-baseline justify-between gap-3 py-2 first:pt-0 last:pb-0"
+            key={item.id}
+          >
+            <span className="wrap-break-word min-w-0 text-sm">{item.text}</span>
+            <time
+              className={cn(META, "shrink-0 tabular-nums")}
+              dateTime={item.at}
+              title={formatDateTime(item.at, zone ?? undefined) ?? undefined}
+            >
+              {ahead && Date.parse(item.at) <= Date.now()
+                ? "due now"
+                : relativeTime(item.at)}
+            </time>
           </li>
         ))}
       </ul>
@@ -1403,7 +1582,9 @@ function ReminderNote({
             {due}
           </span>
         ) : null}
-        {byAssistant ? <span className={META}>Set by Reme</span> : null}
+        {byAssistant ? (
+          <span className={META}>Set by your assistant</span>
+        ) : null}
         {error ? (
           <p className="text-[0.8125rem] text-destructive" role="alert">
             {error}
@@ -1459,16 +1640,14 @@ type Thumbnail = { src: string } | "loading" | null
  * The site as it stands: the version that is live, a link to it and, beside
  * the link, "Request changes", which the app answers by putting the chat's
  * composer into website change mode. The host is the link's title rather
- * than its text, since a long one would not fit. The thumbnail is the
- * panel's only image, at a fixed ratio so nothing moves when it arrives; one
- * that fails to load leaves the text alone.
+ * than its text, since a long one would not fit. The thumbnail holds its
+ * ratio while it loads, so nothing moves when it arrives.
  */
 function YourWebsite({
   host,
   url,
   live,
   thumbnail = null,
-  blueprint = null,
   onRequestChanges,
 }: {
   host: string | null
@@ -1476,27 +1655,19 @@ function YourWebsite({
   url?: string | null
   live: number | null
   thumbnail?: Thumbnail
-  /** The plan the live site was built from, kept under it read-only. */
-  blueprint?: Blueprint | null
   /** Starts a change to the live site in the chat. */
   onRequestChanges?: (() => void) | undefined
 }) {
-  const [broken, setBroken] = useState<string | null>(null)
   const shot = live ? thumbnail : null
   const change = live && onRequestChanges
   return (
     <div className="flex flex-col gap-3" data-slot="your-website">
-      {shot === "loading" ? (
-        <Skeleton className="aspect-[16/10] w-full rounded-md" />
-      ) : shot && shot.src !== broken ? (
-        <img
-          alt={`Your website's home page on a laptop, version ${live}`}
-          className="aspect-[16/10] w-full rounded-md border border-border bg-muted object-cover object-top"
-          height={200}
-          loading="lazy"
-          onError={() => setBroken(shot.src)}
-          src={shot.src}
-          width={320}
+      {shot ? (
+        <Shot
+          alt="Your website's home page on a laptop"
+          className="aspect-[16/10] w-full rounded-md border border-border"
+          key={shot === "loading" ? "loading" : shot.src}
+          src={shot === "loading" ? undefined : shot.src}
         />
       ) : null}
       <p className="flex items-center gap-2 text-sm">
@@ -1507,7 +1678,7 @@ function YourWebsite({
             live ? "bg-primary" : "bg-muted-foreground/40"
           )}
         />
-        {live ? `Version ${live} is live` : "Nothing is published yet"}
+        {live ? "Your website is live" : "Nothing is published yet"}
       </p>
       {live && (host || change) ? (
         // Side by side, each growing to share the row; a row too narrow for
@@ -1546,37 +1717,6 @@ function YourWebsite({
           ) : null}
         </div>
       ) : null}
-      {blueprint ? (
-        <BlueprintCard
-          blueprint={blueprint}
-          className="my-0 rounded-2xl p-3"
-          defaultOpen={false}
-          readOnly
-        />
-      ) : null}
-    </div>
-  )
-}
-
-/* Today ---------------------------------------------------------------- */
-
-/**
- * The panel's opening lines, written by the app from the workspace: one or
- * two short sentences, the first leading and the second quieter. No live
- * region: it changes with every read, and the sections below announce what
- * the owner did.
- */
-function PanelDigest({ sentences }: { sentences: string[] }) {
-  const [lead, ...rest] = sentences
-  if (!lead) return null
-  return (
-    <div className="flex flex-col gap-0.5" data-slot="panel-digest">
-      <p className="text-sm">{lead}</p>
-      {rest.map((sentence) => (
-        <p className={META} key={sentence}>
-          {sentence}
-        </p>
-      ))}
     </div>
   )
 }
@@ -1590,26 +1730,42 @@ function PanelDigest({ sentences }: { sentences: string[] }) {
  * the app picks what the line says. Spans only, and no live region: the
  * shell puts it inside the button that opens the panel.
  */
+/** How long each line holds the panel's header when several share it. */
+const LINE_TURN_MS = 4000
+
+/**
+ * The panel's header line. With several `lines`, such as two jobs at work,
+ * each takes a turn: the next slides in every few seconds, and a pointer
+ * resting on it holds the one showing. The persona and its halo stay put.
+ */
 function LiveLine({
   tone,
   lead,
   detail = null,
-  progress = null,
+  lines,
+  avatar = null,
 }: {
   tone: "working" | "live" | "idle"
   lead: string
   detail?: string | null
-  /** How far a build is through its steps, kept in view when the words truncate. */
-  progress?: { done: number; total: number } | null
+  lines?: readonly { lead: string; detail?: string | null }[] | undefined
+  /** The assistant's face, Reme's own when null. */
+  avatar?: AvatarId | null
 }) {
+  const [held, setHeld] = useState(false)
+  const turns = lines && lines.length > 1 ? lines : [{ lead, detail }]
+  const { item, at } = useCycle(turns, LINE_TURN_MS, held)
+  const shown = item ?? { lead, detail }
   return (
     <span
       className="flex min-w-0 items-center gap-2 text-sm"
       data-slot="live-line"
       data-tone={tone}
+      onPointerEnter={() => setHeld(true)}
+      onPointerLeave={() => setHeld(false)}
     >
-      {/* Reme, floating and blinking as it does everywhere; while it works a
-          halo pulses behind it, and when the work is live the halo holds. */}
+      {/* The assistant, moving as it does everywhere; while it works a halo
+          pulses behind it, and when the work is live the halo holds. */}
       <span aria-hidden className="relative flex size-6 shrink-0">
         {tone === "idle" ? null : (
           <span
@@ -1620,78 +1776,23 @@ function LiveLine({
             data-slot="live-line-halo"
           />
         )}
-        <PersonaAvatar className="size-6" sway />
+        <AssistantAvatar className="size-6" id={avatar} sway />
       </span>
-      {progress ? (
-        // A build's step is the news, so the lead gives way first.
-        <span className="flex min-w-0 items-baseline gap-1">
-          <span className="min-w-0 truncate font-medium">{lead}</span>
-          <span className="shrink-0 text-muted-foreground">{detail}</span>
-          <span
-            className="shrink-0 text-muted-foreground tabular-nums"
-            data-slot="live-line-progress"
-          >
-            <span aria-hidden>
-              {progress.done}/{progress.total}
-            </span>
-            <span className="sr-only">
-              , step {progress.done} of {progress.total}
-            </span>
-          </span>
-        </span>
-      ) : (
-        <span className="min-w-0 truncate">
-          <span className="font-medium">{lead}</span>
-          {detail ? (
-            <span className="text-muted-foreground"> {detail}</span>
-          ) : null}
-        </span>
-      )}
+      <span
+        className={cn(
+          "min-w-0 truncate",
+          turns.length > 1 &&
+            "fade-in slide-in-from-bottom-1 animate-in duration-enter motion-reduce:animate-none"
+        )}
+        // A new key per turn replays the slide.
+        key={turns.length > 1 ? `${at}:${shown.lead}` : "line"}
+      >
+        <span className="font-medium">{shown.lead}</span>
+        {shown.detail ? (
+          <span className="text-muted-foreground"> {shown.detail}</span>
+        ) : null}
+      </span>
     </span>
-  )
-}
-
-/**
- * The panel before there is anything to show: what the team still needs,
- * and the build it leads to. Each step is ticked from the workspace, never
- * from what the owner has clicked.
- */
-function PanelBlank({
-  steps,
-  description = null,
-  action = null,
-}: {
-  steps: { label: string; done: boolean }[]
-  /** What to do next, in the words of the steps below it. */
-  description?: string | null
-  /** Where the next step is taken: a link, from the app. */
-  action?: ReactNode
-}) {
-  return (
-    <PanelSection title="First steps">
-      {description ? <p className={META}>{description}</p> : null}
-      <ul className="flex flex-col gap-1">
-        {steps.map((step) => (
-          <li className="flex items-center gap-2 text-sm" key={step.label}>
-            {step.done ? (
-              <CheckCircleIcon
-                aria-hidden
-                className="size-4 shrink-0 text-primary"
-                weight="fill"
-              />
-            ) : (
-              <CircleIcon
-                aria-hidden
-                className="size-4 shrink-0 text-muted-foreground"
-              />
-            )}
-            <span className="sr-only">{step.done ? "Done: " : "To do: "}</span>
-            {step.label}
-          </li>
-        ))}
-      </ul>
-      {action}
-    </PanelSection>
   )
 }
 
@@ -1717,22 +1818,26 @@ function NextSteps({ children }: { children?: ReactNode }) {
   )
 }
 
-export type { Preview, Thumbnail }
+export type { Preview, SegmentStep, Thumbnail, VersionPictures }
 export {
   AnswerInputs,
   ApprovalItem,
   approvalDecision,
-  BUILD_STAGES,
   ComingUp,
   LiveLine,
   NextSteps,
-  PanelBlank,
-  PanelDigest,
+  PanelSection,
+  PanelSegment,
+  PreviewLink,
   QuestionItem,
   ReminderList,
   ReminderNote,
+  SECTION_ACTION,
+  Shot,
+  SiteIcon,
+  StageDetail,
+  StopBuild,
   stageWord,
   WaitingOnYou,
-  WorkingOn,
   YourWebsite,
 }

@@ -1,14 +1,17 @@
 import {
   ActivityFeed,
+  AGENT_NOTE,
   ApprovalRequest,
   type AssignmentState,
   type AttentionItem,
+  type AvatarId,
   Blueprint,
   type BuildActivity,
   type BuildLane,
   type BuildPhoto,
   type BuildStopCause,
   type BuildSummary,
+  buildFailure,
   type DerivedReminder,
   type FactRecord,
   FactValue,
@@ -40,6 +43,7 @@ import {
 } from "@workspace/db"
 import { factsToAsk } from "@workspace/gates/fields"
 import { fields } from "@workspace/starter-site/site-config"
+import { activityOf, readActivityRows } from "./activity.ts"
 import { sha256Hex } from "./http.ts"
 import { readReminderNotes } from "./reminders.ts"
 
@@ -65,25 +69,86 @@ type Alert = Extract<AttentionItem, { kind: "alert" }>
 const iso = (at: Date) => at.toISOString()
 
 /**
- * shortcut: constants until EV3's rolling p50 and p95 per lane exist; swap
- * this one object for the measured numbers, nothing else reads them.
+ * How long each lane takes, from the click to the draft, as the bounds of
+ * the range the chat and the panel both quote ("6 to 10 minutes"): p50 is
+ * the low end, p95 the high. The full lane is the local runs of 2026-10-24
+ * and 25 (310 to 406 s, a repair round in some; the owner's top is 10
+ * minutes for a slow provider); the quick lane is 34 to 65 s to the ready card.
+ * shortcut: a few runs on one machine, until EV3's rolling p50 and p95 per lane exist; swap this one object for them.
  */
 export const EXPECTED_SECONDS = {
-  quick: { p50: 15, p95: 45 },
-  full: { p50: 180, p95: 330 },
+  quick: { p50: 45, p95: 90 },
+  full: { p50: 360, p95: 600 },
 } as const
 
-/** The steps in the order a full build reaches them; the photos row travels with the pages. */
-const ORDER = [
+/** What a full build is doing, finer than the stages the owner sees. */
+type Step =
+  | "planning"
+  | "writing"
+  | "assembling"
+  | "design"
+  | "polishing"
+  | "fixing"
+  | "checking"
+  | "ready"
+
+/**
+ * The stages every full build lists from its first event, in the order it
+ * reaches them. The photos are drawn before the pages are written, and the
+ * design look and its fixes come before the gates. The activity view's
+ * website segment lists the same ids.
+ */
+export const STAGES = [
   "planning",
+  "photos",
   "writing",
-  "assembling",
-  "design",
   "polishing",
-  "fixing",
   "checking",
+  "ready",
 ] as const
-type Step = (typeof ORDER)[number]
+type Stage = (typeof STAGES)[number]
+
+/** Where each step sits: the pages include putting them together, polish includes the look, the checks include a repair. */
+const STAGE_OF: Record<Step, Stage> = {
+  planning: "planning",
+  writing: "writing",
+  assembling: "writing",
+  design: "polishing",
+  polishing: "polishing",
+  fixing: "checking",
+  checking: "checking",
+  ready: "ready",
+}
+
+const STAGE_LABEL: Record<Stage, string> = {
+  planning: "Planning the layout",
+  photos: "Making photos",
+  writing: "Writing the pages",
+  polishing: "Polishing the design",
+  checking: "Checking the site",
+  ready: "Ready to review",
+}
+
+/** What a stage reads while it is on the step that has a line of its own. */
+const STEP_LABEL: Partial<Record<Step, string>> = {
+  assembling: "Putting the site together",
+  design: "Looking over the design",
+}
+
+/** Where a build waits for a person; its stage is where the events left it. */
+const PARKED: readonly AssignmentState[] = [
+  "blocked_on_information",
+  "blocked_on_approval",
+  "paused",
+]
+
+/** The states from the preview on: every stage that applied is done. */
+const READY: readonly AssignmentState[] = [
+  "preview_ready",
+  "awaiting_review",
+  "release_candidate",
+  "published",
+]
 
 /**
  * An event that says where a build has got to, in the order they landed: the
@@ -97,10 +162,12 @@ export type Mark = { type: string; fixes?: number | null }
 
 const REPORTED = "assignment.completion_reported"
 const REPAIRED = "assignment.state_changed"
+/** The checks' report: its `fixes` is how many checks failed. */
+const VALIDATED = "assignment.validation_reported"
 
 /**
- * The step a build is on, or null in a state that is not one of them. After
- * the lead's first report a planned build is being looked over until the look
+ * The step a build is on, or null before it starts and in a state that ends
+ * it unfinished. After the lead's first report a planned build is being looked over until the look
  * answers; if it asked for changes the lead is polishing until it reports
  * again, and from that report on the build is being checked (the recheck, the
  * screenshots, then the gates). A move into `repairing` that no report has
@@ -114,6 +181,7 @@ function stepOf(
   if (state === "planning") return "planning"
   if (state === "validating") return "checking"
   if (state === "repairing") return "fixing"
+  if (READY.includes(state)) return "ready"
   if (!["implementing", "revising"].includes(state)) return null
   const types = marks.map((m) => m.type)
   const reported = types.lastIndexOf(REPORTED)
@@ -136,12 +204,14 @@ export type Progress = Partial<
   Record<"pages" | "photos", { done: number; total: number }>
 >
 
-/** One `build.progress` row that finished something: a page, or a photo slot with how it settled. */
+/** One `build.progress` row that names its item: a page begun or written, or a photo slot with how it settled. */
 export type Settled = {
   stage: string
   item: string
   status?: string | null
   asset_id?: string | null
+  /** A page whose writer has started; a row without it is a page written. */
+  working?: boolean | null
 }
 
 /** The most a row counts to (the contract's bound). */
@@ -151,16 +221,56 @@ const COUNT_MAX = 999
 const toDraw = (plan: Blueprint | null | undefined) =>
   (plan?.images ?? []).filter((i) => i.source === "generated" && !i.asset_id)
 
+/** A quick change's three steps, in order; the orchestrator tells each as it starts it (`quick.step`). */
+const QUICK_ROWS = [
+  ["edit", "Writing the change"],
+  ["check", "Checking the page"],
+  ["preview", "Taking the preview"],
+] as const
+
 /**
- * Every step of the build, in order: those passed are done, the rest count
- * what they have finished so far. A planned build counts its photos, when it
- * makes any, and names its pages ("Writing the pages, 3 of 5"), then has its
- * design looked over before the checks. A build the gates sent back shows
- * "Fixing what the checks found" until the lead reports again. The step it is
- * on follows the build's own events (`marks`), not the state alone; the pages
- * tick as each is written, or all at once when the lead reports a build it
- * wrote itself. Any other step is whole, `1 of 1`. A quick build gets none;
- * the panel shows one line for it.
+ * A quick change's rows, from the step its own events last told: the ones
+ * before it done, it the one `now`. Nothing is `now` before the first is
+ * told; from the preview on all are done. A change the Developer makes (the
+ * section lane) tells none, so its report stands for the preview.
+ */
+function quickActivity(
+  state: AssignmentState,
+  step: string | null | undefined,
+  reported: boolean
+): BuildActivity[] {
+  const told = QUICK_ROWS.findIndex(([id]) => id === step)
+  const at = READY.includes(state)
+    ? QUICK_ROWS.length
+    : told >= 0
+      ? told
+      : reported || state === "validating"
+        ? QUICK_ROWS.length - 1
+        : state === "queued" || state === "briefing"
+          ? -1
+          : 0
+  return QUICK_ROWS.map(([id, label], i) => ({
+    id,
+    label,
+    done: i < at ? 1 : 0,
+    total: 1,
+    ...(i === at ? { now: true as const } : {}),
+  }))
+}
+
+/**
+ * The same six stages for every full build from its first event, so a row
+ * never appears or goes: Plan, Photos, Pages, Polish, Check, Ready. Stages
+ * passed are done, the rest count what they have finished so far. A stage
+ * that does not apply stays in the list as `skipped`: no photos to make, or a
+ * design look that asked for no changes. The pages include putting them
+ * together, polish includes the look at the design, and a repair the gates
+ * sent back shows as a line under the checks until the lead reports again.
+ * The stage it is on follows the build's own events (`marks`), not the state
+ * alone; the pages tick as each is written, or all at once when the lead
+ * reports a build it wrote itself. From the preview on every row is kept,
+ * done. Any stage but the pages and photos is whole, `1 of 1`. A quick build
+ * lists its own three steps instead (`quickActivity`).
  */
 export function activityFor(
   lane: BuildLane,
@@ -170,80 +280,131 @@ export function activityFor(
     plan,
     settled = [],
     marks = [],
-  }: { plan?: Blueprint | null; settled?: Settled[]; marks?: Mark[] } = {}
+    step,
+  }: {
+    plan?: Blueprint | null
+    settled?: Settled[]
+    marks?: Mark[]
+    /** The step a quick change last told. */
+    step?: string | null
+  } = {}
 ): BuildActivity[] {
-  const reached = stepOf(state, marks, Boolean(plan))
-  if (lane === "quick" || !reached) return []
+  if (lane === "quick") {
+    return quickActivity(
+      state,
+      step,
+      marks.some((m) => m.type === REPORTED)
+    )
+  }
+  // A build waiting on a person is where its events left it: a plan, a report
+  // or a counted page or photo means the lead has begun, else it is planning.
+  // shortcut: an unplanned build parked before its first event reads as
+  // planning, as the state alone cannot say; add the last working state to
+  // the select if that shows.
+  const begun =
+    Boolean(plan) ||
+    marks.length > 0 ||
+    Boolean(progress.pages || progress.photos)
+  const reached = stepOf(
+    PARKED.includes(state) ? (begun ? "implementing" : "planning") : state,
+    marks,
+    Boolean(plan)
+  )
+  const queued = state === "queued" || state === "briefing"
+  if (!reached && !queued) return []
   // Every page written and no report yet: the lead is putting the site
   // together, which took 2 min 20 s in perf run 2 under "6 of 6".
   const written =
     progress.pages !== undefined && progress.pages.done >= progress.pages.total
-  const at: Step =
+  const at: Step | null =
     reached === "writing" && plan && written ? "assembling" : reached
-  const now = ORDER.indexOf(at)
-  const passed = (step: Step) => ORDER.indexOf(step) < now
   const photos =
     progress.photos ??
     (toDraw(plan).length > 0
       ? { done: 0, total: toDraw(plan).length }
       : undefined)
   // The photos are drawn before the pages are written, so while slots are
-  // still settling and no page has been, the photos are the step it is on.
+  // still settling and no page has been, the photos are the stage it is on.
   const drawing =
     at === "writing" &&
     photos !== undefined &&
     photos.done < photos.total &&
     !progress.pages?.done
-  const current = drawing ? "photos" : at
+  const current: Stage | null = drawing ? "photos" : at && STAGE_OF[at]
+  const here = current ? STAGES.indexOf(current) : -1
+  const passed = (stage: Stage) => STAGES.indexOf(stage) < here
+  const looked = marks.some((m) => m.type === "design.critiqued")
+  const polished = marks.some((m) => m.type === "design.critiqued" && m.fixes)
+  // shortcut: a build with no plan that starts counting photos after its
+  // pages have begun moves back from skipped; the builder draws them first.
+  const skipped: Partial<Record<Stage, boolean>> = {
+    photos: !photos && (Boolean(plan) || here >= STAGES.indexOf("writing")),
+    polishing: !polished && (looked || passed("polishing")),
+  }
   const row = (
-    id: string,
-    label: string,
-    done: boolean,
+    id: Stage,
     count?: { done: number; total: number }
   ): BuildActivity => {
+    const label =
+      (at && STAGE_OF[at] === id ? STEP_LABEL[at] : undefined) ??
+      STAGE_LABEL[id]
+    if (skipped[id]) return { id, label, done: 0, total: 1, skipped: true }
     const total = Math.min(Math.max(count?.total ?? 1, 1), COUNT_MAX)
+    // The photos keep their count while the pages are written, as the
+    // builder settles slots alongside them.
+    const done =
+      passed(id === "photos" ? "writing" : id) ||
+      (id === "ready" && at === "ready")
     return {
       id,
       label,
       done: done ? total : Math.min(count?.done ?? 0, total),
       total,
-      ...(id === current ? { now: true as const } : {}),
+      ...(id === current && at !== "ready" ? { now: true as const } : {}),
     }
   }
+  const pageRows = settled.filter((s) => s.stage === "pages")
   const pagesDone = new Set(
-    settled.filter((s) => s.stage === "pages").map((s) => s.item)
+    pageRows.filter((s) => !s.working).map((s) => s.item)
   )
-  const pages = plan?.pages.map(({ page }) => ({
-    label: PLANNED_PAGES.find((p) => p.id === page)?.label ?? page,
-    done: passed("writing") || pagesDone.has(page),
-  }))
+  // Begun and not written, while the writers run: several at once.
+  const pagesAtWork = new Set(
+    current === "writing" && !PARKED.includes(state)
+      ? pageRows.filter((s) => s.working).map((s) => s.item)
+      : []
+  )
+  const everyPage = passed("writing") || at === "assembling"
+  const pages = plan?.pages.map(({ page }) => {
+    const done = everyPage || pagesDone.has(page)
+    return {
+      label: PLANNED_PAGES.find((p) => p.id === page)?.label ?? page,
+      done,
+      ...(!done && pagesAtWork.has(page) ? { working: true as const } : {}),
+    }
+  })
   const repaired = marks.some((m) => m.type === REPAIRED)
-  const polished = marks.some((m) => m.type === "design.critiqued" && m.fixes)
+  const found = marks.filter((m) => m.type === VALIDATED).at(-1)?.fixes
   return [
-    row("planning", "Planning the layout", passed("planning")),
-    ...(photos
-      ? [row("photos", "Making photos", passed("writing"), photos)]
-      : []),
+    row("planning"),
+    row("photos", photos),
+    { ...row("writing", progress.pages), ...(pages ? { items: pages } : {}) },
+    row("polishing"),
     {
-      ...row("writing", "Writing the pages", passed("writing"), progress.pages),
-      ...(pages ? { items: pages } : {}),
+      ...row("checking"),
+      ...(repaired || at === "fixing"
+        ? {
+            items: [
+              {
+                label: found
+                  ? `Fixing ${found} ${found === 1 ? "thing" : "things"} the checks found`
+                  : "Fixing what the checks found",
+                done: at !== "fixing",
+              },
+            ],
+          }
+        : {}),
     },
-    // A planned build's pages are written in parallel and put together by
-    // the lead; BA5's look before the gates runs only on a planned build.
-    ...(plan
-      ? [
-          row("assembling", "Putting the site together", passed("assembling")),
-          row("design", "Looking over the design", passed("design")),
-          // Only when the look asked for changes; a short one still shows, done.
-          ...(polished || at === "polishing"
-            ? [row("polishing", "Polishing the design", passed("polishing"))]
-            : []),
-        ]
-      : []),
-    ...(repaired || at === "fixing"
-      ? [row("fixing", "Fixing what the checks found", passed("fixing"))]
-      : []),
-    row("checking", "Checking the site", passed("checking")),
+    row("ready"),
   ]
 }
 
@@ -303,37 +464,46 @@ export async function readBuilds(
       lane: sql<
         string | null
       >`(select e.payload->>'lane' from events e where e.assignment_id = assignments.id and e.type = 'assignment.created' limit 1)`,
+      retryOf: sql<
+        string | null
+      >`(select e.payload->>'retry_of' from events e where e.assignment_id = assignments.id and e.type = 'assignment.created' limit 1)`,
+      // A change's short name, which the orchestrator trims to 40 characters.
+      label: sql<
+        string | null
+      >`(select e.payload->>'label' from events e where e.assignment_id = assignments.id and e.type = 'assignment.created' limit 1)`,
       // QE4: the quick lane handed the change on, to the Developer or on to
       // the build model. The orchestrator logs each, and the row's lane is
       // only where it started.
+      // A mid-build restart, as the stall watchdog makes (the orchestrator's `retry.ts`).
+      restarted: sql<boolean>`exists (select 1 from events e where e.assignment_id = assignments.id and e.type = ${AGENT_NOTE} and e.payload->>'kind' = 'resumed')`,
       fell: sql<boolean>`exists (select 1 from events e where e.assignment_id = assignments.id and (e.type = 'quick.fell_through' or (e.type = 'model.switched' and e.payload->>'reason' = 'quick.fell_through')))`,
       // Written out rather than interpolated: in a one-table select drizzle
       // drops the table name, and a bare `id` here would mean the revision's.
       revision: sql<RevisionRef | null>`(select json_build_object('revision_id', r.id, 'version', r.version) from site_revisions r where r.assignment_id = assignments.id and r.version is not null order by r.version desc limit 1)`,
       // ADR-038: the plan on the row, the round it is and the plan it
-      // changed from the newest `blueprint.proposed`, and the newest round
-      // the owner decided on, all by `events_assignment_type_idx`.
+      // changed from the newest `blueprint.proposed`, by `events_assignment_type_idx`.
       blueprint: assignments.blueprint,
       proposed: sql<Record<
         string,
         unknown
       > | null>`(select e.payload from events e where e.assignment_id = assignments.id and e.type = 'blueprint.proposed' order by e.event_id desc limit 1)`,
-      decidedRound: sql<
-        number | null
-      >`(select max((e.payload->>'round')::int) from events e where e.assignment_id = assignments.id and e.type = 'blueprint.decided')`,
       // BA4's counts: distinct pages or photos finished per stage, and the
       // stage's total, so a repeated event never counts twice.
-      progress: sql<Progress | null>`(select json_object_agg(p.stage, json_build_object('done', p.done, 'total', p.total)) from (select e.payload->>'stage' as stage, count(distinct e.payload->>'item')::int as done, max((e.payload->>'total')::int) as total from events e where e.assignment_id = assignments.id and e.type = 'build.progress' group by 1) p)`,
+      progress: sql<Progress | null>`(select json_object_agg(p.stage, json_build_object('done', p.done, 'total', p.total)) from (select e.payload->>'stage' as stage, (count(distinct e.payload->>'item') filter (where e.payload->>'working' is null))::int as done, max((e.payload->>'total')::int) as total from events e where e.assignment_id = assignments.id and e.type = 'build.progress' group by 1) p)`,
       // The same rows by name, in the order they landed: which pages are
       // written, and how each photo slot settled.
       settled: sql<
         Settled[] | null
-      >`(select json_agg(json_build_object('stage', e.payload->>'stage', 'item', e.payload->>'item', 'status', e.payload->>'status', 'asset_id', e.payload->>'asset_id') order by e.event_id) from events e where e.assignment_id = assignments.id and e.type = 'build.progress' and e.payload->>'item' is not null)`,
+      >`(select json_agg(json_build_object('stage', e.payload->>'stage', 'item', e.payload->>'item', 'status', e.payload->>'status', 'asset_id', e.payload->>'asset_id', 'working', (e.payload->>'working')::boolean) order by e.event_id) from events e where e.assignment_id = assignments.id and e.type = 'build.progress' and e.payload->>'item' is not null)`,
       // Where the build has got to, in order: the lead's reports, the design
       // look's rounds and each move into repairing (`activityFor`'s marks).
       marks: sql<
         Mark[] | null
-      >`(select json_agg(json_build_object('type', e.type, 'fixes', case when jsonb_typeof(e.payload->'fixes') = 'array' then jsonb_array_length(e.payload->'fixes') end) order by e.event_id) from events e where e.assignment_id = assignments.id and (e.type in ('assignment.completion_reported', 'design.critiqued', 'design.rechecked') or (e.type = 'assignment.state_changed' and e.payload->>'to' = 'repairing')))`,
+      >`(select json_agg(json_build_object('type', e.type, 'fixes', case when e.type = ${VALIDATED} then (select count(*)::int from jsonb_array_elements(e.payload->'gates') g where g->>'passed' = 'false') when jsonb_typeof(e.payload->'fixes') = 'array' then jsonb_array_length(e.payload->'fixes') end) order by e.event_id) from events e where e.assignment_id = assignments.id and (e.type in ('assignment.completion_reported', 'design.critiqued', 'design.rechecked', ${VALIDATED}) or (e.type = 'assignment.state_changed' and e.payload->>'to' = 'repairing')))`,
+      // The step a quick change last told (the orchestrator's `quick.step`).
+      step: sql<
+        string | null
+      >`(select e.payload->>'step' from events e where e.assignment_id = assignments.id and e.type = 'quick.step' order by e.event_id desc limit 1)`,
       // Time the build waited on the owner's decided plan reviews: each
       // `blueprint.decided` back to the review round it answered.
       reviewMs: sql<
@@ -345,8 +515,10 @@ export async function readBuilds(
       >`(select extract(epoch from max(e.occurred_at)) * 1000 from events e where e.assignment_id = assignments.id and e.type = 'assignment.state_changed' and e.payload->>'to' = 'preview_ready')::float8`,
     })
     .from(assignments)
+    // Less a draft a change holds (the orchestrator's `holdDraft`): it is
+    // paused for the change, which is the build the owner follows.
     .where(
-      sql`${assignments.kind} in ('site.build', 'site.revise') and ${assignments.state} not in ${TERMINAL_STATES}`
+      sql`${assignments.kind} in ('site.build', 'site.revise') and ${assignments.state} not in ${TERMINAL_STATES} and not (assignments.state = 'paused' and exists (select 1 from assignments h where h.revision_of_assignment_id = assignments.id and h.state not in ('published', 'failed', 'cancelled')))`
     )
     .orderBy(sql`${assignments.createdAt} desc`)
   const rows = await (limit === null ? query : query.limit(limit))
@@ -362,12 +534,16 @@ export async function readBuilds(
       kind: row.kind as BuildSummary["kind"],
       state: row.state,
       goal: row.goal,
+      ...(row.label ? { label: row.label } : {}),
       lane,
       ...(fellThrough ? { fell_through: true } : {}),
+      ...(row.retryOf ? { retry: true as const } : {}),
+      ...(row.restarted ? { restarted: true as const } : {}),
       activity: activityFor(lane, row.state, progress, {
         plan,
         settled,
         marks: row.marks ?? [],
+        step: row.step,
       }),
       revision: row.revision,
       ...planOf(row),
@@ -380,16 +556,10 @@ export async function readBuilds(
   })
 }
 
-/**
- * The build's Blueprint for the card, when it planned one that still parses.
- * It waits on the owner while the build is planning, its round asked for a
- * review, and no decision on that round is stored.
- */
+/** The build's Blueprint for the panel, when it planned one that still parses. */
 export function planOf(row: {
-  state: AssignmentState
   blueprint: unknown
   proposed: Record<string, unknown> | null
-  decidedRound: number | null
 }): Pick<BuildSummary, "blueprint"> {
   const plan = Blueprint.safeParse(row.blueprint)
   const round = Number(row.proposed?.round)
@@ -399,10 +569,6 @@ export function planOf(row: {
       plan: plan.data,
       round,
       previous: Blueprint.safeParse(row.proposed?.previous).data ?? null,
-      awaiting:
-        row.state === "planning" &&
-        row.proposed?.review === true &&
-        row.decidedRound !== round,
     },
   }
 }
@@ -653,24 +819,9 @@ async function readFeed(
     .slice(0, limit)
 }
 
-/** The orchestrator's failure reasons, by the cause the owner is told. */
-const CAUSES: Record<string, BuildStopCause> = {
-  "developer.stalled": "stalled",
-  "developer.timed_out": "stalled",
-  "developer.no_report": "unfinished",
-  "tool.repeating_failure": "unfinished",
-  "gates.failed": "unfinished",
-  "gates.repair_budget_exhausted": "unfinished",
-  "information.unanswered": "unanswered",
-  "blueprint.undecided": "unanswered",
-  "provider.unavailable": "service",
-  "sandbox.updating": "service",
-  "sandbox.site_lost": "service",
-}
-
-/** Why a build failed, in the owner's terms; `other` for a reason with no words of its own. */
+/** Why a build failed, in the owner's terms, from the one table the pipeline also reads. */
 export const causeOf = (reason: string | null): BuildStopCause =>
-  (reason && CAUSES[reason]) || "other"
+  buildFailure(reason).cause
 
 /** The org's current facts, one per key. */
 export async function readFacts(db: OrgScopedDb): Promise<FactRecord[]> {
@@ -726,6 +877,26 @@ export function assistantName(current: FactRecord[]): string | null {
   const parsed =
     held && FactValue.safeParse({ key: held.key, value: held.value })
   return parsed?.success && parsed.data.key === "assistant.name"
+    ? parsed.data.value.name
+    : null
+}
+
+/** The face the owner picked for their assistant, or null for Reme's own. */
+export function assistantAvatar(current: FactRecord[]): AvatarId | null {
+  const held = current.find((fact) => fact.key === "assistant.avatar")
+  const parsed =
+    held && FactValue.safeParse({ key: held.key, value: held.value })
+  return parsed?.success && parsed.data.key === "assistant.avatar"
+    ? parsed.data.value.id
+    : null
+}
+
+/** The business name fact, when it still parses. Not `factValue`: onboarding.ts reaches chat.ts, which the CoS must not (ADR-034). */
+export function businessName(current: FactRecord[]): string | null {
+  const held = current.find((fact) => fact.key === "business.name")
+  const parsed =
+    held && FactValue.safeParse({ key: held.key, value: held.value })
+  return parsed?.success && parsed.data.key === "business.name"
     ? parsed.data.value.name
     : null
 }
@@ -847,17 +1018,27 @@ export async function statusWithFacts(
 ): Promise<{ status: WorkspaceStatus; facts: FactRecord[] }> {
   // Issued together, so postgres.js pipelines them on the transaction's one
   // connection instead of paying a round trip each.
-  const [builds, approvalItems, questions, feed, current, site, notes, due] =
-    await Promise.all([
-      readBuilds(db),
-      readApprovals(db),
-      readQuestions(db),
-      readFeed(db, PANEL_HOURS, 10),
-      readFacts(db),
-      readSite(db, config),
-      readReminderNotes(db),
-      readDueReminders(db, now),
-    ])
+  const [
+    builds,
+    approvalItems,
+    questions,
+    feed,
+    current,
+    site,
+    notes,
+    due,
+    rows,
+  ] = await Promise.all([
+    readBuilds(db),
+    readApprovals(db),
+    readQuestions(db),
+    readFeed(db, PANEL_HOURS, 10),
+    readFacts(db),
+    readSite(db, config),
+    readReminderNotes(db),
+    readDueReminders(db, now),
+    readActivityRows(db, now),
+  ])
   const missing = missingFacts(current)
   const status = WorkspaceStatus.parse({
     site,
@@ -866,6 +1047,7 @@ export async function statusWithFacts(
     attention: orderAttention(approvalItems, questions, feed, due),
     missing_facts: missing,
     assistant_name: assistantName(current),
+    assistant_avatar: assistantAvatar(current),
     reminders: {
       notes,
       derived: deriveReminders(
@@ -873,6 +1055,21 @@ export async function statusWithFacts(
         now
       ),
     },
+    activity: activityOf(
+      {
+        site,
+        business: businessName(current),
+        builds,
+        approvals: approvalItems,
+        questions,
+        feed,
+        due,
+        notes,
+        rows,
+        expected: EXPECTED_SECONDS,
+      },
+      now
+    ),
   })
   return { status, facts: current }
 }

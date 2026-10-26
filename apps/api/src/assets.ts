@@ -1,6 +1,8 @@
 import {
   type Asset,
   idempotencyKey,
+  SiteMedia,
+  thumbnailOf,
   UPLOAD_MAX_BYTES,
   UPLOAD_MAX_FILES,
   type UploadedAssets,
@@ -8,7 +10,7 @@ import {
 import { sql, type Tenancy } from "@workspace/db"
 import { type Owner, stateFacts } from "./changes.ts"
 import { failure, invalid, keyMissing, sha256Hex } from "./http.ts"
-import { factValue } from "./onboarding.ts"
+import { factValue, logoOf } from "./onboarding.ts"
 import { readFacts } from "./workspace.ts"
 
 /**
@@ -70,7 +72,7 @@ export function cleanName(name: string, kind: Kind): string {
 }
 
 /** A UUID v4 in shape, from a hash, so the same inputs make the same id. */
-async function stableId(seed: string): Promise<string> {
+export async function stableId(seed: string): Promise<string> {
   const hex = (await sha256Hex(seed)).slice(0, 32).split("")
   hex[12] = "4"
   hex[16] = ((Number.parseInt(hex[16] as string, 16) & 0x3) | 0x8).toString(16)
@@ -94,6 +96,34 @@ const tooMany = () =>
     "assets.too_many",
     `A business can keep at most ${UPLOAD_MAX_FILES} photos.`
   )
+
+/**
+ * Rewrites `media.uploads` with `edit`, read and written under the org's
+ * upload lock so two writers at once both land. The stored list, or null
+ * when the edit would pass `UPLOAD_MAX_FILES` and nothing was written.
+ */
+export async function editUploads(
+  kit: Tenancy,
+  owner: Owner,
+  edit: (items: readonly Asset[]) => Asset[]
+): Promise<Asset[] | null> {
+  const scope = { orgId: owner.orgId, workosUserId: owner.session.workosUserId }
+  return kit.withOrg(scope, async (db) => {
+    await db.execute(
+      sql`select pg_advisory_xact_lock(3, hashtext(${owner.orgId}::text))`
+    )
+    const current = await readFacts(db)
+    const items = edit(factValue(current, "media.uploads")?.items ?? [])
+    if (items.length > UPLOAD_MAX_FILES) return null
+    await stateFacts(
+      db,
+      owner,
+      [{ key: "media.uploads", value: { items } }],
+      current
+    )
+    return items
+  })
+}
 
 export async function uploadAssets(
   request: Request,
@@ -156,23 +186,7 @@ export async function uploadAssets(
       httpMetadata: { contentType: asset.content_type },
     })
   }
-  // Read and written under the org's upload lock, so two uploads at once
-  // both land in the list.
-  const stored = await kit.withOrg(scope, async (db) => {
-    await db.execute(
-      sql`select pg_advisory_xact_lock(3, hashtext(${owner.orgId}::text))`
-    )
-    const current = await readFacts(db)
-    const items = merged(factValue(current, "media.uploads")?.items ?? [])
-    if (items.length > UPLOAD_MAX_FILES) return false
-    await stateFacts(
-      db,
-      owner,
-      [{ key: "media.uploads", value: { items } }],
-      current
-    )
-    return true
-  })
+  const stored = await editUploads(kit, owner, merged)
   if (!stored) {
     await Promise.all(
       made
@@ -187,20 +201,31 @@ export async function uploadAssets(
 
 /** The thumbnail's width in pixels, about three times its tile for sharp screens. */
 const THUMB_WIDTH = 320
+/**
+ * The design tray's width: its photo and logo tiles are about 160 px, and a
+ * logo's lettering blurs at 320, so tray pictures are made at 512.
+ */
+const TRAY_WIDTH = 512
 
 /** The types a generated photo is stored as, most likely first. */
 const PHOTO_EXTENSIONS = ["png", "webp", "jpg"] as const
 
+/** The custom metadata a drawn logo variant is stored with, beside the builder's photos. */
+export const LOGO_VARIANT = { use: "logo" } as const
+
 /**
- * `GET /photos/{asset id}`: one generated photo of the caller's org, for the
- * panel's thumbnails and the review card. The key starts with the session's
- * own org, so another org's id is a miss like any other: 404, saying nothing
- * about whether it exists. The id is the picture's hash, so the bytes behind
- * it never change and the answer is cached for good, privately.
+ * `GET /photos/{asset id}`: one picture of the caller's org. A generated
+ * photo, for the panel's thumbnails and the review card; a drawn logo
+ * variant; or an owner's upload, so the tray shows held photos and a held
+ * logo after a reload. The key starts with the session's own org, so another
+ * org's id is a miss like any other: 404, saying nothing about whether it
+ * exists. Ids are hashes of what made the bytes, which never change, so the
+ * answer is cached for good, privately.
  *
- * The answer is a 320 px WebP made by the Images binding: the originals are
- * about 2 MB and the tiles show them about 100 px wide. Without the binding,
- * or if it refuses the bytes, the original is served instead.
+ * The answer is a WebP made by the Images binding, 320 px for a generated
+ * photo (the originals are about 2 MB and the tiles show them about 100 px
+ * wide) and `TRAY_WIDTH` for a logo or an upload. Without the binding, or if
+ * it refuses the bytes, the original is served instead.
  *
  * shortcut: re-made on every uncached request (billed once per image a
  * month); store it beside the original if that cost or latency shows.
@@ -210,18 +235,18 @@ export async function readPhoto(
   owner: Owner,
   assetId: string
 ): Promise<Response> {
-  for (const ext of PHOTO_EXTENSIONS) {
-    const object = await env.SITES.get(
-      `generated/${owner.orgId}/${assetId}.${ext}`
-    )
-    if (!object) continue
+  const object = await findPicture(env, owner.orgId, assetId)
+  if (object) {
+    const tray =
+      object.key.startsWith("uploads/") ||
+      object.customMetadata?.use === LOGO_VARIANT.use
     const headers = {
       "cache-control": "private, max-age=31536000, immutable",
       "x-content-type-options": "nosniff",
     }
     const [forThumb, original] = object.body.tee()
     const thumb = await env.IMAGES?.input(forThumb)
-      .transform({ width: THUMB_WIDTH })
+      .transform({ width: tray ? TRAY_WIDTH : THUMB_WIDTH })
       .output({ format: "image/webp", quality: 75 })
       .catch(() => null)
     if (thumb) {
@@ -232,7 +257,9 @@ export async function readPhoto(
     return new Response(original, {
       headers: {
         ...headers,
-        "content-type": object.httpMetadata?.contentType ?? `image/${ext}`,
+        "content-type":
+          object.httpMetadata?.contentType ??
+          `image/${object.key.split(".").pop()}`,
       },
     })
   }
@@ -243,3 +270,139 @@ export async function readPhoto(
     detail: {},
   })
 }
+
+/**
+ * Where each picture is cut from, under the revision's prefix, the first
+ * file there winning, and the size it is served at: the home page's
+ * full-length shots, cut to their first screen; for the laptop's second
+ * picture, a second page's first screen, or on a build from before those
+ * were taken, the second of the viewport-high pieces taken for the design
+ * critic (`cropKey`). A card shows a laptop at most 576 px wide, so it is
+ * served at twice that.
+ */
+const CUTS: Record<string, { keys: string[]; width: number; height: number }> =
+  {
+    laptop: { keys: ["screenshots/home-1440.png"], width: 1200, height: 750 },
+    "laptop-2": {
+      keys: ["screenshots/page-1440.png", "critic/home-1440-2.jpg"],
+      width: 1200,
+      height: 750,
+    },
+    phone: { keys: ["screenshots/home-390.png"], width: 390, height: 844 },
+    icon: { keys: ["dist/icon-192.png"], width: 0, height: 0 },
+  }
+
+/**
+ * `GET /revisions/{revision id}/{picture}`: one version's home page as a
+ * card shows it, or its icon, read from the revision's own prefix in the
+ * site bucket. Like `readPhoto`, the key starts with the session's org (a
+ * site's id is its org's), so another org's revision is a plain 404, and a
+ * revision never changes, so the answer is cached for good, privately.
+ *
+ * Each screenshot is cut from the top to its size, as a WebP. Without the
+ * Images binding, or if it refuses the bytes, the stored file is served as
+ * it is. A page too short for a second screen has none: 404.
+ */
+export async function readRevisionPicture(
+  env: Env,
+  owner: Owner,
+  revisionId: string,
+  picture: string
+): Promise<Response> {
+  const cut = CUTS[picture]
+  let object: R2ObjectBody | null = null
+  for (const key of cut?.keys ?? []) {
+    object = await env.SITES.get(`sites/${owner.orgId}/${revisionId}/${key}`)
+    if (object) break
+  }
+  if (!cut || !object) {
+    return failure(404, {
+      class: "resource",
+      code: "picture.not_found",
+      message: "That version has no such picture yet.",
+      detail: {},
+    })
+  }
+  const headers = {
+    "cache-control": "private, max-age=31536000, immutable",
+    "x-content-type-options": "nosniff",
+  }
+  const stored = {
+    ...headers,
+    "content-type": object.key.endsWith(".jpg") ? "image/jpeg" : "image/png",
+  }
+  if (!cut.width) return new Response(object.body, { headers: stored })
+  const [forShot, body] = object.body.tee()
+  const shot = await env.IMAGES?.input(forShot)
+    .transform({
+      width: cut.width,
+      height: cut.height,
+      fit: "cover",
+      gravity: "top",
+    })
+    .output({ format: "image/webp", quality: 80 })
+    .catch(() => null)
+  return shot
+    ? new Response(shot.image(), {
+        headers: { ...headers, "content-type": shot.contentType() },
+      })
+    : new Response(body, { headers: stored })
+}
+
+/** One placed picture, as a build's `site.photos` event lists it. */
+type PlacedSlot = {
+  id: string
+  section: string
+  alt: string
+  source: string
+  asset_id?: string
+}
+
+/**
+ * `GET /site/media`: the logo the org holds, and the pictures on its newest
+ * version as that build's newest `site.photos` event placed them: the build
+ * waiting for review (as `readApprovals` reads it), else the live one.
+ */
+export async function readSiteMedia(
+  kit: Tenancy,
+  owner: Owner
+): Promise<Response> {
+  const media = await kit.withOrg({ orgId: owner.orgId }, async (db) => {
+    const held = await readFacts(db)
+    const [placed] = (await db.execute(
+      sql`select payload->'slots' as slots from events where type = 'site.photos' and assignment_id = coalesce(
+        (select a.assignment_id from approvals a join assignments s on s.id = a.assignment_id where a.decision is null and ((s.state = 'awaiting_review' and a.expires_at > now()) or s.state = 'blocked_on_approval') order by a.requested_at desc limit 1),
+        (select r.assignment_id from deployments d join site_revisions r on r.id = d.revision_id where d.site_id = (select id from orgs limit 1) order by d.config_version desc limit 1)
+      ) order by event_id desc limit 1`
+    )) as unknown as { slots: PlacedSlot[] | null }[]
+    return SiteMedia.parse({
+      logo: logoOf(held) ?? null,
+      photos: (placed?.slots ?? []).map((slot) => ({
+        slot_id: slot.id,
+        section: slot.section,
+        alt: slot.alt.slice(0, 200),
+        generated: slot.source === "generated",
+        thumbnail: thumbnailOf(slot.asset_id),
+      })),
+    })
+  })
+  return Response.json(media, { headers: { "cache-control": "no-store" } })
+}
+
+/** A generated picture of the org's, with its extension found by trying each. */
+export async function findGenerated(
+  env: Env,
+  orgId: string,
+  assetId: string
+): Promise<R2ObjectBody | null> {
+  for (const ext of PHOTO_EXTENSIONS) {
+    const object = await env.SITES.get(`generated/${orgId}/${assetId}.${ext}`)
+    if (object) return object
+  }
+  return null
+}
+
+/** A generated picture of the org's, or else one of its uploads. */
+const findPicture = async (env: Env, orgId: string, assetId: string) =>
+  (await findGenerated(env, orgId, assetId)) ??
+  env.SITES.get(uploadKey(orgId, assetId))

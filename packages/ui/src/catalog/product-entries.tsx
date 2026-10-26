@@ -186,7 +186,6 @@ function TargetSample() {
     <div className="flex max-w-md flex-col gap-2">
       <ApprovalTargetSummary
         target={{ kind: "revision", revision_id: "rev_2f41c9" }}
-        version={4}
       />
       <ApprovalTargetSummary
         target={{ kind: "domain", hostname: "brightclean.invalid" }}
@@ -251,19 +250,19 @@ const productCatalog: Entry[] = [
             id: "phone",
             term: "Phone",
             description: "+15550142",
-            meta: "You told Reme · version 1 · checked 6 Jan 2026",
+            meta: "You said this · checked 6 Jan 2026",
           },
           {
             id: "hours",
             term: "Weekday",
             description: "08:00 to 17:00",
-            meta: "You told Reme · version 1 · checked 6 Jan 2026",
+            meta: "You said this · checked 6 Jan 2026",
           },
           {
             id: "area",
             term: "Service area",
             description: "Fairhaven, within 25 km",
-            meta: "You told Reme · version 2 · checked 6 Jan 2026",
+            meta: "You said this · checked 6 Jan 2026",
           },
         ]}
       />

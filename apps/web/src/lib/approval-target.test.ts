@@ -6,28 +6,19 @@ import { expect, it } from "vitest"
 const REVISION = "2f41c9ab-0000-4000-8000-000000000005"
 
 /**
- * The approvals screen names a revision the way the owner does: its version,
- * with the short id beside it for matching against a preview link.
+ * The approvals screen names a revision the way the owner does: a new version
+ * of the website, with no number or id to read. Support matches a report to
+ * the revision through an attribute.
  */
-it("shows a revision as its version, with the short id as secondary text", () => {
-  const html = renderToStaticMarkup(
-    createElement(ApprovalTargetSummary, {
-      target: { kind: "revision", revision_id: REVISION },
-      version: 4,
-    })
-  )
-  expect(html).toContain("Version 4")
-  expect(html).toContain("ID 2f41c9ab")
-  expect(html).not.toContain(REVISION)
-})
-
-it("never labels the full revision id a version when the number is unknown", () => {
+it("shows a revision in the owner's words and keeps its id off the page", () => {
   const html = renderToStaticMarkup(
     createElement(ApprovalTargetSummary, {
       target: { kind: "revision", revision_id: REVISION },
     })
   )
-  expect(html).not.toContain(REVISION)
-  expect(html).not.toMatch(/Version [0-9a-f-]{9,}/)
-  expect(html).toContain("ID 2f41c9ab")
+  expect(html).toContain("A new version of your website")
+  expect(html).toContain(`data-revision="${REVISION}"`)
+  expect(html.replace(/ data-revision="[^"]*"/, "")).not.toMatch(
+    /2f41c9ab|ID |Version \d/
+  )
 })

@@ -2,11 +2,13 @@ import {
   AskChoiceInput,
   AskDesignInput,
   AskDetailsInput,
+  CALM_PALETTES,
   type FactValue,
   FONT_PAIRS,
   INDUSTRIES,
   PALETTES,
   PaletteId,
+  SKIP_REPLY,
   TONES,
   type ToneId,
 } from "@workspace/contracts"
@@ -14,8 +16,10 @@ import DIRECTIONS from "@workspace/starter-site/directions.json"
 import { describe, expect, it } from "vitest"
 import type { ToolPart } from "../src/chat.ts"
 import {
+  again,
   applied,
   built,
+  call,
   cardAnswer,
   choiceCard,
   chosen,
@@ -24,6 +28,8 @@ import {
   decided,
   designAnswer,
   designDone,
+  detailsCard,
+  ended,
   factCard,
   firstPalettes,
   ONBOARDING_GOAL,
@@ -36,19 +42,24 @@ import {
   STEPS,
   type StepId,
   stepOf,
+  trayOption,
   typedAnswer,
   voiceOf,
   withChoice,
 } from "../src/onboarding.ts"
 import {
+  back,
+  chose,
   manualEnd,
   opener,
-  photos,
   question,
   quoteForm,
+  quoteUnchanged,
+  retry,
   started,
   type Voice,
 } from "../src/onboarding-copy.ts"
+import { voiceProblems } from "../src/voice.ts"
 
 const counter = () => {
   let n = 0
@@ -111,10 +122,8 @@ const FACTS: Partial<Record<StepId, FactValue[]>> = {
   assistant: [
     { key: "assistant.name", value: { name: "Maya" } },
     { key: "assistant.pronouns", value: { id: "she_her" } },
+    { key: "assistant.avatar", value: { id: "she_1" } },
     { key: "assistant.tone", value: { id: "friendly" } },
-  ],
-  "owner.preferred_name": [
-    { key: "owner.preferred_name", value: { name: "Sam" } },
   ],
 }
 const CHOSEN: Partial<Record<StepId, string[]>> = {
@@ -137,7 +146,7 @@ function walk(o: Onboarding, answers: (card: ToolPart) => unknown) {
   for (let i = 0; i < 40; i++) {
     const step = onboardingStep(at, counter())
     const card = step.find((p): p is ToolPart => p.type.startsWith("tool-"))
-    if (!card && currentStep(at)?.id === "quote_form") {
+    if (currentStep(at)?.id === "quote_form") {
       asked.push("quote_form")
       at = applied(at, { kind: "facts", facts: [QUOTE] })
       continue
@@ -146,16 +155,39 @@ function walk(o: Onboarding, answers: (card: ToolPart) => unknown) {
     const id = card.type === "tool-request_change" ? "build" : stepOf(card)
     asked.push(id as StepId)
     if (id === "build") return { asked, at, step }
-    const answer = cardAnswer(card, answers(card), [])
+    // The logo page keeps the logo before the tray's answer names it.
+    const answer = cardAnswer(card, answers(card), [], [...at.facts, UPLOADS])
     if (!answer) throw new Error(`refused ${id}`)
     at = applied(at, answer)
   }
   throw new Error("the script did not end")
 }
 
+/** The logo the logo page kept, as `media.uploads` holds it. */
+const LOGO = {
+  id: "0d9e0f10-2131-4a2b-9c3d-4e5f60718293",
+  name: "logo.png",
+  content_type: "image/png",
+  bytes: 4821,
+  use: "logo",
+} as const
+const UPLOADS = { key: "media.uploads", value: { items: [LOGO] } }
+
+/** A photo card from a conversation before the photos joined the tray: it still reads. */
+const OLD_UPLOAD: ToolPart = {
+  type: "tool-ask_upload",
+  toolCallId: "old_upload",
+  state: "input-available",
+  input: {
+    accept: ["image/jpeg", "image/png", "image/webp"],
+    max_files: 12,
+    max_bytes: 10_000_000,
+    skippable: true,
+  },
+}
+
 const everyCard = (card: ToolPart): unknown => {
   const step = stepOf(card) as StepId
-  if (card.type === "tool-ask_upload") return { answer: "skipped" }
   if (card.type === "tool-ask_design") {
     const { questions } = AskDesignInput.parse(card.input)
     return {
@@ -164,7 +196,13 @@ const everyCard = (card: ToolPart): unknown => {
           const first = q.card.options[0]?.id
           return [
             q.id,
-            q.card.multiple ? { choices: [first] } : { choice: first },
+            q.visual === "logo"
+              ? { logo: LOGO }
+              : q.visual === "photos"
+                ? { photos: [], create: true }
+                : q.card.multiple
+                  ? { choices: [first] }
+                  : { choice: first },
           ]
         })
       ),
@@ -188,13 +226,11 @@ describe("the onboarding steps", () => {
       "business.audience",
       "business.proof",
       "industry",
+      "quote_form",
       "contact",
       "assistant",
-      "owner.preferred_name",
       "build_for_me",
       "design",
-      "quote_form",
-      "upload",
       "build",
     ])
     expect(step).toEqual([
@@ -215,6 +251,10 @@ describe("the onboarding steps", () => {
       if (currentStep(at)?.id === "quote_form") {
         expect(step).toEqual([
           expect.objectContaining({ type: "text", state: "done" }),
+          expect.objectContaining({
+            type: "tool-ask_open",
+            input: { about: "quote.form" },
+          }),
         ])
         at = applied(at, { kind: "facts", facts: [QUOTE] })
         continue
@@ -233,9 +273,10 @@ describe("the onboarding steps", () => {
     }
   })
 
-  it("never starts a build before the quote form is confirmed or declined, and the photos after it", () => {
+  it("never starts a build before the quote form is confirmed or declined, then the design", () => {
     const { asked, at } = walk(start(), everyCard)
-    expect(asked.slice(-3)).toEqual(["quote_form", "upload", "build"])
+    expect(asked.indexOf("quote_form")).toBeLessThan(asked.indexOf("design"))
+    expect(asked.slice(-2)).toEqual(["design", "build"])
     // Asked for changes: the question comes back before any build.
     const changed = applied(
       { ...at, facts: at.facts.filter((f) => f.key !== "quote.form") },
@@ -315,12 +356,11 @@ describe("the onboarding steps", () => {
     })
   })
 
-  it("fills in what the assistant calls the owner from the session", () => {
-    expect(cardFor("owner.preferred_name").input).toEqual({
-      key: "owner.preferred_name",
-      skippable: false,
-      prefill: { name: "Probe Owner" },
-    })
+  it("calls the owner by the sign-in first name, or by the name they gave in passing", () => {
+    expect(voiceOf(start()).owner).toBe("Probe")
+    expect(voiceOf(start({ ownerName: "" })).owner).toBe("")
+    const said = [{ key: "owner.preferred_name", value: { name: "Sam" } }]
+    expect(voiceOf(start({ facts: said })).owner).toBe("Sam")
   })
 
   it("asks who the customers are once, whoever asked it", () => {
@@ -354,38 +394,29 @@ describe("the onboarding steps", () => {
     )
   })
 
-  it("takes the Skip branch: build mode manual, the builder question, then a closing line", () => {
+  it("takes the Skip branch: build mode manual, then a closing line that says connecting a site is coming", () => {
     const { asked, step } = walk(start(), (card) =>
       stepOf(card) === "build_for_me"
         ? { answer: "chosen", ids: ["skip"], other: null }
-        : stepOf(card) === "manual_builder"
-          ? { answer: "chosen", ids: ["no"], other: null }
-          : everyCard(card)
+        : everyCard(card)
     )
-    expect(asked.slice(-2)).toEqual(["build_for_me", "manual_builder"])
+    expect(asked.at(-1)).toBe("build_for_me")
+    expect(asked).not.toContain("manual_builder")
     expect(step).toEqual([
-      expect.objectContaining({ type: "text", text: expect.any(String) }),
+      expect.objectContaining({
+        type: "text",
+        text: expect.stringMatching(/stay tuned/),
+      }),
     ])
-    expect(step).toHaveLength(1)
   })
 
-  it("labels the build card's no as Skip, and the builder card's plainly", () => {
+  it("labels the build card's no as Skip", () => {
     const labels = (at: Onboarding) =>
       AskChoiceInput.parse(
         (onboardingStep(at, counter())[1] as ToolPart).input
       ).options.map((o) => o.label)
     const facts = ALL_BEFORE("build_for_me")
     expect(labels(start({ facts }))).toEqual(["Yes, build it for me", "Skip"])
-    expect(
-      labels(
-        start({
-          facts: [
-            ...facts,
-            { key: "site.build_mode", value: { mode: "manual" } },
-          ],
-        })
-      )
-    ).toEqual(["Yes", "No"])
   })
 
   it("resolves the build card, then closes in a step of its own so no client sends again", () => {
@@ -433,7 +464,6 @@ const ALL: FactValue[] = [
   { key: "business.industry", value: { name: "x", category: null } },
   ...(FACTS.contact as FactValue[]),
   ...(FACTS.assistant as FactValue[]),
-  ...(FACTS["owner.preferred_name"] as FactValue[]),
   { key: "site.build_mode", value: { mode: "assistant" } },
   { key: "site.template", value: { id: "classic" } },
   { key: "site.palette", value: { id: "ocean" } },
@@ -446,7 +476,12 @@ const ALL: FactValue[] = [
 const KEYS: Partial<Record<StepId, string[]>> = {
   industry: ["business.industry"],
   contact: ["business.phone", "business.email"],
-  assistant: ["assistant.name", "assistant.pronouns", "assistant.tone"],
+  assistant: [
+    "assistant.name",
+    "assistant.pronouns",
+    "assistant.avatar",
+    "assistant.tone",
+  ],
   build_for_me: ["site.build_mode"],
   design: ["site.direction"],
   template: ["site.template"],
@@ -505,17 +540,40 @@ describe("an answer on a card", () => {
     })
   })
 
+  it("refuses a phone on a card that cannot be dialled, so it is never stored", () => {
+    const contact = detailsCard("contact", start(), counter())
+    const phone = (e164: string) => ({ key: "business.phone", value: { e164 } })
+    expect(
+      cardAnswer(
+        contact,
+        { answer: "stated", facts: [phone("+195899933")] },
+        []
+      )
+    ).toBeNull()
+    expect(
+      cardAnswer(
+        contact,
+        { answer: "stated", facts: [phone("+447700900123")] },
+        []
+      )
+    ).toMatchObject({ kind: "facts" })
+  })
+
   it("states a details card's facts, only the step's own keys, each once, and never a skip", () => {
     const card = cardFor("assistant")
     const facts = FACTS.assistant as FactValue[]
     expect(cardAnswer(card, { answer: "stated", facts }, [])).toEqual({
       kind: "facts",
       facts,
+      persona: "stated",
     })
+    expect(
+      cardAnswer(card, { answer: "stated", facts, skip_all: true }, [])
+    ).toMatchObject({ persona: "picked" })
     // Part of the card is an answer too; the step asks again for the rest.
     expect(
       cardAnswer(card, { answer: "stated", facts: facts.slice(0, 1) }, [])
-    ).toEqual({ kind: "facts", facts: facts.slice(0, 1) })
+    ).toEqual({ kind: "facts", facts: facts.slice(0, 1), persona: "stated" })
     for (const output of [
       { answer: "stated", facts: [PHONE] },
       { answer: "stated", facts: [facts[0], facts[0]] },
@@ -612,24 +670,13 @@ describe("an answer on a card", () => {
     )
   })
 
-  it("words the quote-form step from what the owner picked, never from a template that is not there", () => {
-    const none = { template: null, palette: null }
-    const said = (over: Partial<Voice>) =>
-      question("quote_form", voice({ ...none, ...over }))
-    expect(said({ direction: "Counsel", palette: "Ocean" })).toContain(
-      "the Counsel look in Ocean"
-    )
-    expect(said({ direction: "Counsel" })).toContain("the Counsel look")
-    expect(said({ palette: "Ocean" })).toContain("the Ocean colours")
-    expect(said({ ownLook: "airy and plain" })).toContain(
-      "the look you described"
-    )
-    expect(said({ ownColour: "Navy and gold" })).toContain(
-      "the look you described"
-    )
-    expect(said({})).toContain(`the look I'll choose for ${BUSINESS}`)
-    for (const over of [{}, { direction: "Counsel" }, { ownLook: "airy" }])
-      expect(said(over)).not.toContain("you've chosen")
+  it("asks what a quote needs before any look is chosen, so never names one", () => {
+    const none = { template: null, palette: null, direction: null }
+    for (const org of ORGS) {
+      expect(question("quote_form", voice({ ...none, org }))).not.toMatch(
+        /\blook\b|\bcolours?\b|\blayout\b/i
+      )
+    }
   })
 
   it("always adds the fixed pages, in the list's order", () => {
@@ -651,7 +698,7 @@ describe("an answer on a card", () => {
     expect(
       cardAnswer(cardFor("business.audience"), { answer: "skipped" }, [])
     ).toEqual({ kind: "passed", step: "business.audience" })
-    const upload = cardFor("upload")
+    const upload = OLD_UPLOAD
     const asset = {
       id: "3f2b9c1e-8a4d-4f6b-9c2a-1d5e7f8a9b0c",
       name: "van.jpg",
@@ -699,9 +746,31 @@ describe("an answer on a card", () => {
       kind: "facts",
       facts: [{ key: "quote.form", value: { fields } }],
     })
+    // Changes keep the form as the owner left it on the card.
     expect(
       cardAnswer(review, { answer: "changes", text: "Add the date" }, [])
-    ).toEqual({ kind: "facts", facts: [] })
+    ).toEqual({ kind: "facts", facts: [], changing: fields })
+    const optional = fields.map((f) => ({ ...f, required: false }))
+    expect(
+      cardAnswer(
+        review,
+        { answer: "changes", text: "Split the rooms", fields: optional },
+        []
+      )
+    ).toMatchObject({ changing: optional })
+    // With no model to redraft it, the script shows the form again rather
+    // than moving on (observed 2026-10-25 on a reopened, confirmed form).
+    const held = start({ facts: ALL_BEFORE("contact") })
+    const changed = cardAnswer(
+      review,
+      { answer: "changes", text: "seperate number of rooms" },
+      []
+    )
+    if (!changed) throw new Error("refused")
+    expect(onboardingStep(applied(held, changed), counter())).toMatchObject([
+      { type: "text", text: quoteUnchanged(voiceOf(held)) },
+      { type: "tool-review_quote_form", input: { fields, note: null } },
+    ])
     for (const contact of [
       { key: "email", type: "text", label: "Where to reply" },
       { key: "details", type: "tel", label: "Best number" },
@@ -769,12 +838,39 @@ describe("a typed reply", () => {
   const choice = (step: Parameters<typeof choiceCard>[0], words: string) =>
     typedAnswer(choiceCard(step, start(), counter()), words)
 
+  it("reads an open question's words as its fact, and the quote question as the short list", () => {
+    const open = (about: string) =>
+      call("tool-ask_open", { about }, counter()) as ToolPart
+    // "All" over who the customers are, as an owner typed it: a fact, not
+    // "I didn't quite catch that".
+    expect(typedAnswer(open("business.audience"), "All")).toEqual({
+      kind: "facts",
+      facts: [{ key: "business.audience", value: { text: "All" } }],
+    })
+    expect(typedAnswer(open("business.proof"), "skip")).toEqual({
+      kind: "passed",
+      step: "business.proof",
+    })
+    const quote = open("quote.form")
+    expect(typedAnswer(quote, "The address")).toEqual({
+      kind: "retry",
+      reason: "quote",
+    })
+    expect(
+      again(quote, "quote", start(), counter()).map((p) => p.type)
+    ).toEqual(["text", "tool-review_quote_form"])
+  })
+
   it("takes the words as a text ask's value, a phone number as E.164", () => {
     expect(form("business.phone", "+44 (1632) 960-001")).toEqual({
       kind: "facts",
       facts: [{ key: "business.phone", value: { e164: "+441632960001" } }],
     })
     expect(form("business.phone", "0044 1632 960001")).toMatchObject({
+      facts: [{ value: { e164: "+441632960001" } }],
+    })
+    // The trunk 0 drops after +44.
+    expect(form("business.phone", "01632 960001")).toMatchObject({
       facts: [{ value: { e164: "+441632960001" } }],
     })
     expect(
@@ -790,7 +886,8 @@ describe("a typed reply", () => {
   })
 
   it("asks again with a specific line when the words do not fit", () => {
-    expect(form("business.phone", "01632 960001")).toEqual({
+    // 00 is the international prefix: +1 and too few digits to dial.
+    expect(form("business.phone", "00195 899933")).toEqual({
       kind: "retry",
       reason: "phone",
     })
@@ -868,11 +965,11 @@ describe("a typed reply", () => {
   })
 
   it("skips the photos and who the customers are, and asks again for anything else on the photo card", () => {
-    expect(facts("upload", "I don't have any")).toEqual({
+    expect(typedAnswer(OLD_UPLOAD, "I don't have any")).toEqual({
       kind: "passed",
       step: "upload",
     })
-    expect(facts("upload", "here you go")).toEqual({
+    expect(typedAnswer(OLD_UPLOAD, "here you go")).toEqual({
       kind: "retry",
       reason: "upload",
     })
@@ -944,25 +1041,147 @@ describe("a reply Jev read", () => {
     expect((parts[0] as { text: string }).text).toMatch(
       /colours[\s\S]*\n\nNext question\?$/
     )
-    // The assistant's details: only what the owner has not said.
-    const named = start({
-      facts: [
-        ...ALL_BEFORE("assistant"),
-        { key: "assistant.name", value: { name: "Maya" } },
-      ],
-    })
-    expect(decided(cardFor("assistant"), { kind: "defer" }, named)).toEqual({
-      kind: "facts",
-      facts: [
-        { key: "assistant.pronouns", value: { id: "they_them" } },
-        { key: "assistant.tone", value: { id: "friendly" } },
-      ],
-      chose: expect.any(String),
-    })
+    // The assistant's details answer as Pick for me does: the owner's own kept, the rest as the card opens.
+    const maya: FactValue = { key: "assistant.name", value: { name: "Maya" } }
+    for (const held of [[], [maya]]) {
+      const now = start({ facts: [...ALL_BEFORE("assistant"), ...held] })
+      const card = detailsCard("assistant", now, counter())
+      const button = cardAnswer(
+        card,
+        {
+          answer: "stated",
+          facts: AskDetailsInput.parse(card.input).prefill,
+          skip_all: true,
+        },
+        []
+      )
+      expect(button).toMatchObject({ persona: "picked" })
+      expect(decided(card, { kind: "defer" }, now)).toEqual(button)
+    }
     // What the business does, its contact details and the build are the owner's.
     for (const step of ["industry", "contact", "build_for_me"] as const) {
       expect(decided(cardFor(step), { kind: "defer" }, start())).toBeNull()
     }
+  })
+})
+
+describe("Pick for me, answered by the script", () => {
+  const PERSONA = {
+    type: "data-persona",
+    data: {
+      name: "Maya",
+      pronouns: "she_her",
+      avatar: "she_1",
+      tone: "friendly",
+    },
+  }
+  const facts = FACTS.assistant as FactValue[]
+  const persona = (output: object, orgId = ORG) => {
+    const at = start({ orgId, facts: ALL_BEFORE("assistant") })
+    const meant = cardAnswer(cardFor("assistant"), output, []) ?? undefined
+    const next = applied(at, meant as NonNullable<typeof meant>)
+    const step = onboardingStep(next, counter())
+    return { step, parts: withChoice(meant, next, step) }
+  }
+  // Enough orgs to meet every wording of each line.
+  const ORGS = Array.from({ length: 12 }, (_, i) => `${ORG.slice(0, -2)}${i}0`)
+
+  it("introduces the assistant, then its persona, then the next question with no thanks", () => {
+    const leads = new Set<string>()
+    for (const orgId of ORGS) {
+      const { step, parts } = persona(
+        { answer: "stated", facts, skip_all: true },
+        orgId
+      )
+      // The line, the persona, then the next question: no "Maya it is!" or "Thanks, Probe."
+      const [said, card, lead, ...rest] = parts
+      const line = (said as { text: string }).text
+      const next = (lead as { text: string }).text
+      expect(line).toMatch(/Maya, she\/her, with a friendly manner/)
+      expect(card).toEqual(PERSONA)
+      expect(next).not.toMatch(/Maya|Thanks/)
+      expect(next).toMatch(/website/)
+      expect(rest).toEqual(step.slice(1))
+      leads.add(next)
+    }
+    expect(leads.size).toBe(3)
+    // The owner's own answer: Maya introduces herself, the persona, then the question with no thanks.
+    const intros = new Set<string>()
+    for (const orgId of ORGS) {
+      const own = persona({ answer: "stated", facts }, orgId)
+      const [said, card, lead, ...rest] = own.parts
+      const intro = (said as { text: string }).text
+      expect(intro).toMatch(/Maya/)
+      expect(intro).not.toMatch(/chose|choose|gone with|Leave it/)
+      expect(intro).toMatch(/come across|introduce myself|preview/)
+      expect(card).toEqual(PERSONA)
+      expect((lead as { text: string }).text).not.toMatch(/Maya|Thanks/)
+      expect(rest).toEqual(own.step.slice(1))
+      intros.add(intro)
+    }
+    expect(intros.size).toBe(3)
+  })
+
+  it("says it chose everything only when nothing was set, and keeps the owner's own picks", () => {
+    const asCome: FactValue[] = [
+      { key: "assistant.name", value: { name: "Reme" } },
+      { key: "assistant.pronouns", value: { id: "she_her" } },
+      { key: "assistant.avatar", value: { id: "she_1" } },
+      { key: "assistant.tone", value: { id: "professional" } },
+    ]
+    for (const orgId of ORGS) {
+      const picked = persona(
+        { answer: "stated", facts: asCome, skip_all: true },
+        orgId
+      )
+      const line = (picked.parts[0] as { text: string }).text
+      expect(line).toMatch(/gone with|Leave it with me|Happy to choose/)
+      // The professional tone keeps no contraction, "Here's" included.
+      expect(line).not.toMatch(/'s\b|I'm|I'll|I've/)
+      // Maya, set by the owner before Pick for me, stays and is not claimed.
+      const kept = persona({ answer: "stated", facts, skip_all: true }, orgId)
+      const said = (kept.parts[0] as { text: string }).text
+      expect(said).toMatch(/kept|stay as they are|picked the rest/)
+      expect(said).toMatch(/Maya/)
+    }
+  })
+
+  it("says the design tray left to it is chosen as it builds, then the build's news with no summary", () => {
+    const pending: ToolPart = {
+      type: "tool-request_change",
+      toolCallId: "c1",
+      state: "input-available",
+      input: { text: ONBOARDING_GOAL },
+    }
+    const output = {
+      outcome: "started" as const,
+      build: {
+        assignment_id: ORG,
+        kind: "site.build" as const,
+        state: "queued" as const,
+        goal: ONBOARDING_GOAL,
+        revision: null,
+        created_at: "2026-09-26T09:30:00.000Z",
+        updated_at: "2026-09-26T09:30:00.000Z",
+      },
+    }
+    const tray = { kind: "design" as const, facts: [], settled: true }
+    for (const orgId of ORGS) {
+      const o = start({ orgId, facts: ALL_BEFORE("design") })
+      const answer = { ...tray, picked: true as const }
+      const next = applied(o, answer)
+      const step = built(next, pending, output)
+      const parts = withChoice(answer, next, step)
+      expect(parts.slice(0, 2)).toEqual(step.slice(0, 2))
+      const [line, news] = (parts[2] as { text: string }).text.split("\n\n")
+      expect(line).toMatch(/as I build/)
+      expect(news).not.toMatch(/everything/)
+      expect(news).toMatch(/website|build/)
+    }
+    // Answered by the owner: no line, and the summary stays.
+    const o = start({ facts: ALL_BEFORE("design") })
+    const own = built(applied(o, tray), pending, output)
+    expect(withChoice(tray, applied(o, tray), own)).toEqual(own)
   })
 })
 
@@ -998,6 +1217,7 @@ describe("the progress a conversation's cards hold", () => {
       closed: ["business.audience", "upload", "manual_builder"],
       offered: false,
       builder: false,
+      earlier: ["business.audience", "upload"],
     })
     expect(
       progressOf([
@@ -1009,6 +1229,59 @@ describe("the progress a conversation's cards hold", () => {
         }),
       ]).builder
     ).toBe(true)
+  })
+
+  it("counts a skipped question in words, clicked or typed, and nothing else of it", () => {
+    const open = (over: Record<string, unknown>) =>
+      row({ type: "tool-ask_open", ...over })
+    expect(
+      progressOf([
+        open({ step: "business.audience", answer: "skipped" }),
+        open({
+          step: "business.proof",
+          state: "output-error",
+          reply: SKIP_REPLY,
+        }),
+        open({ step: "service_area.text", answer: "skipped" }),
+        open({ step: "business.audience", state: "input-available" }),
+      ])
+    ).toEqual({
+      passed: ["business.audience", "business.proof"],
+      closed: [],
+      offered: false,
+      builder: null,
+    })
+  })
+
+  it("ends the script on a skipped website, clicked or typed", () => {
+    const skipped = (over: Record<string, unknown>) =>
+      progressOf([
+        row({ type: "tool-ask_choice", step: "build_for_me", ...over }),
+      ])
+    const clicked = skipped({ answer: "chosen", choice: "skip" })
+    expect(clicked.siteSkipped).toBe(true)
+    expect(ended(clicked)).toBe(true)
+    expect(ended(skipped({ state: "output-error", reply: "No thanks" }))).toBe(
+      true
+    )
+    expect(ended(skipped({ answer: "chosen", choice: "yes" }))).toBe(false)
+  })
+
+  it("does not read a typed no as a skip once another card followed it", () => {
+    const went = progressOf([
+      row({
+        type: "tool-ask_choice",
+        step: "build_for_me",
+        state: "output-error",
+        reply: "No, let me change my assistant first",
+      }),
+      row({
+        type: "tool-ask_details",
+        step: "assistant",
+        state: "input-available",
+      }),
+    ])
+    expect(ended(went)).toBe(false)
   })
 
   it("counts a started build, and not one talked over", () => {
@@ -1055,6 +1328,47 @@ describe("the progress a conversation's cards hold", () => {
       ]).passed
     ).toEqual([])
   })
+
+  it("passes an optional question on the Skip this one message, typed or talked over", () => {
+    for (const key of ["business.audience", "business.proof"] as const) {
+      for (const card of [
+        factCard(start(), key, counter()),
+        call("tool-ask_open", { about: key }, counter()),
+      ]) {
+        expect(typedAnswer(card, SKIP_REPLY), card.type).toEqual({
+          kind: "passed",
+          step: key,
+        })
+      }
+      expect(
+        progressOf([
+          row({ step: key, state: "output-error", reply: SKIP_REPLY }),
+        ]).passed
+      ).toEqual([key])
+    }
+  })
+
+  it("asks a step in new words when the owner comes back to it from another", () => {
+    // Observed 2026-10-25: the contact card, a reopened quote form, then the
+    // contact question again word for word.
+    const contact = { type: "tool-ask_details", step: "contact" }
+    const progress = progressOf([
+      row({ ...contact, state: "output-error", reply: "Change the quote" }),
+      row({ type: "tool-review_quote_form", answer: "confirmed" }),
+    ])
+    expect(progress.earlier).toEqual(["contact"])
+    const o = start({ ...progress, facts: ALL_BEFORE("contact") })
+    const [said, card] = onboardingStep(o, counter())
+    expect(said).toMatchObject({ text: back("contact", voiceOf(o)) })
+    expect((said as { text: string }).text).not.toBe(
+      question("contact", voiceOf(o))
+    )
+    expect(card).toMatchObject({ input: { step: "contact" } })
+    // The latest card's own step is no return: a part answer asks as before.
+    expect(progressOf([row({ ...contact, answer: "stated" })]).earlier).toBe(
+      undefined
+    )
+  })
 })
 
 /** Many org ids, so every wording of every line comes up. */
@@ -1078,7 +1392,6 @@ const voice = (over: Partial<Voice> = {}): Voice => ({
   ownLook: null,
   ownColour: null,
   services: null,
-  photoQuestion: null,
   ...over,
 })
 
@@ -1092,14 +1405,30 @@ const lines = (v: Voice): [string, string][] => [
   ["opener", opener(v)],
   ...(
     STEPS.map((s) => s.id).filter(
-      (id) => id !== "upload" && id !== "build"
-    ) as Exclude<StepId, "upload" | "build">[]
+      (id) => id !== "upload" && id !== "build" && id !== "manual_builder"
+    ) as Exclude<StepId, "upload" | "build" | "manual_builder">[]
   ).map((id): [string, string] => [id, question(id, v)]),
-  ["upload", photos(v)],
+  ...STEPS.flatMap(({ id }): [string, string][] => {
+    const line = back(id, v)
+    return line ? [[`back ${id}`, line]] : []
+  }),
   ["default_quote_form", quoteForm(v)],
+  ["quote_unchanged", quoteUnchanged(v)],
   ["started", started(v, true)],
-  ["manual_yes", manualEnd(v, true)],
-  ["manual_no", manualEnd(v, false)],
+  ["manual_end", manualEnd(v)],
+  ["chose", chose(v, "the Ocean colours")],
+  ...(
+    [
+      "phone",
+      "email",
+      "long",
+      "unclear",
+      "choice",
+      "yes_no",
+      "upload",
+      "details",
+    ] as const
+  ).map((reason): [string, string] => [`retry ${reason}`, retry(reason, v)]),
 ]
 
 /** The lines that name the business in every wording. */
@@ -1132,6 +1461,10 @@ describe("the onboarding copy", () => {
       expect(text, name).not.toMatch(/\bReme\b/)
       if (NAMED.includes(name)) expect(text, name).toContain(BUSINESS)
       if (tone === "professional") expect(text, name).not.toContain("!")
+      expect(voiceProblems(text, { assistantNamed: true }), name).toEqual({
+        hard: [],
+        soft: [],
+      })
     }
   })
 
@@ -1142,10 +1475,8 @@ describe("the onboarding copy", () => {
       "opener",
       "assistant",
       "contact",
-      "owner.preferred_name",
       "build_for_me",
       "quote_form",
-      "upload",
       "started",
       "business.audience",
       "business.proof",
@@ -1157,55 +1488,31 @@ describe("the onboarding copy", () => {
     }
   })
 
-  it("asks about photos three ways for each industry, and names an Other industry and its first service", () => {
-    for (const industry of INDUSTRY_VOICES) {
-      const asked = new Set(ORGS.map((org) => photos(voice({ org, industry }))))
-      expect(asked.size, industry.name).toBeGreaterThanOrEqual(3)
-    }
-    const other = ORGS.map((org) =>
-      photos(
-        voice({
-          org,
-          industry: { name: "Dog grooming", category: null },
-          offering: "Full grooms",
-        })
-      )
-    ).join("\n")
-    expect(other).toContain("dog grooming work")
-    expect(other).toContain("full grooms")
-  })
-
-  it("asks the photo question written for the business when it is ready, and always welcomes a logo", () => {
-    const fleet =
-      "Do you have photos of your fleet, inside and out, or your chauffeurs in uniform?"
+  it("asks the quote question with a short example answer", () => {
     for (const org of ORGS) {
-      const asked = photos(voice({ org, photoQuestion: fleet }))
-      expect(asked).toContain(fleet)
-      expect(asked).toMatch(/\blogo\b/)
-      expect(photos(voice({ org }))).toMatch(/\blogo\b/)
+      expect(question("quote_form", voice({ org }))).toMatch(
+        /For instance: [^.]{10,60}\.$/
+      )
     }
-    const prepared = voice({ services: "your wedding cars and airport runs" })
-    expect(
-      ORGS.map((org) => question("quote_form", { ...prepared, org })).join()
-    ).toContain("your wedding cars and airport runs")
   })
 
-  it("mentions the quote page when it turns to the website", () => {
+  it("offers the website, with its quote page, as one thing it can do", () => {
     for (const org of ORGS) {
       expect(question("build_for_me", voice({ org }))).toContain(
         "Request a quote"
       )
       expect(question("build_for_me", voice({ org }))).toContain(
-        "Would you like me to build your website for you?"
+        `Would you like me to build a website for ${BUSINESS}?`
       )
     }
   })
 
-  it("asks what a quote needs after the design, in words", () => {
+  it("asks what a quote needs in words, without the website", () => {
     for (const org of ORGS) {
       const asked = question("quote_form", voice({ org }))
       expect(asked).toMatch(/quote/)
-      expect(asked.trim()).toMatch(/\?$/)
+      expect(asked).toContain("?")
+      expect(asked).not.toMatch(/website|site/i)
     }
   })
 
@@ -1230,7 +1537,7 @@ describe("the onboarding copy", () => {
     expect(at("casual")).toMatch(/\bWant me to build\b/)
   })
 
-  it("opens with text only: thanks by first name, the plan, and what the business does", () => {
+  it("opens with text only: a greeting by first name, the plan, and what the business does", () => {
     const seen = new Set<string>()
     for (const org of ORGS) {
       const parts = opening(start({ orgId: org }))
@@ -1242,7 +1549,9 @@ describe("the onboarding copy", () => {
       expect(text).toContain(BUSINESS)
       expect(text).toMatch(/business assistant/)
       expect(text).toMatch(/quick questions/)
-      expect(text).toMatch(/website/)
+      // A business assistant first: the website is one thing it offers.
+      expect(text).toMatch(/quote/)
+      expect(text).not.toMatch(/build you a website|starting with your website/)
       expect(text.trim()).toMatch(/\?$/)
       expect(text).not.toMatch(/[—–]|\bReme\b/)
       expect(text.split("\n\n").length).toBeLessThanOrEqual(3)
@@ -1276,21 +1585,35 @@ describe("the design tray", () => {
     design.questions.find((q) => q.id === id)?.card.options.map((o) => o.id) ??
     []
 
-  it("is one step of four questions, each with its own text, after the website question", () => {
+  it("is one step of six questions, each with its own text, after the website question", () => {
     const input = tray()
     expect(input.questions.map((q) => q.id)).toEqual([
+      "logo",
       "palette",
       "lettering",
       "arrangement",
+      "photos",
       "pages",
     ])
     expect(input.questions.every((q) => q.question)).toBe(true)
     expect(input.questions.map((q) => q.visual)).toEqual([
+      "logo",
       "palette",
       "font_pair",
       "layout",
+      "photos",
       "text",
     ])
+    // The logo and photos pages: upload or create, never skipped.
+    const [logo, photos] = ["logo", "photos"].map((id) =>
+      input.questions.find((q) => q.id === id)
+    )
+    expect(logo?.card).toMatchObject({ skippable: false, other: null })
+    expect(logo?.card.options.map((o) => o.id)).toEqual(["upload", "create"])
+    expect(logo?.upload?.max_files).toBe(1)
+    expect(photos?.card.skippable).toBe(false)
+    expect(photos?.upload?.max_files).toBe(12)
+    expect(logo?.held).toBeUndefined()
     expect(currentStep(start({ facts: ALL_BEFORE("design") }))?.id).toBe(
       "design"
     )
@@ -1309,30 +1632,60 @@ describe("the design tray", () => {
       for (const id of ids(input, "lettering")) {
         expect(fit.map((d) => d.fonts)).toContain(id)
       }
-      for (const id of ids(input, "palette")) {
-        expect(fit.flatMap((d) => d.palettes)).toContain(id)
+      // Every palette is offered; calm ones lead, four shown.
+      const palette = input.questions.find((q) => q.id === "palette")?.card
+      expect(palette?.initial).toHaveLength(4)
+      expect(ids(input, "palette")).toHaveLength(PALETTES.length)
+      expect(ids(input, "palette").slice(0, 6)).toEqual([
+        ...(palette?.initial ?? []),
+        ...ids(input, "palette").slice(4, 6),
+      ])
+      for (const id of ids(input, "palette").slice(0, CALM_PALETTES.length)) {
+        expect(CALM_PALETTES).toContain(id)
       }
-      expect(ids(input, "palette")).toHaveLength(4)
     }
+  })
+
+  it("orders the calm palettes by org, the same after a reload", () => {
+    const first = (orgId: string) =>
+      tray({ orgId }).questions.find((q) => q.id === "palette")?.card.initial
+    expect(first(ORG)).toEqual(first(ORG))
+    expect(first(ORG)).not.toEqual(
+      first("7b1c9e2a-0d3f-4a6b-8c5e-1f2a3b4c5d6e")
+    )
+  })
+
+  it("shows a held palette among the four, ticked", () => {
+    const outside = PaletteId.options.find(
+      (id) => !tray().questions[1]?.card.initial?.includes(id)
+    )
+    const held = tray({
+      facts: [...heldBefore(), { key: "site.palette", value: { id: outside } }],
+    }).questions[1]?.card
+    expect(held?.initial).toContain(outside)
+    expect(held?.preselected).toEqual([outside])
   })
 
   it("shows layouts that differ, and the pair's faces and the layout's variants as visuals", () => {
     const input = tray()
-    const layouts = input.questions[2]?.card.options.map((o) => o.visual) ?? []
+    const layouts =
+      input.questions
+        .find((q) => q.id === "arrangement")
+        ?.card.options.map((o) => o.visual) ?? []
     const looks = layouts.map((v) => JSON.stringify(v))
     expect(new Set(looks).size).toBe(looks.length)
-    for (const o of input.questions[1]?.card.options ?? []) {
+    for (const o of input.questions[2]?.card.options ?? []) {
       expect(o.visual).toMatchObject({ kind: "font_pair" })
     }
-    for (const o of input.questions[0]?.card.options ?? []) {
+    for (const o of input.questions[1]?.card.options ?? []) {
       expect(o.visual).toMatchObject({ kind: "swatches" })
     }
   })
 
-  it("seeds by org: the same four on every call, other orgs other fours", () => {
-    const first = (org: string) => ids(tray({ orgId: org }), "palette").join()
+  it("seeds by org: the same lettering on every call, other orgs others", () => {
+    const first = (org: string) => ids(tray({ orgId: org }), "lettering").join()
     expect(first(ORG)).toBe(first(ORG))
-    expect(new Set(ORGS.map(first)).size).toBeGreaterThan(10)
+    expect(new Set(ORGS.map(first)).size).toBeGreaterThan(1)
   })
 
   it("opens ticked where the org already answered", () => {
@@ -1343,8 +1696,14 @@ describe("the design tray", () => {
         { key: "site.palette", value: { id: palette as never } },
       ],
     })
-    expect(input.questions[0]?.card.preselected).toEqual([palette])
-    expect(input.questions[1]?.card.preselected).toEqual([])
+    expect(input.questions[1]?.card.preselected).toEqual([palette])
+    // One not answered yet opens on its first option, kept with Looks good.
+    expect(input.questions[2]?.card.preselected).toEqual(
+      ids(input, "lettering").slice(0, 1)
+    )
+    // With no logo or photos held, both open on making them.
+    expect(input.questions[0]?.card.preselected).toEqual(["create"])
+    expect(input.questions[4]?.card.preselected).toEqual(["create"])
   })
 
   it("opens on the owner's own words where the org wrote its own", () => {
@@ -1361,14 +1720,18 @@ describe("the design tray", () => {
       ],
     })
     expect(input.questions.map((q) => q.card.own)).toEqual([
+      undefined,
       "warm greys and brass",
       "a quiet serif",
       "airy",
       undefined,
+      undefined,
     ])
-    // Pages, a card of many, opens on the usual ones.
-    for (const q of input.questions.slice(0, 3))
-      expect(q.card.preselected).toEqual([])
+    // Own words tick nothing; pages, a card of many, opens on the usual ones.
+    for (const id of ["palette", "lettering", "arrangement"])
+      expect(
+        input.questions.find((q) => q.id === id)?.card.preselected
+      ).toEqual([])
     // A hex code is held as the brand colour and comes back as the words;
     // pages' own words ride beside the ids they came with.
     const code = PALETTES[0]?.brand as string
@@ -1380,18 +1743,50 @@ describe("the design tray", () => {
       ],
     })
     expect(rest.questions.map((q) => q.card.own)).toEqual([
+      undefined,
       code,
+      undefined,
       undefined,
       undefined,
       "home, fees",
     ])
   })
 
+  it("opens the logo and photos pages on what the org holds", () => {
+    const photo = {
+      id: "1d9e0f10-2131-4a2b-9c3d-4e5f60718293",
+      name: "kitchen.jpg",
+      content_type: "image/jpeg" as const,
+      bytes: 90_000,
+      use: "hero" as const,
+    }
+    const unread = { ...photo, id: "2d9e0f10-2131-4a2b-9c3d-4e5f60718293" }
+    const { use: _use, ...plain } = unread
+    const input = tray({
+      facts: [
+        ...heldBefore(),
+        { key: "media.uploads", value: { items: [LOGO, photo, plain] } },
+      ],
+    })
+    const held = (id: string) => input.questions.find((q) => q.id === id)?.held
+    expect(held("logo")).toEqual([LOGO])
+    // A photo the review found no use for is not held.
+    expect(held("photos")).toEqual([photo])
+  })
+
   const card = () =>
     onboardingStep(start({ facts: heldBefore() }), counter())[1] as ToolPart
   const input = () => AskDesignInput.parse(card().input)
-  const pick = (answers: Record<string, unknown>, skip_all = false) =>
-    cardAnswer(card(), { answers, skip_all }, [], [])
+  // The logo page has kept its logo; `held` replaces what the org holds.
+  const pick = (
+    answers: Record<string, unknown>,
+    skip_all = false,
+    held: FactValue[] = [UPLOADS as FactValue]
+  ) => cardAnswer(card(), { answers, skip_all }, [], held)
+  const PAGES_ANSWERED = {
+    logo: { logo: LOGO },
+    photos: { photos: [], create: true },
+  }
 
   it("states each answer as a fact as given, and leaves the tray open until it is finished", () => {
     const [palette] = ids(input(), "palette")
@@ -1406,6 +1801,7 @@ describe("the design tray", () => {
       lettering: { choice: ids(input(), "lettering")[0] },
       arrangement: { choice: ids(input(), "arrangement")[0] },
       pages: { choices: ["services", "gallery", "faq"] },
+      ...PAGES_ANSWERED,
     })
     expect(all).toMatchObject({ kind: "design", settled: true })
     expect((all as { facts: FactValue[] }).facts.map((f) => f.key)).toEqual([
@@ -1549,6 +1945,7 @@ describe("the design tray", () => {
         lettering: { own: "Like a newspaper" },
         arrangement: { own: "A long single page" },
         pages: { own: "A blog too" },
+        ...PAGES_ANSWERED,
       })
     ).toMatchObject({
       settled: true,
@@ -1574,6 +1971,85 @@ describe("the design tray", () => {
     expect(pick({ palette: { own: "#12" } })).toBeNull()
   })
 
+  it("takes a palette read from a picture as the brand colour, its name and stops kept", () => {
+    const { paper, tint, primary, ink } = PALETTES[0] as (typeof PALETTES)[0]
+    const stops = { paper, tint, primary, ink }
+    expect(
+      pick({ palette: { palette: { name: "Clay van", stops } } })
+    ).toMatchObject({
+      facts: [
+        {
+          key: "site.palette",
+          value: {
+            id: "custom",
+            brand: primary,
+            custom: `Clay van: paper ${paper}, tint ${tint}, primary ${primary}, ink ${ink}`,
+          },
+        },
+      ],
+    })
+    // Only the palette question takes one.
+    expect(
+      pick({ lettering: { palette: { name: "Clay van", stops } } })
+    ).toBeNull()
+    // After a reload the tray shows it by name, and sending that back keeps it.
+    const read = (
+      pick({ palette: { palette: { name: "Clay van", stops } } }) as {
+        facts: FactValue[]
+      }
+    ).facts
+    expect(
+      tray({ facts: [...heldBefore(), ...read] }).questions[1]?.card.own
+    ).toBe("Clay van")
+    expect(
+      pick({ palette: { own: "Clay van" } }, false, [
+        UPLOADS as FactValue,
+        ...read,
+      ])
+    ).toMatchObject({ facts: [] })
+  })
+
+  it("takes the logo and photos the org holds, and nothing else on their pages", () => {
+    const photo = { ...LOGO, id: "1d9e0f10-2131-4a2b-9c3d-4e5f60718293" }
+    const { use: _use, ...sent } = photo
+    const both = {
+      key: "media.uploads",
+      value: { items: [LOGO, sent] },
+    } as FactValue
+    expect(pick({ logo: { logo: LOGO } })).toMatchObject({ facts: [] })
+    // Not kept as the logo, or not held at all.
+    expect(pick({ logo: { logo: sent } }, false, [both])).toBeNull()
+    expect(pick({ logo: { logo: LOGO } }, false, [])).toBeNull()
+    expect(
+      pick({ photos: { photos: [sent], create: false } }, false, [both])
+    ).toMatchObject({ facts: [] })
+    expect(pick({ photos: { photos: [sent], create: true } })).toBeNull()
+    expect(pick({ photos: { photos: [], create: true } })).toMatchObject({
+      facts: [],
+    })
+    // Their cards' options are ways in, never answers.
+    expect(pick({ logo: { choice: "create" } })).toBeNull()
+    expect(pick({ photos: { choice: "upload" } })).toBeNull()
+    expect(pick({ logo: { skipped: true } })).toBeNull()
+    expect(pick({ palette: { logo: LOGO } })).toBeNull()
+  })
+
+  it("reads a typed option's label as its pick, but never a logo or photos way in", () => {
+    const [palette] = ids(input(), "palette")
+    const named = PALETTES.find((p) => p.id === palette)?.label ?? ""
+    expect(trayOption(card(), named)).toBe(palette)
+    expect(trayOption(card(), "No, create one for me")).toBeNull()
+    expect(trayOption(card(), "Yes, I have photos")).toBeNull()
+  })
+
+  it("refuses a finished tray with no logo, answered or held", () => {
+    expect(pick({}, true, [])).toBeNull()
+    expect(pick({ logo: { logo: LOGO } }, true)).toMatchObject({
+      settled: true,
+    })
+    expect(pick({}, true)).toMatchObject({ settled: true })
+  })
+
   it("refuses an answer its question did not offer", () => {
     expect(pick({ palette: { choice: "not_a_palette" } })).toBeNull()
     expect(
@@ -1594,12 +2070,14 @@ describe("the design tray", () => {
       kind: "design",
       facts: [{ key: "site.direction", value: { id: "builder" } }],
       settled: true,
+      picked: true,
     })
     expect(
       designAnswer(input(), { answers: {}, skip_all: true }, [
+        UPLOADS,
         { key: "site.direction", value: { id: "calm_daylight" } },
       ])
-    ).toEqual({ kind: "design", facts: [], settled: true })
+    ).toEqual({ kind: "design", facts: [], settled: true, picked: true })
     const answered = pick(
       { palette: { skipped: true }, lettering: { skipped: true } },
       true
@@ -1612,18 +2090,19 @@ describe("the design tray", () => {
     expect(designDone(at)).toBe(false)
     const finished = applied(at, pick({}, true) as never)
     expect(designDone(finished)).toBe(true)
-    expect(currentStep(finished)?.id).toBe("quote_form")
-    // Four held answers with the tray never closed: still done.
-    const held = start({
-      facts: [
-        ...ALL_BEFORE("design"),
-        { key: "site.palette", value: { id: "ocean" } },
-        { key: "site.font", value: { id: "sora_manrope" } },
-        { key: "site.direction", value: { id: "fresh_modern" } },
-        { key: "site.pages", value: { ids: ["home", "quote"] } },
-      ],
-    })
-    expect(designDone(held)).toBe(true)
+    expect(currentStep(finished)?.id).toBe("build")
+    // Four held answers and a logo with the tray never closed: still done.
+    const four: FactValue[] = [
+      ...ALL_BEFORE("design"),
+      { key: "site.palette", value: { id: "ocean" } },
+      { key: "site.font", value: { id: "sora_manrope" } },
+      { key: "site.direction", value: { id: "fresh_modern" } },
+      { key: "site.pages", value: { ids: ["home", "quote"] } },
+    ]
+    expect(designDone(start({ facts: four }))).toBe(false)
+    expect(designDone(start({ facts: [...four, UPLOADS as FactValue] }))).toBe(
+      true
+    )
     // Mid-way through the old cards on deploy day: they finish.
     expect(
       currentStep(start({ facts: ALL_BEFORE("design"), oldDesign: true }))?.id
@@ -1663,5 +2142,40 @@ describe("the design tray", () => {
       progressOf([row("tool-ask_choice", "output-available", "industry")])
         .oldDesign
     ).toBeUndefined()
+  })
+})
+
+describe("the assistant card's name ideas", () => {
+  const ideas = (o: Onboarding) =>
+    AskDetailsInput.parse(detailsCard("assistant", o, counter()).input).ideas
+
+  it("carries the names written for the business once they are ready", () => {
+    expect(ideas(start())).toBeUndefined()
+    const prepared = {
+      services_phrase: "your cleans",
+      assistant_names: ["Poppy", "Theo"],
+    }
+    expect(ideas(start({ prepared }))).toEqual(["Poppy", "Theo"])
+  })
+
+  it("opens filled with Reme, she/her, the first she/her face and professional, the org's own picks first", () => {
+    const prefill = (o: Onboarding) =>
+      AskDetailsInput.parse(detailsCard("assistant", o, counter()).input)
+        .prefill
+    expect(prefill(start())).toEqual([
+      { key: "assistant.name", value: { name: "Reme" } },
+      { key: "assistant.pronouns", value: { id: "she_her" } },
+      { key: "assistant.avatar", value: { id: "she_1" } },
+      { key: "assistant.tone", value: { id: "professional" } },
+    ])
+    const named = start({
+      facts: [{ key: "assistant.name", value: { name: "Maya" } }],
+    })
+    expect(prefill(named).map((fact) => fact.value)).toEqual([
+      { name: "Maya" },
+      { id: "she_her" },
+      { id: "she_1" },
+      { id: "professional" },
+    ])
   })
 })

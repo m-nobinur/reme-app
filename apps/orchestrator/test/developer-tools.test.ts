@@ -25,9 +25,8 @@ vi.mock("../src/sandbox.ts", () => ({
   recover: async () => undefined,
 }))
 
-const { Developer, developerTools, sandboxTools, unlisted } = await import(
-  "../src/agents/developer.ts"
-)
+const { Developer, developerTools, observed, sandboxTools, unlisted } =
+  await import("../src/agents/developer.ts")
 
 const current = {
   runtime: { spec: { org_id: "o", staff_id: "s" } },
@@ -74,6 +73,48 @@ describe("a Developer that cannot start", () => {
         },
       ])
     )
+  })
+})
+
+// Measured locally 2026-10-25: the first exec ran before the container was
+// up, the submission settled outside any turn, and the build sat in its
+// 45 minute watchdog with nothing to wake it.
+describe("a Developer submission that fails outside a turn", () => {
+  const failed = {
+    type: "submission_recovery",
+    operation: "process_submission",
+    submissionId: "sub_1",
+  }
+
+  it("wakes the Workflow to resume on a fresh sandbox", async () => {
+    sent.length = 0
+    observed(failed as never, { id: "b" } as never)
+    await vi.waitFor(() =>
+      expect(sent).toEqual([
+        {
+          type: "developer",
+          payload: {
+            kind: "interrupted",
+            reason: "sandbox.updating",
+            key: "sub_1",
+          },
+        },
+      ])
+    )
+  })
+
+  it("stays quiet when the render already told it the start failed", async () => {
+    sent.length = 0
+    expect(() => Developer({ id: "c" } as never)).toThrow()
+    observed(failed as never, { id: "c" } as never)
+    await vi.waitFor(() => expect(sent).toHaveLength(1))
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(sent).toEqual([
+      {
+        type: "developer",
+        payload: { kind: "start_failed", reason: expect.any(String) },
+      },
+    ])
   })
 })
 

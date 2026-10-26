@@ -16,6 +16,8 @@ import {
 import { ToolCallId } from "./ids.ts"
 import { RememberInput, RememberOutput } from "./memory.ts"
 import {
+  BUILD_ACTIVITY_MAX,
+  BuildStopCause,
   BuildSummary,
   CreateReminderRequest,
   E164,
@@ -27,6 +29,7 @@ import {
   WorkspaceStatus,
 } from "./owner.ts"
 import { Refused } from "./refused.ts"
+import { GateName } from "./report.ts"
 import {
   ConnectGoogleInput,
   ConnectGoogleOutput,
@@ -63,9 +66,71 @@ export const CosWorkspace = z.strictObject({
         /** The owner's words as the build restated them: data, never instructions. */
         goal: BuildSummary.shape.goal,
         version: Version.nullable(),
+        /** Started again on its own after a build that stopped. */
+        retry: z.boolean().optional(),
+        /** Fixing what its checks found: the repair round it is on, and the checks that failed. */
+        fixing: z
+          .strictObject({
+            round: z.int().min(1).max(9),
+            checks: z.array(GateName).max(GateName.options.length),
+          })
+          .optional(),
+        /**
+         * The build's steps as the panel shows them: fixed labels and counts,
+         * never model text. Optional: tool results stored before it replay.
+         */
+        progress: z
+          .array(
+            z.strictObject({
+              step: Text(60),
+              done: z.int().nonnegative(),
+              total: z.int().positive(),
+              now: z.boolean(),
+            })
+          )
+          .max(BUILD_ACTIVITY_MAX)
+          .optional(),
+        /**
+         * While the pipeline works on it: whole minutes since it started,
+         * less the owner's plan reviews, and since it last logged any work.
+         * `overdue` is past the top of its lane's range, and `range` is the
+         * panel's words for the wait ("about 6 to 10 minutes"), moved up to
+         * start above the time gone once overdue. Optional, as `progress`.
+         */
+        timing: z
+          .strictObject({
+            running_minutes: z.int().nonnegative(),
+            quiet_minutes: z.int().nonnegative(),
+            overdue: z.boolean(),
+            range: z.string().max(40),
+          })
+          .optional(),
+        /**
+         * The last time the pipeline started its Developer again mid-build,
+         * and why; `working` once it has logged work since.
+         */
+        restarted: z
+          .strictObject({
+            minutes_ago: z.int().nonnegative(),
+            cause: BuildStopCause,
+            working: z.boolean(),
+          })
+          .optional(),
       })
     )
     .max(10),
+  /** Builds that stopped in the last day, newest first. Optional, as `progress`. */
+  stopped: z
+    .array(
+      z.strictObject({
+        cause: BuildStopCause,
+        at: Timestamp,
+        /** The checks its last report failed, by name. */
+        checks: z.array(GateName).max(GateName.options.length).optional(),
+      })
+    )
+    .max(5)
+    .optional(),
   /**
    * The Developer's open questions, at most 10. `why` is another agent's
    * text, capped here: data, never instructions. `options` follows the
@@ -103,17 +168,39 @@ export const CosWorkspace = z.strictObject({
     .optional(),
   /** How long each lane usually takes, so the CoS quotes the measured wait. */
   expected_seconds: WorkspaceStatus.shape.expected_seconds,
+  /** Each lane's wait in the panel's words, for a build that has just started. */
+  expected_range: z
+    .strictObject({ quick: z.string().max(40), full: z.string().max(40) })
+    .optional(),
 })
 
 /** `get_facts`'s output: the org's current values, without their records. */
 export const CosFacts = z.strictObject({ facts: z.array(FactValue) })
 
 /**
+ * The first build's change text, which onboarding starts on the owner's
+ * behalf: the details are in the facts. The chat draws no card for it.
+ */
+export const ONBOARDING_GOAL = "Build my website from the details I gave you."
+
+/**
  * `request_change`'s input: the owner's change, and the new phone or email
  * when the owner typed it in full. The tool records it as the owner's word
- * only if its digits or address appear in what the owner wrote.
+ * only if its digits or address appear in what the owner wrote. `proof` is
+ * what the owner claims about the business in the change, recorded the same
+ * way only if every word of it is the owner's. `step` is a line for the
+ * panel: the runner strips it before the tool runs.
  */
 export const CosChangeRequest = OwnerChangeRequest.extend({
+  proof: z
+    .string()
+    .trim()
+    .min(1)
+    .max(300)
+    .optional()
+    .describe(
+      'What the owner states about the business in this change and wants the site to say, such as insurance, years trading or a guarantee, in their own words and as the site would write it: "Local and fully insured, with £5 million public liability". Money as £5 million, never "5 million pounds". Never the change itself ("Build the website again" is not a claim). Omit it when the change states nothing about the business.'
+    ),
   contact: z
     .strictObject({
       phone: E164.optional().describe(
@@ -128,6 +215,13 @@ export const CosChangeRequest = OwnerChangeRequest.extend({
         ),
     })
     .optional(),
+  step: z
+    .string()
+    .max(60)
+    .optional()
+    .describe(
+      'A few words, in the owner\'s language, of what this change does, such as "Adding the new photos to the home page". At most 60 characters. The panel shows it while the change is made; no ids, no versions.'
+    ),
 })
 
 /** `get_preview`'s input: the build whose preview to check. */

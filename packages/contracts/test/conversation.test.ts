@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest"
 import {
+  BuildQuestionsPart,
   Conversation,
   ConversationList,
   ConversationMessage,
   ConversationPatch,
   MessageFeedback,
+  QuestionReply,
 } from "../src/conversation.ts"
 import { ajv, generated } from "./json-schema.ts"
 import { samples } from "./samples.ts"
@@ -167,5 +169,40 @@ describe("ConversationMessage feedback", () => {
         feedback: "positive",
       })
     ).toEqual(REFUSED)
+  })
+})
+
+describe("BuildQuestionsPart and QuestionReply", () => {
+  const part = samples.BuildQuestionsPart as {
+    data: { questions: Record<string, unknown>[] }
+  }
+  const asking = (patch: Record<string, unknown>) => ({
+    ...part,
+    data: {
+      ...part.data,
+      questions: [{ ...part.data.questions[1], ...patch }],
+    },
+  })
+
+  it("refuses a fact input the owner picks rather than types", () => {
+    const picked = asking({ input: { kind: "fact", key: "business.industry" } })
+    expect(verdict("BuildQuestionsPart", BuildQuestionsPart, picked)).toEqual(
+      REFUSED
+    )
+  })
+
+  it("takes a question the server closed", () => {
+    const closed = asking({ answer: { kind: "closed" } })
+    expect(verdict("BuildQuestionsPart", BuildQuestionsPart, closed)).toEqual(
+      ACCEPTED
+    )
+  })
+
+  it("refuses a reply that closes a question: only the server does", () => {
+    const reply = {
+      ...(samples.QuestionReply as object),
+      answer: { kind: "closed" },
+    }
+    expect(verdict("QuestionReply", QuestionReply, reply)).toEqual(REFUSED)
   })
 })

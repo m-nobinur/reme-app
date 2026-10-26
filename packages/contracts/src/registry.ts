@@ -1,3 +1,4 @@
+import { Activity } from "./activity.ts"
 import {
   ApprovalDecision,
   ApprovalRequest,
@@ -5,6 +6,7 @@ import {
   InformationAnswer,
   InformationRequest,
 } from "./assignment.ts"
+import { AgentNote } from "./build-notes.ts"
 import {
   AskChoiceInput,
   AskChoiceOutput,
@@ -14,23 +16,24 @@ import {
   AskDetailsOutput,
   AskFactInput,
   AskFactOutput,
+  AskOpenInput,
+  AskOpenOutput,
   AskUploadInput,
   AskUploadOutput,
-  BlueprintReceipt,
-  BlueprintReviewInput,
-  BlueprintReviewOutput,
   ChatRequest,
   RequestChangeOutput,
   ReviewQuoteFormInput,
   ReviewQuoteFormOutput,
 } from "./chat.ts"
 import {
+  BuildQuestionsPart,
   Conversation,
   ConversationHistory,
   ConversationList,
   ConversationMessage,
   ConversationPatch,
   MessageFeedback,
+  QuestionReply,
   ServerButtonPart,
   ServerMessage,
 } from "./conversation.ts"
@@ -101,7 +104,20 @@ import {
   RememberInput,
   RememberOutput,
 } from "./memory.ts"
-import { Asset, QuoteField, UploadedAssets } from "./onboarding.ts"
+import {
+  Asset,
+  DrawLogosRequest,
+  KeptLogo,
+  LogoPalettes,
+  LogoPalettesRequest,
+  LogoRounds,
+  PaletteFromImage,
+  QuoteField,
+  ReviewedPhotos,
+  ReviewPhotosRequest,
+  UploadedAssets,
+} from "./onboarding.ts"
+import { OnboardingStatus } from "./onboarding-plan.ts"
 import { CreateOrgRequest, Org, StaffDirectory, StaffMember } from "./org.ts"
 import {
   ActivityFeed,
@@ -118,6 +134,7 @@ import {
   Reminder,
   ReminderPatch,
   SetFactsRequest,
+  SiteMedia,
   TextAnswerSchema,
   WorkspaceStatus,
 } from "./owner.ts"
@@ -131,6 +148,7 @@ import {
   PushSubscribed,
   PushSubscribeRequest,
   ScheduledJob,
+  SetTimeZoneRequest,
 } from "./schedule.ts"
 import {
   ConnectGoogleInput,
@@ -162,6 +180,8 @@ import {
  * Schema, gets no OpenAPI component, and no test.
  */
 export const contracts = {
+  AgentNote,
+  Activity,
   ActivityFeed,
   AnswerQuestionInput,
   AnswerQuestionOutput,
@@ -172,13 +192,12 @@ export const contracts = {
   AskChoiceOutput,
   AskDesignInput,
   AskDesignOutput,
-  BlueprintReceipt,
-  BlueprintReviewInput,
-  BlueprintReviewOutput,
   AskDetailsInput,
   AskDetailsOutput,
   AskFactInput,
   AskFactOutput,
+  AskOpenInput,
+  AskOpenOutput,
   AskUploadInput,
   AskUploadOutput,
   Asset,
@@ -267,6 +286,7 @@ export const contracts = {
   ProfileLine,
   RememberInput,
   RememberOutput,
+  OnboardingStatus,
   Org,
   OrgSchedule,
   OwnerChangeRequest,
@@ -291,19 +311,31 @@ export const contracts = {
   RuntimeSpec,
   ServerButtonPart,
   ServerMessage,
+  BuildQuestionsPart,
+  QuestionReply,
   SearchConnection,
   SearchProperty,
   SearchRow,
   ScheduledJob,
   SearchTotals,
   SetFactsRequest,
+  SetTimeZoneRequest,
   SiteFields,
+  SiteMedia,
   SitePointer,
   SiteRevision,
   StaffDirectory,
   StaffMember,
   TextAnswerSchema,
   UploadedAssets,
+  DrawLogosRequest,
+  KeptLogo,
+  LogoPalettes,
+  LogoPalettesRequest,
+  LogoRounds,
+  PaletteFromImage,
+  ReviewedPhotos,
+  ReviewPhotosRequest,
   UrlStatus,
   ValidationReport,
   WorkspaceStatus,

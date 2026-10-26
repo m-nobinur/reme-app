@@ -1,6 +1,7 @@
 import type {
+  Activity,
   ApprovalRequest,
-  BlueprintReviewOutput,
+  AvatarId,
   BuildStopCause,
   BuildSummary,
   ChangeKind,
@@ -18,11 +19,12 @@ import type {
   MemoryView,
   MessageFeedback,
   PushSubscribeRequest,
+  QuestionReply,
   RegistrantDetails,
   Reminder,
+  SiteMedia,
   WorkspaceStatus,
 } from "@workspace/contracts"
-import type { AnswerSpec } from "@workspace/ui/lib/answer"
 
 /**
  * What the owner screens read, and the one interface behind them.
@@ -89,13 +91,8 @@ export type AttentionItem =
   | (AttentionBase & { kind: "report" | "alert"; stopped?: BuildStopCause })
   // A reminder that came due and is not done; `id` is the reminder's.
   | (AttentionBase & { kind: "reminder" })
-  // A question carries what answering it needs: the build it blocks, and the
-  // inputs, derived on the server so the raw `answer_schema` never travels.
-  | (AttentionBase & {
-      kind: "question"
-      assignmentId: string
-      answer: AnswerSpec
-    })
+  // A question is answered in the chat, on the card the assistant posted.
+  | (AttentionBase & { kind: "question" })
   // The approval carries its contract, because the immutable target is drawn
   // from it and a loosened copy could name a different one.
   | (AttentionBase & {
@@ -130,6 +127,10 @@ export type Workspace = {
   missingFacts: FactValueKey[]
   /** The name the owner gave their assistant, or null before they chose one. */
   assistantName: string | null
+  /** The face the owner picked for their assistant, or null for Reme's own. */
+  assistantAvatar: AvatarId | null
+  /** Every job as segments with fixed steps; null until the api sends it. */
+  activity: Activity | null
   /** What the api derived from rows waiting on the owner, as facts. */
   derivedReminders: DerivedReminder[]
   /** Open reminders someone wrote down, soonest due first, undated after. */
@@ -141,12 +142,11 @@ export type Workspace = {
 /** A poll's answer: the workspace, or that it has not changed since `etag`. */
 export type WorkspacePoll = Workspace | "unchanged"
 
-/** A signed preview of one revision: the page and its three screenshots. */
+/** A signed preview of one revision: the page to open. */
 export type PreviewLinks = {
   revisionId: string
   url: string
-  screenshots: string[]
-  /** When the signed URLs stop working. */
+  /** When the signed URL stops working. */
   expiresAt: string
 }
 
@@ -278,22 +278,18 @@ export type OwnerDataSource = {
    * request: the api reads the org from the session, and nothing is named.
    */
   pollWorkspace: (etag: string | null) => Promise<WorkspacePoll>
+  /** One answer to a question the assistant asked in `conversationId`. */
   answer: (
-    assignmentId: string,
-    requestId: string,
-    value: unknown,
-    key: string
-  ) => Promise<WriteOutcome>
-  /** The owner's decision on a plan: build it, or change it in their words. Idempotent on `key`. */
-  decideBlueprint: (
-    assignmentId: string,
-    decision: BlueprintReviewOutput,
+    conversationId: string,
+    reply: QuestionReply,
     key: string
   ) => Promise<WriteOutcome>
   cancelBuild: (assignmentId: string) => Promise<WriteOutcome>
   /** The owner's own account, ended (ADR-035). A second call finishes the first. */
   deleteAccount: () => Promise<WriteOutcome>
   preview: (assignmentId: string) => Promise<PreviewLinks | null>
+  /** The logo, and the pictures on the newest version; null when there is no session. */
+  siteMedia: () => Promise<SiteMedia | null>
   /** A reminder the owner wrote. Idempotent on `key`. */
   createReminder: (
     input: CreateReminderRequest,
@@ -307,6 +303,8 @@ export type OwnerDataSource = {
     key: string
   ) => Promise<string | null>
   unsubscribePush: (id: string) => Promise<WriteOutcome>
+  /** The zone this browser keeps, for the org to take when it differs. */
+  setTimeZone: (zone: string) => Promise<void>
   /** A domain purchase's Checkout, or the api's refusal code. Keyed by `key`. */
   domainCheckout: (
     name: string,
@@ -330,7 +328,9 @@ export type OwnerDataSource = {
   requestChange: (
     text: string,
     key: string,
-    changeKind?: ChangeKind
+    changeKind?: ChangeKind,
+    /** Also posts the words in the chat, in this conversation or the newest. */
+    chat?: { conversation_id?: string }
   ) => Promise<WriteOutcome>
   conversations: () => Promise<Conversation[]>
   conversation: (id: string) => Promise<Conversation | null>
@@ -369,8 +369,41 @@ export type OwnerDataSource = {
     key: string
   }) => Promise<Response | null>
   /**
-   * One generated photo of the owner's org, answered as `apps/api`'s
-   * `GET /photos/:id` answers. Null when there is no session.
+   * One generated or uploaded image of the owner's org, answered as
+   * `apps/api`'s `GET /photos/:id` answers. Null when there is no session.
    */
   photo: (assetId: string) => Promise<Response | null>
+  /**
+   * One version's home page or icon, answered as `apps/api`'s
+   * `GET /revisions/:id/:picture` answers. Null when there is no session.
+   */
+  revisionPicture: (
+    revisionId: string,
+    picture: string
+  ) => Promise<Response | null>
+  /**
+   * The design tray's photos read against the photo needs, the JSON body as
+   * the owner sent it, answered as `apps/api`'s `POST /assets/review`
+   * answers. Null when there is no session.
+   */
+  reviewPhotos: (body: string, key: string) => Promise<Response | null>
+  /**
+   * The colours in one picture, streamed through as the browser sent it and
+   * never stored, answered as `POST /palettes/from-image` answers. Null when
+   * there is no session.
+   */
+  paletteFromImage: (upload: {
+    body: ReadableStream<Uint8Array>
+    type: string
+    length: number
+    key: string
+  }) => Promise<Response | null>
+  /** The kept logo read into palettes, answered as `POST /palettes/from-logo` answers. Null when there is no session. */
+  logoPalettes: (body: string) => Promise<Response | null>
+  /** A round of logos started, answered as `POST /logos` answers. Null when there is no session. */
+  drawLogos: (body: string, key: string) => Promise<Response | null>
+  /** One logo question's rounds, answered as `GET /logos` answers. Null when there is no session. */
+  logoRounds: (toolCallId: string) => Promise<Response | null>
+  /** A variant or an upload kept as the logo, answered as `POST /logos/{id}/keep`. Null when there is no session. */
+  keepLogo: (id: string, key: string) => Promise<Response | null>
 }

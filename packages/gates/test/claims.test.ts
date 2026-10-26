@@ -331,7 +331,8 @@ describe("the claims gate", () => {
       expect(result.passed, main).toBe(false)
       expect(result.offending_node, main).toContain("index.html html>body>main")
     }
-    // A fact's own phrase passes whatever its key; a bare "local" never claims.
+    // A fact's own phrase passes whatever its key, and any fact that says
+    // "local" backs a bare "local".
     for (const main of [
       "<p>Meet the local team</p>",
       "<p>Local cleaners for Fairhaven homes</p>",
@@ -342,6 +343,30 @@ describe("the claims gate", () => {
       fact("about.story", { text: "We are a family-run business" }),
     ]
     expect(verdict("<p>A family-run business</p>", stated).passed).toBe(true)
+  })
+
+  it("fails a soft identity claim no fact backs", () => {
+    for (const main of [
+      "<p>A family firm you can trust</p>",
+      "<p>Your local cleaners in Fairhaven</p>",
+      "<h2>Local and fully insured</h2>",
+    ]) {
+      const result = verdict(main, PLAIN)
+      expect(result.passed, main).toBe(false)
+    }
+    // Places and people called local are not the firm.
+    for (const main of [
+      "<p>Serving the local area</p>",
+      "<p>Known across the local community</p>",
+    ])
+      expect(verdict(main, PLAIN).passed, main).toBe(true)
+    const stated = [
+      ...PLAIN,
+      fact("business.proof", { text: "A local, family firm" }),
+    ]
+    expect(verdict("<p>A family firm you can trust</p>", stated).passed).toBe(
+      true
+    )
   })
 
   it("publishes the vocabulary and the fact prefixes that support it", () => {

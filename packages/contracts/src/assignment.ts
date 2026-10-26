@@ -71,6 +71,12 @@ export const InformationRequest = z.strictObject({
   field: z.string().min(1),
   why: z.string().min(1),
   /**
+   * The question as the assistant puts it to the owner: plain words about
+   * their business, no field names. The assistant may reword it. Absent on
+   * requests raised before it existed.
+   */
+  question: z.string().min(1).max(300).optional(),
+  /**
    * JSON Schema the answer must satisfy, so answers validate before storage.
    * For a `FactValueKey` field the answer is checked against `FactValue`;
    * for any other field the Developer sends a `TextAnswerSchema`. Kept a
