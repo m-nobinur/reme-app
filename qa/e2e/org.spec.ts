@@ -148,5 +148,8 @@ test("an owner with an org sees its team and the fact it stated @probe-org", asy
   await expect(
     main.getByRole("definition").filter({ hasText: PHONE })
   ).toBeVisible()
-  await expect(main.getByText(/^You told Reme/)).toHaveCount(2)
+  // The name and the phone at least; the first name signup kept may show too.
+  await expect
+    .poll(() => main.getByText(/^You said this/).count())
+    .toBeGreaterThanOrEqual(2)
 })
