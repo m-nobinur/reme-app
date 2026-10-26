@@ -454,7 +454,8 @@ it("typing with focus on a link goes to the composer, and Space opens nothing", 
   const composer = container.querySelector("textarea")
   expect(key.defaultPrevented).toBe(true)
   expect(document.activeElement).toBe(composer)
-  expect(composer?.value).toBe("H")
+  // The runtime's composer store writes the value back, a tick on under load.
+  await vi.waitFor(() => expect(composer?.value).toBe("H"))
   const space = new KeyboardEvent("keydown", { key: " ", bubbles: true })
   link.focus()
   link.dispatchEvent(space)
