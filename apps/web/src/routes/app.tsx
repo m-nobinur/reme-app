@@ -225,7 +225,8 @@ function AppLayout() {
   const { id } = useParams({ strict: false })
   // A new conversation has no activity to show beside it yet: the composer
   // takes the page, and the panel appears once the first message stores it.
-  const showPanel = hasPanel && !(conversation && !id)
+  // With no business, naming one is the next step, so the panel stays.
+  const showPanel = hasPanel && !(conversation && !id && active)
   // Getting started stays in the help menu until the first build.
   const onboarding = onboardingFor(live.workspace, conversations)
   const setupOpen = settingUp(live.workspace)
