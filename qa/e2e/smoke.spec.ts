@@ -137,9 +137,12 @@ test("the staff directory tells a new owner it is empty", async ({ page }) => {
   ).toHaveCount(0)
   await expectNoFixtureContent(page)
 
-  // The rail names the state rather than inventing an organisation, which is
-  // the one place on the shell where a fabricated name would look normal.
-  await expect(page.getByText("No organisation")).toBeVisible()
+  // Settings name the state rather than inventing an organisation, the one
+  // place on the shell where a fabricated name would look normal.
+  await page.locator('[data-slot="profile-menu"]').click()
+  await expect(
+    page.getByRole("dialog", { name: "Settings" }).getByText("No organisation")
+  ).toBeVisible()
 })
 
 test("a chat turn sends only what the owner did", async ({ page }) => {
@@ -229,23 +232,17 @@ test("every chat request is sent to act, with no mode to pick", async ({
   ).toHaveAttribute("data-state", "sent")
 })
 
-test("the top bar holds new chat, the history and the bell", async ({
-  page,
-}) => {
+test("the rail holds a new conversation and the bell", async ({ page }) => {
   await visit(page, "/app/staff")
-  const bar = page.getByRole("banner")
-  await expect(bar.getByRole("link", { name: "New chat" })).toBeVisible()
-  await bar.getByRole("button", { name: "History" }).click()
+  const rail = page.getByRole("complementary", { name: "Workspace" })
   await expect(
-    page.getByPlaceholder("Search your conversations…")
+    rail.getByRole("link", { name: "New conversation" })
   ).toBeVisible()
-  await page.keyboard.press("Escape")
-  // The rail starts one too, at the head of its sections.
   await expect(
-    page
-      .getByRole("complementary", { name: "Workspace" })
-      .getByRole("link", { name: "New conversation" })
+    rail.getByRole("button", { name: "Notifications", exact: true })
   ).toBeVisible()
+  // No conversation yet, so Chat says so instead of opening the history.
+  await expect(rail.getByRole("button", { name: "Chat" })).toBeDisabled()
 })
 
 test("the settings switch the theme", async ({ page }) => {
@@ -267,7 +264,7 @@ test("the settings switch the theme", async ({ page }) => {
   ).toBeVisible()
 })
 
-test("Ask Reme for help sends its question in a new chat", async ({ page }) => {
+test("Ask for help sends its question in a new chat", async ({ page }) => {
   await visit(page, "/app/staff")
   const sent = page
     .waitForRequest((request) => request.url().endsWith("/api/chat"))
@@ -279,20 +276,13 @@ test("Ask Reme for help sends its question in a new chat", async ({ page }) => {
   await expect(
     settings.getByRole("link", { name: "Getting started" })
   ).toHaveCount(0)
-  await settings.getByRole("link", { name: "Ask Reme for help" }).click()
+  await settings.getByRole("link", { name: "Ask for help" }).click()
   expect(await sent).toContain("What can you help me with?")
   await expect(page.getByText(/^What can you help me with\?/)).toBeVisible()
 })
 
-test("the top bar names a new chat and a stored one truthfully", async ({
-  page,
-}) => {
-  const title = page.locator('[data-slot="workspace-title"]')
-  await visit(page, "/app")
-  await expect(title).toHaveText("New chat")
-  // An address with an id is a stored conversation, so it is not "new".
+test("a conversation the owner has none under says so", async ({ page }) => {
   await visit(page, "/app/c/any-conversation")
-  await expect(title).toHaveText("Conversation")
   // An id the owner has no conversation under says so, rather than opening
   // a thread nobody asked for.
   await expect(page.getByText("This conversation is not here")).toBeVisible()

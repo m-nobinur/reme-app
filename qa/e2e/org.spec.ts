@@ -100,7 +100,7 @@ test("an owner with an org sees its team and the fact it stated @probe-org", asy
   expect(workspace.missing_facts).not.toContain("business.phone")
   expect(workspace.missing_facts.length).toBeGreaterThan(0)
 
-  // The name signup collected, and the phone set above.
+  // The names signup collected, and the phone set above.
   const { facts } = await read("/facts")
   expect(facts).toEqual(
     expect.arrayContaining([
@@ -114,9 +114,10 @@ test("an owner with an org sees its team and the fact it stated @probe-org", asy
         key: "business.phone",
         value: { e164: PHONE },
       }),
+      expect.objectContaining({ org_id: orgId, key: "owner.preferred_name" }),
     ])
   )
-  expect(facts).toHaveLength(2)
+  expect(facts).toHaveLength(3)
 
   // The feed shows publishes and rollbacks, and this org has neither.
   expect(await read("/activity")).toEqual({ items: [] })
