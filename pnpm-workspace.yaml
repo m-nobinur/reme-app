@@ -21,8 +21,9 @@ overrides:
   'brace-expansion@>=2.0.0 <2.1.7': 2.1.7
   # Event-loop denial of service through indexed source maps.
   'source-map-js@>=1.0.0 <1.2.2': 1.2.2
-  # Memory exhaustion validating oversized input, through @cloudflare/sandbox.
-  'zod@>=4.0.0 <4.6.6': 4.6.6
+  # Memory exhaustion validating oversized input, through @cloudflare/sandbox. 4.6.7, the
+  # version the workspace uses, so the AI SDK resolves one zod, not two.
+  'zod@>=4.0.0 <4.6.6': 4.6.7
   # Denial of service through a crafted body, through @google/genai.
   'body-parser@>=2.0.0 <2.4.0': 2.4.0
   # Denial of service through excessive content-encodings, through openai and the AI SDK.
