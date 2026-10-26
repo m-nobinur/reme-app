@@ -106,8 +106,8 @@ function Pill({
         side="top"
       >
         <button
-          aria-label={`${field.label}, required`}
-          aria-pressed={field.required}
+          // Names the state it shows, "optional" or the asterisk, as its text.
+          aria-label={`${field.label}, ${field.required ? "required" : "optional"}`}
           className="-ms-1 flex h-6 min-w-6 items-center justify-center rounded-full px-1 outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
           onClick={() =>
             onChange(setRequired(draft, field.key, !field.required))
