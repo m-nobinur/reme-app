@@ -15,6 +15,7 @@ import {
   tenancy,
 } from "@workspace/db"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { settleCard } from "../src/build-questions.ts"
 import { getIndexing, getSearchPerformance } from "../src/cos/search-tools.ts"
 import type { ToolContext } from "../src/cos/tools.ts"
 import {
@@ -168,6 +169,7 @@ describe.skipIf(!url)("the Search Console tools, on a live connection", () => {
       SITE_HOST_SUFFIX: SUFFIX,
     } as unknown as Env,
     kit,
+    settleCard,
     owner: {
       orgId: who.orgId,
       session: {

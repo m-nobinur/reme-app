@@ -43,6 +43,7 @@ import {
   type UIMessageChunk,
 } from "ai"
 import { enqueueAfterTurn } from "./after-turn.ts"
+import { settleCard } from "./build-questions.ts"
 import { type Owner, stateFacts } from "./changes.ts"
 import { holdsNul, notFound } from "./conversations.ts"
 import {
@@ -752,7 +753,7 @@ export async function chat(
   const { conversation_id: id, mode, turn, time_zone: browser } = parsed.data
   if (browser && !knownZone(browser)) return invalid([{ path: ["time_zone"] }])
   const scope = { orgId: owner.orgId, workosUserId: owner.session.workosUserId }
-  const tools = { env, kit, owner }
+  const tools = { env, kit, owner, settleCard }
   // Read before the turn's lock is taken, beside `lookAhead`; the CoS's
   // context is built from it. An onboarding turn reads it and drops it.
   const loading = loadWorkspace(tools)

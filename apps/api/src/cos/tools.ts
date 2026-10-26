@@ -30,6 +30,7 @@ import {
   OwnerAnswerText,
   PreviewLink,
   type ProfileLine,
+  type QuestionAnswer,
   REVIEW_FACT_KEYS,
   type RecordReviewInput,
   type RecordReviewOutput,
@@ -46,12 +47,12 @@ import {
   eq,
   events,
   failureCode,
+  type OrgScopedDb,
   siteRevisions,
   sql,
   type Tenancy,
 } from "@workspace/db"
 import { rangeText } from "@workspace/ui/lib/activity-copy"
-import { settleCard } from "../build-questions.ts"
 import {
   type Bridged,
   bridge,
@@ -98,7 +99,20 @@ import type { Turn } from "./turns.ts"
  * approved call, and the repair could no longer rerun it under its key.
  */
 
-export type ToolContext = { env: Env; kit: Tenancy; owner: Owner }
+export type ToolContext = {
+  env: Env
+  kit: Tenancy
+  owner: Owner
+  /**
+   * Folds a chat card as answered. Passed in, because the card is a
+   * conversation row and this directory never reaches those (ADR-034).
+   */
+  settleCard: (
+    db: OrgScopedDb,
+    questionId: string,
+    answer: QuestionAnswer
+  ) => Promise<void>
+}
 
 type Empty = Record<string, never>
 type Refused = Extract<GetPreviewOutput, { outcome: "refused" }>
@@ -811,7 +825,7 @@ const reviewElsewhere = () =>
  * 'information.requested'` when that scan shows in the slow log.
  */
 export async function answerQuestion(
-  { env, kit, owner }: ToolContext,
+  { env, kit, owner, settleCard }: ToolContext,
   input: AnswerQuestionInput,
   key: string,
   turn: Pick<Turn, "sessionId">
@@ -1031,7 +1045,7 @@ export async function connectDomain(
  * domain-flow.ts), which answers 204. `name` is a path segment as given.
  */
 export async function removal(
-  { env, kit, owner }: ToolContext,
+  { env, kit, owner }: Pick<ToolContext, "env" | "kit" | "owner">,
   name: string,
   key: string
 ): Promise<Response> {

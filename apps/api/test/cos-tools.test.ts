@@ -28,6 +28,7 @@ import {
   it,
   vi,
 } from "vitest"
+import { settleCard } from "../src/build-questions.ts"
 import { remember } from "../src/cos/memory.ts"
 import { getIndexing, getSearchPerformance } from "../src/cos/search-tools.ts"
 import {
@@ -274,6 +275,7 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       SITE_HOST_SUFFIX: SUFFIX,
     } as unknown as Env,
     kit,
+    settleCard,
     owner: {
       orgId: who.orgId,
       session: {
