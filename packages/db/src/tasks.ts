@@ -481,3 +481,29 @@ export async function syncTasks(
   }
   if (row?.google) await apply(db, orgId, "google", googlePlan(row.google))
 }
+
+/** The newest task of `kind` holding `step`, open first, made from the org's rows if missing. */
+export async function stepOf(
+  db: OrgScopedDb,
+  orgId: string,
+  kind: TaskKind,
+  step: TaskStepName
+) {
+  const find = () =>
+    db
+      .select({ taskId: taskSteps.taskId, hash: taskSteps.probeHash })
+      .from(taskSteps)
+      .innerJoin(ownerTasks, eq(ownerTasks.id, taskSteps.taskId))
+      .where(sql`${ownerTasks.kind} = ${kind} and ${taskSteps.step} = ${step}`)
+      .orderBy(
+        sql`${ownerTasks.state} in ('active', 'later') desc`,
+        sql`${ownerTasks.createdAt} desc`
+      )
+      .limit(1)
+  const [found] = await find()
+  if (found) return found
+  await syncTasks(db, orgId)
+  const [made] = await find()
+  if (!made) throw new Error(`task.missing:${kind}`)
+  return made
+}

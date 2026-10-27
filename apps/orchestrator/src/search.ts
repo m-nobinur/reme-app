@@ -10,6 +10,7 @@ import {
   searchProperties,
   setStep,
   sql,
+  stepOf,
   syncTasks,
   type Tenancy,
   users,
@@ -29,7 +30,6 @@ import {
   verifyResource,
 } from "./google.ts"
 import { writeUpdate } from "./heartbeat-write.ts"
-import { stepOf } from "./probe.ts"
 import {
   activeDeployment,
   dropVerification,

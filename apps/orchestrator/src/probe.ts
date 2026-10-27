@@ -4,17 +4,7 @@ import type {
   WorkflowTimeoutDuration,
 } from "cloudflare:workers"
 import type { TaskKind, TaskStepName } from "@workspace/contracts"
-import {
-  eq,
-  type OrgScopedDb,
-  ownerTasks,
-  type StepWrite,
-  setStep,
-  sql,
-  syncTasks,
-  type Tenancy,
-  taskSteps,
-} from "@workspace/db"
+import { type StepWrite, setStep, stepOf, type Tenancy } from "@workspace/db"
 import { canonicalHash } from "@workspace/facade"
 import { type Say, withKit } from "./domain-flow.ts"
 
@@ -49,32 +39,6 @@ export const timeless = (value: unknown): unknown =>
             .map(([key, v]) => [key, timeless(v)])
         )
       : value
-
-/** The newest task of `kind` holding `step`, open first, made from the org's rows if missing. */
-export async function stepOf(
-  db: OrgScopedDb,
-  orgId: string,
-  kind: TaskKind,
-  step: TaskStepName
-) {
-  const find = () =>
-    db
-      .select({ taskId: taskSteps.taskId, hash: taskSteps.probeHash })
-      .from(taskSteps)
-      .innerJoin(ownerTasks, eq(ownerTasks.id, taskSteps.taskId))
-      .where(sql`${ownerTasks.kind} = ${kind} and ${taskSteps.step} = ${step}`)
-      .orderBy(
-        sql`${ownerTasks.state} in ('active', 'later') desc`,
-        sql`${ownerTasks.createdAt} desc`
-      )
-      .limit(1)
-  const [found] = await find()
-  if (found) return found
-  await syncTasks(db, orgId)
-  const [made] = await find()
-  if (!made) throw new Error(`task.missing:${kind}`)
-  return made
-}
 
 /**
  * One probe, as the step `name`: `read` runs, its evidence is hashed as

@@ -70,6 +70,7 @@ export {
   readTasks,
   type StepWrite,
   setStep,
+  stepOf,
   syncTasks,
   type TaskPlan,
 } from "./tasks.ts"
