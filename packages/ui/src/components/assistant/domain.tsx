@@ -172,7 +172,7 @@ export const ConnectDomain: ToolCallMessagePartComponent = (props) => (
     cancelled="Not connected."
     refused="The domain could not be connected."
     detail={() =>
-      "Only your website's address changes. I'll show you what to change where your domain is managed."
+      "Only your website's address changes. Your email is not affected. Next I'll show you what to change where your domain is managed."
     }
     done={(output) =>
       output?.outcome === "connecting" && output.steps?.length ? (

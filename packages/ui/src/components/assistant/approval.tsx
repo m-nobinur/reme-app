@@ -3,11 +3,7 @@ import {
   type ToolCallMessagePartProps,
   useAuiState,
 } from "@assistant-ui/react"
-import {
-  CheckCircleIcon,
-  ProhibitIcon,
-  SealQuestionIcon,
-} from "@phosphor-icons/react"
+import { CheckCircleIcon, ProhibitIcon } from "@phosphor-icons/react"
 import { AskChoice } from "@workspace/ui/components/assistant/ask-choice"
 import { AskDesign } from "@workspace/ui/components/assistant/ask-design"
 import { AskDetails } from "@workspace/ui/components/assistant/ask-details"
@@ -19,11 +15,10 @@ import {
   COS_QUIET,
   COS_READS,
 } from "@workspace/ui/components/assistant/cos-tools"
+import { TrayApproval } from "@workspace/ui/components/assistant/decision"
 import { RequestChange } from "@workspace/ui/components/assistant/request-change"
 import { ReviewQuoteForm } from "@workspace/ui/components/assistant/review-quote-form"
 import { ToolFallback } from "@workspace/ui/components/assistant/tool-fallback"
-import { Button } from "@workspace/ui/components/button"
-import { CARD_SURFACE } from "@workspace/ui/lib/card"
 import { heldText, isHeld } from "@workspace/ui/lib/tool-state"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -61,7 +56,7 @@ function ApprovalTarget({ input }: { input: unknown }) {
   if (rows.length === 0) return null
 
   return (
-    <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+    <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
       {rows.map(([label, value]) => (
         <div className="contents" key={label}>
           <dt className="text-muted-foreground first-letter:uppercase">
@@ -74,7 +69,7 @@ function ApprovalTarget({ input }: { input: unknown }) {
   )
 }
 
-/** The card the owner answers. Two buttons, no third state, no confirm step. */
+/** The card the owner answers, in the tray. Two buttons, no third state, no confirm step. */
 function ApprovalRequest({
   toolName,
   input,
@@ -87,41 +82,21 @@ function ApprovalRequest({
   respondToApproval: ToolCallMessagePartProps["respondToApproval"]
 }) {
   return (
-    <section
-      aria-label={`Approval needed: ${toolName}`}
-      className={cn(CARD_SURFACE, "my-3")}
-      data-slot="approval-request"
+    <TrayApproval
+      name="approval-request"
+      no={{
+        label: "Not now",
+        onNo: () => respondToApproval({ approved: false }),
+      }}
+      title={`Needs your approval: ${toolName.replace(/[_-]/g, " ")}`}
+      yes={{
+        label: "Approve",
+        onYes: () => respondToApproval({ approved: true }),
+      }}
     >
-      <h3 className="flex items-center gap-2 font-medium text-sm">
-        <SealQuestionIcon aria-hidden className="size-4 text-primary" />
-        Needs your approval
-      </h3>
-      {reason ? (
-        <p className="mt-1 max-w-prose text-muted-foreground text-sm">
-          {reason}
-        </p>
-      ) : null}
+      {reason ? <p className="max-w-prose">{reason}</p> : null}
       <ApprovalTarget input={input} />
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Button
-          onClick={() => respondToApproval({ approved: true })}
-          size="sm"
-          type="button"
-        >
-          <CheckCircleIcon aria-hidden />
-          Approve
-        </Button>
-        <Button
-          onClick={() => respondToApproval({ approved: false })}
-          size="sm"
-          type="button"
-          variant="outline"
-        >
-          <ProhibitIcon aria-hidden />
-          Decline
-        </Button>
-      </div>
-    </section>
+    </TrayApproval>
   )
 }
 
@@ -137,7 +112,7 @@ function ApprovalDecision({ approved }: { approved: boolean }) {
       data-slot="approval-decision"
     >
       <Icon aria-hidden className="size-4 shrink-0" />
-      {approved ? "You approved this." : "You declined this."}
+      {approved ? "You approved this." : "You said not now."}
     </p>
   )
 }
