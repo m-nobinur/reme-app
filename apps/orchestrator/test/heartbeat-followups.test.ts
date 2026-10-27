@@ -13,7 +13,7 @@ import {
   staff,
   taskFollowups,
 } from "@workspace/db"
-import { afterAll, describe, expect, it, vi } from "vitest"
+import { afterAll, describe, expect, it, onTestFinished, vi } from "vitest"
 import { heartbeatWith, type Models, SOURCES } from "../src/heartbeat.ts"
 import type { Spent } from "../src/heartbeat-write.ts"
 import { HANDLERS, runJob } from "../src/jobs.ts"
@@ -119,6 +119,16 @@ describe.skipIf(!url)("heartbeat follow-ups over a week", () => {
         }
       }
     )
+    // The week ends in the past, so the job would stay due on the shared
+    // database and read as the earliest due time in the schedule suite.
+    onTestFinished(async () => {
+      await kit.withOrg({ orgId }, (db) =>
+        db
+          .update(scheduledJobs)
+          .set({ pausedAt: new Date() })
+          .where(eq(scheduledJobs.id, jobId))
+      )
+    })
 
     // Wednesday 08:00 to 10:00 in London are inside a turn, and at 11:00 a
     // turn starts while the writer drafts.
