@@ -128,7 +128,9 @@ it("shows the records, a copy button for each value, and the provider button", a
   expect(link?.getAttribute("href")).toBe(GODADDY.settings_url)
   expect(link?.getAttribute("target")).toBe("_blank")
   expect(link?.getAttribute("rel")).toContain("noopener")
-  expect(link?.textContent).toContain("Open GoDaddy DNS settings")
+  expect(link?.textContent).toBe(
+    "GoDaddyOpen your DNS settings (opens in a new tab)"
+  )
   expect(
     [...card.container.querySelectorAll("button[aria-label]")].map((b) =>
       b.getAttribute("aria-label")
@@ -357,8 +359,8 @@ it("draws a domain bought elsewhere as the connect's records, or that the regist
   })
   expect(connected.container.textContent).toContain(`${NAME} is yours.`)
   expect(connected.container.querySelectorAll("ol > li")).toHaveLength(3)
-  expect(connected.container.querySelector("a")?.textContent).toContain(
-    "Open GoDaddy DNS settings"
+  expect(connected.container.querySelector("a")?.getAttribute("href")).toBe(
+    GODADDY.settings_url
   )
   await connected.unmount()
 

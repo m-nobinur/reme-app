@@ -289,7 +289,7 @@ export async function startDueSyncs(
 
 const RECONNECT = {
   label: "Reconnect Google",
-  action: { kind: "ask", text: "Connect Google to my website." },
+  action: { kind: "connect", service: "google" },
 } as const
 
 /** What Ellie says, once, for each way the grant can fail. */

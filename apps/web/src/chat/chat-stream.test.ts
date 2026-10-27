@@ -374,6 +374,39 @@ it("a message the assistant posted on its own is a message of its own, with its 
   expect(link?.textContent).toBe("Open DNS settings (opens in a new tab)")
 })
 
+it("a posted connect button is Google's row, which starts the sign-in in the same tab", async () => {
+  const start = FIXTURE.histories.start as {
+    messages: { id: string; parent_id: string | null; content: unknown }[]
+  }
+  const [first] = start.messages
+  const posted = {
+    ...first,
+    id: "srv_0123456789abcdee",
+    parent_id: first?.id ?? null,
+    content: {
+      role: "assistant",
+      parts: [
+        { type: "text", text: "Google needs one more permission." },
+        {
+          type: "data-button",
+          data: {
+            label: "Reconnect Google",
+            action: { kind: "connect", service: "google" },
+          },
+        },
+      ],
+      metadata: { custom: { createdAt: "2026-09-26T19:45:00.000Z" } },
+    },
+  }
+  const container = await open({ messages: [first, posted] })
+  const link = container.querySelector('[data-slot="connect-row"]')
+  expect(link?.getAttribute("href")).toBe("/api/google/start")
+  expect(link?.getAttribute("target")).toBeNull()
+  expect(link?.textContent).toBe(
+    "Google Search ConsoleShow up when people near you search"
+  )
+})
+
 it("a change asked for in the panel reads as one resolved line", async () => {
   const start = FIXTURE.histories.start as {
     messages: { id: string; parent_id: string | null; content: unknown }[]

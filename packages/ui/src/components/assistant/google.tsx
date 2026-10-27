@@ -7,6 +7,7 @@ import { CheckCircleIcon } from "@phosphor-icons/react"
 import { ConnectGoogleOutput } from "@workspace/contracts"
 import { Problem } from "@workspace/ui/components/assistant/decision"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
+import { ConnectRow } from "@workspace/ui/components/connect-row"
 import { ToolStatus } from "@workspace/ui/components/status-line"
 import { CARD_SURFACE } from "@workspace/ui/lib/card"
 import { refusalText } from "@workspace/ui/lib/refusal"
@@ -15,6 +16,27 @@ import { cn } from "@workspace/ui/lib/utils"
 
 /** Where the connect flow starts, which a connected account uses to switch. */
 const START = "/api/google/start"
+
+/**
+ * The row that starts Google's sign-in, in the same tab so the start route
+ * reads the chat to come back to from the referrer.
+ */
+export function ConnectGoogleRow({
+  href = START,
+  className,
+}: {
+  href?: string
+  className?: string
+}) {
+  return (
+    <ConnectRow
+      className={className}
+      href={href}
+      line="Show up when people near you search"
+      name="Google Search Console"
+    />
+  )
+}
 
 /**
  * Connecting Google so the owner's Search Console can be read. There is no
@@ -51,10 +73,8 @@ export const ConnectGoogle: ToolCallMessagePartComponent = (props) => {
             Google will ask you to let me see how your website shows up in
             search and to add it to Search Console.
           </p>
-          <div className="flex gap-2">
-            <a className={buttonVariants({ size: "sm" })} href={output.url}>
-              Connect Google
-            </a>
+          <ConnectGoogleRow href={output.url} />
+          <div>
             {/* Sent as the owner's words, so Ellie puts the offer off. */}
             <Button
               disabled={running}

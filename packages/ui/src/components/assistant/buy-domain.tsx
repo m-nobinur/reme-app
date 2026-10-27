@@ -29,6 +29,7 @@ import {
   TrayFrame,
   useTabDraft,
 } from "@workspace/ui/components/assistant/question-tray"
+import { ConnectRow, ConnectRows } from "@workspace/ui/components/connect-row"
 import {
   Dialog,
   DialogContent,
@@ -177,20 +178,11 @@ const bestName = (rows: readonly DomainStemOffer[]) => {
 }
 
 /** A link out, which says it opens a new tab. */
-function Out({
-  href,
-  onClick,
-  children,
-}: {
-  href: string
-  onClick?: () => void
-  children: ReactNode
-}) {
+function Out({ href, children }: { href: string; children: ReactNode }) {
   return (
     <a
       className="rounded-sm underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary"
       href={href}
-      onClick={onClick}
       rel="noopener noreferrer"
       target="_blank"
     >
@@ -307,17 +299,27 @@ function Elsewhere({
 }) {
   const links = buyElsewhereLinks(name)
   return (
-    <p className={META}>
-      Search for {name} at{" "}
-      <Out href={links.cloudflare} onClick={onFollow}>
-        Cloudflare
-      </Out>{" "}
-      or{" "}
-      <Out href={links.godaddy} onClick={onFollow}>
-        GoDaddy
-      </Out>
-      . You manage it there, and I connect it once it's yours.
-    </p>
+    <>
+      <ConnectRows heading="Other places to buy it">
+        <ConnectRow
+          href={links.cloudflare}
+          line={`Search for ${name}`}
+          name="Cloudflare"
+          newTab
+          onClick={onFollow}
+        />
+        <ConnectRow
+          href={links.godaddy}
+          line={`Search for ${name}`}
+          name="GoDaddy"
+          newTab
+          onClick={onFollow}
+        />
+      </ConnectRows>
+      <p className={META}>
+        You manage it there, and I connect it once it's yours.
+      </p>
+    </>
   )
 }
 

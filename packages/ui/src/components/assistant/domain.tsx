@@ -3,12 +3,7 @@ import {
   useAui,
   useAuiState,
 } from "@assistant-ui/react"
-import {
-  ArrowSquareOutIcon,
-  CheckIcon,
-  CopyIcon,
-  HourglassIcon,
-} from "@phosphor-icons/react"
+import { CheckIcon, CopyIcon, HourglassIcon } from "@phosphor-icons/react"
 import {
   BoughtElsewhereOutput,
   type CheckDomainOutput,
@@ -24,7 +19,8 @@ import {
   Done,
   Problem,
 } from "@workspace/ui/components/assistant/decision"
-import { Button, buttonVariants } from "@workspace/ui/components/button"
+import { Button } from "@workspace/ui/components/button"
+import { ConnectRow } from "@workspace/ui/components/connect-row"
 import { ToolStatus } from "@workspace/ui/components/status-line"
 import { useCopyToClipboard } from "@workspace/ui/hooks/use-copy-to-clipboard"
 import { refusalText } from "@workspace/ui/lib/refusal"
@@ -143,18 +139,12 @@ function Records({
           : "Your email is not affected."}
       </p>
       {provider?.settings_url ? (
-        <div>
-          <a
-            className={buttonVariants({ size: "sm", variant: "outline" })}
-            href={provider.settings_url}
-            rel="noopener noreferrer"
-            target="_blank"
-          >
-            Open {provider.name} DNS settings
-            <ArrowSquareOutIcon aria-hidden />
-            <span className="sr-only"> (opens in a new tab)</span>
-          </a>
-        </div>
+        <ConnectRow
+          href={provider.settings_url}
+          line="Open your DNS settings"
+          name={provider.name}
+          newTab
+        />
       ) : null}
       <ol className="flex list-decimal flex-col gap-3 ps-5 text-sm marker:text-muted-foreground">
         {steps.map((record) => (
