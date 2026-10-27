@@ -317,21 +317,29 @@ describe.skipIf(!url)("buying a domain against a database", () => {
       "brightclean.co.uk": unsupported("brightclean.co.uk"),
       "brightclean.com": priced("brightclean.com"),
     }
-    stubNet(false, sandboxChecks)
+    const asked = (net: Net) =>
+      net.calls
+        .filter((c) => c.url.endsWith("/domain-check"))
+        .flatMap((c) => JSON.parse(c.body).domains as string[])
+    const sandboxNet = stubNet(false, sandboxChecks)
     const { env } = buyEnv(site.store)
     const sandbox = await find(env, kit, site.orgId, {})
     expect(sandbox).toMatchObject({
       outcome: "found",
       best: { name: "brightclean.com", price_gbp_year: 12 },
     })
+    // The sandbox is asked about .com only, and offers nothing else.
+    expect(asked(sandboxNet).length).toBeGreaterThan(0)
+    expect(asked(sandboxNet).every((n) => n.endsWith(".com"))).toBe(true)
 
     vi.unstubAllGlobals()
-    stubNet(true, {
+    const liveNet = stubNet(true, {
       "brightclean.co.uk": priced("brightclean.co.uk", "5.30"),
       "brightclean.com": priced("brightclean.com"),
       "brightclean.uk": priced("brightclean.uk", "5.30"),
     })
     const live = await find(buyEnv(site.store, true).env, kit, site.orgId, {})
+    expect(asked(liveNet).some((n) => n.endsWith(".net"))).toBe(false)
     expect(live).toMatchObject({
       outcome: "found",
       best: { name: "brightclean.co.uk", price_gbp_year: 8 },

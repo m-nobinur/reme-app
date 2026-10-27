@@ -48,6 +48,7 @@ import {
   checkDomains,
   ensureZone,
   getRegistration,
+  offeredTlds,
   type Registrant,
   type RegistrationStatus,
   register,
@@ -163,10 +164,12 @@ export async function find(
   const suggested = input.data.query
     ? await searchDomains(env, input.data.query).catch(() => [])
     : []
-  // Best first: the ranker's order, then the registrar's suggestions.
-  const names = [
-    ...new Set([...ranked.map((r) => r.name), ...suggested]),
-  ].slice(0, CHECK_MAX)
+  // Best first: the ranker's order, then the registrar's suggestions, in the
+  // endings offered here only, so the check is not spent on the rest.
+  const offered = offeredTlds(env)
+  const names = [...new Set([...ranked.map((r) => r.name), ...suggested])]
+    .filter((n) => offered.some((tld) => tld === sellableTld(n)))
+    .slice(0, CHECK_MAX)
   let checked: Checked[]
   try {
     checked = await checkDomains(env, names)
