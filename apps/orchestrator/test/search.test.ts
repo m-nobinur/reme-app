@@ -8,6 +8,7 @@ import {
   searchConnections,
   searchProperties,
   sql,
+  taskSteps,
 } from "@workspace/db"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { openToken } from "../src/google.ts"
@@ -113,6 +114,14 @@ const typesOf = async (orgId: string) =>
     )
   ).map((e) => e.type)
 
+/** The Google task's `permissions` step, as the panel reads it. */
+const permissionsStep = (orgId: string) =>
+  kit
+    .withOrg({ orgId }, (db) =>
+      db.select().from(taskSteps).where(eq(taskSteps.step, "permissions"))
+    )
+    .then((rows) => rows[0])
+
 afterEach(() => vi.unstubAllGlobals())
 
 /** An org with a live site, and the free subdomain it holds. */
@@ -135,7 +144,7 @@ async function published() {
 }
 
 describe.skipIf(!url)("connecting Google", () => {
-  it("saves nothing when a scope was unticked", async () => {
+  it("saves a scope left unticked as needs_permission, blocks the step and starts nothing", async () => {
     const orgId = await freshOrg(kit)
     stubGoogle(
       "1//refresh",
@@ -155,8 +164,19 @@ describe.skipIf(!url)("connecting Google", () => {
       status: 422,
       code: "search.scopes_missing",
     })
-    expect(await connection(orgId)).toBeUndefined()
-    expect(await typesOf(orgId)).toEqual([])
+    const row = await connection(orgId)
+    expect(row?.state).toBe("needs_permission")
+    expect(row?.scopes).toEqual([
+      "openid",
+      "https://www.googleapis.com/auth/webmasters",
+    ])
+    expect(row?.refreshToken).toMatch(/^v1\./)
+    expect(await typesOf(orgId)).toEqual(["search.needs_permission"])
+    expect(await permissionsStep(orgId)).toMatchObject({
+      state: "blocked",
+      blockedOn: "permission",
+      note: "Google needs one more permission",
+    })
     expect(created).toEqual([])
   })
 

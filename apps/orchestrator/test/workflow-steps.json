@@ -893,8 +893,16 @@
     ]
   },
   "SearchSyncWorkflow": {
-    "synced": ["properties", "pull 1", "inspect 1", "pull 2", "inspect 2"],
-    "stale": ["properties", "pull 1", "pull 2", "inspect 2"],
-    "needs reauth": ["properties", "pull 1"]
+    "synced": [
+      "permissions",
+      "properties",
+      "pull 1",
+      "inspect 1",
+      "pull 2",
+      "inspect 2"
+    ],
+    "stale": ["permissions", "properties", "pull 1", "pull 2", "inspect 2"],
+    "needs reauth": ["permissions", "properties", "pull 1"],
+    "lost permission": ["permissions", "say permissions"]
   }
 }

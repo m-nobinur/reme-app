@@ -4,6 +4,7 @@ import {
   addSite,
   exchangeCode,
   type GoogleError,
+  hasScopes,
   NeedsReauth,
   openToken,
   revokeToken,
@@ -111,7 +112,7 @@ describe("the code exchange", () => {
     expect(sent.get("client_secret")).toBe("csecret")
   })
 
-  it("answers scopes_missing when the owner unticked a box", async () => {
+  it("hands back the scopes Google granted when the owner unticked a box", async () => {
     stub({
       [EXCHANGE]: json({
         access_token: ACCESS,
@@ -119,9 +120,14 @@ describe("the code exchange", () => {
         scope: `openid ${SCOPES[0]}`,
       }),
     })
-    expect(
-      await exchangeCode(env, { code: CODE, verifier: "v", redirect_uri: "r" })
-    ).toEqual({ error: "scopes_missing", scopes: ["openid", SCOPES[0]] })
+    const result = await exchangeCode(env, {
+      code: CODE,
+      verifier: "v",
+      redirect_uri: "r",
+    })
+    expect(result.scopes).toEqual(["openid", SCOPES[0]])
+    expect(hasScopes(result.scopes)).toBe(false)
+    expect(hasScopes([...SCOPES])).toBe(true)
   })
 
   it("is off without the client secret", async () => {
@@ -143,6 +149,7 @@ describe("access tokens", () => {
         access_token: ACCESS,
         expires_in: 3599,
         refresh_token: "1//rotated",
+        scope: "openid a b",
       }),
     })
     const first = await accessFor(env, org, stored)
@@ -150,6 +157,7 @@ describe("access tokens", () => {
     expect(await openToken(env, org, first.sealed ?? "")).toBe("1//rotated")
     expect(await accessFor(env, org, first.sealed ?? "")).toEqual({
       accessToken: ACCESS,
+      scopes: ["openid", "a", "b"],
     })
     expect(calls).toHaveLength(1)
     expect(new URLSearchParams(calls[0]?.body).get("refresh_token")).toBe(
