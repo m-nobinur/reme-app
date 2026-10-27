@@ -200,7 +200,7 @@ const contactOf = ({ name, address }: Registrant): CheckoutContact => ({
   },
 })
 
-type Confirmed = Awaited<ReturnType<CheckoutActions["confirm"]>>
+const COULD_NOT_PAY = "The payment could not be made. Try again."
 
 function PaymentForm({
   publishableKey,
@@ -232,13 +232,25 @@ function PaymentForm({
 
   // Both ways to pay end here: paid closes the dialog, anything else is said
   // under Pay and leaves the form to try again.
-  const settle = useCallback((result: Confirmed) => {
-    if (result.type === "success") paid.current()
-    else {
-      setError(result.error.message)
-      setState("ready")
-    }
-  }, [])
+  // Stripe throws, rather than answers, when it was called wrongly, and that
+  // must not leave Pay silent either.
+  const confirm = useCallback(
+    async (options: Parameters<CheckoutActions["confirm"]>[0]) => {
+      const ready = actions.current
+      if (!ready) return
+      setError(null)
+      const result = await ready.confirm(options).catch((thrown: unknown) => {
+        console.error(thrown)
+        return { type: "error", error: { message: COULD_NOT_PAY } } as const
+      })
+      if (result.type === "success") paid.current()
+      else {
+        setError(result.error.message)
+        setState("ready")
+      }
+    },
+    []
+  )
 
   useEffect(() => {
     const top = wallets.current
@@ -261,21 +273,17 @@ function PaymentForm({
         )
         // Wallets are a shortcut: if they fail, the card form still pays.
         express.on("loaderror", () => live && setWallets("none"))
-        express.on("confirm", async (event: unknown) => {
-          const ready = actions.current
-          if (!ready) return
-          setError(null)
-          settle(
-            await ready.confirm({
-              redirect: "if_required",
-              expressCheckoutConfirmEvent: event,
-            })
-          )
-        })
-        // The address is the registrant's, given to Stripe at init and on
-        // confirm, so the card form asks for the card alone.
+        express.on("confirm", (event: unknown) =>
+          confirm({
+            redirect: "if_required",
+            expressCheckoutConfirmEvent: event,
+          })
+        )
+        // The name and address are the registrant's, sent on confirm, and
+        // Stripe refuses a confirm that sends a field the form also asks
+        // for, so the card form asks for the card alone.
         const payment = checkout.createPaymentElement({
-          fields: { billingDetails: { address: "never" } },
+          fields: { billingDetails: { name: "never", address: "never" } },
         })
         payment.on("loaderror", () => live && setState("failed"))
         mounted.push(express, payment)
@@ -294,20 +302,16 @@ function PaymentForm({
       actions.current = null
       for (const element of mounted) element.destroy()
     }
-  }, [publishableKey, clientSecret, registrant, onTotal, settle])
+  }, [publishableKey, clientSecret, registrant, onTotal, confirm])
 
   const pay = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const ready = actions.current
-    if (!ready || state !== "ready") return
-    setError(null)
+    if (!actions.current || state !== "ready") return
     setState("paying")
-    settle(
-      await ready.confirm({
-        redirect: "if_required",
-        billingAddress: contactOf(registrant),
-      })
-    )
+    await confirm({
+      redirect: "if_required",
+      billingAddress: contactOf(registrant),
+    })
   }
 
   if (state === "failed") {
@@ -337,7 +341,9 @@ function PaymentForm({
         </p>
       ) : null}
       <div className="min-h-40" data-slot="domain-card" ref={card} />
-      <div className="flex flex-col gap-2">
+      {/* Pinned to the dialog's foot, so Stripe's form (Link's sign-up,
+          a 3D Secure note) can grow without pushing Pay out of sight. */}
+      <div className="sticky bottom-0 -mx-6 -mb-6 flex flex-col gap-2 border-border border-t bg-popover px-6 pt-4 pb-6">
         <SubmitButton
           pending={state !== "ready"}
           pendingLabel={state === "paying" ? "Paying" : "Loading"}
