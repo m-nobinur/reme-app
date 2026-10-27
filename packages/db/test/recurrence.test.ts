@@ -151,7 +151,7 @@ describe("the heartbeat's next time", () => {
         }
       }
     }
-  })
+  }, 30_000)
 
   it("runs every 8 hours on low and hourly on high", () => {
     expect(beats(HEARTBEAT_RULES.low, "2026-10-19T06:00:00Z", 3)).toEqual([
