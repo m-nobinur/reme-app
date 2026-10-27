@@ -371,6 +371,25 @@ describe("the DoH inspector", () => {
     })
   })
 
+  it("takes a subdomain under a registered domain with nothing on it yet", async () => {
+    vi.stubGlobal("caches", {
+      default: { match: async () => undefined, put: async () => undefined },
+    })
+    stubNet(
+      {
+        "https://data.iana.org/rdap/dns.json": () =>
+          Response.json({
+            services: [[["uk"], ["https://rdap.nominet.uk/uk/"]]],
+          }),
+        "https://rdap.nominet.uk/uk/domain/brightclean.co.uk": () =>
+          Response.json({ entities: [] }),
+      },
+      soaIn("book.brightclean.co.uk", "brightclean.co.uk", 3)
+    )
+    const inspection = await inspect("book.brightclean.co.uk")
+    expect(inspection.sub).toBe("book.brightclean.co.uk")
+  })
+
   it("refuses a name that does not exist rather than taking the registry's zone", async () => {
     stubNet()
     await expect(inspect("nowhere-at-all.co.uk")).rejects.toThrow(

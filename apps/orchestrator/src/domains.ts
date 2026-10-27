@@ -9,6 +9,7 @@ import type {
   DomainCheck,
   DomainProvider,
 } from "@workspace/contracts"
+import { rdapLookup } from "./rdap.ts"
 
 /** Where every connected host points: a proxied record in our SaaS zone (D0). */
 export const CNAME_TARGET = "domains.remeai.co.uk"
@@ -294,17 +295,18 @@ export async function inspect(name: string): Promise<Inspection> {
     doh(apex, "CAA"),
   ])
   // A name with no records of its own is a subdomain still to be added, and
-  // only under a zone in use: one with an address, a CNAME or mail. A registry
-  // zone such as co.uk has none, so an unregistered name is still refused.
-  // shortcut: a heuristic, not the public suffix list; add the list if a
-  // registry zone with an apex address ever lets a name through.
+  // only under a zone that is someone's: one with an address, a CNAME or mail,
+  // or else registered by RDAP, as a new domain with nothing on it is. A
+  // registry zone such as co.uk is neither, so an unregistered name is still
+  // refused.
   if (missing) {
     if (!sub) throw new DomainError("domain.not_found")
     const [root, mx] = await Promise.all([hostRecords(apex), doh(apex, "MX")])
     const inUse =
       !!root.cname ||
       root.a.length + root.aaaa.length > 0 ||
-      mx.answers.some((x) => x.type === TYPES.MX)
+      mx.answers.some((x) => x.type === TYPES.MX) ||
+      (await rdapLookup(apex).catch(() => null))?.registered === true
     if (!inUse) throw new DomainError("domain.not_found")
   }
   const data = (answers: Answer[], type: number) =>
