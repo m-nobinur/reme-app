@@ -2,13 +2,21 @@ import type {
   Activity,
   ActivitySegment,
   ActivityStep,
+  AddressDetail,
   AssignmentState,
   AttentionItem,
   BuildSummary,
+  OwnerTask,
   Reminder,
+  TaskStepState,
   WorkspaceStatus,
 } from "@workspace/contracts"
-import { type OrgScopedDb, sql } from "@workspace/db"
+import {
+  type OrgScopedDb,
+  PURCHASE_HOLD_MS,
+  readTasks,
+  sql,
+} from "@workspace/db"
 import { STAGES } from "./workspace.ts"
 
 /**
@@ -55,7 +63,7 @@ export type DomainRow = {
 }
 
 export type GoogleRow = {
-  state: "active" | "needs_reauth" | "revoked"
+  state: "active" | "needs_reauth" | "revoked" | "needs_permission"
   connected_at: string | null
   /** The newest property: the site Google is reading now. */
   property: {
@@ -84,6 +92,8 @@ export type ActivityRows = {
   first_live: { at: string; assignment_id: string | null } | null
   /** When the site last published, or null before the first time. */
   live_at: string | null
+  /** The org's owner tasks, newest first (`readTasks`). */
+  tasks: OwnerTask[]
 }
 
 /** A day back from `now`, as SQL: the window "Done today" reads. */
@@ -95,7 +105,8 @@ const dayBefore = (now: Date) =>
  * own row: its domains by `domains_org_state_idx`, the Google connection by
  * its key and its newest property by `search_properties_org_site_url`, the
  * heartbeat's newest run by `job_runs_pkey`, and the first publish by
- * `deployments_site_config_version_key`.
+ * `deployments_site_config_version_key`. The owner tasks are a second
+ * statement, pipelined beside it.
  *
  * shortcut: the heartbeat row is found by kind with no index on
  * `scheduled_jobs (org_id, kind)`, a scan of a small table; add the index
@@ -105,7 +116,8 @@ export async function readActivityRows(
   db: OrgScopedDb,
   now: Date
 ): Promise<ActivityRows> {
-  const [row] = await db.execute<ActivityRows>(sql`
+  const [[row], tasks] = await Promise.all([
+    db.execute<Omit<ActivityRows, "tasks">>(sql`
     select o.created_at as since,
       (select coalesce(json_agg(d), '[]'::json) from (
         select id, name, origin, state, last_check->>'status' as check,
@@ -130,9 +142,11 @@ export async function readActivityRows(
         where d.site_id = o.id order by d.config_version limit 1) as first_live,
       (select d.created_at from deployments d
         where d.site_id = o.id order by d.config_version desc limit 1) as live_at
-    from orgs o limit 1`)
+    from orgs o limit 1`),
+    readTasks(db),
+  ])
   if (!row) throw new Error("the org's own row is not visible")
-  return row
+  return { ...row, tasks }
 }
 
 // ---------------------------------------------------------------------------
@@ -309,16 +323,11 @@ export function domainSegment(row: DomainRow): Segment {
   }
 }
 
-/**
- * How long an unpaid purchase holds its name: the purchase Workflow's four
- * payment rounds of 35 minutes (`PAYMENT_ROUNDS`, `PAYMENT_WAIT` in
- * `apps/orchestrator/src/domain-buy.ts`), after which the row is abandoned.
- *
- * shortcut: the Checkout Session's own `expires_at` is not stored, and the
- * owner may open a fresh one until this; store it on the row if the panel
- * needs the session's 31 minutes instead of the name's hold.
- */
-export const PURCHASE_HOLD_MS = 4 * 35 * 60_000
+// shortcut: `PURCHASE_HOLD_MS` (packages/db) is the name's hold, since the
+// Checkout Session's own `expires_at` is not stored and the owner may open a
+// fresh one until then; store it on the row if the panel needs the session's
+// 31 minutes instead.
+export { PURCHASE_HOLD_MS }
 
 /** A bought domain: details, payment, registration, then connecting it. */
 export function purchaseSegment(row: DomainRow): Segment {
@@ -434,6 +443,62 @@ export function googleSegment(row: GoogleRow | null): Segment | null {
     steps: along(GOOGLE_STEPS, here),
     at: here === 3 ? new Date(Math.max(...finished)).toISOString() : iso(at),
     ...(p?.synced_at && { synced_at: iso(p.synced_at) }),
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Owner tasks
+
+/** A task step in the panel's terms. */
+const STEP_STATE: Record<TaskStepState, Step["state"]> = {
+  pending: "next",
+  in_progress: "now",
+  blocked: "waiting",
+  done: "done",
+  skipped: "skipped",
+}
+
+/**
+ * An open or finished task as one segment, its steps the task's own: waiting
+ * while a step waits on the owner, now while one is at work, coming up while
+ * none has begun, done once the task is. A task put off or declined is no
+ * segment. Google keeps the id its standing row has, so a finished one is
+ * listed once.
+ */
+export function taskSegment(task: OwnerTask): Segment | null {
+  if (task.state !== "active" && task.state !== "done") return null
+  const blocked = task.steps.find((s) => s.state === "blocked")
+  const state =
+    task.state === "done"
+      ? "done"
+      : blocked
+        ? "waiting"
+        : task.steps.some((s) => s.state === "in_progress")
+          ? "now"
+          : "upcoming"
+  const detail: AddressDetail = task.kind === "address" ? task.detail : {}
+  const names = {
+    ...(detail.name && { domain: detail.name }),
+    ...(detail.provider && { provider: detail.provider }),
+  }
+  // The records step counts the changes the connect card listed.
+  const changes = detail.changes
+  return {
+    id: task.kind === "google" ? "google" : `address:${task.id}`,
+    kind: task.kind,
+    state,
+    steps: task.steps.map((s) => ({
+      id: s.step,
+      state: STEP_STATE[s.state],
+      ...(s.state === "blocked" && s.note && { note: s.note }),
+      ...(s.step === "records" &&
+        changes && {
+          count: { done: s.state === "done" ? changes : 0, total: changes },
+        }),
+    })),
+    at: iso((state === "done" && task.done_at) || task.created_at),
+    ...(blocked?.deadline && { deadline: blocked.deadline }),
+    ...(Object.keys(names).length > 0 && { names }),
   }
 }
 
@@ -638,12 +703,10 @@ export function activityOf(input: ActivityInput, now: Date): Activity {
 
   if (live)
     segments.push(...input.builds.map((b) => changeSegment(b, input.expected)))
-  for (const row of input.rows.domains)
-    segments.push(
-      row.origin === "purchased" ? purchaseSegment(row) : domainSegment(row)
-    )
-  const google = googleSegment(input.rows.google)
-  if (google) segments.push(google)
+  // The address and Google work come from their tasks; renewals and the
+  // Website page's standing rows still read the domain and Google rows.
+  const tasks = input.rows.tasks.flatMap((t) => taskSegment(t) ?? [])
+  segments.push(...tasks.filter((t) => t.state !== "upcoming"))
 
   for (const { request } of input.approvals) {
     if (!live && request.assignment_id === first) continue
@@ -718,6 +781,7 @@ export function activityOf(input: ActivityInput, now: Date): Activity {
         })
       ),
     ...input.rows.domains.flatMap((row) => renewalOf(row) ?? []),
+    ...tasks.filter((t) => t.state === "upcoming"),
   ]
   const beat = input.rows.heartbeat
   if (beat?.next)

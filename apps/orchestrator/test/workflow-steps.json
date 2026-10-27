@@ -749,6 +749,7 @@
       "check 2",
       "look 3",
       "activate",
+      "loads 1",
       "say live",
       "settle",
       "pointers again"
@@ -794,6 +795,7 @@
       "wait serving 1",
       "serving 2",
       "activate",
+      "loads 1",
       "say live",
       "settle",
       "pointers again"
@@ -829,6 +831,29 @@
       "serving 1",
       "stalled",
       "say stalled"
+    ],
+    "served after activation": [
+      "hostnames",
+      "look 1",
+      "activate",
+      "loads 1",
+      "wait loads 1",
+      "loads 2",
+      "wait loads 2",
+      "loads 3",
+      "say live",
+      "settle",
+      "pointers again"
+    ],
+    "never served": [
+      "hostnames",
+      "look 1",
+      "activate",
+      "loads 1",
+      "wait loads 1",
+      "loads 2",
+      "not served",
+      "say not served"
     ]
   },
   "SearchWorkflow": {

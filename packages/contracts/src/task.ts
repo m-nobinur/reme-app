@@ -67,6 +67,8 @@ export const AddressDetail = z.strictObject({
   name: DomainName.optional(),
   /** The DNS host's name, from detection. */
   provider: Text(80).optional(),
+  /** How many DNS changes the connect card listed, the apex line included. */
+  changes: z.int().positive().max(20).optional(),
   /** The registrar's name, from RDAP. */
   registrar: Text(80).optional(),
   origin: AddressOrigin.optional(),

@@ -228,9 +228,15 @@ const rowTitle = (workspace: Workspace, segment: ActivitySegment) =>
       null)
     : null
 
-/** One piece of work: a publish is listed by the feed and by where the site stands, under two ids. */
+/**
+ * One piece of work: a publish is listed by the feed and by where the site
+ * stands, under two ids, and so is a domain, as its address task and as its
+ * standing row.
+ */
 const sameWork = (a: ActivitySegment, b: ActivitySegment) =>
-  a.id === b.id || (a.kind === "golive" && b.kind === "golive" && a.at === b.at)
+  a.id === b.id ||
+  (a.kind === "golive" && b.kind === "golive" && a.at === b.at) ||
+  (a.names?.domain !== undefined && a.names.domain === b.names?.domain)
 
 /**
  * Finished work, newest first, each once: the first run's finished

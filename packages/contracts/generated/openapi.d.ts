@@ -5881,6 +5881,7 @@ export interface components {
                   detail: {
                     name?: string
                     provider?: string
+                    changes?: number
                     registrar?: string
                     /** @enum {string} */
                     origin?: "owned" | "buying_elsewhere" | "purchased"
@@ -7951,6 +7952,7 @@ export interface components {
             detail: {
               name?: string
               provider?: string
+              changes?: number
               registrar?: string
               /** @enum {string} */
               origin?: "owned" | "buying_elsewhere" | "purchased"

@@ -164,7 +164,23 @@ const LOCAL_SITES = [
   ],
   [ROUTER_DEV_VARS, ["SITE_HOST_SUFFIX=.reme.localhost"]],
 ]
-for (const [path, lines] of LOCAL_SITES) {
+// Google sign-in: the client id where the consent link is made, and the
+// secret and token key only where the code is exchanged and the refresh
+// token sealed. Copied when .env.local has a value, so a later fill is added.
+const fromEnv = (names) =>
+  names.flatMap((name) => {
+    const value = fromLocalEnv(name)
+    return value ? [`${name}=${value}`] : []
+  })
+const GOOGLE = [
+  [WEB_DEV_VARS, fromEnv(["GOOGLE_CLIENT_ID"])],
+  [API_DEV_VARS, fromEnv(["GOOGLE_CLIENT_ID"])],
+  [
+    ORCHESTRATOR_DEV_VARS,
+    fromEnv(["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_TOKEN_KEY"]),
+  ],
+]
+for (const [path, lines] of [...LOCAL_SITES, ...GOOGLE]) {
   const held = readFileSync(path, "utf8")
   const keys = new Set(held.split("\n").map((line) => line.split("=")[0]))
   const missing = lines.filter((line) => !keys.has(line.split("=")[0]))

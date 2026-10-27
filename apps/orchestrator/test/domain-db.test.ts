@@ -7,6 +7,7 @@ import {
   orgs,
   searchProperties,
   sql,
+  taskSteps,
 } from "@workspace/db"
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest"
 import {
@@ -16,6 +17,7 @@ import {
   connect,
   DEADLINE_MS,
   expireDomain,
+  served as loadsOf,
   look,
   nudge,
   postStatus,
@@ -24,10 +26,13 @@ import {
   revokeDomains,
   sweepDomains,
 } from "../src/domain-flow.ts"
+import { probe } from "../src/probe.ts"
 import { clearPointers, writePointer } from "../src/publish.ts"
 import { searchInstanceId } from "../src/search.ts"
+import { chatTexts, openChat } from "./chat.ts"
 import { DOH } from "./fixtures/domains.ts"
 import { kit, previewed, SUFFIX, type storage, workflowEnv } from "./site.ts"
+import { stepped } from "./step.ts"
 
 // The site fixture reaches the sandbox module through brief.ts; stood in
 // for as in the publish suite.
@@ -336,8 +341,11 @@ describe.skipIf(!url)("custom domains against a database", () => {
         .set({ state: "verifying" })
         .where(eq(domains.id, domainId))
     )
-    expect(await activateDomain(env, kit, site.orgId, domainId)).toEqual({
-      key: `${domainId}:active`,
+    expect(await activateDomain(env, kit, site.orgId, domainId)).toBe(true)
+    // Live is said on the `loads` probe, once the host serves this site.
+    const loads = await loadsOf(env, kit, site.orgId, domainId)
+    expect(loads.result).toMatchObject({ gone: false, ready: true })
+    expect(await loads.reading?.tell?.()).toEqual({
       text: `www.${name} is live. ${site.slug} now forwards to it, so links you've shared still work.`,
       button: {
         label: "Open your website",
@@ -760,14 +768,60 @@ describe.skipIf(!url)("custom domains against a database", () => {
     await connect(env, kit, site.orgId, { name, approval_id: "a" })
     const domainId = (await rowOf(site.orgId, name))?.id ?? ""
     await claimHostnames(env, kit, site.orgId, domainId)
-    expect(await look(env, kit, site.orgId, domainId, 1)).toMatchObject({
+    await openChat(kit, site.orgId)
+    const told = vi.fn()
+    const lookAt = (n: number) =>
+      probe(
+        stepped(),
+        `look ${n}`,
+        env,
+        { orgId: site.orgId, kind: "address" },
+        async (k) => {
+          const seen = await look(env, k, site.orgId, domainId)
+          const tell = seen.reading?.tell
+          if (seen.reading && tell)
+            seen.reading.tell = () => {
+              told()
+              return tell()
+            }
+          return seen
+        }
+      )
+    const records = async () => {
+      const [row] = await kit.withOrg({ orgId: site.orgId }, (db) =>
+        db.select().from(taskSteps).where(sql`${taskSteps.step} = 'records'`)
+      )
+      return row
+    }
+    const first = await lookAt(1)
+    const before = await records()
+    expect(first).toMatchObject({
       status: "conflicting_record",
       say: { text: expect.stringContaining("192.0.2.10") },
     })
-    // jsonb gives the stored check back with its keys in another order.
-    const again = await look(env, kit, site.orgId, domainId, 2)
+    // A retried post lands once.
+    for (let i = 0; i < 2; i++) {
+      if (first.gone || !first.say) throw new Error("no message")
+      await postStatus(kit, site.orgId, first.say)
+    }
+    // The same check again, which jsonb also hands back reordered: no wording, no message.
+    const again = await lookAt(2)
     expect(again).toMatchObject({ status: "conflicting_record" })
     expect(again).not.toHaveProperty("say")
+    expect(told).toHaveBeenCalledTimes(1)
+    expect(await chatTexts(kit, site.orgId)).toHaveLength(1)
+    // The step waits on the owner, with what to do; the second probe moved
+    // only `probed_at`.
+    const after = await records()
+    expect(after).toMatchObject({
+      state: "blocked",
+      blockedOn: "owner_action",
+      note: "Delete the old A record at your DNS provider",
+      probeHash: before?.probeHash,
+      changedAt: before?.changedAt,
+    })
+    expect(after?.probeHash).toMatch(/^[0-9a-f]{64}$/)
+    expect(after?.probedAt).not.toEqual(before?.probedAt)
   })
 
   it("lets a removal that commits during an activation win", async () => {
@@ -802,7 +856,7 @@ describe.skipIf(!url)("custom domains against a database", () => {
         await new Promise((resolve) => setTimeout(resolve, 20))
       }
     })
-    expect(await activation).toBeNull()
+    expect(await activation).toBe(false)
     expect(await rowOf(site.orgId, name)).toMatchObject({ state: "removed" })
     expect(await typesOf(site.orgId, "domain.activated")).toEqual([])
     expect(site.store.pointers.get(`host:${site.slug}`)).toBe(slugBefore)

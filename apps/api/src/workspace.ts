@@ -17,6 +17,7 @@ import {
   FactValue,
   FactValueKey,
   InformationRequest,
+  type OwnerTask,
   PLANNED_PAGES,
   SiteFields,
   siteHost,
@@ -1010,12 +1011,19 @@ export async function statusOf(
   return (await statusWithFacts(db, config, now)).status
 }
 
-/** `statusOf` and the facts it was read from, for a caller that needs both. */
+/**
+ * `statusOf` with the facts it was read from and the owner tasks still open
+ * (active or put off), for the assistant's view, which needs all three.
+ */
 export async function statusWithFacts(
   db: OrgScopedDb,
   config: SiteConfig,
   now: Date
-): Promise<{ status: WorkspaceStatus; facts: FactRecord[] }> {
+): Promise<{
+  status: WorkspaceStatus
+  facts: FactRecord[]
+  tasks: OwnerTask[]
+}> {
   // Issued together, so postgres.js pipelines them on the transaction's one
   // connection instead of paying a round trip each.
   const [
@@ -1071,7 +1079,10 @@ export async function statusWithFacts(
       now
     ),
   })
-  return { status, facts: current }
+  const tasks = rows.tasks.filter(
+    (t) => t.state === "active" || t.state === "later"
+  )
+  return { status, facts: current, tasks }
 }
 
 export async function readActivity(

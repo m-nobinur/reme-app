@@ -30,13 +30,16 @@ import {
   look,
   NUDGE_AFTER_MS,
   nextWait,
+  notServed,
   nudge,
   postStatus,
   repoint,
   type Say,
   SETTLE,
+  served,
   withKit,
 } from "./domain-flow.ts"
+import { hold, probe } from "./probe.ts"
 import { registrarLive } from "./registrar.ts"
 import { startSearchForDomain } from "./search-start.ts"
 
@@ -71,10 +74,12 @@ export const SAY_RETRIES: WorkflowStepConfig = {
  * only. It claims the two custom hostnames, then looks: at once, again on a
  * `check` nudge or on `nextWait`'s schedule (every minute for the first half
  * hour, every 10 minutes to two hours, hourly from then), until
- * the domain is ready, removed, or 72 hours old. Ready activates it and
- * writes the pointers again after `SETTLE`; 72 hours fails it and frees the
- * name. A removal starts `domain-{domain_id}-removed` with `settle`, which
- * only writes the pointers again. A step body returns what to tell the owner
+ * the domain is ready, removed, or 72 hours old. Each look is a probe
+ * (probe.ts), so the owner hears only a check that changed. Ready activates
+ * it, probes `loads` on the same schedule until the host serves the site,
+ * says it is live and writes the pointers again after `SETTLE`; 72 hours
+ * fails it and frees the name. A removal starts `domain-{domain_id}-removed`
+ * with `settle`, which only writes the pointers again. A step body returns what to tell the owner
  * and a `say` step posts it, so a busy chat retries the post alone. Steps
  * carry ids only and every body is in domain-flow.ts; this is the order.
  */
@@ -101,6 +106,41 @@ export class DomainWorkflow extends WorkflowEntrypoint<Env, DomainParams> {
       } catch {
         // The chat stayed busy past every retry; the audit row keeps it.
       }
+    }
+    const address = { orgId, kind: "address" as const }
+    // Active, then said live only once the host serves the site, on the
+    // claim's own schedule and deadline counted from the first `loads`.
+    const live = async () => {
+      const active = await step.do("activate", () =>
+        withKit(env, async (kit) => {
+          const done = await activateDomain(env, kit, orgId, domainId)
+          if (done) await startSearchForDomain(env, kit, orgId, domainId)
+          return done
+        })
+      )
+      if (!active) return { outcome: "removed" }
+      let since: number | undefined
+      for (let n = 1; ; n++) {
+        const loads = await probe(step, `loads ${n}`, env, address, (kit) =>
+          served(env, kit, orgId, domainId)
+        )
+        if (loads.gone) return { outcome: "removed" }
+        if (loads.ready) {
+          await say("say live", loads.say)
+          break
+        }
+        since ??= loads.at
+        if (loads.at >= since + DEADLINE_MS) {
+          const message = await step.do("not served", () =>
+            withKit(env, (kit) => notServed(kit, orgId, domainId))
+          )
+          await say("say not served", message)
+          return { outcome: "stalled" }
+        }
+        await step.sleep(`wait loads ${n}`, nextWait(loads.at - since))
+      }
+      await settle()
+      return { outcome: "active" }
     }
 
     // A removal's own short instance: the route already wrote the pointers.
@@ -182,10 +222,10 @@ export class DomainWorkflow extends WorkflowEntrypoint<Env, DomainParams> {
         return { outcome: "test" }
       }
 
-      const served = await step.do("serve", () =>
+      const serving = await step.do("serve", () =>
         withKit(env, (k) => serveBought(env, k, orgId, domainId))
       )
-      if (!served) return { outcome: "removed" }
+      if (!serving) return { outcome: "removed" }
       for (let n = 1; ; n++) {
         const seen = await step.do(`serving ${n}`, () =>
           withKit(env, (k) => boughtReady(k, orgId, domainId))
@@ -201,17 +241,7 @@ export class DomainWorkflow extends WorkflowEntrypoint<Env, DomainParams> {
         }
         await step.sleep(`wait serving ${n}`, nextWait(seen.at - started))
       }
-      const bought = await step.do("activate", () =>
-        withKit(env, async (k) => {
-          const said = await activateDomain(env, k, orgId, domainId)
-          if (said) await startSearchForDomain(env, k, orgId, domainId)
-          return said
-        })
-      )
-      if (!bought) return { outcome: "removed" }
-      await say("say live", bought)
-      await settle()
-      return { outcome: "active" }
+      return live()
     }
 
     const claimed = await step.do("hostnames", () =>
@@ -226,12 +256,14 @@ export class DomainWorkflow extends WorkflowEntrypoint<Env, DomainParams> {
       return { outcome: "failed" }
     }
 
+    const lookAt = (n: number) =>
+      probe(step, `look ${n}`, env, address, (kit) =>
+        look(env, kit, orgId, domainId)
+      )
     let nudged = false
     let checks = 0
+    let seen = await lookAt(1)
     for (let n = 1; ; n++) {
-      const seen = await step.do(`look ${n}`, () =>
-        withKit(env, (kit) => look(env, kit, orgId, domainId, n))
-      )
       if (seen.gone) return { outcome: "removed" }
       await say(`say ${n}`, seen.say)
       if (seen.ready) break
@@ -255,26 +287,18 @@ export class DomainWorkflow extends WorkflowEntrypoint<Env, DomainParams> {
       // Past `MAX_CHECKS` nudges the waits are sleeps, which are not steps.
       if (checks >= MAX_CHECKS) {
         await step.sleep(`wait ${n}`, wait)
+        seen = await lookAt(n + 1)
         continue
       }
-      try {
-        await step.waitForEvent(`check ${n}`, { type: "check", timeout: wait })
-        checks++
-      } catch {
-        // No nudge in time: look anyway.
-      }
+      const held = await hold(
+        step,
+        `check ${n}`,
+        { type: "check", timeout: wait },
+        () => lookAt(n + 1)
+      )
+      if (held.woken) checks++
+      seen = held.seen
     }
-
-    const live = await step.do("activate", () =>
-      withKit(env, async (kit) => {
-        const said = await activateDomain(env, kit, orgId, domainId)
-        if (said) await startSearchForDomain(env, kit, orgId, domainId)
-        return said
-      })
-    )
-    if (!live) return { outcome: "removed" }
-    await say("say live", live)
-    await settle()
-    return { outcome: "active" }
+    return live()
   }
 }

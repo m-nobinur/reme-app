@@ -569,7 +569,7 @@ describe("later jobs", () => {
     // A review is answered in the panel's own list, not drawn twice.
     expect(rest).toEqual([])
     expect(domain?.title).toMatch(/fixture\.example\.invalid$/)
-    expect(domain?.line).toBe("One change to make at your DNS provider")
+    expect(domain?.line).toBe("Changes to make at your DNS provider")
     expect(domain?.steps.map((each) => [each.label, each.state])).toEqual([
       ["Your DNS change", "waiting"],
       ["Certificate", "next"],
@@ -611,6 +611,22 @@ describe("completedOf", () => {
     )
     expect(rows.map((row) => row.text)).toEqual([
       `Website published at ${HOST}`,
+    ])
+  })
+
+  it("lists a domain once, though its address task and its standing row both hold it", () => {
+    const names = { domain: "spark.example.invalid" }
+    const rows = completedOf(
+      live({
+        activity: activity({
+          done: [segment("address", "done", [], { id: "address:1", names })],
+          standing: [segment("domain", "done", [], { id: "domain:1", names })],
+        }),
+      }),
+      { orgId: ORG, assistant: "Ellie" }
+    )
+    expect(rows.map((row) => row.text)).toEqual([
+      "Spark.example.invalid connected",
     ])
   })
 })
