@@ -39790,6 +39790,24 @@
                     "properties": {
                       "kind": {
                         "type": "string",
+                        "const": "connect"
+                      },
+                      "service": {
+                        "type": "string",
+                        "const": "google"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "service"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
                         "const": "open"
                       },
                       "url": {
@@ -39886,6 +39904,24 @@
                     "required": [
                       "kind",
                       "name"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "connect"
+                      },
+                      "service": {
+                        "type": "string",
+                        "const": "google"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "service"
                     ],
                     "additionalProperties": false
                   },

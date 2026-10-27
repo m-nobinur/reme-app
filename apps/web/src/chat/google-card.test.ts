@@ -59,8 +59,13 @@ async function draw(props: Record<string, unknown>) {
 it("offers the link as a plain same-tab navigation", async () => {
   const url = "https://reme.test/api/google/start"
   const card = await draw({ result: { url } })
+  // The same tab keeps the referrer, which the start route returns to.
   expect(card.links).toEqual([
-    { text: "Connect Google", href: url, target: null },
+    {
+      text: "Google Search ConsoleShow up when people near you search",
+      href: url,
+      target: null,
+    },
   ])
   // Not now goes as the owner's words, so the assistant puts the offer off.
   expect(card.buttons).toEqual(["Not now"])

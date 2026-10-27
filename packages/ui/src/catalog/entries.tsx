@@ -2,8 +2,10 @@ import { CheckCircleIcon, HouseIcon } from "@phosphor-icons/react"
 import { Alert } from "@workspace/ui/components/alert"
 import { PageHeader } from "@workspace/ui/components/app-shell"
 import { AuthCard, AuthForm } from "@workspace/ui/components/auth-card"
+import { BrandMark } from "@workspace/ui/components/brand-mark"
 import { Button } from "@workspace/ui/components/button"
 import { CodeInput } from "@workspace/ui/components/code-input"
+import { ConnectRow, ConnectRows } from "@workspace/ui/components/connect-row"
 import { EmptyState } from "@workspace/ui/components/empty-state"
 import { Field } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
@@ -213,6 +215,68 @@ const catalog: CatalogEntry[] = [
         <LogoMark className="size-5" />
         <LogoMark className="size-8" />
         <LogoMark className="size-12" />
+      </div>
+    ),
+  },
+  // Every vendored mark, and the globe for a brand no library has.
+  {
+    name: "BrandMark",
+    render: () => (
+      <div className="flex flex-wrap gap-3">
+        {[
+          "Google Search Console",
+          "Cloudflare",
+          "GoDaddy",
+          "Namecheap",
+          "Squarespace",
+          "Wix",
+          "IONOS",
+          "Gandi",
+          "Porkbun",
+          "Hostinger",
+          "123-reg",
+        ].map((name) => (
+          <BrandMark key={name} name={name} />
+        ))}
+      </div>
+    ),
+  },
+  {
+    name: "ConnectRow",
+    render: () => (
+      <div className="flex max-w-md flex-col gap-3">
+        <ConnectRow
+          href="#dns"
+          line="Open your DNS settings"
+          name="123-reg"
+          newTab
+        />
+        <ConnectRow
+          href="#google"
+          line="Show up when people near you search"
+          name="Google Search Console"
+        />
+      </div>
+    ),
+  },
+  {
+    name: "ConnectRows",
+    render: () => (
+      <div className="max-w-md">
+        <ConnectRows heading="Other places to buy it">
+          <ConnectRow
+            href="#cloudflare"
+            line="Search for sparkleclean.co.uk"
+            name="Cloudflare"
+            newTab
+          />
+          <ConnectRow
+            href="#godaddy"
+            line="Search for sparkleclean.co.uk"
+            name="GoDaddy"
+            newTab
+          />
+        </ConnectRows>
       </div>
     ),
   },

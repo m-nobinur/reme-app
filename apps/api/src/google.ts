@@ -60,7 +60,7 @@ export async function googleConnect(
 
 const CONNECT: ServerButton = {
   label: "Connect Google",
-  action: { kind: "ask", text: "Connect Google to my website." },
+  action: { kind: "connect", service: "google" },
 }
 
 const RESULT: Record<

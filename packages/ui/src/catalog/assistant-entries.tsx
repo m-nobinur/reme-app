@@ -34,6 +34,7 @@ import {
 } from "@workspace/ui/components/assistant/buy-domain"
 import { ChangeAskedUI } from "@workspace/ui/components/assistant/change-asked"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
+import { ConnectGoogleRow } from "@workspace/ui/components/assistant/google"
 import { MemoryChipUI } from "@workspace/ui/components/assistant/memory-chip"
 import { PersonaCardUI } from "@workspace/ui/components/assistant/persona-card"
 import { TrayFrame } from "@workspace/ui/components/assistant/question-tray"
@@ -1838,6 +1839,24 @@ const POSTED: ThreadMessageLike[] = [
     role: "assistant",
     status: DONE,
   },
+  {
+    content: [
+      {
+        text: "Google needs one more permission. Connect again and leave both boxes ticked.",
+        type: "text",
+      },
+      {
+        type: "data",
+        name: "button",
+        data: {
+          label: "Reconnect Google",
+          action: { kind: "connect", service: "google" },
+        },
+      },
+    ],
+    role: "assistant",
+    status: DONE,
+  },
 ]
 
 /** Two replies with words: one the owner rated up, one not yet rated. */
@@ -2681,9 +2700,17 @@ const assistantCatalog = [
     ),
   },
   {
+    name: "ConnectGoogleRow",
+    render: () => (
+      <div className="max-w-md">
+        <ConnectGoogleRow />
+      </div>
+    ),
+  },
+  {
     name: "ServerButtonUI",
     render: () => (
-      <FixtureThread height="h-[34rem]" messages={POSTED}>
+      <FixtureThread height="h-[46rem]" messages={POSTED}>
         <ServerButtonUI />
       </FixtureThread>
     ),

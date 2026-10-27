@@ -673,7 +673,10 @@ describe.skipIf(!url)("the grant check", () => {
       const seen = await check(env, orgId)
       expect(seen.healthy).toBe(false)
       expect(seen.say?.text).toContain("one more permission")
-      expect(seen.say?.button?.label).toBe("Reconnect Google")
+      expect(seen.say?.button).toEqual({
+        label: "Reconnect Google",
+        action: { kind: "connect", service: "google" },
+      })
       const after = await state(orgId)
       expect(after.connection?.state).toBe("needs_permission")
       expect(after.step).toMatchObject({

@@ -2,6 +2,7 @@ import { makeAssistantDataUI, useAui, useAuiState } from "@assistant-ui/react"
 import { ArrowSquareOutIcon } from "@phosphor-icons/react"
 import type { ServerButton } from "@workspace/contracts"
 import { BuyTray } from "@workspace/ui/components/assistant/buy-domain"
+import { ConnectGoogleRow } from "@workspace/ui/components/assistant/google"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { useState } from "react"
 
@@ -9,7 +10,8 @@ import { useState } from "react"
  * The button on a message the assistant posted on its own (`data-button`).
  * `ask` sends its words as the owner's next message, as a suggestion does;
  * `open` opens the https link the contract allows in a new tab; `pay` opens
- * Your details for buying its name in the tray, with a fresh Checkout.
+ * Your details for buying its name in the tray, with a fresh Checkout;
+ * `connect` is the service's row, which starts its sign-in.
  */
 function ServerButtonPart({ data }: { data: ServerButton }) {
   const aui = useAui()
@@ -31,6 +33,9 @@ function ServerButtonPart({ data }: { data: ServerButton }) {
         {label}
       </Button>
     )
+  }
+  if (action.kind === "connect") {
+    return <ConnectGoogleRow className="mt-2 max-w-md" />
   }
   if (action.kind === "open") {
     return (

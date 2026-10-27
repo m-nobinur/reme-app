@@ -282,6 +282,21 @@ it("asks only for the gaps, pays in a dialog, and leaves one line once paid", as
   expect(document.querySelector('[data-slot="dialog-content"]')).toBeNull()
 })
 
+it("opens Your details from buy_domain's prefill without reading it again", async () => {
+  const purchase = purchaseOf()
+  const { tray } = await draw(
+    "buy_domain",
+    { args: { name: NAME }, result: { outcome: "details", ...PREFILL } },
+    purchase
+  )
+  expect(purchase.registrant).not.toHaveBeenCalled()
+  expect(tray.querySelector('input[name="street"]')).toBeTruthy()
+  expect(
+    tray.querySelector('input[name="email"]:not([type=hidden])')
+  ).toBeNull()
+  expect(button(tray, "Pay £8")).toBeTruthy()
+})
+
 it("keeps a fresh Pay after the dialog closes unpaid", async () => {
   const purchase = purchaseOf()
   const { tray } = await draw(

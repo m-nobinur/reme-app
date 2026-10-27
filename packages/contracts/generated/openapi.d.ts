@@ -11370,6 +11370,12 @@ export interface components {
             }
           | {
               /** @constant */
+              kind: "connect"
+              /** @constant */
+              service: "google"
+            }
+          | {
+              /** @constant */
               kind: "open"
               url: string
             }
@@ -11390,6 +11396,12 @@ export interface components {
               /** @constant */
               kind: "pay"
               name: string
+            }
+          | {
+              /** @constant */
+              kind: "connect"
+              /** @constant */
+              service: "google"
             }
           | {
               /** @constant */

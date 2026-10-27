@@ -29,6 +29,7 @@ import {
   TrayFrame,
   useTabDraft,
 } from "@workspace/ui/components/assistant/question-tray"
+import { ConnectRow, ConnectRows } from "@workspace/ui/components/connect-row"
 import {
   Dialog,
   DialogContent,
@@ -177,20 +178,11 @@ const bestName = (rows: readonly DomainStemOffer[]) => {
 }
 
 /** A link out, which says it opens a new tab. */
-function Out({
-  href,
-  onClick,
-  children,
-}: {
-  href: string
-  onClick?: () => void
-  children: ReactNode
-}) {
+function Out({ href, children }: { href: string; children: ReactNode }) {
   return (
     <a
       className="rounded-sm underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary"
       href={href}
-      onClick={onClick}
       rel="noopener noreferrer"
       target="_blank"
     >
@@ -307,17 +299,27 @@ function Elsewhere({
 }) {
   const links = buyElsewhereLinks(name)
   return (
-    <p className={META}>
-      Search for {name} at{" "}
-      <Out href={links.cloudflare} onClick={onFollow}>
-        Cloudflare
-      </Out>{" "}
-      or{" "}
-      <Out href={links.godaddy} onClick={onFollow}>
-        GoDaddy
-      </Out>
-      . You manage it there, and I connect it once it's yours.
-    </p>
+    <>
+      <ConnectRows heading="Other places to buy it">
+        <ConnectRow
+          href={links.cloudflare}
+          line={`Search for ${name}`}
+          name="Cloudflare"
+          newTab
+          onClick={onFollow}
+        />
+        <ConnectRow
+          href={links.godaddy}
+          line={`Search for ${name}`}
+          name="GoDaddy"
+          newTab
+          onClick={onFollow}
+        />
+      </ConnectRows>
+      <p className={META}>
+        You manage it there, and I connect it once it's yours.
+      </p>
+    </>
   )
 }
 
@@ -633,12 +635,15 @@ type Phase =
 
 function DetailsPage({
   name,
+  given,
   frame,
   onBack,
   onPaid,
   onSettled,
 }: {
   name: string
+  /** What `buy_domain` already prefilled, so the page needs no read of its own. */
+  given?: DomainRegistrantPrefill | undefined
   frame: Frame
   /** Back to Choose, when the page came from it. */
   onBack?: (() => void) | undefined
@@ -649,7 +654,9 @@ function DetailsPage({
 }) {
   const purchase = useContext(DomainPurchaseContext)
   const id = useId()
-  const [prefill, setPrefill] = useState<DomainRegistrantPrefill | Refused>()
+  const [prefill, setPrefill] = useState<
+    DomainRegistrantPrefill | Refused | undefined
+  >(given)
   const [phase, setPhase] = useState<Phase>({ at: "filling" })
   const [errors, setErrors] = useState<
     Partial<Record<RegistrantField, string>>
@@ -659,7 +666,7 @@ function DetailsPage({
   const status = usePurchaseStatus(purchase, name, false, phase.at === "paying")
 
   useEffect(() => {
-    if (!purchase) return
+    if (!purchase || given) return
     let live = true
     purchase.registrant(name).then(
       (read) => live && setPrefill(read),
@@ -668,7 +675,7 @@ function DetailsPage({
     return () => {
       live = false
     }
-  }, [purchase, name])
+  }, [purchase, name, given])
 
   // Paid or taken already: the thread says so in a line. An expiry while
   // Checkout is open closes it and leaves a fresh Pay.
@@ -983,11 +990,14 @@ export function BuyTray({
   draftId,
   rows,
   name,
+  prefill,
 }: {
   draftId: string
   /** The names to choose from; without them it opens on Your details for `name`. */
   rows?: readonly DomainStemOffer[] | undefined
   name?: string | undefined
+  /** Your details for `name` as `buy_domain` prefilled them. */
+  prefill?: DomainRegistrantPrefill | undefined
 }) {
   const purchase = useContext(DomainPurchaseContext)
   const last = useAuiState((s) => s.message.isLast)
@@ -1049,6 +1059,7 @@ export function BuyTray({
       ) : draft.at === "details" ? (
         <DetailsPage
           frame={frame}
+          given={prefill?.name === draft.name ? prefill : undefined}
           name={draft.name}
           onBack={rows ? () => keep({ at: "choose" }) : undefined}
           onPaid={() => keep({ at: "bought", name: draft.name, paid: true })}
@@ -1123,6 +1134,13 @@ export const BuyDomain: ToolCallMessagePartComponent = (props) => {
       </div>
     )
   }
-  return <BuyTray draftId={props.toolCallId} name={view.output.name} />
+  const { output } = view
+  return (
+    <BuyTray
+      draftId={props.toolCallId}
+      name={output.name}
+      prefill={output.outcome === "details" ? output : undefined}
+    />
+  )
 }
 BuyDomain.displayName = "BuyDomain"
