@@ -711,6 +711,8 @@ describe.skipIf(!url)("buying a domain against a database", () => {
     p.net.site = p.orgId
     const live = await served(p.env, kit, p.orgId, p.row.id)
     expect(live.result).toMatchObject({ ready: true })
+    expect(live.reading?.write).toEqual({ state: "done" })
+    expect(unserved.reading).not.toHaveProperty("write")
     expect((await live.reading?.tell?.())?.text).toMatch(
       new RegExp(`^${p.name} is live`)
     )
