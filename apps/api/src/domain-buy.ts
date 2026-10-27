@@ -329,6 +329,13 @@ export async function checkout(
     }
     const customer = held?.customer ?? (await customerOf(env, kit, owner.orgId))
     const metadata = { org_id: owner.orgId, domain_id: row.id }
+    // The email reaches Checkout through the Customer, and only that way:
+    // once the Customer has one, Elements refuse an email from the page.
+    if (!session) {
+      await stripe(secretKey, `customers/${customer}`, {
+        email: details.data.registrant.email,
+      })
+    }
     session ??= await stripe<Session>(
       secretKey,
       "checkout/sessions",

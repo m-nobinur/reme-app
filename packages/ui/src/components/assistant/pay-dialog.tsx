@@ -28,9 +28,9 @@ import {
 /**
  * Paying for a domain: the order on the left, Stripe's Express Checkout
  * (Link, Apple Pay, Google Pay) and card form on the right, on the purchase's
- * Checkout Session. The owner's email and billing address go to Stripe
- * from the registrant, so Stripe asks for neither. Narrow, the order folds
- * to one line above the form.
+ * Checkout Session. The billing address goes to Stripe from the registrant,
+ * and the email through the Stripe Customer the api sets, so Stripe asks
+ * for neither. Narrow, the order folds to one line above the form.
  */
 export function PayDialog({
   name,
@@ -225,7 +225,9 @@ function PaymentForm({
   const [state, setState] = useState<"loading" | "ready" | "paying" | "failed">(
     "loading"
   )
-  const [walletsShown, setWalletsShown] = useState(false)
+  const [walletState, setWallets] = useState<"loading" | "shown" | "none">(
+    "loading"
+  )
   const [error, setError] = useState<string | null>(null)
 
   // Both ways to pay end here: paid closes the dialog, anything else is said
@@ -246,7 +248,6 @@ function PaymentForm({
     const mounted: StripeElement[] = []
     const contact = contactOf(registrant)
     initCheckout(form, publishableKey, clientSecret, {
-      email: registrant.email,
       billingAddress: contact,
     })
       .then(async (checkout) => {
@@ -256,8 +257,10 @@ function PaymentForm({
         express.on(
           "ready",
           (event: { availablePaymentMethods?: object | undefined }) =>
-            live && setWalletsShown(Boolean(event.availablePaymentMethods))
+            live && setWallets(event.availablePaymentMethods ? "shown" : "none")
         )
+        // Wallets are a shortcut: if they fail, the card form still pays.
+        express.on("loaderror", () => live && setWallets("none"))
         express.on("confirm", async (event: unknown) => {
           const ready = actions.current
           if (!ready) return
@@ -274,6 +277,7 @@ function PaymentForm({
         const payment = checkout.createPaymentElement({
           fields: { billingDetails: { address: "never" } },
         })
+        payment.on("loaderror", () => live && setState("failed"))
         mounted.push(express, payment)
         express.mount(top)
         payment.mount(form)
@@ -301,7 +305,6 @@ function PaymentForm({
     settle(
       await ready.confirm({
         redirect: "if_required",
-        email: registrant.email,
         billingAddress: contactOf(registrant),
       })
     )
@@ -321,8 +324,12 @@ function PaymentForm({
       noValidate
       onSubmit={pay}
     >
-      <div data-slot="domain-wallets" ref={wallets} />
-      {walletsShown ? (
+      <div
+        data-slot="domain-wallets"
+        hidden={walletState === "none"}
+        ref={wallets}
+      />
+      {walletState === "shown" ? (
         <p className={cn(META, "flex items-center gap-3")}>
           <span aria-hidden className="h-px flex-1 bg-border" />
           Or pay by card
