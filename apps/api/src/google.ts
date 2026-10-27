@@ -5,6 +5,7 @@ import {
   type ServerButton,
 } from "@workspace/contracts"
 import {
+  activeDomainHost,
   postAssistantMessage,
   searchConnections,
   type Tenancy,
@@ -139,6 +140,18 @@ export async function connectGoogle(
   )
   if (row?.state === "active" && row.email) {
     return { connected: true, email: row.email }
+  }
+  // Google learns the address customers keep, so it waits for a live domain.
+  const domain = await kit.withOrg({ orgId: owner.orgId }, activeDomainHost)
+  if (!domain) {
+    return {
+      outcome: "refused",
+      error: {
+        class: "validation",
+        code: "search.needs_domain",
+        message: "Google comes once the website's own domain is live.",
+      },
+    }
   }
   return { url: new URL("/api/google/start", env.WEB_ORIGIN).href }
 }

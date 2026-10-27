@@ -1,5 +1,6 @@
 import { DeploymentManifest, siteHost } from "@workspace/contracts"
 import {
+  activeDomainHost,
   appendEvent,
   conversationMessages,
   eq,
@@ -732,7 +733,9 @@ export async function weeklyItem(
       .select({ state: searchConnections.state })
       .from(searchConnections)
     if (!connection) {
-      if (!(await activeDeployment(db, orgId))) return null
+      // Google is offered once the site has a live domain of its own.
+      if (!(await activeDeployment(db, orgId)) || !(await activeDomainHost(db)))
+        return null
       // Asked by the Monday message before the heartbeat took it over.
       const [sent] = await db
         .select({ id: conversationMessages.id })

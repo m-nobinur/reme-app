@@ -78,10 +78,11 @@ export type ContextPolicy = {
  * while the job lags or fails: 16,000 leaves a turn's own steps and the
  * fixed part of about 10,000 tokens room under the 30,000-token step
  * reservation. Version 7 puts labels and a `ref` in the workspace data in place
- * of ids, versions and raw states.
+ * of ids, versions and raw states. Version 8 may add a line when the owner
+ * asks for Google before a domain of their own is live.
  */
 export const CONTEXT_POLICY: ContextPolicy = {
-  version: "7",
+  version: "8",
   turns: 80,
   toolTurns: 2,
   historyTokens: 16_000,

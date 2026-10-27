@@ -111,6 +111,7 @@ import {
   type JevDecision,
   jev,
   jevApproval,
+  jevAsksGoogle,
   jevReading,
   matched,
   readReply,
@@ -666,6 +667,12 @@ export type ChatDeps = {
   reading?:
     | ((asked: string | null, said: string) => Promise<MessageReading | null>)
     | null
+  /**
+   * Whether a typed message asks to get on Google, read only while the site
+   * has no live domain of its own: left out, Jev on OpenRouter when the api
+   * holds a key. Tests pass one.
+   */
+  googleFirst?: ((said: string) => Promise<boolean>) | null
 }
 
 /** What a turn is, read before its lock: whether onboarding runs, and the card it waits on. */
@@ -839,6 +846,22 @@ export async function chat(
       ? readingOf(ahead.card && ahead.asked ? ahead.asked : null, turn.text)
       : null
   reading?.catch(() => undefined)
+  // Before a domain of its own is live, an owner asking for Google is told
+  // why the address comes first; Jev reads it here, beside the turn.
+  const googleFirstOf =
+    deps.googleFirst !== undefined
+      ? deps.googleFirst
+      : env.OPENROUTER_API_KEY
+        ? (said: string) =>
+            jevAsksGoogle(env.OPENROUTER_API_KEY as string, said)
+        : null
+  const googleFirst =
+    turn.kind === "message" &&
+    googleFirstOf &&
+    loaded &&
+    !loaded.workspace.domains?.some((d) => d.state === "active")
+      ? googleFirstOf(turn.text).catch(() => false)
+      : Promise.resolve(false)
   const approvalOf =
     deps.approval !== undefined
       ? deps.approval
@@ -1008,7 +1031,8 @@ export async function chat(
         new Date(),
         turn.kind === "message" ? parsed.data.intent : undefined,
         personaOf(facts, profile),
-        turn.kind === "message" && log.fresh ? { reminders } : null
+        turn.kind === "message" && log.fresh ? { reminders } : null,
+        await googleFirst
       )
       await beginTurn(db, cosTurn, {
         prefix: log.prefixLogged ? null : prefix,
