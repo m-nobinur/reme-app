@@ -53,6 +53,7 @@ import {
   type Tenancy,
 } from "@workspace/db"
 import { rangeText } from "@workspace/ui/lib/activity-copy"
+import type { ModelMessage } from "ai"
 import {
   type Bridged,
   bridge,
@@ -71,6 +72,7 @@ import {
   notOwner,
 } from "../domain-buy.ts"
 import { failure } from "../http.ts"
+import { jevPutOn } from "../jev.ts"
 import {
   ASSISTANT_KEY_PREFIX,
   createReminder as storeReminder,
@@ -1038,6 +1040,39 @@ export async function connectDomain(
     result = await ask()
   }
   return domainAnswer(result, ConnectDomainOutput.parse)
+}
+
+/**
+ * Whether connecting `name` still asks on a card. It does not when the
+ * owner's last message puts the site on exactly that name (Jev, at `sure`).
+ * It always does for a name the org already has live, since connecting moves
+ * live DNS, and for anything unsure: no key, a message without the name, a
+ * Jev error. The context note sits before the owner's message, so the last user
+ * message is theirs.
+ */
+export async function connectApproval(
+  { env, kit, owner }: Pick<ToolContext, "env" | "kit" | "owner">,
+  { name }: ConnectDomainInput,
+  messages: readonly ModelMessage[],
+  fetchImpl?: typeof fetch
+): Promise<"user-approval" | "not-applicable"> {
+  const content =
+    messages.filter((m) => m.role === "user").at(-1)?.content ?? ""
+  const said =
+    typeof content === "string"
+      ? content
+      : content.flatMap((p) => (p.type === "text" ? [p.text] : [])).join("\n")
+  if (!env.OPENROUTER_API_KEY) return "user-approval"
+  const [active] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+    db
+      .select({ id: domains.id })
+      .from(domains)
+      .where(sql`${eq(domains.name, name)} and ${domains.state} = 'active'`)
+  )
+  if (active) return "user-approval"
+  return (await jevPutOn(env.OPENROUTER_API_KEY, said, name, fetchImpl))
+    ? "not-applicable"
+    : "user-approval"
 }
 
 /**

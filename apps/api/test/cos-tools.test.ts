@@ -19,10 +19,12 @@ import {
   type Tenancy,
   tenancy,
 } from "@workspace/db"
+import type { ModelMessage } from "ai"
 import {
   afterAll,
   afterEach,
   beforeAll,
+  beforeEach,
   describe,
   expect,
   it,
@@ -36,6 +38,7 @@ import {
   buyDomain,
   CONNECT_RETRY_MS,
   checkDomain,
+  connectApproval,
   connectDomain,
   createReminder,
   findDomain,
@@ -1800,6 +1803,68 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       })
       // The org comes from the session on the bridge, never from the body.
       expect(call?.request.headers.get("x-reme-org-id")).toBe(me.orgId)
+    })
+
+    describe("approval", () => {
+      const sure = (noul: number) =>
+        (async () =>
+          Response.json({
+            answers: { puts_it_on: { type: "noul", noul } },
+          })) as unknown as typeof fetch
+      const user = (text: string): ModelMessage[] => [
+        { role: "user", content: "earlier" },
+        { role: "user", content: [{ type: "text", text }] },
+      ]
+      const asked = (who: Owner, name: string, text: string, noul = 0.97) =>
+        connectApproval(
+          {
+            ...context(who),
+            env: { ...context(who).env, OPENROUTER_API_KEY: "k" } as Env,
+          },
+          { name },
+          user(text),
+          sure(noul)
+        )
+
+      beforeEach(() => {
+        vi.spyOn(console, "log").mockImplementation(() => undefined)
+      })
+
+      it("runs with no card when Jev is sure the owner put the site on that name", async () => {
+        expect(
+          await asked(me, "sparkleclean.co.uk", "Put it on sparkleclean.co.uk")
+        ).toBe("not-applicable")
+      })
+
+      it("shows the card when Jev is unsure, the name is not in the message, or the key is missing", async () => {
+        const text = "what about sparkleclean.co.uk?"
+        expect(await asked(me, "sparkleclean.co.uk", text, 0.4)).toBe(
+          "user-approval"
+        )
+        expect(
+          await asked(me, "sparkleclean.co.uk", "put it on my domain")
+        ).toBe("user-approval")
+        expect(
+          await connectApproval(
+            context(me),
+            { name: "sparkleclean.co.uk" },
+            user("Put it on sparkleclean.co.uk")
+          )
+        ).toBe("user-approval")
+      })
+
+      it("always asks for a domain the org already has live, but not one still connecting or removed", async () => {
+        const live = await domain(me, "floor-live", "active")
+        const waiting = await domain(me, "floor-wait", "awaiting_dns")
+        const gone = await domain(me, "floor-gone", "removed")
+        const put = (name: string) => asked(me, name, `Put the site on ${name}`)
+        expect(await put(live)).toBe("user-approval")
+        expect(await put(waiting)).toBe("not-applicable")
+        expect(await put(gone)).toBe("not-applicable")
+        // Another org's live domain is no floor for this one.
+        const theirs = await domain(other, "floor-theirs", "active")
+        expect(await put(theirs)).toBe("not-applicable")
+      })
     })
 
     it.each([
