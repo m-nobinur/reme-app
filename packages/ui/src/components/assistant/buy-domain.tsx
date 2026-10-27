@@ -29,6 +29,7 @@ import {
   TrayFrame,
   useTabDraft,
 } from "@workspace/ui/components/assistant/question-tray"
+import { Badge } from "@workspace/ui/components/badge"
 import { ConnectRow, ConnectRows } from "@workspace/ui/components/connect-row"
 import { Field } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
@@ -51,8 +52,8 @@ import {
 
 /**
  * Buying a domain, in the question tray. `find_domain`'s rows open it on
- * Choose: one row a name, a chip for each ending with its yearly price or
- * "taken", best first, and "Buy it somewhere else" under them. A chip goes
+ * Choose: a card for each free full domain with its yearly price, best
+ * first, and "Buy it somewhere else" under them. A card goes
  * to Your details, prefilled from what the api holds and asking only for
  * the gaps, and Pay opens the payment dialog on the purchase's Stripe
  * Checkout Session, where paying is the consent. Buying elsewhere opens
@@ -157,17 +158,28 @@ const ICANN = "https://www.icann.org/resources/pages/benefits-2013-09-16-en"
 
 const pounds = (gbp: number) => `£${gbp}`
 
-/** The endings a row offers, in the order the chips show them. */
+/** The endings a row offers, in the order its cards show them. */
 const ENDINGS = ["co.uk", "com", "uk"] as const satisfies DomainTld[]
 
-/** The first free name of the best row, which the buy-elsewhere links search for. */
-const bestName = (rows: readonly DomainStemOffer[]) => {
-  for (const row of rows) {
-    const free = ENDINGS.find((tld) => row.endings[tld]?.state === "free")
-    if (free) return `${row.stem}.${free}`
-  }
-  return null
-}
+/** One free full domain, which is one card. */
+type Offer = { name: string; price: number; why: string }
+
+/** The free names of the rows, best first; a taken ending is no card. */
+const offersOf = (rows: readonly DomainStemOffer[]): Offer[] =>
+  rows.flatMap((row) =>
+    ENDINGS.flatMap((tld) => {
+      const ending = row.endings[tld]
+      return ending?.state === "free"
+        ? [
+            {
+              name: `${row.stem}.${tld}`,
+              price: ending.price_gbp_year,
+              why: row.why,
+            },
+          ]
+        : []
+    })
+  )
 
 /** A link out, which says it opens a new tab. */
 function Out({ href, children }: { href: string; children: ReactNode }) {
@@ -215,85 +227,61 @@ function ToolLine({
 
 /* Choose ------------------------------------------------------------------ */
 
-/** An ending's row in a card: a native radio under a label, or "taken". */
-const ENDING_ROW =
-  "min-h-10 items-center justify-between gap-2 rounded-lg px-3 text-sm"
-
 /**
- * One name and its endings, a row each: free with its yearly price, or taken.
- * The free rows are radios of the grid's one group, so a card holds no choice
- * of its own.
+ * One free domain: its name, then its yearly price. The cards are the radios
+ * of the grid's one group, so the arrow keys and the announcing are the
+ * browser's. The best one wears a pill on its top edge, which also describes
+ * the card to a screen reader with the reason.
  */
 function NameCard({
-  row,
+  offer,
   best,
   group,
   picked,
   onPick,
 }: {
-  row: DomainStemOffer
+  offer: Offer
   best: boolean
   group: string
   picked: string | null
   onPick: (name: string) => void
 }) {
+  const pill = `${group}-best`
   return (
-    <div className="flex min-w-0 flex-col gap-3 rounded-xl border border-border p-3">
-      <div className="flex flex-col gap-0.5">
-        {best ? (
-          <span className={cn(META, "text-primary")}>Best pick</span>
-        ) : null}
-        <span className="break-all font-medium">{row.stem}</span>
-        <span className={META}>{row.why}</span>
-      </div>
-      <div className="mt-auto flex flex-col gap-1.5">
-        {ENDINGS.map((tld) => {
-          const ending = row.endings[tld]
-          if (!ending) return null
-          const name = `${row.stem}.${tld}`
-          return ending.state === "free" ? (
-            <label
-              className={cn(
-                OPTION,
-                ENDING_ROW,
-                "group has-[:checked]:inset-ring-1 has-[:checked]:inset-ring-foreground has-[:checked]:border-foreground has-[:focus-visible]:border-primary has-[:checked]:bg-card has-[:focus-visible]:ring-primary"
-              )}
-              key={tld}
-            >
-              <input
-                aria-label={`${name}, ${pounds(ending.price_gbp_year)} a year`}
-                checked={picked === name}
-                className="sr-only"
-                name={group}
-                onChange={() => onPick(name)}
-                type="radio"
-                value={name}
-              />
-              <span className="font-medium">.{tld}</span>
-              <span className="flex items-center gap-1.5 text-muted-foreground tabular-nums">
-                {pounds(ending.price_gbp_year)}/yr
-                <CheckCircleIcon
-                  aria-hidden
-                  className="hidden size-4 text-foreground group-has-[:checked]:block"
-                  weight="fill"
-                />
-              </span>
-            </label>
-          ) : (
-            <div
-              className={cn(
-                ENDING_ROW,
-                "flex border border-border border-dashed text-muted-foreground"
-              )}
-              key={tld}
-            >
-              <span>.{tld}</span>
-              <span>taken</span>
-            </div>
-          )
-        })}
-      </div>
-    </div>
+    <label
+      className={cn(
+        OPTION,
+        "group min-w-0 flex-col gap-0.5 rounded-xl p-3 pe-9 has-[:checked]:inset-ring-1 has-[:checked]:inset-ring-primary"
+      )}
+    >
+      <input
+        aria-describedby={best ? pill : undefined}
+        aria-label={`${offer.name}, ${pounds(offer.price)} a year`}
+        checked={picked === offer.name}
+        className="sr-only"
+        name={group}
+        onChange={() => onPick(offer.name)}
+        type="radio"
+        value={offer.name}
+      />
+      {best ? (
+        <Badge className="absolute end-3 -top-2.5" id={pill}>
+          Best pick
+          <span className="sr-only">. {offer.why}</span>
+        </Badge>
+      ) : null}
+      <span className="truncate font-medium" title={offer.name}>
+        {offer.name}
+      </span>
+      <span className={cn(META, "tabular-nums")}>
+        {pounds(offer.price)} a year
+      </span>
+      <CheckCircleIcon
+        aria-hidden
+        className="absolute end-3 bottom-3 hidden size-5 text-primary group-has-[:checked]:block"
+        weight="fill"
+      />
+    </label>
   )
 }
 
@@ -345,7 +333,8 @@ function ChoosePage({
   onNotNow: () => void
 }) {
   const [away, setAway] = useState(false)
-  const best = bestName(rows)
+  const offers = offersOf(rows)
+  const best = offers[0]?.name ?? null
   const [picked, setPicked] = useState(best)
   const group = useId()
   // The rows open under the list, so they are brought into view.
@@ -365,20 +354,20 @@ function ChoosePage({
         disabled: !picked,
       }}
     >
-      {/* Two to a row at any width: three would strand the fourth name. */}
+      {/* Two to a row at any width: three would strand the fourth name. The top padding clears the best card's pill. */}
       <div
         aria-label="Web address"
-        className="grid grid-cols-2 gap-2 px-2"
+        className="grid grid-cols-2 gap-2 px-2 pt-2"
         role="radiogroup"
       >
-        {rows.map((row, at) => (
+        {offers.map((offer, at) => (
           <NameCard
             best={at === 0}
             group={group}
-            key={row.stem}
+            key={offer.name}
+            offer={offer}
             onPick={setPicked}
             picked={picked}
-            row={row}
           />
         ))}
       </div>

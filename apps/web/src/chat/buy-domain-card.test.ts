@@ -259,16 +259,15 @@ const submit = (tray: HTMLElement) =>
       ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
   )
 
-it("offers one row a name, best first, with each ending's price or taken", async () => {
+it("offers one card a free full domain, best first, price only", async () => {
   const { tray } = await found()
-  const rows = tray.querySelectorAll('[role="radiogroup"] > div')
-  expect([...rows].map((row) => row.textContent)).toEqual([
-    "Best picksparkleclean" +
-      "Short, and it is your name." +
-      ".co.uk£8/yr.comtaken.uk£8/yr",
-    "sparklecleanbristolSays where you work..com£12/yr",
+  const cards = tray.querySelectorAll('[role="radiogroup"] > label')
+  // A taken ending is no card; the pill is the best card's only extra.
+  expect([...cards].map((card) => card.textContent)).toEqual([
+    "Best pick. Short, and it is your name.sparkleclean.co.uk£8 a year",
+    "sparkleclean.uk£8 a year",
+    "sparklecleanbristol.com£12 a year",
   ])
-  // A taken ending is no option; the free ones are one radio group, the best ticked.
   expect(() => radio(tray, "sparkleclean.com, £12 a year")).toThrow()
   const options = [
     ...tray.querySelectorAll<HTMLInputElement>("input[type=radio]"),
@@ -277,6 +276,10 @@ it("offers one row a name, best first, with each ending's price or taken", async
   expect(
     options.filter((option) => option.checked).map((o) => o.value)
   ).toEqual([NAME])
+  // The reason is the best card's description, and no other card has one.
+  expect(
+    options.map((option) => option.getAttribute("aria-describedby") !== null)
+  ).toEqual([true, false, false])
 })
 
 it("goes on with the ending picked, not the best one", async () => {
