@@ -75,6 +75,90 @@ export const DomainProvider = z.strictObject({
     .optional(),
 })
 
+/**
+ * What `inspect_domain` found out about a name the owner already has, from the
+ * registry (RDAP) and public DNS: whether it is registered, who sold it, who
+ * runs its DNS (the detection the connect card shows), and whether it already
+ * points somewhere, such as a website.
+ */
+export const DomainInspection = z.strictObject({
+  name: DomainName,
+  registered: z.boolean(),
+  registrar: Text(80).optional(),
+  dns_host: DomainProvider.optional(),
+  in_use: z.boolean(),
+})
+
+/**
+ * Mail hosts anyone can sign up to. An email there says nothing about a web
+ * address, so it is the only case where the owner is asked.
+ */
+const FREE_MAIL_HOSTS = new Set([
+  "aol.co.uk",
+  "aol.com",
+  "blueyonder.co.uk",
+  "btinternet.com",
+  "btopenworld.com",
+  "gmail.com",
+  "gmx.co.uk",
+  "gmx.com",
+  "googlemail.com",
+  "hotmail.co.uk",
+  "hotmail.com",
+  "icloud.com",
+  "live.co.uk",
+  "live.com",
+  "mac.com",
+  "mail.com",
+  "me.com",
+  "msn.com",
+  "ntlworld.com",
+  "outlook.com",
+  "pm.me",
+  "proton.me",
+  "protonmail.com",
+  "rocketmail.com",
+  "sky.com",
+  "talktalk.net",
+  "tiscali.co.uk",
+  "virginmedia.com",
+  "yahoo.co.uk",
+  "yahoo.com",
+  "ymail.com",
+])
+
+/** The domain of an email address when it is the sender's own, else null: a free-mail host is nobody's. */
+export function ownDomain(email: string): string | null {
+  const host = email.slice(email.lastIndexOf("@") + 1).toLowerCase()
+  return DomainName.safeParse(host).success && !FREE_MAIL_HOSTS.has(host)
+    ? host
+    : null
+}
+
+/**
+ * The tray question "Do you already have a web address?" (`kind: "address"`)
+ * and its answers: one place for the sender, the answer handler and the card.
+ * A Yes is followed by a text page for the name, which No and Not now close.
+ */
+export const ADDRESS_ASK = {
+  have: "Do you already have a web address?",
+  name: "What is it?",
+  yes: "Yes",
+  no: "No, help me get one",
+  later: "Not now",
+} as const
+
+/**
+ * The owner's words for a settled address stack, sent as their next message
+ * so a normal turn acts on them: the name they typed, or that they have one.
+ * Null for Not now, which needs no reply.
+ */
+export function addressReply(choice: string, name?: string): string | null {
+  if (choice === ADDRESS_ASK.yes)
+    return name ? `Yes, it's ${name}` : "Yes, I have a web address"
+  return choice === ADDRESS_ASK.no ? ADDRESS_ASK.no : null
+}
+
 /** The endings Reme sells. */
 export const DomainTld = z.enum(["co.uk", "uk", "com", "net"])
 
@@ -440,3 +524,4 @@ export type DomainPaymentEvent = z.infer<typeof DomainPaymentEvent>
 export type DnsRecord = z.infer<typeof DnsRecord>
 export type DomainCheck = z.infer<typeof DomainCheck>
 export type DomainProvider = z.infer<typeof DomainProvider>
+export type DomainInspection = z.infer<typeof DomainInspection>

@@ -179,17 +179,24 @@ export const BuildQuestion = z.strictObject({
   field: z.string().min(1).max(100).optional(),
 })
 
+const Questions = z.array(BuildQuestion).min(1).max(10)
+
 /**
  * The questions one message asks, drawn as one stack. `build`: what a
  * build waits on, and an answer resumes it. `offer`: what a ready draft
  * left out; once every one is settled, the answers start one change on top
  * of that draft. `assignment_id` is the build's, read by the server only.
+ * `address`: whether the owner has a web address (`ADDRESS_ASK`); it belongs
+ * to the owner's address task, not to a build, so it names no assignment.
  */
-export const BuildQuestions = z.strictObject({
-  kind: z.enum(["build", "offer"]),
-  assignment_id: Uuid,
-  questions: z.array(BuildQuestion).min(1).max(10),
-})
+export const BuildQuestions = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.enum(["build", "offer"]),
+    assignment_id: Uuid,
+    questions: Questions,
+  }),
+  z.strictObject({ kind: z.literal("address"), questions: Questions }),
+])
 
 /** How `BuildQuestions` is stored among a message's parts: an AI SDK data part. */
 export const BuildQuestionsPart = z.strictObject({

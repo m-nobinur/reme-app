@@ -1,9 +1,10 @@
-import { makeAssistantDataUI, useAuiState } from "@assistant-ui/react"
-import type {
-  BuildQuestion,
-  BuildQuestions,
-  QuestionAnswer,
-  QuestionReply,
+import { makeAssistantDataUI, useAui, useAuiState } from "@assistant-ui/react"
+import {
+  addressReply,
+  type BuildQuestion,
+  type BuildQuestions,
+  type QuestionAnswer,
+  type QuestionReply,
 } from "@workspace/contracts"
 import { Done } from "@workspace/ui/components/assistant/decision"
 import {
@@ -29,14 +30,35 @@ import {
  * question in the assistant's words, its inputs, Skip where it may be
  * skipped. Each answer is sent on its own; after its tick the tray moves to
  * the next open question on its own. Once every one is settled it folds to
- * one row and goes. Typing in the composer is an ordinary turn.
+ * one row and goes. Typing in the composer is an ordinary turn. The
+ * address question is no build's, so once settled the owner's answer goes
+ * on as their next message, for the assistant to act on.
  */
 
-/** Sends one answer: null once it is stored, else the words to show. */
+/**
+ * Sends one answer: the stack as now stored, or null when stored without
+ * one, else the words to show.
+ */
 export type AnswerBuildQuestion = (answer: {
   conversationId: string
   reply: QuestionReply
-}) => Promise<string | null>
+}) => Promise<BuildQuestions | string | null>
+
+/** What the owner said to the address question, as their message; null when there is nothing to say. */
+export function addressSaid(
+  questions: readonly BuildQuestion[],
+  answerOf: (question: BuildQuestion) => QuestionAnswer | undefined
+) {
+  const given = (kind: BuildQuestion["input"]["kind"]) => {
+    const asked = questions.find((each) => each.input.kind === kind)
+    const answer = asked && answerOf(asked)
+    return answer?.kind === "value" && typeof answer.value === "string"
+      ? answer.value
+      : undefined
+  }
+  const choice = given("choice")
+  return choice === undefined ? null : addressReply(choice, given("text"))
+}
 
 const AnswerContext = createContext<AnswerBuildQuestion | null>(null)
 
@@ -80,6 +102,7 @@ export function nextOpen(
 
 function BuildQuestionsPart({ data }: { data: BuildQuestions }) {
   const send = useContext(AnswerContext)
+  const aui = useAui()
   const messageId = useAuiState((s) => s.message.id)
   const conversationId = useAuiState((s) => s.threadListItem.remoteId)
   const id = useId()
@@ -126,22 +149,33 @@ function BuildQuestionsPart({ data }: { data: BuildQuestions }) {
     if (!send || !conversationId || sending) return
     setSending(true)
     setError(null)
-    const refused = await send({
+    const stored = await send({
       conversationId,
       reply: { message_id: messageId, question_id: question.id, answer: sent },
     }).catch(() => FAILED)
     setSending(false)
-    if (refused) {
-      setError(refused)
+    if (typeof stored === "string") {
+      setError(stored)
       return
     }
-    setGiven((now) => ({ ...now, [question.id]: sent }))
-    const next = nextOpen(
-      questions,
-      (each) => each.id === question.id || Boolean(answerOf(each)),
-      index
-    )
+    // The stored stack's answers too: an answer can close others, as No
+    // closes the address question's name.
+    const now: Record<string, QuestionAnswer> = {
+      ...given,
+      ...Object.fromEntries(
+        (stored?.questions ?? []).flatMap((each) =>
+          each.answer ? [[each.id, each.answer]] : []
+        )
+      ),
+      [question.id]: sent,
+    }
+    setGiven(now)
+    const settledNow = (each: BuildQuestion) => each.answer ?? now[each.id]
+    const next = nextOpen(questions, (each) => Boolean(settledNow(each)), index)
     if (next === undefined) {
+      const said =
+        data.kind === "address" ? addressSaid(questions, settledNow) : null
+      if (said) aui.thread().append(said)
       setPhase("closing")
       // The buttons go with the fold, so the keyboard goes to the composer.
       setTimeout(() => {

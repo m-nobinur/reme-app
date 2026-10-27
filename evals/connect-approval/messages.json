@@ -1,0 +1,74 @@
+{
+  "puts": [
+    {
+      "said": "Put the site on northsidegrooming.co.uk",
+      "name": "northsidegrooming.co.uk"
+    },
+    {
+      "said": "Yes, it's northsidegrooming.co.uk",
+      "name": "northsidegrooming.co.uk"
+    },
+    {
+      "said": "please connect sparkleclean.co.uk to my website",
+      "name": "sparkleclean.co.uk"
+    },
+    {
+      "said": "I want the website to live at harbourplumbing.com, go ahead and set it up",
+      "name": "harbourplumbing.com"
+    },
+    {
+      "said": "Use brightsmile-dental.uk for the site",
+      "name": "brightsmile-dental.uk"
+    },
+    {
+      "said": "Can you move my site onto fresh-cuts.co.uk? That's our address.",
+      "name": "fresh-cuts.co.uk"
+    },
+    { "said": "Yes, it's oakleyjoinery.co.uk", "name": "oakleyjoinery.co.uk" },
+    {
+      "said": "Set up my website on kestrelcleaning.com please",
+      "name": "kestrelcleaning.com"
+    },
+    {
+      "said": "Point the site at paws-and-claws.co.uk now",
+      "name": "paws-and-claws.co.uk"
+    },
+    {
+      "said": "go ahead and make bluebellcatering.co.uk the address for the site",
+      "name": "bluebellcatering.co.uk"
+    }
+  ],
+  "vague": [
+    { "said": "What about my domain?", "name": "northsidegrooming.co.uk" },
+    {
+      "said": "Should I put the site on northsidegrooming.co.uk?",
+      "name": "northsidegrooming.co.uk"
+    },
+    {
+      "said": "how much would sparkleclean.co.uk cost to keep?",
+      "name": "sparkleclean.co.uk"
+    },
+    {
+      "said": "I own harbourplumbing.com but I'm not sure what to do with it",
+      "name": "harbourplumbing.com"
+    },
+    {
+      "said": "my domain is brightsmile-dental.uk",
+      "name": "brightsmile-dental.uk"
+    },
+    {
+      "said": "Is fresh-cuts.co.uk a good name for a barber?",
+      "name": "fresh-cuts.co.uk"
+    },
+    {
+      "said": "Maybe later, I need to ask my brother about oakleyjoinery.co.uk first",
+      "name": "oakleyjoinery.co.uk"
+    },
+    { "said": "Put the site on a domain", "name": "kestrelcleaning.com" },
+    { "said": "Can you connect my domain?", "name": "paws-and-claws.co.uk" },
+    {
+      "said": "Don't put it on bluebellcatering.co.uk, use the other one",
+      "name": "bluebellcatering.co.uk"
+    }
+  ]
+}

@@ -51,6 +51,24 @@ export async function openTask(
   return id
 }
 
+/**
+ * Puts the open task off for `days`: `later` until then, the same row as
+ * `openTask` finds when the owner is asked again.
+ */
+export async function putOff(
+  db: OrgScopedDb,
+  taskId: string,
+  days: number
+): Promise<void> {
+  await db
+    .update(ownerTasks)
+    .set({
+      state: "later",
+      laterUntil: sql`now() + ${days} * interval '1 day'`,
+    })
+    .where(eq(ownerTasks.id, taskId))
+}
+
 const addSteps = (
   db: OrgScopedDb,
   orgId: string,

@@ -11275,209 +11275,409 @@
             "const": "data-build_questions"
           },
           "data": {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "type": "string",
-                "enum": [
-                  "build",
-                  "offer"
-                ]
-              },
-              "assignment_id": {
-                "type": "string",
-                "format": "uuid",
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-              },
-              "questions": {
-                "minItems": 1,
-                "maxItems": 10,
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "text": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 300,
-                      "pattern": "\\S"
-                    },
-                    "input": {
-                      "oneOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "const": "fact"
-                            },
-                            "key": {
-                              "type": "string",
-                              "enum": [
-                                "business.name",
-                                "business.phone",
-                                "business.email",
-                                "hours.weekday",
-                                "service_area.radius",
-                                "business.tagline",
-                                "business.offerings",
-                                "business.audience",
-                                "business.overview",
-                                "business.proof",
-                                "business.disclaimer",
-                                "service_area.text",
-                                "assistant.name",
-                                "owner.preferred_name"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "kind",
-                            "key"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "const": "choice"
-                            },
-                            "options": {
-                              "minItems": 1,
-                              "maxItems": 10,
-                              "type": "array",
-                              "items": {
-                                "type": "string",
-                                "minLength": 1,
-                                "maxLength": 500,
-                                "pattern": "\\S"
-                              }
-                            }
-                          },
-                          "required": [
-                            "kind",
-                            "options"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "const": "text"
-                            },
-                            "maxLength": {
-                              "type": "integer",
-                              "minimum": 1,
-                              "maximum": 500
-                            },
-                            "email": {
-                              "type": "boolean"
-                            }
-                          },
-                          "required": [
-                            "kind",
-                            "maxLength",
-                            "email"
-                          ],
-                          "additionalProperties": false
-                        }
-                      ]
-                    },
-                    "skippable": {
-                      "type": "boolean"
-                    },
-                    "answer": {
-                      "oneOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "const": "value"
-                            },
-                            "value": {
-                              "anyOf": [
-                                {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 500,
-                                  "pattern": "\\S"
-                                },
-                                {
-                                  "type": "object",
-                                  "propertyNames": {
-                                    "type": "string"
-                                  },
-                                  "additionalProperties": {}
-                                }
-                              ]
-                            }
-                          },
-                          "required": [
-                            "kind",
-                            "value"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "const": "skipped"
-                            }
-                          },
-                          "required": [
-                            "kind"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "const": "closed"
-                            }
-                          },
-                          "required": [
-                            "kind"
-                          ],
-                          "additionalProperties": false
-                        }
-                      ]
-                    },
-                    "field": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 100
-                    }
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "build",
+                      "offer"
+                    ]
                   },
-                  "required": [
-                    "id",
-                    "text",
-                    "input",
-                    "skippable"
-                  ],
-                  "additionalProperties": false
-                }
+                  "assignment_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "questions": {
+                    "minItems": 1,
+                    "maxItems": 10,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300,
+                          "pattern": "\\S"
+                        },
+                        "input": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "fact"
+                                },
+                                "key": {
+                                  "type": "string",
+                                  "enum": [
+                                    "business.name",
+                                    "business.phone",
+                                    "business.email",
+                                    "hours.weekday",
+                                    "service_area.radius",
+                                    "business.tagline",
+                                    "business.offerings",
+                                    "business.audience",
+                                    "business.overview",
+                                    "business.proof",
+                                    "business.disclaimer",
+                                    "service_area.text",
+                                    "assistant.name",
+                                    "owner.preferred_name"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "key"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "choice"
+                                },
+                                "options": {
+                                  "minItems": 1,
+                                  "maxItems": 10,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 500,
+                                    "pattern": "\\S"
+                                  }
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "options"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "text"
+                                },
+                                "maxLength": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 500
+                                },
+                                "email": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "maxLength",
+                                "email"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "skippable": {
+                          "type": "boolean"
+                        },
+                        "answer": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "value"
+                                },
+                                "value": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 500,
+                                      "pattern": "\\S"
+                                    },
+                                    {
+                                      "type": "object",
+                                      "propertyNames": {
+                                        "type": "string"
+                                      },
+                                      "additionalProperties": {}
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "skipped"
+                                }
+                              },
+                              "required": [
+                                "kind"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "closed"
+                                }
+                              },
+                              "required": [
+                                "kind"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "field": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "text",
+                        "input",
+                        "skippable"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "kind",
+                  "assignment_id",
+                  "questions"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "address"
+                  },
+                  "questions": {
+                    "minItems": 1,
+                    "maxItems": 10,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300,
+                          "pattern": "\\S"
+                        },
+                        "input": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "fact"
+                                },
+                                "key": {
+                                  "type": "string",
+                                  "enum": [
+                                    "business.name",
+                                    "business.phone",
+                                    "business.email",
+                                    "hours.weekday",
+                                    "service_area.radius",
+                                    "business.tagline",
+                                    "business.offerings",
+                                    "business.audience",
+                                    "business.overview",
+                                    "business.proof",
+                                    "business.disclaimer",
+                                    "service_area.text",
+                                    "assistant.name",
+                                    "owner.preferred_name"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "key"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "choice"
+                                },
+                                "options": {
+                                  "minItems": 1,
+                                  "maxItems": 10,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 500,
+                                    "pattern": "\\S"
+                                  }
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "options"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "text"
+                                },
+                                "maxLength": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 500
+                                },
+                                "email": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "maxLength",
+                                "email"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "skippable": {
+                          "type": "boolean"
+                        },
+                        "answer": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "value"
+                                },
+                                "value": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 500,
+                                      "pattern": "\\S"
+                                    },
+                                    {
+                                      "type": "object",
+                                      "propertyNames": {
+                                        "type": "string"
+                                      },
+                                      "additionalProperties": {}
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "skipped"
+                                }
+                              },
+                              "required": [
+                                "kind"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "closed"
+                                }
+                              },
+                              "required": [
+                                "kind"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "field": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "text",
+                        "input",
+                        "skippable"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "kind",
+                  "questions"
+                ],
+                "additionalProperties": false
               }
-            },
-            "required": [
-              "kind",
-              "assignment_id",
-              "questions"
-            ],
-            "additionalProperties": false
+            ]
           }
         },
         "required": [
@@ -38787,209 +38987,409 @@
             "additionalProperties": false
           },
           "questions": {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "type": "string",
-                "enum": [
-                  "build",
-                  "offer"
-                ]
-              },
-              "assignment_id": {
-                "type": "string",
-                "format": "uuid",
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-              },
-              "questions": {
-                "minItems": 1,
-                "maxItems": 10,
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "text": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 300,
-                      "pattern": "\\S"
-                    },
-                    "input": {
-                      "oneOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "const": "fact"
-                            },
-                            "key": {
-                              "type": "string",
-                              "enum": [
-                                "business.name",
-                                "business.phone",
-                                "business.email",
-                                "hours.weekday",
-                                "service_area.radius",
-                                "business.tagline",
-                                "business.offerings",
-                                "business.audience",
-                                "business.overview",
-                                "business.proof",
-                                "business.disclaimer",
-                                "service_area.text",
-                                "assistant.name",
-                                "owner.preferred_name"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "kind",
-                            "key"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "const": "choice"
-                            },
-                            "options": {
-                              "minItems": 1,
-                              "maxItems": 10,
-                              "type": "array",
-                              "items": {
-                                "type": "string",
-                                "minLength": 1,
-                                "maxLength": 500,
-                                "pattern": "\\S"
-                              }
-                            }
-                          },
-                          "required": [
-                            "kind",
-                            "options"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "const": "text"
-                            },
-                            "maxLength": {
-                              "type": "integer",
-                              "minimum": 1,
-                              "maximum": 500
-                            },
-                            "email": {
-                              "type": "boolean"
-                            }
-                          },
-                          "required": [
-                            "kind",
-                            "maxLength",
-                            "email"
-                          ],
-                          "additionalProperties": false
-                        }
-                      ]
-                    },
-                    "skippable": {
-                      "type": "boolean"
-                    },
-                    "answer": {
-                      "oneOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "const": "value"
-                            },
-                            "value": {
-                              "anyOf": [
-                                {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 500,
-                                  "pattern": "\\S"
-                                },
-                                {
-                                  "type": "object",
-                                  "propertyNames": {
-                                    "type": "string"
-                                  },
-                                  "additionalProperties": {}
-                                }
-                              ]
-                            }
-                          },
-                          "required": [
-                            "kind",
-                            "value"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "const": "skipped"
-                            }
-                          },
-                          "required": [
-                            "kind"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "const": "closed"
-                            }
-                          },
-                          "required": [
-                            "kind"
-                          ],
-                          "additionalProperties": false
-                        }
-                      ]
-                    },
-                    "field": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 100
-                    }
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "build",
+                      "offer"
+                    ]
                   },
-                  "required": [
-                    "id",
-                    "text",
-                    "input",
-                    "skippable"
-                  ],
-                  "additionalProperties": false
-                }
+                  "assignment_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "questions": {
+                    "minItems": 1,
+                    "maxItems": 10,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300,
+                          "pattern": "\\S"
+                        },
+                        "input": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "fact"
+                                },
+                                "key": {
+                                  "type": "string",
+                                  "enum": [
+                                    "business.name",
+                                    "business.phone",
+                                    "business.email",
+                                    "hours.weekday",
+                                    "service_area.radius",
+                                    "business.tagline",
+                                    "business.offerings",
+                                    "business.audience",
+                                    "business.overview",
+                                    "business.proof",
+                                    "business.disclaimer",
+                                    "service_area.text",
+                                    "assistant.name",
+                                    "owner.preferred_name"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "key"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "choice"
+                                },
+                                "options": {
+                                  "minItems": 1,
+                                  "maxItems": 10,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 500,
+                                    "pattern": "\\S"
+                                  }
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "options"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "text"
+                                },
+                                "maxLength": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 500
+                                },
+                                "email": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "maxLength",
+                                "email"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "skippable": {
+                          "type": "boolean"
+                        },
+                        "answer": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "value"
+                                },
+                                "value": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 500,
+                                      "pattern": "\\S"
+                                    },
+                                    {
+                                      "type": "object",
+                                      "propertyNames": {
+                                        "type": "string"
+                                      },
+                                      "additionalProperties": {}
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "skipped"
+                                }
+                              },
+                              "required": [
+                                "kind"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "closed"
+                                }
+                              },
+                              "required": [
+                                "kind"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "field": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "text",
+                        "input",
+                        "skippable"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "kind",
+                  "assignment_id",
+                  "questions"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "address"
+                  },
+                  "questions": {
+                    "minItems": 1,
+                    "maxItems": 10,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300,
+                          "pattern": "\\S"
+                        },
+                        "input": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "fact"
+                                },
+                                "key": {
+                                  "type": "string",
+                                  "enum": [
+                                    "business.name",
+                                    "business.phone",
+                                    "business.email",
+                                    "hours.weekday",
+                                    "service_area.radius",
+                                    "business.tagline",
+                                    "business.offerings",
+                                    "business.audience",
+                                    "business.overview",
+                                    "business.proof",
+                                    "business.disclaimer",
+                                    "service_area.text",
+                                    "assistant.name",
+                                    "owner.preferred_name"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "key"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "choice"
+                                },
+                                "options": {
+                                  "minItems": 1,
+                                  "maxItems": 10,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 500,
+                                    "pattern": "\\S"
+                                  }
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "options"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "text"
+                                },
+                                "maxLength": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 500
+                                },
+                                "email": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "maxLength",
+                                "email"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "skippable": {
+                          "type": "boolean"
+                        },
+                        "answer": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "value"
+                                },
+                                "value": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 500,
+                                      "pattern": "\\S"
+                                    },
+                                    {
+                                      "type": "object",
+                                      "propertyNames": {
+                                        "type": "string"
+                                      },
+                                      "additionalProperties": {}
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "skipped"
+                                }
+                              },
+                              "required": [
+                                "kind"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "closed"
+                                }
+                              },
+                              "required": [
+                                "kind"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "field": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "text",
+                        "input",
+                        "skippable"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "kind",
+                  "questions"
+                ],
+                "additionalProperties": false
               }
-            },
-            "required": [
-              "kind",
-              "assignment_id",
-              "questions"
-            ],
-            "additionalProperties": false
+            ]
           }
         },
         "required": [
