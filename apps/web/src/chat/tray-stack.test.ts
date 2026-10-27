@@ -143,7 +143,7 @@ it("shows a message's item before a standing card drawn after the transcript", a
             name: "site-ready-tray",
             settled: true,
             standing: true,
-          },
+          } as never,
           createElement("p", null, "Publish")
         ),
       ])
