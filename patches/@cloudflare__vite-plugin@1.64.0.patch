@@ -1,0 +1,15 @@
+diff --git a/dist/workers/runner-worker/module-runner.js b/dist/workers/runner-worker/module-runner.js
+index a0547ac0a4801773d37b6eda5e5665263301b68e..7a209fb6a846c47cc3119c948fda0eb009015102 100644
+--- a/dist/workers/runner-worker/module-runner.js
++++ b/dist/workers/runner-worker/module-runner.js
+@@ -1107,9 +1107,8 @@ var ModuleRunner = class {
+ 		if (visited.has(mod.id)) return !1;
+ 		visited.add(mod.id);
+ 		for (let importedModuleId of mod.imports) {
+-			if (callstack.includes(importedModuleId)) return !0;
+ 			let importedModule = this.evaluatedModules.getModuleById(importedModuleId);
+-			if (importedModule?.promise && !importedModule.evaluated && this.isCircularRequest(importedModule, callstack, visited)) return !0;
++			if (importedModule?.promise && !importedModule.evaluated && (callstack.includes(importedModuleId) || this.isCircularRequest(importedModule, callstack, visited))) return !0;
+ 		}
+ 		return !1;
+ 	}
