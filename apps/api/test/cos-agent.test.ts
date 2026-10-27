@@ -2124,43 +2124,20 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     expect(stub.calls).toHaveLength(0)
   })
 
-  it("runs buy_domain without a card, keyed by its tool call, since paying in Checkout is the consent", async () => {
+  it("runs buy_domain without a card and opens the details page from the name alone, with nothing sent to the orchestrator", async () => {
     const id = await conversation(me)
-    const stub = stubOrchestrator(() =>
-      Response.json(
-        {
-          outcome: "awaiting_payment",
-          name: "sparkleclean.com",
-          price_gbp: 12,
-          checkout: "embedded",
-        },
-        { status: 201 }
-      )
-    )
+    const stub = stubOrchestrator()
     const done = await turn(
       me,
-      typed(id, "Yes, buy sparkleclean.com."),
+      typed(id, "I'll take sparkleclean.com."),
       {
         model: scripted(
           calls({
             id: "call_buy",
             tool: "buy_domain",
-            input: {
-              name: "sparkleclean.com",
-              registrant: {
-                name: "Jane Smith",
-                email: "jane@sparkle.invalid",
-                phone: "+447700900123",
-                address: {
-                  street: "12 Mill Lane",
-                  city: "Bristol",
-                  postal_code: "BS1 4AB",
-                  country_code: "GB",
-                },
-              },
-            },
+            input: { name: "sparkleclean.com" },
           }),
-          said("The card has the details; paying there buys it.")
+          said("Fill in the rest there.")
         ).model,
       },
       stub
@@ -2170,11 +2147,15 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       done.chunks.filter((c) => c.type === "tool-approval-request")
     ).toHaveLength(0)
     expect(waiting(await tailOf(me, id))).toEqual([])
-    const [call] = stub.calls
-    expect(new URL(call?.request.url ?? "").pathname).toBe(
-      "/assignments/domains/buy"
-    )
-    expect(call?.request.headers.get("idempotency-key")).toBe("call_buy")
+    // The page is the tool's output, drawn by the tray; the model never sent a registrant.
+    expect(
+      done.chunks.some(
+        (c) =>
+          c.type === "tool-output-available" &&
+          (c as { output?: { outcome?: string } }).output?.outcome === "details"
+      )
+    ).toBe(true)
+    expect(stub.calls).toEqual([])
   })
 
   it("stores an approved reminder under the turn's conversation, zone and the CoS, keyed by its approval", async () => {

@@ -6,7 +6,7 @@ import {
   BuildStopCause,
   BuildSummary,
   type BuyDomainInput,
-  BuyDomainOutput,
+  type BuyDomainOutput,
   type CheckDomainInput,
   CheckDomainOutput,
   type ConnectDomainInput,
@@ -20,6 +20,7 @@ import {
   type DomainBoughtInput,
   DomainCheck,
   DomainInspection,
+  DomainRegistrantPrefill,
   ErrorEnvelope,
   type FactRecord,
   FactValue,
@@ -79,6 +80,7 @@ import {
   buyUnavailable,
   isOrgOwner,
   notOwner,
+  registrantPrefill,
 } from "../domain-buy.ts"
 import { failure } from "../http.ts"
 import { jevBought, jevPutOn } from "../jev.ts"
@@ -1299,21 +1301,22 @@ export async function findDomain(
 }
 
 /**
- * A purchase prepared and nothing charged: the orchestrator rechecks the
- * name and its price and holds it as `awaiting_payment`, keyed by the tool
- * call, so a rerun replays it. It takes no approval: the owner's payment in
- * the card's Checkout is the consent, and the amount there comes from the
- * row's price. The owner only, and only once this Worker can take payments.
+ * The details page for buying `name`, prefilled: the same read as
+ * `GET /domains/{name}/registrant`. Nothing is reserved or charged and it
+ * takes no approval, since the owner's payment on the page is the consent.
+ * The model never collects or sends the registrant. The owner only, and only
+ * once this Worker can take payments.
  */
 export async function buyDomain(
   { env, kit, owner }: ToolContext,
-  input: BuyDomainInput,
-  key: string
+  { name }: BuyDomainInput
 ): Promise<BuyDomainOutput> {
   if (!buyConfigured(env)) return refused(buyUnavailable())
-  if (!(await isOrgOwner(kit, owner))) return refused(notOwner("buy"))
-  return domainAnswer(
-    await bridge(env, owner, "/domains/buy", { body: input, key }),
-    BuyDomainOutput.parse
-  )
+  // The owner only, and a name the registrar sells, as the page asks it.
+  const prefill = await registrantPrefill(kit, owner, name)
+  if (!prefill.ok) return refused(prefill)
+  return {
+    outcome: "details",
+    ...DomainRegistrantPrefill.parse(await prefill.json()),
+  }
 }

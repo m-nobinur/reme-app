@@ -2181,20 +2181,6 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         },
       }
     }
-    const registrant = {
-      registrant: {
-        name: "Jane Smith",
-        email: "jane@sparkle.invalid",
-        phone: "+447700900123",
-        address: {
-          street: "12 Mill Lane",
-          city: "Bristol",
-          postal_code: "BS1 4AB",
-          country_code: "GB",
-        },
-      },
-    }
-
     it("find_domain relays the orchestrator's offers, with or without the Stripe keys", async () => {
       const found = {
         outcome: "found",
@@ -2220,39 +2206,50 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       expect(call?.body).toEqual({ query: "sparkle" })
     })
 
-    it("buy_domain prepares the purchase keyed by the call, and charges nothing", async () => {
-      const answer = {
-        outcome: "awaiting_payment",
+    it("buy_domain opens the details page prefilled from the signed-in owner, and reserves nothing", async () => {
+      const stub = stubOrchestrator()
+      const output = kept(
+        "buy_domain",
+        await buyDomain(paying(me, stub), { name: "sparkleclean.com" })
+      )
+      if (output.outcome !== "details") throw new Error("no details page")
+      expect(output).toMatchObject({
         name: "sparkleclean.com",
-        price_gbp: 12,
-        checkout: "embedded",
-      }
-      const stub = stubOrchestrator(() =>
-        Response.json(answer, { status: 201 })
+        registrant: { name: "Probe Owner" },
+      })
+      expect(output.price_gbp_year).toBeGreaterThan(0)
+      // The address is the owner's to type; the page asks for it.
+      expect(output.missing).toEqual(
+        expect.arrayContaining(["street", "city", "postal_code"])
       )
-      const input = { name: "sparkleclean.com", ...registrant }
-      expect(
-        kept(
-          "buy_domain",
-          await buyDomain(paying(me, stub), input, "toolu_buy_1")
-        )
-      ).toEqual(answer)
-      const [call] = stub.calls
-      expect(new URL(call?.request.url ?? "").pathname).toBe(
-        "/assignments/domains/buy"
-      )
-      expect(call?.request.headers.get("idempotency-key")).toBe("toolu_buy_1")
-      expect(call?.body).toEqual(input)
+      expect(stub.calls).toEqual([])
     })
 
-    it("buy_domain refuses without the Stripe keys and for a member who is not the owner, before the orchestrator", async () => {
+    it("buy_domain asks for the registrant type on a .co.uk, and refuses a name that is not sold", async () => {
       const quiet = stubOrchestrator()
-      const input = { name: "sparkleclean.com", ...registrant }
+      const uk = await buyDomain(paying(me, quiet), {
+        name: "sparkleclean.co.uk",
+      })
+      expect(kept("buy_domain", uk)).toMatchObject({
+        outcome: "details",
+        missing: expect.arrayContaining(["registrant_type"]),
+      })
       expect(
         kept(
           "buy_domain",
-          await buyDomain(context(me, quiet), input, "toolu_buy_2")
+          await buyDomain(paying(me, quiet), { name: "sparkleclean.org" })
         )
+      ).toMatchObject({
+        outcome: "refused",
+        error: { code: "domain.unavailable" },
+      })
+    })
+
+    it("buy_domain refuses without the Stripe keys and for a member who is not the owner", async () => {
+      const quiet = stubOrchestrator()
+      const input = { name: "sparkleclean.com" }
+      expect(
+        kept("buy_domain", await buyDomain(context(me, quiet), input))
       ).toEqual({
         outcome: "refused",
         error: {
@@ -2268,9 +2265,7 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
           .set({ role: "member" })
           .where(sql`${memberships.orgId} = ${member.orgId}`)
       )
-      expect(
-        await buyDomain(paying(member, quiet), input, "toolu_buy_3")
-      ).toMatchObject({
+      expect(await buyDomain(paying(member, quiet), input)).toMatchObject({
         outcome: "refused",
         error: { code: "domain.not_owner" },
       })
@@ -2373,7 +2368,8 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
     })
 
     it("says no once a connect was proposed since the owner's message, or for a name the org has live", async () => {
-      const who = await buying("cos-bought-floor", "sparkleclean.co.uk")
+      const held = `bought-floor-${run}.example`
+      const who = await buying("cos-bought-floor", held)
       const proposed: ModelMessage[] = [
         { role: "user", content: "done, I bought it" },
         {
@@ -2383,41 +2379,29 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
               type: "tool-call",
               toolCallId: "c1",
               toolName: "connect_domain",
-              input: { name: "sparkleclean.co.uk" },
+              input: { name: held },
             },
           ],
         },
       ]
       const { sessionId } = await turnOf(who, ["done, I bought it"])
       expect(
-        await boughtSaid(
-          keyed(who),
-          "sparkleclean.co.uk",
-          sessionId,
-          proposed,
-          jev(0.99)
-        )
+        await boughtSaid(keyed(who), held, sessionId, proposed, jev(0.99))
       ).toBe(false)
       await kit.withOrg({ orgId: who.orgId }, (db) =>
         db.insert(domains).values({
           orgId: who.orgId,
           siteId: crypto.randomUUID(),
-          name: "sparkleclean.co.uk",
-          primaryHost: "sparkleclean.co.uk",
+          name: held,
+          primaryHost: held,
           origin: "connected",
           method: "records",
           state: "active",
         })
       )
-      expect(
-        await boughtSaid(
-          keyed(who),
-          "sparkleclean.co.uk",
-          sessionId,
-          [],
-          jev(0.99)
-        )
-      ).toBe(false)
+      expect(await boughtSaid(keyed(who), held, sessionId, [], jev(0.99))).toBe(
+        false
+      )
     })
 
     it("refuses without calling the orchestrator when the owner has not said it", async () => {
