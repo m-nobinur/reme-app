@@ -22,6 +22,7 @@ import {
   remove,
   revokeDomains,
   type Say,
+  served,
   sweepDomains,
 } from "../src/domain-flow.ts"
 import { chatTexts, openChat } from "./chat.ts"
@@ -703,12 +704,16 @@ describe.skipIf(!url)("buying a domain against a database", () => {
     })
 
     // Not live until the router names the site: the 404 is not an answer.
-    await expect(activateDomain(p.env, kit, p.orgId, p.row.id)).rejects.toThrow(
-      "domain.not_served"
-    )
+    expect(await activateDomain(p.env, kit, p.orgId, p.row.id)).toBe(true)
+    const unserved = await served(p.env, kit, p.orgId, p.row.id)
+    expect(unserved.result).toMatchObject({ ready: false })
+    expect(unserved.reading).not.toHaveProperty("tell")
     p.net.site = p.orgId
-    const live = await activateDomain(p.env, kit, p.orgId, p.row.id)
-    expect(live?.text).toMatch(new RegExp(`^${p.name} is live`))
+    const live = await served(p.env, kit, p.orgId, p.row.id)
+    expect(live.result).toMatchObject({ ready: true })
+    expect((await live.reading?.tell?.())?.text).toMatch(
+      new RegExp(`^${p.name} is live`)
+    )
     expect(
       JSON.parse((await p.store.ROUTES.get(`host:${p.name}`)) ?? "{}")
     ).toMatchObject({ org_id: p.orgId, canonical_host: p.name })

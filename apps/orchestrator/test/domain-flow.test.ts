@@ -85,6 +85,8 @@ function fakeKit() {
   const writes = { n: 0 }
   const db = {
     select: () => ({ from: () => ({ where: async () => [row] }) }),
+    // The task sync after a row write; tasks are tested in packages/db.
+    execute: async () => [],
     update: () => ({
       set: (values: object) => ({
         where: () => {
@@ -120,31 +122,38 @@ afterEach(() => {
 })
 
 describe("a look", () => {
-  it("tells the owner about a planted A record exactly once, then goes ready when it is fixed", async () => {
+  it("reads a planted A record as the owner's to fix, then goes ready when it is fixed", async () => {
     const { kit, row, writes } = fakeKit()
     const pending = {
       [`${BASE}/h-${NAME}`]: () => hostname(NAME, "pending", "initializing"),
       [`${BASE}/h-${WWW}`]: () => hostname(WWW, "pending", "initializing"),
     }
     stubNet(pending, { [`${NAME} CAA`]: { Status: 0 } })
-    expect(await look(env, kit, "org", "dom", 1)).toEqual({
+    const first = await look(env, kit, "org", "dom")
+    expect(first.result).toEqual({
       gone: false,
       at: expect.any(Number),
       status: "conflicting_record",
       ready: false,
-      say: {
-        key: "dom:look:1",
-        text: `Nearly there. ${WWW} still has an old A record (192.0.2.10) in the way. Delete it and I'll pick it up from there.`,
-        button: {
-          label: "Open GoDaddy DNS settings",
-          action: { kind: "open", url: "https://dcc.godaddy.com/manage/dns" },
-        },
+    })
+    expect(first.reading).toMatchObject({
+      step: "records",
+      write: {
+        state: "blocked",
+        blocked_on: "owner_action",
+        note: "Delete the old A record at GoDaddy",
       },
     })
-    // The same record still there: nothing new to say.
-    const again = await look(env, kit, "org", "dom", 2)
-    expect(again).toMatchObject({ status: "conflicting_record" })
-    expect(again).not.toHaveProperty("say")
+    expect(await first.reading?.tell?.()).toEqual({
+      text: `Nearly there. ${WWW} still has an old A record (192.0.2.10) in the way. Delete it and I'll pick it up from there.`,
+      button: {
+        label: "Open GoDaddy DNS settings",
+        action: { kind: "open", url: "https://dcc.godaddy.com/manage/dns" },
+      },
+    })
+    // The same record still there: the same evidence, so the probe says nothing.
+    const again = await look(env, kit, "org", "dom")
+    expect(again.reading?.evidence).toEqual(first.reading?.evidence)
     expect(row.state).toBe("awaiting_dns")
     // A look that finds what the last one did writes nothing.
     expect(writes.n).toBe(1)
@@ -159,10 +168,12 @@ describe("a look", () => {
       },
       FIXED
     )
-    const ready = await look(env, kit, "org", "dom", 3)
-    expect(ready).toMatchObject({ status: "valid", ready: true })
-    // Live has its own message, from the activation.
-    expect(ready).not.toHaveProperty("say")
+    const ready = await look(env, kit, "org", "dom")
+    expect(ready.result).toMatchObject({ status: "valid", ready: true })
+    // Live has its own message, from the `loads` probe after activation.
+    expect(ready.reading).toMatchObject({ step: "certificate" })
+    expect(ready.reading).not.toHaveProperty("tell")
+    expect(ready.reading).not.toHaveProperty("write")
     expect(row).toMatchObject({
       state: "verifying",
       primaryHost: WWW,
@@ -180,14 +191,16 @@ describe("a look", () => {
       },
       FIXED
     )
-    const seen = await look(env, kit, "org", "dom", 1)
-    expect(seen).toMatchObject({
+    const seen = await look(env, kit, "org", "dom")
+    expect(seen.result).toMatchObject({
       status: "pending_certificate",
       ready: false,
-      say: { key: "dom:look:1" },
     })
-    // Nothing for the owner to do here, so no button.
-    expect(seen.gone || seen.say?.button).toBeUndefined()
+    // Nothing for the owner to do here, so no button and no block.
+    expect(await seen.reading?.tell?.()).toEqual({
+      text: expect.stringContaining("Your secure certificate is being issued"),
+    })
+    expect(seen.reading).not.toHaveProperty("write")
     expect(row.state).toBe("verifying")
   })
 
@@ -203,7 +216,7 @@ describe("a look", () => {
       [`https://${WWW}/`]: () => new Response("not here", { status: 404 }),
     }
     stubNet(net, FIXED)
-    expect(await look(env, kit, "org", "dom", 1)).toMatchObject({
+    expect((await look(env, kit, "org", "dom")).result).toMatchObject({
       status: "pending_verification",
       ready: false,
     })
@@ -216,19 +229,19 @@ describe("a look", () => {
     })
     vi.unstubAllGlobals()
     stubNet(net, { ...FIXED, ...txt("someone-else") })
-    expect(await look(env, kit, "org", "dom", 2)).toMatchObject({
+    expect((await look(env, kit, "org", "dom")).result).toMatchObject({
       status: "pending_verification",
       ready: false,
     })
     vi.unstubAllGlobals()
     stubNet(net, { ...FIXED, ...txt(own.value) })
-    expect(await look(env, kit, "org", "dom", 3)).toMatchObject({
+    expect((await look(env, kit, "org", "dom")).result).toMatchObject({
       status: "valid",
       ready: true,
     })
     // A host with no stored TXT is never taken as proven.
     row.ownership = {}
-    expect(await look(env, kit, "org", "dom", 4)).toMatchObject({
+    expect((await look(env, kit, "org", "dom")).result).toMatchObject({
       status: "pending_verification",
     })
   })
@@ -236,7 +249,25 @@ describe("a look", () => {
   it("is gone for a claim that is no longer connecting", async () => {
     const { kit, row } = fakeKit()
     row.state = "removed"
-    expect(await look(env, kit, "org", "dom", 1)).toEqual({ gone: true })
+    expect((await look(env, kit, "org", "dom")).result).toEqual({ gone: true })
+  })
+
+  it("takes a failed read as no news: the row stays as it was and nothing is recorded", async () => {
+    const { kit, row, writes } = fakeKit()
+    row.state = "verifying"
+    vi.stubGlobal("fetch", async () => {
+      throw new Error("network down")
+    })
+    expect(await look(env, kit, "org", "dom")).toEqual({
+      result: {
+        gone: false,
+        at: expect.any(Number),
+        status: "unknown_error",
+        ready: false,
+      },
+    })
+    expect(writes.n).toBe(0)
+    expect(row.state).toBe("verifying")
   })
 })
 

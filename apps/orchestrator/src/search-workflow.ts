@@ -10,6 +10,7 @@ import type { Tenancy } from "@workspace/db"
 import { withKit } from "./domain-flow.ts"
 import { SAY_RETRIES } from "./domain-workflow.ts"
 import { GoogleError, NeedsReauth } from "./google.ts"
+import { probe } from "./probe.ts"
 import {
   addProperty,
   announce,
@@ -92,15 +93,26 @@ export class SearchWorkflow extends WorkflowEntrypoint<Env, SearchParams> {
       ...Array.from({ length: VERIFY_TRIES - 1 }, () => VERIFY_GAP),
       ...VERIFY_BACKOFF,
     ]
+    const task = { orgId: params.org_id, kind: "google" as const }
     for (let n = 1; ; n++) {
-      if (
-        await step.do(
-          `verify ${n}`,
-          GOOGLE_RETRIES,
-          google((kit) => verifyOnce(env, kit, params))
-        )
+      const done = await probe(
+        step,
+        `verify ${n}`,
+        env,
+        task,
+        async (kit) => {
+          const verified = await final(verifyOnce(env, kit, params))
+          return {
+            result: verified,
+            reading: {
+              step: "verify",
+              evidence: { host: params.host, verified },
+            },
+          }
+        },
+        GOOGLE_RETRIES
       )
-        break
+      if (done) break
       const wait = waits[n - 1]
       if (!wait) {
         await step.do(

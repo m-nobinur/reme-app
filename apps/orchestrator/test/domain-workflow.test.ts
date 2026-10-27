@@ -21,6 +21,8 @@ vi.mock("cloudflare:workers", () => ({
 const script = vi.hoisted(() => ({
   claim: { apex: "a", www: "w" } as unknown,
   seen: [] as unknown[],
+  /** What each `loads` probe after activation finds. */
+  loads: [] as unknown[],
   calls: [] as string[],
   /** Whether every post finds the chat busy, as a never-answered card would. */
   busy: false,
@@ -76,7 +78,8 @@ vi.mock("../src/domain-flow.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/domain-flow.ts")>()),
   withKit: async (_env: unknown, fn: (kit: unknown) => unknown) => fn({}),
   claimHostnames: async () => script.claim,
-  look: async () => script.seen.shift() ?? { gone: true },
+  look: async () => ({ result: script.seen.shift() ?? { gone: true } }),
+  served: async () => ({ result: script.loads.shift() ?? { gone: true } }),
   nudge: async () => {
     script.calls.push("nudge")
     return { key: "nudge", text: "nudge" }
@@ -87,7 +90,11 @@ vi.mock("../src/domain-flow.ts", async (importOriginal) => ({
   },
   activateDomain: async () => {
     script.calls.push("activate")
-    return { key: "live", text: "live" }
+    return true
+  },
+  notServed: async () => {
+    script.calls.push("not served")
+    return { key: "not served", text: "not served" }
   },
   repoint: async () => {
     script.calls.push("repoint")
@@ -106,7 +113,7 @@ vi.mock("../src/search-start.ts", () => ({
   },
 }))
 
-const { nextWait } = await import("../src/domain-flow.ts")
+const { DEADLINE_MS, nextWait } = await import("../src/domain-flow.ts")
 const { HOLD_MS, PAYMENT_ROUNDS } = await import("../src/domain-buy.ts")
 const { DomainWorkflow, MAX_CHECKS, SAY_RETRIES } = await import(
   "../src/domain-workflow.ts"
@@ -171,7 +178,19 @@ beforeEach(() => {
   script.busy = false
   script.nudged = false
   script.buy = { payments: [], started: {}, reads: [], ready: [], live: false }
+  // By default the host serves the site at the first `loads`, which says live.
+  script.loads = [loads(0, true)]
 })
+
+/** A `loads` probe's result; a ready one carries the live message, as the probe adds it. */
+function loads(ms: number, ready: boolean) {
+  return {
+    gone: false,
+    at: T0 + ms,
+    ready,
+    ...(ready && { say: { key: "live", text: "live" } }),
+  }
+}
 
 describe("the domain Workflow", () => {
   it("looks on the backoff, says what changed, activates once ready, and points again after it settles", async () => {
@@ -200,6 +219,28 @@ describe("the domain Workflow", () => {
     expect(result).toEqual({ outcome: "active" })
     expect(names).toContain("say live")
     expect(script.calls).toEqual(["activate", "search", "repoint"])
+  })
+
+  it("says live only once the host serves the site, probing on the claim's schedule", async () => {
+    script.loads = [loads(0, false), loads(MIN, false), loads(2 * MIN, true)]
+    const { names, waits, result } = await drive([at(MIN, "valid", true)])
+    expect(names).toEqual(steps.DomainWorkflow["served after activation"])
+    expect(waits).toEqual([MIN, MIN, "30 seconds"])
+    expect(result).toEqual({ outcome: "active" })
+    expect(script.calls).toEqual(["activate", "search", "say live", "repoint"])
+  })
+
+  it("flags a host that never serves the site by the deadline, and never says live", async () => {
+    script.loads = [loads(0, false), loads(DEADLINE_MS, false)]
+    const { names, result } = await drive([at(MIN, "valid", true)])
+    expect(names).toEqual(steps.DomainWorkflow["never served"])
+    expect(result).toEqual({ outcome: "stalled" })
+    expect(script.calls).toEqual([
+      "activate",
+      "search",
+      "not served",
+      "say not served",
+    ])
   })
 
   it("backs off a busy chat from 10 seconds, doubling, capped at 30 minutes", () => {
