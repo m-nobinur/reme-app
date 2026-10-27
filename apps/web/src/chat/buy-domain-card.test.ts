@@ -259,6 +259,24 @@ const submit = (tray: HTMLElement) =>
       ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
   )
 
+it("shows four cards at most: the best name twice, then each next name once", async () => {
+  const all = { "co.uk": FREE(8), com: FREE(12), uk: FREE(8) }
+  const { tray } = await draw("find_domain", {
+    args: {},
+    result: {
+      outcome: "found",
+      rows: ["a", "b", "c"].map((stem) => ({ stem, why: "x", endings: all })),
+    },
+  })
+  const cards = tray.querySelectorAll('[role="radiogroup"] input[type=radio]')
+  expect([...cards].map((card) => (card as HTMLInputElement).value)).toEqual([
+    "a.co.uk",
+    "a.com",
+    "b.co.uk",
+    "c.co.uk",
+  ])
+})
+
 it("offers one card a free full domain, best first, price only", async () => {
   const { tray } = await found()
   const cards = tray.querySelectorAll('[role="radiogroup"] > label')

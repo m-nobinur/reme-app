@@ -168,9 +168,13 @@ const ENDINGS = ["co.uk", "com", "uk"] as const satisfies DomainTld[]
 /** One free full domain, which is one card. */
 type Offer = { name: string; price: number; why: string }
 
-/** The free names of the rows, best first; a taken ending is no card. */
-const offersOf = (rows: readonly DomainStemOffer[]): Offer[] =>
-  rows.flatMap((row) =>
+/**
+ * Four cards from the rows' free names, best first: the best name in its two
+ * leading endings, then each next name once, then any ending left over. Every
+ * ending of every row would be twelve cards of the same few names.
+ */
+const offersOf = (rows: readonly DomainStemOffer[]): Offer[] => {
+  const free = rows.map((row) =>
     ENDINGS.flatMap((tld) => {
       const ending = row.endings[tld]
       return ending?.state === "free"
@@ -184,6 +188,12 @@ const offersOf = (rows: readonly DomainStemOffer[]): Offer[] =>
         : []
     })
   )
+  const first = [
+    ...(free[0]?.slice(0, 2) ?? []),
+    ...free.slice(1).flatMap((o) => o.slice(0, 1)),
+  ]
+  return [...new Set([...first, ...free.flat()])].slice(0, 4)
+}
 
 /** A link out, which says it opens a new tab. */
 function Out({ href, children }: { href: string; children: ReactNode }) {
