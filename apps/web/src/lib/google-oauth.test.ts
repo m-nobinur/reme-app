@@ -149,7 +149,11 @@ describe("/api/google/callback", () => {
     expect(where(response)).toBe(`${ORIGIN}/app?google=failed`)
     expect(googleConnect).not.toHaveBeenCalled()
     expect(jar.has("reme-google-state")).toBe(false)
-    expect(googleFailed).toHaveBeenCalledExactlyOnceWith("forged", "failed")
+    // Unverified: keyed by the hour, never by what the link said.
+    expect(googleFailed).toHaveBeenCalledExactlyOnceWith(
+      expect.stringMatching(/^unverified-\d{4}-\d{2}-\d{2}T\d{2}$/),
+      "failed"
+    )
   })
 
   it("fails with no state cookie", async () => {
