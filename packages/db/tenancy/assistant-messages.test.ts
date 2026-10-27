@@ -19,9 +19,9 @@ import {
 import { tenancy, withOrg } from "../src/tenancy.ts"
 
 /**
- * `postAssistantMessage` against Postgres: one row per key, a wait behind an
- * unanswered card or a running onboarding script, and `busy` while a turn
- * holds the conversation.
+ * `postAssistantMessage` against Postgres: one row per key, a post after an
+ * unanswered card that leaves it open, a wait behind a running onboarding
+ * script, and `busy` while a turn holds the conversation.
  */
 const kit = tenancy(connectionString(), { max: 4 })
 const made: string[] = []
@@ -155,7 +155,7 @@ describe("postAssistantMessage", () => {
     expect(await rows(o.orgId, archived)).toHaveLength(1)
   })
 
-  it("waits while the tail holds an unanswered card, then posts once it is answered", async () => {
+  it("posts after an unanswered card and leaves the card as it was", async () => {
     const o = await org()
     const id = await conversation(
       o,
@@ -163,20 +163,32 @@ describe("postAssistantMessage", () => {
       new Date(),
       card("approval-requested")
     )
-    const post = () =>
-      postAssistantMessage(kit, {
+    expect(
+      await postAssistantMessage(kit, {
         orgId: o.orgId,
         key: "live:d2",
         message: { text },
       })
-    expect(await post()).toBe("waiting")
-    expect(await rows(o.orgId, id)).toHaveLength(1)
-    await withOrg({ orgId: o.orgId }, (db) =>
-      db.execute(sql`update ${conversationMessages}
-        set content = jsonb_set(content, '{parts,1,state}', '"output-available"')
-        where conversation_id = ${id}`)
-    )
-    expect(await post()).toBe("posted")
+    ).toBe("posted")
+    const stored = await rows(o.orgId, id)
+    expect(stored.map((r) => [r.id, r.parent_id])).toEqual([
+      ["tail_1", null],
+      [serverMessageId("live:d2"), "tail_1"],
+    ])
+    expect(stored[0]?.content).toEqual({
+      role: "assistant",
+      parts: card("approval-requested"),
+    })
+    // The owner's emailed words still wait while that card is open.
+    expect(
+      await postOwnerEmail(kit, {
+        orgId: o.orgId,
+        conversationId: id,
+        key: "<under-a-post@mail.example.com>",
+        text: "yes",
+      })
+    ).toBe("waiting")
+    expect(await rows(o.orgId, id)).toHaveLength(2)
   })
 
   it("is busy while a turn holds the conversation's lock, and posts after", async () => {

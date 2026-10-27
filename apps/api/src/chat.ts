@@ -192,9 +192,10 @@ import { readFacts } from "./workspace.ts"
  * The client sends only what the owner just did (`ChatRequest`). The stored
  * rows are what assistant-ui reads, written in the same transactions as the
  * log, so a reload shows what the stream showed. A continued message is one
- * row that grows: ai 7 continues the last assistant message, so an approval,
- * or an answer sent without the owner's reply, updates that row and never
- * appends a second one. An answer sent with the owner's reply is a message of
+ * row that grows: ai 7 continues the assistant message an answer is in, the
+ * last one or one a server post landed after, so an approval, or an answer
+ * sent without the owner's reply, updates that row and never appends a
+ * second one. An answer sent with the owner's reply is a message of
  * theirs, as a typed one is: it and the next step each get a row, so every
  * onboarding step is a message of its own.
  */
@@ -422,7 +423,12 @@ const answerInvalid = () =>
 
 type Row = typeof conversationMessages.$inferSelect
 type Tail = Row & { content: Content }
-type Read = { kind: "onboarding" | "assistant"; tail: Tail | null }
+type Read = {
+  kind: "onboarding" | "assistant"
+  tail: Tail | null
+  /** The row the turn answers or cancels a card in (`readCard`). */
+  card: Tail | null
+}
 
 /**
  * The conversation under the session's org and its last row, with the
@@ -434,9 +440,13 @@ type Read = { kind: "onboarding" | "assistant"; tail: Tail | null }
  * rename, an archive or a message insert takes the row too, and would make a
  * turn busy with no turn open. The two-key form never meets the one-key site
  * lock. It is tried rather than waited on, so a waiting turn holds no second
- * connection.
+ * connection. `named` is the row a results turn names.
  */
-async function read(db: OrgScopedDb, id: string): Promise<Read | Response> {
+async function read(
+  db: OrgScopedDb,
+  id: string,
+  named: string | null = null
+): Promise<Read | Response> {
   const [conversation] = await db
     .select({ kind: conversations.kind })
     .from(conversations)
@@ -446,7 +456,11 @@ async function read(db: OrgScopedDb, id: string): Promise<Read | Response> {
     sql`select pg_try_advisory_xact_lock(2, hashtext(${id}::text)) as locked`
   )
   if (!turn?.locked) return busy()
-  return { kind: conversation.kind, tail: await readTail(db, id) }
+  return {
+    kind: conversation.kind,
+    tail: await readTail(db, id),
+    card: await readCard(db, id, named),
+  }
 }
 
 const busy = () =>
@@ -465,6 +479,35 @@ async function readTail(db: OrgScopedDb, id: string): Promise<Tail | null> {
     .orderBy(sql`${conversationMessages.seq} desc`)
     .limit(1)
   return (tail as Tail | undefined) ?? null
+}
+
+/**
+ * The row an answer goes to: the one a results turn names, or else the
+ * newest with a call still pending, which a typed message cancels or a typed
+ * yes answers. Either may sit before the tail, since a server post never
+ * waits on a card (`postAssistantMessage`).
+ */
+async function readCard(
+  db: OrgScopedDb,
+  id: string,
+  named: string | null
+): Promise<Tail | null> {
+  // shortcut: with no card open this reads every row of the conversation;
+  // add a partial index on open calls if long conversations make it slow.
+  const [card] = await db
+    .select()
+    .from(conversationMessages)
+    .where(
+      named === null
+        ? sql`${conversationMessages.conversationId} = ${id} and exists (
+            select 1 from jsonb_array_elements(${conversationMessages.content}->'parts') p
+            where p->>'type' like 'tool-%'
+              and p->>'state' in ('input-available', 'approval-requested'))`
+        : sql`${conversationMessages.conversationId} = ${id} and ${conversationMessages.id} = ${named}`
+    )
+    .orderBy(sql`${conversationMessages.seq} desc`)
+    .limit(1)
+  return (card as Tail | undefined) ?? null
 }
 
 /**
@@ -642,9 +685,8 @@ const TYPED_CARDS: ReadonlySet<string> = new Set([
 ])
 
 /**
- * The tail's last step holds exactly one pending call, and it is a card a
- * typed reply may answer. The tail is the message a click would answer, so
- * an emailed reply, which is a later row, leaves a card out of reach.
+ * The card row's last step holds exactly one pending call, and it is a card
+ * a typed reply may answer. An emailed reply is no turn, so it answers none.
  */
 function typedCard(tail: Tail | null): CosPart | undefined {
   if (tail?.content.role !== "assistant") return undefined
@@ -675,7 +717,9 @@ async function lookAhead(
     conversation?.kind !== "onboarding" ||
     scriptEnded(await readScript(db, id))
   ) {
-    return typing ? { ...none, open: typedCard(await readTail(db, id)) } : none
+    return typing
+      ? { ...none, open: typedCard(await readCard(db, id, null)) }
+      : none
   }
   const tail = await readTail(db, id)
   const parts = tail?.content.role === "assistant" ? tail.content.parts : []
@@ -878,7 +922,11 @@ export async function chat(
   let opened: Opened | Response | { plan: PlanJob }
   try {
     opened = await kit.withOrg(scope, async (db) => {
-      const held = await read(db, id)
+      const held = await read(
+        db,
+        id,
+        turn.kind === "results" ? turn.message_id : null
+      )
       if (held instanceof Response) return held
       const chiefId = await chiefOf(db, owner)
       const session = chiefId
@@ -888,9 +936,8 @@ export async function chat(
       if (session && (await closeLapsedTurn(db, session, LIMITS.totalMs))) {
         return busy()
       }
-      const named = turn.kind === "results" ? turn.message_id : held.tail?.id
       const log = session
-        ? await sessionState(db, id, prefix.sha256, named ?? null)
+        ? await sessionState(db, id, prefix.sha256, held.card?.id ?? null)
         : null
       const scripted =
         !session ||
@@ -1285,10 +1332,10 @@ async function openCos(
 > {
   if (turn.kind === "message") {
     if (await messageTaken(db, id, turn.message_id)) return messageExists()
-    const card = typedCard(held.tail)
+    const card = typedCard(held.card)
     const answered =
-      heard && held.tail && card?.toolCallId === heard.callId
-        ? await resolveApprovals(db, id, held.tail, [
+      heard && held.card && card?.toolCallId === heard.callId
+        ? await resolveApprovals(db, id, held.card, [
             {
               kind: "approval",
               approval_id: card.approval?.id ?? "",
@@ -1297,7 +1344,7 @@ async function openCos(
           ])
         : null
     if (answered instanceof Response) return answered
-    const cancelled = answered ? null : await cancelPending(db, id, held.tail)
+    const cancelled = answered ? null : await cancelPending(db, id, held.card)
     const user = {
       id: turn.message_id,
       role: "user" as const,
@@ -1305,8 +1352,8 @@ async function openCos(
     }
     // The log keeps the tail's reasoning, which its row leaves out.
     const logged =
-      cancelled && log.named && held.tail
-        ? await loggedMessage(db, id, held.tail.id)
+      cancelled && log.named && held.card
+        ? await loggedMessage(db, id, held.card.id)
         : null
     const posts = await unloggedPosts(db, id)
     const messages = answered
@@ -1320,10 +1367,8 @@ async function openCos(
       typed: answered ? heard : null,
     }
   }
-  const { tail } = held
-  if (tail?.id !== turn.message_id || tail.content.role !== "assistant") {
-    return stale()
-  }
+  const tail = held.card
+  if (tail?.content.role !== "assistant") return stale()
   const opened = await resolveApprovals(db, id, tail, turn.results)
   return opened instanceof Response ? opened : { ...opened, typed: null }
 }
@@ -1729,7 +1774,7 @@ const shown = <P extends { type: string }>(parts: P[]): P[] =>
     })
 
 /**
- * The tail with every pending call cancelled, the way assistant-ui's
+ * The card row with every pending call cancelled, the way assistant-ui's
  * `cancelPendingToolCallsOnSend` cancels it on screen, written back. Null
  * when nothing was pending.
  */
@@ -1785,7 +1830,7 @@ async function typed(
   const card = onboarding
     ? (waitingCard(tail) ?? openCard(onboarding, () => "open"))
     : undefined
-  await cancelPending(db, id, tail)
+  await cancelPending(db, id, held.card)
   const reply = given?.answer ?? (card && typedAnswer(card, message.text))
   const step =
     onboarding && card && reply?.kind === "retry"
@@ -2067,7 +2112,7 @@ async function approve(
 ): Promise<Response> {
   const matches = (p: ToolPart) =>
     p.type === "tool-request_change" && p.approval?.id === turn.approval_id
-  const found = callIn(held.tail, turn.message_id, matches)
+  const found = callIn(held.card, turn.message_id, matches)
   if (found instanceof Response) return found
   const { tail, call } = found
   // Resolved already: the same decision replays it, another is stale.
@@ -2102,7 +2147,11 @@ async function approve(
   }
   // Written by something outside the lock meanwhile: this same decision is
   // a replay, anything else is stale.
-  const moved = callIn(await readTail(db, id), turn.message_id, matches)
+  const moved = callIn(
+    await readCard(db, id, turn.message_id),
+    turn.message_id,
+    matches
+  )
   if (moved instanceof Response) return moved
   return pending(moved.call) ? stale() : replay(moved.tail, moved.call)
 }
