@@ -486,6 +486,10 @@ export const samples: Record<ContractName, unknown> = {
     created_at: NOW,
     updated_at: NOW,
   },
+  BoughtElsewhereOutput: {
+    outcome: "not_registered_yet",
+    name: "brightclean.co.uk",
+  },
   BuyDomainInput: { name: "brightclean.co.uk", ...REGISTRANT },
   BuyDomainOutput: {
     outcome: "awaiting_payment",
@@ -899,6 +903,26 @@ export const samples: Record<ContractName, unknown> = {
     test: true,
     outcome: "test_registered",
   },
+  DomainRegistrantPrefill: {
+    name: "brightclean.co.uk",
+    price_gbp_year: 8,
+    registrant: {
+      name: "Jane Smith",
+      business_name: "Bright Clean",
+      email: "jane@brightclean.example",
+      phone: "+447700900123",
+    },
+    missing: ["street", "city", "postal_code", "registrant_type"],
+  },
+  DomainStemOffer: {
+    stem: "brightcleanbristol",
+    why: "your name plus Bristol",
+    endings: {
+      "co.uk": { state: "free", price_gbp_year: 8 },
+      com: { state: "taken" },
+      uk: { state: "free", price_gbp_year: 8 },
+    },
+  },
   DomainRegistration: {
     sandbox: false,
     status: "registered",
@@ -1020,16 +1044,20 @@ export const samples: Record<ContractName, unknown> = {
   FindDomainInput: { query: "bright clean bristol" },
   FindDomainOutput: {
     outcome: "found",
-    best: {
-      name: "brightclean.co.uk",
-      price_gbp_year: 8,
-      why: "Short, matches the business name, and .co.uk says UK-based.",
-    },
-    options: [
+    rows: [
       {
-        name: "brightcleanbristol.co.uk",
-        price_gbp_year: 8,
-        why: "Names the city customers search for.",
+        stem: "brightclean",
+        why: "matches your business name",
+        endings: {
+          "co.uk": { state: "free", price_gbp_year: 8 },
+          com: { state: "taken" },
+          uk: { state: "free", price_gbp_year: 8 },
+        },
+      },
+      {
+        stem: "brightcleanbristol",
+        why: "your name plus Bristol",
+        endings: { com: { state: "free", price_gbp_year: 12 } },
       },
     ],
   },

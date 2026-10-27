@@ -3168,6 +3168,49 @@ export interface components {
         purpose: string
       }[]
     }
+    BoughtElsewhereOutput:
+      | {
+          /** @constant */
+          outcome: "connecting"
+          /** @enum {string} */
+          method: "domain_connect" | "records"
+          email_affected: boolean
+          steps?: {
+            /** @enum {string} */
+            type: "A" | "AAAA" | "ALIAS" | "CAA" | "CNAME" | "TXT"
+            name: string
+            value: string
+          }[]
+          /** @enum {string} */
+          apex?: "alias" | "forward"
+          provider?: {
+            name: string
+            settings_url?: string
+          }
+        }
+      | {
+          /** @constant */
+          outcome: "refused"
+          error: {
+            /** @enum {string} */
+            class:
+              | "validation"
+              | "permission"
+              | "transient"
+              | "resource"
+              | "provider"
+              | "integrity"
+              | "security"
+              | "budgetary"
+            code: string
+            message: string
+          }
+        }
+      | {
+          /** @constant */
+          outcome: "not_registered_yet"
+          name: string
+        }
     BuildQuestionsPart: {
       /** @constant */
       type: "data-build_questions"
@@ -7392,15 +7435,41 @@ export interface components {
             | {
                 /** @constant */
                 outcome: "found"
-                best: {
-                  name: string
-                  price_gbp_year: number
+                rows: {
+                  stem: string
                   why: string
-                }
-                options: {
-                  name: string
-                  price_gbp_year: number
-                  why: string
+                  endings: {
+                    "co.uk"?:
+                      | {
+                          /** @constant */
+                          state: "free"
+                          price_gbp_year: number
+                        }
+                      | {
+                          /** @constant */
+                          state: "taken"
+                        }
+                    com?:
+                      | {
+                          /** @constant */
+                          state: "free"
+                          price_gbp_year: number
+                        }
+                      | {
+                          /** @constant */
+                          state: "taken"
+                        }
+                    uk?:
+                      | {
+                          /** @constant */
+                          state: "free"
+                          price_gbp_year: number
+                        }
+                      | {
+                          /** @constant */
+                          state: "taken"
+                        }
+                  }
                 }[]
               }
             | {
@@ -8468,6 +8537,40 @@ export interface components {
         | "unavailable"
         | "expired"
     }
+    DomainRegistrantPrefill: {
+      name: string
+      price_gbp_year: number
+      registrant: {
+        /** @description The owner's full legal name, first and last. */
+        name?: string
+        /** @description The business's registered or trading name. */
+        business_name?: string
+        /** Format: email */
+        email?: string
+        phone?: string
+        address?: {
+          street?: string
+          city?: string
+          state?: string
+          postal_code?: string
+          /** @description ISO 3166-1 alpha-2, such as GB. */
+          country_code?: string
+        }
+      }
+      missing: (
+        | "name"
+        | "business_name"
+        | "email"
+        | "phone"
+        | "street"
+        | "city"
+        | "state"
+        | "postal_code"
+        | "country_code"
+        | "registrant_type"
+        | "company_number"
+      )[]
+    }
     DomainRegistration: {
       sandbox: boolean
       status?: string
@@ -8485,6 +8588,42 @@ export interface components {
       expires_at?: string
       /** @enum {string} */
       registrant_type?: "STRA" | "LTD" | "LLP" | "PTNR" | "IND"
+    }
+    DomainStemOffer: {
+      stem: string
+      why: string
+      endings: {
+        "co.uk"?:
+          | {
+              /** @constant */
+              state: "free"
+              price_gbp_year: number
+            }
+          | {
+              /** @constant */
+              state: "taken"
+            }
+        com?:
+          | {
+              /** @constant */
+              state: "free"
+              price_gbp_year: number
+            }
+          | {
+              /** @constant */
+              state: "taken"
+            }
+        uk?:
+          | {
+              /** @constant */
+              state: "free"
+              price_gbp_year: number
+            }
+          | {
+              /** @constant */
+              state: "taken"
+            }
+      }
     }
     DomainStripe: {
       customer: string
@@ -9035,15 +9174,41 @@ export interface components {
       | {
           /** @constant */
           outcome: "found"
-          best: {
-            name: string
-            price_gbp_year: number
+          rows: {
+            stem: string
             why: string
-          }
-          options: {
-            name: string
-            price_gbp_year: number
-            why: string
+            endings: {
+              "co.uk"?:
+                | {
+                    /** @constant */
+                    state: "free"
+                    price_gbp_year: number
+                  }
+                | {
+                    /** @constant */
+                    state: "taken"
+                  }
+              com?:
+                | {
+                    /** @constant */
+                    state: "free"
+                    price_gbp_year: number
+                  }
+                | {
+                    /** @constant */
+                    state: "taken"
+                  }
+              uk?:
+                | {
+                    /** @constant */
+                    state: "free"
+                    price_gbp_year: number
+                  }
+                | {
+                    /** @constant */
+                    state: "taken"
+                  }
+            }
           }[]
         }
       | {
@@ -10911,6 +11076,11 @@ export interface components {
             }
           | {
               /** @constant */
+              kind: "pay"
+              name: string
+            }
+          | {
+              /** @constant */
               kind: "open"
               url: string
             }
@@ -10926,6 +11096,11 @@ export interface components {
               /** @constant */
               kind: "ask"
               text: string
+            }
+          | {
+              /** @constant */
+              kind: "pay"
+              name: string
             }
           | {
               /** @constant */
