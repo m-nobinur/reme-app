@@ -328,3 +328,25 @@ test("a modified click on a link leaves the sheet open", async ({ page }) => {
     .dispatchEvent("click", { button: 1, bubbles: true })
   await expect(sheet(page)).toBeVisible()
 })
+
+for (const theme of ["light", "dark"] as const) {
+  test(`the dialog holds focus while open and hands it back in ${theme}`, async ({
+    page,
+  }) => {
+    await open(page, "Dialog", WIDTHS.phone, theme)
+    const opener = page.getByRole("button", { name: "Open the dialog" })
+    await opener.click()
+    const dialog = page.getByRole("dialog", {
+      name: "Pay for sparkleclean.co.uk",
+    })
+    await expect(dialog).toBeVisible()
+    await axe(page, `dialog ${theme}`)
+    for (let press = 0; press < 4; press++) {
+      await page.keyboard.press("Tab")
+      await expect(dialog.locator(":focus")).toHaveCount(1)
+    }
+    await page.keyboard.press("Escape")
+    await expect(dialog).toHaveCount(0)
+    await expect(opener).toBeFocused()
+  })
+}

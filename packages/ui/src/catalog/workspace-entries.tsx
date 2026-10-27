@@ -19,6 +19,13 @@ import { AssistantAvatar } from "@workspace/ui/components/assistant-avatar"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { DefinitionList } from "@workspace/ui/components/definition-list"
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@workspace/ui/components/dialog"
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -51,7 +58,7 @@ import {
   WorkspaceShell,
 } from "@workspace/ui/components/workspace-shell"
 import { cn } from "@workspace/ui/lib/utils"
-import type { ReactNode } from "react"
+import { type ReactNode, useState } from "react"
 import { BellSample } from "./notification-entries"
 import { SamplePanel, SamplePanelLine } from "./panel-entries"
 
@@ -315,6 +322,26 @@ function SheetSample() {
   )
 }
 
+/** Closed here, as the sheet is: an open modal would make the rest of the page inert. */
+function DialogSample() {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <Button onClick={() => setOpen(true)} variant="outline">
+        Open the dialog
+      </Button>
+      <Dialog onOpenChange={setOpen} open={open}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Pay for sparkleclean.co.uk</DialogTitle>
+            <DialogDescription>£8 for the first year.</DialogDescription>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
 function MenuSample() {
   return (
     <div className="flex max-w-60 rounded-lg bg-rail p-3 text-rail-foreground">
@@ -434,6 +461,15 @@ const workspaceCatalog: Entry[] = [
   },
   { name: "SettingsTrigger", render: () => <SettingsSample /> },
   { name: "SettingsContent", render: () => <SettingsSample /> },
+  ...(
+    [
+      "Dialog",
+      "DialogContent",
+      "DialogDescription",
+      "DialogHeader",
+      "DialogTitle",
+    ] as const
+  ).map((name) => ({ name, render: () => <DialogSample /> })),
   { name: "Sheet", render: () => <SheetSample /> },
   { name: "SheetTrigger", render: () => <SheetSample /> },
   { name: "SheetContent", render: () => <SheetSample /> },
