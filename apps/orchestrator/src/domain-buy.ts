@@ -685,21 +685,23 @@ async function apply(
       return
     }
     case "expired": {
-      if (
-        row.state !== "awaiting_payment" ||
-        stripe.checkout_session !== event.checkout_session
-      )
+      if (stripe.checkout_session !== event.checkout_session) return
+      if (row.state === "awaiting_payment") {
+        const closed = await kit.withOrg({ orgId }, (db) =>
+          close(db, row, "abandoned", ["awaiting_payment"], "expired")
+        )
+        if (!closed) return
+        try {
+          const instance = await env.DOMAINS.get(domainInstanceId(row.id))
+          await instance.terminate()
+        } catch {
+          // Never started, or already ended.
+        }
+      } else if (row.state !== "abandoned") {
         return
-      const closed = await kit.withOrg({ orgId }, (db) =>
-        close(db, row, "abandoned", ["awaiting_payment"], "expired")
-      )
-      if (!closed) return
-      try {
-        const instance = await env.DOMAINS.get(domainInstanceId(row.id))
-        await instance.terminate()
-      } catch {
-        // Never started, or already ended.
       }
+      // Also on Stripe's retry after a busy chat, when the row is closed already.
+      await sayExpired(kit, orgId, row)
       return
     }
     case "renewal_paid":
@@ -767,7 +769,7 @@ export async function paymentState(
   return row?.state === "awaiting_payment" ? "waiting" : "gone"
 }
 
-/** No payment in any round: the purchase is abandoned. Nothing was held. */
+/** No payment in any round: the purchase is abandoned and the owner told. Nothing was held. */
 export async function abandonUnpaid(
   kit: Tenancy,
   orgId: string,
@@ -775,10 +777,26 @@ export async function abandonUnpaid(
 ): Promise<void> {
   const row = await readPurchase(kit, orgId, domainId)
   if (!row) return
-  await kit.withOrg({ orgId }, (db) =>
+  const closed = await kit.withOrg({ orgId }, (db) =>
     close(db, row, "abandoned", ["awaiting_payment"], "expired")
   )
+  if (closed || row.state === "abandoned") await sayExpired(kit, orgId, row)
 }
+
+/**
+ * A Checkout that ran out, said once whichever of Stripe's event and the
+ * Workflow's last round sees it first. Nothing was charged; the button asks
+ * for a fresh payment.
+ */
+const sayExpired = (kit: Tenancy, orgId: string, row: DomainRow) =>
+  postStatus(kit, orgId, {
+    key: `${row.id}:expired`,
+    text: `The payment for ${row.name} ran out of time, so nothing was charged and the name is free again. I can set up a fresh payment whenever you're ready.`,
+    button: {
+      label: "Pay again",
+      action: { kind: "ask", text: `Buy ${row.name} for my website.` },
+    },
+  })
 
 /**
  * The hold released and the purchase failed with `outcome`, and what to tell

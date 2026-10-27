@@ -17,6 +17,7 @@ import {
   subscribeRenewal,
 } from "../src/domain-buy.ts"
 import { activateDomain, remove, revokeDomains } from "../src/domain-flow.ts"
+import { chatTexts, openChat } from "./chat.ts"
 import {
   ACCOUNT,
   CHECK_SANDBOX,
@@ -555,6 +556,7 @@ describe.skipIf(!url)("buying a domain against a database", () => {
       })
     await expired("cs_old", "evt_old")
     expect((await rowOf(p.orgId, p.name)).state).toBe("awaiting_payment")
+    await openChat(kit, p.orgId)
     await expired("cs_new", "evt_new")
     const row = await rowOf(p.orgId, p.name)
     expect(row).toMatchObject({
@@ -562,6 +564,12 @@ describe.skipIf(!url)("buying a domain against a database", () => {
       registrant: null,
       registration: { outcome: "expired" },
     })
+    // Said once: Stripe's resend and the Workflow's last round add nothing.
+    await expired("cs_new", "evt_again")
+    await abandonUnpaid(kit, p.orgId, p.row.id)
+    expect(await chatTexts(kit, p.orgId)).toEqual([
+      expect.stringContaining(`payment for ${p.name} ran out of time`),
+    ])
   })
 
   it("registers in the sandbox with Cloudflare's phone form, captures, subscribes, and ends as a test", async () => {
