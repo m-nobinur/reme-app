@@ -138,6 +138,29 @@ export const DomainOffer = z.strictObject({
   why: Text(200),
 })
 
+/** One ending of a name stem: free at its yearly price, or taken. */
+const DomainEnding = z.discriminatedUnion("state", [
+  z.strictObject({
+    state: z.literal("free"),
+    price_gbp_year: z.int().positive(),
+  }),
+  z.strictObject({ state: z.literal("taken") }),
+])
+
+/**
+ * One row of the owner's choice of name: a stem with each ending Reme offers,
+ * `.co.uk`, `.com` and `.uk`, free or taken. `.net` is not offered.
+ */
+export const DomainStemOffer = z.strictObject({
+  stem: Text(63),
+  why: Text(200),
+  endings: z.strictObject({
+    "co.uk": DomainEnding,
+    com: DomainEnding,
+    uk: DomainEnding,
+  }),
+})
+
 /**
  * Who a `.co.uk` or `.uk` is registered to, as Nominet asks: a sole trader,
  * a limited company (with its company number), an LLP, a partnership or an
@@ -343,6 +366,7 @@ export type ConnectMethod = z.infer<typeof ConnectMethod>
 export type DomainTld = z.infer<typeof DomainTld>
 export type DomainPrice = z.infer<typeof DomainPrice>
 export type DomainOffer = z.infer<typeof DomainOffer>
+export type DomainStemOffer = z.infer<typeof DomainStemOffer>
 export type RegistrantType = z.infer<typeof RegistrantType>
 export type Registrant = z.infer<typeof Registrant>
 export type RegistrantDetails = z.infer<typeof RegistrantDetails>

@@ -5,7 +5,11 @@
  * never reach the live registrar, which charges our card and never refunds.
  * Workers Custom Domains serve a bought domain from the router.
  */
-import { DOMAIN_PRICES, sellableTld } from "@workspace/contracts"
+import {
+  DOMAIN_PRICES,
+  type DomainTld,
+  sellableTld,
+} from "@workspace/contracts"
 import { CF_API, CF_TIMEOUT_MS, DomainError, resultOf } from "./domains.ts"
 
 export type RegistrarEnv = {
@@ -18,6 +22,14 @@ export type RegistrarEnv = {
 /** Whether registrations are real: only then is a bought domain served. */
 export const registrarLive = (env: RegistrarEnv) =>
   env.REGISTRAR_API === "registrar"
+
+/**
+ * The endings an owner is offered. The sandbox answers `.co.uk` and `.uk`
+ * with `extension_not_supported_via_api`, so a purchase there can only finish
+ * on `.com`.
+ */
+export const offeredTlds = (env: RegistrarEnv): readonly DomainTld[] =>
+  registrarLive(env) ? ["co.uk", "uk", "com"] : ["com"]
 
 async function cloudflare(
   env: RegistrarEnv,
