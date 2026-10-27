@@ -23,6 +23,7 @@ import {
   tell,
   verifyOnce,
 } from "./search.ts"
+import { sayPayoff } from "./search-payoff.ts"
 import {
   checkGrant,
   inspectPages,
@@ -231,6 +232,12 @@ export class SearchSyncWorkflow extends WorkflowEntrypoint<Env, SyncParams> {
       )
       if (inspected === null) return { outcome: "needs_reauth" }
     }
+    // The first numbers, or the day-10 check-in; a chat busy past every retry tries again tomorrow.
+    await step
+      .do("payoff", SAY_RETRIES, () =>
+        withKit(env, (kit) => sayPayoff(kit, orgId))
+      )
+      .catch(() => undefined)
     return { outcome: "synced", properties: sites?.length ?? 0 }
   }
 }
