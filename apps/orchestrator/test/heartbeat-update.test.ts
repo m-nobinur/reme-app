@@ -1,9 +1,12 @@
+import { ADDRESS_ASK } from "@workspace/contracts"
 import {
   conversationMessages,
   conversations,
   eq,
+  readTasks,
   serverMessageId,
   staff,
+  supersedeFact,
   type Tenancy,
 } from "@workspace/db"
 import { afterAll, describe, expect, it, vi } from "vitest"
@@ -17,6 +20,7 @@ import {
 import { sayLive } from "../src/publish.ts"
 import { announce, searchInstanceId } from "../src/search.ts"
 import { freshOrg, kit as pool } from "./fixture.ts"
+import { stubNet } from "./fixtures/domains.ts"
 
 vi.mock("@cloudflare/sandbox", () => ({
   Sandbox: class {},
@@ -67,9 +71,100 @@ describe.skipIf(!process.env.DATABASE_URL)("today's templates", () => {
           sayLive({}, pool, orgId, "site-1", "https://sparkle.example.test/"),
         () => "site.live:site-1"
       )
-    ).toEqual([
-      "Your website is live at sparkle.example.test. Next I can put it on Google so people find it, or on a domain of your own. Just say which.",
-    ])
+    ).toEqual(["Your website is live at sparkle.example.test."])
+  })
+
+  /** The parts and the address task of a fresh org after `sayLive`, with `email` as its business email. */
+  async function liveFor(email?: string) {
+    const orgId = await freshOrg(pool)
+    await pool.withOrg({ orgId }, async (db) => {
+      const [chief] = await db
+        .select({ id: staff.id })
+        .from(staff)
+        .where(eq(staff.staffCode, "COS-001"))
+      await db.insert(conversations).values({
+        orgId,
+        kind: "assistant",
+        createdByStaffId: chief?.id as string,
+      })
+      if (email) {
+        await supersedeFact(db, {
+          orgId,
+          key: "business.email",
+          factType: "business",
+          value: { address: email },
+          provenance: { source: "owner_stated", confidence: 1 },
+        })
+      }
+    })
+    await sayLive({}, pool, orgId, "site-1", "https://sparkle.example.test/")
+    const [row] = await pool.withOrg({ orgId }, (db) =>
+      db
+        .select({ content: conversationMessages.content })
+        .from(conversationMessages)
+        .where(eq(conversationMessages.id, serverMessageId("site.live:site-1")))
+    )
+    const content = row?.content as
+      | { parts: { type: string; data?: unknown }[] }
+      | undefined
+    const parts = content?.parts ?? []
+    const task = (await pool.withOrg({ orgId }, (db) => readTasks(db)))[0]
+    return { parts, task }
+  }
+
+  it("asks in the tray whether they have an address when their email is free mail", async () => {
+    const { parts, task } = await liveFor("jo@gmail.com")
+    const asked = parts.find((p) => p.type === "data-build_questions")
+    expect(asked?.data).toMatchObject({
+      kind: "address",
+      questions: [
+        { text: ADDRESS_ASK.have, input: { kind: "choice" } },
+        { text: ADDRESS_ASK.name, skippable: true },
+      ],
+    })
+    expect(task?.steps.find((s) => s.step === "find_out")).toMatchObject({
+      state: "blocked",
+      blocked_on: "owner_action",
+    })
+  })
+
+  it("names their own domain and where it lives, with a Connect button", async () => {
+    vi.stubGlobal("caches", {
+      default: { match: async () => undefined, put: async () => undefined },
+    })
+    stubNet({
+      "https://data.iana.org/rdap/dns.json": () =>
+        Response.json({
+          services: [[["uk"], ["https://rdap.nominet.uk/uk/"]]],
+        }),
+      "https://rdap.nominet.uk/uk/domain/sparkleclean.co.uk": () =>
+        Response.json({
+          entities: [
+            {
+              roles: ["registrar"],
+              vcardArray: ["vcard", [["fn", {}, "text", "123-Reg Limited"]]],
+            },
+          ],
+        }),
+    })
+    const { parts, task } = await liveFor("hello@sparkleclean.co.uk")
+    expect(parts.find((p) => p.type === "text")).toMatchObject({
+      text: "Your website is live at sparkle.example.test. Your email is on sparkleclean.co.uk, so I'll put the site there. It's with 123-Reg.",
+    })
+    expect(parts.find((p) => p.type === "data-button")?.data).toEqual({
+      label: "Connect sparkleclean.co.uk",
+      action: { kind: "ask", text: "Put the site on sparkleclean.co.uk" },
+    })
+    expect(parts.some((p) => p.type === "data-build_questions")).toBe(false)
+    expect(task).toMatchObject({
+      detail: {
+        name: "sparkleclean.co.uk",
+        origin: "owned",
+        registrar: "123-Reg",
+      },
+    })
+    expect(task?.steps.find((s) => s.step === "find_out")?.state).toBe("done")
+    vi.unstubAllGlobals()
   })
 
   it("announce Search Console as they did", async () => {
