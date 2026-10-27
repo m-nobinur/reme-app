@@ -1,5 +1,13 @@
 import { type DomainRegistration, SITE_HEADER } from "@workspace/contracts"
-import { deployments, domains, eq, events, readTasks, sql } from "@workspace/db"
+import {
+  conversationMessages,
+  deployments,
+  domains,
+  eq,
+  events,
+  readTasks,
+  sql,
+} from "@workspace/db"
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest"
 import {
   abandonUnpaid,
@@ -602,6 +610,23 @@ describe.skipIf(!url)("buying a domain against a database", () => {
     expect(await chatTexts(kit, p.orgId)).toEqual([
       expect.stringContaining(`payment for ${p.name} ran out of time`),
     ])
+    // Pay again opens the details and Pay page, which makes a fresh Checkout.
+    const [message] = await kit.withOrg({ orgId: p.orgId }, (db) =>
+      db
+        .select({ content: conversationMessages.content })
+        .from(conversationMessages)
+    )
+    expect(message?.content).toMatchObject({
+      parts: expect.arrayContaining([
+        {
+          type: "data-button",
+          data: {
+            label: "Pay again",
+            action: { kind: "pay", name: p.name },
+          },
+        },
+      ]),
+    })
   })
 
   it("registers in the sandbox with Cloudflare's phone form, captures, subscribes, and ends as a test", async () => {

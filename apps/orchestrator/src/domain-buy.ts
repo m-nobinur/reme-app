@@ -821,17 +821,14 @@ export async function abandonUnpaid(
 
 /**
  * A Checkout that ran out, said once whichever of Stripe's event and the
- * Workflow's last round sees it first. Nothing was charged; the button asks
- * for a fresh payment.
+ * Workflow's last round sees it first. Nothing was charged; the button opens
+ * the details and Pay page, whose Pay makes a fresh Checkout.
  */
 const sayExpired = (kit: Tenancy, orgId: string, row: DomainRow) =>
   postStatus(kit, orgId, {
     key: `${row.id}:expired`,
-    text: `The payment for ${row.name} ran out of time, so nothing was charged and the name is free again. I can set up a fresh payment whenever you're ready.`,
-    button: {
-      label: "Pay again",
-      action: { kind: "ask", text: `Buy ${row.name} for my website.` },
-    },
+    text: `The payment for ${row.name} ran out of time, so nothing was charged and the name is free again. You can pay again whenever you're ready.`,
+    button: { label: "Pay again", action: { kind: "pay", name: row.name } },
   })
 
 /**

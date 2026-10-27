@@ -1,16 +1,25 @@
 import {
   BUY_REFUSALS,
+  DOMAIN_PRICES,
   DomainCheckout,
   DomainCheckoutRequest,
   DomainPaymentEvent,
   DomainPrice,
   DomainPurchaseStatus,
+  DomainRegistrantPrefill,
   DomainRegistration,
   DomainStripe,
   idempotencyKey,
+  needsRegistrantType,
+  Registrant,
+  RegistrantDetails,
+  RegistrantDraft,
+  type RegistrantField,
+  sellableTld,
   Uuid,
 } from "@workspace/contracts"
 import {
+  currentFacts,
   domains,
   eq,
   memberships,
@@ -180,11 +189,87 @@ function returnUrl(env: Env, name: string) {
   return `${back.href}&session_id={CHECKOUT_SESSION_ID}`
 }
 
+/** The value of each current fact, by key. */
+async function factValues(kit: Tenancy, orgId: string) {
+  const rows = await kit.withOrg({ orgId }, (db) => currentFacts(db))
+  return (key: string) =>
+    rows.find((r) => r.key === key)?.value as
+      | Record<string, unknown>
+      | undefined
+}
+
+/** The registrant fields every purchase needs; `business_name` and `state` are optional. */
+const REQUIRED = [
+  "name",
+  "email",
+  "phone",
+  "street",
+  "city",
+  "postal_code",
+  "country_code",
+] as const satisfies readonly RegistrantField[]
+
+/**
+ * `GET /domains/{name}/registrant`: the details page for buying `name`. A
+ * purchase still open for any name gives the details the owner already
+ * typed; otherwise the business facts (name, phone) and the signed-in owner
+ * (their name, and their email, since Cloudflare's confirmation link goes
+ * there). A value that would not pass the registrant's own rules is left as a
+ * gap rather than shown. Registrant details live only on an open purchase,
+ * so after an expiry the address is asked again.
+ */
+export async function registrantPrefill(
+  kit: Tenancy,
+  owner: Owner,
+  name: string
+): Promise<Response> {
+  if (!(await isOrgOwner(kit, owner))) return notOwner("buy")
+  const tld = sellableTld(name)
+  if (!tld) return failure(409, BUY_REFUSALS.unavailable)
+  const [open] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+    db
+      .select({ registrant: domains.registrant })
+      .from(domains)
+      .where(
+        sql`${domains.state} = 'awaiting_payment' and ${domains.registrant} is not null`
+      )
+      .orderBy(sql`${domains.createdAt} desc`)
+      .limit(1)
+  )
+  const held = RegistrantDetails.safeParse(open?.registrant).data
+  const fact = await factValues(kit, owner.orgId)
+  const keep = <K extends keyof typeof Registrant.shape>(k: K, v: unknown) =>
+    Registrant.shape[k].safeParse(v).success ? { [k]: v } : {}
+  const registrant = RegistrantDraft.parse(
+    held?.registrant ?? {
+      ...keep("name", owner.session.name),
+      ...keep("business_name", fact("business.name")?.name),
+      ...keep("email", owner.session.email || fact("business.email")?.address),
+      ...keep("phone", fact("business.phone")?.e164),
+    }
+  )
+  const filled = { ...registrant, ...registrant.address }
+  const missing: RegistrantField[] = REQUIRED.filter((f) => !filled[f])
+  // shortcut: the type is asked again for .co.uk and .uk even when an open
+  // purchase holds one; the prefill carries the registrant only. Add the type
+  // to it once .uk sells live.
+  if (needsRegistrantType(name)) missing.push("registrant_type")
+  return Response.json(
+    DomainRegistrantPrefill.parse({
+      name,
+      price_gbp_year: DOMAIN_PRICES[tld].retail_gbp,
+      registrant,
+      missing,
+    })
+  )
+}
+
 /**
  * `POST /domains/{name}/checkout`: the embedded Checkout for the org's
- * newest purchase of that name while it is `awaiting_payment`, the owner
- * only. The body is the registrant as the card shows it or the owner
- * corrected it; the orchestrator stores it with the session and checks it
+ * purchase of that name, opened (or refreshed) first through the
+ * orchestrator's `buy`, the owner only. The body is the registrant as the
+ * page shows it or the owner corrected it; the orchestrator stores it with
+ * the session and checks it
  * against the name's ending. A session still open for the row is handed
  * back rather than replaced, so a reopened card leaves no second one to
  * expire under it. Otherwise a new one: a manual capture hold (the Workflow
@@ -205,6 +290,13 @@ export async function checkout(
   if (!details.success) return invalid(details.error.issues)
   if (!buyConfigured(env)) return buyUnavailable()
   if (!(await isOrgOwner(kit, owner))) return notOwner("buy")
+  // Opens the purchase, or refreshes the one waiting with these details and
+  // today's price, so Pay works first time and again after an expiry.
+  const opened = await bridge(env, owner, "/domains/buy", {
+    body: { name, ...details.data },
+    key: `buy:${name}:${key}`,
+  })
+  if (opened.status >= 300) return relay(opened, () => null)
   const row = await newest(kit, owner.orgId, name)
   if (!row) return noPurchase()
   if (row.state !== "awaiting_payment") {
