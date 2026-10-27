@@ -3,7 +3,12 @@ import {
   useAui,
   useAuiState,
 } from "@assistant-ui/react"
-import { CheckIcon, CopyIcon, HourglassIcon } from "@phosphor-icons/react"
+import {
+  ArrowSquareOutIcon,
+  CheckIcon,
+  CopyIcon,
+  HourglassIcon,
+} from "@phosphor-icons/react"
 import {
   BoughtElsewhereOutput,
   type CheckDomainOutput,
@@ -19,7 +24,7 @@ import {
   Done,
   Problem,
 } from "@workspace/ui/components/assistant/decision"
-import { Button } from "@workspace/ui/components/button"
+import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { ConnectRow } from "@workspace/ui/components/connect-row"
 import { ToolStatus } from "@workspace/ui/components/status-line"
 import { useCopyToClipboard } from "@workspace/ui/hooks/use-copy-to-clipboard"
@@ -123,21 +128,49 @@ function Records({
   steps: DnsRecord[]
   name: string
 }) {
-  const { provider } = output
+  const { provider, apply_url: applyUrl } = output
   // The apex line is a step of its own, so the count matches the list; a
   // subdomain has none.
   const changes = steps.length + (output.apex ? 1 : 0)
+  const email = output.email_affected
+    ? "These may touch your email, so ask whoever set it up before you change anything."
+    : "Your email is not affected."
+  const where = provider?.name ?? "Your DNS provider"
   return (
     <div className="flex flex-col gap-3" data-slot="domain-records">
-      <p className="text-sm">
-        {provider
-          ? `Your domain's settings are at ${provider.name}.`
-          : "Make these changes where you manage your domain."}{" "}
-        {`${changes === 1 ? "There is 1 change" : `There are ${changes} changes`} to make${provider ? " there" : ""}. `}
-        {output.email_affected
-          ? "These may touch your email, so ask whoever set it up before you change anything."
-          : "Your email is not affected."}
-      </p>
+      {applyUrl ? (
+        <>
+          <p className="text-sm">
+            {`${provider ? `Your domain's settings are at ${provider.name}, and I` : "I"} can add the record there for you. ${email}`}
+          </p>
+          <div className="flex flex-col items-start gap-1.5">
+            <a
+              className={buttonVariants({ size: "sm" })}
+              href={applyUrl}
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              Add it for me
+              <ArrowSquareOutIcon aria-hidden />
+              <span className="sr-only"> (opens in a new tab)</span>
+            </a>
+            <p className={META}>
+              {`${where} asks you to sign in and approve it, then brings you back here.`}
+            </p>
+          </div>
+          <p className="text-sm">
+            {`Or make ${changes === 1 ? "the change" : `the ${changes} changes`} yourself:`}
+          </p>
+        </>
+      ) : (
+        <p className="text-sm">
+          {provider
+            ? `Your domain's settings are at ${provider.name}.`
+            : "Make these changes where you manage your domain."}{" "}
+          {`${changes === 1 ? "There is 1 change" : `There are ${changes} changes`} to make${provider ? " there" : ""}. `}
+          {email}
+        </p>
+      )}
       {provider?.settings_url ? (
         <ConnectRow
           href={provider.settings_url}
