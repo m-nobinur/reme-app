@@ -1,4 +1,4 @@
-import { SITE_HEADER } from "@workspace/contracts"
+import { type DomainRegistration, SITE_HEADER } from "@workspace/contracts"
 import { deployments, domains, eq, events, sql } from "@workspace/db"
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest"
 import {
@@ -748,14 +748,18 @@ describe.skipIf(!url)("buying a domain against a database", () => {
     await activateDomain(p.env, kit, p.orgId, p.row.id)
     await openChat(kit, p.orgId)
     const day = 86_400_000
-    const past = (days: number) =>
-      new Date(Date.now() - days * day).toISOString()
     const expire = async () => {
       const row = await rowOf(p.orgId, p.name)
+      const registration = row.registration as DomainRegistration
       await kit.withOrg({ orgId: p.orgId }, (db) =>
         db
           .update(domains)
-          .set({ registration: { ...row.registration, expires_at: past(1) } })
+          .set({
+            registration: {
+              ...registration,
+              expires_at: new Date(Date.now() - day).toISOString(),
+            },
+          })
           .where(eq(domains.id, row.id))
       )
     }
