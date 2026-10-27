@@ -53,11 +53,23 @@ export async function certificateWebhook(
   }
   const bytes = await boundedBody(request)
   if (!bytes) return tooLarge()
-  let alert: z.infer<typeof Alert> | null = null
+  let body: unknown = null
   try {
-    alert = Alert.parse(JSON.parse(new TextDecoder().decode(bytes)))
+    body = JSON.parse(new TextDecoder().decode(bytes))
   } catch {
-    // Nothing to nudge: an alert with no hostname, or a shape we do not know.
+    // Not JSON: read as an alert with no hostname below.
+  }
+  const read = Alert.safeParse(body)
+  const alert = read.success ? read.data : null
+  if (!alert) {
+    // Nothing to nudge. Its keys are logged, never its values, so a shape
+    // Cloudflare changes is seen rather than silently dropped.
+    console.warn(
+      JSON.stringify({
+        code: "webhook.cloudflare_unread",
+        keys: body && typeof body === "object" ? Object.keys(body) : [],
+      })
+    )
   }
   if (alert) {
     const { data } = alert
