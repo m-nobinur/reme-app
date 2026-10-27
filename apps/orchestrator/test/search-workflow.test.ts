@@ -49,6 +49,9 @@ vi.mock("../src/search.ts", () => ({
   announce: async () => {
     script.calls.push("announce")
   },
+  sayVerifyFailed: async () => {
+    script.calls.push("say failed")
+  },
 }))
 
 const { GoogleError } = await import("../src/google.ts")
@@ -102,7 +105,7 @@ describe("the search Workflow", () => {
     expect(configs.token).toBe(GOOGLE_RETRIES)
   })
 
-  it("tries three times 30 s apart, then backs off to 72 hours, then fails with no message", async () => {
+  it("tries three times 30 s apart, then backs off to 72 hours, then fails and says so once", async () => {
     const { names, waits, result } = await drive()
     expect(names).toEqual(steps.SearchWorkflow["never verified"])
     expect(waits).toEqual([
@@ -116,7 +119,11 @@ describe("the search Workflow", () => {
       "72 hours",
     ])
     expect(result).toEqual({ outcome: "failed" })
-    expect(script.calls).toEqual(["place google1a2b.html", "failed"])
+    expect(script.calls).toEqual([
+      "place google1a2b.html",
+      "failed",
+      "say failed",
+    ])
   })
 
   it("retries only Google's outage: any other Google answer is final", async () => {
