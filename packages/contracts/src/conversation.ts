@@ -8,6 +8,7 @@ import {
   OwnerAnswerText,
   REVIEW_FACT_KEYS,
 } from "./owner.ts"
+import { Hostname } from "./site.ts"
 import { Text } from "./text.ts"
 
 /**
@@ -90,12 +91,14 @@ export const ConversationMessage = z.strictObject({
 /**
  * A button on a message the server posted. `ask` sends `text` as the owner's
  * next message, which the chat already does for a suggestion; `open` opens an
- * https link in a new tab.
+ * https link in a new tab; `pay` opens the details and Pay page for buying
+ * `name`, which makes a fresh Checkout.
  */
 export const ServerButton = z.strictObject({
   label: Text(60),
   action: z.discriminatedUnion("kind", [
     z.strictObject({ kind: z.literal("ask"), text: Text(500) }),
+    z.strictObject({ kind: z.literal("pay"), name: Hostname }),
     z.strictObject({
       kind: z.literal("open"),
       url: z
