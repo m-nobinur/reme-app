@@ -3,10 +3,10 @@ import {
   BuyDomainInput,
   type BuyDomainOutput,
   DOMAIN_PRICES,
-  type DomainOffer,
   DomainPaymentEvent,
   DomainPrice,
   DomainRegistration,
+  type DomainStemOffer,
   DomainStripe,
   FindDomainInput,
   type FindDomainOutput,
@@ -21,7 +21,9 @@ import {
   eq,
   events,
   type OrgScopedDb,
+  openTask,
   pgCode,
+  setStep,
   sql,
   syncTasks,
   type Tenancy,
@@ -133,15 +135,24 @@ async function rankFacts(db: OrgScopedDb, query?: string) {
       text(value("service_area.radius")?.centre) ??
       text(value("service_area.text")?.text),
     trade: text(value("business.industry")?.name),
+    asked: Boolean(query),
   }
 }
 
+/** The endings a row shows, in the order the owner reads them. */
+const ROW_TLDS = ["co.uk", "com", "uk"] as const
+
+/** Rows `find_domain` returns at most. */
+const ROWS_MAX = 5
+
 /**
- * `POST /domains/find`: names free to register now, at the price table's
- * price, best first. The ranker's names from the business facts (or the
- * owner's words), plus the registrar's own suggestions for those words, in
- * one authoritative check; a name the configured registrar will not sell is
- * never offered. Needs no Stripe: finding is free.
+ * `POST /domains/find`: one row per name stem, best first, each ending this
+ * registrar sells free at the price table's price or taken. The ranker's
+ * stems from the business facts (or the owner's words), then the registrar's
+ * own suggestions for those words, in one authoritative check. A stem with
+ * no free ending, or whose reason another row already gives, is left out.
+ * The address task's `choose` step then waits on the owner picking. Needs no
+ * Stripe: finding is free.
  */
 export async function find(
   env: Env,
@@ -160,42 +171,64 @@ export async function find(
   const facts = await kit.withOrg({ orgId }, (db) =>
     rankFacts(db, input.data.query)
   )
-  const ranked = candidates(facts)
-  const why = new Map(ranked.map((r) => [r.name, r.why]))
   const suggested = input.data.query
     ? await searchDomains(env, input.data.query).catch(() => [])
     : []
-  // Best first: the ranker's order, then the registrar's suggestions, in the
-  // endings offered here only, so the check is not spent on the rest.
-  const offered = offeredTlds(env)
-  const names = [...new Set([...ranked.map((r) => r.name), ...suggested])]
-    .filter((n) => offered.some((tld) => tld === sellableTld(n)))
-    .slice(0, CHECK_MAX)
+  const offered = ROW_TLDS.filter((tld) => offeredTlds(env).includes(tld))
+  const stems = [
+    ...candidates(facts),
+    ...suggested.map((name) => ({
+      stem: name.slice(0, name.indexOf(".")),
+      why: "close to what you asked for",
+    })),
+  ]
+  // Whole stems only, so a row never shows an ending it did not check.
+  const perStem = offered.length
+  const rows = stems
+    .filter((s, i) => stems.findIndex((t) => t.stem === s.stem) === i)
+    .slice(0, Math.floor(CHECK_MAX / perStem))
   let checked: Checked[]
   try {
-    checked = await checkDomains(env, names)
+    checked = await checkDomains(
+      env,
+      rows.flatMap((r) => offered.map((tld) => `${r.stem}.${tld}`))
+    )
   } catch {
     return registrarDown()
   }
-  const order = new Map(names.map((n, i) => [n, i]))
-  const offers: DomainOffer[] = checked
-    .filter((c) => sellable(c) !== null)
-    .sort((a, b) => (order.get(a.name) ?? 0) - (order.get(b.name) ?? 0))
-    .flatMap((c) => {
-      const tld = sellableTld(c.name)
-      return tld
-        ? [
-            {
-              name: c.name,
-              price_gbp_year: DOMAIN_PRICES[tld].retail_gbp,
-              why: why.get(c.name) ?? "close to what you asked for",
-            },
-          ]
-        : []
+  const answer = new Map(checked.map((c) => [c.name, c]))
+  const reasons = new Set<string>()
+  const out: DomainStemOffer[] = []
+  for (const { stem, why } of rows) {
+    const endings = Object.fromEntries(
+      offered.map((tld) => {
+        const c = answer.get(`${stem}.${tld}`)
+        return [
+          tld,
+          c && sellable(c) !== null
+            ? {
+                state: "free" as const,
+                price_gbp_year: DOMAIN_PRICES[tld].retail_gbp,
+              }
+            : { state: "taken" as const },
+        ]
+      })
+    )
+    const free = Object.values(endings).some((e) => e.state === "free")
+    if (!free || reasons.has(why)) continue
+    reasons.add(why)
+    out.push({ stem, why, endings })
+  }
+  if (out.length === 0) return fromEnvelope(409, BUY_REFUSALS.unavailable)
+  await kit.withOrg({ orgId }, async (db) => {
+    const task = await openTask(db, orgId, "address")
+    await setStep(db, task, "choose", {
+      state: "blocked",
+      blocked_on: "owner_action",
+      note: "picking a name",
     })
-  const [best, ...options] = offers
-  if (!best) return fromEnvelope(409, BUY_REFUSALS.unavailable)
-  return { outcome: "found", best, options: options.slice(0, 4) }
+  })
+  return { outcome: "found", rows: out.slice(0, ROWS_MAX) }
 }
 
 // ---------------------------------------------------------------------------

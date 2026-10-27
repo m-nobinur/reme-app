@@ -1,5 +1,5 @@
 import { type DomainRegistration, SITE_HEADER } from "@workspace/contracts"
-import { deployments, domains, eq, events, sql } from "@workspace/db"
+import { deployments, domains, eq, events, readTasks, sql } from "@workspace/db"
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest"
 import {
   abandonUnpaid,
@@ -335,29 +335,51 @@ describe.skipIf(!url)("buying a domain against a database", () => {
     const sandboxNet = stubNet(false, sandboxChecks)
     const { env } = buyEnv(site.store)
     const sandbox = await find(env, kit, site.orgId, {})
-    expect(sandbox).toMatchObject({
+    // The sandbox is asked about .com only, and its rows show nothing else.
+    expect(sandbox).toEqual({
       outcome: "found",
-      best: { name: "brightclean.com", price_gbp_year: 12 },
+      rows: [
+        {
+          stem: "brightclean",
+          why: "matches your business name",
+          endings: { com: { state: "free", price_gbp_year: 12 } },
+        },
+      ],
     })
-    // The sandbox is asked about .com only, and offers nothing else.
     expect(asked(sandboxNet).length).toBeGreaterThan(0)
     expect(asked(sandboxNet).every((n) => n.endsWith(".com"))).toBe(true)
 
     vi.unstubAllGlobals()
     const liveNet = stubNet(true, {
       "brightclean.co.uk": priced("brightclean.co.uk", "5.30"),
-      "brightclean.com": priced("brightclean.com"),
       "brightclean.uk": priced("brightclean.uk", "5.30"),
     })
     const live = await find(buyEnv(site.store, true).env, kit, site.orgId, {})
     expect(asked(liveNet).some((n) => n.endsWith(".net"))).toBe(false)
-    expect(live).toMatchObject({
+    // One row per stem, .com taken beside the free UK endings; a stem with
+    // nothing free is left out.
+    expect(live).toEqual({
       outcome: "found",
-      best: { name: "brightclean.co.uk", price_gbp_year: 8 },
-      options: [
-        { name: "brightclean.com", price_gbp_year: 12 },
-        { name: "brightclean.uk", price_gbp_year: 8 },
+      rows: [
+        {
+          stem: "brightclean",
+          why: "matches your business name",
+          endings: {
+            "co.uk": { state: "free", price_gbp_year: 8 },
+            com: { state: "taken" },
+            uk: { state: "free", price_gbp_year: 8 },
+          },
+        },
       ],
+    })
+    // The owner is picking: the address task's choose step waits on them.
+    const [task] = await kit.withOrg({ orgId: site.orgId }, (db) =>
+      readTasks(db)
+    )
+    expect(task?.steps.find((s) => s.step === "choose")).toMatchObject({
+      state: "blocked",
+      blocked_on: "owner_action",
+      note: "picking a name",
     })
   })
 
