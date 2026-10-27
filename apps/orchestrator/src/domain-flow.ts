@@ -675,7 +675,6 @@ export async function activateDomain(
       }
     )
     if (!moved) return null
-    await syncTasks(db, orgId)
     return claim
   })
   if (!done) return false
