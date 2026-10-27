@@ -1837,13 +1837,15 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
 
     it("sends the name under the approval as body and key, and returns the contract's output", async () => {
       const approval = crypto.randomUUID()
+      const chat = crypto.randomUUID()
       const stub = stubOrchestrator(() => Response.json(connecting))
       const output = kept(
         "connect_domain",
         await connectDomain(
           context(me, stub),
           { name: "sparkleclean.co.uk" },
-          approval
+          approval,
+          { sessionId: chat }
         )
       )
       expect(output).toEqual(connecting)
@@ -1856,6 +1858,7 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       expect(call?.body).toEqual({
         name: "sparkleclean.co.uk",
         approval_id: approval,
+        conversation_id: chat,
       })
       // The org comes from the session on the bridge, never from the body.
       expect(call?.request.headers.get("x-reme-org-id")).toBe(me.orgId)
@@ -2012,7 +2015,8 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
           await connectDomain(
             context(me, stub),
             { name: "taken.example" },
-            crypto.randomUUID()
+            crypto.randomUUID(),
+            { sessionId: crypto.randomUUID() }
           )
         )
         expect(output).toEqual({
@@ -2043,7 +2047,8 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         const connected = connectDomain(
           context(me, stub),
           { name: "blip.example" },
-          "approval-blip"
+          "approval-blip",
+          { sessionId: crypto.randomUUID() }
         ).then(
           (output) => ({ output, error: null }),
           (error: unknown) => ({ output: null, error })
@@ -2090,7 +2095,8 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         connectDomain(
           context(me, stub),
           { name: "odd.example" },
-          crypto.randomUUID()
+          crypto.randomUUID(),
+          { sessionId: crypto.randomUUID() }
         )
       ).rejects.toBeInstanceOf(ToolFailed)
     })

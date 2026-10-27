@@ -494,6 +494,24 @@ describe.skipIf(!url)("buying a domain, on a live connection", () => {
     expect((await post(member, "bought")).status).toBe(403)
   })
 
+  it("bridges the check the owner's tab asks for back from Domain Connect", async () => {
+    const name = `back-${crypto.randomUUID().slice(0, 8)}.com`
+    const checked = {
+      outcome: "checked",
+      state: "awaiting_dns",
+      status: { status: "pending_verification" },
+      next_step: "Records seen, certificate next.",
+    }
+    const stub = stubOrchestrator(() => Response.json(checked))
+    const response = await me.call(stub, `/domains/${name}/check`, {
+      method: "POST",
+    })
+    expect(await response.json()).toEqual(checked)
+    expect(stub.calls.map((c) => new URL(c.request.url).pathname)).toEqual([
+      `/assignments/domains/${name}/check`,
+    ])
+  })
+
   it("reads the newest purchase of a name, its sandbox flag and how it closed", async () => {
     const name = unique("status")
     const status = async (who: Owner) => {

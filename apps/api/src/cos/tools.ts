@@ -1052,16 +1052,18 @@ export const CONNECT_RETRY_MS = 2_000
  * and replays its answer. Whether the name may be claimed (`domain.in_use`,
  * `domain.too_many_pending`, `domain.invalid`) is the orchestrator's to say.
  * A passing 503 is asked once more under the same key, so one approval
- * survives one blip; a second one stands.
+ * survives one blip; a second one stands. The conversation is where the
+ * provider's Domain Connect page sends the owner back to.
  */
 export async function connectDomain(
   { env, owner }: ToolContext,
   { name }: ConnectDomainInput,
-  approvalId: string
+  approvalId: string,
+  turn: Pick<Turn, "sessionId">
 ): Promise<ConnectDomainOutput> {
   const ask = () =>
     bridge(env, owner, "/domains", {
-      body: { name, approval_id: approvalId },
+      body: { name, approval_id: approvalId, conversation_id: turn.sessionId },
       key: approvalId,
     })
   let result = await ask()
