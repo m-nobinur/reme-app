@@ -455,7 +455,7 @@ describe.skipIf(!url)("buying a domain against a database", () => {
     })
   })
 
-  it("fills four rows from the registrar's suggestions for the business name, each its own reason", async () => {
+  it("asks the registrar about the business name and drops its suggestions not made of the business's words", async () => {
     const site = await published()
     const suggests = [
       "brightcleanpro.com",
@@ -474,11 +474,9 @@ describe.skipIf(!url)("buying a domain against a database", () => {
     ).toBe(true)
     expect(found).toMatchObject({ outcome: "found" })
     const rows = (found as { rows: Array<{ stem: string; why: string }> }).rows
+    // Each suggestion adds a word the business never used.
     expect(rows.map((r) => [r.stem, r.why])).toEqual([
       ["brightclean", "matches your business name"],
-      ["brightcleanpro", "your name plus pro"],
-      ["getbrightclean", "get before your name"],
-      ["brightcleanhome", "your name plus home"],
     ])
   })
 

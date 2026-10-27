@@ -356,6 +356,7 @@ describe("the name ranker", () => {
       "northsidedoggrooming",
       "northsidegrooming",
       "northsideleeds",
+      "leedsgrooming",
       "leedsdoggrooming",
     ])
     expect(ranked[1]?.why).toBe("shorter, northside grooming")
@@ -366,21 +367,26 @@ describe("the name ranker", () => {
       expect(r.stem.length).toBeLessThanOrEqual(ADDED_MAX)
   })
 
-  it("fills from the registrar's names without a repeated word, a long stem or a shared reason", () => {
-    const filled = suggestions({ name: "Sparkle Clean" }, [
-      "sparklecleanpro.com",
-      "sparklecleanpro.co.uk",
-      "getsparkleclean.uk",
-      "sparklesparkleclean.com",
-      "sparklecleanbristolservices.com",
-      "freshstart.com",
-    ])
+  it("fills from the registrar's names made only of the owner's words, never repeated or long", () => {
+    const filled = suggestions(
+      { name: "Northside Dog Grooming", town: "Leeds", trade: "Dog grooming" },
+      [
+        "northsidedoggrooming.com",
+        "northsidedoggrooming.uk",
+        "doggroomingnorthside.com",
+        "groomingleeds.co.uk",
+        "ndoggrooming.com",
+        "drnorthsidedoggrooming.com",
+        "northsidedogsitting.com",
+        "northsidedoggroomingsupplies.com",
+        "northsidenorthside.com",
+      ]
+    )
     expect(filled.map((r) => [r.stem, r.why])).toEqual([
-      ["sparklecleanpro", "your name plus pro"],
-      ["getsparkleclean", "get before your name"],
-      ["freshstart", "another take on your name"],
+      ["northsidedoggrooming", "another take on your name"],
+      ["doggroomingnorthside", "another take on your name"],
+      ["groomingleeds", "another take on your name"],
     ])
-    expect(filled.every((r) => r.stem.length <= ADDED_MAX)).toBe(true)
   })
 
   it("says the owner's own words when they typed the search", () => {

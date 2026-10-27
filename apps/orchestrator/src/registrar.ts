@@ -502,6 +502,8 @@ export function candidates(facts: RankFacts): Ranked[] {
     : ""
   if (town && tradeWords && !brand.includes(town)) {
     stems.push([`${town}${tradeWords}`, 15, `${where} plus what you do`])
+    if (trade && trade !== tradeWords)
+      stems.push([`${town}${trade}`, 13, `${where} plus ${trade}`])
   }
   return stems
     .filter(([s], i) => s.length <= (i === 0 ? 63 : ADDED_MAX))
@@ -517,19 +519,37 @@ export function candidates(facts: RankFacts): Ranked[] {
     .sort((a, b) => b.score - a.score)
 }
 
+/** Whether `stem` splits wholly into `vocab`'s words, in any order. */
+const madeOf = (stem: string, vocab: string[]) => {
+  const ends = [true]
+  for (let i = 1; i <= stem.length; i++)
+    ends[i] = vocab.some(
+      (w) => w && ends[i - w.length] && stem.startsWith(w, i - w.length)
+    )
+  return ends[stem.length] === true
+}
+
 /**
  * The registrar's suggested names as stems, to fill the rows the ranker's own
- * leave short. The ranker's rules hold: none repeats a word of the name or
- * runs past `ADDED_MAX`, and the reason says how the stem differs from the
- * brand, so no two read alike.
+ * leave short. Each is made only of the owner's own words, its name, town and
+ * trade, since the registrar also offers fragments ("ndoggrooming"), titles
+ * ("drnorthside...") and other trades ("...dogsitting"). The ranker's rules
+ * hold: none repeats a word of the name or runs past `ADDED_MAX`, and the
+ * reason says how the stem differs from the brand.
  */
 export function suggestions(facts: RankFacts, names: string[]): Ranked[] {
   const { words, brand } = brandOf(facts)
   const yours = facts.asked ? "your words" : "your name"
+  const vocab = [
+    ...words,
+    facts.town?.split(",")[0] ?? "",
+    ...(facts.trade?.split(/\s+/) ?? []),
+  ].map(label)
   return [...new Set(names.map((n) => n.slice(0, n.indexOf("."))))]
     .filter(
       (stem) =>
         stem.length <= ADDED_MAX &&
+        madeOf(stem, vocab) &&
         !words.some((w) => w.length >= 3 && stem.split(w).length > 2)
     )
     .map((stem) => ({
