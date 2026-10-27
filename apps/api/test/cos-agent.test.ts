@@ -9,6 +9,7 @@ import {
   CreateReminderRequest,
   ONBOARDING_STATUS,
   type OnboardingStatus,
+  TOOL_CALL_CANCELLED,
   TOOL_FAILED,
   TOOL_UNKNOWN,
   toolErrorKind,
@@ -2197,6 +2198,108 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     const after = await tailOf(me, id)
     expect(after.id).toBe(tail.id)
     expect(plain(await replay(tail, done.chunks))).toStrictEqual(plain(after))
+  })
+
+  describe("a card a server post landed after", () => {
+    const ready = "Your website is ready."
+    /** A change card, then a post after it, as a build finishing would. */
+    const cardThenPost = async () => {
+      const id = await conversation(me)
+      await turn(me, typed(id, "Add a Saturday slot."), {
+        model: scripted(
+          calls({
+            id: "call_rc",
+            tool: "request_change",
+            input: { text: "Add a Saturday slot." },
+          })
+        ).model,
+      })
+      const card = await tailOf(me, id)
+      expect(
+        await postAssistantMessage(kit, {
+          orgId: me.orgId,
+          conversationId: id,
+          key: `ready:${id}`,
+          message: { text: [ready] },
+        })
+      ).toBe("posted")
+      return { id, card, post: serverMessageId(`ready:${id}`) }
+    }
+
+    it("is answered where it sits: the reply continues its row, and the model reads the call with its result", async () => {
+      const { id, card, post } = await cardThenPost()
+      const [call] = waiting(card)
+      const stub = orchestrator()
+      const { model, sent } = scripted(said("The change has started."))
+      const done = await turn(
+        me,
+        {
+          conversation_id: id,
+          mode: "act",
+          turn: {
+            kind: "results",
+            message_id: card.id,
+            results: [
+              {
+                kind: "approval",
+                approval_id: call?.approval.id,
+                approved: true,
+              },
+            ],
+          },
+        },
+        { model },
+        stub
+      )
+      expect(done.response.status, done.text).toBe(200)
+      expect(stub.calls).toHaveLength(1)
+      // The history ends on the call and its result; the post is logged on
+      // the next typed turn, after the card, as the chat shows it.
+      const prompt = JSON.stringify(sent[0]?.prompt)
+      expect(prompt).toContain('"outcome":"started"')
+      expect(prompt).not.toContain(ready)
+      const rows = await rowsOf(me, id)
+      expect(rows.slice(-2).map((r) => r.id)).toEqual([card.id, post])
+      const continued = rows.at(-2)
+      expect(plain(await replay(card, done.chunks))).toStrictEqual(
+        plain({ id: card.id, ...(continued?.content as object) })
+      )
+      const next = scripted(said("Both done."))
+      await turn(me, typed(id, "All set?", "ask"), { model: next.model })
+      const seen = wire(next.sent)
+      expect(seen.indexOf('"outcome":"started"')).toBeGreaterThan(-1)
+      expect(seen.indexOf('"outcome":"started"')).toBeLessThan(
+        seen.indexOf(ready)
+      )
+      expect(seen.indexOf(ready)).toBeLessThan(seen.indexOf("All set?"))
+    })
+
+    it("is cancelled by a typed message, in its row and in the model's history", async () => {
+      const { id, card } = await cardThenPost()
+      const next = scripted(said("Left it."))
+      const done = await turn(me, typed(id, "Leave it for now."), {
+        model: next.model,
+      })
+      expect(done.response.status, done.text).toBe(200)
+      const row = (await rowsOf(me, id)).find((r) => r.id === card.id)
+      expect(row?.content).toMatchObject({
+        parts: expect.arrayContaining([
+          expect.objectContaining({
+            type: "tool-request_change",
+            state: "output-error",
+            errorText: TOOL_CALL_CANCELLED,
+          }),
+        ]),
+      })
+      const seen = wire(next.sent)
+      expect(seen.indexOf(TOOL_CALL_CANCELLED)).toBeGreaterThan(-1)
+      expect(seen.indexOf(TOOL_CALL_CANCELLED)).toBeLessThan(
+        seen.indexOf(ready)
+      )
+      expect(seen.indexOf(ready)).toBeLessThan(
+        seen.indexOf("Leave it for now.")
+      )
+    })
   })
 
   it("starts a change the owner typed with no card, keyed by its turn and call, and drops a contact it carried", async () => {

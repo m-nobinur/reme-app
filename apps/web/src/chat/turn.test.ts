@@ -527,6 +527,41 @@ it("a not now stays not now when the owner types next", () => {
   expect(cancelOvertaken(denied)).toBe(denied)
 })
 
+it("answers a card a post landed after, and a typed message cancels it there", async () => {
+  const post: ChatMessage = {
+    id: "srv_ready",
+    role: "assistant",
+    parts: [
+      { type: "step-start" },
+      { type: "text", text: "Your website is ready.", state: "done" },
+    ],
+  }
+  const approval = { id: "appr_1", approved: true }
+  const open = [assistant(change("approval-requested", { approval })), post]
+  expect(sendsOn({ messages: open })).toBe(false)
+  const decided = [assistant(change("approval-responded", { approval })), post]
+  expect(sendsOn({ messages: decided })).toBe(true)
+  const sending: { current: ChatMessage | undefined } = { current: undefined }
+  const body = turnBody(
+    () => Promise.resolve({ remoteId: CONVERSATION }),
+    () => "act",
+    sending
+  )
+  const sent = await body({ messages: decided, messageId: "msg_assistant" })
+  expect(ChatRequest.parse(sent.body).turn).toEqual({
+    kind: "results",
+    message_id: "msg_assistant",
+    results: [{ kind: "approval", approval_id: "appr_1", approved: true }],
+  })
+  expect(sending.current?.id).toBe("msg_assistant")
+  const [card, ...rest] = cancelOvertaken(open)
+  expect(card?.parts[1]).toMatchObject({
+    state: "output-error",
+    errorText: CANCELLED,
+  })
+  expect(rest).toEqual([post])
+})
+
 it("sends on after an approval, and not after an answer or the last stored step", () => {
   expect(
     sendsOn({
