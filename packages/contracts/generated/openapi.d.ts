@@ -37,6 +37,8 @@ export interface components {
             total: number
           }
           note?: string
+          /** Format: date-time */
+          at?: string
         }[]
         /** Format: date-time */
         at: string
@@ -56,6 +58,10 @@ export interface components {
         restarted?: true
         /** Format: date-time */
         synced_at?: string
+        numbers?: {
+          clicks: number
+          impressions: number
+        }
       }[]
       now: {
         id: string
@@ -86,6 +92,8 @@ export interface components {
             total: number
           }
           note?: string
+          /** Format: date-time */
+          at?: string
         }[]
         /** Format: date-time */
         at: string
@@ -105,6 +113,10 @@ export interface components {
         restarted?: true
         /** Format: date-time */
         synced_at?: string
+        numbers?: {
+          clicks: number
+          impressions: number
+        }
       }[]
       waiting: {
         id: string
@@ -135,6 +147,8 @@ export interface components {
             total: number
           }
           note?: string
+          /** Format: date-time */
+          at?: string
         }[]
         /** Format: date-time */
         at: string
@@ -154,6 +168,10 @@ export interface components {
         restarted?: true
         /** Format: date-time */
         synced_at?: string
+        numbers?: {
+          clicks: number
+          impressions: number
+        }
       }[]
       upcoming: {
         id: string
@@ -184,6 +202,8 @@ export interface components {
             total: number
           }
           note?: string
+          /** Format: date-time */
+          at?: string
         }[]
         /** Format: date-time */
         at: string
@@ -203,6 +223,10 @@ export interface components {
         restarted?: true
         /** Format: date-time */
         synced_at?: string
+        numbers?: {
+          clicks: number
+          impressions: number
+        }
       }[]
       done: {
         id: string
@@ -233,6 +257,8 @@ export interface components {
             total: number
           }
           note?: string
+          /** Format: date-time */
+          at?: string
         }[]
         /** Format: date-time */
         at: string
@@ -252,6 +278,10 @@ export interface components {
         restarted?: true
         /** Format: date-time */
         synced_at?: string
+        numbers?: {
+          clicks: number
+          impressions: number
+        }
       }[]
       standing?: {
         id: string
@@ -282,6 +312,8 @@ export interface components {
             total: number
           }
           note?: string
+          /** Format: date-time */
+          at?: string
         }[]
         /** Format: date-time */
         at: string
@@ -301,6 +333,10 @@ export interface components {
         restarted?: true
         /** Format: date-time */
         synced_at?: string
+        numbers?: {
+          clicks: number
+          impressions: number
+        }
       }[]
     }
     ActivityFeed: {
@@ -12899,6 +12935,8 @@ export interface components {
               total: number
             }
             note?: string
+            /** Format: date-time */
+            at?: string
           }[]
           /** Format: date-time */
           at: string
@@ -12918,6 +12956,10 @@ export interface components {
           restarted?: true
           /** Format: date-time */
           synced_at?: string
+          numbers?: {
+            clicks: number
+            impressions: number
+          }
         }[]
         now: {
           id: string
@@ -12948,6 +12990,8 @@ export interface components {
               total: number
             }
             note?: string
+            /** Format: date-time */
+            at?: string
           }[]
           /** Format: date-time */
           at: string
@@ -12967,6 +13011,10 @@ export interface components {
           restarted?: true
           /** Format: date-time */
           synced_at?: string
+          numbers?: {
+            clicks: number
+            impressions: number
+          }
         }[]
         waiting: {
           id: string
@@ -12997,6 +13045,8 @@ export interface components {
               total: number
             }
             note?: string
+            /** Format: date-time */
+            at?: string
           }[]
           /** Format: date-time */
           at: string
@@ -13016,6 +13066,10 @@ export interface components {
           restarted?: true
           /** Format: date-time */
           synced_at?: string
+          numbers?: {
+            clicks: number
+            impressions: number
+          }
         }[]
         upcoming: {
           id: string
@@ -13046,6 +13100,8 @@ export interface components {
               total: number
             }
             note?: string
+            /** Format: date-time */
+            at?: string
           }[]
           /** Format: date-time */
           at: string
@@ -13065,6 +13121,10 @@ export interface components {
           restarted?: true
           /** Format: date-time */
           synced_at?: string
+          numbers?: {
+            clicks: number
+            impressions: number
+          }
         }[]
         done: {
           id: string
@@ -13095,6 +13155,8 @@ export interface components {
               total: number
             }
             note?: string
+            /** Format: date-time */
+            at?: string
           }[]
           /** Format: date-time */
           at: string
@@ -13114,6 +13176,10 @@ export interface components {
           restarted?: true
           /** Format: date-time */
           synced_at?: string
+          numbers?: {
+            clicks: number
+            impressions: number
+          }
         }[]
         standing?: {
           id: string
@@ -13144,6 +13210,8 @@ export interface components {
               total: number
             }
             note?: string
+            /** Format: date-time */
+            at?: string
           }[]
           /** Format: date-time */
           at: string
@@ -13163,6 +13231,10 @@ export interface components {
           restarted?: true
           /** Format: date-time */
           synced_at?: string
+          numbers?: {
+            clicks: number
+            impressions: number
+          }
         }[]
       }
     }
