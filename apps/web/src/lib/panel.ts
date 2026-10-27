@@ -48,7 +48,6 @@ export type Suggestion =
   | { kind: "name-business" }
   | { kind: "onboarding"; id: string }
   | { kind: "start-website" }
-  | { kind: "visit-site"; host: string; url: string }
 
 /** Something with a time: what is coming up, or what finished. */
 export type Timed = { id: string; text: string; at: string }
@@ -304,7 +303,7 @@ const running = (segment: ActivitySegment | undefined) =>
 
 export function panelFor(input: PanelInput): Panel | null {
   const { workspace, business, now, zone } = input
-  const { live, host, url, builds, attention } = workspace
+  const { live, host, builds, attention } = workspace
   const activity = workspace.activity ?? NO_ACTIVITY
   const onboarding = business
     ? onboardingFor(workspace, input.conversations)
@@ -533,9 +532,6 @@ export function panelFor(input: PanelInput): Panel | null {
     } else if (!onboarding && !current) {
       suggestions.push({ kind: "start-website" })
     }
-  }
-  if (live && host && url && page !== "website") {
-    suggestions.push({ kind: "visit-site", host, url })
   }
 
   return {

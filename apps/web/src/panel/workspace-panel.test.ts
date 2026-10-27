@@ -406,7 +406,7 @@ it("moves focus to the Activity tab when the last reminder is done", async () =>
   expect(tab("Activity")?.getAttribute("aria-selected")).toBe("true")
 })
 
-it("offers a live site's one next step", async () => {
+it("leaves the visit link to the Website tab, not Activity", async () => {
   live.workspace = {
     ...EMPTY_WORKSPACE,
     live: 3,
@@ -414,12 +414,8 @@ it("offers a live site's one next step", async () => {
     url: "https://fixture.example.invalid",
   }
   await render()
-  const steps = container.querySelector('[data-slot="next-steps"]')
-  expect(
-    [...(steps?.querySelectorAll("a, button") ?? [])].map(
-      (element) => element.textContent
-    )
-  ).toEqual(["Visit your website (opens in a new tab)"])
+  expect(container.querySelector('[data-slot="next-steps"]')).toBeNull()
+  expect(container.textContent).not.toContain("Visit your website")
 })
 
 it("announces a new line on the same page, and not a build's next stage", async () => {

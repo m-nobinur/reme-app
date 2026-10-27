@@ -586,10 +586,8 @@ describe("later jobs", () => {
     expect(purchase?.icon).toBe("payment")
   })
 
-  it("opens the site once live, and offers nothing else", () => {
-    expect(jobs?.suggestions).toEqual([
-      { kind: "visit-site", host: HOST, url: URL_ },
-    ])
+  it("offers no next step once the site is live: the Website page links it", () => {
+    expect(jobs?.suggestions).toEqual([])
   })
 })
 
@@ -708,9 +706,7 @@ describe("completedOf", () => {
       }),
       { orgId: ORG, assistant: "Ellie" }
     )
-    expect(rows.map((row) => row.text)).toEqual([
-      `Website published at ${HOST}`,
-    ])
+    expect(rows.map((row) => row.text)).toEqual(["Website published"])
   })
 
   it("lists a domain once, though its address task and its standing row both hold it", () => {

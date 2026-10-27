@@ -483,7 +483,6 @@ const SEGMENTS_MAX = 20
 
 const liveNames = (input: ActivityInput) => ({
   ...(input.business && { business: input.business }),
-  ...(input.site.host && { host: input.site.host }),
 })
 
 /**
