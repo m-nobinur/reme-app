@@ -2,6 +2,7 @@ import {
   CheckDomainOutput,
   ConnectDomainOutput,
   DomainCheck,
+  DomainInspection,
   DomainName,
   DomainProvider,
   type DomainRegistration,
@@ -41,6 +42,7 @@ import {
   ensureHostname,
   getHostname,
   hasTxt,
+  type Inspection,
   inspect,
   OUR_ZONE,
   recordsFor,
@@ -55,6 +57,7 @@ import {
   otherHost,
   writePointer,
 } from "./publish.ts"
+import { rdapLookup } from "./rdap.ts"
 import {
   detachHostname,
   getRegistration,
@@ -831,6 +834,47 @@ const invalid = () =>
     "domain.invalid",
     "That isn't a domain we can connect: give the address itself, like sparkleclean.co.uk or book.sparkleclean.co.uk."
   )
+
+/**
+ * `GET /domains/{name}/inspect`: what a name the owner already has is, before
+ * anything is connected. Whether it is registered and with whom comes from
+ * RDAP; a registry that is down or rate-limiting leaves DNS to say whether
+ * the name exists, and the registrar unknown. Then who runs its DNS (the
+ * connect card's detection) and whether it already points somewhere.
+ */
+export async function inspectDomain(
+  raw: unknown
+): Promise<Refusal | DomainInspection> {
+  const name = normalizeName(raw)
+  if (!name) return invalid()
+  const known = await rdapLookup(name).catch(() => null)
+  if (known && !known.registered)
+    return { name, registered: false, in_use: false }
+  let inspection: Inspection | null = null
+  try {
+    inspection = await inspect(name)
+  } catch (error) {
+    if (!(error instanceof DomainError && error.name === "domain.not_found"))
+      return refuse(
+        503,
+        "transient",
+        "dns.unavailable",
+        "I couldn't read the domain's DNS just now. Try again in a minute."
+      )
+  }
+  const dnsHost =
+    inspection &&
+    (await detectProvider(inspection.apex, inspection.nameservers))
+  return DomainInspection.parse({
+    name,
+    registered: known?.registered ?? inspection !== null,
+    ...(known?.registrar && { registrar: known.registrar }),
+    ...(dnsHost && { dns_host: dnsHost }),
+    in_use: Object.values(inspection?.hosts ?? {}).some(
+      (h) => h.cname || h.a.length + h.aaaa.length > 0
+    ),
+  })
+}
 
 /**
  * `POST /domains`: inspect the domain, claim it for the org and start its
