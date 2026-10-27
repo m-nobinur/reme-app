@@ -9,11 +9,10 @@ import {
   DomainInspection,
   DomainName,
   DomainProvider,
+  DomainRegistrantPrefill,
   DomainState,
   DomainStemOffer,
   NotRegisteredYet,
-  Registrant,
-  RegistrantDetails,
 } from "./domain.ts"
 import { ToolCallId } from "./ids.ts"
 import { RememberInput, RememberOutput } from "./memory.ts"
@@ -399,33 +398,24 @@ export const BoughtElsewhereOutput = z.discriminatedUnion("outcome", [
 ])
 
 /**
- * `buy_domain`'s input: a name `find_domain` offered and its registrant.
- * It prepares the purchase and moves no money: the owner's payment in
- * Checkout is the consent.
+ * `buy_domain`'s input: a name `find_domain` offered, and nothing else. The
+ * model never collects or sends the registrant: the details page asks the
+ * owner for what is missing, and paying there is the consent.
  */
-export const BuyDomainInput = z.strictObject({
-  name: DomainName,
-  ...RegistrantDetails.shape,
-})
+export const BuyDomainInput = z.strictObject({ name: DomainName })
 
 /**
- * What the model may send `buy_domain`: no county, since it sent the city,
- * "null" and a wrong county. The owner adds one on the card. Stored inputs
- * with a county still read as `BuyDomainInput`.
- */
-export const BuyDomainAsk = BuyDomainInput.extend({
-  registrant: Registrant.extend({
-    address: Registrant.shape.address.omit({ state: true }),
-  }),
-})
-
-/**
- * `buy_domain`'s output: the purchase waits on the owner's payment in the
- * card's embedded Checkout. Refused with `domain.unavailable`,
- * `domain.registrant_invalid`, `domain.price_changed` or
- * `domain.buy_unavailable`.
+ * `buy_domain`'s output: the details page for buying the name, prefilled
+ * from what Reme knows (`DomainRegistrantPrefill`), which the tray draws.
+ * Nothing is reserved or charged. `awaiting_payment` is what it answered
+ * before the details page, kept so a stored session still reads. Refused with
+ * `domain.unavailable` or `domain.buy_unavailable`.
  */
 export const BuyDomainOutput = z.discriminatedUnion("outcome", [
+  z.strictObject({
+    outcome: z.literal("details"),
+    ...DomainRegistrantPrefill.shape,
+  }),
   z.strictObject({
     outcome: z.literal("awaiting_payment"),
     name: DomainName,
