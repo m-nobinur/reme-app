@@ -16,5 +16,5 @@ export const answerBuildQuestion: AnswerBuildQuestion = async ({
   })
   if (!outcome.done) return outcome.reason
   keys.done()
-  return null
+  return "stack" in outcome ? outcome.stack : null
 }
