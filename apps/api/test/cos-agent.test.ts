@@ -62,7 +62,9 @@ import {
   binds,
   type CosAgent,
   changeRepeated,
+  cleanedChange,
   contextOf,
+  cosPrefix,
   costOf,
   DEFAULT_MODEL,
   DESCRIPTIONS,
@@ -82,6 +84,7 @@ import {
   SITE_CHANGE_LINE,
   stepCost,
   toolErrorText,
+  withoutStep,
 } from "../src/cos/agent.ts"
 import { sha256 } from "../src/cos/history.ts"
 import { retrying } from "../src/cos/retry.ts"
@@ -328,6 +331,45 @@ describe("the CoS's instructions", () => {
     )
     expect(INSTRUCTIONS).toContain('"I\'m putting your site together"')
     expect(INSTRUCTIONS).not.toMatch(/such as "It's/)
+  })
+
+  it("tell the model to promise a report back only while something watches, and never to end on a bare promise", () => {
+    expect(INSTRUCTIONS).toMatch(
+      /tell the owner when something happens only while something is watching for it[^\n]*Never end a reply on "I'll\.\.\." with no tool call/
+    )
+  })
+})
+
+describe("a tool's step line", () => {
+  it("is offered on the reads whose line shows it, and on request_change with its own words", async () => {
+    const { tools } = await cosPrefix()
+    const step = (name: string) => {
+      const found = tools.find((t) => t.name === name)
+      const properties = found?.input_schema.properties as
+        | Record<string, { description?: string } | undefined>
+        | undefined
+      return properties?.step?.description
+    }
+    for (const name of [
+      "get_workspace",
+      "get_facts",
+      "get_preview",
+      "check_domain",
+    ]) {
+      expect(step(name)).toContain("in your own voice")
+    }
+    expect(step("request_change")).toContain("owner's language")
+    expect(step("create_reminder")).toBeUndefined()
+  })
+
+  it("is cleaned before the call is logged, and kept from the tool", () => {
+    expect(
+      cleanedChange({ name: "x.co.uk", step: "  Checking \u2014 your domain " })
+    ).toEqual({ name: "x.co.uk", step: "Checking, your domain" })
+    expect(cleanedChange({ step: "Calling get_facts" })).toEqual({})
+    expect(
+      withoutStep({ name: "x.co.uk", step: "Checking your domain" })
+    ).toEqual({ name: "x.co.uk" })
   })
 })
 
@@ -2707,6 +2749,27 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     })
     expect(writing.response.status, writing.text).toBe(200)
     expect(statuses(writing.chunks)).toEqual([])
+  })
+
+  it("logs a read's step cleaned and runs the read without it", async () => {
+    const id = await conversation(me)
+    const done = await turn(me, typed(id, "How is my site?", "ask"), {
+      model: scripted(
+        calls({
+          id: "call_ws",
+          tool: "get_workspace",
+          input: { step: "Checking where things stand" },
+        }),
+        said("Your site has no live version yet.")
+      ).model,
+    })
+    expect(done.response.status, done.text).toBe(200)
+    const log = await logOf(id)
+    expect(
+      JSON.stringify(log.find((e) => e.type === "cos.step")?.payload)
+    ).toContain("Checking where things stand")
+    expect(log.some((e) => e.type === "cos.tool_result")).toBe(true)
+    await shownAsStored(me, id, done.chunks)
   })
 
   it("keeps reasoning in the log but out of the owner's stream and rows, and sends it back with an approval", async () => {

@@ -7,6 +7,7 @@ import {
   JEV,
   jev,
   jevApproval,
+  jevPromise,
   jevReading,
   matched,
   phrased,
@@ -493,5 +494,55 @@ describe("the reading of a typed message", () => {
       "timeout"
     )
     expect(log).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe("the reading of a reply that may promise work", () => {
+  afterEach(() => vi.restoreAllMocks())
+  const read = (acts: number, tells: number) =>
+    fake({
+      answers: {
+        acts: { type: "noul", noul: acts },
+        tells: { type: "noul", noul: tells },
+      },
+      usage: { cost: 0.00002 },
+    })
+  const never = async () => {
+    throw new Error("watched was asked")
+  }
+
+  it("takes a sure promise of action without asking whether anything is watching", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined)
+    const { fetchImpl, sent } = read(0.97, 0.05)
+    expect(
+      await jevPromise("k", "I'll set that up now.", never, fetchImpl)
+    ).toBe(true)
+    expect(JSON.parse(sent[0]?.init.body as string).state).toEqual({
+      assistant_said: "I'll set that up now.",
+    })
+  })
+
+  it("takes a promise to tell the owner later only when nothing is watching", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined)
+    const said = "I'll tell you when it's live."
+    expect(
+      await jevPromise("k", said, async () => false, read(0.1, 0.98).fetchImpl)
+    ).toBe(true)
+    expect(
+      await jevPromise("k", said, async () => true, read(0.1, 0.98).fetchImpl)
+    ).toBe(false)
+  })
+
+  it("leaves an honest ending, an unsure reading and a failed call alone", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined)
+    expect(
+      await jevPromise("k", "Done.", never, read(0.03, 0.03).fetchImpl)
+    ).toBe(false)
+    expect(
+      await jevPromise("k", "Hmm.", never, read(0.77, 0.6).fetchImpl)
+    ).toBe(false)
+    expect(await jevPromise("k", "Hmm.", never, fake({}, 500).fetchImpl)).toBe(
+      false
+    )
   })
 })

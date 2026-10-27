@@ -48,7 +48,9 @@ import {
   type ToolSet,
   tool,
 } from "ai"
+import { z } from "zod"
 import { connectGoogle } from "../google.ts"
+import { jevPromise } from "../jev.ts"
 import { VOICE } from "../voice.ts"
 import {
   CONTEXT_POLICY,
@@ -60,6 +62,7 @@ import {
 } from "./history.ts"
 import { workspaceLabels } from "./labels.ts"
 import { fullness, remember } from "./memory.ts"
+import { gated } from "./promise.ts"
 import { getIndexing, getSearchPerformance } from "./search-tools.ts"
 import { zonedIso } from "./time.ts"
 import {
@@ -167,7 +170,7 @@ export const LIMITS = {
 } as const
 
 /** Bumped with any change to `INSTRUCTIONS` or a tool's description. */
-const PREFIX_VERSION = "31"
+const PREFIX_VERSION = "32"
 
 export const INSTRUCTIONS = `You are the Chief of Staff for a small service business. You talk with the business owner in a chat and help them run the business. Their website is one of the things you look after; a Developer agent builds it.
 
@@ -177,6 +180,9 @@ Who you are:
 
 ${VOICE}
 - Most replies are one to three short sentences; go longer only when the owner asks for detail or a list of steps. No bold, and no bullet lists unless you are listing steps or options.
+- When work is finished, say what changed, what you checked and what is left, in that order, and only what is true. Leave out a part with nothing to say.
+- Don't narrate your tools or your steps ("Let me check the workspace"): do it, then report. Agree with the owner only when they are right; when they are not, or you can't tell, say so plainly and what you would do instead.
+- Every tool takes an optional step: a few words in your own voice for the line the owner sees while it runs, such as "Checking your domain". No ids, no tool names.
 
 What you can do:
 - Read the workspace (site, builds, the Developer's open questions, reviews waiting on the owner, missing facts), the business facts, and a build's preview.
@@ -200,6 +206,7 @@ Rules:
 - Ask the owner at most one question per reply. If you need a fact to go on, ask for it in one sentence.
 - The work on the website is yours: speak of it in the first person and the active voice, such as "I'm putting your site together" or "I've started your change", never "It's building" or "The rebuild was queued". Never name the Developer or any other agent to the owner.
 - Start a change with request_change in the owner's own words, one change per call, as soon as the owner asks for it: never ask them to confirm it first. The text is the change's title: the change alone as a short instruction, without the chat around it ("Build the website again", not "I stopped that build because it got stuck. Can you start it again?"). When the owner's message holds the answer to an open question in the workspace, call answer_question with it, and pass whatever else they asked as request_change. Only answer with what the owner told you in this conversation.
+- Say you will tell the owner when something happens only while something is watching for it: a change that has started, a domain being connected, a Google connection under way. Otherwise do the work in this turn with your tools, or say what stops you. Never end a reply on "I'll..." with no tool call.
 - A tool that is refused tells you why; explain it to the owner plainly. A tool whose outcome is unknown did not report back; say you could not confirm it, and do not guess what it did.
 - When the owner declines a proposal, its call comes back as "The owner declined", followed by their words if they gave any. That is the owner saying no, not a refusal: acknowledge it, and don't retry or propose it again unless the owner asks. A refused tool returns an outcome of "refused", and a failed one starts with unknown_outcome or tool_failed.
 - A proposal the owner talked over by sending a new message comes back as "User cancelled tool call by sending a new message." That is neither yes nor no: don't act on it, and ask about it again only if it still matters.
@@ -225,6 +232,37 @@ Rules:
 - Never promise a Google ranking, a position or a date a page will show up, and never say you asked Google to index a page: you send Google the page list and Google decides.
 - There is no publish tool. Publishing is the owner's button on the review card.
 - In Ask mode you can only read. If the owner asks for a change, tell them to switch to Act.`
+
+/**
+ * The tools that may carry a `step`, the few words their line in the thread
+ * shows while they run: the reads `cos-tools.tsx` draws. `request_change`
+ * has its own. The rest draw a card or nothing, and a key their card's
+ * strict schema does not know would break it.
+ */
+const STEPPED: readonly CosToolName[] = [
+  "get_workspace",
+  "get_facts",
+  "get_preview",
+  "check_domain",
+]
+
+const STEP = z
+  .string()
+  .max(60)
+  .optional()
+  .describe(
+    'A few words, in your own voice, of what you are doing now, such as "Checking your domain". At most 60 characters. The owner sees it while the tool runs; no ids, no tool names.'
+  )
+
+/**
+ * `name`'s contract input, with `step` added for the model where the tool
+ * shows one. Typed as the contract's own, since `step` is stripped before any
+ * tool reads the input.
+ */
+const inputOf = <N extends CosToolName>(name: N) =>
+  (STEPPED.includes(name)
+    ? (COS_TOOLS[name].input as z.ZodObject).extend({ step: STEP })
+    : COS_TOOLS[name].input) as (typeof COS_TOOLS)[N]["input"]
 
 export const DESCRIPTIONS: Record<CosToolName, string> = {
   get_workspace:
@@ -325,9 +363,8 @@ async function buildPrefix(): Promise<CosPrefix> {
     (Object.keys(COS_TOOLS) as CosToolName[]).map(async (name) => ({
       name,
       description: DESCRIPTIONS[name],
-      input_schema: (await asSchema(
-        COS_TOOLS[name].input as FlexibleSchema<unknown>
-      ).jsonSchema) as Record<string, unknown>,
+      input_schema: (await asSchema(inputOf(name) as FlexibleSchema<unknown>)
+        .jsonSchema) as Record<string, unknown>,
     }))
   )
   const body = { version: PREFIX_VERSION, instructions: INSTRUCTIONS, tools }
@@ -807,8 +844,11 @@ export async function binds(
   )
 }
 
-/** `request_change`'s input with its `step` cleaned, or gone when nothing of it may show. */
-export function cleanedChange({ step, ...rest }: CosChangeRequest) {
+/** A tool's input with its `step` cleaned, or gone when nothing of it may show. */
+export function cleanedChange<T extends object>({
+  step,
+  ...rest
+}: T & { step?: string }) {
   const clean = cleanStep(step)
   return clean ? { ...rest, step: clean } : rest
 }
@@ -867,7 +907,7 @@ export function changeRepeated(
   return new Set(started).size < started.length
 }
 
-/** `request_change`'s input without `step`, the panel's line, which the tool never reads. */
+/** A tool's input without `step`, the line its status shows, which the tool never reads. */
 export function withoutStep(input: unknown): unknown {
   const { step: _step, ...rest } = input as { step?: string }
   return rest
@@ -944,11 +984,11 @@ export async function runTool(
       run.tools,
       // A contact is recorded only under a card's yes; a change that ran
       // with none carries no new one.
-      name === "request_change"
-        ? withoutStep(
-            approvalId ? input : { ...(input as object), contact: undefined }
-          )
-        : input,
+      withoutStep(
+        name === "request_change" && !approvalId
+          ? { ...(input as object), contact: undefined }
+          : input
+      ),
       key ?? "",
       run.turn,
       run.zone
@@ -1058,7 +1098,7 @@ function toolsFor(run: AgentTurn) {
   return {
     get_workspace: tool({
       ...describe("get_workspace"),
-      inputSchema: COS_TOOLS.get_workspace.input,
+      inputSchema: inputOf("get_workspace"),
       // The labels the turn's context shows, never raw states or ids outside a ref.
       toModelOutput: ({ output }) => {
         const read = CosWorkspace.safeParse(output)
@@ -1072,43 +1112,43 @@ function toolsFor(run: AgentTurn) {
     }),
     get_facts: tool({
       ...describe("get_facts"),
-      inputSchema: COS_TOOLS.get_facts.input,
+      inputSchema: inputOf("get_facts"),
     }),
     get_preview: tool({
       ...describe("get_preview"),
-      inputSchema: COS_TOOLS.get_preview.input,
+      inputSchema: inputOf("get_preview"),
     }),
     request_change: tool({
       ...describe("request_change"),
-      inputSchema: COS_TOOLS.request_change.input,
+      inputSchema: inputOf("request_change"),
     }),
     answer_question: tool({
       ...describe("answer_question"),
-      inputSchema: COS_TOOLS.answer_question.input,
+      inputSchema: inputOf("answer_question"),
     }),
     create_reminder: tool({
       ...describe("create_reminder"),
-      inputSchema: COS_TOOLS.create_reminder.input,
+      inputSchema: inputOf("create_reminder"),
     }),
     record_review: tool({
       ...describe("record_review"),
-      inputSchema: COS_TOOLS.record_review.input,
+      inputSchema: inputOf("record_review"),
     }),
     check_domain: tool({
       ...describe("check_domain"),
-      inputSchema: COS_TOOLS.check_domain.input,
+      inputSchema: inputOf("check_domain"),
     }),
     connect_domain: tool({
       ...describe("connect_domain"),
-      inputSchema: COS_TOOLS.connect_domain.input,
+      inputSchema: inputOf("connect_domain"),
     }),
     remove_domain: tool({
       ...describe("remove_domain"),
-      inputSchema: COS_TOOLS.remove_domain.input,
+      inputSchema: inputOf("remove_domain"),
     }),
     find_domain: tool({
       ...describe("find_domain"),
-      inputSchema: COS_TOOLS.find_domain.input,
+      inputSchema: inputOf("find_domain"),
     }),
     buy_domain: tool({
       ...describe("buy_domain"),
@@ -1116,19 +1156,19 @@ function toolsFor(run: AgentTurn) {
     }),
     get_search_performance: tool({
       ...describe("get_search_performance"),
-      inputSchema: COS_TOOLS.get_search_performance.input,
+      inputSchema: inputOf("get_search_performance"),
     }),
     get_indexing: tool({
       ...describe("get_indexing"),
-      inputSchema: COS_TOOLS.get_indexing.input,
+      inputSchema: inputOf("get_indexing"),
     }),
     connect_google: tool({
       ...describe("connect_google"),
-      inputSchema: COS_TOOLS.connect_google.input,
+      inputSchema: inputOf("connect_google"),
     }),
     remember: tool({
       ...describe("remember"),
-      inputSchema: COS_TOOLS.remember.input,
+      inputSchema: inputOf("remember"),
     }),
   }
 }
@@ -1177,6 +1217,27 @@ async function derivedCall(
   return [...(await convertToModelMessages(messages, { tools })), ...steps]
 }
 
+/** The domain states in which a connection reports back on its own. */
+const WAITING_DOMAIN: readonly string[] = [
+  "awaiting_payment",
+  "awaiting_dns",
+  "verifying",
+]
+
+/**
+ * Whether something is running that will tell the owner when it changes, so
+ * "I'll let you know" is true. Google is known here only from this turn's
+ * connect_google, since the workspace holds no Google state.
+ */
+async function watching(run: AgentTurn): Promise<boolean> {
+  if (run.state.tools.includes("connect_google")) return true
+  const { builds, domains } = await getWorkspace(run.tools, {})
+  return (
+    builds.length > 0 ||
+    (domains ?? []).some((d) => WAITING_DOMAIN.includes(d.state))
+  )
+}
+
 /**
  * The turn's agent. `prepareStep` refuses a call whose messages are not
  * the log's (ADR-034's check), and `onStepEnd` logs each step before the
@@ -1192,8 +1253,24 @@ export function cosAgent(
   const closed = (error: unknown) => {
     if (error instanceof TurnClosed) run.abort.abort(error)
   }
+  const jevKey = run.tools.env.OPENROUTER_API_KEY
   return new ToolLoopAgent({
-    model,
+    // A reply that ends on a promise of work with no tool call is run again
+    // (`promise.ts`). With no key for Jev the turn ends as the model ended it.
+    model: jevKey
+      ? gated(model, async (said) => {
+          const rerun = await jevPromise(jevKey, said, () => watching(run))
+          if (rerun) {
+            console.log(
+              JSON.stringify({
+                code: "cos.promise_gate",
+                turn_id: run.turn.turnId,
+              })
+            )
+          }
+          return rerun
+        })
+      : model,
     instructions: INSTRUCTIONS,
     tools,
     activeTools: activeTools(mode),
@@ -1232,7 +1309,13 @@ export function cosAgent(
     maxOutputTokens: LIMITS.maxOutputTokens,
     // The `step` the panel shows is cleaned before the call is logged, so the
     // part holds what the owner may read; the tool body never gets it.
-    experimental_refineToolInput: { request_change: cleanedChange },
+    experimental_refineToolInput: {
+      request_change: cleanedChange,
+      get_workspace: cleanedChange,
+      get_facts: cleanedChange,
+      get_preview: cleanedChange,
+      check_domain: cleanedChange,
+    },
     repairToolCall: async ({ toolCall }) => repairedChange(toolCall),
     // The instructions and tools come first and never change, and only the
     // turn's context and the owner's newest message follow the history, so
