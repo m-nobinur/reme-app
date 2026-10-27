@@ -51,6 +51,12 @@ vi.mock("../src/search.ts", async (importOriginal) => ({
     script.calls.push(`tell ${key}`)
   },
 }))
+vi.mock("../src/search-payoff.ts", () => ({
+  sayPayoff: async () => {
+    script.calls.push("payoff")
+    return null
+  },
+}))
 vi.mock("../src/search-sync.ts", () => ({
   checkGrant: async () => ({ result: { healthy: script.healthy } }),
   syncTargets: async () => [
@@ -111,6 +117,7 @@ describe("the daily search sync", () => {
       "inspect https://a.example.test/",
       "pull https://b.example.test/",
       "inspect https://b.example.test/",
+      "payoff",
     ])
     expect(configs["pull 1"]).toBe(SYNC_RETRIES)
   })
@@ -124,6 +131,7 @@ describe("the daily search sync", () => {
       "pull https://a.example.test/",
       "pull https://b.example.test/",
       "inspect https://b.example.test/",
+      "payoff",
     ])
   })
 

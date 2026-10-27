@@ -899,9 +899,17 @@
       "pull 1",
       "inspect 1",
       "pull 2",
-      "inspect 2"
+      "inspect 2",
+      "payoff"
     ],
-    "stale": ["permissions", "properties", "pull 1", "pull 2", "inspect 2"],
+    "stale": [
+      "permissions",
+      "properties",
+      "pull 1",
+      "pull 2",
+      "inspect 2",
+      "payoff"
+    ],
     "needs reauth": ["permissions", "properties", "pull 1"],
     "lost permission": ["permissions", "say permissions"]
   },
