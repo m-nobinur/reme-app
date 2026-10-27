@@ -332,6 +332,11 @@ export type OwnerDataSource = {
     attempt: string,
     result: GoogleResultRequest["result"]
   ) => Promise<void>
+  /**
+   * Checks a connecting domain now, which wakes its Workflow to say in the
+   * chat what it sees. Never throws: the chat carries the answer.
+   */
+  domainCheck: (name: string) => Promise<void>
   /** The newest purchase of a domain, or null when there is none. */
   domainStatus: (name: string) => Promise<DomainPurchaseStatus | null>
   /** The details page for buying a name, prefilled, or the api's refusal code. */
