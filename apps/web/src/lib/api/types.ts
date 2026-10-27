@@ -2,6 +2,7 @@ import type {
   Activity,
   ApprovalRequest,
   AvatarId,
+  BuildQuestions,
   BuildStopCause,
   BuildSummary,
   ChangeKind,
@@ -278,12 +279,15 @@ export type OwnerDataSource = {
    * request: the api reads the org from the session, and nothing is named.
    */
   pollWorkspace: (etag: string | null) => Promise<WorkspacePoll>
-  /** One answer to a question the assistant asked in `conversationId`. */
+  /**
+   * One answer to a question the assistant asked in `conversationId`, with
+   * the stack as now stored: an answer can close others in it.
+   */
   answer: (
     conversationId: string,
     reply: QuestionReply,
     key: string
-  ) => Promise<WriteOutcome>
+  ) => Promise<WriteOutcome | { done: true; stack: BuildQuestions }>
   cancelBuild: (assignmentId: string) => Promise<WriteOutcome>
   /** The owner's own account, ended (ADR-035). A second call finishes the first. */
   deleteAccount: () => Promise<WriteOutcome>

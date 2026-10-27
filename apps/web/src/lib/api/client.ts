@@ -2,6 +2,7 @@ import {
   ActivityFeed,
   ApprovalDecision,
   type AttentionItem as Attention,
+  BuildQuestions,
   CHAT_TURN_MS,
   type ChangeKind,
   Conversation,
@@ -535,10 +536,16 @@ async function answer(
   conversationId: string,
   reply: QuestionReply,
   key: string
-): Promise<WriteOutcome> {
+): ReturnType<OwnerDataSource["answer"]> {
   const path = `/conversations/${segment(conversationId)}/questions`
   // The same answer again is a retry; a refusal says why in the owner's words.
-  return await outcome(await post(path, reply, key), path)
+  const response = await post(path, reply, key)
+  if (!response.ok) return await outcome(response, path)
+  // The stack as stored: an answer can close the rest of it.
+  const stack = BuildQuestions.safeParse(
+    await response.json().catch(() => null)
+  )
+  return stack.success ? { done: true, stack: stack.data } : { done: true }
 }
 
 async function cancelBuild(assignmentId: string): Promise<WriteOutcome> {

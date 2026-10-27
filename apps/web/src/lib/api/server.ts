@@ -211,7 +211,7 @@ export const answerQuestion = createServerFn({ method: "POST" })
       key: keyOf(data.key),
     }
   })
-  .handler(async ({ data }): Promise<WriteOutcome> => {
+  .handler(async ({ data }) => {
     return await source.answer(data.conversationId, data.reply, data.key)
   })
 
