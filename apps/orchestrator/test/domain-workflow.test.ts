@@ -286,6 +286,23 @@ describe("the domain Workflow", () => {
     expect(script.calls.filter((c) => c === "nudge")).toHaveLength(1)
   })
 
+  it("counts the 24 hours from the last change, and not at all while the certificate is ours", async () => {
+    const moved = (ms: number) => ({ ...at(ms), changed: true }) as Seen
+    // Moved at 20 hours: 25 hours in is only 5 quiet hours, 45 is 25.
+    await drive([at(MIN), moved(20 * HOUR), at(25 * HOUR)])
+    expect(script.calls).not.toContain("nudge")
+    script.calls.length = 0
+    await drive([at(MIN), moved(20 * HOUR), at(45 * HOUR), at(46 * HOUR)])
+    expect(script.calls.filter((c) => c === "nudge")).toHaveLength(1)
+    // A later move starts a new quiet period, which gets its own reminder.
+    script.calls.length = 0
+    await drive([at(25 * HOUR), moved(26 * HOUR), at(51 * HOUR)])
+    expect(script.calls.filter((c) => c === "nudge")).toHaveLength(2)
+    script.calls.length = 0
+    await drive([at(25 * HOUR, "pending_certificate")])
+    expect(script.calls).not.toContain("nudge")
+  })
+
   it("waits by how long the claim has been connecting, not by how many looks", async () => {
     const { waits } = await drive(
       [0, 29, 30, 119, 120, 71 * 60].map((m) => at(m * MIN))

@@ -136,6 +136,7 @@ describe("a look", () => {
       at: expect.any(Number),
       status: "conflicting_record",
       ready: false,
+      changed: true,
     })
     expect(first.reading).toMatchObject({
       step: "records",
@@ -217,9 +218,26 @@ describe("a look", () => {
       [`https://${WWW}/`]: () => new Response("not here", { status: 404 }),
     }
     stubNet(net, FIXED)
-    expect((await look(env, kit, "org", "dom")).result).toMatchObject({
+    const held = await look(env, kit, "org", "dom")
+    expect(held.result).toMatchObject({
       status: "pending_verification",
       ready: false,
+    })
+    // The records are in, so the one step left is the TXT, said with its value.
+    expect(row.state).toBe("verifying")
+    expect(held.reading).toMatchObject({
+      step: "ownership",
+      write: {
+        state: "blocked",
+        blocked_on: "owner_action",
+        note: "Add the TXT record at GoDaddy",
+      },
+    })
+    expect(await held.reading?.tell?.()).toMatchObject({
+      text: expect.stringContaining(
+        "add this TXT record at GoDaddy: _cf-custom-hostname.www = 0e2d5a7f-uuid."
+      ),
+      button: { label: "Open GoDaddy DNS settings" },
     })
     // A TXT with another value is not the owner's proof either.
     const txt = (value: string) => ({
@@ -310,6 +328,7 @@ describe("the check", () => {
         ],
       },
       primary: WWW,
+      apex: NAME,
     })
     vi.unstubAllGlobals()
     vi.stubGlobal("fetch", async () => {

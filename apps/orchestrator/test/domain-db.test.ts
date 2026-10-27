@@ -460,7 +460,7 @@ describe.skipIf(!url)("custom domains against a database", () => {
     const before = new Map(site.store.pointers)
 
     // With no model key, the nudge and the failed line are today's templates.
-    expect((await nudge(env, kit, site.orgId, domainId))?.text).toBe(
+    expect((await nudge(env, kit, site.orgId, domainId, 1))?.text).toBe(
       `I'm still waiting for the records for ${name}. There's no need to tell me when they're in; I'll see them.`
     )
     expect(
@@ -681,11 +681,11 @@ describe.skipIf(!url)("custom domains against a database", () => {
     const site = await published()
     const { env, created } = domainEnv(site.store)
     const body = { name: sub, approval_id: "a" }
+    // Its CNAME is already there, so the card asks for the TXT alone.
     expect(await connect(env, kit, site.orgId, body)).toMatchObject({
       status: 201,
       output: {
         steps: [
-          { type: "CNAME", name: "book", value: "domains.remeai.co.uk" },
           {
             type: "TXT",
             name: "_cf-custom-hostname.book",
