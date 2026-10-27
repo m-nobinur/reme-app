@@ -46,6 +46,10 @@
     "CF_ACCOUNT_ID": "f161d624d34c45dd59579f9ee45c4396",
     "REGISTRAR_API": "registrar-sandbox",
     "ROUTER_SERVICE": "reme-router",
+    // Staging only: the Worker each claimed custom host gets a `{host}/*`
+    // route to, since production's router holds `*/*` on the shared zone
+    // (src/domains.ts `setRoutes`). Production has none and needs none.
+    "CF_ROUTE_SCRIPT": "reme-router",
     // The router serves it at /{key}.txt; the same value per environment.
     "INDEXNOW_KEY": "e589181a6d7f0ffecc3cfe5285688213",
     // Where an owner email links (src/deliveries.ts): the web app, as apps/api's WEB_ORIGIN.

@@ -4,6 +4,7 @@ import {
   CAA_FOR_US,
   CNAME_TARGET,
   type CustomHostname,
+  claimHosts,
   deleteHostname,
   detectProvider,
   domainCheck,
@@ -12,7 +13,9 @@ import {
   type Inspection,
   inspect,
   recordsFor,
+  refreshHostname,
   SETTINGS_MAX_BYTES,
+  setRoutes,
   settingsBase,
   stillToAdd,
 } from "../src/domains.ts"
@@ -738,5 +741,106 @@ describe("the custom hostname client", () => {
     })
     expect(await getHostname(env, "gone")).toBeNull()
     await expect(deleteHostname(env, "gone")).resolves.toBeUndefined()
+  })
+})
+
+describe("instant validation", () => {
+  const env = { CF_DOMAINS_TOKEN: "token", CF_DOMAINS_ZONE_ID: "zone" }
+  const url = `https://api.cloudflare.com/client/v4/zones/zone/custom_hostnames/id-${WWW}`
+
+  it("never refreshes a hostname whose certificate is already active", async () => {
+    const fetched = stubNet()
+    const active = hostname(WWW)
+    expect(await refreshHostname(env, active)).toBe(active)
+    expect(fetched).not.toHaveBeenCalled()
+  })
+
+  it("refreshes a pending one with the create's validation and reads its answer", async () => {
+    const after = hostname(WWW, "active", "pending_validation")
+    const fetched = stubNet({
+      [url]: Response.json({ success: true, result: after }),
+    })
+    expect(
+      await refreshHostname(env, hostname(WWW, "pending", "initializing"))
+    ).toEqual(after)
+    const [, init] = fetched.mock.calls[0] ?? []
+    expect(init?.method).toBe("PATCH")
+    expect(JSON.parse(String(init?.body))).toEqual({
+      ssl: { method: "http", type: "dv" },
+    })
+  })
+
+  it("keeps the state it was given when the refresh fails", async () => {
+    stubNet({ [url]: Response.json({ success: false }, { status: 500 }) })
+    const pending = hostname(WWW, "pending", "initializing")
+    expect(await refreshHostname(env, pending)).toBe(pending)
+  })
+})
+
+describe("staging routes", () => {
+  const env = {
+    CF_DOMAINS_TOKEN: "token",
+    CF_DOMAINS_ZONE_ID: "zone",
+    CF_ROUTE_SCRIPT: "reme-router",
+  }
+  const base = "https://api.cloudflare.com/client/v4/zones/zone/workers/routes"
+  const routes = (result: unknown) => () =>
+    Response.json({ success: true, result })
+  const calls = (fetched: ReturnType<typeof stubNet>) =>
+    fetched.mock.calls.map(([u, init]) => `${init?.method} ${String(u)}`)
+
+  it("names the apex and www, or a subdomain alone", () => {
+    expect(claimHosts(APEX, { apex: "a", www: "w" })).toEqual([APEX, WWW])
+    expect(claimHosts(`book.${APEX}`, { apex: "a" })).toEqual([`book.${APEX}`])
+  })
+
+  it("does nothing where no script is set, as in production", async () => {
+    const fetched = stubNet()
+    expect(
+      await setRoutes({ ...env, CF_ROUTE_SCRIPT: undefined }, [APEX], true)
+    ).toBe(true)
+    expect(fetched).not.toHaveBeenCalled()
+  })
+
+  it("creates only the routes not already there", async () => {
+    const fetched = stubNet({
+      [base]: routes([
+        { id: "r1", pattern: `${WWW}/*`, script: "reme-router" },
+      ]),
+    })
+    expect(await setRoutes(env, [APEX, WWW], true)).toBe(true)
+    expect(calls(fetched)).toEqual([`GET ${base}`, `POST ${base}`])
+    expect(JSON.parse(String(fetched.mock.calls[1]?.[1]?.body))).toEqual({
+      pattern: `${APEX}/*`,
+      script: "reme-router",
+    })
+  })
+
+  it("removes only its own script's routes", async () => {
+    const fetched = stubNet({
+      [base]: routes([
+        { id: "r1", pattern: `${APEX}/*`, script: "reme-router" },
+        { id: "r2", pattern: `${WWW}/*`, script: "something-else" },
+      ]),
+      [`${base}/r1`]: routes({ id: "r1" }),
+    })
+    expect(await setRoutes(env, [APEX, WWW], false)).toBe(true)
+    expect(calls(fetched)).toEqual([`GET ${base}`, `DELETE ${base}/r1`])
+  })
+
+  it("logs one line and never throws when Cloudflare refuses", async () => {
+    stubNet({
+      [base]: () =>
+        Response.json(
+          { success: false, errors: [{ code: 10000 }] },
+          { status: 403 }
+        ),
+    })
+    const logged = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined)
+    expect(await setRoutes(env, [APEX], true)).toBe(false)
+    expect(logged).toHaveBeenCalledTimes(1)
+    expect(String(logged.mock.calls[0]?.[0])).toContain("cloudflare.10000")
   })
 })

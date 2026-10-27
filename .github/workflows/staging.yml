@@ -213,6 +213,16 @@ jobs:
             echo "::error::$ROUTER_PROBE/ answered $code, expected the router's 404"; exit 1; }
           echo "$ROUTER_PROBE/ answered $code"
 
+      # The router deploy just replaced its routes with its config's, which
+      # drops each staging custom domain's `{host}/*` route; this puts them
+      # back from the claims staging holds (apps/orchestrator domain-flow.ts).
+      - name: Restore the custom domain routes
+        run: |
+          curl -sSf --max-time 60 -X POST \
+            -H "authorization: Bearer $ORCHESTRATOR_TOKEN" \
+            "$ORCHESTRATOR/domains/routes" | tee /dev/stderr | jq -e '.ok' >/dev/null || {
+            echo "::error::$ORCHESTRATOR/domains/routes did not restore every route"; exit 1; }
+
       - run: pnpm --filter web build
 
       - name: Deploy the web app

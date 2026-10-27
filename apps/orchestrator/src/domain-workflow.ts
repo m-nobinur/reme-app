@@ -256,9 +256,10 @@ export class DomainWorkflow extends WorkflowEntrypoint<Env, DomainParams> {
       return { outcome: "failed" }
     }
 
+    // The first look asks Cloudflare to validate at once, for records already in.
     const lookAt = (n: number) =>
       probe(step, `look ${n}`, env, address, (kit) =>
-        look(env, kit, orgId, domainId)
+        look(env, kit, orgId, domainId, n === 1)
       )
     let quietSince = started
     let nudged = false
