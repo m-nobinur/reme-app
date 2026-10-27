@@ -28,6 +28,17 @@ vi.mock("../src/domain-flow.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/domain-flow.ts")>()),
   withKit: async (_env: unknown, fn: (kit: unknown) => unknown) => fn({}),
 }))
+// The engine is tested against a database in probe.test.ts; here it is the step it runs in.
+vi.mock("../src/probe.ts", () => ({
+  probe: (
+    step: { do: (...args: unknown[]) => unknown },
+    name: string,
+    _env: unknown,
+    _target: unknown,
+    read: (kit: unknown) => Promise<{ result: unknown }>,
+    config: unknown
+  ) => step.do(name, config, () => read({}).then((seen) => seen.result)),
+}))
 vi.mock("../src/search.ts", () => ({
   fileToken: async () => {
     if (script.tokenError) throw script.tokenError

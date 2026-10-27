@@ -48,6 +48,7 @@ import {
   zoneApex,
 } from "./domains.ts"
 import { writeUpdate } from "./heartbeat-write.ts"
+import type { Observed } from "./probe.ts"
 import {
   activeDeployment,
   dropDomainPointers,
@@ -528,42 +529,46 @@ export type Seen =
       at: number
       status: DomainCheck["status"]
       ready: boolean
-      /** What to tell the owner, when the check differs from the last one. */
+      /** What to tell the owner, which the probe adds when the check changed. */
       say?: Say
     }
 
 /**
- * One look: the check, the row brought up to date, and a message when the
- * check differs from the last one. Ready means valid and answering through
- * our edge. The message is keyed by the look and returned with the step's
- * result, so the Workflow's own post step neither loses it nor says it twice.
+ * One look, the `look` probe: the check, the row brought up to date, and the
+ * reading the probe hashes. Ready means valid and answering through our edge.
+ * The message is worded here and said by the probe only when the check
+ * differs from the last one the task step holds.
  */
 export async function look(
   env: Env,
   kit: Tenancy,
   orgId: string,
-  domainId: string,
-  n: number
-): Promise<Seen> {
+  domainId: string
+): Promise<Observed<Seen>> {
   const row = await kit.withOrg({ orgId }, (db) => readDomain(db, domainId))
-  if (!row || !connecting(row.state)) return { gone: true }
+  if (!row || !connecting(row.state)) return { result: { gone: true } }
   const seen = await currentCheck(env, row)
   let check = seen.check
   const ready = check.status === "valid" && (await answers(seen.primary))
   // Valid at Cloudflare but not yet answering: the certificate is still deploying.
   if (check.status === "valid" && !ready)
     check = { status: "pending_certificate" }
+  const result = {
+    gone: false as const,
+    at: Date.now(),
+    status: check.status,
+    ready,
+  }
+  // A failed read is no news: nothing stored moves, and the next look reads again.
+  if (check.status === "unknown_error") return { result }
   // jsonb keeps keys in its own order, so the stored check is compared canonically.
   const same = canonical(row.lastCheck) === canonical(check)
-  const text = same ? null : statusText(check, row.name, seen.primary)
+  const text = statusText(check, row.name, seen.primary)
   const button =
     check.status === "conflicting_record" ||
     check.status === "invalid_configuration"
       ? settingsButton(row.provider)
       : undefined
-  const say: Say | undefined = text
-    ? { key: `${domainId}:look:${n}`, text, ...(button && { button }) }
-    : undefined
   const state: DomainState =
     check.status === "pending_certificate" || check.status === "valid"
       ? "verifying"
@@ -581,14 +586,31 @@ export async function look(
       if (moved.length > 0) await syncTasks(db, orgId)
       return moved
     })
-    if (updated.length === 0) return { gone: true }
+    if (updated.length === 0) return { result: { gone: true } }
   }
+  // Until the records are seen the owner is the one to act; past them, Cloudflare is.
+  const waiting = state === "awaiting_dns"
+  const provider = DomainProvider.safeParse(row.provider)
+  const where = provider.success ? provider.data.name : "your DNS provider"
+  const [conflict] =
+    check.status === "conflicting_record" ? check.conflicts : []
   return {
-    gone: false,
-    at: Date.now(),
-    status: check.status,
-    ready,
-    ...(say && { say }),
+    result,
+    reading: {
+      step: waiting ? "records" : "certificate",
+      // The claim's id, so a new claim on the same task is news again.
+      evidence: { domain_id: domainId, check, host: seen.primary },
+      ...(waiting && {
+        write: {
+          state: "blocked",
+          blocked_on: "owner_action",
+          note: conflict
+            ? `Delete the old ${conflict.type} record at ${where}`
+            : `Add the records at ${where}`,
+        },
+      }),
+      ...(text && { tell: async () => ({ text, ...(button && { button }) }) }),
+    },
   }
 }
 
@@ -626,54 +648,109 @@ export async function nudge(
 
 /**
  * The domain goes live: the row first, then every pointer written from it
- * (`writePointer` reads the active domain), then what to tell the owner.
- * Null when the claim was removed meanwhile; a throw while the host does not
- * yet serve the site, which the step retries. A retry after the row moved
- * finds it active and writes the pointers again, which repeats what is live.
+ * (`writePointer` reads the active domain). False when the claim was removed
+ * meanwhile. A retry after the row moved finds it active and writes the
+ * pointers again, which repeats what is live. Saying so waits for `served`.
  */
 export async function activateDomain(
   env: Env,
   kit: Tenancy,
   orgId: string,
   domainId: string
-): Promise<Say | null> {
+): Promise<boolean> {
   const done = await kit.withOrg({ orgId }, async (db) => {
     const claim = await readClaim(db, env, eq(domains.id, domainId))
     if (!claim) return null
     const { row } = claim
-    return row.state === "active" ||
-      (await moveTo(
-        db,
-        row,
-        "active",
-        CONNECTING,
-        { activatedAt: new Date() },
-        {
-          type: "domain.activated",
-          payload: { domain_id: domainId, primary_host: row.primaryHost },
-        }
-      ))
-      ? claim
-      : null
+    if (row.state === "active") return claim
+    const moved = await moveTo(
+      db,
+      row,
+      "active",
+      CONNECTING,
+      { activatedAt: new Date() },
+      {
+        type: "domain.activated",
+        payload: { domain_id: domainId, primary_host: row.primaryHost },
+      }
+    )
+    if (!moved) return null
+    await syncTasks(db, orgId)
+    return claim
   })
-  if (!done) return null
+  if (!done) return false
   await writePointer(env, kit, orgId, done.row.siteId, done.slug)
-  // Live is said on a fresh look at the host. Until KV has the pointer the
-  // router answers 404, so this throws and the step retries.
-  if (!(await reaches(done.row.primaryHost, done.row.siteId))) {
-    throw new Error("domain.not_served")
-  }
+  return true
+}
+
+export type Served =
+  | { gone: true }
+  | { gone: false; at: number; ready: boolean; say?: Say }
+
+/**
+ * The `loads` probe after activation: whether the domain serves this site,
+ * on a fresh request (`reaches`). Until KV carries the pointer, up to a
+ * minute, the router answers 404. Live is worded only once it passes.
+ */
+export async function served(
+  env: Env,
+  kit: Tenancy,
+  orgId: string,
+  domainId: string
+): Promise<Observed<Served>> {
+  const claim = await kit.withOrg({ orgId }, (db) =>
+    readClaim(db, env, eq(domains.id, domainId))
+  )
+  if (claim?.row.state !== "active") return { result: { gone: true } }
+  const { row, slug } = claim
+  const ready = await reaches(row.primaryHost, row.siteId)
   return {
-    key: `${domainId}:active`,
-    text: await writeUpdate(env, kit, orgId, {
-      facts: { host: done.row.primaryHost, old_host: done.slug },
-      template: `${done.row.primaryHost} is live. ${done.slug} now forwards to it, so links you've shared still work.`,
-    }),
-    button: {
-      label: "Open your website",
-      action: { kind: "open", url: `https://${done.row.primaryHost}/` },
+    result: { gone: false, at: Date.now(), ready },
+    reading: {
+      step: "loads",
+      evidence: { domain_id: domainId, host: row.primaryHost, ready },
+      // Only this proof makes `loads` done; the rows keep it in progress.
+      ...(ready && {
+        write: { state: "done" },
+        tell: async () => ({
+          text: await writeUpdate(env, kit, orgId, {
+            facts: { host: row.primaryHost, old_host: slug },
+            template: `${row.primaryHost} is live. ${slug} now forwards to it, so links you've shared still work.`,
+          }),
+          button: {
+            label: "Open your website",
+            action: { kind: "open", url: `https://${row.primaryHost}/` },
+          },
+        }),
+      }),
     },
   }
+}
+
+/**
+ * Active in our records but not serving the site by the deadline: only we can
+ * fix that, so an alert, and the owner told once.
+ */
+export async function notServed(
+  kit: Tenancy,
+  orgId: string,
+  domainId: string
+): Promise<Say | null> {
+  return kit.withOrg({ orgId }, async (db) => {
+    const row = await readDomain(db, domainId)
+    if (row?.state !== "active") return null
+    await appendEvent(db, {
+      orgId,
+      assignmentId: null,
+      staffId: null,
+      type: "alert.raised",
+      payload: { kind: "domain.serve_failed", domain_id: domainId },
+    })
+    return {
+      key: `${domainId}:not_served`,
+      text: `${row.primaryHost} is connected, but your site isn't loading there yet. I've flagged it so we can fix it.`,
+    }
+  })
 }
 
 /**
