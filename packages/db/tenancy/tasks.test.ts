@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm"
+import { eq, sql } from "drizzle-orm"
 import { afterAll, describe, expect, it } from "vitest"
 import { clearOrgs } from "../fixtures/seed.ts"
 import { connect } from "../src/client.ts"
@@ -71,6 +71,28 @@ describe("owner tasks", () => {
     await run((db) => syncTasks(db, ORG, { changes: 2 }))
     await sync()
     expect((await tasks())[0]?.detail).toMatchObject({ changes: 2 })
+
+    // What the probe writes survives a sync: its hash, and a wait it noted.
+    const hash = "a".repeat(64)
+    await run((db) =>
+      setStep(db, first?.id as string, "records", {
+        state: "blocked",
+        blocked_on: "owner_action",
+        note: "One record still missing",
+        probe_hash: hash,
+        evidence: { seen: 1 },
+      })
+    )
+    await sync()
+    const probed = await run((db) =>
+      db.execute<{ note: string; probe_hash: string }>(
+        sql`select note, probe_hash from task_steps where step = 'records'`
+      )
+    )
+    expect(probed[0]).toEqual({
+      note: "One record still missing",
+      probe_hash: hash,
+    })
 
     await run((db) =>
       db

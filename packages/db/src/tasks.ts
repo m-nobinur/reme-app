@@ -371,7 +371,6 @@ async function apply(
             : null,
       })
       .where(eq(ownerTasks.id, id))
-    await addSteps(db, orgId, id, kind)
   } else {
     // A task that starts closed (a back-filled live domain) is made in its state.
     const [row] = await db
@@ -387,12 +386,29 @@ async function apply(
     id = (row as { id: string }).id
     await addSteps(db, orgId, id, kind)
   }
-  for (const [step, s] of Object.entries(plan.steps ?? {}))
-    await setStep(db, id, step as TaskStepName, {
-      state: s.state,
-      blocked_on: s.blocked_on ?? null,
-      deadline: s.deadline ?? null,
-    })
+  const steps = Object.entries(plan.steps ?? {})
+  if (steps.length === 0) return
+  // Every step in one statement, since `look()` syncs on each change it sees.
+  // The probe's fields are never written, and a step the probe blocked with a
+  // note keeps its wait until the rows say the step is done or does not apply.
+  const values = sql.join(
+    steps.map(
+      ([step, s]) =>
+        sql`(${step}, ${s.state}, ${s.blocked_on ?? null}, ${s.deadline?.toISOString() ?? null})`
+    ),
+    sql`, `
+  )
+  await db.execute(sql`
+    update task_steps s set
+      state = v.state::task_step_state,
+      blocked_on = v.blocked_on::task_blocked_on,
+      deadline = v.deadline::timestamptz,
+      note = case when v.state = 'blocked' then s.note end,
+      changed_at = case when s.state::text <> v.state then now() else s.changed_at end
+    from (values ${values}) as v(step, state, blocked_on, deadline)
+    where s.task_id = ${id} and s.step::text = v.step
+      and not (s.state = 'blocked' and s.note is not null
+        and v.state not in ('done', 'skipped'))`)
 }
 
 /**
