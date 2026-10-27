@@ -8,6 +8,7 @@ import {
   JEV,
   jev,
   jevApproval,
+  jevBought,
   jevPromise,
   jevPutOn,
   jevReading,
@@ -552,7 +553,7 @@ describe("the reading of a reply that may promise work", () => {
 describe("the reading of a message that may put the site on a name", () => {
   afterEach(() => vi.restoreAllMocks())
   const read = (score: number) =>
-    fake({ answers: { puts_it_on: { type: "noul", noul: score } } })
+    fake({ answers: { yes: { type: "noul", noul: score } } })
 
   it("is sure only at the bar, and sends the message and the name as data", async () => {
     vi.spyOn(console, "log").mockImplementation(() => undefined)
@@ -635,5 +636,39 @@ describe("the reading of a message that may put the site on a name", () => {
       sure: false,
       error: "timeout",
     })
+  })
+})
+
+describe("the reading of a message that says a domain is bought", () => {
+  afterEach(() => vi.restoreAllMocks())
+  const read = (score: number) =>
+    fake({ answers: { yes: { type: "noul", noul: score } } })
+
+  it("is sure only at the bar, and sends the message and the name as data", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined)
+    const sure = read(0.96)
+    expect(
+      await jevBought(
+        "k",
+        "done, I bought it",
+        "sparkleclean.co.uk",
+        sure.fetchImpl
+      )
+    ).toBe(true)
+    expect(JSON.parse(sure.sent[0]?.init.body as string).state).toEqual({
+      owner_said: "done, I bought it",
+      domain: "sparkleclean.co.uk",
+    })
+    expect(
+      await jevBought(
+        "k",
+        "I'll buy it tonight",
+        "a.co.uk",
+        read(0.2).fetchImpl
+      )
+    ).toBe(false)
+    expect(
+      await jevBought("k", "done", "a.co.uk", fake({}, 500).fetchImpl)
+    ).toBe(false)
   })
 })

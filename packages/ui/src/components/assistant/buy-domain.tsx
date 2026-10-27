@@ -21,7 +21,7 @@ import {
   toE164,
 } from "@workspace/contracts"
 import { Done, Problem } from "@workspace/ui/components/assistant/decision"
-import { Records } from "@workspace/ui/components/assistant/domain"
+import { ConnectSteps } from "@workspace/ui/components/assistant/domain"
 import {
   ACCENT_RING,
   Docked,
@@ -1008,13 +1008,7 @@ export function BuyTray({
           data-slot="buy-domain"
         >
           <Done>{draft.name} is yours. Next, the settings to change.</Done>
-          {draft.output.steps?.length ? (
-            <Records
-              name={draft.name}
-              output={draft.output}
-              steps={draft.output.steps}
-            />
-          ) : null}
+          <ConnectSteps name={draft.name} output={draft.output} />
         </section>
       )
     case "not_now":

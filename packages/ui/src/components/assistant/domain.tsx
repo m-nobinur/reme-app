@@ -10,17 +10,25 @@ import {
   HourglassIcon,
 } from "@phosphor-icons/react"
 import {
+  BoughtElsewhereOutput,
   type CheckDomainOutput,
   ConnectDomainInput,
   ConnectDomainOutput,
   type DnsRecord,
+  DomainBoughtInput,
   RemoveDomainInput,
   RemoveDomainOutput,
 } from "@workspace/contracts"
-import { Decision, Done } from "@workspace/ui/components/assistant/decision"
+import {
+  Decision,
+  Done,
+  Problem,
+} from "@workspace/ui/components/assistant/decision"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
+import { ToolStatus } from "@workspace/ui/components/status-line"
 import { useCopyToClipboard } from "@workspace/ui/hooks/use-copy-to-clipboard"
-import { decisionView } from "@workspace/ui/lib/tool-state"
+import { refusalText } from "@workspace/ui/lib/refusal"
+import { decisionView, readView } from "@workspace/ui/lib/tool-state"
 import { META } from "@workspace/ui/lib/utils"
 import { useState } from "react"
 
@@ -110,7 +118,7 @@ function WaitButton() {
 }
 
 /** The records to add; only drawn when there is at least one. */
-export function Records({
+function Records({
   output,
   steps,
   name,
@@ -166,6 +174,21 @@ export function Records({
   )
 }
 
+/** A connect under way: the records to add, or that it needs none from the owner. */
+export function ConnectSteps({
+  name,
+  output,
+}: {
+  name: string
+  output: Connecting
+}) {
+  return output.steps?.length ? (
+    <Records name={name} output={output} steps={output.steps} />
+  ) : (
+    <p className="text-sm">Connecting. I'll message you when it's live.</p>
+  )
+}
+
 export const ConnectDomain: ToolCallMessagePartComponent = (props) => (
   <Decision
     busy="Connecting"
@@ -175,11 +198,10 @@ export const ConnectDomain: ToolCallMessagePartComponent = (props) => (
       "Only your website's address changes. Your email is not affected. Next I'll show you what to change where your domain is managed."
     }
     done={(output) =>
-      output?.outcome === "connecting" && output.steps?.length ? (
-        <Records
+      output?.outcome === "connecting" ? (
+        <ConnectSteps
           name={ConnectDomainInput.safeParse(props.args).data?.name ?? ""}
           output={output}
-          steps={output.steps}
         />
       ) : (
         <p className="text-sm">Connecting. I'll message you when it's live.</p>
@@ -194,6 +216,60 @@ export const ConnectDomain: ToolCallMessagePartComponent = (props) => (
   />
 )
 ConnectDomain.displayName = "ConnectDomain"
+
+/**
+ * A domain the owner says they bought elsewhere (`domain_bought`). No yes
+ * of its own: the owner's words are the ask. Once the registry shows the
+ * name it is the connect card's records; until then, a line saying so.
+ */
+export const DomainBought: ToolCallMessagePartComponent = (props) => {
+  const streaming = useAuiState((s) => s.message.status?.type === "running")
+  const view = readView(props, BoughtElsewhereOutput)
+  const name = DomainBoughtInput.safeParse(props.args).data?.name ?? ""
+  if (view.state !== "done") {
+    return (
+      <ToolStatus
+        args={{ domain: name }}
+        className="flex px-1 py-1.5 text-sm"
+        data-slot="domain-bought"
+        state={
+          view.state === "working" && streaming
+            ? "working"
+            : view.state === "failed"
+              ? "failed"
+              : "stopped"
+        }
+        tool="domain_bought"
+      />
+    )
+  }
+  const { output } = view
+  return (
+    <section
+      className="my-3 flex max-w-md flex-col gap-2"
+      data-slot="domain-bought"
+    >
+      {output.outcome === "connecting" ? (
+        <>
+          <Done>{name} is yours. Next, the settings to change.</Done>
+          <ConnectSteps name={name} output={output} />
+        </>
+      ) : output.outcome === "not_registered_yet" ? (
+        <p className="text-muted-foreground text-sm">
+          {`I can't see ${output.name} at the registry yet. It can take a few minutes, and I check each day too.`}
+        </p>
+      ) : (
+        <Problem
+          text={refusalText(
+            output.error.code,
+            "I couldn't connect it just now."
+          )}
+        />
+      )}
+    </section>
+  )
+}
+DomainBought.displayName = "DomainBought"
 
 /**
  * Taking the website off a connected domain. The yes is the owner's approval;

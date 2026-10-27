@@ -296,6 +296,13 @@ export const RecordReviewOutput = z.discriminatedUnion("outcome", [
   Refused,
 ])
 
+/**
+ * `domain_bought`'s input: the name the owner says they bought themselves.
+ * Its output is `BoughtElsewhereOutput`: the connect's own once the registry
+ * shows the name, else that it does not yet.
+ */
+export const DomainBoughtInput = z.strictObject({ name: DomainName })
+
 /** `inspect_domain`'s input: a name the owner says they have, not yet connected. */
 export const InspectDomainInput = z.strictObject({ name: DomainName })
 
@@ -472,6 +479,7 @@ export const COS_TOOLS = {
   remember: { input: RememberInput, output: RememberOutput },
   put_off: { input: PutOffInput, output: PutOffOutput },
   inspect_domain: { input: InspectDomainInput, output: InspectDomainOutput },
+  domain_bought: { input: DomainBoughtInput, output: BoughtElsewhereOutput },
 } as const
 
 export type CosToolName = keyof typeof COS_TOOLS
@@ -658,6 +666,11 @@ export const CosToolResult = z.discriminatedUnion("tool", [
     tool: z.literal("inspect_domain"),
     output: COS_TOOLS.inspect_domain.output,
   }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("domain_bought"),
+    output: COS_TOOLS.domain_bought.output,
+  }),
 ])
 
 /** The `cos.step` payload: a step's response messages as the SDK holds them. Model-written, so `inferred`. */
@@ -753,6 +766,7 @@ export type ConnectDomainInput = z.infer<typeof ConnectDomainInput>
 export type ConnectDomainOutput = z.infer<typeof ConnectDomainOutput>
 export type RemoveDomainInput = z.infer<typeof RemoveDomainInput>
 export type RemoveDomainOutput = z.infer<typeof RemoveDomainOutput>
+export type DomainBoughtInput = z.infer<typeof DomainBoughtInput>
 export type InspectDomainInput = z.infer<typeof InspectDomainInput>
 export type InspectDomainOutput = z.infer<typeof InspectDomainOutput>
 export type PutOffInput = z.infer<typeof PutOffInput>

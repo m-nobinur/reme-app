@@ -5398,6 +5398,7 @@ export interface components {
         | "remember"
         | "put_off"
         | "inspect_domain"
+        | "domain_bought"
       )[]
       text: string
       reserved_usd: number
@@ -5800,6 +5801,7 @@ export interface components {
           | "remember"
           | "put_off"
           | "inspect_domain"
+          | "domain_bought"
         description: string
         input_schema: {
           [key: string]: unknown
@@ -7822,6 +7824,55 @@ export interface components {
                 }
               }
         }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "domain_bought"
+          output:
+            | {
+                /** @constant */
+                outcome: "connecting"
+                /** @enum {string} */
+                method: "domain_connect" | "records"
+                email_affected: boolean
+                steps?: {
+                  /** @enum {string} */
+                  type: "A" | "AAAA" | "ALIAS" | "CAA" | "CNAME" | "TXT"
+                  name: string
+                  value: string
+                }[]
+                /** @enum {string} */
+                apex?: "alias" | "forward"
+                provider?: {
+                  name: string
+                  settings_url?: string
+                }
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                }
+              }
+            | {
+                /** @constant */
+                outcome: "not_registered_yet"
+                name: string
+              }
+        }
     CosToolStarted: {
       tool_call_id: string
       approval_id: string
@@ -7861,6 +7912,7 @@ export interface components {
             | "remember"
             | "put_off"
             | "inspect_domain"
+            | "domain_bought"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -7897,6 +7949,7 @@ export interface components {
             | "remember"
             | "put_off"
             | "inspect_domain"
+            | "domain_bought"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -7931,6 +7984,7 @@ export interface components {
             | "remember"
             | "put_off"
             | "inspect_domain"
+            | "domain_bought"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -7965,6 +8019,7 @@ export interface components {
             | "remember"
             | "put_off"
             | "inspect_domain"
+            | "domain_bought"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -7999,6 +8054,7 @@ export interface components {
             | "remember"
             | "put_off"
             | "inspect_domain"
+            | "domain_bought"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -8511,6 +8567,9 @@ export interface components {
       type: "A" | "AAAA" | "ALIAS" | "CAA" | "CNAME" | "TXT"
       name: string
       value: string
+    }
+    DomainBoughtInput: {
+      name: string
     }
     DomainCheck:
       | {

@@ -22,6 +22,7 @@ import {
 import { Decision, Done } from "@workspace/ui/components/assistant/decision"
 import {
   ConnectDomain,
+  DomainBought,
   domainStatusText,
   RemoveDomain,
 } from "@workspace/ui/components/assistant/domain"
@@ -300,6 +301,7 @@ export const COS_CARDS: Record<string, ToolCallMessagePartComponent> = {
   record_review: RecordReview,
   connect_domain: ConnectDomain,
   remove_domain: RemoveDomain,
+  domain_bought: DomainBought,
   connect_google: ConnectGoogle,
   find_domain: FindDomain,
   buy_domain: BuyDomain,
