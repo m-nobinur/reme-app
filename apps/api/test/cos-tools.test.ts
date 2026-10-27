@@ -2346,28 +2346,78 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       vi.spyOn(console, "log").mockImplementation(() => undefined)
     })
 
-    it("says yes only for the waiting purchase or a name the message gives, and only when Jev is sure", async () => {
+    it("says yes only for the waiting purchase, and only when Jev is sure", async () => {
       const who = await buying("cos-bought", "sparkleclean.co.uk")
       const said = async (text: string, noul = 0.97) =>
         boughtSaid(
           keyed(who),
           "sparkleclean.co.uk",
           (await turnOf(who, [text])).sessionId,
+          [],
           jev(noul)
         )
       expect(await said("done, I bought it")).toBe(true)
       expect(await said("done, I bought it", 0.4)).toBe(false)
-      // No waiting purchase for this name, and the message does not give it.
+      // No waiting purchase for this name, even when the message gives it.
       const stranger = await owner(kit, url as string, "cos-bought-none")
-      const unrelated = async (text: string) =>
-        boughtSaid(
+      expect(
+        await boughtSaid(
           keyed(stranger),
           "sparkleclean.co.uk",
-          (await turnOf(stranger, [text])).sessionId,
+          (await turnOf(stranger, ["done, I bought sparkleclean.co.uk"]))
+            .sessionId,
+          [],
           jev(0.99)
         )
-      expect(await unrelated("done, I bought it")).toBe(false)
-      expect(await unrelated("done, I bought sparkleclean.co.uk")).toBe(true)
+      ).toBe(false)
+    })
+
+    it("says no once a connect was proposed since the owner's message, or for a name the org has live", async () => {
+      const who = await buying("cos-bought-floor", "sparkleclean.co.uk")
+      const proposed: ModelMessage[] = [
+        { role: "user", content: "done, I bought it" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool-call",
+              toolCallId: "c1",
+              toolName: "connect_domain",
+              input: { name: "sparkleclean.co.uk" },
+            },
+          ],
+        },
+      ]
+      const { sessionId } = await turnOf(who, ["done, I bought it"])
+      expect(
+        await boughtSaid(
+          keyed(who),
+          "sparkleclean.co.uk",
+          sessionId,
+          proposed,
+          jev(0.99)
+        )
+      ).toBe(false)
+      await kit.withOrg({ orgId: who.orgId }, (db) =>
+        db.insert(domains).values({
+          orgId: who.orgId,
+          siteId: crypto.randomUUID(),
+          name: "sparkleclean.co.uk",
+          primaryHost: "sparkleclean.co.uk",
+          origin: "connected",
+          method: "records",
+          state: "active",
+        })
+      )
+      expect(
+        await boughtSaid(
+          keyed(who),
+          "sparkleclean.co.uk",
+          sessionId,
+          [],
+          jev(0.99)
+        )
+      ).toBe(false)
     })
 
     it("refuses without calling the orchestrator when the owner has not said it", async () => {

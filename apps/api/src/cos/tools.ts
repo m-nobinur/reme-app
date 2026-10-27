@@ -81,7 +81,7 @@ import {
   notOwner,
 } from "../domain-buy.ts"
 import { failure } from "../http.ts"
-import { holdsName, jevBought, jevPutOn } from "../jev.ts"
+import { jevBought, jevPutOn } from "../jev.ts"
 import {
   ASSISTANT_KEY_PREFIX,
   createReminder as storeReminder,
@@ -1104,6 +1104,39 @@ async function typedByOwner(
 }
 
 /**
+ * Whether a connect (`connect_domain` or `domain_bought`) was already
+ * proposed since the owner's last message, whatever came of it. A no, a
+ * refusal or a run is the end of that message's yes.
+ */
+const connectProposed = (messages: readonly ModelMessage[]) =>
+  messages
+    .slice(messages.map((m) => m.role).lastIndexOf("user"))
+    .some(
+      (m) =>
+        m.role === "assistant" &&
+        Array.isArray(m.content) &&
+        m.content.some(
+          (p) =>
+            p.type === "tool-call" &&
+            (p.toolName === "connect_domain" || p.toolName === "domain_bought")
+        )
+    )
+
+/** Whether the org already has `name` live: connecting it again moves live DNS. */
+async function isLive(
+  { kit, owner }: Pick<ToolContext, "kit" | "owner">,
+  name: string
+): Promise<boolean> {
+  const [active] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+    db
+      .select({ id: domains.id })
+      .from(domains)
+      .where(sql`${eq(domains.name, name)} and ${domains.state} = 'active'`)
+  )
+  return Boolean(active)
+}
+
+/**
  * Whether connecting `name` still asks on a card. It does not when the
  * owner's last typed message puts the site on exactly that name (Jev, at
  * `sure`). It always does for a name the org already has live, since
@@ -1119,47 +1152,36 @@ export async function connectApproval(
   messages: readonly ModelMessage[],
   fetchImpl?: typeof fetch
 ): Promise<"user-approval" | "not-applicable"> {
-  if (!env.OPENROUTER_API_KEY) return "user-approval"
-  const proposed = messages
-    .slice(messages.map((m) => m.role).lastIndexOf("user"))
-    .some(
-      (m) =>
-        m.role === "assistant" &&
-        Array.isArray(m.content) &&
-        m.content.some(
-          (p) => p.type === "tool-call" && p.toolName === "connect_domain"
-        )
-    )
-  if (proposed) return "user-approval"
+  if (!env.OPENROUTER_API_KEY || connectProposed(messages)) {
+    return "user-approval"
+  }
   const said = await typedByOwner({ kit, owner }, sessionId)
-  if (said === null) return "user-approval"
-  const [active] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
-    db
-      .select({ id: domains.id })
-      .from(domains)
-      .where(sql`${eq(domains.name, name)} and ${domains.state} = 'active'`)
-  )
-  if (active) return "user-approval"
+  if (said === null || (await isLive({ kit, owner }, name))) {
+    return "user-approval"
+  }
   return (await jevPutOn(env.OPENROUTER_API_KEY, said, name, fetchImpl))
     ? "not-applicable"
     : "user-approval"
 }
 
 /**
- * Whether the owner's last typed message says they bought `name`, a domain
- * they are buying themselves: the name is the address task's waiting purchase
- * or one the message names, and Jev is sure the message says it is bought.
- * The connect this starts has the owner's word as its only consent, so any
- * doubt is a no.
+ * Whether the owner's last typed message says they bought `name`, the
+ * domain the address task is waiting on them to buy, and Jev is sure it
+ * does. The connect this starts has the owner's word as its only consent, so
+ * any doubt is a no, and so is a name the org has live or a connect already
+ * proposed since that message, as for `connectApproval`. A domain they bought
+ * without us offering it goes through `connect_domain` instead.
  */
 export async function boughtSaid(
   { env, kit, owner }: Pick<ToolContext, "env" | "kit" | "owner">,
   name: string,
   sessionId: string,
+  messages: readonly ModelMessage[],
   fetchImpl?: typeof fetch
 ): Promise<boolean> {
+  if (!env.OPENROUTER_API_KEY || connectProposed(messages)) return false
   const said = await typedByOwner({ kit, owner }, sessionId)
-  if (said === null || !env.OPENROUTER_API_KEY) return false
+  if (said === null || (await isLive({ kit, owner }, name))) return false
   const address = (await kit.withOrg({ orgId: owner.orgId }, readTasks)).find(
     (t) => t.kind === "address"
   )
@@ -1168,10 +1190,7 @@ export async function boughtSaid(
     address.detail.name === name &&
     address.detail.origin === "buying_elsewhere" &&
     address.steps.some((s) => s.step === "purchase" && s.state !== "done")
-  return (
-    (waiting || holdsName(said, name)) &&
-    (await jevBought(env.OPENROUTER_API_KEY, said, name, fetchImpl))
-  )
+  return waiting && jevBought(env.OPENROUTER_API_KEY, said, name, fetchImpl)
 }
 
 const unconfirmed = () =>
@@ -1194,10 +1213,14 @@ export async function domainBought(
   { env, kit, owner }: ToolContext,
   { name }: DomainBoughtInput,
   key: string,
-  turn: Turn
+  turn: Turn,
+  _zone: string | null = null,
+  messages: readonly ModelMessage[] = []
 ): Promise<BoughtElsewhereOutput | Refused> {
   if (!(await isOrgOwner(kit, owner))) return refused(notOwner("buy"))
-  if (!(await boughtSaid({ env, kit, owner }, name, turn.sessionId))) {
+  if (
+    !(await boughtSaid({ env, kit, owner }, name, turn.sessionId, messages))
+  ) {
     return refused(unconfirmed())
   }
   return domainAnswer(
