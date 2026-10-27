@@ -11,11 +11,13 @@ import {
   cleanArg,
   elapsedText,
   type LineState,
+  notStarted,
   onboardingLine,
   type PageActionKey,
   pageAction,
   pillLine,
   planningLine,
+  proofOf,
   segmentLine,
   segmentTitle,
   stageLine,
@@ -30,6 +32,7 @@ import {
 import { describe, expect, it } from "vitest"
 
 const words = (line: string) => line.split(/\s+/).length
+const STAMP = "2026-10-22T10:00:00.000Z"
 const DASH = /[–—]/
 // A UUID, a run of 7 or more hex characters, a snake_case value or a staff code.
 const INTERNAL =
@@ -710,7 +713,13 @@ describe("segment copy", () => {
 })
 
 describe("page lines", () => {
-  const STANDING = ["golive", "domain", "purchase", "google"] as const
+  const STANDING = [
+    "golive",
+    "address",
+    "domain",
+    "purchase",
+    "google",
+  ] as const
 
   it("writes a clean line for every standing kind, state and name", () => {
     for (const kind of STANDING) {
@@ -744,6 +753,21 @@ describe("page lines", () => {
     ).toBe("Published today, 3:40 pm")
     expect(standingLine(at("golive", "done"), ctx)).toBe("Published")
     expect(standingLine(at("domain", "done"), ctx)).toBe("Live")
+    expect(standingLine(at("address", "done"), ctx)).toBe("Live")
+    expect(
+      standingLine(at("address", "done"), ctx, { renews: "1 October 2027" })
+    ).toBe("Live. Renews 1 October 2027")
+    expect(
+      standingLine(
+        segment("google", "done", {
+          numbers: { clicks: 12, impressions: 340 },
+        }),
+        ctx,
+        { synced: "today, 9:30 am" }
+      )
+    ).toBe(
+      "12 clicks and 340 appearances on Google in the last 28 days. Data read today, 9:30 am"
+    )
     expect(standingLine(at("domain", "waiting"), ctx)).toBe(
       "Waiting for your DNS change"
     )
@@ -759,6 +783,46 @@ describe("page lines", () => {
     expect(
       standingLine(at("domain", "failed"), { orgId: "o", assistant: null })
     ).toBe("The domain connection stopped. Ask your assistant to try again")
+  })
+
+  it("words what a task's furthest done step proved, and nothing for a step that proves nothing", () => {
+    const ctx = { orgId: "org-1", assistant: null }
+    const done = (...ids: string[]) =>
+      segment("address", "now", {
+        steps: ids.map((id) => ({ id, state: "done" as const, at: STAMP })),
+        names: { domain: "spark.co.uk" },
+      })
+    expect(proofOf(done("find_out", "choose"), ctx)).toBeNull()
+    expect(proofOf(done("find_out", "records"), ctx)).toEqual({
+      text: "Your DNS points spark.co.uk at your website",
+      at: STAMP,
+    })
+    // The furthest, not the first, and never a go-live segment's own "loads".
+    expect(proofOf(done("records", "certificate"), ctx)?.text).toBe(
+      "The certificate for spark.co.uk is active"
+    )
+    expect(
+      proofOf(segment("golive", "done", { steps: done("loads").steps }), ctx)
+    ).toBeNull()
+    for (const id of ["purchase", "ownership", "sign_in", "first_data"]) {
+      const text = proofOf(done(id), ctx)?.text ?? ""
+      plain(text)
+      expect(text).toMatch(/^[A-Z]/)
+    }
+  })
+
+  it("tells a task nothing has begun from one that has", () => {
+    const steps = (...states: ("next" | "done")[]) =>
+      states.map((state, i) => ({ id: `s${i}`, state }))
+    expect(
+      notStarted(segment("address", "upcoming", { steps: steps("next") }))
+    ).toBe(true)
+    expect(
+      notStarted(
+        segment("google", "upcoming", { steps: steps("done", "next") })
+      )
+    ).toBe(false)
+    expect(notStarted(segment("reminder", "upcoming"))).toBe(false)
   })
 
   it("follows the domain's steps while it connects", () => {

@@ -174,6 +174,64 @@ it("says what finished, and no Now list when nothing waits", async () => {
   expect(container.textContent).not.toContain("Now")
 })
 
+const section = (title: string) =>
+  [...container.querySelectorAll("section")].find((each) =>
+    each.querySelector("h2")?.textContent?.startsWith(title)
+  )
+
+it("puts a job waiting on the owner under Waiting on you, never Now", async () => {
+  live.workspace = {
+    ...EMPTY_WORKSPACE,
+    activity: {
+      journey: [
+        {
+          id: "golive",
+          kind: "golive",
+          state: "waiting",
+          steps: [{ id: "approval", state: "waiting" }],
+          at: new Date().toISOString(),
+        },
+      ],
+      now: [],
+      waiting: [],
+      upcoming: [],
+      done: [],
+    },
+  }
+  await render()
+  expect(section("Waiting on you")?.textContent).toContain(
+    "Your website is ready"
+  )
+  expect(section("Now")).toBeUndefined()
+})
+
+it("offers the next task not started as Up next, with its button into the chat", async () => {
+  live.workspace = {
+    ...EMPTY_WORKSPACE,
+    live: 2,
+    host: "fixture.example.invalid",
+    activity: {
+      journey: [],
+      now: [],
+      waiting: [],
+      upcoming: [
+        {
+          id: "address:1",
+          kind: "address",
+          state: "upcoming",
+          steps: [{ id: "find_out", state: "next" }],
+          at: new Date().toISOString(),
+        },
+      ],
+      done: [],
+    },
+  }
+  await render()
+  expect(section("Up next")?.textContent).toMatch(/address/i)
+  expect(link("Use your own domain")?.dataset.to).toBe("/app")
+  expect(section("Coming up")).toBeUndefined()
+})
+
 const note = (id: string, title: string, due_at: string | null): Reminder => ({
   id,
   title,

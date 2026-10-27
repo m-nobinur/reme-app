@@ -1518,6 +1518,21 @@ function ComingUp({
 }
 
 /**
+ * The next task not started: what it is, and its one button, which the app
+ * draws as a link into the chat.
+ */
+function UpNext({ text, children }: { text: string; children: ReactNode }) {
+  return (
+    <PanelSection icon={CircleIcon} title="Up next">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 ps-5">
+        <p className="min-w-0 text-sm">{text}</p>
+        {children}
+      </div>
+    </PanelSection>
+  )
+}
+
+/**
  * A reminder someone wrote down, completed in place. The title is the
  * owner's text, rendered as text. `due` is already in the reader's own zone,
  * or null while that zone is not known, so one time is never shown two ways.
@@ -1838,6 +1853,7 @@ export {
   StageDetail,
   StopBuild,
   stageWord,
+  UpNext,
   WaitingOnYou,
   YourWebsite,
 }

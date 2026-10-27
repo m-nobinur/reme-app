@@ -810,6 +810,7 @@ const JOBS: Record<JobKind, JobCopy> = {
   },
   google: {
     title: () => ["Connecting Google", "Linking your site to Google"],
+    next: () => ["Your site on Google comes next", "Next, your site on Google"],
     done: () => ["Your site is on Google", "Your site is connected to Google"],
     noun: "Google connection",
     pill: () => "connecting Google",
@@ -1238,6 +1239,42 @@ const COMPLETED: Record<JobKind, (n: Names) => string> = {
   google: () => "Connected to Google",
 }
 
+/** An owner task nothing has begun: the panel offers it as Up next. */
+export const notStarted = (segment: ActivitySegment) =>
+  (segment.kind === "address" || segment.kind === "google") &&
+  segment.state === "upcoming" &&
+  segment.steps.every((s) => s.state === "next")
+
+/**
+ * What a done step of an owner task proved, as the line under its Done row.
+ * A step with no line here (finding out, choosing) earns no row of its own.
+ */
+const PROVED: Readonly<Record<string, (n: Names) => string>> = {
+  purchase: (n) => `${cap(domain(n))} is registered in your name`,
+  records: (n) => `Your DNS points ${domain(n)} at your website`,
+  ownership: (n) => `Ownership of ${domain(n)} is confirmed`,
+  certificate: (n) => `The certificate for ${domain(n)} is active`,
+  loads: (n) => `Your website loads at ${domain(n)}`,
+  sign_in: () => "You signed in to Google",
+  permissions: () => "Google can read your search data",
+  verify: () => "Google confirmed the site is yours",
+  sitemap: () => "Your pages were sent to Google",
+  first_data: () => "Google sent its first search numbers",
+}
+
+/** The line an owner task's furthest done step earns, and when that step moved. */
+export function proofOf(segment: ActivitySegment, ctx: CopyContext) {
+  // A go-live segment has a "loads" step of its own, which proves something else.
+  if (segment.kind !== "address" && segment.kind !== "google") return null
+  const step = segment.steps
+    .filter((s) => s.state === "done" && Object.hasOwn(PROVED, s.id))
+    .at(-1)
+  const line = step && PROVED[step.id]
+  return step && line
+    ? { text: line(namesOf(segment, ctx)), at: step.at }
+    : null
+}
+
 /** The check-in sent the owner a message. */
 const wroteToOwner = (segment: ActivitySegment) =>
   segment.steps.some((s) => s.id === "message" && s.state === "done")
@@ -1331,12 +1368,12 @@ export function completedBrief(
     case "change":
       return cleanArg(segment.step, "text", 60) ?? "Made and checked"
     case "address":
+    case "google":
+      return proofOf(segment, ctx)?.text ?? null
     case "domain":
       return `Your website now loads at ${n.domain ?? "your domain"}`
     case "purchase":
       return "Registered in your name"
-    case "google":
-      return "Your pages were sent to Google"
     case "checkin":
       return wroteToOwner(segment)
         ? "Sent you a message in the chat"
@@ -1410,10 +1447,18 @@ export function standingLine(
       return extras.when ? `Published ${extras.when}` : "Published"
     case "purchase":
       return extras.renews ? `Renews ${extras.renews}` : "Registered"
-    case "google":
+    case "address":
+      return extras.renews ? `Live. Renews ${extras.renews}` : "Live"
+    case "google": {
+      const seen = segment.numbers
+      if (seen) {
+        const counts = `${plural(seen.clicks, "click")} and ${plural(seen.impressions, "appearance")} on Google in the last 28 days`
+        return extras.synced ? `${counts}. Data read ${extras.synced}` : counts
+      }
       return extras.synced
         ? `Verified, pages sent. Data read ${extras.synced}`
         : "Verified, pages sent. No data yet"
+    }
     default:
       return "Live"
   }
