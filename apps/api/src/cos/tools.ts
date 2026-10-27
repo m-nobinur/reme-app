@@ -53,6 +53,7 @@ import {
   type Tenancy,
 } from "@workspace/db"
 import { rangeText } from "@workspace/ui/lib/activity-copy"
+import type { ModelMessage } from "ai"
 import {
   type Bridged,
   bridge,
@@ -71,6 +72,7 @@ import {
   notOwner,
 } from "../domain-buy.ts"
 import { failure } from "../http.ts"
+import { jevPutOn } from "../jev.ts"
 import {
   ASSISTANT_KEY_PREFIX,
   createReminder as storeReminder,
@@ -1038,6 +1040,66 @@ export async function connectDomain(
     result = await ask()
   }
   return domainAnswer(result, ConnectDomainOutput.parse)
+}
+
+/**
+ * Whether connecting `name` still asks on a card. It does not when the
+ * owner's last message puts the site on exactly that name (Jev, at `sure`).
+ * It always does for a name the org already has live, since connecting moves
+ * live DNS, and for anything unsure: no key, a message without the name, a
+ * Jev error. The owner's words are read from the log, not from `messages`,
+ * so a context note or a summary can never stand for them, and an emailed
+ * reply (`eml_`) is not a yes: it crosses a channel the owner does not see.
+ * A connect already proposed since that message (declined, refused or run)
+ * never skips the card again, so a no cannot be retried past.
+ */
+export async function connectApproval(
+  { env, kit, owner }: Pick<ToolContext, "env" | "kit" | "owner">,
+  { name }: ConnectDomainInput,
+  sessionId: string,
+  messages: readonly ModelMessage[],
+  fetchImpl?: typeof fetch
+): Promise<"user-approval" | "not-applicable"> {
+  if (!env.OPENROUTER_API_KEY) return "user-approval"
+  const proposed = messages
+    .slice(messages.map((m) => m.role).lastIndexOf("user"))
+    .some(
+      (m) =>
+        m.role === "assistant" &&
+        Array.isArray(m.content) &&
+        m.content.some(
+          (p) => p.type === "tool-call" && p.toolName === "connect_domain"
+        )
+    )
+  if (proposed) return "user-approval"
+  const log = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+    readSession(db, sessionId)
+  )
+  const last = log
+    .flatMap((e) => {
+      const m =
+        e.type === "cos.message" ? CosMessage.safeParse(e.payload) : null
+      return m?.success && m.data.message.role === "user"
+        ? [m.data.message]
+        : []
+    })
+    .at(-1)
+  if (!last || last.id.startsWith("eml_")) return "user-approval"
+  const said = last.parts
+    .flatMap((p) =>
+      p.type === "text" && typeof p.text === "string" ? [p.text] : []
+    )
+    .join("\n")
+  const [active] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+    db
+      .select({ id: domains.id })
+      .from(domains)
+      .where(sql`${eq(domains.name, name)} and ${domains.state} = 'active'`)
+  )
+  if (active) return "user-approval"
+  return (await jevPutOn(env.OPENROUTER_API_KEY, said, name, fetchImpl))
+    ? "not-applicable"
+    : "user-approval"
 }
 
 /**
