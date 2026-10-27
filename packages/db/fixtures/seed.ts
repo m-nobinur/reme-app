@@ -15,6 +15,7 @@ import {
   jobRuns,
   memberships,
   orgs,
+  ownerTasks,
   pushSubscriptions,
   reminders,
   roles,
@@ -27,6 +28,7 @@ import {
   siteRevisions,
   staff,
   staffEvents,
+  taskFollowups,
   users,
 } from "../src/schema.ts"
 import { GOLDEN_ORGS } from "./golden.ts"
@@ -126,6 +128,10 @@ export async function clearOrgs(
     searchProperties,
     searchConnections,
   ]) {
+    await tx.delete(table).where(inArray(table.orgId, ids))
+  }
+  // A step cites its task; its delete cascades, so the task alone is enough.
+  for (const table of [taskFollowups, ownerTasks]) {
     await tx.delete(table).where(inArray(table.orgId, ids))
   }
   // A domain cites its approval, so it goes before the approvals.

@@ -22,6 +22,11 @@ import {
   SiteRevision,
   StaffMember,
   TaintLabel,
+  TaskBlockedOn,
+  TaskKind,
+  TaskState,
+  TaskStepName,
+  TaskStepState,
 } from "@workspace/contracts"
 import { describe, expect, it } from "vitest"
 import {
@@ -63,6 +68,11 @@ import {
   staffKind,
   staffStatus,
   taintLabel,
+  taskBlockedOn,
+  taskKind,
+  taskState,
+  taskStep,
+  taskStepState,
 } from "../src/schema.ts"
 
 /**
@@ -133,6 +143,16 @@ describe("enums match the contract", () => {
     expect(searchPropertyKind.enumValues).toEqual(SearchPropertyKind.options)
     expect(searchPropertyState.enumValues).toEqual(SearchPropertyState.options)
     expect(searchVerifyMethod.enumValues).toEqual(SearchVerifyMethod.options)
+  })
+})
+
+describe("owner task enums match the contract", () => {
+  it("kinds, states, steps and what a step waits on", () => {
+    expect(taskKind.enumValues).toEqual(TaskKind.options)
+    expect(taskState.enumValues).toEqual(TaskState.options)
+    expect(taskStep.enumValues).toEqual(TaskStepName.options)
+    expect(taskStepState.enumValues).toEqual(TaskStepState.options)
+    expect(taskBlockedOn.enumValues).toEqual(TaskBlockedOn.options)
   })
 })
 

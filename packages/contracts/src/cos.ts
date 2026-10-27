@@ -38,6 +38,7 @@ import {
   GetSearchPerformanceInput,
   GetSearchPerformanceOutput,
 } from "./search.ts"
+import { OwnerTask, TaskKind } from "./task.ts"
 import { Text } from "./text.ts"
 
 // The Chief of Staff's tools and its event log (ADR-034). A tool's output is
@@ -166,6 +167,11 @@ export const CosWorkspace = z.strictObject({
     )
     .max(10)
     .optional(),
+  /**
+   * The owner tasks still open, one per kind, with each step's state and the
+   * note of a step that waits on the owner. Optional, as `domains`.
+   */
+  tasks: z.array(OwnerTask).max(TaskKind.options.length).optional(),
   /** How long each lane usually takes, so the CoS quotes the measured wait. */
   expected_seconds: WorkspaceStatus.shape.expected_seconds,
   /** Each lane's wait in the panel's words, for a build that has just started. */

@@ -7,11 +7,15 @@ import { Text } from "./text.ts"
 // carries a refresh token, an access token, an org id or a Google account id:
 // the model and the web app see the connection's state and email only.
 
-/** Where the owner's Google connection is. `needs_reauth` is a token Google refused. */
+/**
+ * Where the owner's Google connection is. `needs_reauth` is a token Google
+ * refused; `needs_permission` a sign-in that left a Search Console box unticked.
+ */
 export const SearchConnectionState = z.enum([
   "active",
   "needs_reauth",
   "revoked",
+  "needs_permission",
 ])
 
 /** The free subdomain, a connected domain's own address, or a whole purchased domain. */
@@ -177,6 +181,7 @@ export const GetIndexingOutput = z.union([
 ])
 
 export type GoogleConnectRequest = z.infer<typeof GoogleConnectRequest>
+export type SearchConnectionState = z.infer<typeof SearchConnectionState>
 export type SearchConnection = z.infer<typeof SearchConnection>
 export type SearchProperty = z.infer<typeof SearchProperty>
 export type SearchTotals = z.infer<typeof SearchTotals>

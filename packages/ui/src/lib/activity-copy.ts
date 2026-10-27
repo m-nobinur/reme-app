@@ -1097,6 +1097,7 @@ const SEGMENT_KIND: Record<ActivitySegment["kind"], StatusKind> = {
   website: "building",
   golive: "publishing",
   change: "building",
+  address: "domain",
   domain: "domain",
   purchase: "payment",
   google: "google",

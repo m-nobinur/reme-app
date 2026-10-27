@@ -16,6 +16,7 @@ export interface components {
           | "website"
           | "golive"
           | "change"
+          | "address"
           | "domain"
           | "purchase"
           | "google"
@@ -35,6 +36,7 @@ export interface components {
             done: number
             total: number
           }
+          note?: string
         }[]
         /** Format: date-time */
         at: string
@@ -44,6 +46,7 @@ export interface components {
           business?: string
           host?: string
           domain?: string
+          provider?: string
           change?: string
         }
         step?: string
@@ -62,6 +65,7 @@ export interface components {
           | "website"
           | "golive"
           | "change"
+          | "address"
           | "domain"
           | "purchase"
           | "google"
@@ -81,6 +85,7 @@ export interface components {
             done: number
             total: number
           }
+          note?: string
         }[]
         /** Format: date-time */
         at: string
@@ -90,6 +95,7 @@ export interface components {
           business?: string
           host?: string
           domain?: string
+          provider?: string
           change?: string
         }
         step?: string
@@ -108,6 +114,7 @@ export interface components {
           | "website"
           | "golive"
           | "change"
+          | "address"
           | "domain"
           | "purchase"
           | "google"
@@ -127,6 +134,7 @@ export interface components {
             done: number
             total: number
           }
+          note?: string
         }[]
         /** Format: date-time */
         at: string
@@ -136,6 +144,7 @@ export interface components {
           business?: string
           host?: string
           domain?: string
+          provider?: string
           change?: string
         }
         step?: string
@@ -154,6 +163,7 @@ export interface components {
           | "website"
           | "golive"
           | "change"
+          | "address"
           | "domain"
           | "purchase"
           | "google"
@@ -173,6 +183,7 @@ export interface components {
             done: number
             total: number
           }
+          note?: string
         }[]
         /** Format: date-time */
         at: string
@@ -182,6 +193,7 @@ export interface components {
           business?: string
           host?: string
           domain?: string
+          provider?: string
           change?: string
         }
         step?: string
@@ -200,6 +212,7 @@ export interface components {
           | "website"
           | "golive"
           | "change"
+          | "address"
           | "domain"
           | "purchase"
           | "google"
@@ -219,6 +232,7 @@ export interface components {
             done: number
             total: number
           }
+          note?: string
         }[]
         /** Format: date-time */
         at: string
@@ -228,6 +242,7 @@ export interface components {
           business?: string
           host?: string
           domain?: string
+          provider?: string
           change?: string
         }
         step?: string
@@ -246,6 +261,7 @@ export interface components {
           | "website"
           | "golive"
           | "change"
+          | "address"
           | "domain"
           | "purchase"
           | "google"
@@ -265,6 +281,7 @@ export interface components {
             done: number
             total: number
           }
+          note?: string
         }[]
         /** Format: date-time */
         at: string
@@ -274,6 +291,7 @@ export interface components {
           business?: string
           host?: string
           domain?: string
+          provider?: string
           change?: string
         }
         step?: string
@@ -5848,6 +5866,97 @@ export interface components {
                   )
                 | null
             }[]
+            tasks?: (
+              | {
+                  /** Format: uuid */
+                  id: string
+                  /** @enum {string} */
+                  state: "active" | "done" | "declined" | "later"
+                  later_until: string | null
+                  /** Format: date-time */
+                  created_at: string
+                  done_at: string | null
+                  /** @constant */
+                  kind: "address"
+                  detail: {
+                    name?: string
+                    provider?: string
+                    registrar?: string
+                    /** @enum {string} */
+                    origin?: "owned" | "buying_elsewhere" | "purchased"
+                    ending?: string
+                  }
+                  steps: {
+                    /** @enum {string} */
+                    step:
+                      | "find_out"
+                      | "choose"
+                      | "purchase"
+                      | "records"
+                      | "ownership"
+                      | "certificate"
+                      | "loads"
+                    /** @enum {string} */
+                    state:
+                      | "pending"
+                      | "in_progress"
+                      | "blocked"
+                      | "done"
+                      | "skipped"
+                    note: string | null
+                    blocked_on:
+                      | (
+                          | "approval"
+                          | "owner_action"
+                          | "purchase"
+                          | "permission"
+                        )
+                      | null
+                    deadline: string | null
+                    changed_at: string | null
+                  }[]
+                }
+              | {
+                  /** Format: uuid */
+                  id: string
+                  /** @enum {string} */
+                  state: "active" | "done" | "declined" | "later"
+                  later_until: string | null
+                  /** Format: date-time */
+                  created_at: string
+                  done_at: string | null
+                  /** @constant */
+                  kind: "google"
+                  detail: Record<string, never>
+                  steps: {
+                    /** @enum {string} */
+                    step:
+                      | "sign_in"
+                      | "permissions"
+                      | "verify"
+                      | "sitemap"
+                      | "first_data"
+                    /** @enum {string} */
+                    state:
+                      | "pending"
+                      | "in_progress"
+                      | "blocked"
+                      | "done"
+                      | "skipped"
+                    note: string | null
+                    blocked_on:
+                      | (
+                          | "approval"
+                          | "owner_action"
+                          | "purchase"
+                          | "permission"
+                        )
+                      | null
+                    deadline: string | null
+                    changed_at: string | null
+                  }[]
+                }
+            )[]
             expected_seconds?: {
               full: {
                 p50: number
@@ -7827,6 +7936,77 @@ export interface components {
             )
           | null
       }[]
+      tasks?: (
+        | {
+            /** Format: uuid */
+            id: string
+            /** @enum {string} */
+            state: "active" | "done" | "declined" | "later"
+            later_until: string | null
+            /** Format: date-time */
+            created_at: string
+            done_at: string | null
+            /** @constant */
+            kind: "address"
+            detail: {
+              name?: string
+              provider?: string
+              registrar?: string
+              /** @enum {string} */
+              origin?: "owned" | "buying_elsewhere" | "purchased"
+              ending?: string
+            }
+            steps: {
+              /** @enum {string} */
+              step:
+                | "find_out"
+                | "choose"
+                | "purchase"
+                | "records"
+                | "ownership"
+                | "certificate"
+                | "loads"
+              /** @enum {string} */
+              state: "pending" | "in_progress" | "blocked" | "done" | "skipped"
+              note: string | null
+              blocked_on:
+                | ("approval" | "owner_action" | "purchase" | "permission")
+                | null
+              deadline: string | null
+              changed_at: string | null
+            }[]
+          }
+        | {
+            /** Format: uuid */
+            id: string
+            /** @enum {string} */
+            state: "active" | "done" | "declined" | "later"
+            later_until: string | null
+            /** Format: date-time */
+            created_at: string
+            done_at: string | null
+            /** @constant */
+            kind: "google"
+            detail: Record<string, never>
+            steps: {
+              /** @enum {string} */
+              step:
+                | "sign_in"
+                | "permissions"
+                | "verify"
+                | "sitemap"
+                | "first_data"
+              /** @enum {string} */
+              state: "pending" | "in_progress" | "blocked" | "done" | "skipped"
+              note: string | null
+              blocked_on:
+                | ("approval" | "owner_action" | "purchase" | "permission")
+                | null
+              deadline: string | null
+              changed_at: string | null
+            }[]
+          }
+      )[]
       expected_seconds?: {
         full: {
           p50: number
@@ -10626,7 +10806,7 @@ export interface components {
     }
     SearchConnection: {
       /** @enum {string} */
-      state: "active" | "needs_reauth" | "revoked"
+      state: "active" | "needs_reauth" | "revoked" | "needs_permission"
       google_email: string | null
       connected_at: string | null
     }
@@ -12251,6 +12431,7 @@ export interface components {
             | "website"
             | "golive"
             | "change"
+            | "address"
             | "domain"
             | "purchase"
             | "google"
@@ -12270,6 +12451,7 @@ export interface components {
               done: number
               total: number
             }
+            note?: string
           }[]
           /** Format: date-time */
           at: string
@@ -12279,6 +12461,7 @@ export interface components {
             business?: string
             host?: string
             domain?: string
+            provider?: string
             change?: string
           }
           step?: string
@@ -12297,6 +12480,7 @@ export interface components {
             | "website"
             | "golive"
             | "change"
+            | "address"
             | "domain"
             | "purchase"
             | "google"
@@ -12316,6 +12500,7 @@ export interface components {
               done: number
               total: number
             }
+            note?: string
           }[]
           /** Format: date-time */
           at: string
@@ -12325,6 +12510,7 @@ export interface components {
             business?: string
             host?: string
             domain?: string
+            provider?: string
             change?: string
           }
           step?: string
@@ -12343,6 +12529,7 @@ export interface components {
             | "website"
             | "golive"
             | "change"
+            | "address"
             | "domain"
             | "purchase"
             | "google"
@@ -12362,6 +12549,7 @@ export interface components {
               done: number
               total: number
             }
+            note?: string
           }[]
           /** Format: date-time */
           at: string
@@ -12371,6 +12559,7 @@ export interface components {
             business?: string
             host?: string
             domain?: string
+            provider?: string
             change?: string
           }
           step?: string
@@ -12389,6 +12578,7 @@ export interface components {
             | "website"
             | "golive"
             | "change"
+            | "address"
             | "domain"
             | "purchase"
             | "google"
@@ -12408,6 +12598,7 @@ export interface components {
               done: number
               total: number
             }
+            note?: string
           }[]
           /** Format: date-time */
           at: string
@@ -12417,6 +12608,7 @@ export interface components {
             business?: string
             host?: string
             domain?: string
+            provider?: string
             change?: string
           }
           step?: string
@@ -12435,6 +12627,7 @@ export interface components {
             | "website"
             | "golive"
             | "change"
+            | "address"
             | "domain"
             | "purchase"
             | "google"
@@ -12454,6 +12647,7 @@ export interface components {
               done: number
               total: number
             }
+            note?: string
           }[]
           /** Format: date-time */
           at: string
@@ -12463,6 +12657,7 @@ export interface components {
             business?: string
             host?: string
             domain?: string
+            provider?: string
             change?: string
           }
           step?: string
@@ -12481,6 +12676,7 @@ export interface components {
             | "website"
             | "golive"
             | "change"
+            | "address"
             | "domain"
             | "purchase"
             | "google"
@@ -12500,6 +12696,7 @@ export interface components {
               done: number
               total: number
             }
+            note?: string
           }[]
           /** Format: date-time */
           at: string
@@ -12509,6 +12706,7 @@ export interface components {
             business?: string
             host?: string
             domain?: string
+            provider?: string
             change?: string
           }
           step?: string
