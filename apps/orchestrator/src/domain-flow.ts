@@ -30,9 +30,12 @@ import {
   tenancy,
 } from "@workspace/db"
 import { canonical } from "@workspace/facade"
+import { z } from "zod"
+import { applyUrl } from "./domain-connect.ts"
 import {
   alreadyPointsAtUs,
   apexMode,
+  applyBase,
   CAA_FOR_US,
   type CloudflareEnv,
   CNAME_TARGET,
@@ -981,7 +984,7 @@ export async function connect(
   env: Env,
   kit: Tenancy,
   orgId: string,
-  body: { name?: unknown; approval_id?: unknown }
+  body: { name?: unknown; approval_id?: unknown; conversation_id?: unknown }
 ): Promise<Refusal | { status: 200 | 201; output: ConnectDomainOutput }> {
   const name = normalizeName(body.name)
   const approvalId = body.approval_id
@@ -1121,12 +1124,24 @@ export async function connect(
   }
   const status: 200 | 201 = claimed.created ? 201 : 200
   // The task keeps how many changes the card lists, which no row holds.
-  const answer = async (steps: typeof base.steps) => {
+  const answer = async (
+    steps: typeof base.steps,
+    link?: { method: "domain_connect"; apply_url: string }
+  ) => {
     const changes = steps.length + ("apex" in base ? 1 : 0)
     await kit.withOrg({ orgId }, (db) => syncTasks(db, orgId, { changes }))
-    return { status, output: ConnectDomainOutput.parse({ ...base, steps }) }
+    return {
+      status,
+      output: ConnectDomainOutput.parse({ ...base, steps, ...link }),
+    }
   }
-  if (!claimed.needsTxt) return answer(base.steps)
+  if (!claimed.needsTxt) {
+    const link = await applyLink(env, inspection, base.steps, name, body)
+    return answer(
+      base.steps,
+      link ? { method: "domain_connect", apply_url: link } : undefined
+    )
+  }
   const txt = txtRecords(ownership, name, inspection.apex)
   if (txt.length === 0)
     return refuse(
@@ -1136,6 +1151,36 @@ export async function connect(
       "I've started connecting the domain but its records aren't ready yet. Ask me again in a minute."
     )
   return answer([...base.steps, ...txt])
+}
+
+/**
+ * The provider's signed Domain Connect page that adds the owner's one CNAME
+ * for them, or undefined. Only for a claim whose records are that CNAME
+ * alone: our template holds no ALIAS, CAA or TXT, and a page that left one
+ * out would read as done when it is not. The owner's tab comes back to the
+ * web's `/api/domains/applied`, which runs the check and opens `conversation_id`.
+ */
+export async function applyLink(
+  env: Env,
+  inspection: Inspection,
+  steps: DnsRecord[],
+  name: string,
+  body: { conversation_id?: unknown }
+): Promise<string | undefined> {
+  const conversation = z.uuid().safeParse(body.conversation_id)
+  const [step, ...more] = steps
+  if (!env.DOMAIN_CONNECT_KEY || !conversation.success) return undefined
+  if (step?.type !== "CNAME" || more.length > 0) return undefined
+  const syncUX = await applyBase(inspection.apex)
+  if (!syncUX) return undefined
+  const back = new URL("/api/domains/applied", env.APP_ORIGIN)
+  back.searchParams.set("name", name)
+  back.searchParams.set("c", conversation.data)
+  return applyUrl(syncUX, env.DOMAIN_CONNECT_KEY, {
+    domain: inspection.apex,
+    host: step.name,
+    redirect_uri: back.href,
+  })
 }
 
 /** The claim's Workflow, created; one already there is fine. */

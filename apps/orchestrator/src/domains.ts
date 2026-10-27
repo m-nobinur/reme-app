@@ -9,6 +9,7 @@ import type {
   DomainCheck,
   DomainProvider,
 } from "@workspace/contracts"
+import { TEMPLATE } from "./domain-connect.ts"
 import { rdapLookup } from "./rdap.ts"
 
 /** Where every connected host points: a proxied record in our SaaS zone (D0). */
@@ -425,6 +426,18 @@ export const SETTINGS_LINKS: Readonly<Record<string, string>> = {
   "dash.cloudflare.com": "https://dash.cloudflare.com/",
 }
 
+/**
+ * The Domain Connect pages an apply link may open, keyed by the provider's
+ * `urlSyncUX` as `host[/path]`, each with the API we ask whether our template
+ * is live there. Ours for the same reason as `SETTINGS_LINKS`: a domain's own
+ * DNS could otherwise send the owner to any page. Add a provider once our
+ * template is live there and tested.
+ */
+const APPLY_PAGES: Readonly<Record<string, string>> = {
+  "dash.cloudflare.com/domainconnect":
+    "api.cloudflare.com/client/v4/dns/domainconnect",
+}
+
 const IONOS: DomainProvider = {
   name: "IONOS",
   settings_url: "https://my.ionos.co.uk/domains",
@@ -548,36 +561,73 @@ function linkFor(url: unknown): string | undefined {
   }
 }
 
+/** How long a Domain Connect answer is kept, so a connect right after an inspect reads it once. */
+const DISCOVERY_TTL_MS = 5 * 60_000
+
+/**
+ * Domain Connect answers by key, for `DISCOVERY_TTL_MS`. A failed read is
+ * dropped, so only answers are kept. Exported for the test network to clear.
+ *
+ * shortcut: per isolate, so another isolate reads again; move to KV if
+ * connects ever come often enough for that to matter.
+ */
+export const discoveries = new Map<
+  string,
+  { until: number; value: Promise<unknown> }
+>()
+
+function remembered<T>(key: string, read: () => Promise<T>): Promise<T> {
+  const hit = discoveries.get(key)
+  if (hit && hit.until > Date.now()) return hit.value as Promise<T>
+  const value = read()
+  discoveries.set(key, { until: Date.now() + DISCOVERY_TTL_MS, value })
+  value.catch(() => {
+    if (discoveries.get(key)?.value === value) discoveries.delete(key)
+  })
+  return value
+}
+
+/**
+ * The apex's Domain Connect settings, or null when it has none. The settings
+ * host is any public host the domain's TXT names, as the spec intends. What
+ * bounds that: a Worker's subrequests leave through Cloudflare's public egress
+ * and reach no private network, the GET carries no credential, and only
+ * checked fields of the answer are ever used.
+ */
+const settingsOf = (apex: string) =>
+  remembered(`settings ${apex}`, async () => {
+    const { answers } = await doh(`_domainconnect.${apex}`, "TXT")
+    const base = answers
+      .filter((x) => x.type === TYPES.TXT)
+      .map((x) => settingsBase(txt(x.data)))
+      .find((b) => b !== null)
+    if (!base) return null
+    const response = await fetch(
+      `https://${base}/v2/${encodeURIComponent(apex)}/settings`,
+      {
+        headers: { accept: "application/json" },
+        redirect: "manual",
+        signal: AbortSignal.timeout(SETTINGS_TIMEOUT_MS),
+      }
+    )
+    if (response.status !== 200) {
+      await response.body?.cancel()
+      return null
+    }
+    return JSON.parse(await readCapped(response, SETTINGS_MAX_BYTES)) as Record<
+      string,
+      unknown
+    >
+  })
+
 /**
  * Domain Connect discovery: the provider's own name, and our link if we have
- * one. The settings host is any public host the domain's TXT names, as the
- * spec intends, so an unknown provider still gets its name. What bounds that:
- * a Worker's subrequests leave through Cloudflare's public egress and reach
- * no private network, the GET carries no credential, the answer is cut to an
- * 80-character name, and a link is only ever one of `SETTINGS_LINKS`.
+ * one, so an unknown provider still gets its name. The name is cut to 80
+ * characters, and a link is only ever one of `SETTINGS_LINKS`.
  */
 async function discover(apex: string): Promise<DomainProvider | null> {
-  const { answers } = await doh(`_domainconnect.${apex}`, "TXT")
-  const base = answers
-    .filter((x) => x.type === TYPES.TXT)
-    .map((x) => settingsBase(txt(x.data)))
-    .find((b) => b !== null)
-  if (!base) return null
-  const response = await fetch(
-    `https://${base}/v2/${encodeURIComponent(apex)}/settings`,
-    {
-      headers: { accept: "application/json" },
-      redirect: "manual",
-      signal: AbortSignal.timeout(SETTINGS_TIMEOUT_MS),
-    }
-  )
-  if (response.status !== 200) {
-    await response.body?.cancel()
-    return null
-  }
-  const settings = JSON.parse(
-    await readCapped(response, SETTINGS_MAX_BYTES)
-  ) as Record<string, unknown>
+  const settings = await settingsOf(apex)
+  if (!settings) return null
   const shown = settings.providerDisplayName ?? settings.providerName
   // Shown in the card: printable characters only, at the contract's length.
   const name =
@@ -591,6 +641,35 @@ async function discover(apex: string): Promise<DomainProvider | null> {
   const settingsUrl =
     linkFor(settings.urlControlPanel) ?? linkFor(settings.urlSyncUX)
   return settingsUrl ? { name, settings_url: settingsUrl } : { name }
+}
+
+/**
+ * The provider's Domain Connect page for `apex`, as `host[/path]`, when its
+ * settings name one of `APPLY_PAGES` and that provider's API answers that our
+ * template is live there (the spec's template query: 2xx yes, 404 no). That
+ * answer is per provider, so it is kept by API host. Null otherwise; never
+ * throws.
+ */
+export async function applyBase(apex: string): Promise<string | null> {
+  try {
+    const ux = (await settingsOf(apex))?.urlSyncUX
+    const page = typeof ux === "string" ? settingsBase(ux) : null
+    const api = page && APPLY_PAGES[page]
+    if (!page || !api) return null
+    const live = await remembered(`template ${api}`, async () => {
+      const response = await fetch(
+        `https://${api}/v2/domainTemplates/providers/${TEMPLATE.provider}/services/${TEMPLATE.service}`,
+        { redirect: "manual", signal: AbortSignal.timeout(SETTINGS_TIMEOUT_MS) }
+      )
+      await response.body?.cancel()
+      // A provider error is no answer, so it is not kept as a no.
+      if (response.status >= 500) throw new DomainError("provider.unavailable")
+      return response.ok
+    })
+    return live ? page : null
+  } catch {
+    return null
+  }
 }
 
 /**

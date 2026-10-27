@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import {
   alreadyPointsAtUs,
+  applyBase,
   CAA_FOR_US,
   CNAME_TARGET,
   type CustomHostname,
@@ -842,5 +843,37 @@ describe("staging routes", () => {
     expect(await setRoutes(env, [APEX], true)).toBe(false)
     expect(logged).toHaveBeenCalledTimes(1)
     expect(String(logged.mock.calls[0]?.[0])).toContain("cloudflare.10000")
+  })
+})
+
+describe("Domain Connect apply page", () => {
+  const TEMPLATE =
+    "https://api.cloudflare.com/client/v4/dns/domainconnect/v2/domainTemplates/providers/remeai.co.uk/services/website"
+  const PAGE = "dash.cloudflare.com/domainconnect"
+
+  it("names Cloudflare's page once our template is live there, asking each thing once", async () => {
+    const fetched = stubNet({ [TEMPLATE]: () => Response.json({ version: 1 }) })
+    expect(await applyBase("sparkleclean.co.uk")).toBe(PAGE)
+    expect(await applyBase("sparkleclean.co.uk")).toBe(PAGE)
+    expect(urls(fetched).filter((u) => !u.includes("dns-query"))).toEqual([
+      "https://api.cloudflare.com/client/v4/dns/domainconnect/v2/sparkleclean.co.uk/settings",
+      TEMPLATE,
+    ])
+  })
+
+  it("has none where our template is not live, or the domain has no Domain Connect", async () => {
+    stubNet({
+      [TEMPLATE]: () =>
+        Response.json({ error: "unknown template" }, { status: 404 }),
+    })
+    expect(await applyBase("sparkleclean.co.uk")).toBeNull()
+    expect(await applyBase("nowhere-at-all.co.uk")).toBeNull()
+  })
+
+  it("opens no page a domain's own DNS names that is not one of ours", async () => {
+    // GoDaddy answers Domain Connect, but its page is not on our list yet.
+    const fetched = stubNet()
+    expect(await applyBase("sparklecleanbristol.co.uk")).toBeNull()
+    expect(urls(fetched).some((u) => u.includes("domainTemplates"))).toBe(false)
   })
 })

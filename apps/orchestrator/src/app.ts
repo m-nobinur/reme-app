@@ -895,6 +895,7 @@ ownerOnly.post("/domains", async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as {
     name?: unknown
     approval_id?: unknown
+    conversation_id?: unknown
   }
   const result = await connect(c.env, c.get("kit"), c.get("orgId"), body)
   if ("refused" in result) return domainRefused(c, result)
