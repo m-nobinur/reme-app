@@ -20,7 +20,7 @@ export async function supersedeFact(db: OrgScopedDb, input: FactInput) {
   return writeVersion(db, input)
 }
 
-/** The same write for the owner's memory (`PRIVATE_FACT_KEYS`), which only the memory module calls. */
+/** The same write for a private fact (`PRIVATE_FACT_KEYS`): the owner's memory, or the address Your details keeps. */
 export async function supersedePrivateFact(db: OrgScopedDb, input: FactInput) {
   if (!PRIVATE_FACT_KEYS.includes(input.key)) {
     throw new Error(`fact.not_private_key: ${input.key} is a business fact`)

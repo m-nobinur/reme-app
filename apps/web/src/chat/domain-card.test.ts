@@ -253,17 +253,25 @@ it("says what happened when the owner cancels or the call is refused", async () 
   expect(denied.container.textContent).toContain("You said not now.")
   await denied.unmount()
 
-  const refused = await draw(
-    done({
-      outcome: "refused",
-      error: { code: "domain.in_use", message: "written for the model" },
-    })
-  )
+  const REFUSAL = {
+    outcome: "refused",
+    error: { code: "domain.in_use", message: "written for the model" },
+  }
+  // After the owner's yes: one calm line, the warning in the icon alone.
+  const refused = await draw(done(REFUSAL))
   expect(refused.container.textContent).toContain(
     "The domain could not be connected."
   )
   expect(refused.container.textContent).not.toContain("written for the model")
+  expect(refused.container.querySelector(".text-destructive")?.tagName).toBe(
+    "svg"
+  )
   await refused.unmount()
+
+  // Never asked: the assistant explains it in its own words, so no line.
+  const quiet = await draw({ result: REFUSAL })
+  expect(quiet.container.innerHTML).toBe("")
+  await quiet.unmount()
 })
 
 it("reads a domain check as one plain sentence", () => {

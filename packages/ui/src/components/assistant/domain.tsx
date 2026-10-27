@@ -21,8 +21,9 @@ import {
 } from "@workspace/ui/components/assistant/decision"
 import { Button } from "@workspace/ui/components/button"
 import { ConnectRow } from "@workspace/ui/components/connect-row"
-import { ToolStatus } from "@workspace/ui/components/status-line"
+import { StatusLine, ToolStatus } from "@workspace/ui/components/status-line"
 import { useCopyToClipboard } from "@workspace/ui/hooks/use-copy-to-clipboard"
+import { toolKind } from "@workspace/ui/lib/activity-copy"
 import { refusalText } from "@workspace/ui/lib/refusal"
 import { decisionView, readView } from "@workspace/ui/lib/tool-state"
 import { META } from "@workspace/ui/lib/utils"
@@ -179,32 +180,52 @@ export function ConnectSteps({
   )
 }
 
-export const ConnectDomain: ToolCallMessagePartComponent = (props) => (
-  <Decision
-    busy="Connecting"
-    cancelled="Not connected."
-    refused="The domain could not be connected."
-    detail={() =>
-      "Only your website's address changes. Your email is not affected. Next I'll show you what to change where your domain is managed."
-    }
-    done={(output) =>
-      output?.outcome === "connecting" ? (
-        <ConnectSteps
-          name={ConnectDomainInput.safeParse(props.args).data?.name ?? ""}
-          output={output}
-        />
-      ) : (
-        <p className="text-sm">Connecting. I'll message you when it's live.</p>
-      )
-    }
-    no="Cancel"
-    props={props}
-    slot="connect-domain"
-    title={(input) => `Put your website on ${input.name}.`}
-    view={decisionView(props, ConnectDomainInput, ConnectDomainOutput)}
-    yes="Connect"
-  />
-)
+const NOT_CONNECTED = "The domain could not be connected."
+
+export const ConnectDomain: ToolCallMessagePartComponent = (props) => {
+  const view = decisionView(props, ConnectDomainInput, ConnectDomainOutput)
+  if (view.state === "refused") {
+    // Refused before the owner was asked: the assistant says why in its own words.
+    if (props.approval?.approved !== true) return null
+    return (
+      <StatusLine
+        className="flex px-1 py-1.5 text-sm"
+        data-slot="connect-domain"
+        kind={toolKind(props.toolName)}
+        label={`Put your website on ${view.input.name}. ${refusalText(view.code, NOT_CONNECTED)}`}
+        state="failed"
+      />
+    )
+  }
+  return (
+    <Decision
+      busy="Connecting"
+      cancelled="Not connected."
+      refused={NOT_CONNECTED}
+      detail={() =>
+        "Only your website's address changes. Your email is not affected. Next I'll show you what to change where your domain is managed."
+      }
+      done={(output) =>
+        output?.outcome === "connecting" ? (
+          <ConnectSteps
+            name={ConnectDomainInput.safeParse(props.args).data?.name ?? ""}
+            output={output}
+          />
+        ) : (
+          <p className="text-sm">
+            Connecting. I'll message you when it's live.
+          </p>
+        )
+      }
+      no="Cancel"
+      props={props}
+      slot="connect-domain"
+      title={(input) => `Put your website on ${input.name}.`}
+      view={view}
+      yes="Connect"
+    />
+  )
+}
 ConnectDomain.displayName = "ConnectDomain"
 
 /**
