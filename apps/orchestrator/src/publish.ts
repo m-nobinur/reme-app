@@ -1,9 +1,12 @@
 import type { WorkflowStepConfig } from "cloudflare:workers"
 import {
+  ADDRESS_ASK,
   ApprovalDecision,
   ApprovalRequest,
   ApprovalTarget,
+  type DomainInspection,
   type FactRecord,
+  ownDomain,
   parseSiteRevision,
   RedirectPointer,
   SITE_PROBE_HEADER,
@@ -18,17 +21,21 @@ import {
   approvals,
   assignments,
   chiefStaffId,
+  currentFact,
   deployments,
   eq,
   type OrgScopedDb,
+  openTask,
   orgOpen,
   orgs,
   postAssistantMessage,
+  setStep,
   siteRevisions,
   sql,
   type Tenancy,
 } from "@workspace/db"
 import { checkBuild, checkContent, parsePage } from "@workspace/gates"
+import { inspectDomain } from "./domain-flow.ts"
 import { writeUpdate } from "./heartbeat-write.ts"
 import {
   enteredFrom,
@@ -651,9 +658,32 @@ export const LIVE_SAY: WorkflowStepConfig = {
 }
 
 /**
+ * The business email's own domain, when it is registered and carries no
+ * website yet: the address to put the site on without asking. Null for free
+ * mail, a name that is not registered or not readable now, and one that
+ * already points somewhere, which is the owner's to decide.
+ */
+async function ownAddress(
+  kit: Tenancy,
+  orgId: string
+): Promise<DomainInspection | null> {
+  const email = await kit.withOrg({ orgId }, (db) =>
+    currentFact(db, "business.email")
+  )
+  const address = (email?.value as { address?: unknown } | undefined)?.address
+  const domain = typeof address === "string" ? ownDomain(address) : null
+  if (!domain) return null
+  const found = await inspectDomain(domain)
+  return "refused" in found || !found.registered || found.in_use ? null : found
+}
+
+/**
  * The owner's first version is live: said once in their chat, keyed by the
- * site, with what the assistant can do next and the site to open. The model words it
- * from the host, or the template stands (heartbeat-write.ts).
+ * site. The model words it from the facts, or the template stands
+ * (heartbeat-write.ts). It also opens the address task. An email on its own
+ * domain settles what the owner has: the line names the domain and where it
+ * lives, with a Connect button. Otherwise the tray asks "Do you already have a
+ * web address?" and the task waits on the answer.
  */
 export async function sayLive(
   env: { OPENROUTER_API_KEY?: string },
@@ -663,23 +693,92 @@ export async function sayLive(
   url: string
 ): Promise<void> {
   const host = url.replace(/^https?:\/\//, "").replace(/\/$/, "")
+  const own = await ownAddress(kit, orgId)
+  const where = own?.dns_host?.name ?? own?.registrar
   const text = await writeUpdate(env, kit, orgId, {
-    facts: { host },
-    template: `Your website is live at ${host}. Next I can put it on Google so people find it, or on a domain of your own. Just say which.`,
+    facts: { host, ...(own && { address: own.name }), ...(where && { where }) },
+    template: own
+      ? `Your website is live at ${host}. Your email is on ${own.name}, so I'll put the site there.${where ? ` It's with ${where}.` : ""}`
+      : `Your website is live at ${host}.`,
   })
+  const connect = own && `Connect ${own.name}`
   const posted = await postAssistantMessage(kit, {
     orgId,
     key: `site.live:${siteId}`,
     message: {
       text: [text],
-      ...(url.startsWith("https://") && {
-        button: { label: "Visit your website", action: { kind: "open", url } },
-      }),
+      ...(own
+        ? {
+            button: {
+              label: connect && connect.length <= 60 ? connect : "Connect it",
+              action: { kind: "ask", text: `Put the site on ${own.name}` },
+            },
+          }
+        : {
+            ...(url.startsWith("https://") && {
+              button: {
+                label: "Visit your website",
+                action: { kind: "open", url },
+              },
+            }),
+            questions: {
+              kind: "address",
+              questions: [
+                {
+                  id: crypto.randomUUID(),
+                  text: ADDRESS_ASK.have,
+                  input: {
+                    kind: "choice",
+                    options: [
+                      ADDRESS_ASK.yes,
+                      ADDRESS_ASK.no,
+                      ADDRESS_ASK.later,
+                    ],
+                  },
+                  skippable: false,
+                },
+                {
+                  id: crypto.randomUUID(),
+                  text: ADDRESS_ASK.name,
+                  input: { kind: "text", maxLength: 253, email: false },
+                  skippable: true,
+                },
+              ],
+            },
+          }),
     },
   })
   if (posted === "busy" || posted === "waiting") {
     throw new Error(`site.live_${posted}`)
   }
+  // After the post, so a chat that was busy retries both. A repeat changes nothing.
+  await kit.withOrg({ orgId }, async (db) => {
+    const task = await openTask(
+      db,
+      orgId,
+      "address",
+      own
+        ? {
+            name: own.name,
+            origin: "owned",
+            ...(own.dns_host && { provider: own.dns_host.name }),
+            ...(own.registrar && { registrar: own.registrar }),
+          }
+        : {}
+    )
+    await setStep(
+      db,
+      task,
+      "find_out",
+      own
+        ? { state: "done" }
+        : {
+            state: "blocked",
+            blocked_on: "owner_action",
+            note: ADDRESS_ASK.have,
+          }
+    )
+  })
 }
 
 /**

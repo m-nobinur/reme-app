@@ -416,8 +416,17 @@ export async function detachHostname(
 // Name ranker
 // ---------------------------------------------------------------------------
 
-export type RankFacts = { name: string; town?: string; trade?: string }
-export type Ranked = { name: string; score: number; why: string }
+/** `asked` is a name the owner typed rather than the business name. */
+export type RankFacts = {
+  name: string
+  town?: string
+  trade?: string
+  asked?: boolean
+}
+export type Ranked = { stem: string; score: number; why: string }
+
+/** The longest stem with a word added; past it a name is hard to say or type. */
+export const ADDED_MAX = 20
 
 const LEGAL = /\b(ltd|limited|llp|plc|inc|co|company|services?|the)\b/g
 const slug = (s: string) =>
@@ -429,10 +438,12 @@ const slug = (s: string) =>
 const label = (s: string) => slug(s).replace(/[^a-z0-9]/g, "")
 
 /**
- * The candidate names for a business, best first: its brand, brand plus town,
+ * The candidate stems for a business, best first: its brand, brand plus town,
  * brand plus trade (when the name does not already say it) and brand-town,
- * each in the table's TLDs. At most 12, one `domain-check`. A pure function:
- * no model, no network.
+ * each with its own reason. A word the brand already holds is never added
+ * again, and a stem with a word added stays within `ADDED_MAX`; the brand
+ * alone is kept at any length so a long name still gets a row. A pure
+ * function: no model, no network.
  */
 export function candidates(facts: RankFacts): Ranked[] {
   // "sparklecleaning.com" names the brand: drop the TLD before slugging.
@@ -445,44 +456,41 @@ export function candidates(facts: RankFacts): Ranked[] {
   const brand = words.join("").replace(/[^a-z0-9]/g, "")
   if (!brand) return []
   const town = facts.town ? label(facts.town.split(",")[0] ?? "") : ""
-  const trade = facts.trade ? label(facts.trade.split(/\s+/)[0] ?? "") : ""
+  // The trade's last word names it: "Dog grooming" is grooming.
+  const trade = facts.trade
+    ? label(facts.trade.trim().split(/\s+/).at(-1) ?? "")
+    : ""
   // "Sparkle Clean" already says cleaning: a word and the trade share a stem.
   const said =
     !trade ||
+    brand.includes(trade) ||
     words.some(
       (w) => w.length >= 4 && (trade.startsWith(w) || w.startsWith(trade))
     )
   const where = facts.town?.split(",")[0]?.trim()
-  const labels: Array<[string, number, string]> = [
-    [brand, 40, "matches your business name"],
+  const yours = facts.asked ? "your words" : "your name"
+  const stems: Array<[string, number, string]> = [
+    [
+      brand,
+      40,
+      facts.asked ? "exactly what you asked for" : "matches your business name",
+    ],
   ]
-  if (town) labels.push([`${brand}${town}`, 25, `your name plus ${where}`])
-  if (!said) labels.push([`${brand}${trade}`, 20, "your name plus what you do"])
-  if (town)
-    labels.push([`${brand}-${town}`, 25, "your name and town, easy to read"])
-  const fit: Record<string, [number, string]> = {
-    "co.uk": [30, ".co.uk tells customers you're UK-based"],
-    com: [25, ".com is the one people guess"],
-    uk: [20, ".uk is short and UK-based"],
-    net: [15, ".net is a common alternative"],
+  if (town && !brand.includes(town)) {
+    stems.push([`${brand}${town}`, 25, `${yours} plus ${where}`])
+    stems.push([`${brand}-${town}`, 25, `${yours} and ${where}, with a dash`])
   }
-  const seen = new Set<string>()
-  const out: Ranked[] = []
-  for (const [l, points, why] of labels) {
-    if (l.length > 63) continue
-    for (const tld of Object.keys(DOMAIN_PRICES)) {
-      const name = `${l}.${tld}`
-      if (seen.has(name)) continue
-      seen.add(name)
-      const [tldPoints, tldWhy] = fit[tld] ?? [0, ""]
-      const score =
-        points +
-        tldPoints -
-        Math.max(0, l.length - 12) -
-        (l.includes("-") ? 10 : 0) -
-        (/\d/.test(l) ? 20 : 0)
-      out.push({ name, score, why: `${why}; ${tldWhy}` })
-    }
-  }
-  return out.sort((a, b) => b.score - a.score)
+  if (!said) stems.push([`${brand}${trade}`, 20, `${yours} plus ${trade}`])
+  return stems
+    .filter(([s], i) => s.length <= (i === 0 ? 63 : ADDED_MAX))
+    .map(([stem, points, why]) => ({
+      stem,
+      why,
+      score:
+        points -
+        Math.max(0, stem.length - 12) -
+        (stem.includes("-") ? 10 : 0) -
+        (/\d/.test(stem) ? 20 : 0),
+    }))
+    .sort((a, b) => b.score - a.score)
 }
