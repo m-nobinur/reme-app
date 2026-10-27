@@ -174,7 +174,7 @@ describe("ConversationMessage feedback", () => {
 
 describe("BuildQuestionsPart and QuestionReply", () => {
   const part = samples.BuildQuestionsPart as {
-    data: { questions: Record<string, unknown>[] }
+    data: { assignment_id: string; questions: Record<string, unknown>[] }
   }
   const asking = (patch: Record<string, unknown>) => ({
     ...part,
@@ -195,6 +195,23 @@ describe("BuildQuestionsPart and QuestionReply", () => {
     const closed = asking({ answer: { kind: "closed" } })
     expect(verdict("BuildQuestionsPart", BuildQuestionsPart, closed)).toEqual(
       ACCEPTED
+    )
+  })
+
+  it("takes an address stack with no assignment and refuses one that names it", () => {
+    const address = {
+      ...part,
+      data: { kind: "address", questions: part.data.questions },
+    }
+    expect(verdict("BuildQuestionsPart", BuildQuestionsPart, address)).toEqual(
+      ACCEPTED
+    )
+    const named = {
+      ...part,
+      data: { ...address.data, assignment_id: part.data.assignment_id },
+    }
+    expect(verdict("BuildQuestionsPart", BuildQuestionsPart, named)).toEqual(
+      REFUSED
     )
   })
 
