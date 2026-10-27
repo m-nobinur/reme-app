@@ -1253,24 +1253,24 @@ export function cosAgent(
   const closed = (error: unknown) => {
     if (error instanceof TurnClosed) run.abort.abort(error)
   }
-  const jevKey = run.tools.env.OPENROUTER_API_KEY
   return new ToolLoopAgent({
     // A reply that ends on a promise of work with no tool call is run again
     // (`promise.ts`). With no key for Jev the turn ends as the model ended it.
-    model: jevKey
-      ? gated(model, async (said) => {
-          const rerun = await jevPromise(jevKey, said, () => watching(run))
-          if (rerun) {
-            console.log(
-              JSON.stringify({
-                code: "cos.promise_gate",
-                turn_id: run.turn.turnId,
-              })
-            )
-          }
-          return rerun
-        })
-      : model,
+    // The key is read per reply, so building the agent reads no environment.
+    model: gated(model, async (said) => {
+      const jevKey = run.tools.env.OPENROUTER_API_KEY
+      if (!jevKey) return false
+      const rerun = await jevPromise(jevKey, said, () => watching(run))
+      if (rerun) {
+        console.log(
+          JSON.stringify({
+            code: "cos.promise_gate",
+            turn_id: run.turn.turnId,
+          })
+        )
+      }
+      return rerun
+    }),
     instructions: INSTRUCTIONS,
     tools,
     activeTools: activeTools(mode),
