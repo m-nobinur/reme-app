@@ -16,6 +16,7 @@ import {
   openTask,
   readTasks,
   reminders,
+  setStep,
   sql,
   supersedeFact,
   type Tenancy,
@@ -37,12 +38,14 @@ import { remember } from "../src/cos/memory.ts"
 import { getIndexing, getSearchPerformance } from "../src/cos/search-tools.ts"
 import {
   answerQuestion as answerTool,
+  boughtSaid,
   buyDomain,
   CONNECT_RETRY_MS,
   checkDomain,
   connectApproval,
   connectDomain,
   createReminder,
+  domainBought,
   findDomain,
   getFacts,
   getPreview,
@@ -1862,7 +1865,7 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       const sure = (noul: number) =>
         (async () =>
           Response.json({
-            answers: { puts_it_on: { type: "noul", noul } },
+            answers: { yes: { type: "noul", noul } },
           })) as unknown as typeof fetch
       const keyed = (who: Owner) => ({
         ...context(who),
@@ -2304,6 +2307,121 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
     )
     expect(output).toEqual({
       url: "https://staging.remeai.co.uk/api/google/start",
+    })
+  })
+
+  describe("domain_bought", () => {
+    const keyed = (who: Owner, stub?: Stub) => ({
+      ...context(who, stub),
+      env: {
+        ...context(who, stub).env,
+        OPENROUTER_API_KEY: "k",
+      } as Env,
+    })
+    const jev = (noul: number) =>
+      (async () =>
+        Response.json({
+          answers: { yes: { type: "noul", noul } },
+        })) as unknown as typeof fetch
+    /** An owner buying `name` themselves, with the purchase step waiting. */
+    const buying = async (label: string, name: string) => {
+      const who = await owner(kit, url as string, label)
+      await kit.withOrg({ orgId: who.orgId }, async (db) => {
+        const task = await openTask(db, who.orgId, "address", {
+          name: name as never,
+          origin: "buying_elsewhere",
+        })
+        await setStep(db, task, "purchase", {
+          state: "blocked",
+          blocked_on: "owner_action",
+        })
+      })
+      return who
+    }
+
+    beforeEach(() => {
+      vi.spyOn(console, "log").mockImplementation(() => undefined)
+    })
+
+    it("says yes only for the waiting purchase or a name the message gives, and only when Jev is sure", async () => {
+      const who = await buying("cos-bought", "sparkleclean.co.uk")
+      const said = async (text: string, noul = 0.97) =>
+        boughtSaid(
+          keyed(who),
+          "sparkleclean.co.uk",
+          (await turnOf(who, [text])).sessionId,
+          jev(noul)
+        )
+      expect(await said("done, I bought it")).toBe(true)
+      expect(await said("done, I bought it", 0.4)).toBe(false)
+      // No waiting purchase for this name, and the message does not give it.
+      const stranger = await owner(kit, url as string, "cos-bought-none")
+      const unrelated = async (text: string) =>
+        boughtSaid(
+          keyed(stranger),
+          "sparkleclean.co.uk",
+          (await turnOf(stranger, [text])).sessionId,
+          jev(0.99)
+        )
+      expect(await unrelated("done, I bought it")).toBe(false)
+      expect(await unrelated("done, I bought sparkleclean.co.uk")).toBe(true)
+    })
+
+    it("refuses without calling the orchestrator when the owner has not said it", async () => {
+      const who = await buying("cos-bought-no", "sparkleclean.co.uk")
+      const stub = stubOrchestrator(() => Response.json({}))
+      const turn = await turnOf(who, ["what is a registrar?"])
+      expect(
+        kept(
+          "domain_bought",
+          await domainBought(
+            keyed(who, stub),
+            { name: "sparkleclean.co.uk" },
+            "key",
+            turn
+          )
+        )
+      ).toMatchObject({
+        outcome: "refused",
+        error: { code: "domain.bought_unconfirmed" },
+      })
+      expect(stub.calls).toHaveLength(0)
+    })
+
+    it("asks the orchestrator under its key once the owner said it, and returns its answer", async () => {
+      const who = await buying("cos-bought-yes", "sparkleclean.co.uk")
+      const stub = stubOrchestrator(() =>
+        Response.json({
+          outcome: "not_registered_yet",
+          name: "sparkleclean.co.uk",
+        })
+      )
+      const turn = await turnOf(who, ["done, I bought it"])
+      vi.stubGlobal("fetch", jev(0.97))
+      try {
+        expect(
+          kept(
+            "domain_bought",
+            await domainBought(
+              keyed(who, stub),
+              { name: "sparkleclean.co.uk" },
+              "turn:call",
+              turn
+            )
+          )
+        ).toEqual({
+          outcome: "not_registered_yet",
+          name: "sparkleclean.co.uk",
+        })
+      } finally {
+        vi.unstubAllGlobals()
+      }
+      const [call] = stub.calls
+      expect(new URL(call?.request.url ?? "").pathname).toBe(
+        "/assignments/domains/bought"
+      )
+      expect(call?.body).toEqual({ name: "sparkleclean.co.uk" })
+      expect(call?.request.headers.get("idempotency-key")).toBe("turn:call")
     })
   })
 
