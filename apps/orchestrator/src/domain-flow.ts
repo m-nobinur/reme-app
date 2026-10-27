@@ -18,6 +18,7 @@ import {
   domains,
   eq,
   failureCode,
+  listOrgIds,
   type OrgScopedDb,
   orgs,
   pgCode,
@@ -29,13 +30,17 @@ import {
   tenancy,
 } from "@workspace/db"
 import { canonical } from "@workspace/facade"
+import { z } from "zod"
+import { applyUrl } from "./domain-connect.ts"
 import {
   alreadyPointsAtUs,
   apexMode,
+  applyBase,
   CAA_FOR_US,
   type CloudflareEnv,
   CNAME_TARGET,
   type CustomHostname,
+  claimHosts,
   DomainError,
   deleteHostname,
   detectProvider,
@@ -46,8 +51,11 @@ import {
   type Inspection,
   inspect,
   OUR_ZONE,
+  type RouteEnv,
   recordsFor,
+  refreshHostname,
   relative,
+  setRoutes,
   stillToAdd,
   zoneApex,
 } from "./domains.ts"
@@ -206,15 +214,19 @@ export async function moveTo(
 }
 
 /**
- * A claim's custom hostnames deleted, and a bought domain's Workers Custom
- * Domains; one already gone is done. A bought zone stays: the domain is the
- * owner's.
+ * A claim's custom hostnames deleted with their staging routes, and a bought
+ * domain's Workers Custom Domains; one already gone is done. A bought zone
+ * stays: the domain is the owner's.
  */
 async function dropHostnames(
-  env: CloudflareEnv & RegistrarEnv,
-  cfIds: unknown
+  env: RouteEnv & RegistrarEnv,
+  row: Pick<DomainRow, "name" | "cfIds">
 ) {
-  const ids = cfIds as CfIds & { worker_apex?: string; worker_www?: string }
+  const ids = row.cfIds as CfIds & {
+    worker_apex?: string
+    worker_www?: string
+  }
+  await setRoutes(env, claimHosts(row.name, ids), false)
   for (const id of [ids.apex, ids.www]) {
     if (id) await deleteHostname(env, id)
   }
@@ -450,14 +462,17 @@ async function ownedByTxt(
  * `unknown_error`, which the Workflow looks past. Before any hostname exists
  * the check is `not_found` whatever DNS says, so DNS is not read. `txtMissing`
  * is the guard below holding a domain whose records are otherwise in, and
- * `apex` the zone the owner's DNS page is for.
+ * `apex` the zone the owner's DNS page is for. `refresh` asks Cloudflare to
+ * validate a hostname not yet active now, for when the records may just
+ * have gone in.
  */
 export async function currentCheck(
   env: CloudflareEnv,
   row: Pick<
     DomainRow,
     "name" | "cfIds" | "primaryHost" | "needsTxt" | "ownership"
-  >
+  >,
+  refresh?: boolean
 ): Promise<{
   check: DomainCheck
   primary: string
@@ -467,11 +482,15 @@ export async function currentCheck(
   const ids = row.cfIds as CfIds
   if (!ids.apex && !ids.www)
     return { check: { status: "not_found" }, primary: row.primaryHost }
+  const read = async (id: string | undefined) => {
+    const hostname = id ? await getHostname(env, id) : null
+    return hostname && refresh ? refreshHostname(env, hostname) : hostname
+  }
   try {
     const [inspection, apex, www] = await Promise.all([
       inspect(row.name),
-      ids.apex ? getHostname(env, ids.apex) : null,
-      ids.www ? getHostname(env, ids.www) : null,
+      read(ids.apex),
+      read(ids.www),
     ])
     const wwwHost = `www.${row.name}`
     // A subdomain is served on its own name, its hostname kept as `apex`.
@@ -559,6 +578,7 @@ export async function claimHostnames(
         .where(eq(domains.id, domainId))
     )
   }
+  await setRoutes(env, claimHosts(row.name, ids), true)
   return { ids, ownership }
 }
 
@@ -579,17 +599,18 @@ export type Seen =
  * One look, the `look` probe: the check, the row brought up to date, and the
  * reading the probe hashes. Ready means valid and answering through our edge.
  * The message is worded here and said by the probe only when the check
- * differs from the last one the task step holds.
+ * differs from the last one the task step holds. `refresh` as `currentCheck`.
  */
 export async function look(
   env: Env,
   kit: Tenancy,
   orgId: string,
-  domainId: string
+  domainId: string,
+  refresh?: boolean
 ): Promise<Observed<Seen>> {
   const row = await kit.withOrg({ orgId }, (db) => readDomain(db, domainId))
   if (!row || !connecting(row.state)) return { result: { gone: true } }
-  const seen = await currentCheck(env, row)
+  const seen = await currentCheck(env, row, refresh)
   let check = seen.check
   const ready = check.status === "valid" && (await answers(seen.primary))
   // Valid at Cloudflare but not yet answering: the certificate is still deploying.
@@ -743,6 +764,7 @@ export async function activateDomain(
   })
   if (!done) return false
   await writePointer(env, kit, orgId, done.row.siteId, done.slug)
+  await setRoutes(env, claimHosts(done.row.name, done.row.cfIds as CfIds), true)
   return true
 }
 
@@ -787,7 +809,7 @@ export async function served(
             },
             template: `${row.primaryHost} is live. ${slug} now forwards to it, so links you've shared still work.${
               google === "moved"
-                ? ` I'm adding it to your ${gsc} and have stopped tracking ${slug} there; that property stays in your Google account.`
+                ? ` I'm adding it to your ${gsc} and taking ${slug} out of it.`
                 : google
                   ? ` I'm adding it to your ${gsc} too.`
                   : ""
@@ -835,7 +857,7 @@ export async function notServed(
  * hostnames are deleted, and what to tell the owner is returned.
  */
 export async function expireDomain(
-  env: CloudflareEnv &
+  env: RouteEnv &
     Pick<Env, "SITE_HOST_SUFFIX"> & { OPENROUTER_API_KEY?: string },
   kit: Tenancy,
   orgId: string,
@@ -858,7 +880,7 @@ export async function expireDomain(
       : null
   })
   if (!found) return null
-  await dropHostnames(env, found.row.cfIds)
+  await dropHostnames(env, found.row)
   const where = ` Your site stays on ${found.slug}.`
   const name = found.row.name
   const facts = { domain: name, site: found.slug }
@@ -962,7 +984,7 @@ export async function connect(
   env: Env,
   kit: Tenancy,
   orgId: string,
-  body: { name?: unknown; approval_id?: unknown }
+  body: { name?: unknown; approval_id?: unknown; conversation_id?: unknown }
 ): Promise<Refusal | { status: 200 | 201; output: ConnectDomainOutput }> {
   const name = normalizeName(body.name)
   const approvalId = body.approval_id
@@ -1102,12 +1124,24 @@ export async function connect(
   }
   const status: 200 | 201 = claimed.created ? 201 : 200
   // The task keeps how many changes the card lists, which no row holds.
-  const answer = async (steps: typeof base.steps) => {
+  const answer = async (
+    steps: typeof base.steps,
+    link?: { method: "domain_connect"; apply_url: string }
+  ) => {
     const changes = steps.length + ("apex" in base ? 1 : 0)
     await kit.withOrg({ orgId }, (db) => syncTasks(db, orgId, { changes }))
-    return { status, output: ConnectDomainOutput.parse({ ...base, steps }) }
+    return {
+      status,
+      output: ConnectDomainOutput.parse({ ...base, steps, ...link }),
+    }
   }
-  if (!claimed.needsTxt) return answer(base.steps)
+  if (!claimed.needsTxt) {
+    const link = await applyLink(env, inspection, base.steps, name, body)
+    return answer(
+      base.steps,
+      link ? { method: "domain_connect", apply_url: link } : undefined
+    )
+  }
   const txt = txtRecords(ownership, name, inspection.apex)
   if (txt.length === 0)
     return refuse(
@@ -1117,6 +1151,36 @@ export async function connect(
       "I've started connecting the domain but its records aren't ready yet. Ask me again in a minute."
     )
   return answer([...base.steps, ...txt])
+}
+
+/**
+ * The provider's signed Domain Connect page that adds the owner's one CNAME
+ * for them, or undefined. Only for a claim whose records are that CNAME
+ * alone: our template holds no ALIAS, CAA or TXT, and a page that left one
+ * out would read as done when it is not. The owner's tab comes back to the
+ * web's `/api/domains/applied`, which runs the check and opens `conversation_id`.
+ */
+export async function applyLink(
+  env: Env,
+  inspection: Inspection,
+  steps: DnsRecord[],
+  name: string,
+  body: { conversation_id?: unknown }
+): Promise<string | undefined> {
+  const conversation = z.uuid().safeParse(body.conversation_id)
+  const [step, ...more] = steps
+  if (!env.DOMAIN_CONNECT_KEY || !conversation.success) return undefined
+  if (step?.type !== "CNAME" || more.length > 0) return undefined
+  const syncUX = await applyBase(inspection.apex)
+  if (!syncUX) return undefined
+  const back = new URL("/api/domains/applied", env.APP_ORIGIN)
+  back.searchParams.set("name", name)
+  back.searchParams.set("c", conversation.data)
+  return applyUrl(syncUX, env.DOMAIN_CONNECT_KEY, {
+    domain: inspection.apex,
+    host: step.name,
+    redirect_uri: back.href,
+  })
 }
 
 /** The claim's Workflow, created; one already there is fine. */
@@ -1165,7 +1229,8 @@ export async function checkNow(
     )
   let status: DomainCheck
   if (connecting(row.state)) {
-    status = (await currentCheck(env, row)).check
+    // The owner says the records are in: Cloudflare validates now, not on its backoff.
+    status = (await currentCheck(env, row, true)).check
     // Valid at Cloudflare is not live: only the Workflow's activation is, as in `look`.
     if (status.status === "valid") status = { status: "pending_certificate" }
     try {
@@ -1354,7 +1419,7 @@ async function revoke(
   env: Env,
   row: Pick<DomainRow, "id" | "name" | "cfIds" | "stripe">
 ) {
-  await dropHostnames(env, row.cfIds)
+  await dropHostnames(env, row)
   try {
     const instance = await env.DOMAINS.get(domainInstanceId(row.id))
     await instance.terminate()
@@ -1494,6 +1559,35 @@ export async function sweepDomains(
     })
   }
   return says
+}
+
+/**
+ * Staging's routes put back for every claim this environment holds that is
+ * connecting or live, across orgs: each staging deploy of the router replaces
+ * its routes with its config's, which has none of these. Run after that
+ * deploy and hourly. Without `CF_ROUTE_SCRIPT` (production) it reads nothing.
+ */
+export async function restoreRoutes(
+  env: Env
+): Promise<{ hosts: number; ok: boolean }> {
+  if (!env.CF_ROUTE_SCRIPT) return { hosts: 0, ok: true }
+  const hosts = await withKit(env, async (kit) => {
+    const all: string[] = []
+    for (const orgId of await listOrgIds(kit)) {
+      const rows = await kit.withOrg({ orgId }, (db) =>
+        db
+          .select({ name: domains.name, cfIds: domains.cfIds })
+          .from(domains)
+          .where(
+            sql`${domains.state} in ('awaiting_dns', 'verifying', 'active')`
+          )
+      )
+      for (const row of rows)
+        all.push(...claimHosts(row.name, row.cfIds as CfIds))
+    }
+    return all
+  })
+  return { hosts: hosts.length, ok: await setRoutes(env, hosts, true) }
 }
 
 /**

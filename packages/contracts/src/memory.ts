@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { Timestamp, Uuid } from "./common.ts"
+import { BUSINESS_ADDRESS_KEY } from "./domain.ts"
 import { Refused } from "./refused.ts"
 import { Text } from "./text.ts"
 
@@ -13,13 +14,15 @@ export const OWNER_PROFILE_KEY = "owner.profile"
 export const OWNER_MEMORY_REVIEW_KEY = "owner.memory_review"
 
 /**
- * Facts that belong to the Chief of Staff's memory of the owner. Every
- * reader of the business's facts leaves them out: they never reach a
- * builder snapshot, `get_facts`, the website or the claims gate (§8.5).
+ * Facts that belong to the Chief of Staff's memory of the owner, and the
+ * business address Your details keeps. Every reader of the business's facts
+ * leaves them out: they never reach a builder snapshot, `get_facts`, the
+ * website or the claims gate (§8.5).
  */
 export const PRIVATE_FACT_KEYS: readonly string[] = [
   OWNER_PROFILE_KEY,
   OWNER_MEMORY_REVIEW_KEY,
+  BUSINESS_ADDRESS_KEY,
 ]
 
 /** The most the profile may hold, counted on its rendered text. */

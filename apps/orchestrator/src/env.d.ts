@@ -41,6 +41,12 @@ interface __BaseEnv_Env {
    */
   CF_DOMAINS_TOKEN?: string
   /**
+   * Signs Domain Connect apply links (src/domain-connect.ts): base64 of the
+   * PKCS #8 private key whose public half is TXT at `_dck1.remeai.co.uk`.
+   * Unset, a connect shows the records only.
+   */
+  DOMAIN_CONNECT_KEY?: string
+  /**
    * Stripe's secret key, for a bought domain's hold (capture or release) and
    * its renewal Subscription (src/stripe.ts). Unset, `buy_domain` refuses
    * with `domain.buy_unavailable` and finding a domain still works.

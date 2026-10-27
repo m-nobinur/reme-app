@@ -1,15 +1,19 @@
 import {
+  BUSINESS_ADDRESS_KEY,
   DomainCheckout,
   DomainRegistrantPrefill,
   ErrorEnvelope,
 } from "@workspace/contracts"
 import {
+  currentFacts,
   domains,
   eq,
+  factVersions,
   memberships,
   orgs,
   sql,
   supersedeFact,
+  supersedePrivateFact,
   type Tenancy,
   tenancy,
 } from "@workspace/db"
@@ -233,6 +237,11 @@ describe.skipIf(!url)("buying a domain, on a live connection", () => {
       `customers/${CUSTOMER}`,
       "checkout/sessions",
     ])
+    // The address is kept for next time, once for the same address.
+    const kept = await kit.withOrg({ orgId: me.orgId }, (db) =>
+      factVersions(db, BUSINESS_ADDRESS_KEY, 5)
+    )
+    expect(kept.map((f) => f.value)).toEqual([details.registrant.address])
   })
 
   it("hands back a session Stripe still holds open instead of making a second", async () => {
@@ -403,6 +412,26 @@ describe.skipIf(!url)("buying a domain, on a live connection", () => {
     expect(body.missing).not.toContain("phone")
     expect(body.missing).not.toContain("email")
     expect(body.missing).not.toContain("registrant_type")
+    // The address paid with before fills its gaps once no purchase holds a
+    // registrant, and stays out of the business's facts.
+    await kit.withOrg({ orgId: fresh.orgId }, (db) =>
+      supersedePrivateFact(db, {
+        orgId: fresh.orgId,
+        key: BUSINESS_ADDRESS_KEY,
+        factType: "business",
+        value: details.registrant.address,
+        provenance: { source: "owner_stated", confidence: 1 },
+      })
+    )
+    const known = DomainRegistrantPrefill.parse(
+      (await prefill(fresh, `known-${crypto.randomUUID().slice(0, 8)}.com`))
+        .body
+    )
+    expect(known.registrant.address).toEqual(details.registrant.address)
+    const address = ["street", "city", "postal_code", "country_code"]
+    expect(known.missing.filter((f) => address.includes(f))).toEqual([])
+    const facts = await kit.withOrg({ orgId: fresh.orgId }, currentFacts)
+    expect(facts.map((f) => f.key)).not.toContain(BUSINESS_ADDRESS_KEY)
     // An open purchase's details win, and a .co.uk asks the registrant type.
     await purchase(fresh, unique("held"), { registrant: details })
     const uk = DomainRegistrantPrefill.parse(
@@ -492,6 +521,24 @@ describe.skipIf(!url)("buying a domain, on a live connection", () => {
         .where(sql`${memberships.orgId} = ${member.orgId}`)
     )
     expect((await post(member, "bought")).status).toBe(403)
+  })
+
+  it("bridges the check the owner's tab asks for back from Domain Connect", async () => {
+    const name = `back-${crypto.randomUUID().slice(0, 8)}.com`
+    const checked = {
+      outcome: "checked",
+      state: "awaiting_dns",
+      status: { status: "pending_verification" },
+      next_step: "Records seen, certificate next.",
+    }
+    const stub = stubOrchestrator(() => Response.json(checked))
+    const response = await me.call(stub, `/domains/${name}/check`, {
+      method: "POST",
+    })
+    expect(await response.json()).toEqual(checked)
+    expect(stub.calls.map((c) => new URL(c.request.url).pathname)).toEqual([
+      `/assignments/domains/${name}/check`,
+    ])
   })
 
   it("reads the newest purchase of a name, its sandbox flag and how it closed", async () => {

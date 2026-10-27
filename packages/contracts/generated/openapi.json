@@ -11339,6 +11339,11 @@
                   "name"
                 ],
                 "additionalProperties": false
+              },
+              "apply_url": {
+                "type": "string",
+                "maxLength": 2000,
+                "pattern": "^https:\\/\\/[^\\s]+$"
               }
             },
             "required": [
@@ -18248,6 +18253,11 @@
                   "name"
                 ],
                 "additionalProperties": false
+              },
+              "apply_url": {
+                "type": "string",
+                "maxLength": 2000,
+                "pattern": "^https:\\/\\/[^\\s]+$"
               }
             },
             "required": [
@@ -25757,6 +25767,11 @@
                           "name"
                         ],
                         "additionalProperties": false
+                      },
+                      "apply_url": {
+                        "type": "string",
+                        "maxLength": 2000,
+                        "pattern": "^https:\\/\\/[^\\s]+$"
                       }
                     },
                     "required": [
@@ -27511,6 +27526,11 @@
                           "name"
                         ],
                         "additionalProperties": false
+                      },
+                      "apply_url": {
+                        "type": "string",
+                        "maxLength": 2000,
+                        "pattern": "^https:\\/\\/[^\\s]+$"
                       }
                     },
                     "required": [

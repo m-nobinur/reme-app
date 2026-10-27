@@ -1436,7 +1436,8 @@ const connecting = (id: string, output: unknown, name = DOMAIN) =>
 
 // The records a domain needs, as the orchestrator answers: with the provider
 // named and its own link, with only the bare-address alias, a subdomain's one
-// record, one that may touch email, and one with no records to show.
+// record, one that may touch email, one with no records to show, and one the
+// provider can add through Domain Connect.
 const CONNECT_DOMAIN_STATES = [
   ...decisionStates(
     "connect_domain",
@@ -1474,6 +1475,19 @@ const CONNECT_DOMAIN_STATES = [
     outcome: "connecting",
     method: "domain_connect",
     email_affected: false,
+  }),
+  connecting("add_for_me", {
+    outcome: "connecting",
+    method: "domain_connect",
+    email_affected: false,
+    apex: "forward",
+    provider: {
+      name: "Cloudflare",
+      settings_url: "https://dash.cloudflare.com/",
+    },
+    steps: [WWW],
+    apply_url:
+      "https://dash.cloudflare.com/domainconnect/v2/domainTemplates/providers/remeai.co.uk/services/website/apply?domain=sparkleclean.co.uk&host=www&key=_dck1&sig=example",
   }),
   connecting(
     "subdomain",

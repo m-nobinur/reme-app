@@ -139,6 +139,39 @@ it("shows the records, a copy button for each value, and the provider button", a
   await card.unmount()
 })
 
+it("puts Add it for me first when the provider can add the record, with the records below", async () => {
+  const apply =
+    "https://dash.cloudflare.com/domainconnect/v2/domainTemplates/providers/remeai.co.uk/services/website/apply?domain=sparkleclean.co.uk&host=www&key=_dck1&sig=x"
+  const card = await draw(
+    done({
+      outcome: "connecting",
+      method: "domain_connect",
+      email_affected: false,
+      apex: "forward",
+      provider: {
+        name: "Cloudflare",
+        settings_url: "https://dash.cloudflare.com/",
+      },
+      steps: [{ type: "CNAME", name: "www", value: "domains.remeai.co.uk" }],
+      apply_url: apply,
+    })
+  )
+  const text = card.container.textContent ?? ""
+  expect(text).toContain(
+    "Your domain's settings are at Cloudflare, and I can add the record there for you."
+  )
+  expect(text).toContain("Or make the 2 changes yourself:")
+  const [first, settings] = card.container.querySelectorAll("a")
+  expect(first?.textContent).toBe("Add it for me (opens in a new tab)")
+  expect(first?.getAttribute("href")).toBe(apply)
+  expect(first?.getAttribute("target")).toBe("_blank")
+  expect(first?.getAttribute("rel")).toContain("noopener")
+  expect(settings?.getAttribute("href")).toBe("https://dash.cloudflare.com/")
+  expect(card.container.querySelectorAll("ol > li")).toHaveLength(2)
+  expect(buttons(card.container)).toContain("Done, I'll wait")
+  await card.unmount()
+})
+
 it("keeps every step a list item, so each shows its number", async () => {
   const card = await draw(done(RECORDS))
   // `display: flex` on an `li` drops its marker, so none of them may carry it.
@@ -253,17 +286,25 @@ it("says what happened when the owner cancels or the call is refused", async () 
   expect(denied.container.textContent).toContain("You said not now.")
   await denied.unmount()
 
-  const refused = await draw(
-    done({
-      outcome: "refused",
-      error: { code: "domain.in_use", message: "written for the model" },
-    })
-  )
+  const REFUSAL = {
+    outcome: "refused",
+    error: { code: "domain.in_use", message: "written for the model" },
+  }
+  // After the owner's yes: one calm line, the warning in the icon alone.
+  const refused = await draw(done(REFUSAL))
   expect(refused.container.textContent).toContain(
     "The domain could not be connected."
   )
   expect(refused.container.textContent).not.toContain("written for the model")
+  expect(refused.container.querySelector(".text-destructive")?.tagName).toBe(
+    "svg"
+  )
   await refused.unmount()
+
+  // Never asked: the assistant explains it in its own words, so no line.
+  const quiet = await draw({ result: REFUSAL })
+  expect(quiet.container.innerHTML).toBe("")
+  await quiet.unmount()
 })
 
 it("reads a domain check as one plain sentence", () => {

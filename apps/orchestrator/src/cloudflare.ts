@@ -51,7 +51,12 @@ import {
   deliveriesBatch,
   redriveDeliveries,
 } from "./deliveries.ts"
-import { postStatus, type Say, sweepDomains } from "./domain-flow.ts"
+import {
+  postStatus,
+  restoreRoutes,
+  type Say,
+  sweepDomains,
+} from "./domain-flow.ts"
 import { SAY_RETRIES } from "./domain-workflow.ts"
 import { JOBS_QUEUES, jobsBatch } from "./jobs.ts"
 import { makePhotos } from "./photo-step.ts"
@@ -1837,6 +1842,13 @@ export default {
       } catch {
         // Already created for this hour.
       }
+      // A staging deploy that skipped its restore step heals within the hour.
+      // Caught, so the uptime check on this same firing still runs.
+      await restoreRoutes(env).catch((error) =>
+        console.error(
+          JSON.stringify({ routes: hour, code: failureCode(error) })
+        )
+      )
     }
     if (controller.cron === UPTIME_CRON) {
       // A router that stops serving verification files alerts before Google drops a property.

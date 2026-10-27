@@ -13,6 +13,7 @@ import {
 import { type AfterTurn, afterTurnBatch } from "./after-turn.ts"
 import { bridge, type Owner } from "./changes.ts"
 import { stripeWebhook } from "./domain-buy.ts"
+import { certificateWebhook } from "./domain-certificate.ts"
 import { checkTenantPath } from "./health.ts"
 import {
   BodyTooLarge,
@@ -50,9 +51,11 @@ import {
  * vendor ids that came from the sealed session. No route reads an organisation
  * from a path, a query or a body, in any spelling, so the rule that `org_id`
  * never comes from client input is a property of this file rather than a check
- * somebody has to remember to write. The one exception is `/webhooks/stripe`:
+ * somebody has to remember to write. The exceptions are `/webhooks/stripe`:
  * its org is in metadata that only our own Stripe calls wrote and Stripe
- * signed, and it reaches the domain row only under that org's RLS.
+ * signed, and it reaches the domain row only under that org's RLS; and
+ * `/webhooks/cloudflare`, whose org is looked up from the hostname the alert
+ * names, behind a secret only Cloudflare holds.
  */
 
 /**
@@ -238,6 +241,10 @@ async function route(
   // Stripe's, signed by Stripe: no session, no write limit.
   if (pathname === "/webhooks/stripe" && method === "POST") {
     return stripeWebhook(request, env)
+  }
+  // Cloudflare's certificate alert, with its secret in a header.
+  if (pathname === "/webhooks/cloudflare" && method === "POST") {
+    return certificateWebhook(request, env, kit, waitUntil)
   }
 
   const session = await readSession(request, env)

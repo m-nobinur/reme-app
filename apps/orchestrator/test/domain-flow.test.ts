@@ -1,7 +1,9 @@
 import { SITE_HEADER } from "@workspace/contracts"
 import type { Tenancy } from "@workspace/db"
 import { afterEach, describe, expect, it, vi } from "vitest"
+import { keyPair } from "../../../infra/domain-connect/keygen.ts"
 import {
+  applyLink,
   connect,
   currentCheck,
   inspectDomain,
@@ -12,7 +14,7 @@ import {
   reaches,
   statusText,
 } from "../src/domain-flow.ts"
-import { CAA_FOR_US } from "../src/domains.ts"
+import { CAA_FOR_US, CNAME_TARGET, type Inspection } from "../src/domains.ts"
 import { stubNet } from "./fixtures/domains.ts"
 
 /** What the chat's post answers, in order, and every post asked of it. */
@@ -588,5 +590,51 @@ describe("inspecting a name the owner has", () => {
       refused: true,
       code: "domain.invalid",
     })
+  })
+})
+
+describe("the Domain Connect link", () => {
+  const TEMPLATE =
+    "https://api.cloudflare.com/client/v4/dns/domainconnect/v2/domainTemplates/providers/remeai.co.uk/services/website"
+  const CHAT = "7f9c1b2e-4d3a-4b5c-8e6f-0a1b2c3d4e5f"
+  const APEX = "sparkleclean.co.uk"
+  const signed = {
+    ...env,
+    APP_ORIGIN: "https://staging.remeai.co.uk",
+    DOMAIN_CONNECT_KEY: keyPair().privateKey,
+  } as unknown as Env
+  const inspection = { apex: APEX } as Inspection
+  const www = { type: "CNAME" as const, name: "www", value: CNAME_TARGET }
+  const body = { conversation_id: CHAT }
+
+  it("links Cloudflare's page for the one CNAME, coming back to the chat", async () => {
+    stubNet({ [TEMPLATE]: () => Response.json({ version: 1 }) })
+    const link = new URL(
+      (await applyLink(signed, inspection, [www], APEX, body)) ?? ""
+    )
+    expect(link.origin + link.pathname).toBe(
+      "https://dash.cloudflare.com/domainconnect/v2/domainTemplates/providers/remeai.co.uk/services/website/apply"
+    )
+    expect(link.searchParams.get("domain")).toBe(APEX)
+    expect(link.searchParams.get("host")).toBe("www")
+    expect(link.searchParams.get("redirect_uri")).toBe(
+      `https://staging.remeai.co.uk/api/domains/applied?name=${APEX}&c=${CHAT}`
+    )
+  })
+
+  it("has none without the key, the chat, a lone CNAME or our live template", async () => {
+    stubNet({ [TEMPLATE]: () => Response.json({ version: 1 }) })
+    const caa = { type: "CAA" as const, name: "@", value: CAA_FOR_US }
+    const none = [
+      await applyLink(env, inspection, [www], APEX, body),
+      await applyLink(signed, inspection, [www], APEX, {
+        conversation_id: "x",
+      }),
+      await applyLink(signed, inspection, [www, caa], APEX, body),
+      await applyLink(signed, inspection, [], APEX, body),
+    ]
+    stubNet({ [TEMPLATE]: () => new Response(null, { status: 404 }) })
+    none.push(await applyLink(signed, inspection, [www], APEX, body))
+    expect(none).toEqual(Array(5).fill(undefined))
   })
 })

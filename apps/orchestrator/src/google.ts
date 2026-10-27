@@ -309,7 +309,7 @@ export async function revokeToken(token: string): Promise<void> {
 
 async function google<T>(
   accessToken: string,
-  method: "GET" | "POST" | "PUT",
+  method: "GET" | "POST" | "PUT" | "DELETE",
   url: string,
   body?: unknown
 ): Promise<T> {
@@ -329,7 +329,7 @@ async function google<T>(
   if (!response.ok) {
     throw new GoogleError(`google.${response.status}`, response.status)
   }
-  // sites.add and sitemaps.submit answer with an empty body.
+  // sites.add, sites.delete and sitemaps.submit answer with an empty body.
   return (await response.json().catch(() => ({}))) as T
 }
 
@@ -397,6 +397,18 @@ export async function addSite(
   await google(
     accessToken,
     "PUT",
+    `${WEBMASTERS_API}/${encodeURIComponent(siteUrl)}`
+  )
+}
+
+/** Takes the property out of the account's Search Console list. */
+export async function removeSite(
+  accessToken: string,
+  siteUrl: string
+): Promise<void> {
+  await google(
+    accessToken,
+    "DELETE",
     `${WEBMASTERS_API}/${encodeURIComponent(siteUrl)}`
   )
 }

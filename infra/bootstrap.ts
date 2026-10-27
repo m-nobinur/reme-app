@@ -90,6 +90,8 @@ const environments = {
         "REME_MODEL_FALLBACK",
         // Custom hostnames on the SaaS zone (optional, see OPTIONAL_SECRETS).
         "CF_DOMAINS_TOKEN",
+        // Signs Domain Connect apply links (optional).
+        "DOMAIN_CONNECT_KEY",
         // Search Console, the reme-dev Google project (optional).
         "GOOGLE_CLIENT_ID",
         "GOOGLE_CLIENT_SECRET",
@@ -149,6 +151,7 @@ const environments = {
         "REME_MODEL_DEFAULT",
         "REME_MODEL_FALLBACK",
         "CF_DOMAINS_TOKEN",
+        "DOMAIN_CONNECT_KEY",
         // The production Google project, from .env.production.local only.
         "GOOGLE_CLIENT_ID",
         "GOOGLE_CLIENT_SECRET",
@@ -456,6 +459,8 @@ const googleEnv = name === "prod" ? readEnv(".env.production.local") : localEnv
  */
 const OPTIONAL_SECRETS: ReadonlySet<string> = new Set([
   "CF_DOMAINS_TOKEN",
+  // Without it a connect shows the records only, with no "Add it for me".
+  "DOMAIN_CONNECT_KEY",
   // Search Console stays off until the Google project exists.
   "GOOGLE_CLIENT_ID",
   "GOOGLE_CLIENT_SECRET",

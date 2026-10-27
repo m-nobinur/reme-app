@@ -654,6 +654,13 @@ async function googleResult(
     .catch(() => undefined)
 }
 
+async function domainCheck(name: string): Promise<void> {
+  const path = `/domains/${DomainName.parse(name)}/check`
+  await call(path, { method: "POST" })
+    .then((response) => response?.body?.cancel())
+    .catch(() => undefined)
+}
+
 /** The newest purchase of a domain in the owner's business, or null when there is none. */
 async function domainStatus(
   name: string
@@ -923,6 +930,7 @@ export const apiSource: OwnerDataSource = {
   unsubscribePush,
   setTimeZone,
   domainCheckout,
+  domainCheck,
   domainStatus,
   domainRegistrant,
   domainElsewhere,

@@ -283,6 +283,15 @@ export const Registrant = z.strictObject({
   }),
 })
 
+/**
+ * The fact holding the business address as the owner last gave it on Your
+ * details, in the registrant's address shape, so the page never asks again
+ * once a purchase's registrant is purged. Often the owner's home, so it is
+ * private (`PRIVATE_FACT_KEYS`): no build, tool or page that reads the
+ * business's facts sees it.
+ */
+export const BUSINESS_ADDRESS_KEY = "business.address"
+
 /** The registrant and, for `.co.uk` and `.uk`, who it is in law. */
 export const RegistrantDetails = z.strictObject({
   registrant: Registrant,

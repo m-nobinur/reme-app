@@ -186,6 +186,30 @@ const SECURITY_DEFINER_FUNCTIONS: Record<
       }
     },
   },
+  // The custom-hostname alert's way to a claim (migration 0026): a claim that
+  // is connecting or live, by its name or its `www.`, and nothing for an
+  // unknown or empty host.
+  resolve_domain_claim: {
+    probe: async (raw) => {
+      const call = async (host: string) => {
+        const [row] = await raw<{ org_id: string | null }[]>`
+          select org_id from public.resolve_domain_claim(${host})`
+        return row?.org_id ?? null
+      }
+      return {
+        granted: [
+          await call(DOMAIN_PENDING),
+          await call(`www.${DOMAIN_PENDING}`),
+          await call(DOMAIN_OF.b.toUpperCase()),
+        ],
+        refused: [
+          await call("tenancy-probe-c.example.com"),
+          await call(`blog.${DOMAIN_OF.a}`),
+          await call(""),
+        ],
+      }
+    },
+  },
   // The connect path's takeover guard (migration 0016): whether an org other
   // than the context's ever held a name. A yes is the only answer it gives,
   // so a no counts as a refusal: an org's own name, a name nobody holds.

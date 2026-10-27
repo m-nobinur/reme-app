@@ -6,18 +6,21 @@
  */
 
 import { vi } from "vitest"
+import { discoveries } from "../../src/domains.ts"
 
 type Route = Response | (() => Response)
 
 /**
  * Stands in for `fetch`: DoH from the recorded answers (overridden by `doh`),
  * settings URLs from `SETTINGS`, anything else from `extra`, and a throw for
- * a URL nobody planned on. Undone by `vi.unstubAllGlobals()`.
+ * a URL nobody planned on. Undone by `vi.unstubAllGlobals()`. Clears what
+ * discovery remembered, since tests reuse names with other answers.
  */
 export function stubNet(
   extra: Record<string, Route> = {},
   doh: Record<string, unknown> = {}
 ) {
+  discoveries.clear()
   const fetched = vi.fn(
     async (input: string | URL | Request, _init?: RequestInit) => {
       const url = String(input)

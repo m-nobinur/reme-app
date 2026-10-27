@@ -80,6 +80,12 @@ describe("the bearer", () => {
     expect((await envelope(res)).code).toBe("console.unauthenticated")
   })
 
+  it("guards the staging route restore the same way", async () => {
+    const res = await app.request("/domains/routes", { method: "POST" }, env)
+    expect(res.status).toBe(401)
+    expect((await envelope(res)).code).toBe("console.unauthenticated")
+  })
+
   it("answers a sandbox that throws as a transient 503, which the probe retries", async () => {
     const res = await app.request(
       "/sandbox/probe",
@@ -322,6 +328,7 @@ describe("owner mode", () => {
   const CONSOLE_ONLY: [string, string][] = [
     ["GET", "/assignments"],
     ["GET", "/sandbox/probe"],
+    ["POST", "/domains/routes"],
     ["POST", "/assignments/x/start"],
     ["GET", "/assignments/facts"],
     ["POST", "/assignments/facts"],

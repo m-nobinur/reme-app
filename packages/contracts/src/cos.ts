@@ -339,7 +339,9 @@ export const ConnectDomainInput = z.strictObject({ name: DomainName })
  * `connect_domain`'s output once the owner said yes. A no is `output-denied`.
  * `steps` are the records to add, `apex` says whether the bare domain is an
  * alias or forwards from `www` (absent for a subdomain, which is served on its
- * own name), and `provider` is the detected DNS provider.
+ * own name), and `provider` is the detected DNS provider. `apply_url` is the
+ * provider's signed Domain Connect page that adds `steps` for the owner, only
+ * when the provider runs our template; `steps` stay as the fallback.
  */
 export const ConnectDomainOutput = z.discriminatedUnion("outcome", [
   z.strictObject({
@@ -349,6 +351,12 @@ export const ConnectDomainOutput = z.discriminatedUnion("outcome", [
     steps: z.array(DnsRecord).max(10).optional(),
     apex: z.enum(["alias", "forward"]).optional(),
     provider: DomainProvider.optional(),
+    // A plain string, as `settings_url` is, so the model sees no `uri` format.
+    apply_url: z
+      .string()
+      .max(2000)
+      .regex(/^https:\/\/[^\s]+$/)
+      .optional(),
   }),
   Refused,
 ])

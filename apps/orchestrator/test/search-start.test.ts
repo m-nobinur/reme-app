@@ -1,8 +1,11 @@
 import { domains, searchConnections, searchProperties } from "@workspace/db"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
+import { sealToken } from "../src/google.ts"
 import { searchInstanceId } from "../src/search.ts"
 import { moveGoogle, startSearchForDomain } from "../src/search-start.ts"
 import { freshOrg, kit } from "./fixture.ts"
+
+afterEach(() => vi.unstubAllGlobals())
 
 /**
  * A domain going live starts the Search Console workflow for its new primary
@@ -81,7 +84,13 @@ describe.skipIf(!url)("starting Search Console for a new domain", () => {
 
 describe.skipIf(!url)("moving Google to a live domain", () => {
   const OLD = "old-slug.example"
-  const propertyOf = (orgId: string) =>
+  const KEY = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString(
+    "base64"
+  )
+  const propertyOf = (
+    orgId: string,
+    state: "verified" | "pending" = "verified"
+  ) =>
     kit.withOrg({ orgId }, (db) =>
       db.insert(searchProperties).values({
         orgId,
@@ -89,9 +98,33 @@ describe.skipIf(!url)("moving Google to a live domain", () => {
         siteUrl: `https://${OLD}/`,
         kind: "subdomain",
         method: "file",
-        state: "verified",
+        state,
       })
     )
+  /**
+   * The org's grant sealed for real, and Google: the token refresh succeeds,
+   * Search Console answers `status`, its calls recorded.
+   */
+  const google = async (orgId: string, env: Env, status = 204) => {
+    const refreshToken = await sealToken(env, orgId, "1//refresh")
+    await kit.withOrg({ orgId }, (db) =>
+      db.update(searchConnections).set({ refreshToken })
+    )
+    const calls: string[] = []
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const href = String(input)
+        if (href.endsWith("/token")) {
+          return Response.json({ access_token: "ya29.a", expires_in: 3600 })
+        }
+        calls.push(`${init?.method} ${href}`)
+        return new Response(null, { status })
+      })
+    )
+    return calls
+  }
+  const DELETE = `DELETE https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(`https://${OLD}/`)}`
   const held = (orgId: string) =>
     kit.withOrg({ orgId }, (db) =>
       db.select({ id: searchProperties.id }).from(searchProperties)
@@ -99,19 +132,55 @@ describe.skipIf(!url)("moving Google to a live domain", () => {
   const stopping = () => {
     const terminate = vi.fn(async () => undefined)
     const get = vi.fn(async () => ({ terminate }))
-    return { terminate, env: { SEARCHES: { get } } as unknown as Env }
+    const env = {
+      SEARCHES: { get },
+      GOOGLE_CLIENT_ID: "client",
+      GOOGLE_CLIENT_SECRET: "secret",
+      GOOGLE_TOKEN_KEY: KEY,
+    } as unknown as Env
+    return { terminate, env }
   }
 
-  it("forgets the old host's property in our records and says it moved", async () => {
+  it("takes the old host's property out of Search Console and our records", async () => {
     const orgId = await freshOrg(kit)
     await domainOf(orgId, "active")
     await propertyOf(orgId)
     const { terminate, env } = stopping()
+    const calls = await google(orgId, env)
     expect(await moveGoogle(env, kit, orgId, OLD)).toBe("moved")
     expect(terminate).toHaveBeenCalledOnce()
+    expect(calls).toEqual([DELETE])
     expect(await held(orgId)).toEqual([])
     // A repeat finds nothing to let go of and says the new host went.
     expect(await moveGoogle(env, kit, orgId, OLD)).toBe("added")
+    expect(calls).toHaveLength(1)
+  })
+
+  it("leaves a property Reme never added at Google alone there", async () => {
+    const orgId = await freshOrg(kit)
+    await domainOf(orgId, "active")
+    await propertyOf(orgId, "pending")
+    const { env } = stopping()
+    const calls = await google(orgId, env)
+    expect(await moveGoogle(env, kit, orgId, OLD)).toBe("moved")
+    expect(calls).toEqual([])
+    expect(await held(orgId)).toEqual([])
+  })
+
+  it("still moves when Google refuses the removal", async () => {
+    const orgId = await freshOrg(kit)
+    await domainOf(orgId, "active")
+    await propertyOf(orgId)
+    const { env } = stopping()
+    const calls = await google(orgId, env, 403)
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+    expect(await moveGoogle(env, kit, orgId, OLD)).toBe("moved")
+    expect(calls).toEqual([DELETE])
+    expect(warn).toHaveBeenCalledExactlyOnceWith(
+      JSON.stringify({ code: "search.unlist_failed", reason: "google.403" })
+    )
+    expect(await held(orgId)).toEqual([])
+    warn.mockRestore()
   })
 
   it("says only that the host was added when Google never held the old one", async () => {
