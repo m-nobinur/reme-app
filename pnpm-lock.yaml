@@ -17,6 +17,9 @@ overrides:
   undici@>=7.18.0 <7.30.1: 7.30.1
 
 patchedDependencies:
+  '@cloudflare/vite-plugin@1.64.0':
+    hash: 23149ceffec68764ec6541862138f3e738b3f6e6c5d6beafbbb651690c5bae45
+    path: patches/@cloudflare__vite-plugin@1.64.0.patch
   '@workos/authkit-session@0.7.1':
     hash: 42f895fc17405e2529168825531d12fe20c52a387d859eca3a1579ee79ef533d
     path: patches/@workos__authkit-session@0.7.1.patch
@@ -146,7 +149,7 @@ importers:
     devDependencies:
       '@cloudflare/vite-plugin':
         specifier: 1.64.0
-        version: 1.64.0(@types/node@24.19.2)(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(wrangler@4.151.1(@types/node@24.19.2))
+        version: 1.64.0(patch_hash=23149ceffec68764ec6541862138f3e738b3f6e6c5d6beafbbb651690c5bae45)(@types/node@24.19.2)(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(wrangler@4.151.1(@types/node@24.19.2))
       '@flue/runtime':
         specifier: 2.3.0
         version: 2.3.0(@aws-sdk/credential-provider-node@3.972.84)(@modelcontextprotocol/sdk@1.32.0(@cfworker/json-schema@4.1.1)(zod@4.6.7))(@smithy/signature-v4@5.7.4)(typescript@6.0.3)(undici@8.12.2)(ws@8.22.0)(zod@4.6.7)
@@ -262,7 +265,7 @@ importers:
     devDependencies:
       '@cloudflare/vite-plugin':
         specifier: 1.64.0
-        version: 1.64.0(@types/node@24.19.2)(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(wrangler@4.151.1(@types/node@24.19.2))
+        version: 1.64.0(patch_hash=23149ceffec68764ec6541862138f3e738b3f6e6c5d6beafbbb651690c5bae45)(@types/node@24.19.2)(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(wrangler@4.151.1(@types/node@24.19.2))
       '@types/node':
         specifier: ^24
         version: 24.19.2
@@ -7636,7 +7639,7 @@ snapshots:
     optionalDependencies:
       workerd: 1.20261012.1
 
-  '@cloudflare/vite-plugin@1.64.0(@types/node@24.19.2)(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(wrangler@4.151.1(@types/node@24.19.2))':
+  '@cloudflare/vite-plugin@1.64.0(patch_hash=23149ceffec68764ec6541862138f3e738b3f6e6c5d6beafbbb651690c5bae45)(@types/node@24.19.2)(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(wrangler@4.151.1(@types/node@24.19.2))':
     dependencies:
       '@cloudflare/unenv-preset': 2.16.2(unenv@2.0.0-rc.24)(workerd@1.20261012.1)
       miniflare: 5.20261012.0-beta(@types/node@24.19.2)

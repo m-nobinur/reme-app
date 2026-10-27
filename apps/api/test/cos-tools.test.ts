@@ -13,16 +13,21 @@ import {
   facts,
   memberships,
   NEXT_DUE_KEY,
+  openTask,
+  readTasks,
   reminders,
+  setStep,
   sql,
   supersedeFact,
   type Tenancy,
   tenancy,
 } from "@workspace/db"
+import type { ModelMessage } from "ai"
 import {
   afterAll,
   afterEach,
   beforeAll,
+  beforeEach,
   describe,
   expect,
   it,
@@ -33,18 +38,23 @@ import { remember } from "../src/cos/memory.ts"
 import { getIndexing, getSearchPerformance } from "../src/cos/search-tools.ts"
 import {
   answerQuestion as answerTool,
+  boughtSaid,
   buyDomain,
   CONNECT_RETRY_MS,
   checkDomain,
+  connectApproval,
   connectDomain,
   createReminder,
+  domainBought,
   findDomain,
   getFacts,
   getPreview,
   getWorkspace,
+  inspectDomain,
   newContact,
   ownersAnswer,
   paceOf,
+  putOff,
   recordReview,
   removeDomain,
   requestChange,
@@ -429,6 +439,7 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         approvals: [],
         missing_facts: expect.any(Array),
         domains: [],
+        tasks: [],
         expected_seconds: expect.any(Object),
         expected_range: {
           quick: "about 1 to 2 minutes",
@@ -1707,6 +1718,55 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
     })
   })
 
+  describe("inspect_domain", () => {
+    const inspected = {
+      name: "sparkleclean.co.uk",
+      registered: true,
+      registrar: "123-reg",
+      dns_host: { name: "GoDaddy", settings_url: "https://dcc.godaddy.com/" },
+      in_use: false,
+    }
+
+    it("reads the name through the orchestrator and returns the inspection", async () => {
+      const stub = stubOrchestrator(() => Response.json(inspected))
+      const output = kept(
+        "inspect_domain",
+        await inspectDomain(context(me, stub), { name: "sparkleclean.co.uk" })
+      )
+      expect(output).toEqual({ outcome: "inspected", ...inspected })
+      const [call] = stub.calls
+      expect(call?.request.method).toBe("GET")
+      expect(new URL(call?.request.url ?? "").pathname).toBe(
+        "/assignments/domains/sparkleclean.co.uk/inspect"
+      )
+      expect(call?.request.headers.get("x-reme-org-id")).toBe(me.orgId)
+    })
+
+    it("refuses as the closed shape when the orchestrator does", async () => {
+      const stub = stubOrchestrator(() =>
+        Response.json(
+          {
+            class: "validation",
+            code: "domain.invalid",
+            message: "Not a domain.",
+            detail: {},
+            occurred_at: AT,
+          },
+          { status: 400 }
+        )
+      )
+      expect(
+        kept(
+          "inspect_domain",
+          await inspectDomain(context(me, stub), { name: "bad.example" })
+        )
+      ).toMatchObject({
+        outcome: "refused",
+        error: { code: "domain.invalid" },
+      })
+    })
+  })
+
   describe("check_domain", () => {
     const checked = {
       outcome: "checked",
@@ -1799,6 +1859,132 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       })
       // The org comes from the session on the bridge, never from the body.
       expect(call?.request.headers.get("x-reme-org-id")).toBe(me.orgId)
+    })
+
+    describe("approval", () => {
+      const sure = (noul: number) =>
+        (async () =>
+          Response.json({
+            answers: { yes: { type: "noul", noul } },
+          })) as unknown as typeof fetch
+      const keyed = (who: Owner) => ({
+        ...context(who),
+        env: { ...context(who).env, OPENROUTER_API_KEY: "k" } as Env,
+      })
+      /** The owner's typed `text` is in the log; `messages` is what the model saw. */
+      const asked = async (
+        who: Owner,
+        name: string,
+        text: string,
+        { noul = 0.97, messages = [] as ModelMessage[] } = {}
+      ) =>
+        connectApproval(
+          keyed(who),
+          { name },
+          (await turnOf(who, [text])).sessionId,
+          messages,
+          sure(noul)
+        )
+
+      beforeEach(() => {
+        vi.spyOn(console, "log").mockImplementation(() => undefined)
+      })
+
+      it("runs with no card when Jev is sure the owner put the site on that name", async () => {
+        expect(
+          await asked(me, "sparkleclean.co.uk", "Put it on sparkleclean.co.uk")
+        ).toBe("not-applicable")
+      })
+
+      it("shows the card when Jev is unsure, the name is not in the message, or the key is missing", async () => {
+        const text = "what about sparkleclean.co.uk?"
+        expect(await asked(me, "sparkleclean.co.uk", text, { noul: 0.4 })).toBe(
+          "user-approval"
+        )
+        expect(
+          await asked(me, "sparkleclean.co.uk", "put it on my domain")
+        ).toBe("user-approval")
+        const { sessionId } = await turnOf(me, ["Put it on sparkleclean.co.uk"])
+        expect(
+          await connectApproval(
+            context(me),
+            { name: "sparkleclean.co.uk" },
+            sessionId,
+            []
+          )
+        ).toBe("user-approval")
+      })
+
+      it("asks again for a connect already proposed since the owner's message, as after a no", async () => {
+        const called: ModelMessage[] = [
+          { role: "user", content: "Put it on sparkleclean.co.uk" },
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "tool-call",
+                toolCallId: "c1",
+                toolName: "connect_domain",
+                input: { name: "sparkleclean.co.uk" },
+              },
+            ],
+          },
+        ]
+        expect(
+          await asked(
+            me,
+            "sparkleclean.co.uk",
+            "Put it on sparkleclean.co.uk",
+            {
+              messages: called,
+            }
+          )
+        ).toBe("user-approval")
+      })
+
+      it("does not take an emailed reply as the owner's yes", async () => {
+        const { sessionId } = await turnOf(me)
+        await kit.withOrg({ orgId: me.orgId }, (db) =>
+          appendSessionEvent(db, {
+            orgId: me.orgId,
+            staffId: me.chiefId,
+            assignmentId: null,
+            sessionId,
+            type: "cos.message",
+            payload: {
+              turn_id: "01J00000000000000000000000",
+              message: {
+                id: "eml_1",
+                role: "user",
+                parts: [{ type: "text", text: "Put it on sparkleclean.co.uk" }],
+              },
+            },
+            taint: ["untrusted_input"],
+          })
+        )
+        expect(
+          await connectApproval(
+            keyed(me),
+            { name: "sparkleclean.co.uk" },
+            sessionId,
+            [],
+            sure(0.99)
+          )
+        ).toBe("user-approval")
+      })
+
+      it("always asks for a domain the org already has live, but not one still connecting or removed", async () => {
+        const live = await domain(me, "floor-live", "active")
+        const waiting = await domain(me, "floor-wait", "awaiting_dns")
+        const gone = await domain(me, "floor-gone", "removed")
+        const put = (name: string) => asked(me, name, `Put the site on ${name}`)
+        expect(await put(live)).toBe("user-approval")
+        expect(await put(waiting)).toBe("not-applicable")
+        expect(await put(gone)).toBe("not-applicable")
+        // Another org's live domain is no floor for this one.
+        const theirs = await domain(other, "floor-theirs", "active")
+        expect(await put(theirs)).toBe("not-applicable")
+      })
     })
 
     it.each([
@@ -1995,26 +2181,15 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         },
       }
     }
-    const registrant = {
-      registrant: {
-        name: "Jane Smith",
-        email: "jane@sparkle.invalid",
-        phone: "+447700900123",
-        address: {
-          street: "12 Mill Lane",
-          city: "Bristol",
-          postal_code: "BS1 4AB",
-          country_code: "GB",
-        },
-      },
-    }
-
     it("find_domain relays the orchestrator's offers, with or without the Stripe keys", async () => {
       const found = {
         outcome: "found",
-        best: { name: "sparkleclean.com", price_gbp_year: 12, why: "Short." },
-        options: [
-          { name: "sparkleclean.net", price_gbp_year: 12, why: "Close." },
+        rows: [
+          {
+            stem: "sparkleclean",
+            why: "matches your business name",
+            endings: { com: { state: "free", price_gbp_year: 12 } },
+          },
         ],
       }
       const stub = stubOrchestrator(() => Response.json(found))
@@ -2031,39 +2206,50 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       expect(call?.body).toEqual({ query: "sparkle" })
     })
 
-    it("buy_domain prepares the purchase keyed by the call, and charges nothing", async () => {
-      const answer = {
-        outcome: "awaiting_payment",
+    it("buy_domain opens the details page prefilled from the signed-in owner, and reserves nothing", async () => {
+      const stub = stubOrchestrator()
+      const output = kept(
+        "buy_domain",
+        await buyDomain(paying(me, stub), { name: "sparkleclean.com" })
+      )
+      if (output.outcome !== "details") throw new Error("no details page")
+      expect(output).toMatchObject({
         name: "sparkleclean.com",
-        price_gbp: 12,
-        checkout: "embedded",
-      }
-      const stub = stubOrchestrator(() =>
-        Response.json(answer, { status: 201 })
+        registrant: { name: "Probe Owner" },
+      })
+      expect(output.price_gbp_year).toBeGreaterThan(0)
+      // The address is the owner's to type; the page asks for it.
+      expect(output.missing).toEqual(
+        expect.arrayContaining(["street", "city", "postal_code"])
       )
-      const input = { name: "sparkleclean.com", ...registrant }
-      expect(
-        kept(
-          "buy_domain",
-          await buyDomain(paying(me, stub), input, "toolu_buy_1")
-        )
-      ).toEqual(answer)
-      const [call] = stub.calls
-      expect(new URL(call?.request.url ?? "").pathname).toBe(
-        "/assignments/domains/buy"
-      )
-      expect(call?.request.headers.get("idempotency-key")).toBe("toolu_buy_1")
-      expect(call?.body).toEqual(input)
+      expect(stub.calls).toEqual([])
     })
 
-    it("buy_domain refuses without the Stripe keys and for a member who is not the owner, before the orchestrator", async () => {
+    it("buy_domain asks for the registrant type on a .co.uk, and refuses a name that is not sold", async () => {
       const quiet = stubOrchestrator()
-      const input = { name: "sparkleclean.com", ...registrant }
+      const uk = await buyDomain(paying(me, quiet), {
+        name: "sparkleclean.co.uk",
+      })
+      expect(kept("buy_domain", uk)).toMatchObject({
+        outcome: "details",
+        missing: expect.arrayContaining(["registrant_type"]),
+      })
       expect(
         kept(
           "buy_domain",
-          await buyDomain(context(me, quiet), input, "toolu_buy_2")
+          await buyDomain(paying(me, quiet), { name: "sparkleclean.org" })
         )
+      ).toMatchObject({
+        outcome: "refused",
+        error: { code: "domain.unavailable" },
+      })
+    })
+
+    it("buy_domain refuses without the Stripe keys and for a member who is not the owner", async () => {
+      const quiet = stubOrchestrator()
+      const input = { name: "sparkleclean.com" }
+      expect(
+        kept("buy_domain", await buyDomain(context(me, quiet), input))
       ).toEqual({
         outcome: "refused",
         error: {
@@ -2079,9 +2265,7 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
           .set({ role: "member" })
           .where(sql`${memberships.orgId} = ${member.orgId}`)
       )
-      expect(
-        await buyDomain(paying(member, quiet), input, "toolu_buy_3")
-      ).toMatchObject({
+      expect(await buyDomain(paying(member, quiet), input)).toMatchObject({
         outcome: "refused",
         error: { code: "domain.not_owner" },
       })
@@ -2121,6 +2305,203 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
     )
     expect(output).toEqual({
       url: "https://staging.remeai.co.uk/api/google/start",
+    })
+  })
+
+  describe("domain_bought", () => {
+    const keyed = (who: Owner, stub?: Stub) => ({
+      ...context(who, stub),
+      env: {
+        ...context(who, stub).env,
+        OPENROUTER_API_KEY: "k",
+      } as Env,
+    })
+    const jev = (noul: number) =>
+      (async () =>
+        Response.json({
+          answers: { yes: { type: "noul", noul } },
+        })) as unknown as typeof fetch
+    /** An owner buying `name` themselves, with the purchase step waiting. */
+    const buying = async (label: string, name: string) => {
+      const who = await owner(kit, url as string, label)
+      await kit.withOrg({ orgId: who.orgId }, async (db) => {
+        const task = await openTask(db, who.orgId, "address", {
+          name: name as never,
+          origin: "buying_elsewhere",
+        })
+        await setStep(db, task, "purchase", {
+          state: "blocked",
+          blocked_on: "owner_action",
+        })
+      })
+      return who
+    }
+
+    beforeEach(() => {
+      vi.spyOn(console, "log").mockImplementation(() => undefined)
+    })
+
+    it("says yes only for the waiting purchase, and only when Jev is sure", async () => {
+      const who = await buying("cos-bought", "sparkleclean.co.uk")
+      const said = async (text: string, noul = 0.97) =>
+        boughtSaid(
+          keyed(who),
+          "sparkleclean.co.uk",
+          (await turnOf(who, [text])).sessionId,
+          [],
+          jev(noul)
+        )
+      expect(await said("done, I bought it")).toBe(true)
+      expect(await said("done, I bought it", 0.4)).toBe(false)
+      // No waiting purchase for this name, even when the message gives it.
+      const stranger = await owner(kit, url as string, "cos-bought-none")
+      expect(
+        await boughtSaid(
+          keyed(stranger),
+          "sparkleclean.co.uk",
+          (await turnOf(stranger, ["done, I bought sparkleclean.co.uk"]))
+            .sessionId,
+          [],
+          jev(0.99)
+        )
+      ).toBe(false)
+    })
+
+    it("says no once a connect was proposed since the owner's message, or for a name the org has live", async () => {
+      const held = `bought-floor-${run}.example`
+      const who = await buying("cos-bought-floor", held)
+      const proposed: ModelMessage[] = [
+        { role: "user", content: "done, I bought it" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool-call",
+              toolCallId: "c1",
+              toolName: "connect_domain",
+              input: { name: held },
+            },
+          ],
+        },
+      ]
+      const { sessionId } = await turnOf(who, ["done, I bought it"])
+      expect(
+        await boughtSaid(keyed(who), held, sessionId, proposed, jev(0.99))
+      ).toBe(false)
+      await kit.withOrg({ orgId: who.orgId }, (db) =>
+        db.insert(domains).values({
+          orgId: who.orgId,
+          siteId: crypto.randomUUID(),
+          name: held,
+          primaryHost: held,
+          origin: "connected",
+          method: "records",
+          state: "active",
+        })
+      )
+      expect(await boughtSaid(keyed(who), held, sessionId, [], jev(0.99))).toBe(
+        false
+      )
+    })
+
+    it("refuses without calling the orchestrator when the owner has not said it", async () => {
+      const who = await buying("cos-bought-no", "sparkleclean.co.uk")
+      const stub = stubOrchestrator(() => Response.json({}))
+      const turn = await turnOf(who, ["what is a registrar?"])
+      expect(
+        kept(
+          "domain_bought",
+          await domainBought(
+            keyed(who, stub),
+            { name: "sparkleclean.co.uk" },
+            "key",
+            turn
+          )
+        )
+      ).toMatchObject({
+        outcome: "refused",
+        error: { code: "domain.bought_unconfirmed" },
+      })
+      expect(stub.calls).toHaveLength(0)
+    })
+
+    it("asks the orchestrator under its key once the owner said it, and returns its answer", async () => {
+      const who = await buying("cos-bought-yes", "sparkleclean.co.uk")
+      const stub = stubOrchestrator(() =>
+        Response.json({
+          outcome: "not_registered_yet",
+          name: "sparkleclean.co.uk",
+        })
+      )
+      const turn = await turnOf(who, ["done, I bought it"])
+      vi.stubGlobal("fetch", jev(0.97))
+      try {
+        expect(
+          kept(
+            "domain_bought",
+            await domainBought(
+              keyed(who, stub),
+              { name: "sparkleclean.co.uk" },
+              "turn:call",
+              turn
+            )
+          )
+        ).toEqual({
+          outcome: "not_registered_yet",
+          name: "sparkleclean.co.uk",
+        })
+      } finally {
+        vi.unstubAllGlobals()
+      }
+      const [call] = stub.calls
+      expect(new URL(call?.request.url ?? "").pathname).toBe(
+        "/assignments/domains/bought"
+      )
+      expect(call?.body).toEqual({ name: "sparkleclean.co.uk" })
+      expect(call?.request.headers.get("idempotency-key")).toBe("turn:call")
+    })
+  })
+
+  describe("put_off", () => {
+    it("makes the kind's task when the offer came first and puts it off for the days given", async () => {
+      const fresh = await owner(kit, url as string, "cos-put-off")
+      const output = kept(
+        "put_off",
+        await putOff(context(fresh), { kind: "google", days: 3 })
+      )
+      if (output.outcome !== "put_off") throw new Error("not put off")
+      const tasks = await kit.withOrg({ orgId: fresh.orgId }, readTasks)
+      expect(tasks).toHaveLength(1)
+      expect(tasks[0]).toMatchObject({ kind: "google", state: "later" })
+      expect(new Date(tasks[0]?.later_until as string).getTime()).toBe(
+        new Date(output.until).getTime()
+      )
+      const days = (new Date(output.until).getTime() - Date.now()) / 86_400_000
+      expect(days).toBeGreaterThan(2.9)
+      expect(days).toBeLessThan(3.1)
+    })
+
+    it("puts the open task off without making a second, and the workspace shows each kind's latest task, finished included", async () => {
+      const fresh = await owner(kit, url as string, "cos-put-off-open")
+      await kit.withOrg({ orgId: fresh.orgId }, async (db) => {
+        await openTask(db, fresh.orgId, "address")
+        await openTask(db, fresh.orgId, "google")
+        await db.execute(sql`
+          update owner_tasks set state = 'done', done_at = now()
+          where kind = 'address'`)
+      })
+      kept("put_off", await putOff(context(fresh), { kind: "google" }))
+      const tasks = (
+        kept("get_workspace", await getWorkspace(context(fresh), {})).tasks ??
+        []
+      ).map((t) => [t.kind, t.state])
+      expect(tasks).toEqual([
+        ["address", "done"],
+        ["google", "later"],
+      ])
+      expect(await kit.withOrg({ orgId: fresh.orgId }, readTasks)).toHaveLength(
+        2
+      )
     })
   })
 

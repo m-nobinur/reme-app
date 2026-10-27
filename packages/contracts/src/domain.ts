@@ -75,6 +75,90 @@ export const DomainProvider = z.strictObject({
     .optional(),
 })
 
+/**
+ * What `inspect_domain` found out about a name the owner already has, from the
+ * registry (RDAP) and public DNS: whether it is registered, who sold it, who
+ * runs its DNS (the detection the connect card shows), and whether it already
+ * points somewhere, such as a website.
+ */
+export const DomainInspection = z.strictObject({
+  name: DomainName,
+  registered: z.boolean(),
+  registrar: Text(80).optional(),
+  dns_host: DomainProvider.optional(),
+  in_use: z.boolean(),
+})
+
+/**
+ * Mail hosts anyone can sign up to. An email there says nothing about a web
+ * address, so it is the only case where the owner is asked.
+ */
+const FREE_MAIL_HOSTS = new Set([
+  "aol.co.uk",
+  "aol.com",
+  "blueyonder.co.uk",
+  "btinternet.com",
+  "btopenworld.com",
+  "gmail.com",
+  "gmx.co.uk",
+  "gmx.com",
+  "googlemail.com",
+  "hotmail.co.uk",
+  "hotmail.com",
+  "icloud.com",
+  "live.co.uk",
+  "live.com",
+  "mac.com",
+  "mail.com",
+  "me.com",
+  "msn.com",
+  "ntlworld.com",
+  "outlook.com",
+  "pm.me",
+  "proton.me",
+  "protonmail.com",
+  "rocketmail.com",
+  "sky.com",
+  "talktalk.net",
+  "tiscali.co.uk",
+  "virginmedia.com",
+  "yahoo.co.uk",
+  "yahoo.com",
+  "ymail.com",
+])
+
+/** The domain of an email address when it is the sender's own, else null: a free-mail host is nobody's. */
+export function ownDomain(email: string): string | null {
+  const host = email.slice(email.lastIndexOf("@") + 1).toLowerCase()
+  return DomainName.safeParse(host).success && !FREE_MAIL_HOSTS.has(host)
+    ? host
+    : null
+}
+
+/**
+ * The tray question "Do you already have a web address?" (`kind: "address"`)
+ * and its answers: one place for the sender, the answer handler and the card.
+ * A Yes is followed by a text page for the name, which No and Not now close.
+ */
+export const ADDRESS_ASK = {
+  have: "Do you already have a web address?",
+  name: "What is it?",
+  yes: "Yes",
+  no: "No, help me get one",
+  later: "Not now",
+} as const
+
+/**
+ * The owner's words for a settled address stack, sent as their next message
+ * so a normal turn acts on them: the name they typed, or that they have one.
+ * Null for Not now, which needs no reply.
+ */
+export function addressReply(choice: string, name?: string): string | null {
+  if (choice === ADDRESS_ASK.yes)
+    return name ? `Yes, it's ${name}` : "Yes, I have a web address"
+  return choice === ADDRESS_ASK.no ? ADDRESS_ASK.no : null
+}
+
 /** The endings Reme sells. */
 export const DomainTld = z.enum(["co.uk", "uk", "com", "net"])
 
@@ -131,11 +215,38 @@ export const DomainPrice = z.strictObject({
   cost_usd: z.number().nonnegative(),
 })
 
-/** One name `find_domain` offers: free to register now, at the table's price. */
-export const DomainOffer = z.strictObject({
-  name: DomainName,
-  price_gbp_year: z.int().positive(),
+/** One ending of a name stem: free at its yearly price, or taken. */
+const DomainEnding = z.discriminatedUnion("state", [
+  z.strictObject({
+    state: z.literal("free"),
+    price_gbp_year: z.int().positive(),
+  }),
+  z.strictObject({ state: z.literal("taken") }),
+])
+
+/**
+ * One row of the owner's choice of name: a stem with each ending Reme offers,
+ * `.co.uk`, `.com` and `.uk`, free or taken. `.net` is not offered. An ending
+ * the registrar here does not sell is absent, never "taken": the sandbox
+ * sells `.com` only. `why` is this stem's own reason; no two rows share one.
+ */
+export const DomainStemOffer = z.strictObject({
+  stem: Text(63),
   why: Text(200),
+  endings: z.strictObject({
+    "co.uk": DomainEnding.optional(),
+    com: DomainEnding.optional(),
+    uk: DomainEnding.optional(),
+  }),
+})
+
+/**
+ * Where an owner buys a name themselves, each opening the provider's own
+ * search with the name filled in (both checked in Chrome on 2026-10-27).
+ */
+export const buyElsewhereLinks = (name: string) => ({
+  cloudflare: `https://domains.cloudflare.com/?domain=${encodeURIComponent(name)}`,
+  godaddy: `https://www.godaddy.com/domainsearch/find?domainToCheck=${encodeURIComponent(name)}`,
 })
 
 /**
@@ -244,11 +355,64 @@ export const DomainPurchaseStatus = z.strictObject({
   outcome: PurchaseOutcome.optional(),
 })
 
+/** Whether the registry asks who registers the name in law: `.co.uk` and `.uk`. */
+export const needsRegistrantType = (name: string) => {
+  const tld = sellableTld(name)
+  return tld === "co.uk" || tld === "uk"
+}
+
+/** A registrant as far as Reme knows it before the owner fills the gaps. */
+export const RegistrantDraft = Registrant.partial().extend({
+  address: Registrant.shape.address.partial().optional(),
+})
+
+/** A field of the details page, by its key in `RegistrantDetails`. */
+export const RegistrantField = z.enum([
+  "name",
+  "business_name",
+  "email",
+  "phone",
+  "street",
+  "city",
+  "state",
+  "postal_code",
+  "country_code",
+  "registrant_type",
+  "company_number",
+])
+
 /**
- * `POST /domains/{name}/checkout`, web to api: the card's registrant, as
- * shown or as the owner corrected it.
+ * `GET /domains/{name}/registrant`, api to web: the details page for buying
+ * `name` (a stem and its ending), prefilled from the business facts and the
+ * signed-in owner. `missing` lists the required fields Reme could not fill,
+ * so the page asks only for those; `registrant_type` is among them for
+ * `.co.uk` and `.uk`. A company number is asked once the owner picks LTD or
+ * LLP.
+ */
+export const DomainRegistrantPrefill = z.strictObject({
+  name: DomainName,
+  price_gbp_year: z.int().positive(),
+  registrant: RegistrantDraft,
+  missing: z.array(RegistrantField),
+})
+
+/**
+ * `POST /domains/{name}/checkout`, web to api: Pay on the details page, with
+ * the registrant as shown or as the owner corrected it. It opens the
+ * purchase of `name` when none is waiting, so a first Pay and a Pay again
+ * after an expired Checkout are the same call; the answer is `DomainCheckout`.
  */
 export const DomainCheckoutRequest = RegistrantDetails
+
+/**
+ * `POST /domains/{name}/bought`'s answer when the registry does not show the
+ * name yet: the hold goes on, and the daily look will see it. When it does,
+ * the answer is the connect's own (`BoughtElsewhereOutput` in cos.ts).
+ */
+export const NotRegisteredYet = z.strictObject({
+  outcome: z.literal("not_registered_yet"),
+  name: DomainName,
+})
 
 /**
  * The api's answer: what the embedded Checkout mounts with. The client
@@ -342,10 +506,14 @@ export type DomainOrigin = z.infer<typeof DomainOrigin>
 export type ConnectMethod = z.infer<typeof ConnectMethod>
 export type DomainTld = z.infer<typeof DomainTld>
 export type DomainPrice = z.infer<typeof DomainPrice>
-export type DomainOffer = z.infer<typeof DomainOffer>
+export type DomainStemOffer = z.infer<typeof DomainStemOffer>
 export type RegistrantType = z.infer<typeof RegistrantType>
 export type Registrant = z.infer<typeof Registrant>
 export type RegistrantDetails = z.infer<typeof RegistrantDetails>
+export type RegistrantDraft = z.infer<typeof RegistrantDraft>
+export type RegistrantField = z.infer<typeof RegistrantField>
+export type DomainRegistrantPrefill = z.infer<typeof DomainRegistrantPrefill>
+export type NotRegisteredYet = z.infer<typeof NotRegisteredYet>
 export type DomainStripe = z.infer<typeof DomainStripe>
 export type PurchaseOutcome = z.infer<typeof PurchaseOutcome>
 export type DomainRegistration = z.infer<typeof DomainRegistration>
@@ -356,3 +524,4 @@ export type DomainPaymentEvent = z.infer<typeof DomainPaymentEvent>
 export type DnsRecord = z.infer<typeof DnsRecord>
 export type DomainCheck = z.infer<typeof DomainCheck>
 export type DomainProvider = z.infer<typeof DomainProvider>
+export type DomainInspection = z.infer<typeof DomainInspection>

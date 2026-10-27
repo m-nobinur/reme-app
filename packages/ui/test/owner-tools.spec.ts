@@ -73,70 +73,74 @@ test("the change card is one tap either way, and waits for the server", async ({
   page,
 }) => {
   await open(page, "RequestChange")
-  const cards = page.locator('[data-slot="request-change"]')
-  await expect(cards).toHaveCount(15)
-  const asked = cards.nth(0)
-  await expect(asked.getByRole("heading")).toHaveText(
+  const all = page.locator('[data-slot="request-change"]')
+  await expect(all).toHaveCount(15)
+  // The three waiting on the owner sit in the tray, with the two answer cards
+  // that wait beside them; the thread keeps the other twelve.
+  const cards = all.filter({
+    hasNot: page.locator('[data-slot="question-tray"]'),
+  })
+  await expect(cards).toHaveCount(12)
+  // The tray shows the newest of five, and steps back to the rest.
+  const tray = page.locator('[data-slot="question-tray"]:visible')
+  const older = page.getByRole("button", { name: "Older" })
+  for (let step = 0; step < 4; step++) await older.click()
+  await expect(tray.getByRole("heading")).toHaveText(
     "Build my website from the details I gave you."
   )
-  await expect(asked.getByRole("button", { name: "Approve" })).toBeEnabled()
-  await expect(asked.getByRole("button", { name: "Not now" })).toBeEnabled()
+  await expect(tray.getByRole("button", { name: "Approve" })).toBeEnabled()
+  await expect(tray.getByRole("button", { name: "Not now" })).toBeEnabled()
   // After the tap, nothing claims the build started until it has.
-  const answered = cards.nth(1)
-  await expect(
-    answered.getByRole("button", { name: "Starting" })
-  ).toBeDisabled()
-  await expect(answered.getByRole("button", { name: "Not now" })).toBeDisabled()
+  const answered = cards.nth(0)
+  await expect(answered).toContainText("Starting…")
+  await expect(answered.locator('[aria-busy="true"]')).toHaveCount(1)
+  await expect(answered.getByRole("button")).toHaveCount(0)
   // A started build names no version, id or hash.
-  for (const started of [cards.nth(2), cards.nth(3)]) {
+  for (const started of [cards.nth(1), cards.nth(2)]) {
     await expect(started).toContainText("Started. Follow it in the panel.")
     await expect(started).not.toContainText(/5b0f6c1e|9c3e1f2a|ID |Build /)
   }
-  await expect(cards.nth(4)).toContainText("Ask again once it is ready")
-  await expect(cards.nth(5)).toContainText("You said not now.")
-  await expect(cards.nth(6)).toContainText("Not started")
+  await expect(cards.nth(3)).toContainText("Ask again once it is ready")
+  await expect(cards.nth(4)).toContainText("You said not now.")
+  await expect(cards.nth(5)).toContainText("Not started")
   // An error after a yes may still have started the build: the owner checks.
-  await expect(cards.nth(7)).toContainText(
+  await expect(cards.nth(6)).toContainText(
     "We could not confirm this went through."
   )
   // A yes that waits for the rest of its step is not starting anything yet,
   // on either card.
   const HELD = "You said yes. Sent once you answer the other cards."
-  const held = cards.nth(8)
+  const held = cards.nth(7)
   await expect(held.getByRole("status")).toHaveText(HELD)
   // The answer is recorded and nothing runs, so the card offers no buttons.
   await expect(held.getByRole("button")).toHaveCount(0)
   await expect(held.locator('[aria-busy="true"]')).toHaveCount(0)
-  const heldQuestions = page.locator(
-    '[data-slot="answer-question"] [role="status"]'
-  )
+  const heldQuestions = page
+    .locator('[data-slot="answer-question"]')
+    .filter({ hasNot: page.locator('[data-slot="question-tray"]') })
+    .locator('[role="status"]')
   await expect(heldQuestions.nth(0)).toHaveText(HELD)
-  await expect(
-    cards.nth(9).getByRole("button", { name: "Approve" })
-  ).toBeEnabled()
+  // The card beside a held answer still waits, in the tray.
+  for (let step = 0; step < 2; step++)
+    await page.getByRole("button", { name: "Newer" }).click()
+  await expect(tray.getByRole("button", { name: "Approve" })).toBeEnabled()
   // And a no, on either card.
   const NOT_NOW = "You said not now. Sent once you answer the other cards."
-  await expect(cards.nth(10).getByRole("status")).toHaveText(NOT_NOW)
+  await expect(cards.nth(8).getByRole("status")).toHaveText(NOT_NOW)
   await expect(heldQuestions.nth(1)).toHaveText(NOT_NOW)
   // A yes already sent, with no other card in its step, is starting.
-  const sent = cards.nth(12)
-  await expect(sent.getByRole("button", { name: "Starting" })).toBeDisabled()
-  await expect(sent.getByRole("status")).toHaveCount(0)
+  const sent = cards.nth(9)
+  await expect(sent).toContainText("Starting…")
+  await expect(sent.getByRole("status")).toHaveCount(1)
   await expect(sent.locator('[aria-busy="true"]')).toHaveCount(1)
   // Nothing to approve while the model is still writing the change.
-  await expect(cards.nth(13)).toHaveText("Passing on your change")
-  await expect(cards.nth(13).getByRole("button")).toHaveCount(0)
+  await expect(cards.nth(10)).toHaveText("Passing on your change")
+  await expect(cards.nth(10).getByRole("button")).toHaveCount(0)
   // A no on its way to the server claims nothing is starting.
-  const declining = cards.nth(14)
-  await expect(
-    declining.getByRole("button", { name: "Approve" })
-  ).toBeDisabled()
-  await expect(
-    declining.getByRole("button", { name: "Not now" })
-  ).toBeDisabled()
-  await expect(declining.getByRole("button", { name: "Starting" })).toHaveCount(
-    0
-  )
+  const declining = cards.nth(11)
+  await expect(declining).toContainText("You said not now.")
+  await expect(declining.locator('[aria-busy="true"]')).toHaveCount(0)
+  await expect(declining.getByRole("button")).toHaveCount(0)
 })
 
 test("the approve button shows a visible focus ring from the keyboard", async ({
@@ -144,8 +148,7 @@ test("the approve button shows a visible focus ring from the keyboard", async ({
 }) => {
   await open(page, "RequestChange")
   const approve = page
-    .locator('[data-slot="request-change"]')
-    .first()
+    .locator('[data-slot="question-tray"]:visible')
     .getByRole("button", { name: "Approve" })
   await approve.focus()
   await page.keyboard.press("Shift+Tab")

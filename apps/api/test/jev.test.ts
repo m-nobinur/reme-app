@@ -1,3 +1,4 @@
+import { ADDRESS_ASK, addressReply } from "@workspace/contracts"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import replies from "../../../evals/typed-replies/replies.json" with {
   type: "json",
@@ -7,6 +8,9 @@ import {
   JEV,
   jev,
   jevApproval,
+  jevBought,
+  jevPromise,
+  jevPutOn,
   jevReading,
   matched,
   phrased,
@@ -493,5 +497,178 @@ describe("the reading of a typed message", () => {
       "timeout"
     )
     expect(log).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe("the reading of a reply that may promise work", () => {
+  afterEach(() => vi.restoreAllMocks())
+  const read = (acts: number, tells: number) =>
+    fake({
+      answers: {
+        acts: { type: "noul", noul: acts },
+        tells: { type: "noul", noul: tells },
+      },
+      usage: { cost: 0.00002 },
+    })
+  const never = async () => {
+    throw new Error("watched was asked")
+  }
+
+  it("takes a sure promise of action without asking whether anything is watching", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined)
+    const { fetchImpl, sent } = read(0.97, 0.05)
+    expect(
+      await jevPromise("k", "I'll set that up now.", never, fetchImpl)
+    ).toBe(true)
+    expect(JSON.parse(sent[0]?.init.body as string).state).toEqual({
+      assistant_said: "I'll set that up now.",
+    })
+  })
+
+  it("takes a promise to tell the owner later only when nothing is watching", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined)
+    const said = "I'll tell you when it's live."
+    expect(
+      await jevPromise("k", said, async () => false, read(0.1, 0.98).fetchImpl)
+    ).toBe(true)
+    expect(
+      await jevPromise("k", said, async () => true, read(0.1, 0.98).fetchImpl)
+    ).toBe(false)
+  })
+
+  it("leaves an honest ending, an unsure reading and a failed call alone", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined)
+    expect(
+      await jevPromise("k", "Done.", never, read(0.03, 0.03).fetchImpl)
+    ).toBe(false)
+    expect(
+      await jevPromise("k", "Hmm.", never, read(0.77, 0.6).fetchImpl)
+    ).toBe(false)
+    expect(await jevPromise("k", "Hmm.", never, fake({}, 500).fetchImpl)).toBe(
+      false
+    )
+  })
+})
+
+describe("the reading of a message that may put the site on a name", () => {
+  afterEach(() => vi.restoreAllMocks())
+  const read = (score: number) =>
+    fake({ answers: { yes: { type: "noul", noul: score } } })
+
+  it("is sure only at the bar, and sends the message and the name as data", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined)
+    const said = "Put the site on sparkleclean.co.uk"
+    const sure = read(0.95)
+    expect(
+      await jevPutOn("k", said, "sparkleclean.co.uk", sure.fetchImpl)
+    ).toBe(true)
+    expect(JSON.parse(sure.sent[0]?.init.body as string).state).toEqual({
+      owner_said: said,
+      domain: "sparkleclean.co.uk",
+    })
+    expect(
+      await jevPutOn("k", said, "sparkleclean.co.uk", read(0.89).fetchImpl)
+    ).toBe(false)
+  })
+
+  it("takes the tray's own yes with no reading, and never reads a message without the name", async () => {
+    const name = "sparkleclean.co.uk"
+    const never = fake({}, 500)
+    expect(
+      await jevPutOn(
+        "k",
+        addressReply(ADDRESS_ASK.yes, name) ?? "",
+        name,
+        never.fetchImpl
+      )
+    ).toBe(true)
+    expect(
+      await jevPutOn(
+        "k",
+        "Yes, it's sparkleclean.com",
+        name,
+        read(0.99).fetchImpl
+      )
+    ).toBe(false)
+    expect(never.sent).toHaveLength(0)
+  })
+
+  it("reads only a whole name, so a longer or lookalike name is never the one named", async () => {
+    const name = "sparkleclean.co.uk"
+    const sure = read(0.99)
+    for (const said of [
+      "Put it on notsparkleclean.co.uk",
+      "Put it on sparkleclean.co.uk.example.com",
+      "Put it on sparkleclean.co.ukx",
+      "Put it on sparklecleanXco.uk",
+    ]) {
+      expect(await jevPutOn("k", said, name, sure.fetchImpl)).toBe(false)
+    }
+    expect(sure.sent).toHaveLength(0)
+    for (const said of [
+      "Put it on sparkleclean.co.uk.",
+      "Put it on www.SparkleClean.co.uk, please",
+    ]) {
+      expect(await jevPutOn("k", said, name, sure.fetchImpl)).toBe(true)
+    }
+  })
+
+  it("reads as no on a non-200, a missing answer and the time limit, one log line each", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined)
+    const slow = ((_url: string, init: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        init.signal?.addEventListener("abort", () =>
+          reject(init.signal?.reason)
+        )
+      })) as unknown as typeof fetch
+    for (const fetchImpl of [
+      fake({}, 500).fetchImpl,
+      fake({}).fetchImpl,
+      slow,
+    ]) {
+      expect(
+        await jevPutOn("k", "put it on a.co.uk", "a.co.uk", fetchImpl)
+      ).toBe(false)
+    }
+    expect(log).toHaveBeenCalledTimes(3)
+    expect(JSON.parse(log.mock.calls.at(-1)?.[0] as string)).toMatchObject({
+      code: "put_on.jev",
+      sure: false,
+      error: "timeout",
+    })
+  })
+})
+
+describe("the reading of a message that says a domain is bought", () => {
+  afterEach(() => vi.restoreAllMocks())
+  const read = (score: number) =>
+    fake({ answers: { yes: { type: "noul", noul: score } } })
+
+  it("is sure only at the bar, and sends the message and the name as data", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined)
+    const sure = read(0.96)
+    expect(
+      await jevBought(
+        "k",
+        "done, I bought it",
+        "sparkleclean.co.uk",
+        sure.fetchImpl
+      )
+    ).toBe(true)
+    expect(JSON.parse(sure.sent[0]?.init.body as string).state).toEqual({
+      owner_said: "done, I bought it",
+      domain: "sparkleclean.co.uk",
+    })
+    expect(
+      await jevBought(
+        "k",
+        "I'll buy it tonight",
+        "a.co.uk",
+        read(0.2).fetchImpl
+      )
+    ).toBe(false)
+    expect(
+      await jevBought("k", "done", "a.co.uk", fake({}, 500).fetchImpl)
+    ).toBe(false)
   })
 })

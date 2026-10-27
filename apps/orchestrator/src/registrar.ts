@@ -5,7 +5,11 @@
  * never reach the live registrar, which charges our card and never refunds.
  * Workers Custom Domains serve a bought domain from the router.
  */
-import { DOMAIN_PRICES, sellableTld } from "@workspace/contracts"
+import {
+  DOMAIN_PRICES,
+  type DomainTld,
+  sellableTld,
+} from "@workspace/contracts"
 import { CF_API, CF_TIMEOUT_MS, DomainError, resultOf } from "./domains.ts"
 
 export type RegistrarEnv = {
@@ -18,6 +22,14 @@ export type RegistrarEnv = {
 /** Whether registrations are real: only then is a bought domain served. */
 export const registrarLive = (env: RegistrarEnv) =>
   env.REGISTRAR_API === "registrar"
+
+/**
+ * The endings an owner is offered. The sandbox answers `.co.uk` and `.uk`
+ * with `extension_not_supported_via_api`, so a purchase there can only finish
+ * on `.com`.
+ */
+export const offeredTlds = (env: RegistrarEnv): readonly DomainTld[] =>
+  registrarLive(env) ? ["co.uk", "uk", "com"] : ["com"]
 
 async function cloudflare(
   env: RegistrarEnv,
@@ -404,8 +416,17 @@ export async function detachHostname(
 // Name ranker
 // ---------------------------------------------------------------------------
 
-export type RankFacts = { name: string; town?: string; trade?: string }
-export type Ranked = { name: string; score: number; why: string }
+/** `asked` is a name the owner typed rather than the business name. */
+export type RankFacts = {
+  name: string
+  town?: string
+  trade?: string
+  asked?: boolean
+}
+export type Ranked = { stem: string; score: number; why: string }
+
+/** The longest stem with a word added; past it a name is hard to say or type. */
+export const ADDED_MAX = 20
 
 const LEGAL = /\b(ltd|limited|llp|plc|inc|co|company|services?|the)\b/g
 const slug = (s: string) =>
@@ -416,13 +437,8 @@ const slug = (s: string) =>
     .replace(/[^\p{L}\p{N}\s-]/gu, "")
 const label = (s: string) => slug(s).replace(/[^a-z0-9]/g, "")
 
-/**
- * The candidate names for a business, best first: its brand, brand plus town,
- * brand plus trade (when the name does not already say it) and brand-town,
- * each in the table's TLDs. At most 12, one `domain-check`. A pure function:
- * no model, no network.
- */
-export function candidates(facts: RankFacts): Ranked[] {
+/** The business name as words, and as the one run of letters its stems build on. */
+function brandOf(facts: RankFacts) {
   // "sparklecleaning.com" names the brand: drop the TLD before slugging.
   const words = slug(
     facts.name.trim().replace(/\.[a-z]{2,}(\.[a-z]{2})?$/i, "")
@@ -430,47 +446,120 @@ export function candidates(facts: RankFacts): Ranked[] {
     .replace(LEGAL, " ")
     .split(/\s+/)
     .filter(Boolean)
-  const brand = words.join("").replace(/[^a-z0-9]/g, "")
+  return { words, brand: words.join("").replace(/[^a-z0-9]/g, "") }
+}
+
+/**
+ * The candidate stems for a business, best first: its brand, brand plus town,
+ * brand plus trade (when the name does not already say it) and brand-town,
+ * each with its own reason. A word the brand already holds is never added
+ * again, and a stem with a word added stays within `ADDED_MAX`; the brand
+ * alone is kept at any length so a long name still gets a row. A pure
+ * function: no model, no network.
+ */
+export function candidates(facts: RankFacts): Ranked[] {
+  const { words, brand } = brandOf(facts)
   if (!brand) return []
   const town = facts.town ? label(facts.town.split(",")[0] ?? "") : ""
-  const trade = facts.trade ? label(facts.trade.split(/\s+/)[0] ?? "") : ""
+  // The trade's last word names it: "Dog grooming" is grooming.
+  const trade = facts.trade
+    ? label(facts.trade.trim().split(/\s+/).at(-1) ?? "")
+    : ""
   // "Sparkle Clean" already says cleaning: a word and the trade share a stem.
   const said =
     !trade ||
+    brand.includes(trade) ||
     words.some(
       (w) => w.length >= 4 && (trade.startsWith(w) || w.startsWith(trade))
     )
   const where = facts.town?.split(",")[0]?.trim()
-  const labels: Array<[string, number, string]> = [
-    [brand, 40, "matches your business name"],
+  const yours = facts.asked ? "your words" : "your name"
+  const stems: Array<[string, number, string]> = [
+    [
+      brand,
+      40,
+      facts.asked ? "exactly what you asked for" : "matches your business name",
+    ],
   ]
-  if (town) labels.push([`${brand}${town}`, 25, `your name plus ${where}`])
-  if (!said) labels.push([`${brand}${trade}`, 20, "your name plus what you do"])
-  if (town)
-    labels.push([`${brand}-${town}`, 25, "your name and town, easy to read"])
-  const fit: Record<string, [number, string]> = {
-    "co.uk": [30, ".co.uk tells customers you're UK-based"],
-    com: [25, ".com is the one people guess"],
-    uk: [20, ".uk is short and UK-based"],
-    net: [15, ".net is a common alternative"],
+  if (town && !brand.includes(town)) {
+    stems.push([`${brand}${town}`, 25, `${yours} plus ${where}`])
+    stems.push([`${brand}-${town}`, 25, `${yours} and ${where}, with a dash`])
   }
-  const seen = new Set<string>()
-  const out: Ranked[] = []
-  for (const [l, points, why] of labels) {
-    if (l.length > 63) continue
-    for (const tld of Object.keys(DOMAIN_PRICES)) {
-      const name = `${l}.${tld}`
-      if (seen.has(name)) continue
-      seen.add(name)
-      const [tldPoints, tldWhy] = fit[tld] ?? [0, ""]
-      const score =
-        points +
-        tldPoints -
-        Math.max(0, l.length - 12) -
-        (l.includes("-") ? 10 : 0) -
-        (/\d/.test(l) ? 20 : 0)
-      out.push({ name, score, why: `${why}; ${tldWhy}` })
+  if (!said) stems.push([`${brand}${trade}`, 20, `${yours} plus ${trade}`])
+  // A long name gets shorter forms of itself, since a word added to it would
+  // pass `ADDED_MAX`: its first and last words, and its first word and town.
+  if (words.length >= 3 && brand.length > 15) {
+    const first = label(words[0] ?? "")
+    const last = label(words.at(-1) ?? "")
+    stems.push([`${first}${last}`, 30, `shorter, ${words[0]} ${words.at(-1)}`])
+    if (town && first !== town) {
+      stems.push([`${first}${town}`, 22, `${words[0]} plus ${where}`])
     }
   }
-  return out.sort((a, b) => b.score - a.score)
+  // Where and what, without the brand: what people type to find a trade.
+  const tradeWords = facts.trade
+    ? label(facts.trade.trim().split(/\s+/).slice(-2).join(""))
+    : ""
+  if (town && tradeWords && !brand.includes(town)) {
+    stems.push([`${town}${tradeWords}`, 15, `${where} plus what you do`])
+    if (trade && trade !== tradeWords)
+      stems.push([`${town}${trade}`, 13, `${where} plus ${trade}`])
+  }
+  return stems
+    .filter(([s], i) => s.length <= (i === 0 ? 63 : ADDED_MAX))
+    .map(([stem, points, why]) => ({
+      stem,
+      why,
+      score:
+        points -
+        Math.max(0, stem.length - 12) -
+        (stem.includes("-") ? 10 : 0) -
+        (/\d/.test(stem) ? 20 : 0),
+    }))
+    .sort((a, b) => b.score - a.score)
+}
+
+/** Whether `stem` splits wholly into `vocab`'s words, in any order. */
+const madeOf = (stem: string, vocab: string[]) => {
+  const ends = [true]
+  for (let i = 1; i <= stem.length; i++)
+    ends[i] = vocab.some(
+      (w) => w && ends[i - w.length] && stem.startsWith(w, i - w.length)
+    )
+  return ends[stem.length] === true
+}
+
+/**
+ * The registrar's suggested names as stems, to fill the rows the ranker's own
+ * leave short. Each is made only of the owner's own words, its name, town and
+ * trade, since the registrar also offers fragments ("ndoggrooming"), titles
+ * ("drnorthside...") and other trades ("...dogsitting"). The ranker's rules
+ * hold: none repeats a word of the name or runs past `ADDED_MAX`, and the
+ * reason says how the stem differs from the brand.
+ */
+export function suggestions(facts: RankFacts, names: string[]): Ranked[] {
+  const { words, brand } = brandOf(facts)
+  const yours = facts.asked ? "your words" : "your name"
+  const vocab = [
+    ...words,
+    facts.town?.split(",")[0] ?? "",
+    ...(facts.trade?.split(/\s+/) ?? []),
+  ].map(label)
+  return [...new Set(names.map((n) => n.slice(0, n.indexOf("."))))]
+    .filter(
+      (stem) =>
+        stem.length <= ADDED_MAX &&
+        madeOf(stem, vocab) &&
+        !words.some((w) => w.length >= 3 && stem.split(w).length > 2)
+    )
+    .map((stem) => ({
+      stem,
+      score: 10 - Math.max(0, stem.length - 12),
+      why:
+        brand && stem.startsWith(brand) && stem.length > brand.length
+          ? `${yours} plus ${stem.slice(brand.length)}`
+          : brand && stem.endsWith(brand) && stem.length > brand.length
+            ? `${stem.slice(0, -brand.length)} before ${yours}`
+            : `another take on ${yours}`,
+    }))
 }

@@ -1,11 +1,15 @@
 import {
   CheckDomainOutput,
   ConnectDomainOutput,
+  type DnsRecord,
   DomainCheck,
+  DomainInspection,
   DomainName,
   DomainProvider,
+  type DomainRegistration,
   type DomainState,
   type ServerButton,
+  SITE_HEADER,
   siteHost,
 } from "@workspace/contracts"
 import {
@@ -13,12 +17,14 @@ import {
   domainHeldElsewhere,
   domains,
   eq,
+  failureCode,
   type OrgScopedDb,
   orgs,
   pgCode,
   postAssistantMessage,
   type SQL,
   sql,
+  syncTasks,
   type Tenancy,
   tenancy,
 } from "@workspace/db"
@@ -37,21 +43,31 @@ import {
   ensureHostname,
   getHostname,
   hasTxt,
+  type Inspection,
   inspect,
   OUR_ZONE,
   recordsFor,
   relative,
+  stillToAdd,
   zoneApex,
 } from "./domains.ts"
 import { writeUpdate } from "./heartbeat-write.ts"
+import type { Observed } from "./probe.ts"
 import {
   activeDeployment,
   dropDomainPointers,
   otherHost,
   writePointer,
 } from "./publish.ts"
-import { detachHostname, type RegistrarEnv, setAutoRenew } from "./registrar.ts"
+import { rdapLookup } from "./rdap.ts"
+import {
+  detachHostname,
+  getRegistration,
+  type RegistrarEnv,
+  setAutoRenew,
+} from "./registrar.ts"
 import { forgetHost } from "./search.ts"
+import { moveGoogle } from "./search-start.ts"
 import { cancelRenewal } from "./stripe.ts"
 
 /**
@@ -90,8 +106,8 @@ export const MAX_PENDING = 3
 export const DEADLINE_MS = 72 * 60 * 60 * 1000
 /**
  * One reminder, with the provider again, for a claim still connecting a day
- * after it started. shortcut: counts from the start, not from the last status
- * change; move the clock to the last change if owners find it early.
+ * after the last time it moved, so an owner who is making progress is not
+ * nagged.
  */
 export const NUDGE_AFTER_MS = 24 * 60 * 60 * 1000
 const MINUTE = 60 * 1000
@@ -185,6 +201,7 @@ export async function moveTo(
     staffId: null,
     ...event,
   })
+  await syncTasks(db, row.orgId)
   return true
 }
 
@@ -351,8 +368,12 @@ function nextStep(
   )
 }
 
-/** Whether a host answers through our edge with a certificate: anything short of a 5xx. */
-export async function reaches(host: string): Promise<boolean> {
+/**
+ * Whether a host answers through our edge with a certificate: anything short
+ * of a 5xx. The certificate's proof alone, for a domain not yet active: the
+ * router has no site for it until `activateDomain`, so it answers 404 here.
+ */
+export async function answers(host: string): Promise<boolean> {
   try {
     const response = await fetch(`https://${host}/`, {
       redirect: "manual",
@@ -365,12 +386,49 @@ export async function reaches(host: string): Promise<boolean> {
   }
 }
 
+/**
+ * Whether `host` serves this site: a 2xx after redirects that the router
+ * marked with the site's id. The router's own 404 and any other server fail.
+ * Every "it is live" is said on this, run when it is said.
+ */
+export async function reaches(host: string, siteId: string): Promise<boolean> {
+  try {
+    const response = await fetch(`https://${host}/`, {
+      signal: AbortSignal.timeout(10_000),
+    })
+    await response.body?.cancel()
+    return response.ok && response.headers.get(SITE_HEADER) === siteId
+  } catch {
+    return false
+  }
+}
+
 /** Statuses a check reaches only once Cloudflare holds the hostnames verified. */
 const PAST_VERIFICATION: DomainCheck["status"][] = [
   "invalid_configuration",
   "pending_certificate",
   "valid",
 ]
+
+/** The ownership TXT records a card lists, `www` first, named relative to the zone's apex. */
+function txtRecords(
+  ownership: Ownership,
+  name: string,
+  apex: string
+): DnsRecord[] {
+  return [`www.${name}`, name].flatMap((host) => {
+    const own = ownership[host]
+    return own
+      ? [
+          {
+            type: "TXT" as const,
+            name: relative(own.name, apex),
+            value: own.value,
+          },
+        ]
+      : []
+  })
+}
 
 /** Every host's stored ownership TXT is in public DNS; a host with none fails. */
 async function ownedByTxt(
@@ -390,7 +448,9 @@ async function ownedByTxt(
  * The domain's check now, from public DNS and its two custom hostnames, and
  * the host it would be served on. Never throws: a failed read is
  * `unknown_error`, which the Workflow looks past. Before any hostname exists
- * the check is `not_found` whatever DNS says, so DNS is not read.
+ * the check is `not_found` whatever DNS says, so DNS is not read. `txtMissing`
+ * is the guard below holding a domain whose records are otherwise in, and
+ * `apex` the zone the owner's DNS page is for.
  */
 export async function currentCheck(
   env: CloudflareEnv,
@@ -398,7 +458,12 @@ export async function currentCheck(
     DomainRow,
     "name" | "cfIds" | "primaryHost" | "needsTxt" | "ownership"
   >
-): Promise<{ check: DomainCheck; primary: string }> {
+): Promise<{
+  check: DomainCheck
+  primary: string
+  apex?: string
+  txtMissing?: true
+}> {
   const ids = row.cfIds as CfIds
   if (!ids.apex && !ids.www)
     return { check: { status: "not_found" }, primary: row.primaryHost }
@@ -422,14 +487,21 @@ export async function currentCheck(
     // The takeover guard: a name another org held, or one that pointed at us
     // before this claim, is not verified until each host's ownership TXT is
     // in public DNS. Cloudflare's own `active` may come from the CNAME alone.
+    let txtMissing = false
     if (
       row.needsTxt &&
       PAST_VERIFICATION.includes(check.status) &&
       !(await ownedByTxt(row.ownership as Ownership, hosts))
     ) {
       check = { status: "pending_verification" }
+      txtMissing = true
     }
-    return { check, primary: alias ? row.name : wwwHost }
+    return {
+      check,
+      primary: alias ? row.name : wwwHost,
+      apex: inspection.apex,
+      ...(txtMissing && { txtMissing }),
+    }
   } catch {
     return { check: { status: "unknown_error" }, primary: row.primaryHost }
   }
@@ -497,79 +569,126 @@ export type Seen =
       at: number
       status: DomainCheck["status"]
       ready: boolean
-      /** What to tell the owner, when the check differs from the last one. */
+      /** The row moved on this look: the owner's quiet period starts over. */
+      changed?: boolean
+      /** What to tell the owner, which the probe adds when the check changed. */
       say?: Say
     }
 
 /**
- * One look: the check, the row brought up to date, and a message when the
- * check differs from the last one. Ready means valid and answering through
- * our edge. The message is keyed by the look and returned with the step's
- * result, so the Workflow's own post step neither loses it nor says it twice.
+ * One look, the `look` probe: the check, the row brought up to date, and the
+ * reading the probe hashes. Ready means valid and answering through our edge.
+ * The message is worded here and said by the probe only when the check
+ * differs from the last one the task step holds.
  */
 export async function look(
   env: Env,
   kit: Tenancy,
   orgId: string,
-  domainId: string,
-  n: number
-): Promise<Seen> {
+  domainId: string
+): Promise<Observed<Seen>> {
   const row = await kit.withOrg({ orgId }, (db) => readDomain(db, domainId))
-  if (!row || !connecting(row.state)) return { gone: true }
+  if (!row || !connecting(row.state)) return { result: { gone: true } }
   const seen = await currentCheck(env, row)
   let check = seen.check
-  const ready = check.status === "valid" && (await reaches(seen.primary))
+  const ready = check.status === "valid" && (await answers(seen.primary))
   // Valid at Cloudflare but not yet answering: the certificate is still deploying.
   if (check.status === "valid" && !ready)
     check = { status: "pending_certificate" }
+  const result = {
+    gone: false as const,
+    at: Date.now(),
+    status: check.status,
+    ready,
+  }
+  // A failed read is no news: nothing stored moves, and the next look reads again.
+  if (check.status === "unknown_error") return { result }
   // jsonb keeps keys in its own order, so the stored check is compared canonically.
   const same = canonical(row.lastCheck) === canonical(check)
-  const text = same ? null : statusText(check, row.name, seen.primary)
+  const provider = DomainProvider.safeParse(row.provider)
+  const where = provider.success ? provider.data.name : "your DNS provider"
+  // Records in, ownership TXT not: the owner's one step left is the TXT.
+  const txt =
+    seen.txtMissing && seen.apex
+      ? txtRecords(row.ownership as Ownership, row.name, seen.apex)
+      : []
+  const text =
+    txt.length > 0
+      ? `Your records for ${seen.primary} are in. One more thing, so I know the domain is yours: add ${txt.length === 1 ? "this TXT record" : "these TXT records"} at ${where}: ${txt.map((r) => `${r.name} = ${r.value}`).join("; ")}. Your email isn't affected.`
+      : statusText(check, row.name, seen.primary)
   const button =
+    txt.length > 0 ||
     check.status === "conflicting_record" ||
     check.status === "invalid_configuration"
       ? settingsButton(row.provider)
       : undefined
-  const say: Say | undefined = text
-    ? { key: `${domainId}:look:${n}`, text, ...(button && { button }) }
-    : undefined
   const state: DomainState =
-    check.status === "pending_certificate" || check.status === "valid"
+    txt.length > 0 ||
+    check.status === "pending_certificate" ||
+    check.status === "valid"
       ? "verifying"
       : "awaiting_dns"
+  const changed =
+    !same || state !== row.state || seen.primary !== row.primaryHost
   // A quiet look writes nothing; a removal since the read is the next look's.
-  if (!same || state !== row.state || seen.primary !== row.primaryHost) {
-    const updated = await kit.withOrg({ orgId }, (db) =>
-      db
+  if (changed) {
+    const updated = await kit.withOrg({ orgId }, async (db) => {
+      const moved = await db
         .update(domains)
         .set({ lastCheck: check, state, primaryHost: seen.primary })
         .where(
           sql`${domains.id} = ${domainId} and ${domains.state} in ('awaiting_dns', 'verifying')`
         )
         .returning({ id: domains.id })
-    )
-    if (updated.length === 0) return { gone: true }
+      if (moved.length > 0) await syncTasks(db, orgId)
+      return moved
+    })
+    if (updated.length === 0) return { result: { gone: true } }
   }
+  // Until the records are seen the owner is the one to act; past them, Cloudflare is.
+  const waiting = state === "awaiting_dns"
+  const [conflict] =
+    check.status === "conflicting_record" ? check.conflicts : []
   return {
-    gone: false,
-    at: Date.now(),
-    status: check.status,
-    ready,
-    ...(say && { say }),
+    result: { ...result, changed },
+    reading: {
+      step: txt.length > 0 ? "ownership" : waiting ? "records" : "certificate",
+      // The claim's id, so a new claim on the same task is news again.
+      evidence: {
+        domain_id: domainId,
+        check,
+        host: seen.primary,
+        ...(txt.length > 0 && { txt: true }),
+      },
+      ...((waiting || txt.length > 0) && {
+        write: {
+          state: "blocked",
+          blocked_on: "owner_action",
+          note:
+            txt.length > 0
+              ? `Add the TXT record${txt.length > 1 ? "s" : ""} at ${where}`
+              : conflict
+                ? `Delete the old ${conflict.type} record at ${where}`
+                : `Add the records at ${where}`,
+        },
+      }),
+      ...(text && { tell: async () => ({ text, ...(button && { button }) }) }),
+    },
   }
 }
 
 /**
- * The 24-hour reminder, once, with where the owner's DNS settings are. This
- * line, the live one and the failed ones are worded by the model from their
- * facts, or else are the template (heartbeat-write.ts); `statusText`'s DNS
- * records stay fixed.
+ * The reminder for a claim quiet since `since`, once per quiet period, with
+ * where the owner's DNS settings are. This line, the live one and the failed
+ * ones are worded by the model from their facts, or else are the template
+ * (heartbeat-write.ts); `statusText`'s DNS records stay fixed.
  */
 export async function nudge(
   env: { OPENROUTER_API_KEY?: string },
   kit: Tenancy,
   orgId: string,
-  domainId: string
+  domainId: string,
+  since: number
 ): Promise<Say | null> {
   const row = await kit.withOrg({ orgId }, (db) => readDomain(db, domainId))
   if (!row || !connecting(row.state)) return null
@@ -579,7 +698,7 @@ export async function nudge(
     : ""
   const button = settingsButton(row.provider)
   return {
-    key: `${domainId}:nudge`,
+    key: `${domainId}:nudge:${since}`,
     text: await writeUpdate(env, kit, orgId, {
       facts: {
         domain: row.name,
@@ -593,48 +712,121 @@ export async function nudge(
 
 /**
  * The domain goes live: the row first, then every pointer written from it
- * (`writePointer` reads the active domain), then what to tell the owner.
- * Null when the claim was removed meanwhile. A retry after the row moved
- * finds it active and writes the pointers again, which repeats what is live.
+ * (`writePointer` reads the active domain). False when the claim was removed
+ * meanwhile. A retry after the row moved finds it active and writes the
+ * pointers again, which repeats what is live. Saying so waits for `served`.
  */
 export async function activateDomain(
   env: Env,
   kit: Tenancy,
   orgId: string,
   domainId: string
-): Promise<Say | null> {
+): Promise<boolean> {
   const done = await kit.withOrg({ orgId }, async (db) => {
     const claim = await readClaim(db, env, eq(domains.id, domainId))
     if (!claim) return null
     const { row } = claim
-    return row.state === "active" ||
-      (await moveTo(
-        db,
-        row,
-        "active",
-        CONNECTING,
-        { activatedAt: new Date() },
-        {
-          type: "domain.activated",
-          payload: { domain_id: domainId, primary_host: row.primaryHost },
-        }
-      ))
-      ? claim
-      : null
+    if (row.state === "active") return claim
+    const moved = await moveTo(
+      db,
+      row,
+      "active",
+      CONNECTING,
+      { activatedAt: new Date() },
+      {
+        type: "domain.activated",
+        payload: { domain_id: domainId, primary_host: row.primaryHost },
+      }
+    )
+    if (!moved) return null
+    return claim
   })
-  if (!done) return null
+  if (!done) return false
   await writePointer(env, kit, orgId, done.row.siteId, done.slug)
+  return true
+}
+
+export type Served =
+  | { gone: true }
+  | { gone: false; at: number; ready: boolean; say?: Say }
+
+/**
+ * The `loads` probe after activation: whether the domain serves this site,
+ * on a fresh request (`reaches`). Until KV carries the pointer, up to a
+ * minute, the router answers 404. Live is worded only once it passes.
+ */
+export async function served(
+  env: Env,
+  kit: Tenancy,
+  orgId: string,
+  domainId: string
+): Promise<Observed<Served>> {
+  const claim = await kit.withOrg({ orgId }, (db) =>
+    readClaim(db, env, eq(domains.id, domainId))
+  )
+  if (claim?.row.state !== "active") return { result: { gone: true } }
+  const { row, slug } = claim
+  const ready = await reaches(row.primaryHost, row.siteId)
+  // Serving is the proof Google is moved on: the new host added, the old one let go.
+  const google = ready ? await moveGoogle(env, kit, orgId, slug) : null
+  const gsc = "Google Search Console"
   return {
-    key: `${domainId}:active`,
-    text: await writeUpdate(env, kit, orgId, {
-      facts: { host: done.row.primaryHost, old_host: done.slug },
-      template: `${done.row.primaryHost} is live. ${done.slug} now forwards to it, so links you've shared still work.`,
-    }),
-    button: {
-      label: "Open your website",
-      action: { kind: "open", url: `https://${done.row.primaryHost}/` },
+    result: { gone: false, at: Date.now(), ready },
+    reading: {
+      step: "loads",
+      evidence: { domain_id: domainId, host: row.primaryHost, ready },
+      // Only this proof makes `loads` done; the rows keep it in progress.
+      ...(ready && {
+        write: { state: "done" },
+        tell: async () => ({
+          text: await writeUpdate(env, kit, orgId, {
+            facts: {
+              host: row.primaryHost,
+              old_host: slug,
+              ...(google && { google: gsc }),
+            },
+            template: `${row.primaryHost} is live. ${slug} now forwards to it, so links you've shared still work.${
+              google === "moved"
+                ? ` I'm adding it to your ${gsc} and have stopped tracking ${slug} there; that property stays in your Google account.`
+                : google
+                  ? ` I'm adding it to your ${gsc} too.`
+                  : ""
+            }`,
+          }),
+          button: {
+            label: "Open your website",
+            action: { kind: "open", url: `https://${row.primaryHost}/` },
+          },
+        }),
+      }),
     },
   }
+}
+
+/**
+ * Active in our records but not serving the site by the deadline: only we can
+ * fix that, so an alert, and the owner told once.
+ */
+export async function notServed(
+  kit: Tenancy,
+  orgId: string,
+  domainId: string
+): Promise<Say | null> {
+  return kit.withOrg({ orgId }, async (db) => {
+    const row = await readDomain(db, domainId)
+    if (row?.state !== "active") return null
+    await appendEvent(db, {
+      orgId,
+      assignmentId: null,
+      staffId: null,
+      type: "alert.raised",
+      payload: { kind: "domain.serve_failed", domain_id: domainId },
+    })
+    return {
+      key: `${domainId}:not_served`,
+      text: `${row.primaryHost} is connected, but your site isn't loading there yet. I've flagged it so we can fix it.`,
+    }
+  })
 }
 
 /**
@@ -718,6 +910,47 @@ const invalid = () =>
   )
 
 /**
+ * `GET /domains/{name}/inspect`: what a name the owner already has is, before
+ * anything is connected. Whether it is registered and with whom comes from
+ * RDAP; a registry that is down or rate-limiting leaves DNS to say whether
+ * the name exists, and the registrar unknown. Then who runs its DNS (the
+ * connect card's detection) and whether it already points somewhere.
+ */
+export async function inspectDomain(
+  raw: unknown
+): Promise<Refusal | DomainInspection> {
+  const name = normalizeName(raw)
+  if (!name) return invalid()
+  const known = await rdapLookup(name).catch(() => null)
+  if (known && !known.registered)
+    return { name, registered: false, in_use: false }
+  let inspection: Inspection | null = null
+  try {
+    inspection = await inspect(name)
+  } catch (error) {
+    if (!(error instanceof DomainError && error.name === "domain.not_found"))
+      return refuse(
+        503,
+        "transient",
+        "dns.unavailable",
+        "I couldn't read the domain's DNS just now. Try again in a minute."
+      )
+  }
+  const dnsHost =
+    inspection &&
+    (await detectProvider(inspection.apex, inspection.nameservers))
+  return DomainInspection.parse({
+    name,
+    registered: known?.registered ?? inspection !== null,
+    ...(known?.registrar && { registrar: known.registrar }),
+    ...(dnsHost && { dns_host: dnsHost }),
+    in_use: Object.values(inspection?.hosts ?? {}).some(
+      (h) => h.cname || h.a.length + h.aaaa.length > 0
+    ),
+  })
+}
+
+/**
  * `POST /domains`: inspect the domain, claim it for the org and start its
  * Workflow, answering with the records to add. The same org asking again for
  * a name it is connecting gets the same answer; one name has one live claim
@@ -757,7 +990,7 @@ export async function connect(
     outcome: "connecting" as const,
     method: "records" as const,
     email_affected: false,
-    steps: recordsFor({ inspection, apex }),
+    steps: stillToAdd(recordsFor({ inspection, apex }), inspection),
     // A subdomain has no bare-address choice.
     ...(!inspection.sub && { apex }),
     ...(provider && { provider }),
@@ -867,22 +1100,15 @@ export async function connect(
     }
     await start(env, orgId, claimed.id)
   }
-  const status = claimed.created ? 201 : 200
-  if (!claimed.needsTxt)
-    return { status, output: ConnectDomainOutput.parse(base) }
-  // www first, as the card lists it; jsonb keeps its own key order.
-  const txt = [`www.${name}`, name].flatMap((host) => {
-    const own = ownership[host]
-    return own
-      ? [
-          {
-            type: "TXT" as const,
-            name: relative(own.name, inspection.apex),
-            value: own.value,
-          },
-        ]
-      : []
-  })
+  const status: 200 | 201 = claimed.created ? 201 : 200
+  // The task keeps how many changes the card lists, which no row holds.
+  const answer = async (steps: typeof base.steps) => {
+    const changes = steps.length + ("apex" in base ? 1 : 0)
+    await kit.withOrg({ orgId }, (db) => syncTasks(db, orgId, { changes }))
+    return { status, output: ConnectDomainOutput.parse({ ...base, steps }) }
+  }
+  if (!claimed.needsTxt) return answer(base.steps)
+  const txt = txtRecords(ownership, name, inspection.apex)
   if (txt.length === 0)
     return refuse(
       503,
@@ -890,13 +1116,7 @@ export async function connect(
       "domain.records_pending",
       "I've started connecting the domain but its records aren't ready yet. Ask me again in a minute."
     )
-  return {
-    status,
-    output: ConnectDomainOutput.parse({
-      ...base,
-      steps: [...base.steps, ...txt],
-    }),
-  }
+  return answer([...base.steps, ...txt])
 }
 
 /** The claim's Workflow, created; one already there is fine. */
@@ -1023,22 +1243,105 @@ export async function remove(
       "domain.not_found",
       `${name} isn't connected to this site.`
     )
-  await repoint(env, kit, orgId, found.row.id)
-  await revoke(env, found.row)
+  await stopServing(env, kit, orgId, found.row)
+  return null
+}
+
+/**
+ * A claim that has left `active` stops being served: its pointers rewritten
+ * from the row, its hostnames and billing revoked, its Google files
+ * forgotten, and the pointers written once more after `SETTLE`. Idempotent.
+ * A removal and a lapsed registration share it.
+ */
+async function stopServing(
+  env: Env,
+  kit: Tenancy,
+  orgId: string,
+  row: DomainRow
+) {
+  await repoint(env, kit, orgId, row.id)
+  await revoke(env, row)
   // This org's Google files must not prove the name for whoever claims it next.
-  const primary = found.row.primaryHost
-  for (const host of [primary, otherHost(primary)]) {
+  for (const host of [row.primaryHost, otherHost(row.primaryHost)]) {
     await forgetHost(env, kit, orgId, host)
   }
   try {
     await env.DOMAINS.create({
-      id: settleInstanceId(found.row.id),
-      params: { org_id: orgId, domain_id: found.row.id, settle: true },
+      id: settleInstanceId(row.id),
+      params: { org_id: orgId, domain_id: row.id, settle: true },
     })
   } catch {
     // Already settling: a repeated removal.
   }
-  return null
+}
+
+/**
+ * A bought domain past its stored expiry, asked of the registrar, which knows
+ * if it renewed: a later date is kept, and none or a past one means it
+ * lapsed. A lapsed domain leaves `active` and stops being served, as a
+ * removal does, and the owner is told. Cleanup that fails after the row moved
+ * raises an alert, since the sweep will not find the row again.
+ */
+async function lapse(
+  env: Env,
+  kit: Tenancy,
+  orgId: string,
+  row: DomainRow
+): Promise<Say | null> {
+  const registration = row.registration as DomainRegistration | null
+  const expiry = registration?.expires_at
+  if (!(registration && expiry) || Date.parse(expiry) > Date.now()) return null
+  const live = await getRegistration(env, row.name)
+  if (live?.expires_at && Date.parse(live.expires_at) > Date.now()) {
+    const renewed = { ...registration, expires_at: live.expires_at }
+    await kit.withOrg({ orgId }, (db) =>
+      db
+        .update(domains)
+        .set({ registration: renewed })
+        .where(eq(domains.id, row.id))
+    )
+    return null
+  }
+  const found = await kit.withOrg({ orgId }, async (db) => {
+    const claim = await readClaim(db, env, eq(domains.id, row.id))
+    return claim &&
+      (await moveTo(
+        db,
+        claim.row,
+        "removed",
+        ["active"],
+        { removedAt: new Date() },
+        { type: "domain.expired", payload: { domain_id: row.id } }
+      ))
+      ? claim
+      : null
+  })
+  if (!found) return null
+  try {
+    await stopServing(env, kit, orgId, found.row)
+  } catch (error) {
+    await kit.withOrg({ orgId }, (db) =>
+      appendEvent(db, {
+        orgId,
+        assignmentId: null,
+        staffId: null,
+        type: "alert.raised",
+        payload: {
+          kind: "domain.expiry_cleanup_failed",
+          domain_id: row.id,
+          code: failureCode(error),
+        },
+      })
+    )
+  }
+  return {
+    key: `${row.id}:lapsed`,
+    text: `${row.name} wasn't renewed and has run out, so visitors there no longer reach your website. It's back at ${found.slug}. If you still want ${row.name}, I can buy it again.`,
+    button: {
+      label: "Buy it again",
+      action: { kind: "pay", name: row.name },
+    },
+  }
 }
 
 /**
@@ -1110,7 +1413,7 @@ export async function repoint(
  * here as it would there, so the 72-hour bound holds without the Workflow.
  */
 export async function sweepDomains(
-  env: CloudflareEnv & Pick<Env, "SITE_HOST_SUFFIX">,
+  env: Env,
   kit: Tenancy,
   orgId: string,
   hour: string
@@ -1128,6 +1431,12 @@ export async function sweepDomains(
   for (const row of rows) {
     if (connecting(row.state)) {
       const say = await expireDomain(env, kit, orgId, row.id, "timeout")
+      if (say) says.push(say)
+      continue
+    }
+    // A bought domain has no custom hostname to read; its registration is the check.
+    if (row.origin === "purchased") {
+      const say = await lapse(env, kit, orgId, row)
       if (say) says.push(say)
       continue
     }
@@ -1216,10 +1525,11 @@ export async function revokeDomains(
   // The hostnames before the rows, so a retried takedown still finds them.
   // Failed claims are included: their hostnames are deleted again, idempotently.
   for (const row of held) await revoke(env, row)
-  await kit.withOrg({ orgId }, (db) =>
-    db
+  await kit.withOrg({ orgId }, async (db) => {
+    await db
       .update(domains)
       .set({ state: "removed", removedAt: new Date() })
       .where(kept)
-  )
+    await syncTasks(db, orgId)
+  })
 }

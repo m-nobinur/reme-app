@@ -10,6 +10,7 @@ import type { Tenancy } from "@workspace/db"
 import { withKit } from "./domain-flow.ts"
 import { SAY_RETRIES } from "./domain-workflow.ts"
 import { GoogleError, NeedsReauth } from "./google.ts"
+import { probe } from "./probe.ts"
 import {
   addProperty,
   announce,
@@ -18,9 +19,13 @@ import {
   markVerified,
   placeToken,
   type SearchParams,
+  sayVerifyFailed,
+  tell,
   verifyOnce,
 } from "./search.ts"
+import { sayPayoff } from "./search-payoff.ts"
 import {
+  checkGrant,
   inspectPages,
   pullProperty,
   type SyncParams,
@@ -91,15 +96,26 @@ export class SearchWorkflow extends WorkflowEntrypoint<Env, SearchParams> {
       ...Array.from({ length: VERIFY_TRIES - 1 }, () => VERIFY_GAP),
       ...VERIFY_BACKOFF,
     ]
+    const task = { orgId: params.org_id, kind: "google" as const }
     for (let n = 1; ; n++) {
-      if (
-        await step.do(
-          `verify ${n}`,
-          GOOGLE_RETRIES,
-          google((kit) => verifyOnce(env, kit, params))
-        )
+      const done = await probe(
+        step,
+        `verify ${n}`,
+        env,
+        task,
+        async (kit) => {
+          const verified = await final(verifyOnce(env, kit, params))
+          return {
+            result: verified,
+            reading: {
+              step: "verify",
+              evidence: { host: params.host, verified },
+            },
+          }
+        },
+        GOOGLE_RETRIES
       )
-        break
+      if (done) break
       const wait = waits[n - 1]
       if (!wait) {
         await step.do(
@@ -107,6 +123,11 @@ export class SearchWorkflow extends WorkflowEntrypoint<Env, SearchParams> {
           GOOGLE_RETRIES,
           google((kit) => markFailed(kit, params))
         )
+        await step
+          .do("say failed", SAY_RETRIES, () =>
+            withKit(env, (kit) => sayVerifyFailed(env, kit, params))
+          )
+          .catch(() => undefined) // a chat busy past every retry; the alert stands
         return { outcome: "failed" }
       }
       await step.sleep(`wait ${n}`, wait)
@@ -146,7 +167,9 @@ export const SYNC_RETRIES: WorkflowStepConfig = {
 
 /**
  * One instance per org a day, `syncInstanceId`, started by the hourly sweep
- * (search-sync.ts). Per verified property: the numbers, then the day's page
+ * (search-sync.ts). First the grant is checked (`checkGrant`): a revoked
+ * token, a lost scope or lost Owner access blocks `permissions`, is said once
+ * and ends the day. Then per verified property: the numbers, then the day's page
  * inspections; a property Google refuses is left `stale` and skipped. A
  * token Google refused ends it, with the connection already
  * `needs_reauth` and audited; tomorrow's instance finds no live connection.
@@ -167,6 +190,26 @@ export class SearchSyncWorkflow extends WorkflowEntrypoint<Env, SyncParams> {
             })
           )
         )
+
+    const grant = await probe(
+      step,
+      "permissions",
+      env,
+      { orgId, kind: "google" },
+      (kit) => final(checkGrant(env, kit, orgId)),
+      GOOGLE_RETRIES
+    )
+    if (grant.say) {
+      const { key, text, button } = grant.say
+      await step
+        .do("say permissions", SAY_RETRIES, () =>
+          withKit(env, (kit) =>
+            tell(kit, orgId, key, { text: [text], ...(button && { button }) })
+          )
+        )
+        .catch(() => undefined) // a chat busy past every retry; the step row keeps it
+    }
+    if (!grant.healthy) return { outcome: "needs_permission" }
 
     const sites = await step.do(
       "properties",
@@ -189,6 +232,12 @@ export class SearchSyncWorkflow extends WorkflowEntrypoint<Env, SyncParams> {
       )
       if (inspected === null) return { outcome: "needs_reauth" }
     }
+    // The first numbers, or the day-10 check-in; a chat busy past every retry tries again tomorrow.
+    await step
+      .do("payoff", SAY_RETRIES, () =>
+        withKit(env, (kit) => sayPayoff(kit, orgId))
+      )
+      .catch(() => undefined)
     return { outcome: "synced", properties: sites?.length ?? 0 }
   }
 }

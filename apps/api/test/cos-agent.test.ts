@@ -9,6 +9,7 @@ import {
   CreateReminderRequest,
   ONBOARDING_STATUS,
   type OnboardingStatus,
+  TOOL_CALL_CANCELLED,
   TOOL_FAILED,
   TOOL_UNKNOWN,
   toolErrorKind,
@@ -62,7 +63,9 @@ import {
   binds,
   type CosAgent,
   changeRepeated,
+  cleanedChange,
   contextOf,
+  cosPrefix,
   costOf,
   DEFAULT_MODEL,
   DESCRIPTIONS,
@@ -82,6 +85,7 @@ import {
   SITE_CHANGE_LINE,
   stepCost,
   toolErrorText,
+  withoutStep,
 } from "../src/cos/agent.ts"
 import { sha256 } from "../src/cos/history.ts"
 import { retrying } from "../src/cos/retry.ts"
@@ -329,6 +333,47 @@ describe("the CoS's instructions", () => {
     expect(INSTRUCTIONS).toContain('"I\'m putting your site together"')
     expect(INSTRUCTIONS).not.toMatch(/such as "It's/)
   })
+
+  it("tell the model to promise a report back only while something watches, and never to end on a bare promise", () => {
+    expect(INSTRUCTIONS).toMatch(
+      /tell the owner when something happens only while something is watching for it[^\n]*Never end a reply on "I'll\.\.\." with no tool call/
+    )
+  })
+})
+
+describe("a tool's step line", () => {
+  it("is offered on every tool, with request_change's in its own words", async () => {
+    const { tools } = await cosPrefix()
+    const step = (name: string) => {
+      const found = tools.find((t) => t.name === name)
+      const properties = found?.input_schema.properties as
+        | Record<string, { description?: string } | undefined>
+        | undefined
+      return properties?.step?.description
+    }
+    for (const name of [
+      "get_workspace",
+      "get_facts",
+      "get_preview",
+      "check_domain",
+    ]) {
+      expect(step(name)).toContain("in your own voice")
+    }
+    expect(step("request_change")).toContain("owner's language")
+    // The model sends a step to any tool, so every tool takes one.
+    expect(step("find_domain")).toContain("in your own voice")
+    expect(step("create_reminder")).toContain("in your own voice")
+  })
+
+  it("is cleaned before the call is logged, and kept from the tool", () => {
+    expect(
+      cleanedChange({ name: "x.co.uk", step: "  Checking \u2014 your domain " })
+    ).toEqual({ name: "x.co.uk", step: "Checking, your domain" })
+    expect(cleanedChange({ step: "Calling get_facts" })).toEqual({})
+    expect(
+      withoutStep({ name: "x.co.uk", step: "Checking your domain" })
+    ).toEqual({ name: "x.co.uk" })
+  })
 })
 
 describe("a change asked twice in one turn", () => {
@@ -446,6 +491,47 @@ describe("the CoS's change kinds", () => {
     expect(text).toContain('"expected_range":{"quick":"about 1 to 2 minutes"')
     expect(text).not.toContain("p50")
     expect(text).toContain('"lane":"quick"')
+  })
+
+  it("carries an open owner task with its blocked note, and no task id", () => {
+    const id = "3f2b9c1e-8a4d-4f6b-9c2a-1d5e7f8a9b0e"
+    const text = contextOf("act", {
+      site: { host: null, live_version: null },
+      questions: [],
+      approvals: [],
+      missing_facts: [],
+      builds: [],
+      tasks: [
+        {
+          id,
+          kind: "address",
+          state: "active",
+          later_until: null,
+          detail: { name: "spark.example" },
+          created_at: "2026-10-27T09:00:00.000Z",
+          done_at: null,
+          steps: [
+            {
+              step: "records",
+              state: "blocked",
+              note: "Two records to add at 123-reg",
+              blocked_on: "owner_action",
+              deadline: null,
+              changed_at: null,
+            },
+          ],
+        },
+      ],
+      expected_seconds: {
+        quick: { p50: 15, p95: 45 },
+        full: { p50: 180, p95: 330 },
+      },
+    }).text
+    expect(text).toContain(
+      '"steps":["records: waiting on the owner (Two records to add at 123-reg)"]'
+    )
+    expect(text).toContain('"domain":"spark.example"')
+    expect(text).not.toContain(id)
   })
 })
 
@@ -1323,7 +1409,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     await shownAsStored(me, id, done.chunks)
   })
 
-  it("gives Ask mode the read tools and remember", async () => {
+  it("gives Ask mode the read tools, remember and put_off", async () => {
     const id = await conversation(me)
     const { model, sent } = scripted(said("Here is what I can see."))
     await turn(me, typed(id, "What can you do?", "ask"), { model })
@@ -1339,6 +1425,8 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       "get_preview",
       "get_search_performance",
       "get_workspace",
+      "inspect_domain",
+      "put_off",
       "remember",
     ])
   })
@@ -2038,43 +2126,20 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     expect(stub.calls).toHaveLength(0)
   })
 
-  it("runs buy_domain without a card, keyed by its tool call, since paying in Checkout is the consent", async () => {
+  it("runs buy_domain without a card and opens the details page from the name alone, with nothing sent to the orchestrator", async () => {
     const id = await conversation(me)
-    const stub = stubOrchestrator(() =>
-      Response.json(
-        {
-          outcome: "awaiting_payment",
-          name: "sparkleclean.com",
-          price_gbp: 12,
-          checkout: "embedded",
-        },
-        { status: 201 }
-      )
-    )
+    const stub = stubOrchestrator()
     const done = await turn(
       me,
-      typed(id, "Yes, buy sparkleclean.com."),
+      typed(id, "I'll take sparkleclean.com."),
       {
         model: scripted(
           calls({
             id: "call_buy",
             tool: "buy_domain",
-            input: {
-              name: "sparkleclean.com",
-              registrant: {
-                name: "Jane Smith",
-                email: "jane@sparkle.invalid",
-                phone: "+447700900123",
-                address: {
-                  street: "12 Mill Lane",
-                  city: "Bristol",
-                  postal_code: "BS1 4AB",
-                  country_code: "GB",
-                },
-              },
-            },
+            input: { name: "sparkleclean.com" },
           }),
-          said("The card has the details; paying there buys it.")
+          said("Fill in the rest there.")
         ).model,
       },
       stub
@@ -2084,11 +2149,15 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       done.chunks.filter((c) => c.type === "tool-approval-request")
     ).toHaveLength(0)
     expect(waiting(await tailOf(me, id))).toEqual([])
-    const [call] = stub.calls
-    expect(new URL(call?.request.url ?? "").pathname).toBe(
-      "/assignments/domains/buy"
-    )
-    expect(call?.request.headers.get("idempotency-key")).toBe("call_buy")
+    // The page is the tool's output, drawn by the tray; the model never sent a registrant.
+    expect(
+      done.chunks.some(
+        (c) =>
+          c.type === "tool-output-available" &&
+          (c as { output?: { outcome?: string } }).output?.outcome === "details"
+      )
+    ).toBe(true)
+    expect(stub.calls).toEqual([])
   })
 
   it("stores an approved reminder under the turn's conversation, zone and the CoS, keyed by its approval", async () => {
@@ -2197,6 +2266,108 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     const after = await tailOf(me, id)
     expect(after.id).toBe(tail.id)
     expect(plain(await replay(tail, done.chunks))).toStrictEqual(plain(after))
+  })
+
+  describe("a card a server post landed after", () => {
+    const ready = "Your website is ready."
+    /** A change card, then a post after it, as a build finishing would. */
+    const cardThenPost = async () => {
+      const id = await conversation(me)
+      await turn(me, typed(id, "Add a Saturday slot."), {
+        model: scripted(
+          calls({
+            id: "call_rc",
+            tool: "request_change",
+            input: { text: "Add a Saturday slot." },
+          })
+        ).model,
+      })
+      const card = await tailOf(me, id)
+      expect(
+        await postAssistantMessage(kit, {
+          orgId: me.orgId,
+          conversationId: id,
+          key: `ready:${id}`,
+          message: { text: [ready] },
+        })
+      ).toBe("posted")
+      return { id, card, post: serverMessageId(`ready:${id}`) }
+    }
+
+    it("is answered where it sits: the reply continues its row, and the model reads the call with its result", async () => {
+      const { id, card, post } = await cardThenPost()
+      const [call] = waiting(card)
+      const stub = orchestrator()
+      const { model, sent } = scripted(said("The change has started."))
+      const done = await turn(
+        me,
+        {
+          conversation_id: id,
+          mode: "act",
+          turn: {
+            kind: "results",
+            message_id: card.id,
+            results: [
+              {
+                kind: "approval",
+                approval_id: call?.approval.id,
+                approved: true,
+              },
+            ],
+          },
+        },
+        { model },
+        stub
+      )
+      expect(done.response.status, done.text).toBe(200)
+      expect(stub.calls).toHaveLength(1)
+      // The history ends on the call and its result; the post is logged on
+      // the next typed turn, after the card, as the chat shows it.
+      const prompt = JSON.stringify(sent[0]?.prompt)
+      expect(prompt).toContain('"outcome":"started"')
+      expect(prompt).not.toContain(ready)
+      const rows = await rowsOf(me, id)
+      expect(rows.slice(-2).map((r) => r.id)).toEqual([card.id, post])
+      const continued = rows.at(-2)
+      expect(plain(await replay(card, done.chunks))).toStrictEqual(
+        plain({ id: card.id, ...(continued?.content as object) })
+      )
+      const next = scripted(said("Both done."))
+      await turn(me, typed(id, "All set?", "ask"), { model: next.model })
+      const seen = wire(next.sent)
+      expect(seen.indexOf('"outcome":"started"')).toBeGreaterThan(-1)
+      expect(seen.indexOf('"outcome":"started"')).toBeLessThan(
+        seen.indexOf(ready)
+      )
+      expect(seen.indexOf(ready)).toBeLessThan(seen.indexOf("All set?"))
+    })
+
+    it("is cancelled by a typed message, in its row and in the model's history", async () => {
+      const { id, card } = await cardThenPost()
+      const next = scripted(said("Left it."))
+      const done = await turn(me, typed(id, "Leave it for now."), {
+        model: next.model,
+      })
+      expect(done.response.status, done.text).toBe(200)
+      const row = (await rowsOf(me, id)).find((r) => r.id === card.id)
+      expect(row?.content).toMatchObject({
+        parts: expect.arrayContaining([
+          expect.objectContaining({
+            type: "tool-request_change",
+            state: "output-error",
+            errorText: TOOL_CALL_CANCELLED,
+          }),
+        ]),
+      })
+      const seen = wire(next.sent)
+      expect(seen.indexOf(TOOL_CALL_CANCELLED)).toBeGreaterThan(-1)
+      expect(seen.indexOf(TOOL_CALL_CANCELLED)).toBeLessThan(
+        seen.indexOf(ready)
+      )
+      expect(seen.indexOf(ready)).toBeLessThan(
+        seen.indexOf("Leave it for now.")
+      )
+    })
   })
 
   it("starts a change the owner typed with no card, keyed by its turn and call, and drops a contact it carried", async () => {
@@ -2707,6 +2878,27 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     })
     expect(writing.response.status, writing.text).toBe(200)
     expect(statuses(writing.chunks)).toEqual([])
+  })
+
+  it("logs a read's step cleaned and runs the read without it", async () => {
+    const id = await conversation(me)
+    const done = await turn(me, typed(id, "How is my site?", "ask"), {
+      model: scripted(
+        calls({
+          id: "call_ws",
+          tool: "get_workspace",
+          input: { step: "Checking where things stand" },
+        }),
+        said("Your site has no live version yet.")
+      ).model,
+    })
+    expect(done.response.status, done.text).toBe(200)
+    const log = await logOf(id)
+    expect(
+      JSON.stringify(log.find((e) => e.type === "cos.step")?.payload)
+    ).toContain("Checking where things stand")
+    expect(log.some((e) => e.type === "cos.tool_result")).toBe(true)
+    await shownAsStored(me, id, done.chunks)
   })
 
   it("keeps reasoning in the log but out of the owner's stream and rows, and sends it back with an approval", async () => {

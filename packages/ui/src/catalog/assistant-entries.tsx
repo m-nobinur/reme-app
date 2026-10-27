@@ -34,7 +34,9 @@ import {
 } from "@workspace/ui/components/assistant/buy-domain"
 import { ChangeAskedUI } from "@workspace/ui/components/assistant/change-asked"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
+import { ConnectGoogleRow } from "@workspace/ui/components/assistant/google"
 import { MemoryChipUI } from "@workspace/ui/components/assistant/memory-chip"
+import { PayDialog } from "@workspace/ui/components/assistant/pay-dialog"
 import { PersonaCardUI } from "@workspace/ui/components/assistant/persona-card"
 import { TrayFrame } from "@workspace/ui/components/assistant/question-tray"
 import { ServerButtonUI } from "@workspace/ui/components/assistant/server-button"
@@ -1494,14 +1496,38 @@ const REMOVE_DOMAIN_STATES = decisionStates(
   refusal("domain.not_found", "That domain is not connected.")
 )
 
-const offer = (name: string, price: number, why: string) => ({
-  name,
-  price_gbp_year: price,
-  why,
-})
+// What domain_bought answers once the owner says they bought it: a look still
+// running, the connect's records, the registry not showing the name yet, and a refusal.
+const bought = (id: string, result?: unknown) =>
+  cosCall(
+    "domain_bought",
+    `bought_${id}`,
+    { args: { name: DOMAIN }, result },
+    result === undefined ? IN_FLIGHT : DONE
+  )
+const DOMAIN_BOUGHT_STATES = [
+  bought("looking"),
+  bought("connecting", {
+    outcome: "connecting",
+    method: "records",
+    email_affected: false,
+    apex: "forward",
+    provider: GODADDY,
+    steps: [WWW],
+  }),
+  bought("not_yet", { outcome: "not_registered_yet", name: DOMAIN }),
+  bought(
+    "refused",
+    refusal("domain.in_use", "That domain belongs to another business.")
+  ),
+]
 
-// What find_domain answers: the best pick and three others, none free, and
-// a search still running.
+const FREE_UK = { state: "free", price_gbp_year: 8 } as const
+const FREE_COM = { state: "free", price_gbp_year: 12 } as const
+const TAKEN = { state: "taken" } as const
+
+// What find_domain answers: name rows best first, one ending taken, none
+// free, and a search still running.
 const FIND_DOMAIN_STATES: ThreadMessageLike[] = [
   ask("I don't have a website address. Can you sort one?"),
   cosCall("find_domain", "find_running", { args: {} }, IN_FLIGHT),
@@ -1509,11 +1535,17 @@ const FIND_DOMAIN_STATES: ThreadMessageLike[] = [
     args: {},
     result: {
       outcome: "found",
-      best: offer(DOMAIN, 8, "Short, matches your name, and .co.uk says UK."),
-      options: [
-        offer("sparklecleanbristol.co.uk", 8, "Says where you work."),
-        offer("sparkleclean.uk", 8, "The shortest UK ending."),
-        offer("sparklecleanbristol.com", 12, "Known everywhere."),
+      rows: [
+        {
+          stem: "sparkleclean",
+          why: "Short, and it is your name.",
+          endings: { "co.uk": FREE_UK, com: TAKEN, uk: FREE_UK },
+        },
+        {
+          stem: "sparklecleanbristol",
+          why: "Says where you work.",
+          endings: { "co.uk": FREE_UK, com: FREE_COM, uk: FREE_UK },
+        },
       ],
     },
   }),
@@ -1569,9 +1601,22 @@ const PAID: Record<string, Omit<DomainPurchaseStatus, "name">> = {
   "abandoned.co.uk": { state: "abandoned", test: false, outcome: "expired" },
 }
 
-// No Stripe in the catalog: Continue answers as an environment without
-// buying does.
+// No Stripe in the catalog: Pay answers as an environment without buying
+// does, and the details page asks for the address only.
 const CATALOG_PURCHASE: DomainPurchase = {
+  registrant: async (name) => ({
+    name,
+    price_gbp_year: name.endsWith(".com") ? 12 : 8,
+    registrant: {
+      name: REGISTRANT.name,
+      business_name: REGISTRANT.business_name,
+      email: REGISTRANT.email,
+      phone: REGISTRANT.phone,
+    },
+    missing: ["street", "city", "postal_code", "country_code"],
+  }),
+  elsewhere: async () => undefined,
+  bought: async (name) => ({ outcome: "not_registered_yet", name }),
   checkout: async () => ({
     outcome: "refused",
     code: "domain.buy_unavailable",
@@ -1815,6 +1860,24 @@ const POSTED: ThreadMessageLike[] = [
         data: {
           label: "Show me what changed",
           action: { kind: "ask", text: "Show me what changed." },
+        },
+      },
+    ],
+    role: "assistant",
+    status: DONE,
+  },
+  {
+    content: [
+      {
+        text: "Google needs one more permission. Connect again and leave both boxes ticked.",
+        type: "text",
+      },
+      {
+        type: "data",
+        name: "button",
+        data: {
+          label: "Reconnect Google",
+          action: { kind: "connect", service: "google" },
         },
       },
     ],
@@ -2252,6 +2315,39 @@ const READY = {
   onMakeChanges: noop,
 }
 
+/** The payment dialog behind its button, with test values. */
+function PayDialogSample() {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <Button onClick={() => setOpen(true)} variant="outline">
+        Pay £8
+      </Button>
+      {open ? (
+        <PayDialog
+          clientSecret="catalog"
+          name="sparkleclean.co.uk"
+          onClose={() => setOpen(false)}
+          onPaid={() => setOpen(false)}
+          priceGbp={8}
+          publishableKey="pk_test_catalog"
+          registrant={{
+            name: "Jo Bright",
+            email: "jo@sparkleclean.co.uk",
+            phone: "+447700900123",
+            address: {
+              street: "1 High Street",
+              city: "Bristol",
+              postal_code: "BS1 1AA",
+              country_code: "GB",
+            },
+          }}
+        />
+      ) : null}
+    </>
+  )
+}
+
 const assistantCatalog = [
   { name: "Collapsible", render: () => <CollapsibleSample /> },
   { name: "CollapsibleTrigger", render: () => <CollapsibleSample /> },
@@ -2581,21 +2677,21 @@ const assistantCatalog = [
   },
   // The card the three tools share, its outcome lines and its provider, on
   // a waiting card, a done one and a refused one.
-  ...(["Decision", "Done", "Problem", "CosToolsProvider"] as const).map(
-    (name) => ({
-      name,
-      render: () => (
-        <FixtureThread
-          height="h-[36rem]"
-          messages={[
-            CREATE_REMINDER_STATES[2],
-            CREATE_REMINDER_STATES[8],
-            CREATE_REMINDER_STATES[9],
-          ].filter((message) => message !== undefined)}
-        />
-      ),
-    })
-  ),
+  ...(
+    ["Decision", "Done", "Problem", "TrayApproval", "CosToolsProvider"] as const
+  ).map((name) => ({
+    name,
+    render: () => (
+      <FixtureThread
+        height="h-[36rem]"
+        messages={[
+          CREATE_REMINDER_STATES[2],
+          CREATE_REMINDER_STATES[8],
+          CREATE_REMINDER_STATES[9],
+        ].filter((message) => message !== undefined)}
+      />
+    ),
+  })),
   {
     name: "ReplyFeedback",
     render: () => <FixtureThread height="h-[30rem]" messages={RATED} rates />,
@@ -2624,10 +2720,17 @@ const assistantCatalog = [
       <FixtureThread height="h-[180rem]" messages={RECORD_REVIEW_STATES} />
     ),
   },
-  {
-    name: "ConnectDomain",
+  // The connect card and the records it ends on.
+  ...(["ConnectDomain", "ConnectSteps"] as const).map((name) => ({
+    name,
     render: () => (
       <FixtureThread height="h-[230rem]" messages={CONNECT_DOMAIN_STATES} />
+    ),
+  })),
+  {
+    name: "DomainBought",
+    render: () => (
+      <FixtureThread height="h-[80rem]" messages={DOMAIN_BOUGHT_STATES} />
     ),
   },
   {
@@ -2642,15 +2745,20 @@ const assistantCatalog = [
       <FixtureThread height="h-[60rem]" messages={FIND_DOMAIN_STATES} />
     ),
   },
-  // The purchase card and the provider that gives it the app's checkout.
-  ...(["BuyDomain", "DomainPurchaseProvider"] as const).map((name) => ({
-    name,
-    render: () => (
-      <DomainPurchaseProvider value={CATALOG_PURCHASE}>
-        <FixtureThread height="h-[260rem]" messages={BUY_DOMAIN_STATES} />
-      </DomainPurchaseProvider>
-    ),
-  })),
+  // The purchase card, its tray and the provider that gives it the app's checkout.
+  ...(["BuyDomain", "BuyTray", "DomainPurchaseProvider"] as const).map(
+    (name) => ({
+      name,
+      render: () => (
+        <DomainPurchaseProvider value={CATALOG_PURCHASE}>
+          <FixtureThread height="h-[260rem]" messages={BUY_DOMAIN_STATES} />
+        </DomainPurchaseProvider>
+      ),
+    })
+  ),
+  // Opened from its button: Stripe.js cannot start here, so the payment side
+  // shows its "did not load" line beside the order summary.
+  { name: "PayDialog", render: () => <PayDialogSample /> },
   {
     name: "DomainCheck",
     render: () => (
@@ -2664,9 +2772,17 @@ const assistantCatalog = [
     ),
   },
   {
+    name: "ConnectGoogleRow",
+    render: () => (
+      <div className="max-w-md">
+        <ConnectGoogleRow />
+      </div>
+    ),
+  },
+  {
     name: "ServerButtonUI",
     render: () => (
-      <FixtureThread height="h-[34rem]" messages={POSTED}>
+      <FixtureThread height="h-[46rem]" messages={POSTED}>
         <ServerButtonUI />
       </FixtureThread>
     ),

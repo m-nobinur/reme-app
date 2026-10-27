@@ -80,9 +80,15 @@ const done = (output: unknown) => ({
 const buttons = (container: HTMLElement) =>
   [...container.querySelectorAll("button")].map((b) => b.textContent?.trim())
 
+/** The tray's labelled buttons, its no before its yes; Collapse has only an icon. */
+const choices = (container: HTMLElement) =>
+  buttons(container).filter((label) => label !== "")
+
 /** Presses the card's yes, then its no, and checks what each told the thread. */
 async function answer(card: Awaited<ReturnType<typeof draw>>) {
-  const [yes, no] = card.container.querySelectorAll("button")
+  const [no, yes] = [...card.container.querySelectorAll("button")].filter(
+    (button) => button.textContent?.trim()
+  )
   await act(async () => yes?.click())
   expect(card.respondToApproval).toHaveBeenLastCalledWith({ approved: true })
   await act(async () => no?.click())
@@ -97,10 +103,11 @@ afterEach(() => {
 
 it("asks for the owner's yes through the existing approval flow", async () => {
   const card = await draw({ approval: { approved: undefined } })
-  expect(card.container.querySelector("h3")?.textContent).toBe(
+  expect(card.container.querySelector("h2")?.textContent).toBe(
     `Put your website on ${NAME}.`
   )
-  expect(buttons(card.container)).toEqual(["Connect", "Cancel"])
+  expect(card.container.textContent).toContain("Your email is not affected.")
+  expect(choices(card.container)).toEqual(["Cancel", "Connect"])
   await answer(card)
   await card.unmount()
 })
@@ -121,7 +128,9 @@ it("shows the records, a copy button for each value, and the provider button", a
   expect(link?.getAttribute("href")).toBe(GODADDY.settings_url)
   expect(link?.getAttribute("target")).toBe("_blank")
   expect(link?.getAttribute("rel")).toContain("noopener")
-  expect(link?.textContent).toContain("Open GoDaddy DNS settings")
+  expect(link?.textContent).toBe(
+    "GoDaddyOpen your DNS settings (opens in a new tab)"
+  )
   expect(
     [...card.container.querySelectorAll("button[aria-label]")].map((b) =>
       b.getAttribute("aria-label")
@@ -299,13 +308,13 @@ it("asks before taking the website off a domain, and says nothing is deleted", a
     toolName: "remove_domain",
     approval: { approved: undefined },
   })
-  expect(card.container.querySelector("h3")?.textContent).toBe(
+  expect(card.container.querySelector("h2")?.textContent).toBe(
     `Take your website off ${NAME}?`
   )
   expect(card.container.textContent).toContain(
     "Your website goes back to its own address. Nothing is deleted at your domain's provider."
   )
-  expect(buttons(card.container)).toEqual(["Remove", "Keep it"])
+  expect(choices(card.container)).toEqual(["Keep it", "Remove"])
   await answer(card)
   await card.unmount()
 })
@@ -341,4 +350,26 @@ it("says the domain is no longer connected once removed, and what a refusal or a
   })
   expect(kept.container.textContent).toContain("You said not now.")
   await kept.unmount()
+})
+
+it("draws a domain bought elsewhere as the connect's records, or that the registry can't see it yet", async () => {
+  const connected = await draw({
+    toolName: "domain_bought",
+    result: { ...RECORDS, provider: GODADDY },
+  })
+  expect(connected.container.textContent).toContain(`${NAME} is yours.`)
+  expect(connected.container.querySelectorAll("ol > li")).toHaveLength(3)
+  expect(connected.container.querySelector("a")?.getAttribute("href")).toBe(
+    GODADDY.settings_url
+  )
+  await connected.unmount()
+
+  const waiting = await draw({
+    toolName: "domain_bought",
+    result: { outcome: "not_registered_yet", name: NAME },
+  })
+  expect(waiting.container.textContent).toBe(
+    `I can't see ${NAME} at the registry yet. It can take a few minutes, and I check each day too.`
+  )
+  await waiting.unmount()
 })

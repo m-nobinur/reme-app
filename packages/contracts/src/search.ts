@@ -7,11 +7,16 @@ import { Text } from "./text.ts"
 // carries a refresh token, an access token, an org id or a Google account id:
 // the model and the web app see the connection's state and email only.
 
-/** Where the owner's Google connection is. `needs_reauth` is a token Google refused. */
+/**
+ * Where the owner's Google connection is. `needs_reauth` is a token Google
+ * refused; `needs_permission` a sign-in that left a Search Console box unticked,
+ * or a grant that has since lost a scope or the Owner role on the property.
+ */
 export const SearchConnectionState = z.enum([
   "active",
   "needs_reauth",
   "revoked",
+  "needs_permission",
 ])
 
 /** The free subdomain, a connected domain's own address, or a whole purchased domain. */
@@ -37,6 +42,16 @@ export const GoogleConnectRequest = z.strictObject({
     .max(128)
     .regex(/^[A-Za-z0-9\-._~]+$/),
   redirect_uri: z.string().min(1).max(512),
+})
+
+/**
+ * `POST /google/result`'s body: how the callback ended, for the one message
+ * the assistant says about it. `attempt` is the OAuth state, which is what one
+ * attempt's message is keyed by; `cancelled` is the owner declining on Google's screen.
+ */
+export const GoogleResultRequest = z.strictObject({
+  attempt: z.string().min(1).max(128),
+  result: z.enum(["connected", "cancelled", "failed", "scopes_missing"]),
 })
 
 /** The connection as the web app and the model read it: no token, no Google id. */
@@ -177,6 +192,8 @@ export const GetIndexingOutput = z.union([
 ])
 
 export type GoogleConnectRequest = z.infer<typeof GoogleConnectRequest>
+export type SearchConnectionState = z.infer<typeof SearchConnectionState>
+export type GoogleResultRequest = z.infer<typeof GoogleResultRequest>
 export type SearchConnection = z.infer<typeof SearchConnection>
 export type SearchProperty = z.infer<typeof SearchProperty>
 export type SearchTotals = z.infer<typeof SearchTotals>

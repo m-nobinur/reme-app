@@ -174,6 +174,64 @@ it("says what finished, and no Now list when nothing waits", async () => {
   expect(container.textContent).not.toContain("Now")
 })
 
+const section = (title: string) =>
+  [...container.querySelectorAll("section")].find((each) =>
+    each.querySelector("h2")?.textContent?.startsWith(title)
+  )
+
+it("puts a job waiting on the owner under Waiting on you, never Now", async () => {
+  live.workspace = {
+    ...EMPTY_WORKSPACE,
+    activity: {
+      journey: [
+        {
+          id: "golive",
+          kind: "golive",
+          state: "waiting",
+          steps: [{ id: "approval", state: "waiting" }],
+          at: new Date().toISOString(),
+        },
+      ],
+      now: [],
+      waiting: [],
+      upcoming: [],
+      done: [],
+    },
+  }
+  await render()
+  expect(section("Waiting on you")?.textContent).toContain(
+    "Your website is ready"
+  )
+  expect(section("Now")).toBeUndefined()
+})
+
+it("offers the next task not started as Up next, with its button into the chat", async () => {
+  live.workspace = {
+    ...EMPTY_WORKSPACE,
+    live: 2,
+    host: "fixture.example.invalid",
+    activity: {
+      journey: [],
+      now: [],
+      waiting: [],
+      upcoming: [
+        {
+          id: "address:1",
+          kind: "address",
+          state: "upcoming",
+          steps: [{ id: "find_out", state: "next" }],
+          at: new Date().toISOString(),
+        },
+      ],
+      done: [],
+    },
+  }
+  await render()
+  expect(section("Up next")?.textContent).toMatch(/address/i)
+  expect(link("Use your own domain")?.dataset.to).toBe("/app")
+  expect(section("Coming up")).toBeUndefined()
+})
+
 const note = (id: string, title: string, due_at: string | null): Reminder => ({
   id,
   title,
@@ -348,7 +406,7 @@ it("moves focus to the Activity tab when the last reminder is done", async () =>
   expect(tab("Activity")?.getAttribute("aria-selected")).toBe("true")
 })
 
-it("offers a live site's one next step", async () => {
+it("leaves the visit link to the Website tab, not Activity", async () => {
   live.workspace = {
     ...EMPTY_WORKSPACE,
     live: 3,
@@ -356,12 +414,8 @@ it("offers a live site's one next step", async () => {
     url: "https://fixture.example.invalid",
   }
   await render()
-  const steps = container.querySelector('[data-slot="next-steps"]')
-  expect(
-    [...(steps?.querySelectorAll("a, button") ?? [])].map(
-      (element) => element.textContent
-    )
-  ).toEqual(["Visit your website (opens in a new tab)"])
+  expect(container.querySelector('[data-slot="next-steps"]')).toBeNull()
+  expect(container.textContent).not.toContain("Visit your website")
 })
 
 it("announces a new line on the same page, and not a build's next stage", async () => {

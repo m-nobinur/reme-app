@@ -2,6 +2,8 @@ import {
   OwnerProfile,
   type Proactivity,
   profileText,
+  type TaskBlockedOn,
+  type TaskStepName,
 } from "@workspace/contracts"
 import {
   approvals,
@@ -15,10 +17,12 @@ import {
   jobRuns,
   type OrgScopedDb,
   orgs,
+  readTasks,
   reminders,
   serverMessageId,
   sql,
   type Tenancy,
+  taskFollowups,
   waitedOn,
 } from "@workspace/db"
 import { assistantName } from "./assistant.ts"
@@ -198,6 +202,84 @@ const searchReport: Source = async (db, now) => {
   return item ? [item] : []
 }
 
+/**
+ * How long a step waits on the owner before one follow-up asks about it, by
+ * what it waits for. A purchase gets none: the Checkout holds the name for
+ * 140 minutes (`PURCHASE_HOLD_MS`) and then the task is put off, all inside
+ * the gap between two beats.
+ */
+const FOLLOW_UP_AFTER: Partial<Record<TaskBlockedOn, number>> = {
+  // A day to act unprompted; a DNS change still has two of its three days left.
+  owner_action: DAY,
+  approval: DAY,
+  // Search sync said it the day it was seen, so asking again sooner nags.
+  permission: 2 * DAY,
+}
+
+/** Each step in the owner's words, since the writer must never say a step name. */
+const STEP_WORDS: Record<TaskStepName, string> = {
+  find_out: "whether you already have a web address",
+  choose: "choosing a name",
+  purchase: "buying the name",
+  records: "your DNS change",
+  ownership: "proving the address is yours",
+  certificate: "the security certificate",
+  loads: "the site loading on its new address",
+  sign_in: "signing in to Google",
+  permissions: "giving Google permission",
+  verify: "Google checking the site is yours",
+  sitemap: "sending your pages to Google",
+  first_data: "your first search numbers",
+}
+
+/** `task:{id}:{step}:{state}`: a follow-up's ledger key and its `task_followups` row. */
+const isFollowUp = (item: DigestItem) => item.key.startsWith("task:")
+
+/**
+ * Follow-ups: each step of an active task that has waited on the owner longer
+ * than `FOLLOW_UP_AFTER`, unless one was sent for it before, with its note
+ * and the task's steps done in the last day (longer than any gap between
+ * beats, quiet hours included).
+ */
+const followUps: Source = async (db, now) => {
+  const sent = new Set(
+    (
+      await db
+        .select({ fingerprint: taskFollowups.fingerprint })
+        .from(taskFollowups)
+    ).map((row) => row.fingerprint)
+  )
+  return (await readTasks(db)).flatMap((task) => {
+    if (task.state !== "active") return []
+    const name = task.kind === "address" ? task.detail.name : undefined
+    const done = task.steps
+      .filter((s) => s.state === "done" && (s.changed_at ?? "") > ago(now, DAY))
+      .map((s) => STEP_WORDS[s.step])
+    return task.steps.flatMap((s) => {
+      const wait = s.blocked_on && FOLLOW_UP_AFTER[s.blocked_on]
+      const key = `task:${task.id}:${s.step}:${s.state}`
+      if (s.state !== "blocked" || !wait || !s.changed_at || sent.has(key))
+        return []
+      if (s.changed_at > ago(now, wait)) return []
+      return [
+        {
+          key,
+          since: s.changed_at,
+          facts: {
+            waiting_for: STEP_WORDS[s.step],
+            ...(s.note && { note: s.note }),
+            ...(s.deadline && { deadline: s.deadline }),
+            ...(name && { name }),
+            ...(done.length > 0 && { done_lately: done.join(", ") }),
+          },
+          // Code wrote both: the note from a fixed string, the name from the domain row.
+          trusted: ["note", "name"],
+        },
+      ]
+    })
+  })
+}
+
 export const SOURCES: Source[] = [
   reviews,
   questions,
@@ -205,6 +287,7 @@ export const SOURCES: Source[] = [
   remindersDue,
   searchReport,
   alerts,
+  followUps,
 ]
 
 /** Every source's items, sorted by key. A source that fails fails the digest. */
@@ -277,6 +360,37 @@ async function ownerActive(db: OrgScopedDb, orgId: string, now: Date) {
         and occurred_at > ${ago(now, ACTIVE_MS)}::timestamptz
     ) as active`)
   return row?.active === true
+}
+
+const bySince = (a: DigestItem, b: DigestItem) =>
+  a.since < b.since ? -1 : a.since > b.since ? 1 : 0
+
+/**
+ * The owner answering a follow-up dismisses it: whatever they typed next, a
+ * reply or a "not now", closes it for good. The row stays, so its
+ * fingerprint is never sent again.
+ */
+const dismissAnswered = (db: OrgScopedDb) =>
+  db.execute(sql`
+    with answered as (
+      select f.fingerprint, (
+        select min(m.created_at) from ${conversationMessages} m
+        where m.content->>'role' = 'user' and m.created_at > f.sent_at
+      ) as at
+      from ${taskFollowups} f where f.dismissed_at is null)
+    update ${taskFollowups} f set dismissed_at = a.at
+    from answered a where f.fingerprint = a.fingerprint and a.at is not null`)
+
+/** Puts this beat's follow-ups back, when what stopped them was not a decision about them. */
+async function giveBack(db: OrgScopedDb, orgId: string, items: DigestItem[]) {
+  const keys = items.filter(isFollowUp).map((i) => surfacedKey(orgId, i.key))
+  if (keys.length === 0) return
+  await db.delete(deliveries).where(
+    sql`${deliveries.key} in (${sql.join(
+      keys.map((key) => sql`${key}`),
+      sql`, `
+    )})`
+  )
 }
 
 /** The owner profile fact's text, if the org has one. */
@@ -376,12 +490,17 @@ async function speak(kit: Tenancy, env: Env, models: Models, beat: Beat) {
     )
   const spend = (job: string, outcome: string, spent: Spent) =>
     logSpend(kit, orgId, job, outcome, spent)
+  // A follow-up that a failure, the cap or a turn kept back is asked about on
+  // a later beat; one Jev or the writer turned down is not.
+  const putBack = () =>
+    kit.withOrg({ orgId }, (db) => giveBack(db, orgId, beat.items))
 
   const { state, data } = modelInput(beat)
   let gate: Awaited<ReturnType<Models["gate"]>>
   try {
     gate = await models.gate(state)
   } catch (error) {
+    await putBack()
     return record("failed", `gate_error:${failureCode(error)}`)
   }
   const pass = gate.probability >= GATE.floor
@@ -396,7 +515,10 @@ async function speak(kit: Tenancy, env: Env, models: Models, beat: Beat) {
       .onConflictDoNothing()
       .returning({ key: deliveries.key })
   )
-  if (took.length === 0) return record("skipped", "capped")
+  if (took.length === 0) {
+    await putBack()
+    return record("skipped", "capped")
+  }
 
   let reply: Reply
   try {
@@ -407,13 +529,22 @@ async function speak(kit: Tenancy, env: Env, models: Models, beat: Beat) {
   } catch (error) {
     reply = { kind: "error", detail: `writer_error:${failureCode(error)}` }
   }
-  if (reply.kind !== "message") {
-    await kit.withOrg({ orgId }, (db) =>
+  const release = () =>
+    kit.withOrg({ orgId }, (db) =>
       db.delete(deliveries).where(eq(deliveries.key, cap))
     )
-    return reply.kind === "quiet"
-      ? record("skipped", `quiet: ${reply.reason}`)
-      : record("failed", reply.detail)
+  if (reply.kind !== "message") {
+    await release()
+    if (reply.kind === "quiet")
+      return record("skipped", `quiet: ${reply.reason}`)
+    await putBack()
+    return record("failed", reply.detail)
+  }
+  // A turn may have begun while the models ran; then the chat is the place.
+  if (await kit.withOrg({ orgId }, (db) => ownerActive(db, orgId, beat.now))) {
+    await release()
+    await putBack()
+    return record("skipped", "owner_active")
   }
 
   const { text } = reply
@@ -429,7 +560,14 @@ async function speak(kit: Tenancy, env: Env, models: Models, beat: Beat) {
         message: {
           text: [text],
           ...(chip && {
-            button: { label: chip, action: { kind: "ask", text: chip } },
+            button: {
+              label: chip,
+              // The report's Google chip starts the sign-in from the row itself.
+              action:
+                chip === "Connect Google"
+                  ? { kind: "connect", service: "google" }
+                  : { kind: "ask", text: chip },
+            },
           }),
         },
       }),
@@ -447,6 +585,18 @@ async function speak(kit: Tenancy, env: Env, models: Models, beat: Beat) {
           text,
         })
       )
+    const asked = beat.items.filter(isFollowUp)
+    if (asked.length > 0)
+      await db
+        .insert(taskFollowups)
+        .values(
+          asked.map((item) => ({
+            orgId,
+            fingerprint: item.key,
+            sentAt: beat.now,
+          }))
+        )
+        .onConflictDoNothing()
     await db
       .update(jobRuns)
       .set({
@@ -488,9 +638,17 @@ export function heartbeatWith(
       return { outcome: "skipped", detail: "quiet_hours" }
     if (await ownerActive(db, job.orgId, now))
       return { outcome: "skipped", detail: "owner_active" }
+    await dismissAnswered(db)
     const items = await digest(db, now, sources)
     if (items.length === 0) return { outcome: "skipped", detail: "empty" }
-    const fresh = await unsurfaced(db, job.orgId, items)
+    const unseen = await unsurfaced(db, job.orgId, items)
+    // One thing per message: the news as before, else the longest wait. The
+    // other follow-ups stay unsurfaced for a later day's message.
+    const news = unseen.filter((item) => !isFollowUp(item))
+    const fresh =
+      news.length > 0
+        ? news
+        : unseen.filter(isFollowUp).sort(bySince).slice(0, 1)
     if (fresh.length === 0) return { outcome: "skipped", detail: "unchanged" }
     // Detection time is the state boundary: the keys are surfaced before any
     // model looks, so a model that fails does not raise them again.

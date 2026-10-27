@@ -17,12 +17,16 @@ import {
   domains,
   eq,
   postAssistantMessage,
+  readTasks,
   reminders,
+  searchConnections,
   serverMessageId,
+  setStep,
   sql,
   staff,
   steerKeyHash,
   supersedeFact,
+  syncTasks,
   type Tenancy,
   tenancy,
 } from "@workspace/db"
@@ -417,6 +421,81 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
         db.delete(domains).where(eq(domains.name, name))
       )
     }
+  })
+
+  it("shows an existing domain and Google connection as tasks in the panel after the back-fill", async () => {
+    const who = await owner(kit, url as string, "owner-tasks")
+    const name = `${crypto.randomUUID().slice(0, 8)}.example`
+    const write = (fn: Parameters<Tenancy["withOrg"]>[1]) =>
+      kit.withOrg({ orgId: who.orgId }, async (db) => {
+        await fn(db)
+        await syncTasks(db, who.orgId)
+      })
+    await write(async (db) => {
+      await db.insert(domains).values({
+        orgId: who.orgId,
+        siteId: who.orgId,
+        name,
+        primaryHost: name,
+        origin: "connected",
+        method: "records",
+        state: "awaiting_dns",
+        provider: { name: "123-reg" },
+      })
+      await db.insert(searchConnections).values({
+        orgId: who.orgId,
+        refreshToken: "v1.iv.ct",
+        state: "needs_permission",
+        connectedAt: new Date(),
+      })
+    })
+    const panel = async () =>
+      (await readWorkspace(kit, who.orgId, { SITE_HOST_SUFFIX: SUFFIX }))
+        .activity
+    const waiting = (await panel())?.waiting ?? []
+    expect(waiting.map((s) => [s.kind, s.names])).toEqual([
+      ["address", { domain: name, provider: "123-reg" }],
+      ["google", undefined],
+    ])
+    expect(waiting[0]?.steps.map((s) => `${s.id}:${s.state}`)).toEqual([
+      "find_out:done",
+      "choose:skipped",
+      "purchase:skipped",
+      "records:waiting",
+      "ownership:skipped",
+      "certificate:next",
+      "loads:next",
+    ])
+    expect(waiting[0]?.deadline).toBeDefined()
+    expect(waiting[1]?.steps[1]).toEqual({
+      id: "permissions",
+      state: "waiting",
+    })
+
+    await write((db) =>
+      db
+        .update(domains)
+        .set({ state: "verifying", lastCheck: { status: "valid" } })
+        .where(eq(domains.name, name))
+    )
+    expect((await panel())?.now.map((s) => s.kind)).toEqual(["address"])
+    await write((db) =>
+      db
+        .update(domains)
+        .set({ state: "active", activatedAt: new Date() })
+        .where(eq(domains.name, name))
+    )
+    // Live on the row, still checking it loads until the probe says so.
+    expect((await panel())?.now.map((s) => s.kind)).toEqual(["address"])
+    await write(async (db) => {
+      const [task] = await readTasks(db)
+      await setStep(db, task?.id as string, "loads", { state: "done" })
+    })
+    expect((await panel())?.done).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "address", state: "done" }),
+      ])
+    )
   })
 
   it("shows a working build's photos as they settle and its pages by name, its clock without the plan review", async () => {
@@ -872,7 +951,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     })
   })
 
-  it("reads the workspace in one transaction of eleven statements", async () => {
+  it("reads the workspace in one transaction of twelve statements", async () => {
     let transactions = 0
     let statements = 0
     const counted: Tenancy = {
@@ -896,8 +975,8 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     // The tenth reads the generated photos of the waiting approval; the
     // reminders that came due and the paused jobs are one each, and the
     // eleventh is the activity view's domain, Google, heartbeat and first
-    // publish rows.
-    expect(statements).toBe(11)
+    // publish rows, pipelined with the twelfth, its owner tasks.
+    expect(statements).toBe(12)
   })
 
   it("lists a reminder once it is due and until it is done, after the questions and before the alerts", async () => {

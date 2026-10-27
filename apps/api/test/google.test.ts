@@ -1,5 +1,7 @@
 import { ErrorEnvelope } from "@workspace/contracts"
 import {
+  conversationMessages,
+  conversations,
   memberships,
   searchConnections,
   sql,
@@ -96,6 +98,40 @@ describe.skipIf(!url)("connecting Google through the api", () => {
     const bad = await connect(me, stub, { ...BODY, verifier: "short" })
     expect(bad.status).toBe(400)
     expect(stub.calls).toEqual([])
+  })
+
+  it("says how a callback ended once in the chat, per attempt, and only for the owner", async () => {
+    const result = (who: Owner, body: unknown) =>
+      who.call(stubOrchestrator(), "/google/result", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      })
+    const posted = () =>
+      kit.withOrg({ orgId: me.orgId }, (db) =>
+        db.select({ id: conversationMessages.id }).from(conversationMessages)
+      )
+    await kit.withOrg({ orgId: me.orgId }, (db) =>
+      db.insert(conversations).values({
+        orgId: me.orgId,
+        kind: "assistant",
+        createdByStaffId: me.chiefId,
+      })
+    )
+    const before = (await posted()).length
+    const attempt = { attempt: "state-1", result: "failed" }
+    expect((await result(me, attempt)).status).toBe(204)
+    expect((await result(me, attempt)).status).toBe(204)
+    expect(await posted()).toHaveLength(before + 1)
+    await result(me, { attempt: "state-2", result: "scopes_missing" })
+    expect(await posted()).toHaveLength(before + 2)
+    await result(me, { attempt: "state-3", result: "connected" })
+    await result(me, { attempt: "state-4", result: "cancelled" })
+    expect(await posted()).toHaveLength(before + 4)
+    expect((await result(member, attempt)).status).toBe(403)
+    expect((await result(me, { attempt: "", result: "failed" })).status).toBe(
+      400
+    )
   })
 
   it("connect_google: off, the consent link, the connected account, or refused for a member", async () => {

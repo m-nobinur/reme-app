@@ -2,6 +2,8 @@ import {
   ActivityFeed,
   ApprovalDecision,
   type AttentionItem as Attention,
+  BoughtElsewhereOutput,
+  BuildQuestions,
   CHAT_TURN_MS,
   type ChangeKind,
   Conversation,
@@ -11,8 +13,10 @@ import {
   DomainCheckout,
   DomainName,
   DomainPurchaseStatus,
+  DomainRegistrantPrefill,
   ErrorEnvelope,
   FactList,
+  type GoogleResultRequest,
   type MemoryReviewAction,
   MemoryView,
   type MessageFeedback,
@@ -535,10 +539,16 @@ async function answer(
   conversationId: string,
   reply: QuestionReply,
   key: string
-): Promise<WriteOutcome> {
+): ReturnType<OwnerDataSource["answer"]> {
   const path = `/conversations/${segment(conversationId)}/questions`
   // The same answer again is a retry; a refusal says why in the owner's words.
-  return await outcome(await post(path, reply, key), path)
+  const response = await post(path, reply, key)
+  if (!response.ok) return await outcome(response, path)
+  // The stack as stored: an answer can close the rest of it.
+  const stack = BuildQuestions.safeParse(
+    await response.json().catch(() => null)
+  )
+  return stack.success ? { done: true, stack: stack.data } : { done: true }
 }
 
 async function cancelBuild(assignmentId: string): Promise<WriteOutcome> {
@@ -608,14 +618,11 @@ async function domainCheckout(
 ): Promise<DomainCheckout | { refused: string | null }> {
   // A hostname never holds "/" or a lone dot, so it cannot reach another route.
   const path = `/domains/${DomainName.parse(name)}/checkout`
-  const response = await post(path, details, key)
-  const body = await response.json().catch(() => null)
-  if (response.ok) return DomainCheckout.parse(body)
-  const refusal = ErrorEnvelope.safeParse(body)
-  if (response.status >= 400 && response.status < 500 && refusal.success) {
-    return { refused: refusal.data.code }
-  }
-  throw new Error(`apps/api answered ${response.status} for ${path}`)
+  return await domainAnswer(
+    await post(path, details, key),
+    path,
+    DomainCheckout.parse
+  )
 }
 
 async function googleConnect(
@@ -638,6 +645,15 @@ async function googleConnect(
     : "failed"
 }
 
+async function googleResult(
+  attempt: string,
+  result: GoogleResultRequest["result"]
+): Promise<void> {
+  await post("/google/result", { attempt, result }, `google-result:${attempt}`)
+    .then((response) => response.body?.cancel())
+    .catch(() => undefined)
+}
+
 /** The newest purchase of a domain in the owner's business, or null when there is none. */
 async function domainStatus(
   name: string
@@ -649,6 +665,50 @@ async function domainStatus(
     throw new Error(`apps/api answered ${response.status} for ${path}`)
   }
   return DomainPurchaseStatus.parse(await response.json())
+}
+
+/** A domain write's answer, parsed, or the refusal's code when it is the owner's to read. */
+async function domainAnswer<T>(
+  response: Response,
+  path: string,
+  parse: (body: unknown) => T
+): Promise<T | { refused: string | null }> {
+  const body = await response.json().catch(() => null)
+  if (response.ok) return parse(body)
+  const refusal = ErrorEnvelope.safeParse(body)
+  if (response.status >= 400 && response.status < 500 && refusal.success) {
+    return { refused: refusal.data.code }
+  }
+  throw new Error(`apps/api answered ${response.status} for ${path}`)
+}
+
+async function domainRegistrant(
+  name: string
+): ReturnType<OwnerDataSource["domainRegistrant"]> {
+  const path = `/domains/${DomainName.parse(name)}/registrant`
+  const response = await call(path)
+  if (!response) throw new Error(`no session to read ${path} with`)
+  return await domainAnswer(response, path, DomainRegistrantPrefill.parse)
+}
+
+async function domainElsewhere(
+  name: string,
+  key: string
+): Promise<WriteOutcome> {
+  const path = `/domains/${DomainName.parse(name)}/elsewhere`
+  return await outcome(await post(path, undefined, key), path)
+}
+
+async function domainBought(
+  name: string,
+  key: string
+): ReturnType<OwnerDataSource["domainBought"]> {
+  const path = `/domains/${DomainName.parse(name)}/bought`
+  return await domainAnswer(
+    await post(path, undefined, key),
+    path,
+    BoughtElsewhereOutput.parse
+  )
 }
 
 async function completeReminder(id: string): Promise<WriteOutcome> {
@@ -864,7 +924,11 @@ export const apiSource: OwnerDataSource = {
   setTimeZone,
   domainCheckout,
   domainStatus,
+  domainRegistrant,
+  domainElsewhere,
+  domainBought,
   googleConnect,
+  googleResult,
   conversations,
   conversation,
   createConversation,

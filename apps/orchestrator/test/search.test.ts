@@ -8,16 +8,20 @@ import {
   searchConnections,
   searchProperties,
   sql,
+  taskSteps,
 } from "@workspace/db"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { openToken } from "../src/google.ts"
 import {
   accessToken,
   connectGoogle,
+  markFailed,
   ownProperty,
   placeToken,
+  sayVerifyFailed,
   searchInstanceId,
 } from "../src/search.ts"
+import { chatTexts, openChat } from "./chat.ts"
 import { freshOrg } from "./fixture.ts"
 import { kit, previewed, SUFFIX, storage } from "./site.ts"
 
@@ -110,6 +114,14 @@ const typesOf = async (orgId: string) =>
     )
   ).map((e) => e.type)
 
+/** The Google task's `permissions` step, as the panel reads it. */
+const permissionsStep = (orgId: string) =>
+  kit
+    .withOrg({ orgId }, (db) =>
+      db.select().from(taskSteps).where(eq(taskSteps.step, "permissions"))
+    )
+    .then((rows) => rows[0])
+
 afterEach(() => vi.unstubAllGlobals())
 
 /** An org with a live site, and the free subdomain it holds. */
@@ -132,7 +144,7 @@ async function published() {
 }
 
 describe.skipIf(!url)("connecting Google", () => {
-  it("saves nothing when a scope was unticked", async () => {
+  it("saves a scope left unticked as needs_permission, blocks the step and starts nothing", async () => {
     const orgId = await freshOrg(kit)
     stubGoogle(
       "1//refresh",
@@ -152,8 +164,19 @@ describe.skipIf(!url)("connecting Google", () => {
       status: 422,
       code: "search.scopes_missing",
     })
-    expect(await connection(orgId)).toBeUndefined()
-    expect(await typesOf(orgId)).toEqual([])
+    const row = await connection(orgId)
+    expect(row?.state).toBe("needs_permission")
+    expect(row?.scopes).toEqual([
+      "openid",
+      "https://www.googleapis.com/auth/webmasters",
+    ])
+    expect(row?.refreshToken).toMatch(/^v1\./)
+    expect(await typesOf(orgId)).toEqual(["search.needs_permission"])
+    expect(await permissionsStep(orgId)).toMatchObject({
+      state: "blocked",
+      blockedOn: "permission",
+      note: "Google needs one more permission",
+    })
     expect(created).toEqual([])
   })
 
@@ -379,5 +402,33 @@ describe.skipIf(!url)("the org's own properties", () => {
     expect(
       (await ownProperty(kit, mine, `https://mine-${mine}.example.test/`)).orgId
     ).toBe(mine)
+  })
+})
+
+describe.skipIf(!url)("a verification that never succeeds", () => {
+  it("raises the alert and tells the owner once, however often the steps run", async () => {
+    const { orgId, slug } = await published()
+    const store = storage()
+    const env = {
+      ROUTES: store.ROUTES,
+      SITE_HOST_SUFFIX: SUFFIX,
+    } as unknown as Env
+    const params = { org_id: orgId, host: slug }
+    await placeToken(env, kit, params, "google1a.html")
+    await openChat(kit, orgId)
+    for (let tries = 0; tries < 2; tries++) {
+      await markFailed(kit, params)
+      await sayVerifyFailed({}, kit, params)
+    }
+    expect(await chatTexts(kit, orgId)).toEqual([
+      expect.stringContaining(`confirm that ${slug} is yours`),
+    ])
+    const raised = await kit.withOrg({ orgId }, (db) =>
+      db
+        .select({ type: events.type })
+        .from(events)
+        .where(sql`${events.type} = 'alert.raised'`)
+    )
+    expect(raised).toHaveLength(1)
   })
 })

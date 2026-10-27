@@ -39,8 +39,15 @@ import { chat } from "./chat.ts"
 import { conversationRoute } from "./conversations.ts"
 import { memoryRoute } from "./cos/memory.ts"
 import { removal } from "./cos/tools.ts"
-import { checkout, isOrgOwner, purchaseStatus } from "./domain-buy.ts"
-import { googleConnect } from "./google.ts"
+import {
+  boughtElsewhere,
+  buyElsewhere,
+  checkout,
+  isOrgOwner,
+  purchaseStatus,
+  registrantPrefill,
+} from "./domain-buy.ts"
+import { googleConnect, googleResult } from "./google.ts"
 import { failure, invalid, keyMissing, readBody } from "./http.ts"
 import { drawLogos, keepLogo, readLogos } from "./logo.ts"
 import { pushRoute } from "./push.ts"
@@ -64,7 +71,7 @@ const LOGO_KEEP_PATH =
 
 /** The routes `ownerRoute` answers, for `index.ts` to resolve an org before. */
 export const OWNER_PATH =
-  /^\/(workspace|facts|assets(\/review)?|site\/media|photos\/[^/]+|revisions\/[^/]+\/[^/]+|logos(\/[^/]+\/keep)?|palettes\/from-(image|logo)|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback|questions))?)?|reminders(\/[^/]+)?|memory(\/(undo|review))?|push\/(config|subscriptions(\/[^/]+)?)|domains\/[^/]+(\/checkout)?|google\/(connect|disconnect)|time-zone|chat)$/
+  /^\/(workspace|facts|assets(\/review)?|site\/media|photos\/[^/]+|revisions\/[^/]+\/[^/]+|logos(\/[^/]+\/keep)?|palettes\/from-(image|logo)|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback|questions))?)?|reminders(\/[^/]+)?|memory(\/(undo|review))?|push\/(config|subscriptions(\/[^/]+)?)|domains\/[^/]+(\/(checkout|registrant|elsewhere|bought))?|google\/(connect|disconnect|result)|time-zone|chat)$/
 
 async function setFacts(request: Request, kit: Tenancy, owner: Owner) {
   if (!idempotencyKey(request)) return keyMissing()
@@ -310,6 +317,9 @@ export async function ownerRoute(
   if (pathname === "/google/connect" && method === "POST") {
     return googleConnect(request, env, kit, owner)
   }
+  if (pathname === "/google/result" && method === "POST") {
+    return googleResult(request, kit, owner)
+  }
   if (pathname === "/activity" && method === "GET") {
     return Response.json(await readActivity(kit, owner.orgId))
   }
@@ -336,6 +346,15 @@ export async function ownerRoute(
   }
   if (noun === "domains" && method === "GET" && !action) {
     return purchaseStatus(kit, owner, id)
+  }
+  if (noun === "domains" && method === "GET" && action === "registrant") {
+    return registrantPrefill(kit, owner, id)
+  }
+  if (noun === "domains" && method === "POST" && action === "elsewhere") {
+    return buyElsewhere(request, env, kit, owner, id)
+  }
+  if (noun === "domains" && method === "POST" && action === "bought") {
+    return boughtElsewhere(request, env, kit, owner, id)
   }
   if (noun === "approvals" && method === "POST") {
     return decide(request, env, kit, owner, id)

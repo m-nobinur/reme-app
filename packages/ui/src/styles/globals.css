@@ -53,6 +53,14 @@
   --device: oklch(0.16 0 0);
 }
 
+/* The tile a brand's logo sits on: white in both themes, because brands draw
+   their full-colour marks for a light ground. The foreground is the globe a
+   service with no mark gets, 7.4:1 on the tile. */
+:root {
+  --brand-tile: oklch(1 0 0);
+  --brand-tile-foreground: oklch(0.45 0 0);
+}
+
 /* Sections rise into place as they scroll in. Pure CSS, so it costs no script
    and does nothing where scroll timelines are unsupported or motion is off. */
 @utility reveal {
@@ -127,6 +135,8 @@
   --color-muted-foreground: var(--muted-foreground);
   --color-muted: var(--muted);
   --color-device: var(--device);
+  --color-brand-tile: var(--brand-tile);
+  --color-brand-tile-foreground: var(--brand-tile-foreground);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);

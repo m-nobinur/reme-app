@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import {
+  ADDED_MAX,
   attachHostname,
   candidates,
   checkDomains,
@@ -12,6 +13,7 @@ import {
   searchDomains,
   sellable,
   setAutoRenew,
+  suggestions,
 } from "../src/registrar.ts"
 import {
   ACCOUNT,
@@ -306,55 +308,108 @@ describe("the registrar client", () => {
 })
 
 describe("the name ranker", () => {
-  it("ranks the plan's example: exact .co.uk first, brand plus town next, no trade when the name says it", () => {
+  it("ranks the plan's example: the brand first, brand plus town next, no trade when the name says it", () => {
     const ranked = candidates({
       name: "Sparkle Clean Ltd",
       town: "Bristol",
       trade: "Cleaning",
     })
-    expect(ranked[0]?.name).toBe("sparkleclean.co.uk")
-    expect(ranked.map((r) => r.name)).toEqual([
-      "sparkleclean.co.uk",
-      "sparkleclean.com",
-      "sparkleclean.uk",
-      "sparkleclean.net",
-      "sparklecleanbristol.co.uk",
-      "sparklecleanbristol.com",
-      "sparklecleanbristol.uk",
-      "sparkleclean-bristol.co.uk",
-      "sparklecleanbristol.net",
-      "sparkleclean-bristol.com",
-      "sparkleclean-bristol.uk",
-      "sparkleclean-bristol.net",
+    expect(ranked).toEqual([
+      { stem: "sparkleclean", why: "matches your business name", score: 40 },
+      { stem: "sparklecleanbristol", why: "your name plus Bristol", score: 18 },
+      { stem: "bristolcleaning", why: "Bristol plus what you do", score: 12 },
+      {
+        stem: "sparkleclean-bristol",
+        why: "your name and Bristol, with a dash",
+        score: 7,
+      },
     ])
-    expect(ranked.some((r) => r.name.includes("cleaning"))).toBe(false)
-    expect(ranked[0]?.why).toMatch(/business name/)
   })
 
-  it("adds the trade when the name does not say it, and stays within one check", () => {
+  it("adds the trade's word when the name does not say it, each reason its own", () => {
     const ranked = candidates({
-      name: "The Smith & Daughters Co.",
-      town: "Bath, Somerset",
+      name: "Bright",
+      town: "Bath",
       trade: "Cleaning",
     })
-    expect(ranked.map((r) => r.name)).toContain(
-      "smithanddaughterscleaning.co.uk"
+    expect(ranked.map((r) => r.stem)).toEqual([
+      "bright",
+      "brightbath",
+      "brightcleaning",
+      "bright-bath",
+      "bathcleaning",
+    ])
+    expect(new Set(ranked.map((r) => r.why)).size).toBe(ranked.length)
+    expect(ranked.find((r) => r.stem === "brightcleaning")?.why).toBe(
+      "your name plus cleaning"
     )
-    expect(ranked.map((r) => r.name)).toContain("smithanddaughters-bath.co.uk")
-    expect(ranked.length).toBeLessThanOrEqual(20)
+  })
+
+  it("never repeats a word the name holds and keeps added-word stems short (seen 2026-10-27)", () => {
+    const ranked = candidates({
+      name: "Northside Dog Grooming",
+      town: "Leeds",
+      trade: "Dog grooming",
+    })
+    // A long name gets shorter forms of itself instead of a word added.
+    expect(ranked.map((r) => r.stem)).toEqual([
+      "northsidedoggrooming",
+      "northsidegrooming",
+      "northsideleeds",
+      "leedsgrooming",
+      "leedsdoggrooming",
+    ])
+    expect(ranked[1]?.why).toBe("shorter, northside grooming")
+    expect(
+      candidates({ name: "Leeds Cleaning", town: "Leeds" }).map((r) => r.stem)
+    ).toEqual(["leedscleaning"])
+    for (const r of candidates({ name: "Ab", town: "Leeds", trade: "x" }))
+      expect(r.stem.length).toBeLessThanOrEqual(ADDED_MAX)
+  })
+
+  it("fills from the registrar's names made only of the owner's words, never repeated or long", () => {
+    const filled = suggestions(
+      { name: "Northside Dog Grooming", town: "Leeds", trade: "Dog grooming" },
+      [
+        "northsidedoggrooming.com",
+        "northsidedoggrooming.uk",
+        "doggroomingnorthside.com",
+        "groomingleeds.co.uk",
+        "ndoggrooming.com",
+        "drnorthsidedoggrooming.com",
+        "northsidedogsitting.com",
+        "northsidedoggroomingsupplies.com",
+        "northsidenorthside.com",
+      ]
+    )
+    expect(filled.map((r) => [r.stem, r.why])).toEqual([
+      ["northsidedoggrooming", "another take on your name"],
+      ["doggroomingnorthside", "another take on your name"],
+      ["groomingleeds", "another take on your name"],
+    ])
+  })
+
+  it("says the owner's own words when they typed the search", () => {
+    const [top, next] = candidates({
+      name: "bright",
+      town: "Bath",
+      asked: true,
+    })
+    expect(top?.why).toBe("exactly what you asked for")
+    expect(next?.why).toBe("your words plus Bath")
   })
 
   it("strips accents and punctuation and gives nothing for a name with no letters", () => {
-    expect(candidates({ name: "Café Fresh!" })[0]?.name).toBe("cafefresh.co.uk")
+    expect(candidates({ name: "Café Fresh!" })[0]?.stem).toBe("cafefresh")
     expect(candidates({ name: "Ltd" })).toEqual([])
-    expect(candidates({ name: "sparklecleaning.com" })[0]?.name).toBe(
-      "sparklecleaning.co.uk"
+    expect(candidates({ name: "sparklecleaning.com" })[0]?.stem).toBe(
+      "sparklecleaning"
     )
-    expect(candidates({ name: "sparkle.co.uk" })[0]?.name).toBe("sparkle.co.uk")
+    expect(candidates({ name: "sparkle.co.uk" })[0]?.stem).toBe("sparkle")
   })
 
   it("marks digits and length down", () => {
     const [top] = candidates({ name: "Clean 4 U" })
-    expect(top?.score).toBe(40 + 30 - 20)
+    expect(top?.score).toBe(40 - 20)
   })
 })

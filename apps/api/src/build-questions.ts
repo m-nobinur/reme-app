@@ -1,4 +1,5 @@
 import {
+  ADDRESS_ASK,
   BuildQuestions,
   ErrorEnvelope,
   FactValue,
@@ -18,7 +19,10 @@ import {
   currentFact,
   failureCode,
   type OrgScopedDb,
+  openTask,
+  putOff,
   type SQL,
+  setStep,
   sql,
   supersedeFact,
   type Tenancy,
@@ -224,6 +228,39 @@ async function stateOffer(
   })
 }
 
+/** How long a Not now holds the address question back. */
+const ADDRESS_LATER_DAYS = 7
+
+/**
+ * The owner's answer to "Do you already have a web address?" on the address
+ * task. A Yes changes nothing here: the card's reply carries the name into a
+ * normal turn, which connects it. A No means finding out is over and a name
+ * is next; Not now puts the task off. Both close the page that asks for the
+ * name, which the owner will not see. The stack as stored.
+ */
+async function answerAddress(
+  db: OrgScopedDb,
+  orgId: string,
+  held: Held,
+  question: BuildQuestions["questions"][number],
+  value: unknown
+): Promise<BuildQuestions> {
+  const [ask, name] = held.stack.questions
+  if (question.id !== ask?.id || value === ADDRESS_ASK.yes) return held.stack
+  const task = await openTask(db, orgId, "address")
+  if (value === ADDRESS_ASK.no) {
+    await setStep(db, task, "find_out", { state: "done" })
+    await setStep(db, task, "choose", {
+      state: "blocked",
+      blocked_on: "owner_action",
+      note: "Picking a name",
+    })
+  } else {
+    await putOff(db, task, ADDRESS_LATER_DAYS)
+  }
+  return name ? settle(db, held, name.id, { kind: "closed" }) : held.stack
+}
+
 const questionNotFound = () =>
   failure(404, {
     class: "resource",
@@ -309,7 +346,16 @@ export async function answerQuestions(
     if (offered?.field && !offered.answer && answer.kind === "value") {
       await stateOffer(db, owner, offered.field, answer.value)
     }
-    return settle(db, locked, questionId, settled)
+    const stored = await settle(db, locked, questionId, settled)
+    return locked.stack.kind === "address" && offered && answer.kind === "value"
+      ? answerAddress(
+          db,
+          owner.orgId,
+          { ...locked, stack: stored },
+          offered,
+          answer.value
+        )
+      : stored
   })
   if (!stack) return questionNotFound()
   await startOffer(env, kit, owner, messageId, stack)

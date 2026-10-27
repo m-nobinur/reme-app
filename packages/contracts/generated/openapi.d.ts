@@ -16,6 +16,7 @@ export interface components {
           | "website"
           | "golive"
           | "change"
+          | "address"
           | "domain"
           | "purchase"
           | "google"
@@ -35,6 +36,9 @@ export interface components {
             done: number
             total: number
           }
+          note?: string
+          /** Format: date-time */
+          at?: string
         }[]
         /** Format: date-time */
         at: string
@@ -44,6 +48,7 @@ export interface components {
           business?: string
           host?: string
           domain?: string
+          provider?: string
           change?: string
         }
         step?: string
@@ -53,6 +58,10 @@ export interface components {
         restarted?: true
         /** Format: date-time */
         synced_at?: string
+        numbers?: {
+          clicks: number
+          impressions: number
+        }
       }[]
       now: {
         id: string
@@ -62,6 +71,7 @@ export interface components {
           | "website"
           | "golive"
           | "change"
+          | "address"
           | "domain"
           | "purchase"
           | "google"
@@ -81,6 +91,9 @@ export interface components {
             done: number
             total: number
           }
+          note?: string
+          /** Format: date-time */
+          at?: string
         }[]
         /** Format: date-time */
         at: string
@@ -90,6 +103,7 @@ export interface components {
           business?: string
           host?: string
           domain?: string
+          provider?: string
           change?: string
         }
         step?: string
@@ -99,6 +113,10 @@ export interface components {
         restarted?: true
         /** Format: date-time */
         synced_at?: string
+        numbers?: {
+          clicks: number
+          impressions: number
+        }
       }[]
       waiting: {
         id: string
@@ -108,6 +126,7 @@ export interface components {
           | "website"
           | "golive"
           | "change"
+          | "address"
           | "domain"
           | "purchase"
           | "google"
@@ -127,6 +146,9 @@ export interface components {
             done: number
             total: number
           }
+          note?: string
+          /** Format: date-time */
+          at?: string
         }[]
         /** Format: date-time */
         at: string
@@ -136,6 +158,7 @@ export interface components {
           business?: string
           host?: string
           domain?: string
+          provider?: string
           change?: string
         }
         step?: string
@@ -145,6 +168,10 @@ export interface components {
         restarted?: true
         /** Format: date-time */
         synced_at?: string
+        numbers?: {
+          clicks: number
+          impressions: number
+        }
       }[]
       upcoming: {
         id: string
@@ -154,6 +181,7 @@ export interface components {
           | "website"
           | "golive"
           | "change"
+          | "address"
           | "domain"
           | "purchase"
           | "google"
@@ -173,6 +201,9 @@ export interface components {
             done: number
             total: number
           }
+          note?: string
+          /** Format: date-time */
+          at?: string
         }[]
         /** Format: date-time */
         at: string
@@ -182,6 +213,7 @@ export interface components {
           business?: string
           host?: string
           domain?: string
+          provider?: string
           change?: string
         }
         step?: string
@@ -191,6 +223,10 @@ export interface components {
         restarted?: true
         /** Format: date-time */
         synced_at?: string
+        numbers?: {
+          clicks: number
+          impressions: number
+        }
       }[]
       done: {
         id: string
@@ -200,6 +236,7 @@ export interface components {
           | "website"
           | "golive"
           | "change"
+          | "address"
           | "domain"
           | "purchase"
           | "google"
@@ -219,6 +256,9 @@ export interface components {
             done: number
             total: number
           }
+          note?: string
+          /** Format: date-time */
+          at?: string
         }[]
         /** Format: date-time */
         at: string
@@ -228,6 +268,7 @@ export interface components {
           business?: string
           host?: string
           domain?: string
+          provider?: string
           change?: string
         }
         step?: string
@@ -237,6 +278,10 @@ export interface components {
         restarted?: true
         /** Format: date-time */
         synced_at?: string
+        numbers?: {
+          clicks: number
+          impressions: number
+        }
       }[]
       standing?: {
         id: string
@@ -246,6 +291,7 @@ export interface components {
           | "website"
           | "golive"
           | "change"
+          | "address"
           | "domain"
           | "purchase"
           | "google"
@@ -265,6 +311,9 @@ export interface components {
             done: number
             total: number
           }
+          note?: string
+          /** Format: date-time */
+          at?: string
         }[]
         /** Format: date-time */
         at: string
@@ -274,6 +323,7 @@ export interface components {
           business?: string
           host?: string
           domain?: string
+          provider?: string
           change?: string
         }
         step?: string
@@ -283,6 +333,10 @@ export interface components {
         restarted?: true
         /** Format: date-time */
         synced_at?: string
+        numbers?: {
+          clicks: number
+          impressions: number
+        }
       }[]
     }
     ActivityFeed: {
@@ -3150,72 +3204,177 @@ export interface components {
         purpose: string
       }[]
     }
+    BoughtElsewhereOutput:
+      | {
+          /** @constant */
+          outcome: "connecting"
+          /** @enum {string} */
+          method: "domain_connect" | "records"
+          email_affected: boolean
+          steps?: {
+            /** @enum {string} */
+            type: "A" | "AAAA" | "ALIAS" | "CAA" | "CNAME" | "TXT"
+            name: string
+            value: string
+          }[]
+          /** @enum {string} */
+          apex?: "alias" | "forward"
+          provider?: {
+            name: string
+            settings_url?: string
+          }
+        }
+      | {
+          /** @constant */
+          outcome: "refused"
+          error: {
+            /** @enum {string} */
+            class:
+              | "validation"
+              | "permission"
+              | "transient"
+              | "resource"
+              | "provider"
+              | "integrity"
+              | "security"
+              | "budgetary"
+            code: string
+            message: string
+          }
+        }
+      | {
+          /** @constant */
+          outcome: "not_registered_yet"
+          name: string
+        }
     BuildQuestionsPart: {
       /** @constant */
       type: "data-build_questions"
-      data: {
-        /** @enum {string} */
-        kind: "build" | "offer"
-        /** Format: uuid */
-        assignment_id: string
-        questions: {
-          /** Format: uuid */
-          id: string
-          text: string
-          input:
-            | {
-                /** @constant */
-                kind: "fact"
-                /** @enum {string} */
-                key:
-                  | "business.name"
-                  | "business.phone"
-                  | "business.email"
-                  | "hours.weekday"
-                  | "service_area.radius"
-                  | "business.tagline"
-                  | "business.offerings"
-                  | "business.audience"
-                  | "business.overview"
-                  | "business.proof"
-                  | "business.disclaimer"
-                  | "service_area.text"
-                  | "assistant.name"
-                  | "owner.preferred_name"
-              }
-            | {
-                /** @constant */
-                kind: "choice"
-                options: string[]
-              }
-            | {
-                /** @constant */
-                kind: "text"
-                maxLength: number
-                email: boolean
-              }
-          skippable: boolean
-          answer?:
-            | {
-                /** @constant */
-                kind: "value"
-                value:
-                  | string
-                  | {
-                      [key: string]: unknown
-                    }
-              }
-            | {
-                /** @constant */
-                kind: "skipped"
-              }
-            | {
-                /** @constant */
-                kind: "closed"
-              }
-          field?: string
-        }[]
-      }
+      data:
+        | {
+            /** @enum {string} */
+            kind: "build" | "offer"
+            /** Format: uuid */
+            assignment_id: string
+            questions: {
+              /** Format: uuid */
+              id: string
+              text: string
+              input:
+                | {
+                    /** @constant */
+                    kind: "fact"
+                    /** @enum {string} */
+                    key:
+                      | "business.name"
+                      | "business.phone"
+                      | "business.email"
+                      | "hours.weekday"
+                      | "service_area.radius"
+                      | "business.tagline"
+                      | "business.offerings"
+                      | "business.audience"
+                      | "business.overview"
+                      | "business.proof"
+                      | "business.disclaimer"
+                      | "service_area.text"
+                      | "assistant.name"
+                      | "owner.preferred_name"
+                  }
+                | {
+                    /** @constant */
+                    kind: "choice"
+                    options: string[]
+                  }
+                | {
+                    /** @constant */
+                    kind: "text"
+                    maxLength: number
+                    email: boolean
+                  }
+              skippable: boolean
+              answer?:
+                | {
+                    /** @constant */
+                    kind: "value"
+                    value:
+                      | string
+                      | {
+                          [key: string]: unknown
+                        }
+                  }
+                | {
+                    /** @constant */
+                    kind: "skipped"
+                  }
+                | {
+                    /** @constant */
+                    kind: "closed"
+                  }
+              field?: string
+            }[]
+          }
+        | {
+            /** @constant */
+            kind: "address"
+            questions: {
+              /** Format: uuid */
+              id: string
+              text: string
+              input:
+                | {
+                    /** @constant */
+                    kind: "fact"
+                    /** @enum {string} */
+                    key:
+                      | "business.name"
+                      | "business.phone"
+                      | "business.email"
+                      | "hours.weekday"
+                      | "service_area.radius"
+                      | "business.tagline"
+                      | "business.offerings"
+                      | "business.audience"
+                      | "business.overview"
+                      | "business.proof"
+                      | "business.disclaimer"
+                      | "service_area.text"
+                      | "assistant.name"
+                      | "owner.preferred_name"
+                  }
+                | {
+                    /** @constant */
+                    kind: "choice"
+                    options: string[]
+                  }
+                | {
+                    /** @constant */
+                    kind: "text"
+                    maxLength: number
+                    email: boolean
+                  }
+              skippable: boolean
+              answer?:
+                | {
+                    /** @constant */
+                    kind: "value"
+                    value:
+                      | string
+                      | {
+                          [key: string]: unknown
+                        }
+                  }
+                | {
+                    /** @constant */
+                    kind: "skipped"
+                  }
+                | {
+                    /** @constant */
+                    kind: "closed"
+                  }
+              field?: string
+            }[]
+          }
     }
     BuildSummary: {
       /** Format: uuid */
@@ -3902,32 +4061,44 @@ export interface components {
     }
     BuyDomainInput: {
       name: string
-      registrant: {
-        /** @description The owner's full legal name, first and last. */
-        name: string
-        /** @description The business's registered or trading name. */
-        business_name?: string
-        /** Format: email */
-        email: string
-        phone: string
-        address: {
-          street: string
-          city: string
-          state?: string
-          postal_code: string
-          /** @description ISO 3166-1 alpha-2, such as GB. */
-          country_code: string
-        }
-      }
-      /**
-       * @description Required for .co.uk and .uk: STRA sole trader, LTD limited company, LLP, PTNR partnership, IND individual.
-       * @enum {string}
-       */
-      registrant_type?: "STRA" | "LTD" | "LLP" | "PTNR" | "IND"
-      /** @description The Companies House number, required with LTD and LLP. */
-      company_number?: string
     }
     BuyDomainOutput:
+      | {
+          /** @constant */
+          outcome: "details"
+          name: string
+          price_gbp_year: number
+          registrant: {
+            /** @description The owner's full legal name, first and last. */
+            name?: string
+            /** @description The business's registered or trading name. */
+            business_name?: string
+            /** Format: email */
+            email?: string
+            phone?: string
+            address?: {
+              street?: string
+              city?: string
+              state?: string
+              postal_code?: string
+              /** @description ISO 3166-1 alpha-2, such as GB. */
+              country_code?: string
+            }
+          }
+          missing: (
+            | "name"
+            | "business_name"
+            | "email"
+            | "phone"
+            | "street"
+            | "city"
+            | "state"
+            | "postal_code"
+            | "country_code"
+            | "registrant_type"
+            | "company_number"
+          )[]
+        }
       | {
           /** @constant */
           outcome: "awaiting_payment"
@@ -5237,6 +5408,9 @@ export interface components {
         | "get_search_performance"
         | "get_indexing"
         | "remember"
+        | "put_off"
+        | "inspect_domain"
+        | "domain_bought"
       )[]
       text: string
       reserved_usd: number
@@ -5637,6 +5811,9 @@ export interface components {
           | "get_search_performance"
           | "get_indexing"
           | "remember"
+          | "put_off"
+          | "inspect_domain"
+          | "domain_bought"
         description: string
         input_schema: {
           [key: string]: unknown
@@ -5848,6 +6025,98 @@ export interface components {
                   )
                 | null
             }[]
+            tasks?: (
+              | {
+                  /** Format: uuid */
+                  id: string
+                  /** @enum {string} */
+                  state: "active" | "done" | "declined" | "later"
+                  later_until: string | null
+                  /** Format: date-time */
+                  created_at: string
+                  done_at: string | null
+                  /** @constant */
+                  kind: "address"
+                  detail: {
+                    name?: string
+                    provider?: string
+                    changes?: number
+                    registrar?: string
+                    /** @enum {string} */
+                    origin?: "owned" | "buying_elsewhere" | "purchased"
+                    ending?: string
+                  }
+                  steps: {
+                    /** @enum {string} */
+                    step:
+                      | "find_out"
+                      | "choose"
+                      | "purchase"
+                      | "records"
+                      | "ownership"
+                      | "certificate"
+                      | "loads"
+                    /** @enum {string} */
+                    state:
+                      | "pending"
+                      | "in_progress"
+                      | "blocked"
+                      | "done"
+                      | "skipped"
+                    note: string | null
+                    blocked_on:
+                      | (
+                          | "approval"
+                          | "owner_action"
+                          | "purchase"
+                          | "permission"
+                        )
+                      | null
+                    deadline: string | null
+                    changed_at: string | null
+                  }[]
+                }
+              | {
+                  /** Format: uuid */
+                  id: string
+                  /** @enum {string} */
+                  state: "active" | "done" | "declined" | "later"
+                  later_until: string | null
+                  /** Format: date-time */
+                  created_at: string
+                  done_at: string | null
+                  /** @constant */
+                  kind: "google"
+                  detail: Record<string, never>
+                  steps: {
+                    /** @enum {string} */
+                    step:
+                      | "sign_in"
+                      | "permissions"
+                      | "verify"
+                      | "sitemap"
+                      | "first_data"
+                    /** @enum {string} */
+                    state:
+                      | "pending"
+                      | "in_progress"
+                      | "blocked"
+                      | "done"
+                      | "skipped"
+                    note: string | null
+                    blocked_on:
+                      | (
+                          | "approval"
+                          | "owner_action"
+                          | "purchase"
+                          | "permission"
+                        )
+                      | null
+                    deadline: string | null
+                    changed_at: string | null
+                  }[]
+                }
+            )[]
             expected_seconds?: {
               full: {
                 p50: number
@@ -7217,6 +7486,66 @@ export interface components {
           /** @constant */
           tool: "find_domain"
           output:
+            | (
+                | {
+                    /** @constant */
+                    outcome: "found"
+                    rows: {
+                      stem: string
+                      why: string
+                      endings: {
+                        "co.uk"?:
+                          | {
+                              /** @constant */
+                              state: "free"
+                              price_gbp_year: number
+                            }
+                          | {
+                              /** @constant */
+                              state: "taken"
+                            }
+                        com?:
+                          | {
+                              /** @constant */
+                              state: "free"
+                              price_gbp_year: number
+                            }
+                          | {
+                              /** @constant */
+                              state: "taken"
+                            }
+                        uk?:
+                          | {
+                              /** @constant */
+                              state: "free"
+                              price_gbp_year: number
+                            }
+                          | {
+                              /** @constant */
+                              state: "taken"
+                            }
+                      }
+                    }[]
+                  }
+                | {
+                    /** @constant */
+                    outcome: "refused"
+                    error: {
+                      /** @enum {string} */
+                      class:
+                        | "validation"
+                        | "permission"
+                        | "transient"
+                        | "resource"
+                        | "provider"
+                        | "integrity"
+                        | "security"
+                        | "budgetary"
+                      code: string
+                      message: string
+                    }
+                  }
+              )
             | {
                 /** @constant */
                 outcome: "found"
@@ -7231,24 +7560,6 @@ export interface components {
                   why: string
                 }[]
               }
-            | {
-                /** @constant */
-                outcome: "refused"
-                error: {
-                  /** @enum {string} */
-                  class:
-                    | "validation"
-                    | "permission"
-                    | "transient"
-                    | "resource"
-                    | "provider"
-                    | "integrity"
-                    | "security"
-                    | "budgetary"
-                  code: string
-                  message: string
-                }
-              }
         }
       | {
           turn_id: string
@@ -7256,6 +7567,42 @@ export interface components {
           /** @constant */
           tool: "buy_domain"
           output:
+            | {
+                /** @constant */
+                outcome: "details"
+                name: string
+                price_gbp_year: number
+                registrant: {
+                  /** @description The owner's full legal name, first and last. */
+                  name?: string
+                  /** @description The business's registered or trading name. */
+                  business_name?: string
+                  /** Format: email */
+                  email?: string
+                  phone?: string
+                  address?: {
+                    street?: string
+                    city?: string
+                    state?: string
+                    postal_code?: string
+                    /** @description ISO 3166-1 alpha-2, such as GB. */
+                    country_code?: string
+                  }
+                }
+                missing: (
+                  | "name"
+                  | "business_name"
+                  | "email"
+                  | "phone"
+                  | "street"
+                  | "city"
+                  | "state"
+                  | "postal_code"
+                  | "country_code"
+                  | "registrant_type"
+                  | "company_number"
+                )[]
+              }
             | {
                 /** @constant */
                 outcome: "awaiting_payment"
@@ -7473,6 +7820,123 @@ export interface components {
                 }
               }
         }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "put_off"
+          output:
+            | {
+                /** @constant */
+                outcome: "put_off"
+                /** Format: date-time */
+                until: string
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                }
+              }
+        }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "inspect_domain"
+          output:
+            | {
+                /** @constant */
+                outcome: "inspected"
+                name: string
+                registered: boolean
+                registrar?: string
+                dns_host?: {
+                  name: string
+                  settings_url?: string
+                }
+                in_use: boolean
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                }
+              }
+        }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "domain_bought"
+          output:
+            | {
+                /** @constant */
+                outcome: "connecting"
+                /** @enum {string} */
+                method: "domain_connect" | "records"
+                email_affected: boolean
+                steps?: {
+                  /** @enum {string} */
+                  type: "A" | "AAAA" | "ALIAS" | "CAA" | "CNAME" | "TXT"
+                  name: string
+                  value: string
+                }[]
+                /** @enum {string} */
+                apex?: "alias" | "forward"
+                provider?: {
+                  name: string
+                  settings_url?: string
+                }
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                }
+              }
+            | {
+                /** @constant */
+                outcome: "not_registered_yet"
+                name: string
+              }
+        }
     CosToolStarted: {
       tool_call_id: string
       approval_id: string
@@ -7510,6 +7974,9 @@ export interface components {
             | "get_search_performance"
             | "get_indexing"
             | "remember"
+            | "put_off"
+            | "inspect_domain"
+            | "domain_bought"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -7544,6 +8011,9 @@ export interface components {
             | "get_search_performance"
             | "get_indexing"
             | "remember"
+            | "put_off"
+            | "inspect_domain"
+            | "domain_bought"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -7576,6 +8046,9 @@ export interface components {
             | "get_search_performance"
             | "get_indexing"
             | "remember"
+            | "put_off"
+            | "inspect_domain"
+            | "domain_bought"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -7608,6 +8081,9 @@ export interface components {
             | "get_search_performance"
             | "get_indexing"
             | "remember"
+            | "put_off"
+            | "inspect_domain"
+            | "domain_bought"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -7640,6 +8116,9 @@ export interface components {
             | "get_search_performance"
             | "get_indexing"
             | "remember"
+            | "put_off"
+            | "inspect_domain"
+            | "domain_bought"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -7827,6 +8306,78 @@ export interface components {
             )
           | null
       }[]
+      tasks?: (
+        | {
+            /** Format: uuid */
+            id: string
+            /** @enum {string} */
+            state: "active" | "done" | "declined" | "later"
+            later_until: string | null
+            /** Format: date-time */
+            created_at: string
+            done_at: string | null
+            /** @constant */
+            kind: "address"
+            detail: {
+              name?: string
+              provider?: string
+              changes?: number
+              registrar?: string
+              /** @enum {string} */
+              origin?: "owned" | "buying_elsewhere" | "purchased"
+              ending?: string
+            }
+            steps: {
+              /** @enum {string} */
+              step:
+                | "find_out"
+                | "choose"
+                | "purchase"
+                | "records"
+                | "ownership"
+                | "certificate"
+                | "loads"
+              /** @enum {string} */
+              state: "pending" | "in_progress" | "blocked" | "done" | "skipped"
+              note: string | null
+              blocked_on:
+                | ("approval" | "owner_action" | "purchase" | "permission")
+                | null
+              deadline: string | null
+              changed_at: string | null
+            }[]
+          }
+        | {
+            /** Format: uuid */
+            id: string
+            /** @enum {string} */
+            state: "active" | "done" | "declined" | "later"
+            later_until: string | null
+            /** Format: date-time */
+            created_at: string
+            done_at: string | null
+            /** @constant */
+            kind: "google"
+            detail: Record<string, never>
+            steps: {
+              /** @enum {string} */
+              step:
+                | "sign_in"
+                | "permissions"
+                | "verify"
+                | "sitemap"
+                | "first_data"
+              /** @enum {string} */
+              state: "pending" | "in_progress" | "blocked" | "done" | "skipped"
+              note: string | null
+              blocked_on:
+                | ("approval" | "owner_action" | "purchase" | "permission")
+                | null
+              deadline: string | null
+              changed_at: string | null
+            }[]
+          }
+      )[]
       expected_seconds?: {
         full: {
           p50: number
@@ -8081,6 +8632,9 @@ export interface components {
       name: string
       value: string
     }
+    DomainBoughtInput: {
+      name: string
+    }
     DomainCheck:
       | {
           /** @constant */
@@ -8224,6 +8778,40 @@ export interface components {
         | "unavailable"
         | "expired"
     }
+    DomainRegistrantPrefill: {
+      name: string
+      price_gbp_year: number
+      registrant: {
+        /** @description The owner's full legal name, first and last. */
+        name?: string
+        /** @description The business's registered or trading name. */
+        business_name?: string
+        /** Format: email */
+        email?: string
+        phone?: string
+        address?: {
+          street?: string
+          city?: string
+          state?: string
+          postal_code?: string
+          /** @description ISO 3166-1 alpha-2, such as GB. */
+          country_code?: string
+        }
+      }
+      missing: (
+        | "name"
+        | "business_name"
+        | "email"
+        | "phone"
+        | "street"
+        | "city"
+        | "state"
+        | "postal_code"
+        | "country_code"
+        | "registrant_type"
+        | "company_number"
+      )[]
+    }
     DomainRegistration: {
       sandbox: boolean
       status?: string
@@ -8241,6 +8829,42 @@ export interface components {
       expires_at?: string
       /** @enum {string} */
       registrant_type?: "STRA" | "LTD" | "LLP" | "PTNR" | "IND"
+    }
+    DomainStemOffer: {
+      stem: string
+      why: string
+      endings: {
+        "co.uk"?:
+          | {
+              /** @constant */
+              state: "free"
+              price_gbp_year: number
+            }
+          | {
+              /** @constant */
+              state: "taken"
+            }
+        com?:
+          | {
+              /** @constant */
+              state: "free"
+              price_gbp_year: number
+            }
+          | {
+              /** @constant */
+              state: "taken"
+            }
+        uk?:
+          | {
+              /** @constant */
+              state: "free"
+              price_gbp_year: number
+            }
+          | {
+              /** @constant */
+              state: "taken"
+            }
+      }
     }
     DomainStripe: {
       customer: string
@@ -8788,6 +9412,66 @@ export interface components {
       query?: string
     }
     FindDomainOutput:
+      | (
+          | {
+              /** @constant */
+              outcome: "found"
+              rows: {
+                stem: string
+                why: string
+                endings: {
+                  "co.uk"?:
+                    | {
+                        /** @constant */
+                        state: "free"
+                        price_gbp_year: number
+                      }
+                    | {
+                        /** @constant */
+                        state: "taken"
+                      }
+                  com?:
+                    | {
+                        /** @constant */
+                        state: "free"
+                        price_gbp_year: number
+                      }
+                    | {
+                        /** @constant */
+                        state: "taken"
+                      }
+                  uk?:
+                    | {
+                        /** @constant */
+                        state: "free"
+                        price_gbp_year: number
+                      }
+                    | {
+                        /** @constant */
+                        state: "taken"
+                      }
+                }
+              }[]
+            }
+          | {
+              /** @constant */
+              outcome: "refused"
+              error: {
+                /** @enum {string} */
+                class:
+                  | "validation"
+                  | "permission"
+                  | "transient"
+                  | "resource"
+                  | "provider"
+                  | "integrity"
+                  | "security"
+                  | "budgetary"
+                code: string
+                message: string
+              }
+            }
+        )
       | {
           /** @constant */
           outcome: "found"
@@ -8801,24 +9485,6 @@ export interface components {
             price_gbp_year: number
             why: string
           }[]
-        }
-      | {
-          /** @constant */
-          outcome: "refused"
-          error: {
-            /** @enum {string} */
-            class:
-              | "validation"
-              | "permission"
-              | "transient"
-              | "resource"
-              | "provider"
-              | "integrity"
-              | "security"
-              | "budgetary"
-            code: string
-            message: string
-          }
         }
     FontPair: {
       /** @enum {string} */
@@ -9100,6 +9766,40 @@ export interface components {
       requested_at: string
       expires_at: string | null
     }
+    InspectDomainInput: {
+      name: string
+    }
+    InspectDomainOutput:
+      | {
+          /** @constant */
+          outcome: "inspected"
+          name: string
+          registered: boolean
+          registrar?: string
+          dns_host?: {
+            name: string
+            settings_url?: string
+          }
+          in_use: boolean
+        }
+      | {
+          /** @constant */
+          outcome: "refused"
+          error: {
+            /** @enum {string} */
+            class:
+              | "validation"
+              | "permission"
+              | "transient"
+              | "resource"
+              | "provider"
+              | "integrity"
+              | "security"
+              | "budgetary"
+            code: string
+            message: string
+          }
+        }
     JobRun: {
       /** Format: uuid */
       job_id: string
@@ -9577,6 +10277,36 @@ export interface components {
       /** Format: uuid */
       id: string
     }
+    PutOffInput: {
+      /** @enum {string} */
+      kind: "address" | "google"
+      days?: number
+    }
+    PutOffOutput:
+      | {
+          /** @constant */
+          outcome: "put_off"
+          /** Format: date-time */
+          until: string
+        }
+      | {
+          /** @constant */
+          outcome: "refused"
+          error: {
+            /** @enum {string} */
+            class:
+              | "validation"
+              | "permission"
+              | "transient"
+              | "resource"
+              | "provider"
+              | "integrity"
+              | "security"
+              | "budgetary"
+            code: string
+            message: string
+          }
+        }
     QuestionReply: {
       message_id: string
       /** Format: uuid */
@@ -10626,7 +11356,7 @@ export interface components {
     }
     SearchConnection: {
       /** @enum {string} */
-      state: "active" | "needs_reauth" | "revoked"
+      state: "active" | "needs_reauth" | "revoked" | "needs_permission"
       google_email: string | null
       connected_at: string | null
     }
@@ -10667,6 +11397,17 @@ export interface components {
             }
           | {
               /** @constant */
+              kind: "pay"
+              name: string
+            }
+          | {
+              /** @constant */
+              kind: "connect"
+              /** @constant */
+              service: "google"
+            }
+          | {
+              /** @constant */
               kind: "open"
               url: string
             }
@@ -10685,73 +11426,146 @@ export interface components {
             }
           | {
               /** @constant */
+              kind: "pay"
+              name: string
+            }
+          | {
+              /** @constant */
+              kind: "connect"
+              /** @constant */
+              service: "google"
+            }
+          | {
+              /** @constant */
               kind: "open"
               url: string
             }
       }
-      questions?: {
-        /** @enum {string} */
-        kind: "build" | "offer"
-        /** Format: uuid */
-        assignment_id: string
-        questions: {
-          /** Format: uuid */
-          id: string
-          text: string
-          input:
-            | {
-                /** @constant */
-                kind: "fact"
-                /** @enum {string} */
-                key:
-                  | "business.name"
-                  | "business.phone"
-                  | "business.email"
-                  | "hours.weekday"
-                  | "service_area.radius"
-                  | "business.tagline"
-                  | "business.offerings"
-                  | "business.audience"
-                  | "business.overview"
-                  | "business.proof"
-                  | "business.disclaimer"
-                  | "service_area.text"
-                  | "assistant.name"
-                  | "owner.preferred_name"
-              }
-            | {
-                /** @constant */
-                kind: "choice"
-                options: string[]
-              }
-            | {
-                /** @constant */
-                kind: "text"
-                maxLength: number
-                email: boolean
-              }
-          skippable: boolean
-          answer?:
-            | {
-                /** @constant */
-                kind: "value"
-                value:
-                  | string
-                  | {
-                      [key: string]: unknown
-                    }
-              }
-            | {
-                /** @constant */
-                kind: "skipped"
-              }
-            | {
-                /** @constant */
-                kind: "closed"
-              }
-          field?: string
-        }[]
-      }
+      questions?:
+        | {
+            /** @enum {string} */
+            kind: "build" | "offer"
+            /** Format: uuid */
+            assignment_id: string
+            questions: {
+              /** Format: uuid */
+              id: string
+              text: string
+              input:
+                | {
+                    /** @constant */
+                    kind: "fact"
+                    /** @enum {string} */
+                    key:
+                      | "business.name"
+                      | "business.phone"
+                      | "business.email"
+                      | "hours.weekday"
+                      | "service_area.radius"
+                      | "business.tagline"
+                      | "business.offerings"
+                      | "business.audience"
+                      | "business.overview"
+                      | "business.proof"
+                      | "business.disclaimer"
+                      | "service_area.text"
+                      | "assistant.name"
+                      | "owner.preferred_name"
+                  }
+                | {
+                    /** @constant */
+                    kind: "choice"
+                    options: string[]
+                  }
+                | {
+                    /** @constant */
+                    kind: "text"
+                    maxLength: number
+                    email: boolean
+                  }
+              skippable: boolean
+              answer?:
+                | {
+                    /** @constant */
+                    kind: "value"
+                    value:
+                      | string
+                      | {
+                          [key: string]: unknown
+                        }
+                  }
+                | {
+                    /** @constant */
+                    kind: "skipped"
+                  }
+                | {
+                    /** @constant */
+                    kind: "closed"
+                  }
+              field?: string
+            }[]
+          }
+        | {
+            /** @constant */
+            kind: "address"
+            questions: {
+              /** Format: uuid */
+              id: string
+              text: string
+              input:
+                | {
+                    /** @constant */
+                    kind: "fact"
+                    /** @enum {string} */
+                    key:
+                      | "business.name"
+                      | "business.phone"
+                      | "business.email"
+                      | "hours.weekday"
+                      | "service_area.radius"
+                      | "business.tagline"
+                      | "business.offerings"
+                      | "business.audience"
+                      | "business.overview"
+                      | "business.proof"
+                      | "business.disclaimer"
+                      | "service_area.text"
+                      | "assistant.name"
+                      | "owner.preferred_name"
+                  }
+                | {
+                    /** @constant */
+                    kind: "choice"
+                    options: string[]
+                  }
+                | {
+                    /** @constant */
+                    kind: "text"
+                    maxLength: number
+                    email: boolean
+                  }
+              skippable: boolean
+              answer?:
+                | {
+                    /** @constant */
+                    kind: "value"
+                    value:
+                      | string
+                      | {
+                          [key: string]: unknown
+                        }
+                  }
+                | {
+                    /** @constant */
+                    kind: "skipped"
+                  }
+                | {
+                    /** @constant */
+                    kind: "closed"
+                  }
+              field?: string
+            }[]
+          }
     }
     SetFactsRequest: {
       facts: (
@@ -12251,6 +13065,7 @@ export interface components {
             | "website"
             | "golive"
             | "change"
+            | "address"
             | "domain"
             | "purchase"
             | "google"
@@ -12270,6 +13085,9 @@ export interface components {
               done: number
               total: number
             }
+            note?: string
+            /** Format: date-time */
+            at?: string
           }[]
           /** Format: date-time */
           at: string
@@ -12279,6 +13097,7 @@ export interface components {
             business?: string
             host?: string
             domain?: string
+            provider?: string
             change?: string
           }
           step?: string
@@ -12288,6 +13107,10 @@ export interface components {
           restarted?: true
           /** Format: date-time */
           synced_at?: string
+          numbers?: {
+            clicks: number
+            impressions: number
+          }
         }[]
         now: {
           id: string
@@ -12297,6 +13120,7 @@ export interface components {
             | "website"
             | "golive"
             | "change"
+            | "address"
             | "domain"
             | "purchase"
             | "google"
@@ -12316,6 +13140,9 @@ export interface components {
               done: number
               total: number
             }
+            note?: string
+            /** Format: date-time */
+            at?: string
           }[]
           /** Format: date-time */
           at: string
@@ -12325,6 +13152,7 @@ export interface components {
             business?: string
             host?: string
             domain?: string
+            provider?: string
             change?: string
           }
           step?: string
@@ -12334,6 +13162,10 @@ export interface components {
           restarted?: true
           /** Format: date-time */
           synced_at?: string
+          numbers?: {
+            clicks: number
+            impressions: number
+          }
         }[]
         waiting: {
           id: string
@@ -12343,6 +13175,7 @@ export interface components {
             | "website"
             | "golive"
             | "change"
+            | "address"
             | "domain"
             | "purchase"
             | "google"
@@ -12362,6 +13195,9 @@ export interface components {
               done: number
               total: number
             }
+            note?: string
+            /** Format: date-time */
+            at?: string
           }[]
           /** Format: date-time */
           at: string
@@ -12371,6 +13207,7 @@ export interface components {
             business?: string
             host?: string
             domain?: string
+            provider?: string
             change?: string
           }
           step?: string
@@ -12380,6 +13217,10 @@ export interface components {
           restarted?: true
           /** Format: date-time */
           synced_at?: string
+          numbers?: {
+            clicks: number
+            impressions: number
+          }
         }[]
         upcoming: {
           id: string
@@ -12389,6 +13230,7 @@ export interface components {
             | "website"
             | "golive"
             | "change"
+            | "address"
             | "domain"
             | "purchase"
             | "google"
@@ -12408,6 +13250,9 @@ export interface components {
               done: number
               total: number
             }
+            note?: string
+            /** Format: date-time */
+            at?: string
           }[]
           /** Format: date-time */
           at: string
@@ -12417,6 +13262,7 @@ export interface components {
             business?: string
             host?: string
             domain?: string
+            provider?: string
             change?: string
           }
           step?: string
@@ -12426,6 +13272,10 @@ export interface components {
           restarted?: true
           /** Format: date-time */
           synced_at?: string
+          numbers?: {
+            clicks: number
+            impressions: number
+          }
         }[]
         done: {
           id: string
@@ -12435,6 +13285,7 @@ export interface components {
             | "website"
             | "golive"
             | "change"
+            | "address"
             | "domain"
             | "purchase"
             | "google"
@@ -12454,6 +13305,9 @@ export interface components {
               done: number
               total: number
             }
+            note?: string
+            /** Format: date-time */
+            at?: string
           }[]
           /** Format: date-time */
           at: string
@@ -12463,6 +13317,7 @@ export interface components {
             business?: string
             host?: string
             domain?: string
+            provider?: string
             change?: string
           }
           step?: string
@@ -12472,6 +13327,10 @@ export interface components {
           restarted?: true
           /** Format: date-time */
           synced_at?: string
+          numbers?: {
+            clicks: number
+            impressions: number
+          }
         }[]
         standing?: {
           id: string
@@ -12481,6 +13340,7 @@ export interface components {
             | "website"
             | "golive"
             | "change"
+            | "address"
             | "domain"
             | "purchase"
             | "google"
@@ -12500,6 +13360,9 @@ export interface components {
               done: number
               total: number
             }
+            note?: string
+            /** Format: date-time */
+            at?: string
           }[]
           /** Format: date-time */
           at: string
@@ -12509,6 +13372,7 @@ export interface components {
             business?: string
             host?: string
             domain?: string
+            provider?: string
             change?: string
           }
           step?: string
@@ -12518,6 +13382,10 @@ export interface components {
           restarted?: true
           /** Format: date-time */
           synced_at?: string
+          numbers?: {
+            clicks: number
+            impressions: number
+          }
         }[]
       }
     }

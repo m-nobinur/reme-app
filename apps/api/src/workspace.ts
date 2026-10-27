@@ -17,10 +17,12 @@ import {
   FactValue,
   FactValueKey,
   InformationRequest,
+  type OwnerTask,
   PLANNED_PAGES,
   SiteFields,
   siteHost,
   siteUrl,
+  TaskKind,
   TERMINAL_STATES,
   thumbnailOf,
   WorkspaceStatus,
@@ -1010,12 +1012,19 @@ export async function statusOf(
   return (await statusWithFacts(db, config, now)).status
 }
 
-/** `statusOf` and the facts it was read from, for a caller that needs both. */
+/**
+ * `statusOf` with the facts it was read from and each kind's latest owner
+ * task in any state, for the assistant's view, which needs all three.
+ */
 export async function statusWithFacts(
   db: OrgScopedDb,
   config: SiteConfig,
   now: Date
-): Promise<{ status: WorkspaceStatus; facts: FactRecord[] }> {
+): Promise<{
+  status: WorkspaceStatus
+  facts: FactRecord[]
+  tasks: OwnerTask[]
+}> {
   // Issued together, so postgres.js pipelines them on the transaction's one
   // connection instead of paying a round trip each.
   const [
@@ -1071,7 +1080,12 @@ export async function statusWithFacts(
       now
     ),
   })
-  return { status, facts: current }
+  // Rows come newest first, so each kind's first is its latest, a finished
+  // one included: the assistant reads the address task's end to time Google.
+  const tasks = TaskKind.options.flatMap(
+    (kind) => rows.tasks.find((t) => t.kind === kind) ?? []
+  )
+  return { status, facts: current, tasks }
 }
 
 export async function readActivity(

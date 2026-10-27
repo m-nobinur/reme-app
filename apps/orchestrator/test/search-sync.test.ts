@@ -8,12 +8,16 @@ import {
   searchSnapshot,
   searchUrlStatus,
   sql,
+  syncTasks,
+  taskSteps,
 } from "@workspace/db"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { sealToken } from "../src/google.ts"
+import { probe } from "../src/probe.ts"
 import { searchInstanceId } from "../src/search.ts"
 import {
   afterPublish,
+  checkGrant,
   disconnectSearch,
   inspectPages,
   isoWeek,
@@ -41,6 +45,8 @@ vi.mock("../src/agents/developer.ts", () => ({ Developer: {} }))
 const url = process.env.DATABASE_URL
 /** A file name the router would serve; public once placed. */
 const VERIFICATION_FILE = "google1a2b.html"
+const BOTH =
+  "openid https://www.googleapis.com/auth/webmasters https://www.googleapis.com/auth/siteverification.verify_only"
 
 type Call = { href: string; method: string; body: string }
 
@@ -52,6 +58,9 @@ function stubFetch(
     pages?: string[]
     /** A property Google answers 403 for, as for one the account lost. */
     refused?: string
+    /** What the refresh answer says the grant carries, and the role `sites.get` gives. */
+    scope?: string
+    level?: string
   } = {}
 ) {
   const calls: Call[] = []
@@ -70,7 +79,11 @@ function stubFetch(
       if (href.endsWith("/token")) {
         return answers.refresh === "revoked"
           ? Response.json({ error: "invalid_grant" }, { status: 400 })
-          : Response.json({ access_token: "ya29.a", expires_in: 3600 })
+          : Response.json({
+              access_token: "ya29.a",
+              expires_in: 3600,
+              scope: answers.scope ?? BOTH,
+            })
       }
       if (href.endsWith("/revoke")) return new Response(null, { status: 200 })
       if (href.includes("api.indexnow.org")) {
@@ -159,6 +172,13 @@ function stubFetch(
             },
           },
         })
+      }
+      if (
+        href.includes("/webmasters/v3/sites/") &&
+        !href.includes("/sitemaps") &&
+        (init?.method ?? "GET") === "GET"
+      ) {
+        return Response.json({ permissionLevel: answers.level ?? "siteOwner" })
       }
       return new Response("not stubbed", { status: 599 })
     })
@@ -605,5 +625,93 @@ describe.skipIf(!url)("disconnecting", () => {
     expect(
       await rows(orgId, (db) => db.select().from(searchConnections))
     ).toEqual([])
+  })
+})
+
+describe.skipIf(!url)("the grant check", () => {
+  /** The sync's probe step, run once with no Workflow around it. */
+  const check = async (env: Env, orgId: string) => {
+    const step = {
+      do: (_name: string, a: unknown, b?: unknown) =>
+        ((typeof a === "function" ? a : b) as () => unknown)(),
+    } as never
+    return probe(step, "permissions", env, { orgId, kind: "google" }, (k) =>
+      checkGrant(env, k, orgId)
+    )
+  }
+  const state = async (orgId: string) => ({
+    connection: (
+      await rows(orgId, (db) => db.select().from(searchConnections))
+    )[0],
+    step: (
+      await rows(orgId, (db) =>
+        db.select().from(taskSteps).where(eq(taskSteps.step, "permissions"))
+      )
+    )[0],
+  })
+
+  it("leaves a healthy grant alone and says nothing", async () => {
+    const { env } = searchEnv()
+    const { orgId } = await connected(env)
+    stubFetch()
+    expect(await check(env, orgId)).toEqual({ healthy: true })
+    expect((await state(orgId)).connection?.state).toBe("active")
+  })
+
+  it.each([
+    ["a removed scope", { scope: "openid" }, "scope"],
+    ["a lost Owner role", { level: "siteFullUser" }, "owner"],
+    ["a refused property", { refused: "h-" }, "owner"],
+  ])(
+    "blocks a step that was done on %s, and says it once",
+    async (_, answers, why) => {
+      const { env } = searchEnv()
+      const { orgId } = await connected(env)
+      await rows(orgId, (db) => syncTasks(db, orgId))
+      expect((await state(orgId)).step?.state).toBe("done")
+      stubFetch(answers)
+      const seen = await check(env, orgId)
+      expect(seen.healthy).toBe(false)
+      expect(seen.say?.text).toContain("one more permission")
+      expect(seen.say?.button).toEqual({
+        label: "Reconnect Google",
+        action: { kind: "connect", service: "google" },
+      })
+      const after = await state(orgId)
+      expect(after.connection?.state).toBe("needs_permission")
+      expect(after.step).toMatchObject({
+        state: "blocked",
+        blockedOn: "permission",
+        note: "Google needs one more permission",
+      })
+      // The audit row names what went, and a later task sync keeps the wait.
+      const [event] = await rows(orgId, (db) =>
+        db
+          .select({ payload: events.payload })
+          .from(events)
+          .where(eq(events.type, "search.needs_permission"))
+      )
+      expect(event).toEqual({ payload: { problem: why } })
+      await rows(orgId, (db) => syncTasks(db, orgId))
+      expect((await state(orgId)).step?.state).toBe("blocked")
+    }
+  )
+
+  it("blocks the step and asks for a new sign-in when Google refuses the token", async () => {
+    const { env } = searchEnv()
+    const { orgId } = await connected(env)
+    await rows(orgId, (db) => syncTasks(db, orgId))
+    stubFetch({ refresh: "revoked" })
+    const seen = await check(env, orgId)
+    expect(seen.healthy).toBe(false)
+    expect(seen.say?.text).toContain("taken away")
+    const after = await state(orgId)
+    expect(after.connection?.state).toBe("needs_reauth")
+    expect(after.step).toMatchObject({
+      state: "blocked",
+      note: "Google needs you to sign in again",
+    })
+    await rows(orgId, (db) => syncTasks(db, orgId))
+    expect((await state(orgId)).step?.state).toBe("blocked")
   })
 })

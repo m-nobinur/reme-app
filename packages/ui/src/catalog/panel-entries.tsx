@@ -1,8 +1,4 @@
-import {
-  ArrowSquareOutIcon,
-  CheckCircleIcon,
-  PulseIcon,
-} from "@phosphor-icons/react"
+import { CheckCircleIcon, PulseIcon } from "@phosphor-icons/react"
 import type {
   ActivitySegment,
   ApprovalTarget,
@@ -21,6 +17,7 @@ import {
   SECTION_ACTION,
   StageDetail,
   StopBuild,
+  UpNext,
   WaitingOnYou,
   YourWebsite,
 } from "@workspace/ui/components/live-panel"
@@ -86,22 +83,6 @@ const PICTURES = {
 
 /** A next step as `apps/web` draws it: an outline button, link or not. */
 const STEP = buttonVariants({ variant: "outline", size: "sm" })
-
-/** A live site's next step, as the panel offers it on Home. */
-const liveSteps = (
-  <NextSteps>
-    <a
-      className={STEP}
-      href="#visit"
-      key="visit"
-      title="brightclean-demo.example.invalid"
-    >
-      Visit your website
-      <span className="sr-only"> (opens in a new tab)</span>
-      <ArrowSquareOutIcon aria-hidden className="text-muted-foreground" />
-    </a>
-  </NextSteps>
-)
 
 /** A read that takes a moment, so the retry's pending state shows. */
 const retry = () => new Promise<void>((done) => setTimeout(done, 400))
@@ -456,15 +437,26 @@ function SamplePanelLine() {
 }
 
 const panelCatalog: Entry[] = [
-  { name: "NextSteps", render: () => liveSteps },
   {
-    name: "NextSteps getting started",
+    name: "NextSteps",
     render: () => (
       <NextSteps>
         <a className={STEP} href="#getting-started" key="continue">
           Continue getting started
         </a>
       </NextSteps>
+    ),
+  },
+  {
+    name: "UpNext",
+    render: () => (
+      <div className="max-w-88">
+        <UpNext text="Your own web address comes next">
+          <a className={STEP} href="#up-next">
+            Use your own domain
+          </a>
+        </UpNext>
+      </div>
     ),
   },
   {
@@ -482,7 +474,7 @@ const panelCatalog: Entry[] = [
           items={[
             {
               id: "golive",
-              text: "Website published at brightclean-demo.example.invalid",
+              text: "Website published",
               at: STARTED,
             },
           ]}
@@ -490,7 +482,6 @@ const panelCatalog: Entry[] = [
           icon={CheckCircleIcon}
           title="Completed"
         />
-        {liveSteps}
       </div>
     ),
   },

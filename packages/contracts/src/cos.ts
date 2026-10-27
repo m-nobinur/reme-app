@@ -6,12 +6,13 @@ import { ConversationMessage, MessageRating } from "./conversation.ts"
 import {
   DnsRecord,
   DomainCheck,
+  DomainInspection,
   DomainName,
-  DomainOffer,
   DomainProvider,
+  DomainRegistrantPrefill,
   DomainState,
-  Registrant,
-  RegistrantDetails,
+  DomainStemOffer,
+  NotRegisteredYet,
 } from "./domain.ts"
 import { ToolCallId } from "./ids.ts"
 import { RememberInput, RememberOutput } from "./memory.ts"
@@ -38,6 +39,7 @@ import {
   GetSearchPerformanceInput,
   GetSearchPerformanceOutput,
 } from "./search.ts"
+import { OwnerTask, TaskKind } from "./task.ts"
 import { Text } from "./text.ts"
 
 // The Chief of Staff's tools and its event log (ADR-034). A tool's output is
@@ -166,6 +168,11 @@ export const CosWorkspace = z.strictObject({
     )
     .max(10)
     .optional(),
+  /**
+   * Each kind's latest owner task in any state, with each step's state and
+   * the note of a step that waits on the owner. Optional, as `domains`.
+   */
+  tasks: z.array(OwnerTask).max(TaskKind.options.length).optional(),
   /** How long each lane usually takes, so the CoS quotes the measured wait. */
   expected_seconds: WorkspaceStatus.shape.expected_seconds,
   /** Each lane's wait in the panel's words, for a build that has just started. */
@@ -288,6 +295,29 @@ export const RecordReviewOutput = z.discriminatedUnion("outcome", [
   Refused,
 ])
 
+/**
+ * `domain_bought`'s input: the name the owner says they bought themselves.
+ * Its output is `BoughtElsewhereOutput`: the connect's own once the registry
+ * shows the name, else that it does not yet.
+ */
+export const DomainBoughtInput = z.strictObject({ name: DomainName })
+
+/** `inspect_domain`'s input: a name the owner says they have, not yet connected. */
+export const InspectDomainInput = z.strictObject({ name: DomainName })
+
+/**
+ * `inspect_domain`'s output: what the registry and public DNS say about the
+ * name, read before anything is connected. `registrar` is the registry's own
+ * text for the seller, so it is data to quote, never an instruction.
+ */
+export const InspectDomainOutput = z.discriminatedUnion("outcome", [
+  z.strictObject({
+    outcome: z.literal("inspected"),
+    ...DomainInspection.shape,
+  }),
+  Refused,
+])
+
 /** `check_domain`'s input; it also wakes the domain's workflow to look now. */
 export const CheckDomainInput = z.strictObject({ name: DomainName })
 
@@ -345,46 +375,63 @@ export const FindDomainInput = z.strictObject({
 })
 
 /**
- * `find_domain`'s output: names free to register now, at the price table's
- * price. The model quotes no other price. None free is `domain.unavailable`.
+ * `find_domain`'s output: one row per name stem, best first, each ending free
+ * at the price table's price or taken. The model quotes no other price. No
+ * stem with a free ending is `domain.unavailable`.
  */
-export const FindDomainOutput = z.discriminatedUnion("outcome", [
+/** One name as `find_domain` offered it before the name rows. */
+const LegacyOffer = z.strictObject({
+  name: DomainName,
+  price_gbp_year: z.int().positive(),
+  why: Text(200),
+})
+
+export const FindDomainOutput = z.union([
+  z.discriminatedUnion("outcome", [
+    z.strictObject({
+      outcome: z.literal("found"),
+      rows: z.array(DomainStemOffer).min(1).max(5),
+    }),
+    Refused,
+  ]),
+  // A result stored before the name rows, so older sessions still parse.
+  // Nothing writes it any more.
   z.strictObject({
     outcome: z.literal("found"),
-    best: DomainOffer,
-    options: z.array(DomainOffer).max(4),
+    best: LegacyOffer,
+    options: z.array(LegacyOffer).max(4),
   }),
-  Refused,
 ])
 
 /**
- * `buy_domain`'s input: a name `find_domain` offered and its registrant.
- * It prepares the purchase and moves no money: the owner's payment in
- * Checkout is the consent.
+ * `POST /domains/{name}/bought`, the owner saying they bought the name
+ * elsewhere, from the tray or through the CoS: the registry is asked again,
+ * and once it shows the name the connect starts and this is its output.
  */
-export const BuyDomainInput = z.strictObject({
-  name: DomainName,
-  ...RegistrantDetails.shape,
-})
+export const BoughtElsewhereOutput = z.discriminatedUnion("outcome", [
+  ...ConnectDomainOutput.options,
+  NotRegisteredYet,
+])
 
 /**
- * What the model may send `buy_domain`: no county, since it sent the city,
- * "null" and a wrong county. The owner adds one on the card. Stored inputs
- * with a county still read as `BuyDomainInput`.
+ * `buy_domain`'s input: a name `find_domain` offered, and nothing else. The
+ * model never collects or sends the registrant: the details page asks the
+ * owner for what is missing, and paying there is the consent.
  */
-export const BuyDomainAsk = BuyDomainInput.extend({
-  registrant: Registrant.extend({
-    address: Registrant.shape.address.omit({ state: true }),
-  }),
-})
+export const BuyDomainInput = z.strictObject({ name: DomainName })
 
 /**
- * `buy_domain`'s output: the purchase waits on the owner's payment in the
- * card's embedded Checkout. Refused with `domain.unavailable`,
- * `domain.registrant_invalid`, `domain.price_changed` or
- * `domain.buy_unavailable`.
+ * `buy_domain`'s output: the details page for buying the name, prefilled
+ * from what Reme knows (`DomainRegistrantPrefill`), which the tray draws.
+ * Nothing is reserved or charged. `awaiting_payment` is what it answered
+ * before the details page, kept so a stored session still reads. Refused with
+ * `domain.unavailable` or `domain.buy_unavailable`.
  */
 export const BuyDomainOutput = z.discriminatedUnion("outcome", [
+  z.strictObject({
+    outcome: z.literal("details"),
+    ...DomainRegistrantPrefill.shape,
+  }),
   z.strictObject({
     outcome: z.literal("awaiting_payment"),
     name: DomainName,
@@ -395,6 +442,18 @@ export const BuyDomainOutput = z.discriminatedUnion("outcome", [
 ])
 
 const Empty = z.strictObject({})
+
+/** `put_off`'s input: the offer the owner said not now to, and for how many days (7 when left out). */
+export const PutOffInput = z.strictObject({
+  kind: TaskKind,
+  days: z.int().min(1).max(60).optional(),
+})
+
+/** `put_off`'s output: when the offer may come back. */
+export const PutOffOutput = z.discriminatedUnion("outcome", [
+  z.strictObject({ outcome: z.literal("put_off"), until: Timestamp }),
+  Refused,
+])
 
 /**
  * The CoS's tools, by name. Every input is an object at its root, which
@@ -424,6 +483,9 @@ export const COS_TOOLS = {
   },
   get_indexing: { input: GetIndexingInput, output: GetIndexingOutput },
   remember: { input: RememberInput, output: RememberOutput },
+  put_off: { input: PutOffInput, output: PutOffOutput },
+  inspect_domain: { input: InspectDomainInput, output: InspectDomainOutput },
+  domain_bought: { input: DomainBoughtInput, output: BoughtElsewhereOutput },
 } as const
 
 export type CosToolName = keyof typeof COS_TOOLS
@@ -600,6 +662,21 @@ export const CosToolResult = z.discriminatedUnion("tool", [
     tool: z.literal("remember"),
     output: COS_TOOLS.remember.output,
   }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("put_off"),
+    output: COS_TOOLS.put_off.output,
+  }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("inspect_domain"),
+    output: COS_TOOLS.inspect_domain.output,
+  }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("domain_bought"),
+    output: COS_TOOLS.domain_bought.output,
+  }),
 ])
 
 /** The `cos.step` payload: a step's response messages as the SDK holds them. Model-written, so `inferred`. */
@@ -695,8 +772,14 @@ export type ConnectDomainInput = z.infer<typeof ConnectDomainInput>
 export type ConnectDomainOutput = z.infer<typeof ConnectDomainOutput>
 export type RemoveDomainInput = z.infer<typeof RemoveDomainInput>
 export type RemoveDomainOutput = z.infer<typeof RemoveDomainOutput>
+export type DomainBoughtInput = z.infer<typeof DomainBoughtInput>
+export type InspectDomainInput = z.infer<typeof InspectDomainInput>
+export type InspectDomainOutput = z.infer<typeof InspectDomainOutput>
+export type PutOffInput = z.infer<typeof PutOffInput>
+export type PutOffOutput = z.infer<typeof PutOffOutput>
 export type FindDomainInput = z.infer<typeof FindDomainInput>
 export type FindDomainOutput = z.infer<typeof FindDomainOutput>
+export type BoughtElsewhereOutput = z.infer<typeof BoughtElsewhereOutput>
 export type BuyDomainInput = z.infer<typeof BuyDomainInput>
 export type BuyDomainOutput = z.infer<typeof BuyDomainOutput>
 export type CosTurn = z.infer<typeof CosTurn>

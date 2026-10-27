@@ -486,12 +486,22 @@ export const samples: Record<ContractName, unknown> = {
     created_at: NOW,
     updated_at: NOW,
   },
-  BuyDomainInput: { name: "brightclean.co.uk", ...REGISTRANT },
-  BuyDomainOutput: {
-    outcome: "awaiting_payment",
+  BoughtElsewhereOutput: {
+    outcome: "not_registered_yet",
     name: "brightclean.co.uk",
-    price_gbp: 8,
-    checkout: "embedded",
+  },
+  BuyDomainInput: { name: "brightclean.co.uk" },
+  BuyDomainOutput: {
+    outcome: "details",
+    name: "brightclean.co.uk",
+    price_gbp_year: 8,
+    registrant: {
+      name: "Jane Smith",
+      business_name: "Bright Clean",
+      email: "jane@brightclean.example",
+      phone: "+447700900123",
+    },
+    missing: ["street", "city", "postal_code", "registrant_type"],
   },
   CapabilityCall: {
     call_id: "8192a3b4-c5d6-4192-a354-8f9001122334",
@@ -780,6 +790,39 @@ export const samples: Record<ContractName, unknown> = {
         last_check: { status: "pending_verification" },
       },
     ],
+    tasks: [
+      {
+        id: ASSIGNMENT,
+        kind: "address",
+        state: "active",
+        later_until: null,
+        detail: {
+          name: "brightclean.example",
+          provider: "123-reg",
+          origin: "owned",
+        },
+        created_at: NOW,
+        done_at: null,
+        steps: [
+          {
+            step: "records",
+            state: "blocked",
+            note: "Two records to add at 123-reg",
+            blocked_on: "owner_action",
+            deadline: LATER,
+            changed_at: NOW,
+          },
+          {
+            step: "loads",
+            state: "pending",
+            note: null,
+            blocked_on: null,
+            deadline: null,
+            changed_at: null,
+          },
+        ],
+      },
+    ],
   },
   CreateOrgRequest: {
     name: "Brightclean Cleaning Co. (fixture)",
@@ -865,6 +908,26 @@ export const samples: Record<ContractName, unknown> = {
     state: "removed",
     test: true,
     outcome: "test_registered",
+  },
+  DomainRegistrantPrefill: {
+    name: "brightclean.co.uk",
+    price_gbp_year: 8,
+    registrant: {
+      name: "Jane Smith",
+      business_name: "Bright Clean",
+      email: "jane@brightclean.example",
+      phone: "+447700900123",
+    },
+    missing: ["street", "city", "postal_code", "registrant_type"],
+  },
+  DomainStemOffer: {
+    stem: "brightcleanbristol",
+    why: "your name plus Bristol",
+    endings: {
+      "co.uk": { state: "free", price_gbp_year: 8 },
+      com: { state: "taken" },
+      uk: { state: "free", price_gbp_year: 8 },
+    },
   },
   DomainRegistration: {
     sandbox: false,
@@ -987,16 +1050,20 @@ export const samples: Record<ContractName, unknown> = {
   FindDomainInput: { query: "bright clean bristol" },
   FindDomainOutput: {
     outcome: "found",
-    best: {
-      name: "brightclean.co.uk",
-      price_gbp_year: 8,
-      why: "Short, matches the business name, and .co.uk says UK-based.",
-    },
-    options: [
+    rows: [
       {
-        name: "brightcleanbristol.co.uk",
-        price_gbp_year: 8,
-        why: "Names the city customers search for.",
+        stem: "brightclean",
+        why: "matches your business name",
+        endings: {
+          "co.uk": { state: "free", price_gbp_year: 8 },
+          com: { state: "taken" },
+          uk: { state: "free", price_gbp_year: 8 },
+        },
+      },
+      {
+        stem: "brightcleanbristol",
+        why: "your name plus Bristol",
+        endings: { com: { state: "free", price_gbp_year: 12 } },
       },
     ],
   },
@@ -1108,6 +1175,18 @@ export const samples: Record<ContractName, unknown> = {
     source: "owner_said",
     at: NOW,
   },
+  DomainBoughtInput: { name: "sparkleclean.co.uk" },
+  InspectDomainInput: { name: "sparkleclean.co.uk" },
+  InspectDomainOutput: {
+    outcome: "inspected",
+    name: "sparkleclean.co.uk",
+    registered: true,
+    registrar: "123-reg",
+    dns_host: { name: "GoDaddy", settings_url: "https://dcc.godaddy.com/" },
+    in_use: false,
+  },
+  PutOffInput: { kind: "google", days: 7 },
+  PutOffOutput: { outcome: "put_off", until: "2026-11-03T08:00:00.000Z" },
   RememberInput: {
     operations: [{ action: "add", text: "Prefers calls after 4pm" }],
   },

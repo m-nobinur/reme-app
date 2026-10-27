@@ -14,10 +14,13 @@ import {
   searchUrlStatus,
   serverMessageId,
   sql,
+  syncTasks,
   type Tenancy,
 } from "@workspace/db"
 import {
   GoogleError,
+  getSite,
+  hasScopes,
   inspectUrl,
   listSitemaps,
   NeedsReauth,
@@ -26,11 +29,15 @@ import {
   searchAnalytics,
   submitSitemap,
 } from "./google.ts"
+import type { Observed } from "./probe.ts"
 import { activeDeployment, restoreVerification } from "./publish.ts"
 import {
   accessToken,
   FILE,
   forgetHost,
+  grant,
+  NEEDS_PERMISSION,
+  NEEDS_SIGN_IN,
   ownProperty,
   siteUrlOf,
   startSearch,
@@ -280,6 +287,110 @@ export async function startDueSyncs(
   return due.length
 }
 
+const RECONNECT = {
+  label: "Reconnect Google",
+  action: { kind: "connect", service: "google" },
+} as const
+
+/** What Ellie says, once, for each way the grant can fail. */
+const LOST = {
+  revoked:
+    "Google no longer lets me see your site, because the access I was given was taken away. Connect again and I'll pick up where I left off.",
+  scope:
+    "Google needs one more permission. Some of the access I was given was taken away in your Google account, so I can't check your site any more. Connect again and leave both boxes ticked.",
+  owner:
+    "Google needs one more permission. The Google account I'm signed in with is no longer an owner of your site in Search Console. Connect again with the account that owns it.",
+} as const
+
+/**
+ * The daily look at the grant itself, as the `permissions` step's probe: a
+ * token Google still honours, both Search Console scopes still on it (from
+ * Google's refresh answer) and the Owner role on every verified property.
+ * Anything less blocks the step with a note, moves the connection to
+ * `needs_reauth` or `needs_permission` (so the pull stops and the panel,
+ * which read those rows, agree) and Ellie says so once: the evidence carries
+ * the grant's own connect time, so a second loss after a reconnect is a new
+ * message. A property Google refuses outright counts as lost Owner access;
+ * its outage throws, for the step's retries.
+ */
+export async function checkGrant(
+  env: Env,
+  kit: Tenancy,
+  orgId: string
+): Promise<Observed<{ healthy: boolean }>> {
+  const [row] = await kit.withOrg({ orgId }, (db) =>
+    db.select({ at: searchConnections.connectedAt }).from(searchConnections)
+  )
+  const since = row?.at?.getTime() ?? 0
+  const blocked = (why: keyof typeof LOST) => ({
+    result: { healthy: false },
+    reading: {
+      step: "permissions" as const,
+      evidence: { grant: since, problem: why },
+      write: {
+        state: "blocked" as const,
+        blocked_on: "permission" as const,
+        note: why === "revoked" ? NEEDS_SIGN_IN : NEEDS_PERMISSION,
+      },
+      tell: async () => ({ text: LOST[why], button: RECONNECT }),
+    },
+  })
+  let granted: Awaited<ReturnType<typeof grant>>
+  try {
+    granted = await grant(env, kit, orgId)
+  } catch (error) {
+    if (error instanceof NeedsReauth) return blocked("revoked")
+    throw error
+  }
+  let problem: "scope" | "owner" | null = hasScopes(granted.scopes)
+    ? null
+    : "scope"
+  if (!problem) {
+    const verified = await kit.withOrg({ orgId }, (db) =>
+      db
+        .select({ siteUrl: searchProperties.siteUrl })
+        .from(searchProperties)
+        .where(eq(searchProperties.state, "verified"))
+    )
+    for (const { siteUrl } of verified) {
+      try {
+        const site = await getSite(granted.token, siteUrl)
+        if (site.permissionLevel !== "siteOwner") problem = "owner"
+      } catch (error) {
+        if (!refusedBy(error)) throw error
+        problem = "owner"
+      }
+    }
+  }
+  if (!problem) {
+    return {
+      result: { healthy: true },
+      reading: {
+        step: "permissions",
+        evidence: { grant: since, problem: null },
+      },
+    }
+  }
+  await kit.withOrg({ orgId }, async (db) => {
+    const flipped = await db
+      .update(searchConnections)
+      .set({ state: "needs_permission", scopes: granted.scopes })
+      .where(sql`${searchConnections.state} = 'active'`)
+      .returning({ orgId: searchConnections.orgId })
+    if (flipped.length > 0) {
+      await appendEvent(db, {
+        orgId,
+        assignmentId: null,
+        staffId: null,
+        type: "search.needs_permission",
+        payload: { problem },
+      })
+      await syncTasks(db, orgId)
+    }
+  })
+  return blocked(problem)
+}
+
 /**
  * The sync's first step: the org's verified properties, and every missing
  * verification file of the org's own slug host put back, since KV is a cache
@@ -363,12 +474,13 @@ export async function pullProperty(
     sitemaps = await listSitemaps(access, property.siteUrl)
   } catch (error) {
     if (!refusedBy(error)) throw error
-    await kit.withOrg({ orgId }, (db) =>
-      db
+    await kit.withOrg({ orgId }, async (db) => {
+      await db
         .update(searchProperties)
         .set({ state: "stale" })
         .where(eq(searchProperties.id, property.id))
-    )
+      await syncTasks(db, orgId)
+    })
     return { days: 0, pairs: 0, stale: true }
   }
   const ours =
@@ -431,6 +543,7 @@ export async function pullProperty(
         }),
       })
       .where(eq(searchProperties.id, property.id))
+    await syncTasks(db, orgId)
   })
   return { days: days.length, pairs: top.length }
 }
@@ -640,7 +753,9 @@ export async function weeklyItem(
       const [paused] = await db
         .select({ at: events.recordedAt })
         .from(events)
-        .where(sql`${events.type} = 'search.needs_reauth'`)
+        .where(
+          sql`${events.type} in ('search.needs_reauth', 'search.needs_permission')`
+        )
         .orderBy(sql`${events.recordedAt} desc`)
         .limit(1)
       return {
@@ -806,5 +921,6 @@ export async function disconnectSearch(
       type: "search.disconnected",
       payload: { properties: properties.length },
     })
+    await syncTasks(db, orgId)
   })
 }

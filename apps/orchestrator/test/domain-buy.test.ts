@@ -1,13 +1,29 @@
-import { deployments, domains, eq, events, sql } from "@workspace/db"
+import { type DomainRegistration, SITE_HEADER } from "@workspace/contracts"
+import {
+  conversationMessages,
+  deployments,
+  domains,
+  eq,
+  events,
+  readTasks,
+  searchConnections,
+  sql,
+} from "@workspace/db"
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest"
 import {
   abandonUnpaid,
+  boughtElsewhere,
   buy,
+  buyElsewhere,
   captureRegistered,
   checkoutSession,
+  elsewhereId,
   find,
   finishSandbox,
+  followUpElsewhere,
   heldDetails,
+  isRegistered,
+  lookElsewhere,
   MAX_OPEN_PURCHASES,
   paymentEvent,
   registrarPhone,
@@ -15,7 +31,16 @@ import {
   startRegistration,
   subscribeRenewal,
 } from "../src/domain-buy.ts"
-import { activateDomain, remove, revokeDomains } from "../src/domain-flow.ts"
+import {
+  activateDomain,
+  postStatus,
+  remove,
+  revokeDomains,
+  type Say,
+  served,
+  sweepDomains,
+} from "../src/domain-flow.ts"
+import { chatTexts, openChat } from "./chat.ts"
 import {
   ACCOUNT,
   CHECK_SANDBOX,
@@ -43,6 +68,40 @@ vi.mock("../src/container.ts", () => ({
 }))
 vi.mock("../src/sandbox.ts", () => ({}))
 vi.mock("../src/agents/developer.ts", () => ({ Developer: {} }))
+
+// The registry's answer for a name bought elsewhere, and the connect it
+// starts, whose own tests are in domain-flow.test.ts.
+const rdap = vi.hoisted(() => ({
+  registered: new Set<string>(),
+  /** Endings with no RDAP server, which fall back on DNS. */
+  unlisted: new Set<string>(),
+  /** Names DNS delegates as a zone of their own. */
+  zones: new Set<string>(),
+}))
+vi.mock("../src/rdap.ts", () => ({
+  rdapLookup: async (name: string) =>
+    rdap.unlisted.has(name.slice(name.indexOf(".") + 1))
+      ? null
+      : { registered: rdap.registered.has(name) },
+}))
+vi.mock("../src/domains.ts", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../src/domains.ts")>()
+  return {
+    ...real,
+    zoneApex: async (name: string) => {
+      if (rdap.zones.has(name)) return { apex: name, missing: false }
+      throw new real.DomainError("domain.not_found")
+    },
+  }
+})
+vi.mock("../src/domain-flow.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/domain-flow.ts")>()),
+  connect: async (_e: unknown, _k: unknown, _o: unknown, body: unknown) => ({
+    status: 201,
+    output: { outcome: "connecting", method: "records", email_affected: false },
+    body,
+  }),
+}))
 
 /**
  * The buy path's routes and step bodies against a real database, with
@@ -78,6 +137,12 @@ type Net = {
   /** `domain-check` answers by name; anything unlisted is taken. */
   checks: Record<string, unknown>
   registered: Set<string>
+  /** The names `domain-search` suggests. */
+  suggests?: string[]
+  /** The site id the router's edge probe names, once a test has a site. */
+  site?: string
+  /** The expiry the registrar reports for a registered name. */
+  expires?: string
   pi: Record<string, unknown>
   calls: Array<{ method: string; url: string; body: string }>
 }
@@ -109,14 +174,16 @@ function stubNet(live: boolean, checks: Record<string, unknown> = {}): Net {
         )
       }
       if (href.startsWith(`${base}/domain-search`))
-        return json(envelope({ domains: [] }))
+        return json(
+          envelope({ domains: (net.suggests ?? []).map((name) => ({ name })) })
+        )
       if (href === `${base}/extensions/co.uk`)
         return json(live ? EXTENSION_CO_UK : NOT_FOUND, live ? 200 : 400)
       if (href.startsWith(`${base}/extensions/`)) return json(EXTENSION_COM)
       const reg = href.match(new RegExp(`^${base}/registrations/([^/]+)$`))
       if (reg?.[1] && method === "GET")
         return net.registered.has(reg[1])
-          ? json(REGISTRATION(reg[1]))
+          ? json(REGISTRATION(reg[1], true, net.expires))
           : json(NOT_FOUND, 404)
       if (reg?.[1] && method === "PATCH") return json(REG_PENDING(reg[1]))
       const progress = href.match(
@@ -162,7 +229,9 @@ function stubNet(live: boolean, checks: Record<string, unknown> = {}): Net {
       if (href === `${STRIPE}/invoices/in_123`) return json(INVOICE)
       // The edge probe: the bought domain answers.
       if (href.startsWith("https://") && method === "GET")
-        return new Response("ok")
+        return new Response("ok", {
+          headers: net.site ? { [SITE_HEADER]: net.site } : {},
+        })
       throw new Error(`unexpected ${method} ${href}`)
     })
   )
@@ -172,6 +241,8 @@ function stubNet(live: boolean, checks: Record<string, unknown> = {}): Net {
 function buyEnv(store: ReturnType<typeof storage>, live = false) {
   const created: Array<{ id: string; params: unknown }> = []
   const sent: unknown[] = []
+  const holds: Array<{ id: string; params: unknown }> = []
+  const woken: string[] = []
   const env = {
     ...workflowEnv(store).env,
     CF_DOMAINS_TOKEN: "token",
@@ -194,8 +265,25 @@ function buyEnv(store: ReturnType<typeof storage>, live = false) {
         terminate: async () => undefined,
       }),
     },
+    ELSEWHERE: {
+      create: async (instance: { id: string; params: unknown }) => {
+        if (holds.some((c) => c.id === instance.id))
+          throw new Error("instance exists")
+        holds.push(instance)
+        return instance
+      },
+      get: async (id: string) => {
+        if (!holds.some((c) => c.id === id)) throw new Error("not found")
+        return {
+          status: async () => ({ status: "waiting" }),
+          sendEvent: async (e: { type: string }) => {
+            woken.push(`${id} ${e.type}`)
+          },
+        }
+      },
+    },
   } as unknown as Env
-  return { env, created, sent }
+  return { env, created, sent, holds, woken }
 }
 
 async function published() {
@@ -312,29 +400,84 @@ describe.skipIf(!url)("buying a domain against a database", () => {
       "brightclean.co.uk": unsupported("brightclean.co.uk"),
       "brightclean.com": priced("brightclean.com"),
     }
-    stubNet(false, sandboxChecks)
+    const asked = (net: Net) =>
+      net.calls
+        .filter((c) => c.url.endsWith("/domain-check"))
+        .flatMap((c) => JSON.parse(c.body).domains as string[])
+    const sandboxNet = stubNet(false, sandboxChecks)
     const { env } = buyEnv(site.store)
     const sandbox = await find(env, kit, site.orgId, {})
-    expect(sandbox).toMatchObject({
+    // The sandbox is asked about .com only, and its rows show nothing else.
+    expect(sandbox).toEqual({
       outcome: "found",
-      best: { name: "brightclean.com", price_gbp_year: 12 },
+      rows: [
+        {
+          stem: "brightclean",
+          why: "matches your business name",
+          endings: { com: { state: "free", price_gbp_year: 12 } },
+        },
+      ],
     })
+    expect(asked(sandboxNet).length).toBeGreaterThan(0)
+    expect(asked(sandboxNet).every((n) => n.endsWith(".com"))).toBe(true)
 
     vi.unstubAllGlobals()
-    stubNet(true, {
+    const liveNet = stubNet(true, {
       "brightclean.co.uk": priced("brightclean.co.uk", "5.30"),
-      "brightclean.com": priced("brightclean.com"),
       "brightclean.uk": priced("brightclean.uk", "5.30"),
     })
     const live = await find(buyEnv(site.store, true).env, kit, site.orgId, {})
-    expect(live).toMatchObject({
+    expect(asked(liveNet).some((n) => n.endsWith(".net"))).toBe(false)
+    // One row per stem, .com taken beside the free UK endings; a stem with
+    // nothing free is left out.
+    expect(live).toEqual({
       outcome: "found",
-      best: { name: "brightclean.co.uk", price_gbp_year: 8 },
-      options: [
-        { name: "brightclean.com", price_gbp_year: 12 },
-        { name: "brightclean.uk", price_gbp_year: 8 },
+      rows: [
+        {
+          stem: "brightclean",
+          why: "matches your business name",
+          endings: {
+            "co.uk": { state: "free", price_gbp_year: 8 },
+            com: { state: "taken" },
+            uk: { state: "free", price_gbp_year: 8 },
+          },
+        },
       ],
     })
+    // The owner is picking: the address task's choose step waits on them.
+    const [task] = await kit.withOrg({ orgId: site.orgId }, (db) =>
+      readTasks(db)
+    )
+    expect(task?.steps.find((s) => s.step === "choose")).toMatchObject({
+      state: "blocked",
+      blocked_on: "owner_action",
+      note: "picking a name",
+    })
+  })
+
+  it("asks the registrar about the business name and drops its suggestions not made of the business's words", async () => {
+    const site = await published()
+    const suggests = [
+      "brightcleanpro.com",
+      "getbrightclean.com",
+      "brightcleanhome.com",
+      "brightcleanplus.com",
+    ]
+    const net = stubNet(false, {
+      "brightclean.com": priced("brightclean.com"),
+      ...Object.fromEntries(suggests.map((n) => [n, priced(n)])),
+    })
+    net.suggests = suggests
+    const found = await find(buyEnv(site.store).env, kit, site.orgId, {})
+    expect(
+      net.calls.some((c) => c.url.includes("domain-search?q=BrightClean"))
+    ).toBe(true)
+    expect(found).toMatchObject({ outcome: "found" })
+    const rows = (found as { rows: Array<{ stem: string; why: string }> }).rows
+    // Each suggestion adds a word the business never used.
+    expect(rows.map((r) => [r.stem, r.why])).toEqual([
+      ["brightclean", "matches your business name"],
+    ])
   })
 
   it("refuses when nothing is free or over its cap, and when the registrar is down", async () => {
@@ -542,12 +685,36 @@ describe.skipIf(!url)("buying a domain against a database", () => {
       })
     await expired("cs_old", "evt_old")
     expect((await rowOf(p.orgId, p.name)).state).toBe("awaiting_payment")
+    await openChat(kit, p.orgId)
     await expired("cs_new", "evt_new")
     const row = await rowOf(p.orgId, p.name)
     expect(row).toMatchObject({
       state: "abandoned",
       registrant: null,
       registration: { outcome: "expired" },
+    })
+    // Said once: Stripe's resend and the Workflow's last round add nothing.
+    await expired("cs_new", "evt_again")
+    await abandonUnpaid(kit, p.orgId, p.row.id)
+    expect(await chatTexts(kit, p.orgId)).toEqual([
+      expect.stringContaining(`payment for ${p.name} ran out of time`),
+    ])
+    // Pay again opens the details and Pay page, which makes a fresh Checkout.
+    const [message] = await kit.withOrg({ orgId: p.orgId }, (db) =>
+      db
+        .select({ content: conversationMessages.content })
+        .from(conversationMessages)
+    )
+    expect(message?.content).toMatchObject({
+      parts: expect.arrayContaining([
+        {
+          type: "data-button",
+          data: {
+            label: "Pay again",
+            action: { kind: "pay", name: p.name },
+          },
+        },
+      ]),
     })
   })
 
@@ -672,8 +839,25 @@ describe.skipIf(!url)("buying a domain against a database", () => {
       code: "domain.purchase_in_progress",
     })
 
-    const live = await activateDomain(p.env, kit, p.orgId, p.row.id)
-    expect(live?.text).toMatch(new RegExp(`^${p.name} is live`))
+    // Not live until the router names the site: the 404 is not an answer.
+    expect(await activateDomain(p.env, kit, p.orgId, p.row.id)).toBe(true)
+    const unserved = await served(p.env, kit, p.orgId, p.row.id)
+    expect(unserved.result).toMatchObject({ ready: false })
+    expect(unserved.reading).not.toHaveProperty("tell")
+    p.net.site = p.orgId
+    // An org connected to Google hears that its new host is going there too.
+    await kit.withOrg({ orgId: p.orgId }, (db) =>
+      db
+        .insert(searchConnections)
+        .values({ orgId: p.orgId, state: "active", refreshToken: "v1.aXY.Y3Q" })
+    )
+    const live = await served(p.env, kit, p.orgId, p.row.id)
+    expect(live.result).toMatchObject({ ready: true })
+    expect(live.reading?.write).toEqual({ state: "done" })
+    expect(unserved.reading).not.toHaveProperty("write")
+    expect((await live.reading?.tell?.())?.text).toMatch(
+      new RegExp(`^${p.name} is live.*adding it to your Google Search Console`)
+    )
     expect(
       JSON.parse((await p.store.ROUTES.get(`host:${p.name}`)) ?? "{}")
     ).toMatchObject({ org_id: p.orgId, canonical_host: p.name })
@@ -701,6 +885,65 @@ describe.skipIf(!url)("buying a domain against a database", () => {
     expect(renewal.map((c) => JSON.parse(c.body))).toContainEqual({
       auto_renew: false,
     })
+  })
+
+  it("live: a bought domain past its expiry is kept when the registrar renewed it, and taken down and told when it lapsed", async () => {
+    const p = await paid(true)
+    await startRegistration(p.env, kit, p.orgId, p.row.id)
+    await captureRegistered(p.env, kit, p.orgId, p.row.id)
+    await subscribeRenewal(p.env, kit, p.orgId, p.row.id)
+    await serveBought(p.env, kit, p.orgId, p.row.id)
+    p.net.site = p.orgId
+    await activateDomain(p.env, kit, p.orgId, p.row.id)
+    await openChat(kit, p.orgId)
+    const day = 86_400_000
+    const expire = async () => {
+      const row = await rowOf(p.orgId, p.name)
+      const registration = row.registration as DomainRegistration
+      await kit.withOrg({ orgId: p.orgId }, (db) =>
+        db
+          .update(domains)
+          .set({
+            registration: {
+              ...registration,
+              expires_at: new Date(Date.now() - day).toISOString(),
+            },
+          })
+          .where(eq(domains.id, row.id))
+      )
+    }
+    const pointer = () => p.store.ROUTES.get(`host:${p.name}`)
+
+    // Not yet past: no question asked of the registrar.
+    const calls = p.net.calls.length
+    expect(await sweepDomains(p.env, kit, p.orgId, "2026102706")).toEqual([])
+    expect(p.net.calls).toHaveLength(calls)
+
+    // Past, but renewed: the new date is kept and nothing is said.
+    const renewed = new Date(Date.now() + 365 * day).toISOString()
+    p.net.expires = renewed
+    await expire()
+    expect(await sweepDomains(p.env, kit, p.orgId, "2026102706")).toEqual([])
+    expect((await rowOf(p.orgId, p.name)).state).toBe("active")
+    expect((await rowOf(p.orgId, p.name)).registration).toMatchObject({
+      expires_at: renewed,
+    })
+    expect(await pointer()).not.toBeNull()
+
+    // Past and gone from the registrar: out of active, no longer served, told once.
+    await expire()
+    p.net.registered.delete(p.name)
+    const says = await sweepDomains(p.env, kit, p.orgId, "2026102706")
+    expect(says).toHaveLength(1)
+    expect(says[0]?.text).toContain(`${p.name} wasn't renewed`)
+    expect((await rowOf(p.orgId, p.name)).state).toBe("removed")
+    expect(await pointer()).toBeNull()
+    expect(await sweepDomains(p.env, kit, p.orgId, "2026102806")).toEqual([])
+    await postStatus(kit, p.orgId, says[0] as Say)
+    await postStatus(kit, p.orgId, says[0] as Say)
+    expect(await chatTexts(kit, p.orgId)).toEqual([
+      expect.stringContaining("wasn't renewed"),
+    ])
   })
 
   it("renewals: keeps auto-renew on a paid invoice, says how to pay a failed one, turns it off when the subscription ends", async () => {
@@ -750,6 +993,140 @@ describe.skipIf(!url)("buying a domain against a database", () => {
     await revokeDomains(p.env, kit, p.orgId)
     expect((await rowOf(p.orgId, p.name)).state).toBe("verifying")
     expect((await rowOf(p.orgId, name)).state).toBe("removed")
+  })
+})
+
+describe.skipIf(!url)("buying a name elsewhere, against a database", () => {
+  const stepOf = async (orgId: string, step: string) => {
+    const tasks = await kit.withOrg({ orgId }, (db) => readTasks(db))
+    const task = tasks.find((t) => t.kind === "address")
+    return { task, step: task?.steps.find((s) => s.step === step) }
+  }
+
+  it("marks the purchase step the owner's and starts one hold per org and name", async () => {
+    const site = await published()
+    const setup = buyEnv(site.store)
+    const name = unique()
+    expect(await buyElsewhere(setup.env, kit, site.orgId, { name })).toBeNull()
+    expect((await stepOf(site.orgId, "purchase")).step).toMatchObject({
+      state: "blocked",
+      blocked_on: "owner_action",
+      note: `buying ${name}`,
+    })
+    expect((await stepOf(site.orgId, "purchase")).task?.detail).toMatchObject({
+      name,
+      origin: "buying_elsewhere",
+    })
+    // A second click finds the same hold.
+    await buyElsewhere(setup.env, kit, site.orgId, { name })
+    expect(setup.holds).toEqual([
+      {
+        id: await elsewhereId(site.orgId, name),
+        params: { org_id: site.orgId, name },
+      },
+    ])
+    expect(
+      await buyElsewhere(setup.env, kit, site.orgId, { name: "not a name" })
+    ).toMatchObject({ status: 400 })
+  })
+
+  it("drops the buying-elsewhere note once the owner buys the name with us", async () => {
+    const site = await published()
+    const name = unique()
+    stubNet(false, { [name]: priced(name) })
+    const setup = buyEnv(site.store)
+    await buyElsewhere(setup.env, kit, site.orgId, { name })
+    expect(
+      await buy(setup.env, kit, site.orgId, { name, ...details })
+    ).toMatchObject({ status: 201 })
+    const { task, step } = await stepOf(site.orgId, "purchase")
+    expect(step?.note ?? null).toBeNull()
+    expect(task?.detail).toMatchObject({ name, origin: "purchased" })
+  })
+
+  it("on the owner's done, wakes the hold, and connects once the registry shows the name", async () => {
+    const site = await published()
+    const setup = buyEnv(site.store)
+    const name = unique()
+    await buyElsewhere(setup.env, kit, site.orgId, { name })
+    const id = await elsewhereId(site.orgId, name)
+    expect(await boughtElsewhere(setup.env, kit, site.orgId, { name })).toEqual(
+      {
+        status: 200,
+        output: { outcome: "not_registered_yet", name },
+      }
+    )
+    expect((await stepOf(site.orgId, "purchase")).step?.state).toBe("blocked")
+    rdap.registered.add(name)
+    const done = await boughtElsewhere(setup.env, kit, site.orgId, { name })
+    expect(done).toMatchObject({
+      status: 201,
+      output: { outcome: "connecting" },
+      body: { name, approval_id: `owner_done:${name}` },
+    })
+    expect((await stepOf(site.orgId, "purchase")).step?.state).toBe("done")
+    expect(setup.woken).toEqual([`${id} owner_done`, `${id} owner_done`])
+  })
+
+  it("offers the connect once the daily look sees the name, and says nothing once a claim is open", async () => {
+    const site = await published()
+    const setup = buyEnv(site.store)
+    const name = unique()
+    await buyElsewhere(setup.env, kit, site.orgId, { name })
+    const quiet = await lookElsewhere(kit, site.orgId, name)
+    expect(quiet.result).toMatchObject({ registered: false, claimed: false })
+    rdap.registered.add(name)
+    const seen = await lookElsewhere(kit, site.orgId, name)
+    expect(seen.result).toMatchObject({ registered: true, claimed: false })
+    expect(seen.reading?.write).toEqual({ state: "done" })
+    expect(await seen.reading?.tell?.()).toEqual({
+      text: `${name} is registered now. Shall I put your website on it?`,
+      button: {
+        label: "Put my site on it",
+        action: { kind: "ask", text: `Put my site on ${name}.` },
+      },
+    })
+    await kit.withOrg({ orgId: site.orgId }, (db) =>
+      db.insert(domains).values({
+        orgId: site.orgId,
+        siteId: site.orgId,
+        name,
+        primaryHost: name,
+        origin: "connected",
+        method: "records",
+        state: "awaiting_dns",
+      })
+    )
+    expect(await seen.reading?.tell?.()).toBeNull()
+    expect((await lookElsewhere(kit, site.orgId, name)).result).toMatchObject({
+      claimed: true,
+    })
+  })
+
+  it("reads an ending with no RDAP server from DNS, never as not bought", async () => {
+    rdap.unlisted.add("io")
+    const name = `bright${crypto.randomUUID().slice(0, 8)}.io`
+    expect(await isRegistered(name)).toBe(false)
+    rdap.zones.add(name)
+    expect(await isRegistered(name)).toBe(true)
+    rdap.registered.add("rdap-says.com")
+    expect(await isRegistered("rdap-says.com")).toBe(true)
+  })
+
+  it("follows up once and puts the address task off for a week", async () => {
+    const site = await published()
+    const setup = buyEnv(site.store)
+    const name = unique()
+    await buyElsewhere(setup.env, kit, site.orgId, { name })
+    const say = await followUpElsewhere(kit, site.orgId, name)
+    expect(say.text).toBe(
+      `Did you get ${name}? Once it's yours, tell me and I'll put your website on it.`
+    )
+    const { task } = await stepOf(site.orgId, "purchase")
+    expect(task?.state).toBe("later")
+    expect(Date.parse(task?.later_until ?? "")).toBeGreaterThan(
+      Date.now() + 6 * 24 * 60 * 60 * 1000
+    )
   })
 })
 

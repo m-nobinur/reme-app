@@ -23,12 +23,20 @@ export const ActivityStep = z.strictObject({
       total: z.int().positive().max(999),
     })
     .optional(),
+  /** A waiting step's note from its owner task, written by code: shown as data. */
+  note: Text(200).optional(),
+  /** An owner task's step: when it last moved, which dates the line a done step earns. */
+  at: Timestamp.optional(),
 })
 
 /** The most steps a segment lists. */
 export const ACTIVITY_STEPS_MAX = 12
 
-/** One piece of work with a title and fixed steps: a build, a domain, a reminder, a turn. */
+/**
+ * One piece of work with a title and fixed steps: a build, a domain, a
+ * reminder, a turn. `address` and `google` in the groups are owner tasks,
+ * their steps the task's own.
+ */
 export const ActivitySegment = z.strictObject({
   id: Text(80),
   kind: z.enum([
@@ -36,6 +44,7 @@ export const ActivitySegment = z.strictObject({
     "website",
     "golive",
     "change",
+    "address",
     "domain",
     "purchase",
     "google",
@@ -57,6 +66,8 @@ export const ActivitySegment = z.strictObject({
       business: Text(120).optional(),
       host: Text(253).optional(),
       domain: Text(253).optional(),
+      /** The DNS host the owner changes records at, from detection. */
+      provider: Text(80).optional(),
       /** A change at work: what it changes in the owner's terms, such as "your hero title". */
       change: Text(40).optional(),
     })
@@ -74,6 +85,13 @@ export const ActivitySegment = z.strictObject({
   restarted: z.literal(true).optional(),
   /** Google only: when Search Console data was last read. */
   synced_at: Timestamp.optional(),
+  /** Google only: what the last 28 days of searches brought, once Google has sent any. */
+  numbers: z
+    .strictObject({
+      clicks: z.int().nonnegative(),
+      impressions: z.int().nonnegative(),
+    })
+    .optional(),
 })
 
 /** The most segments one group lists. */

@@ -5,6 +5,7 @@ import type {
   DomainCheck,
   DomainState,
   GateName,
+  TaskStepState,
 } from "@workspace/contracts"
 
 // The workspace as the model reads it each turn: labels in the owner's
@@ -51,6 +52,14 @@ const CHECK: Record<DomainCheck["status"], string> = {
   valid: "working",
 }
 
+const STEP: Record<TaskStepState, string> = {
+  pending: "not started",
+  in_progress: "under way",
+  blocked: "waiting on the owner",
+  done: "done",
+  skipped: "not needed",
+}
+
 const STOPPED: Record<BuildStopCause, string> = {
   stalled: "it went quiet for too long",
   unfinished: "it could not pass its checks",
@@ -95,6 +104,7 @@ export function workspaceLabels(workspace: CosWorkspace) {
     approvals,
     missing_facts,
     domains,
+    tasks,
   } = workspace
   return {
     site: { address: site.host, live: site.live_version !== null },
@@ -153,6 +163,26 @@ export function workspaceLabels(workspace: CosWorkspace) {
         name: d.name,
         state: DOMAIN[d.state],
         last_check: d.last_check && CHECK[d.last_check.status],
+      })),
+    }),
+    // What the assistant leads over days. A blocked step's note is code's
+    // words for the wait, the thing to follow up on.
+    ...(tasks?.length && {
+      tasks: tasks.map((t) => ({
+        about: t.kind === "address" ? "the website's own address" : "Google",
+        ...(t.kind === "address" && t.detail.name && { domain: t.detail.name }),
+        ...(t.state === "later" && {
+          put_off: true,
+          ...(t.later_until && { put_off_until: t.later_until }),
+        }),
+        // A finished task stays in view so the next one can wait on its end.
+        ...((t.state === "done" || t.state === "declined") && {
+          finished: t.state,
+        }),
+        steps: t.steps.map(
+          (s) =>
+            `${s.step.replaceAll("_", " ")}: ${STEP[s.state]}${s.note ? ` (${s.note})` : ""}`
+        ),
       })),
     }),
     expected_range: workspace.expected_range,

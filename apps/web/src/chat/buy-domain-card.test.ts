@@ -1,47 +1,97 @@
 // @vitest-environment happy-dom
 
-import type { DomainPurchaseStatus } from "@workspace/contracts"
+import type {
+  DomainPurchaseStatus,
+  DomainRegistrantPrefill,
+} from "@workspace/contracts"
 import { Approval } from "@workspace/ui/components/assistant/approval"
 import {
   type CheckoutStart,
-  chooseText,
   type DomainPurchase,
   DomainPurchaseProvider,
   purchaseStatusOf,
   readDetails,
 } from "@workspace/ui/components/assistant/buy-domain"
+import { TraySlotProvider } from "@workspace/ui/components/assistant/question-tray"
 import { act, createElement } from "react"
 import { createRoot } from "react-dom/client"
-import { afterEach, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, expect, it, vi } from "vitest"
 
 ;(
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true
 
-// The cards read the thread through assistant-ui's store; these tests stand in
-// for it, since what they check is the card, not the runtime.
-const store = vi.hoisted(() => ({
-  isRunning: false,
-  append: vi.fn(),
-}))
+// The tray reads the thread through assistant-ui's store; these tests stand
+// in for it, since what they check is the tray, not the runtime.
+const store = vi.hoisted(() => ({ after: [] as ("user" | "assistant")[] }))
 vi.mock("@assistant-ui/react", async (original) => ({
   ...(await original<typeof import("@assistant-ui/react")>()),
   useAuiState: (select: (state: unknown) => unknown) =>
     select({
-      message: { parts: [], isLast: true, status: undefined },
-      thread: { isRunning: store.isRunning },
+      message: { id: "msg-1", parts: [] },
+      thread: {
+        isRunning: false,
+        messages: [
+          { id: "msg-1", role: "assistant" },
+          ...store.after.map((role, i) => ({ id: `after-${i}`, role })),
+        ],
+      },
     }),
-  useAui: () => ({ thread: () => ({ append: store.append }) }),
-  useThreadViewport: () => undefined,
+  useAui: () => ({ thread: () => ({ append: vi.fn() }) }),
+  useThreadViewportStore: () => null,
 }))
 
-// Stripe.js is Stripe's to load; the card's part is mounting it with the
-// client secret the api returned.
-const stripe = vi.hoisted(() => ({
-  mount: vi.fn(async (..._args: unknown[]) => stripe.unmount),
-  unmount: vi.fn(),
+// Stripe.js is Stripe's to load; the dialog's part is starting Checkout with
+// the client secret the api returned, mounting the Elements, showing
+// Stripe's total and confirming with what the owner already gave.
+const stripe = vi.hoisted(() => {
+  // Each Element's options by kind, and its event handlers by "kind:event"
+  // for the test to fire.
+  const options: Record<string, unknown> = {}
+  const handlers: Record<string, (event: unknown) => void> = {}
+  const element = (kind: string) => (given?: unknown) => {
+    options[kind] = given
+    return {
+      mount: vi.fn(),
+      destroy: vi.fn(),
+      on: vi.fn((event: string, handler: (event: unknown) => void) => {
+        handlers[`${kind}:${event}`] = handler
+      }),
+    }
+  }
+  const confirm = vi.fn(
+    async (
+      _options: unknown
+    ): Promise<
+      { type: "success" } | { type: "error"; error: { message: string } }
+    > => ({
+      type: "success",
+    })
+  )
+  const session = {
+    currency: "gbp",
+    minorUnitsAmountDivisor: 100,
+    total: { total: { minorUnitsAmount: 800 } },
+  }
+  return {
+    confirm,
+    options,
+    handlers,
+    init: vi.fn(async (..._args: unknown[]) => ({
+      on: vi.fn(),
+      createExpressCheckoutElement: vi.fn(element("express")),
+      createPaymentElement: vi.fn(element("payment")),
+      loadActions: async () => ({
+        type: "success" as const,
+        actions: { confirm, getSession: () => session },
+      }),
+    })),
+  }
+})
+vi.mock("@workspace/ui/lib/stripe", async (original) => ({
+  ...(await original<typeof import("@workspace/ui/lib/stripe")>()),
+  initCheckout: stripe.init,
 }))
-vi.mock("@workspace/ui/lib/stripe", () => ({ mountCheckout: stripe.mount }))
 
 const NAME = "sparkleclean.co.uk"
 const REGISTRANT = {
@@ -56,442 +106,513 @@ const REGISTRANT = {
     country_code: "GB",
   },
 }
-const BUY = { name: NAME, registrant: REGISTRANT, registrant_type: "STRA" }
-const AWAITING = {
-  outcome: "awaiting_payment",
-  name: NAME,
-  price_gbp: 8,
-  checkout: "embedded",
-}
-const offer = (name: string, price: number) => ({
-  name,
-  price_gbp_year: price,
-  why: `Why ${name}`,
-})
+const FREE = (price: number) => ({ state: "free", price_gbp_year: price })
 const FOUND = {
   outcome: "found",
-  best: offer(NAME, 8),
-  options: [
-    offer("sparklecleanbristol.co.uk", 8),
-    offer("sparkleclean.uk", 8),
-    offer("sparklecleanbristol.com", 12),
-    offer("sparkle-clean.com", 12),
+  rows: [
+    {
+      stem: "sparkleclean",
+      why: "Short, and it is your name.",
+      endings: { "co.uk": FREE(8), com: { state: "taken" }, uk: FREE(8) },
+    },
+    // The sandbox sells .com only, so a row may carry that ending alone.
+    {
+      stem: "sparklecleanbristol",
+      why: "Says where you work.",
+      endings: { com: FREE(12) },
+    },
   ],
 }
-
-type Props = Record<string, unknown>
-
-/** Draws a CoS tool part as the thread does, inside the app's buy provider. */
-async function draw(
-  toolName: string,
-  props: Props,
-  purchase: DomainPurchase | null = null
-) {
-  const container = document.createElement("div")
-  document.body.appendChild(container)
-  const root = createRoot(container)
-  const part = createElement(Approval, {
-    toolName,
-    toolCallId: "call-1",
-    argsText: "",
-    respondToApproval: vi.fn(),
-    ...props,
-  } as never)
-  await act(async () =>
-    root.render(
-      purchase
-        ? createElement(DomainPurchaseProvider, { value: purchase }, part)
-        : part
-    )
-  )
-  return {
-    container,
-    unmount: async () => {
-      await act(async () => root.unmount())
-      container.remove()
-    },
-  }
+const PREFILL: DomainRegistrantPrefill = {
+  name: NAME,
+  price_gbp_year: 8,
+  registrant: {
+    name: REGISTRANT.name,
+    business_name: REGISTRANT.business_name,
+    email: REGISTRANT.email,
+    phone: REGISTRANT.phone,
+  },
+  missing: ["street", "city", "postal_code", "country_code", "registrant_type"],
+}
+const OPEN: CheckoutStart = {
+  outcome: "open",
+  publishable_key: "pk_test_1",
+  client_secret: "cs_x",
 }
 
 type Read = Omit<DomainPurchaseStatus, "name">
 
-const purchaseOf = (start: CheckoutStart, read: Read | null = null) => ({
-  checkout: vi.fn(async () => start),
-  status: vi.fn(async () => (read ? { name: NAME, ...read } : null)),
+const purchaseOf = (overrides: Partial<DomainPurchase> = {}) => ({
+  registrant: vi.fn(async () => PREFILL),
+  checkout: vi.fn(async () => OPEN),
+  status: vi.fn(async (): Promise<DomainPurchaseStatus | null> => null),
+  elsewhere: vi.fn(async () => undefined),
+  bought: vi.fn(
+    async (name: string) => ({ outcome: "not_registered_yet", name }) as const
+  ),
+  ...overrides,
 })
 
-const buttons = (container: HTMLElement) =>
-  [...container.querySelectorAll("button")].map((b) => b.textContent?.trim())
-
-const press = async (container: HTMLElement, label: string) => {
-  const button = [...container.querySelectorAll("button")].find(
-    (each) => each.textContent?.trim() === label
+beforeEach(() => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe = () => undefined
+      unobserve = () => undefined
+      disconnect = () => undefined
+    }
   )
-  if (!button) throw new Error(`no ${label} button`)
-  await act(async () => button.click())
-}
+  HTMLElement.prototype.checkVisibility ??= () => true
+})
 
 afterEach(() => {
-  store.isRunning = false
-  store.append.mockReset()
-  stripe.mount.mockClear()
-  stripe.unmount.mockClear()
+  store.after = []
+  stripe.init.mockClear()
+  stripe.confirm.mockClear()
+  sessionStorage.clear()
+  document.body.innerHTML = ""
+  vi.unstubAllGlobals()
 })
 
-it("offers the best name and three others at their GBP price, each one choosable", async () => {
-  const card = await draw("find_domain", { args: {}, result: FOUND })
-  const text = card.container.textContent ?? ""
-  expect(text).toContain("£8 a year")
-  expect(text).toContain("£12 a year")
-  const choose = [...card.container.querySelectorAll("button")]
-  // The best pick once, then three others: the fourth other is left out.
-  expect(choose.map((b) => b.getAttribute("aria-label"))).toEqual([
-    `Choose ${NAME}`,
-    "Choose sparklecleanbristol.co.uk",
-    "Choose sparkleclean.uk",
-    "Choose sparklecleanbristol.com",
+/** Draws a CoS tool part as the thread does, with a tray slot and the buy calls. */
+async function draw(
+  toolName: string,
+  props: Record<string, unknown>,
+  purchase: DomainPurchase = purchaseOf()
+) {
+  const chat = document.createElement("div")
+  const tray = document.createElement("div")
+  document.body.appendChild(chat)
+  document.body.appendChild(tray)
+  const root = createRoot(chat)
+  await act(async () =>
+    root.render(
+      createElement(
+        TraySlotProvider,
+        { value: tray },
+        createElement(
+          DomainPurchaseProvider,
+          { value: purchase },
+          createElement(Approval, {
+            toolName,
+            toolCallId: "call-1",
+            argsText: "",
+            respondToApproval: vi.fn(),
+            ...props,
+          } as never)
+        )
+      )
+    )
+  )
+  return { chat, tray, purchase }
+}
+
+const found = () => draw("find_domain", { args: {}, result: FOUND })
+
+const button = (within: Element, label: string) => {
+  const match = [...within.querySelectorAll("button")].find(
+    (each) =>
+      each.textContent?.trim() === label ||
+      each.getAttribute("aria-label") === label
+  )
+  if (!match) throw new Error(`no ${label} button`)
+  return match
+}
+const press = (within: Element, label: string) =>
+  act(async () => button(within, label).click())
+
+const radio = (within: Element, label: string) => {
+  const match = within.querySelector<HTMLInputElement>(
+    `input[type=radio][aria-label="${label}"]`
+  )
+  if (!match) throw new Error(`no ${label} option`)
+  return match
+}
+
+/** Picks an ending on Choose, then goes on, as the owner does. */
+const choose = async (within: Element, label: string) => {
+  await act(async () => radio(within, label).click())
+  await press(within, "Continue")
+}
+
+/** Fills the fields the details page asks for, as the owner types them. */
+const fill = (tray: HTMLElement, values: Record<string, string>) => {
+  for (const [name, value] of Object.entries(values)) {
+    const input = tray.querySelector<HTMLInputElement>(
+      `input[name="${name}"]:not([type=hidden])`
+    )
+    if (!input) throw new Error(`no ${name} field`)
+    if (input.type === "radio") {
+      tray
+        .querySelector<HTMLInputElement>(
+          `input[name="${name}"][value="${value}"]`
+        )
+        ?.click()
+    } else input.value = value
+  }
+}
+
+const submit = (tray: HTMLElement) =>
+  act(async () =>
+    tray
+      .querySelector<HTMLFormElement>("form")
+      ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+  )
+
+it("shows four cards at most: the best name twice, then each next name once", async () => {
+  const all = { "co.uk": FREE(8), com: FREE(12), uk: FREE(8) }
+  const { tray } = await draw("find_domain", {
+    args: {},
+    result: {
+      outcome: "found",
+      rows: ["a", "b", "c"].map((stem) => ({ stem, why: "x", endings: all })),
+    },
+  })
+  const cards = tray.querySelectorAll('[role="radiogroup"] input[type=radio]')
+  expect([...cards].map((card) => (card as HTMLInputElement).value)).toEqual([
+    "a.co.uk",
+    "a.com",
+    "b.co.uk",
+    "c.co.uk",
   ])
-  await act(async () => choose[2]?.click())
-  expect(store.append).toHaveBeenCalledWith(chooseText("sparkleclean.uk"))
-  // One choice per card: the buttons wait for the assistant's answer.
-  expect(choose.every((b) => b.disabled)).toBe(true)
-  await card.unmount()
 })
 
-it("lets nobody choose while the assistant is answering", async () => {
-  store.isRunning = true
-  const card = await draw("find_domain", { args: {}, result: FOUND })
+it("offers one card a free full domain, best first, price only", async () => {
+  const { tray } = await found()
+  const cards = tray.querySelectorAll('[role="radiogroup"] > label')
+  // A taken ending is no card; the pill is the best card's only extra.
+  expect([...cards].map((card) => card.textContent)).toEqual([
+    "Best pick. Short, and it is your name.sparkleclean.co.uk£8 a year",
+    "sparkleclean.uk£8 a year",
+    "sparklecleanbristol.com£12 a year",
+  ])
+  expect(() => radio(tray, "sparkleclean.com, £12 a year")).toThrow()
+  const options = [
+    ...tray.querySelectorAll<HTMLInputElement>("input[type=radio]"),
+  ]
+  expect(new Set(options.map((option) => option.name)).size).toBe(1)
   expect(
-    [...card.container.querySelectorAll("button")].every((b) => b.disabled)
-  ).toBe(true)
-  await card.unmount()
+    options.filter((option) => option.checked).map((o) => o.value)
+  ).toEqual([NAME])
+  // The reason is the best card's description, and no other card has one.
+  expect(
+    options.map((option) => option.getAttribute("aria-describedby") !== null)
+  ).toEqual([true, false, false])
+})
+
+it("goes on with the ending picked, not the best one", async () => {
+  const purchase = purchaseOf()
+  const { tray } = await draw(
+    "find_domain",
+    { args: {}, result: FOUND },
+    purchase
+  )
+  await choose(tray, "sparklecleanbristol.com, £12 a year")
+  expect(purchase.registrant).toHaveBeenCalledWith("sparklecleanbristol.com")
 })
 
 it("says plainly when no name was free", async () => {
-  const card = await draw("find_domain", {
+  const { chat, tray } = await draw("find_domain", {
     args: {},
     result: {
       outcome: "refused",
-      error: {
-        class: "resource",
-        code: "domain.unavailable",
-        message: "That name isn't free to register.",
-      },
+      error: { class: "resource", code: "domain.unavailable", message: "x" },
     },
   })
-  expect(card.container.textContent).toContain(
-    "None of the names I tried are free."
-  )
-  expect(buttons(card.container)).toEqual([])
-  await card.unmount()
+  expect(chat.textContent).toContain("None of the names I tried are free.")
+  expect(tray.textContent).toBe("")
 })
 
-it("shows what is bought, for how much, in whose name, and the agreements", async () => {
-  const card = await draw("buy_domain", { args: BUY, result: AWAITING })
-  const text = card.container.textContent ?? ""
-  expect(card.container.querySelector("h3")?.textContent).toBe(NAME)
-  expect(text).toContain("£8 for 1 year, renews yearly.")
-  expect(text).toContain("Sparkle Clean, sole trader")
-  expect(text).toContain("Jane Smith")
-  expect(text).toContain("12 Mill Lane, Bristol, BS1 4AB, GB")
-  const links = [...card.container.querySelectorAll("a")].map((a) => [
-    a.getAttribute("href"),
-    a.getAttribute("target"),
-  ])
-  expect(links).toEqual([
-    ["https://www.cloudflare.com/domain-registration-agreement", "_blank"],
-    ["https://www.icann.org/resources/pages/benefits-2013-09-16-en", "_blank"],
-  ])
-  expect(buttons(card.container)).toEqual([
-    "Edit details",
-    "Continue to pay £8",
-  ])
-  await card.unmount()
-})
-
-it("shows no legal type or company number on a .com, and no county that repeats the city", async () => {
-  // As staging saw it: the assistant sent an individual with a made-up number.
-  const name = "sparklecleaning.com"
-  const card = await draw("buy_domain", {
-    args: {
-      name,
-      registrant: {
-        ...REGISTRANT,
-        address: { ...REGISTRANT.address, state: "Bristol" },
-      },
-      registrant_type: "IND",
-      company_number: "00000000",
+it("reads a search stored before the name rows as one line, not a failure", async () => {
+  const { chat, tray } = await draw("find_domain", {
+    args: {},
+    result: {
+      outcome: "found",
+      best: { name: "sparkleclean.com", price_gbp_year: 12, why: "Short." },
+      options: [],
     },
-    result: { ...AWAITING, name, price_gbp: 12 },
   })
-  const text = card.container.textContent ?? ""
-  expect(text).toContain("Sparkle Clean")
-  expect(text).not.toContain("individual")
-  expect(text).not.toContain("00000000")
-  expect(text).toContain("12 Mill Lane, Bristol, BS1 4AB, GB")
-  await card.unmount()
+  expect(chat.textContent).toContain("I suggested some names here earlier.")
+  expect(tray.textContent).toBe("")
 })
 
-it("mounts Checkout with the client secret the api returned for the details shown", async () => {
-  const purchase = purchaseOf({
-    outcome: "open",
-    publishable_key: "pk_test_1",
-    client_secret: "cs_x",
-  })
-  const card = await draw(
-    "buy_domain",
-    { args: BUY, result: AWAITING },
+it("asks only for the gaps, pays in a dialog, and leaves one line once paid", async () => {
+  const purchase = purchaseOf()
+  const { chat, tray } = await draw(
+    "find_domain",
+    { args: {}, result: FOUND },
     purchase
   )
-  await press(card.container, "Continue to pay £8")
+  await choose(tray, `${NAME}, £8 a year`)
+  expect(purchase.registrant).toHaveBeenCalledWith(NAME)
+  // What Reme holds is not asked again; the address and the legal type are.
+  const asked = [
+    ...tray.querySelectorAll<HTMLInputElement>("input:not([type=hidden])"),
+  ].map((input) => input.name)
+  expect(new Set(asked)).toEqual(
+    new Set([
+      "street",
+      "city",
+      "postal_code",
+      "country_code",
+      "registrant_type",
+    ])
+  )
+  expect(button(tray, "Pay £8")).toBeTruthy()
+
+  fill(tray, {
+    street: "12 Mill Lane",
+    city: "Bristol",
+    postal_code: "bs1 4ab",
+    country_code: "gb",
+    registrant_type: "STRA",
+  })
+  await submit(tray)
   expect(purchase.checkout).toHaveBeenCalledWith(NAME, {
     registrant: REGISTRANT,
     registrant_type: "STRA",
   })
-  expect(stripe.mount).toHaveBeenCalledWith(
-    card.container.querySelector("[data-slot=domain-checkout]"),
+  const dialog = document.querySelector('[data-slot="dialog-content"]')
+  expect(dialog?.textContent).toContain("Payment details")
+  expect(dialog?.textContent).toContain("Renews at £8 a year, cancel any time.")
+  // Stripe gets the address the owner already gave, not a blank. The email
+  // is the Customer's, set by the api: Elements refuse a second one.
+  const contact = {
+    name: REGISTRANT.name,
+    address: {
+      country: "GB",
+      line1: "12 Mill Lane",
+      city: "Bristol",
+      postal_code: "BS1 4AB",
+    },
+  }
+  expect(stripe.init.mock.calls[0]?.slice(1)).toEqual([
     "pk_test_1",
     "cs_x",
-    expect.any(Function)
-  )
-  // A keyboard owner lands on the payment form, not the page.
-  expect(document.activeElement?.getAttribute("data-slot")).toBe(
-    "domain-checkout"
-  )
-  // Paying is under way: the details are fixed in this Checkout.
-  expect(buttons(card.container)).toEqual([])
-  await card.unmount()
-  expect(stripe.unmount).toHaveBeenCalledOnce()
-})
-
-it("shows the hold as authorised once Checkout completes on the page", async () => {
-  // The api still reads the row as awaiting payment: the webhook is behind.
-  const purchase = purchaseOf(
-    { outcome: "open", publishable_key: "pk_test_1", client_secret: "cs_x" },
-    { state: "awaiting_payment", test: false }
-  )
-  const card = await draw(
-    "buy_domain",
-    { args: BUY, result: AWAITING },
-    purchase
-  )
-  await press(card.container, "Continue to pay £8")
-  const complete = stripe.mount.mock.calls[0]?.[3] as () => void
-  await act(async () => complete())
-  expect(card.container.textContent).toContain("Payment approved.")
-  expect(card.container.querySelector("[data-slot=domain-checkout]")).toBeNull()
-  expect(stripe.unmount).toHaveBeenCalledOnce()
-  await card.unmount()
-})
-
-it("says buying is off, with nothing to retry, when the app has no Checkout", async () => {
-  const card = await draw("buy_domain", { args: BUY, result: AWAITING })
-  await press(card.container, "Continue to pay £8")
-  expect(card.container.textContent).toContain(
-    "Buying a domain isn't available yet."
-  )
-  expect(buttons(card.container)).toEqual(["Edit details"])
-  expect(stripe.mount).not.toHaveBeenCalled()
-  await card.unmount()
-})
-
-it("reads a refusal by its code and offers to try again", async () => {
-  const purchase = purchaseOf({
-    outcome: "refused",
-    code: "domain.price_changed",
+    { billingAddress: contact },
+  ])
+  // What confirm sends, the card form must not also ask for, or Stripe
+  // refuses the confirm. Link is the button above, not a sign-up in the
+  // card form, and the renewal consent is ours, under Pay.
+  expect(stripe.options.payment).toEqual({
+    fields: { billingDetails: { name: "never", address: "never" } },
+    wallets: { link: "never" },
+    terms: { card: "never" },
   })
-  const card = await draw(
-    "buy_domain",
-    { args: BUY, result: AWAITING },
-    purchase
+  expect(dialog?.textContent).toContain(
+    `By paying you let Reme charge this card £8 a year to renew ${NAME} until you cancel.`
   )
-  await press(card.container, "Continue to pay £8")
-  expect(card.container.querySelector("[role=alert]")?.textContent).toContain(
-    "That domain's price has changed, so nothing was charged."
+
+  // Wallets that fail to load go away, and the card form still pays.
+  await vi.waitFor(() =>
+    expect(stripe.handlers["express:loaderror"]).toBeTruthy()
   )
-  expect(buttons(card.container)).toEqual(["Edit details", "Try again"])
-  await card.unmount()
+  await act(async () => stripe.handlers["express:loaderror"]?.({}))
+  expect(
+    dialog?.querySelector<HTMLElement>('[data-slot="domain-wallets"]')?.hidden
+  ).toBe(true)
+  expect(dialog?.textContent).not.toContain("did not load")
+
+  // Stripe answers a decline in words, under Pay, and Pay comes back.
+  stripe.confirm.mockResolvedValueOnce({
+    type: "error",
+    error: { message: "Your card was declined." },
+  })
+  const pay = () => button(dialog as Element, "Pay £8")
+  await vi.waitFor(() => expect(pay().getAttribute("aria-busy")).toBeNull())
+  await act(async () => pay().click())
+  expect(dialog?.querySelector('[role="alert"]')?.textContent).toBe(
+    "Your card was declined."
+  )
+  expect(pay().getAttribute("aria-busy")).toBeNull()
+
+  // A confirm Stripe throws from is said the same way, not swallowed.
+  const logged = vi.spyOn(console, "error").mockImplementation(() => undefined)
+  stripe.confirm.mockRejectedValueOnce(new Error("IntegrationError"))
+  await act(async () => pay().click())
+  expect(dialog?.querySelector('[role="alert"]')?.textContent).toBe(
+    "The payment could not be made. Try again."
+  )
+  expect(pay().getAttribute("aria-busy")).toBeNull()
+  logged.mockRestore()
+
+  await act(async () => pay().click())
+  expect(stripe.confirm).toHaveBeenLastCalledWith({
+    redirect: "if_required",
+    billingAddress: contact,
+  })
+  await vi.waitFor(() =>
+    expect(chat.textContent).toContain(
+      `Payment approved. I'm registering ${NAME}`
+    )
+  )
+  expect(tray.textContent).toBe("")
+  expect(document.querySelector('[data-slot="dialog-content"]')).toBeNull()
 })
 
-it("lets the owner correct the details before paying, and pays with the corrected ones", async () => {
-  const purchase = purchaseOf({
-    outcome: "open",
-    publishable_key: "pk_test_1",
-    client_secret: "cs_x",
-  })
-  const card = await draw(
+it("opens Your details from buy_domain's prefill without reading it again", async () => {
+  const purchase = purchaseOf()
+  const { tray } = await draw(
     "buy_domain",
-    { args: BUY, result: AWAITING },
+    { args: { name: NAME }, result: { outcome: "details", ...PREFILL } },
     purchase
   )
-  await press(card.container, "Edit details")
-  const form = card.container.querySelector("form")
-  if (!form) throw new Error("no form")
-  // The first field takes focus, so a keyboard owner starts typing there.
-  expect(document.activeElement?.getAttribute("name")).toBe("name")
-  const input = (name: string) =>
-    form.querySelector<HTMLInputElement>(`[name=${name}]`) as HTMLInputElement
-  input("name").value = "Jane A. Smith"
-  input("phone").value = "07700 900456"
-  await act(async () => form.requestSubmit())
-  expect(card.container.textContent).toContain("Jane A. Smith")
-  // Back on the summary, focus returns to the button that opened the form.
-  await act(
-    async () => new Promise<void>((done) => requestAnimationFrame(() => done()))
-  )
-  expect(document.activeElement?.textContent).toContain("Edit details")
-  await press(card.container, "Continue to pay £8")
-  expect(purchase.checkout).toHaveBeenCalledWith(NAME, {
-    registrant: {
-      ...REGISTRANT,
-      name: "Jane A. Smith",
-      phone: "+447700900456",
+  expect(purchase.registrant).not.toHaveBeenCalled()
+  expect(tray.querySelector('input[name="street"]')).toBeTruthy()
+  expect(
+    tray.querySelector('input[name="email"]:not([type=hidden])')
+  ).toBeNull()
+  expect(button(tray, "Pay £8")).toBeTruthy()
+})
+
+it("keeps a fresh Pay after the dialog closes unpaid", async () => {
+  const purchase = purchaseOf()
+  const { tray } = await draw(
+    "buy_domain",
+    {
+      args: { name: NAME, registrant: REGISTRANT, registrant_type: "STRA" },
+      result: {
+        outcome: "awaiting_payment",
+        name: NAME,
+        price_gbp: 8,
+        checkout: "embedded",
+      },
     },
-    registrant_type: "STRA",
-  })
-  await card.unmount()
-})
-
-it("keeps the form open and says what is wrong when a field does not read", async () => {
-  const card = await draw("buy_domain", { args: BUY, result: AWAITING })
-  await press(card.container, "Edit details")
-  const form = card.container.querySelector("form") as HTMLFormElement
-  ;(form.querySelector("[name=email]") as HTMLInputElement).value = "jane"
-  await act(async () => form.requestSubmit())
-  const email = form.querySelector("[name=email]")
-  expect(email?.getAttribute("aria-invalid")).toBe("true")
-  expect(card.container.textContent).toContain(
-    "Write an email address you read."
+    purchaseOf({
+      ...purchase,
+      registrant: vi.fn(async () => ({
+        ...PREFILL,
+        registrant: REGISTRANT,
+        missing: [],
+      })),
+    })
   )
-  await card.unmount()
+  // Nothing is missing, but a .co.uk still needs its legal type.
+  fill(tray, { registrant_type: "LTD", company_number: "" })
+  await submit(tray)
+  expect(tray.textContent).toContain(
+    "Write the 8-character Companies House number."
+  )
+  fill(tray, { company_number: "sc123456" })
+  await submit(tray)
+  await act(async () =>
+    button(document.body, "Close").dispatchEvent(
+      new MouseEvent("click", { bubbles: true })
+    )
+  )
+  await vi.waitFor(() =>
+    expect(document.querySelector('[data-slot="dialog-content"]')).toBeNull()
+  )
+  await vi.waitFor(() => expect(button(tray, "Pay £8").disabled).toBe(false))
 })
 
-it.each([
-  [
-    "authorised",
-    { state: "verifying", test: false },
-    "Payment approved. I'm registering",
-  ],
-  [
-    "registered",
-    { state: "active", test: false, outcome: "registered" },
-    `${NAME} is yours, and your website is on it.`,
-  ],
-  [
-    "test",
-    { state: "verifying", test: true, outcome: "test_registered" },
-    "Test purchase complete: paid in test mode, registered in Cloudflare's sandbox, not live on the internet.",
-  ],
-  [
-    "failed",
-    { state: "failed", test: false, outcome: "payment_released" },
-    "could not be registered, so your card was not charged",
-  ],
-  [
-    "abandoned",
-    { state: "abandoned", test: false, outcome: "expired" },
-    "timed out before it was made",
-  ],
-] as const)(
-  "shows a %s purchase as such, with no way to pay again",
-  async (status, read, line) => {
-    const purchase = purchaseOf({ outcome: "refused", code: null }, read)
-    const card = await draw(
-      "buy_domain",
-      { args: BUY, result: AWAITING },
-      purchase
-    )
-    expect(card.container.textContent).toContain(line)
-    expect(buttons(card.container)).toEqual([])
-    expect(purchase.status).toHaveBeenCalledWith(NAME)
-    // A tick only where the purchase went through.
-    expect(card.container.querySelector("svg") !== null).toBe(
-      status !== "failed" && status !== "abandoned"
-    )
-    await card.unmount()
-  }
-)
-
-it("offers no payment until the read says the purchase still waits on one", async () => {
-  let answer: (read: null) => void = () => undefined
-  const purchase = {
-    checkout: vi.fn(),
-    status: vi.fn(() => new Promise<null>((resolve) => (answer = resolve))),
-  }
-  const card = await draw(
+it("says a refusal by its code", async () => {
+  const { tray } = await draw(
     "buy_domain",
-    { args: BUY, result: AWAITING },
+    {
+      args: { name: "sparkleclean.com", registrant: REGISTRANT },
+      result: {
+        outcome: "awaiting_payment",
+        name: "sparkleclean.com",
+        price_gbp: 12,
+        checkout: "embedded",
+      },
+    },
+    purchaseOf({
+      registrant: vi.fn(async () => ({ refused: "domain.unavailable" })),
+    })
+  )
+  expect(tray.querySelector('[role="alert"]')?.textContent).toContain(
+    "That name isn't free to register"
+  )
+})
+
+it("shows a name already bought as its line, with no Pay", async () => {
+  const read: Read = { state: "active", test: false, outcome: "registered" }
+  const { chat, tray } = await draw(
+    "find_domain",
+    { args: {}, result: FOUND },
+    purchaseOf({ status: vi.fn(async () => ({ name: NAME, ...read })) })
+  )
+  await choose(tray, `${NAME}, £8 a year`)
+  await vi.waitFor(() =>
+    expect(chat.textContent).toContain(
+      `${NAME} is yours, and your website is on it.`
+    )
+  )
+  expect(tray.textContent).toBe("")
+})
+
+it("buys elsewhere: links with the name, tells the api, then waits for done", async () => {
+  const purchase = purchaseOf()
+  const { tray } = await draw(
+    "find_domain",
+    { args: {}, result: FOUND },
     purchase
   )
-  const pay = () =>
-    [...card.container.querySelectorAll("button")].find(
-      (b) =>
-        b.textContent?.includes("pay") || b.textContent?.includes("Checking")
-    )
-  expect(pay()?.textContent).toBe("Checking the purchase")
-  expect(pay()?.disabled).toBe(true)
-  await act(async () => answer(null))
-  expect(pay()?.textContent).toBe("Continue to pay £8")
-  expect(pay()?.disabled).toBe(false)
-  await card.unmount()
+  await press(tray, "Buy directly from a provider")
+  const links = [...tray.querySelectorAll("a")].map((a) => a.href)
+  expect(links).toEqual([
+    `https://domains.cloudflare.com/?domain=${NAME}`,
+    `https://www.godaddy.com/domainsearch/find?domainToCheck=${NAME}`,
+  ])
+  await act(async () => tray.querySelector("a")?.click())
+  expect(purchase.elsewhere).toHaveBeenCalledWith(NAME)
+  expect(tray.querySelector("h2")?.textContent).toBe(
+    "Tell me when you've bought it"
+  )
+
+  await press(tray, "Done, I bought it")
+  expect(purchase.bought).toHaveBeenCalledWith(NAME)
+  expect(tray.textContent).toContain(`I can't see ${NAME} at the registry yet.`)
 })
 
-it("reads a registering purchase again until it settles", async () => {
-  vi.useFakeTimers()
-  const reads: Read[] = [
-    { state: "verifying", test: false },
-    { state: "verifying", test: false, outcome: "registered" },
-    { state: "active", test: false, outcome: "registered" },
-  ]
-  const purchase = {
-    checkout: vi.fn(),
-    status: vi.fn(async () => ({ name: NAME, ...(reads.shift() as Read) })),
-  }
-  const card = await draw(
-    "buy_domain",
-    { args: BUY, result: AWAITING },
-    purchase
+it("connects a name bought elsewhere once the registry shows it", async () => {
+  const { chat, tray } = await draw(
+    "find_domain",
+    { args: {}, result: FOUND },
+    purchaseOf({
+      bought: vi.fn(async () => ({
+        outcome: "connecting" as const,
+        method: "records" as const,
+        email_affected: false,
+        steps: [
+          {
+            type: "CNAME" as const,
+            name: "www",
+            value: "domains.remeai.co.uk",
+          },
+        ],
+      })),
+    })
   )
-  expect(card.container.textContent).toContain("Payment approved.")
-  await act(async () => vi.advanceTimersByTimeAsync(5000))
-  expect(card.container.textContent).toContain("Your website goes on it")
-  await act(async () => vi.advanceTimersByTimeAsync(5000))
-  expect(card.container.textContent).toContain("your website is on it.")
-  // Settled: no more reads.
-  await act(async () => vi.advanceTimersByTimeAsync(20000))
-  expect(purchase.status).toHaveBeenCalledTimes(3)
-  vi.useRealTimers()
-  await card.unmount()
+  await press(tray, "Buy directly from a provider")
+  await act(async () => tray.querySelector("a")?.click())
+  await press(tray, "Done, I bought it")
+  expect(chat.textContent).toContain(`${NAME} is yours.`)
+  expect(chat.querySelectorAll("ol > li")).toHaveLength(1)
+  expect(tray.textContent).toBe("")
 })
 
-it("says a Checkout that expired while open timed out", async () => {
-  vi.useFakeTimers()
-  const reads: (Read | null)[] = [
-    null,
-    null,
-    { state: "abandoned", test: false, outcome: "expired" },
-  ]
-  const purchase = {
-    checkout: vi.fn(async () => ({
-      outcome: "open" as const,
-      publishable_key: "pk_test_1",
-      client_secret: "cs_x",
-    })),
-    status: vi.fn(async () => {
-      const read = reads.shift()
-      return read ? { name: NAME, ...read } : null
-    }),
-  }
-  const card = await draw(
-    "buy_domain",
-    { args: BUY, result: AWAITING },
-    purchase
+it("leaves one line on Not now, and none of the tray once the chat moves on", async () => {
+  const { chat, tray } = await found()
+  await press(tray, "Not now")
+  expect(chat.textContent).toBe("You said not now.")
+  expect(tray.textContent).toBe("")
+
+  sessionStorage.clear()
+  store.after = ["user"]
+  const later = await found()
+  expect(later.chat.textContent).toBe(
+    "Names I found: sparkleclean, sparklecleanbristol."
   )
-  await press(card.container, "Continue to pay £8")
-  await act(async () => vi.advanceTimersByTimeAsync(20_000))
-  expect(card.container.textContent).toContain("timed out before it was made")
-  vi.useRealTimers()
-  await card.unmount()
+  expect(later.tray.textContent).toBe("")
+})
+
+it("stays open when the assistant posts below it, as the site going live does", async () => {
+  store.after = ["assistant"]
+  const { tray } = await found()
+  expect(tray.textContent).toContain("sparkleclean")
 })
 
 it("reads every purchase outcome in the card's words", () => {
@@ -557,10 +678,7 @@ it("asks a .co.uk for who the registrant is in law, and a company for its number
   ).toEqual({
     ok: true,
     details: {
-      registrant: {
-        ...REGISTRANT,
-        address: { ...REGISTRANT.address, postal_code: "BS1 4AB" },
-      },
+      registrant: REGISTRANT,
       registrant_type: "LTD",
       company_number: "SC123456",
     },

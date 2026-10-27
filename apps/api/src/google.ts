@@ -1,8 +1,14 @@
 import {
   type ConnectGoogleOutput,
   GoogleConnectRequest,
+  GoogleResultRequest,
+  type ServerButton,
 } from "@workspace/contracts"
-import { searchConnections, type Tenancy } from "@workspace/db"
+import {
+  postAssistantMessage,
+  searchConnections,
+  type Tenancy,
+} from "@workspace/db"
 import { bridge, type Owner, relay } from "./changes.ts"
 import { isOrgOwner } from "./domain-buy.ts"
 import { failure, invalid, readBody } from "./http.ts"
@@ -50,6 +56,57 @@ export async function googleConnect(
   return relay(result, () => {
     throw new Error("a connect answers 204 and no body")
   })
+}
+
+const CONNECT: ServerButton = {
+  label: "Connect Google",
+  action: { kind: "connect", service: "google" },
+}
+
+const RESULT: Record<
+  GoogleResultRequest["result"],
+  { text: string; button?: ServerButton }
+> = {
+  connected: {
+    text: "Google is connected. I'm adding your site to Search Console now and I'll tell you when it's in.",
+  },
+  // The owner's choice, not a fault: one quiet line and no button.
+  cancelled: {
+    text: "No problem, Google isn't connected. Say the word whenever you want to try again.",
+  },
+  failed: {
+    text: "Google didn't connect, so your site isn't in Search Console yet. The sign-in link runs out if it sits for a while. Say the word and I'll send a fresh one.",
+    button: CONNECT,
+  },
+  scopes_missing: {
+    text: "Google needs one more permission before I can add your site. Connect again and leave both boxes ticked.",
+    button: { ...CONNECT, label: "Reconnect Google" },
+  },
+}
+
+/**
+ * `POST /google/result`: how the callback ended. One message from the
+ * assistant says so, keyed by the attempt so a reloaded callback says it once.
+ *
+ * shortcut: a chat in a turn drops the message; retry from a Workflow if
+ * that ever matters.
+ */
+export async function googleResult(
+  request: Request,
+  kit: Tenancy,
+  owner: Owner
+): Promise<Response> {
+  if (!(await isOrgOwner(kit, owner))) return notOwner()
+  const parsed = GoogleResultRequest.safeParse(await readBody(request))
+  if (!parsed.success) return invalid(parsed.error.issues)
+  const { attempt, result } = parsed.data
+  const { text, button } = RESULT[result]
+  await postAssistantMessage(kit, {
+    orgId: owner.orgId,
+    key: `google.result:${attempt}`,
+    message: { text: [text], ...(button && { button }) },
+  })
+  return new Response(null, { status: 204 })
 }
 
 /**

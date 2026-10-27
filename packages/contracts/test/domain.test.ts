@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest"
 import {
+  ADDRESS_ASK,
+  addressReply,
   BUY_REFUSALS,
-  BuyDomainAsk,
   BuyDomainInput,
+  BuyDomainOutput,
   CheckDomainOutput,
   ConnectDomainOutput,
   DnsRecord,
@@ -14,6 +16,7 @@ import {
   DomainRegistration,
   DomainTld,
   ErrorEnvelope,
+  ownDomain,
   RemoveDomainOutput,
   ServerButtonPart,
   ServerMessage,
@@ -274,38 +277,24 @@ describe("sellableTld", () => {
 })
 
 describe("BuyDomainInput", () => {
-  const input = samples.BuyDomainInput as {
-    registrant: { address: object }
-  }
-  const registrant = (patch: object) => ({
-    ...input,
-    registrant: { ...input.registrant, ...patch },
-  })
+  const input = samples.BuyDomainInput as object
   it.each([
-    [
-      "a company number in lower case",
-      { ...input, company_number: "sc123456" },
-    ],
-    [
-      "a country by name",
-      registrant({
-        address: { ...input.registrant.address, country_code: "UK " },
-      }),
-    ],
-    ["a phone not in E.164", registrant({ phone: "07700 900123" })],
-    ["a registrant type of its own", { ...input, registrant_type: "CHARITY" }],
+    ["a registrant", { ...input, registrant: { name: "Jane Smith" } }],
     ["a price from the model", { ...input, price_gbp: 1 }],
+    ["no name", {}],
   ])("refuses %s", (_name, value) => {
     expect(verdict("BuyDomainInput", BuyDomainInput, value)).toEqual(REFUSED)
   })
 
-  it("takes a county from a stored input, never from the model", () => {
-    const county = registrant({
-      address: { ...input.registrant.address, state: "Somerset" },
-    })
-    expect(BuyDomainInput.safeParse(county).success).toBe(true)
-    expect(BuyDomainAsk.safeParse(county).success).toBe(false)
-    expect(BuyDomainAsk.safeParse(input).success).toBe(true)
+  it("still reads the answer it gave before the details page", () => {
+    expect(
+      BuyDomainOutput.safeParse({
+        outcome: "awaiting_payment",
+        name: "brightclean.co.uk",
+        price_gbp: 8,
+        checkout: "embedded",
+      }).success
+    ).toBe(true)
   })
 })
 
@@ -358,5 +347,35 @@ describe("DomainRegistration", () => {
 describe("BUY_REFUSALS", () => {
   it.each(Object.values(BUY_REFUSALS))("$code is an envelope code", (r) => {
     expect(ErrorEnvelope.shape.code.safeParse(r.code).success).toBe(true)
+  })
+})
+
+describe("ownDomain", () => {
+  it.each([
+    ["Hello@NorthsideGrooming.co.uk", "northsidegrooming.co.uk"],
+    ["jo@mail.brightclean.com", "mail.brightclean.com"],
+  ])("takes the own domain of %s", (email, domain) => {
+    expect(ownDomain(email)).toBe(domain)
+  })
+
+  it.each(["jo@gmail.com", "jo@Hotmail.co.uk", "jo@btinternet.com", "nobody"])(
+    "takes none from %s",
+    (email) => {
+      expect(ownDomain(email)).toBeNull()
+    }
+  )
+})
+
+describe("addressReply", () => {
+  it("speaks for Yes with and without a name, and for No", () => {
+    expect(addressReply(ADDRESS_ASK.yes, "sparkle.co.uk")).toBe(
+      "Yes, it's sparkle.co.uk"
+    )
+    expect(addressReply(ADDRESS_ASK.yes)).toBe("Yes, I have a web address")
+    expect(addressReply(ADDRESS_ASK.no)).toBe(ADDRESS_ASK.no)
+  })
+
+  it("says nothing for Not now", () => {
+    expect(addressReply(ADDRESS_ASK.later)).toBeNull()
   })
 })

@@ -1,5 +1,5 @@
 {
-  "_": "The ordered step names of every Workflow path, written by test/workflow-steps.test.ts, test/publish.test.ts test/domain-workflow.test.ts test/search-workflow.test.ts and test/search-sync-workflow.test.ts. A resumed instance runs the deployed code's step list against this one (open item 46, ADR-032): when this file changes, the staging deploy refuses while any instance is live. A number in a name is the round or the attempt, which a resumed instance replays identically.",
+  "_": "The ordered step names of every Workflow path, written by test/workflow-steps.test.ts, test/publish.test.ts test/domain-workflow.test.ts test/search-workflow.test.ts, test/search-sync-workflow.test.ts and test/elsewhere-workflow.test.ts. A resumed instance runs the deployed code's step list against this one (open item 46, ADR-032): when this file changes, the staging deploy refuses while any instance is live. A number in a name is the round or the attempt, which a resumed instance replays identically.",
   "AssignmentWorkflow": {
     "build": [
       "claim 1",
@@ -749,6 +749,7 @@
       "check 2",
       "look 3",
       "activate",
+      "loads 1",
       "say live",
       "settle",
       "pointers again"
@@ -794,6 +795,7 @@
       "wait serving 1",
       "serving 2",
       "activate",
+      "loads 1",
       "say live",
       "settle",
       "pointers again"
@@ -829,6 +831,29 @@
       "serving 1",
       "stalled",
       "say stalled"
+    ],
+    "served after activation": [
+      "hostnames",
+      "look 1",
+      "activate",
+      "loads 1",
+      "wait loads 1",
+      "loads 2",
+      "wait loads 2",
+      "loads 3",
+      "say live",
+      "settle",
+      "pointers again"
+    ],
+    "never served": [
+      "hostnames",
+      "look 1",
+      "activate",
+      "loads 1",
+      "wait loads 1",
+      "loads 2",
+      "not served",
+      "say not served"
     ]
   },
   "SearchWorkflow": {
@@ -863,12 +888,44 @@
       "verify 7",
       "wait 7",
       "verify 8",
-      "failed"
+      "failed",
+      "say failed"
     ]
   },
   "SearchSyncWorkflow": {
-    "synced": ["properties", "pull 1", "inspect 1", "pull 2", "inspect 2"],
-    "stale": ["properties", "pull 1", "pull 2", "inspect 2"],
-    "needs reauth": ["properties", "pull 1"]
+    "synced": [
+      "permissions",
+      "properties",
+      "pull 1",
+      "inspect 1",
+      "pull 2",
+      "inspect 2",
+      "payoff"
+    ],
+    "stale": [
+      "permissions",
+      "properties",
+      "pull 1",
+      "pull 2",
+      "inspect 2",
+      "payoff"
+    ],
+    "needs reauth": ["permissions", "properties", "pull 1"],
+    "lost permission": ["permissions", "say permissions"]
+  },
+  "ElsewhereWorkflow": {
+    "registered": ["look 1", "wait 1", "look 2", "say 2"],
+    "owner done": ["look 1", "wait 1", "look 2"],
+    "follow up and stop": [
+      "look 1",
+      "wait 1",
+      "look 2",
+      "follow up",
+      "say follow up",
+      "wait 2",
+      "look 3",
+      "wait 3",
+      "look 4"
+    ]
   }
 }

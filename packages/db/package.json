@@ -8,6 +8,7 @@
     "db:check": "drizzle-kit check",
     "db:migrate": "node scripts/migrate.ts",
     "probe:clear": "node scripts/clear-probes.ts",
+    "tasks:backfill": "node scripts/backfill-tasks.ts",
     "typecheck": "tsc --noEmit",
     "test": "node ../../scripts/floor.mjs db-unit -- vitest run --dir test",
     "test:tenancy": "node ../../scripts/floor.mjs db-tenancy -- vitest run --dir tenancy",

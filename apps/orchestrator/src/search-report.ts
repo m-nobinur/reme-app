@@ -1,13 +1,14 @@
 // The Monday search message: a fixed template, no model call. Every query and
 // page it quotes was typed or published by someone else, so each goes through
 // `cleanQuery` and sits inside quotes or a name, never in the sentence's shape.
+import type { SearchConnectionState } from "@workspace/contracts"
 import { cleanQuery, type Suggestion, type Window } from "./search-rules.ts"
 
 type When = Date | string
 
 export type ReportInput = {
   /** `never` is no connection row; `revoked` is the owner's own disconnect. */
-  state: "active" | "needs_reauth" | "revoked" | "never"
+  state: SearchConnectionState | "never"
   pausedOn?: When
   declined?: boolean
   /** The one reminder has already been sent. */
@@ -83,7 +84,8 @@ export function weeklyReport(input: ReportInput): Report | null {
       chips: ["Connect Google", "Later"],
     }
   }
-  if (input.state === "needs_reauth") {
+  // A box left unticked is fixed the same way: sign in again.
+  if (input.state === "needs_reauth" || input.state === "needs_permission") {
     const d = input.pausedOn ? new Date(input.pausedOn) : null
     const on = d ? ` on ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}` : ""
     return {

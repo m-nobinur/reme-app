@@ -1,16 +1,26 @@
 import {
+  BoughtElsewhereOutput,
   BUY_REFUSALS,
+  DOMAIN_PRICES,
   DomainCheckout,
   DomainCheckoutRequest,
   DomainPaymentEvent,
   DomainPrice,
   DomainPurchaseStatus,
+  DomainRegistrantPrefill,
   DomainRegistration,
   DomainStripe,
   idempotencyKey,
+  needsRegistrantType,
+  Registrant,
+  RegistrantDetails,
+  RegistrantDraft,
+  type RegistrantField,
+  sellableTld,
   Uuid,
 } from "@workspace/contracts"
 import {
+  currentFacts,
   domains,
   eq,
   memberships,
@@ -32,7 +42,7 @@ import { StripeFailed, stripe, verifyStripeSignature } from "./stripe.ts"
 
 /**
  * The buy path's api half (custom-domains plan, "Buy and pay path"): the
- * owner's embedded Checkout for a domain the orchestrator holds as
+ * owner's Checkout Session for a domain the orchestrator holds as
  * `awaiting_payment`, and Stripe's webhook, verified here and handed to the
  * orchestrator, which owns the domains row and every state it moves to.
  * The amount comes from the row's price, never from the client or the model.
@@ -133,6 +143,7 @@ type Session = {
   status: "open" | "complete" | "expired"
   client_secret: string | null
   expires_at: number
+  ui_mode: string
 }
 
 /**
@@ -180,13 +191,89 @@ function returnUrl(env: Env, name: string) {
   return `${back.href}&session_id={CHECKOUT_SESSION_ID}`
 }
 
+/** The value of each current fact, by key. */
+async function factValues(kit: Tenancy, orgId: string) {
+  const rows = await kit.withOrg({ orgId }, (db) => currentFacts(db))
+  return (key: string) =>
+    rows.find((r) => r.key === key)?.value as
+      | Record<string, unknown>
+      | undefined
+}
+
+/** The registrant fields every purchase needs; `business_name` and `state` are optional. */
+const REQUIRED = [
+  "name",
+  "email",
+  "phone",
+  "street",
+  "city",
+  "postal_code",
+  "country_code",
+] as const satisfies readonly RegistrantField[]
+
 /**
- * `POST /domains/{name}/checkout`: the embedded Checkout for the org's
- * newest purchase of that name while it is `awaiting_payment`, the owner
- * only. The body is the registrant as the card shows it or the owner
- * corrected it; the orchestrator stores it with the session and checks it
- * against the name's ending. A session still open for the row is handed
- * back rather than replaced, so a reopened card leaves no second one to
+ * `GET /domains/{name}/registrant`: the details page for buying `name`. A
+ * purchase still open for any name gives the details the owner already
+ * typed; otherwise the business facts (name, phone) and the signed-in owner
+ * (their name, and their email, since Cloudflare's confirmation link goes
+ * there). A value that would not pass the registrant's own rules is left as a
+ * gap rather than shown. Registrant details live only on an open purchase,
+ * so after an expiry the address is asked again.
+ */
+export async function registrantPrefill(
+  kit: Tenancy,
+  owner: Owner,
+  name: string
+): Promise<Response> {
+  if (!(await isOrgOwner(kit, owner))) return notOwner("buy")
+  const tld = sellableTld(name)
+  if (!tld) return failure(409, BUY_REFUSALS.unavailable)
+  const [open] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+    db
+      .select({ registrant: domains.registrant })
+      .from(domains)
+      .where(
+        sql`${domains.state} = 'awaiting_payment' and ${domains.registrant} is not null`
+      )
+      .orderBy(sql`${domains.createdAt} desc`)
+      .limit(1)
+  )
+  const held = RegistrantDetails.safeParse(open?.registrant).data
+  const fact = await factValues(kit, owner.orgId)
+  const keep = <K extends keyof typeof Registrant.shape>(k: K, v: unknown) =>
+    Registrant.shape[k].safeParse(v).success ? { [k]: v } : {}
+  const registrant = RegistrantDraft.parse(
+    held?.registrant ?? {
+      ...keep("name", owner.session.name),
+      ...keep("business_name", fact("business.name")?.name),
+      ...keep("email", owner.session.email || fact("business.email")?.address),
+      ...keep("phone", fact("business.phone")?.e164),
+    }
+  )
+  const filled = { ...registrant, ...registrant.address }
+  const missing: RegistrantField[] = REQUIRED.filter((f) => !filled[f])
+  // shortcut: the type is asked again for .co.uk and .uk even when an open
+  // purchase holds one; the prefill carries the registrant only. Add the type
+  // to it once .uk sells live.
+  if (needsRegistrantType(name)) missing.push("registrant_type")
+  return Response.json(
+    DomainRegistrantPrefill.parse({
+      name,
+      price_gbp_year: DOMAIN_PRICES[tld].retail_gbp,
+      registrant,
+      missing,
+    })
+  )
+}
+
+/**
+ * `POST /domains/{name}/checkout`: the Checkout Session for the org's
+ * purchase of that name, opened (or refreshed) first through the
+ * orchestrator's `buy`, the owner only. The body is the registrant as the
+ * page shows it or the owner corrected it; the orchestrator stores it with
+ * the session and checks it
+ * against the name's ending. An Elements session still open for the row
+ * is handed back rather than replaced, so a reopened card leaves no second one to
  * expire under it. Otherwise a new one: a manual capture hold (the Workflow
  * captures after registering), the card saved for the renewal
  * subscription, dynamic payment methods, and `org_id` with `domain_id` in
@@ -205,6 +292,13 @@ export async function checkout(
   if (!details.success) return invalid(details.error.issues)
   if (!buyConfigured(env)) return buyUnavailable()
   if (!(await isOrgOwner(kit, owner))) return notOwner("buy")
+  // Opens the purchase, or refreshes the one waiting with these details and
+  // today's price, so Pay works first time and again after an expiry.
+  const opened = await bridge(env, owner, "/domains/buy", {
+    body: { name, ...details.data },
+    key: `buy:${name}:${key}`,
+  })
+  if (opened.status >= 300) return relay(opened, () => null)
   const row = await newest(kit, owner.orgId, name)
   if (!row) return noPurchase()
   if (row.state !== "awaiting_payment") {
@@ -220,22 +314,36 @@ export async function checkout(
   const held = DomainStripe.partial().safeParse(row.stripe ?? {}).data
   try {
     let session: Session | null = null
+    // An open session from before the move to Elements (`embedded_page`)
+    // would never load in the payment dialog, so it is replaced.
+    let stale: string | null = null
     if (held?.checkout_session) {
       const open = await stripe<Session>(
         secretKey,
         `checkout/sessions/${held.checkout_session}`
       )
-      if (open.status === "open" && open.client_secret) session = open
+      if (open.status === "open" && open.client_secret) {
+        if (open.ui_mode === "elements") session = open
+        else stale = open.id
+      }
     }
     const customer = held?.customer ?? (await customerOf(env, kit, owner.orgId))
     const metadata = { org_id: owner.orgId, domain_id: row.id }
+    // The email reaches Checkout through the Customer, and only that way:
+    // once the Customer has one, Elements refuse an email from the page.
+    if (!session) {
+      await stripe(secretKey, `customers/${customer}`, {
+        email: details.data.registrant.email,
+      })
+    }
     session ??= await stripe<Session>(
       secretKey,
       "checkout/sessions",
       {
         mode: "payment",
-        ui_mode: "embedded_page",
-        redirect_on_completion: "if_required",
+        // The web draws the form with Stripe's Elements and confirms a card
+        // on the page; only a redirect-based method goes to return_url.
+        ui_mode: "elements",
         return_url: returnUrl(env, row.name),
         customer,
         line_items: [
@@ -269,6 +377,19 @@ export async function checkout(
       }
     )
     if (told.status >= 300) return relay(told, () => null)
+    if (stale) {
+      // Only now: the orchestrator acts on an expiry only for the session
+      // it holds, which is the new one, so this cannot abandon the purchase.
+      // A failed expire is harmless, since it lapses on its own.
+      await stripe(secretKey, `checkout/sessions/${stale}/expire`, {}).catch(
+        (error: unknown) => {
+          if (!(error instanceof StripeFailed)) throw error
+          console.error(
+            JSON.stringify({ code: "stripe.expire_failed", stripe: error.code })
+          )
+        }
+      )
+    }
     return Response.json(
       DomainCheckout.parse({
         name: row.name,
@@ -293,6 +414,50 @@ export async function checkout(
       detail: {},
     })
   }
+}
+
+/**
+ * `POST /domains/{name}/elsewhere`: the owner buys `name` themselves. The
+ * orchestrator marks the address task's purchase step as theirs ("buying
+ * <name>") and starts the hold that watches the registry. Finding is free,
+ * so this needs no Stripe keys.
+ */
+export async function buyElsewhere(
+  request: Request,
+  env: Env,
+  kit: Tenancy,
+  owner: Owner,
+  name: string
+): Promise<Response> {
+  if (!(await isOrgOwner(kit, owner))) return notOwner("buy")
+  const result = await bridge(env, owner, "/domains/elsewhere", {
+    body: { name },
+    key: idempotencyKey(request),
+  })
+  if (result.status === 204) return new Response(null, { status: 204 })
+  return relay(result, () => null)
+}
+
+/**
+ * `POST /domains/{name}/bought`: the owner says they bought `name`. Once the
+ * registry shows it, the answer is the connect's, with the records to add;
+ * until then `not_registered_yet`.
+ */
+export async function boughtElsewhere(
+  request: Request,
+  env: Env,
+  kit: Tenancy,
+  owner: Owner,
+  name: string
+): Promise<Response> {
+  if (!(await isOrgOwner(kit, owner))) return notOwner("buy")
+  return relay(
+    await bridge(env, owner, "/domains/bought", {
+      body: { name },
+      key: idempotencyKey(request),
+    }),
+    BoughtElsewhereOutput.parse
+  )
 }
 
 /** The parts of a Stripe event this file reads. */

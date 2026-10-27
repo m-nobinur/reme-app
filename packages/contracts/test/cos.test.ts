@@ -55,8 +55,8 @@ function walk(node: unknown, found: Found) {
 
 describe("COS_TOOLS", () => {
   // A tool added or dropped is a decision, so the list is written out.
-  it("has exactly the sixteen tools, in order", () => {
-    const sixteen = [
+  it("has exactly the nineteen tools, in order", () => {
+    const nineteen = [
       "get_workspace",
       "get_facts",
       "get_preview",
@@ -73,9 +73,12 @@ describe("COS_TOOLS", () => {
       "get_search_performance",
       "get_indexing",
       "remember",
+      "put_off",
+      "inspect_domain",
+      "domain_bought",
     ]
-    expect(Object.keys(COS_TOOLS)).toStrictEqual(sixteen)
-    expect(CosToolName.options).toStrictEqual(sixteen)
+    expect(Object.keys(COS_TOOLS)).toStrictEqual(nineteen)
+    expect(CosToolName.options).toStrictEqual(nineteen)
   })
 
   // Provider tool APIs take an object as a tool's parameters and refuse a

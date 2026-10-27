@@ -58,6 +58,22 @@ export {
   STAFF_CODE,
 } from "./staff.ts"
 export { steerByKey, steerKeyHash } from "./steers.ts"
+export {
+  addressPlan,
+  CONNECT_DEADLINE_MS,
+  type DomainFacts,
+  type GoogleFacts,
+  googlePlan,
+  openTask,
+  PURCHASE_HOLD_MS,
+  putOff,
+  readTasks,
+  type StepWrite,
+  setStep,
+  stepOf,
+  syncTasks,
+  type TaskPlan,
+} from "./tasks.ts"
 export type {
   Identity,
   OrgScopedDb,

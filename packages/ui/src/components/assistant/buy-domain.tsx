@@ -1,39 +1,52 @@
 import {
   type ToolCallMessagePartComponent,
-  useAui,
   useAuiState,
 } from "@assistant-ui/react"
 import {
   ArrowSquareOutIcon,
+  CaretDownIcon,
   CheckCircleIcon,
-  PencilSimpleIcon,
 } from "@phosphor-icons/react"
 import {
+  type BoughtElsewhereOutput,
   BuyDomainInput,
   BuyDomainOutput,
-  type DomainOffer,
+  buyElsewhereLinks,
   type DomainPurchaseStatus,
+  type DomainRegistrantPrefill,
+  type DomainStemOffer,
+  type DomainTld,
   FindDomainInput,
   FindDomainOutput,
+  needsRegistrantType,
   RegistrantDetails,
+  type RegistrantField,
   type RegistrantType,
-  sellableTld,
   toE164,
 } from "@workspace/contracts"
-import { Problem } from "@workspace/ui/components/assistant/decision"
-import { Button } from "@workspace/ui/components/button"
+import { Done, Problem } from "@workspace/ui/components/assistant/decision"
+import { ConnectSteps } from "@workspace/ui/components/assistant/domain"
+import { PayDialog } from "@workspace/ui/components/assistant/pay-dialog"
+import {
+  Docked,
+  TRAY_FIELD,
+  TrayFrame,
+  useTabDraft,
+} from "@workspace/ui/components/assistant/question-tray"
+import { Badge } from "@workspace/ui/components/badge"
+import { ConnectRow, ConnectRows } from "@workspace/ui/components/connect-row"
 import { Field } from "@workspace/ui/components/field"
+import { Input } from "@workspace/ui/components/input"
 import { ToolStatus } from "@workspace/ui/components/status-line"
 import type { ToolArgs } from "@workspace/ui/lib/activity-copy"
-import { CARD_SURFACE, FIELD_ERROR } from "@workspace/ui/lib/card"
+import { FIELD_ERROR, OPTION, OPTION_PILL } from "@workspace/ui/lib/card"
 import { refusalText } from "@workspace/ui/lib/refusal"
-import { mountCheckout } from "@workspace/ui/lib/stripe"
 import { type Failure, readView } from "@workspace/ui/lib/tool-state"
 import { cn, META } from "@workspace/ui/lib/utils"
 import {
-  type ComponentProps,
   createContext,
   type FormEvent,
+  type ReactNode,
   useContext,
   useEffect,
   useId,
@@ -42,14 +55,16 @@ import {
 } from "react"
 
 /**
- * Buying a domain. `find_domain` is a read: the free names it found, each
- * with a button that asks the assistant to buy it in the owner's voice.
- * `buy_domain` prepares a purchase and moves no money, so it has no yes of
- * its own: its card shows what is bought, for how much and in whose name,
- * lets the owner correct the details, and then mounts Stripe's embedded
- * Checkout, where paying is the consent. The price shown is the tool's,
- * which the api took from the price table, never the model's text. What
- * happens after the payment is the purchase's status, read from the app.
+ * Buying a domain, in the question tray. `find_domain`'s rows open it on
+ * Choose: a card for each free full domain with its yearly price, best
+ * first, and "Buy directly from a provider" under them. A card goes
+ * to Your details, prefilled from what the api holds and asking only for
+ * the gaps, and Pay opens the payment dialog on the purchase's Stripe
+ * Checkout Session, where paying is the consent. Buying elsewhere opens
+ * Cloudflare's or GoDaddy's search and leaves the tray waiting for "Done, I bought it". `buy_domain`
+ * and a posted Pay button open Your details for their name. The price shown
+ * is the api's, from the price table, never the model's text. Done, the
+ * tray goes and the thread keeps one line.
  */
 
 /** Where a paid purchase stands, in the card's words. */
@@ -115,69 +130,84 @@ export function purchaseStatusOf(
   }
 }
 
-/** What the card mounts Checkout with, or why it cannot. */
+/** What the dialog mounts Checkout with, or why it cannot. */
 export type CheckoutStart =
   | { outcome: "open"; publishable_key: string; client_secret: string }
   | { outcome: "refused"; code: string | null }
 
-/** What the buy card needs from the app. */
+/** A refusal the api gave, by its code. */
+type Refused = { refused: string | null }
+
+/** What the buy tray needs from the app. */
 export type DomainPurchase = {
-  /** Creates the purchase's Checkout with the details as shown. */
+  /** The details page for a name, prefilled. */
+  registrant: (name: string) => Promise<DomainRegistrantPrefill | Refused>
+  /** Opens the purchase's Checkout with the details as shown. */
   checkout: (name: string, details: RegistrantDetails) => Promise<CheckoutStart>
   /** The newest purchase of that name, or null when there is none. */
   status: (name: string) => Promise<DomainPurchaseStatus | null>
+  /** The owner buys it themselves, so the api watches the registry for it. */
+  elsewhere: (name: string) => Promise<void>
+  /** The owner says they bought it. */
+  bought: (name: string) => Promise<BoughtElsewhereOutput | Refused>
 }
 
 const DomainPurchaseContext = createContext<DomainPurchase | null>(null)
 
-/** Gives the buy card the app's Checkout and purchase status. */
+/** Gives the buy tray the app's purchase calls. */
 export const DomainPurchaseProvider = DomainPurchaseContext.Provider
 
 const AGREEMENT = "https://www.cloudflare.com/domain-registration-agreement"
 const ICANN = "https://www.icann.org/resources/pages/benefits-2013-09-16-en"
 
-/** The message a choose button sends as the owner. */
-export const chooseText = (name: string) => `Buy ${name} for me.`
-
 const pounds = (gbp: number) => `£${gbp}`
 
-/* find_domain ----------------------------------------------------------- */
+/** The endings a row offers, in the order its cards show them. */
+const ENDINGS = ["co.uk", "com", "uk"] as const satisfies DomainTld[]
 
-/** One name on offer, with the button that asks for it. */
-function Offer({
-  offer,
-  best,
-  disabled,
-  onChoose,
-}: {
-  offer: DomainOffer
-  best: boolean
-  disabled: boolean
-  onChoose: () => void
-}) {
+/** One free full domain, which is one card. */
+type Offer = { name: string; price: number; why: string }
+
+/**
+ * Four cards from the rows' free names, best first: the best name in its two
+ * leading endings, then each next name once, then any ending left over. Every
+ * ending of every row would be twelve cards of the same few names.
+ */
+const offersOf = (rows: readonly DomainStemOffer[]): Offer[] => {
+  const free = rows.map((row) =>
+    ENDINGS.flatMap((tld) => {
+      const ending = row.endings[tld]
+      return ending?.state === "free"
+        ? [
+            {
+              name: `${row.stem}.${tld}`,
+              price: ending.price_gbp_year,
+              why: row.why,
+            },
+          ]
+        : []
+    })
+  )
+  const first = [
+    ...(free[0]?.slice(0, 2) ?? []),
+    ...free.slice(1).flatMap((o) => o.slice(0, 1)),
+  ]
+  return [...new Set([...first, ...free.flat()])].slice(0, 4)
+}
+
+/** A link out, which says it opens a new tab. */
+function Out({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3">
-      <div className="flex min-w-0 flex-1 basis-48 flex-col gap-0.5">
-        {best ? (
-          <span className={cn(META, "text-primary")}>Best pick</span>
-        ) : null}
-        <span className="break-all font-medium">{offer.name}</span>
-        <span className={META}>{offer.why}</span>
-      </div>
-      <span className="text-sm tabular-nums">
-        {pounds(offer.price_gbp_year)} a year
-      </span>
-      <Button
-        aria-label={`Choose ${offer.name}`}
-        disabled={disabled}
-        onClick={onChoose}
-        size="sm"
-        type="button"
-        variant={best ? "default" : "outline"}
-      >
-        Choose
-      </Button>
-    </div>
+    <a
+      className="rounded-sm underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary"
+      href={href}
+      rel="noopener noreferrer"
+      target="_blank"
+    >
+      {children}
+      <ArrowSquareOutIcon aria-hidden className="ms-0.5 inline size-3" />
+      <span className="sr-only"> (opens in a new tab)</span>
+    </a>
   )
 }
 
@@ -209,22 +239,848 @@ function ToolLine({
   )
 }
 
-export const FindDomain: ToolCallMessagePartComponent = (props) => {
-  const aui = useAui()
-  const running = useAuiState((s) => s.thread.isRunning)
-  const streaming = useAuiState((s) => s.message.status?.type === "running")
-  const [chosen, setChosen] = useState<string | null>(null)
-  const view = readView(props, FindDomainOutput)
-  const id = useId()
+/* Choose ------------------------------------------------------------------ */
 
+/**
+ * One free domain: its name, then its yearly price. The cards are the radios
+ * of the grid's one group, so the arrow keys and the announcing are the
+ * browser's. The best one wears a pill on its top edge, which also describes
+ * the card to a screen reader with the reason.
+ */
+function NameCard({
+  offer,
+  best,
+  group,
+  picked,
+  onPick,
+}: {
+  offer: Offer
+  best: boolean
+  group: string
+  picked: string | null
+  onPick: (name: string) => void
+}) {
+  const pill = `${group}-best`
+  return (
+    <label
+      className={cn(
+        OPTION,
+        "group min-w-0 flex-col gap-0.5 rounded-xl p-3 pe-9 has-[:checked]:inset-ring-1 has-[:checked]:inset-ring-primary"
+      )}
+    >
+      <input
+        aria-describedby={best ? pill : undefined}
+        aria-label={`${offer.name}, ${pounds(offer.price)} a year`}
+        checked={picked === offer.name}
+        className="sr-only"
+        name={group}
+        onChange={() => onPick(offer.name)}
+        type="radio"
+        value={offer.name}
+      />
+      {best ? (
+        <Badge className="absolute end-3 -top-2.5" id={pill}>
+          Best pick
+          <span className="sr-only">. {offer.why}</span>
+        </Badge>
+      ) : null}
+      <span className="truncate font-medium" title={offer.name}>
+        {offer.name}
+      </span>
+      <span className={cn(META, "tabular-nums")}>
+        {pounds(offer.price)} a year
+      </span>
+      <CheckCircleIcon
+        aria-hidden
+        className="absolute end-3 bottom-3 hidden size-5 text-primary group-has-[:checked]:block"
+        weight="fill"
+      />
+    </label>
+  )
+}
+
+/** The links that buy a name elsewhere; following one tells the api. */
+function Elsewhere({
+  name,
+  onFollow,
+}: {
+  name: string
+  onFollow?: () => void
+}) {
+  const links = buyElsewhereLinks(name)
+  return (
+    <>
+      <ConnectRows heading={`Search for ${name}`}>
+        <ConnectRow
+          href={links.cloudflare}
+          line="cloudflare.com"
+          name="Cloudflare"
+          newTab
+          onClick={onFollow}
+        />
+        <ConnectRow
+          href={links.godaddy}
+          line="godaddy.com"
+          name="GoDaddy"
+          newTab
+          onClick={onFollow}
+        />
+      </ConnectRows>
+      <p className={META}>Tell me once it's yours and I'll connect it.</p>
+    </>
+  )
+}
+
+function ChoosePage({
+  rows,
+  frame,
+  onPick,
+  onElsewhere,
+  onNotNow,
+}: {
+  rows: readonly DomainStemOffer[]
+  frame: Frame
+  onPick: (name: string) => void
+  onElsewhere: (name: string) => void
+  onNotNow: () => void
+}) {
+  const [away, setAway] = useState(false)
+  const offers = offersOf(rows)
+  const best = offers[0]?.name ?? null
+  const [picked, setPicked] = useState(best)
+  const group = useId()
+  // The rows open under the list, so they are brought into view.
+  const places = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (away) places.current?.scrollIntoView({ block: "nearest" })
+  }, [away])
+  return (
+    <TrayFrame
+      {...frame}
+      hint="We register it in your business's name, renew it every year and handle the settings."
+      question="Choose your web address"
+      skip={{ label: "Not now", onSkip: onNotNow }}
+      submit={{
+        label: "Continue",
+        onSubmit: () => picked && onPick(picked),
+        disabled: !picked,
+      }}
+    >
+      {/* Two to a row at any width: three would strand the fourth name. The top padding clears the best card's pill. */}
+      <div
+        aria-label="Web address"
+        className="grid grid-cols-2 gap-2 px-2 pt-2"
+        role="radiogroup"
+      >
+        {offers.map((offer, at) => (
+          <NameCard
+            best={at === 0}
+            group={group}
+            key={offer.name}
+            offer={offer}
+            onPick={setPicked}
+            picked={picked}
+          />
+        ))}
+      </div>
+      {best ? (
+        <div className="flex flex-col gap-2 px-2 pb-1">
+          <button
+            aria-expanded={away}
+            className="flex items-center gap-1.5 self-start rounded-sm text-muted-foreground text-sm outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary"
+            onClick={() => setAway(!away)}
+            type="button"
+          >
+            Buy directly from a provider
+            <CaretDownIcon
+              aria-hidden
+              className={cn(
+                "size-3.5 transition-transform motion-reduce:transition-none",
+                away && "rotate-180"
+              )}
+            />
+          </button>
+          {away ? (
+            <div className="flex flex-col gap-2" ref={places}>
+              <Elsewhere name={best} onFollow={() => onElsewhere(best)} />
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </TrayFrame>
+  )
+}
+
+/* Your details ------------------------------------------------------------ */
+
+const TYPES: Record<RegistrantType, string> = {
+  STRA: "Sole trader",
+  LTD: "Limited company",
+  LLP: "Limited liability partnership",
+  PTNR: "Partnership",
+  IND: "Individual",
+}
+
+const MESSAGES = {
+  name: "Write your full name.",
+  business_name: "Write your business's name.",
+  email: "Write an email address you read.",
+  phone: "Write a phone number, such as 07700 900123.",
+  street: "Write the street address.",
+  city: "Write the town or city.",
+  state: "Check the county.",
+  postal_code: "Write the postcode.",
+  country_code: "Write the two-letter country code, such as GB.",
+  registrant_type: "Choose what kind of business this is.",
+  company_number: "Write the 8-character Companies House number.",
+} satisfies Record<RegistrantField, string>
+
+/** A form value, trimmed, or undefined when empty. */
+const field = (data: FormData, key: string) => {
+  const value = String(data.get(key) ?? "").trim()
+  return value || undefined
+}
+
+/**
+ * The details from the form, checked against the contract and the rules a
+ * .co.uk or .uk adds. Errors are keyed by the field's name.
+ */
+export function readDetails(
+  name: string,
+  data: FormData
+):
+  | { ok: true; details: RegistrantDetails }
+  | { ok: false; errors: Partial<Record<RegistrantField, string>> } {
+  const typed = needsRegistrantType(name)
+  const type = field(data, "registrant_type") as RegistrantType | undefined
+  const company = field(data, "company_number")?.replace(/\s/g, "")
+  const phone = field(data, "phone")
+  const candidate = {
+    registrant: {
+      name: field(data, "name"),
+      business_name: field(data, "business_name"),
+      email: field(data, "email"),
+      phone: phone ? (toE164(phone) ?? phone) : undefined,
+      address: {
+        street: field(data, "street"),
+        city: field(data, "city"),
+        state: field(data, "state"),
+        postal_code: field(data, "postal_code")?.toUpperCase(),
+        country_code: field(data, "country_code")?.toUpperCase(),
+      },
+    },
+    registrant_type: typed ? type : undefined,
+    company_number:
+      typed && (type === "LTD" || type === "LLP")
+        ? company?.toUpperCase()
+        : undefined,
+  }
+  const errors: Partial<Record<RegistrantField, string>> = {}
+  const parsed = RegistrantDetails.safeParse(candidate)
+  if (!parsed.success) {
+    for (const issue of parsed.error.issues) {
+      const key = String(issue.path.at(-1) ?? "") as RegistrantField
+      errors[key] ??= MESSAGES[key] ?? "Check this."
+    }
+  }
+  if (typed) {
+    if (!type) errors.registrant_type ??= MESSAGES.registrant_type
+    if (type !== "IND" && !candidate.registrant.business_name) {
+      errors.business_name ??= MESSAGES.business_name
+    }
+  }
+  if ((type === "LTD" || type === "LLP") && !candidate.company_number) {
+    errors.company_number ??= MESSAGES.company_number
+  }
+  return parsed.success && Object.keys(errors).length === 0
+    ? { ok: true, details: parsed.data }
+    : { ok: false, errors }
+}
+
+/** The text fields of the details page, in its order, with their labels. */
+const TEXT_FIELDS = [
+  ["name", "Your full name", { autoComplete: "name" }],
+  ["business_name", "Business name", { autoComplete: "organization" }],
+  ["email", "Email", { autoComplete: "email", type: "email" }],
+  ["phone", "Phone", { autoComplete: "tel", type: "tel" }],
+  ["street", "Street address", { autoComplete: "street-address" }],
+  ["city", "Town or city", { autoComplete: "address-level2" }],
+  ["state", "County (optional)", { autoComplete: "address-level1" }],
+  ["postal_code", "Postcode", { autoComplete: "postal-code" }],
+  ["country_code", "Country code", { autoComplete: "country", maxLength: 2 }],
+] as const satisfies [RegistrantField, string, object][]
+
+/** What the prefill holds for a field, as the form's text. */
+function prefilled(prefill: DomainRegistrantPrefill, key: RegistrantField) {
+  const { address, ...who } = prefill.registrant
+  const flat: Record<string, string | undefined> = { ...who, ...address }
+  return flat[key]
+}
+
+/**
+ * The purchase's status, read when the page shows and again while it moves:
+ * every few seconds while registering, and while Checkout is open, so an
+ * expiry is seen. `undefined` until the first read answers; a read that
+ * fails counts as none, and the api refuses a second payment. `paid` is
+ * Checkout's word that the payment completed on this page.
+ */
+function usePurchaseStatus(
+  purchase: DomainPurchase | null,
+  name: string,
+  paid: boolean,
+  paying: boolean
+): PurchaseStatus | null | undefined {
+  const [status, setStatus] = useState<PurchaseStatus | null | undefined>(
+    purchase ? undefined : null
+  )
+  useEffect(() => {
+    if (!purchase) return
+    let live = true
+    let timer: ReturnType<typeof setTimeout> | undefined
+    // A read from before Pay says nothing about the Checkout just opened.
+    setStatus(undefined)
+    const read = async () => {
+      const next =
+        (await purchase.status(name).then(purchaseStatusOf, () => null)) ??
+        (paid ? "authorised" : null)
+      if (!live) return
+      setStatus(next)
+      if (next && MOVING.has(next)) timer = setTimeout(read, REREAD_MS)
+      else if (!next && paying) timer = setTimeout(read, PAYING_REREAD_MS)
+    }
+    void read()
+    return () => {
+      live = false
+      clearTimeout(timer)
+    }
+  }, [purchase, name, paid, paying])
+  return status
+}
+
+const STATUS_TEXT: Record<PurchaseStatus, (name: string) => string> = {
+  authorised: (name) =>
+    `Payment approved. I'm registering ${name} now and will message you when it's done.`,
+  serving: (name) =>
+    `${name} is registered to your business. Your website goes on it in the next few minutes.`,
+  registered: (name) => `${name} is yours, and your website is on it.`,
+  test: (name) =>
+    `Test purchase complete: paid in test mode, registered in Cloudflare's sandbox, not live on the internet. No real money moved for ${name}.`,
+  failed: (name) =>
+    `${name} could not be registered, so your card was not charged.`,
+  price_changed: (name) =>
+    `The price of ${name} went up before it could be registered, so your card was not charged.`,
+  unavailable: (name) =>
+    `Someone registered ${name} first, so your card was not charged.`,
+  abandoned: (name) =>
+    `The payment for ${name} timed out before it was made, so nothing was charged.`,
+  removed: (name) => `${name} is yours, and no longer on your website.`,
+}
+
+const TICKED = new Set<PurchaseStatus>([
+  "authorised",
+  "serving",
+  "registered",
+  "test",
+  "removed",
+])
+
+/** Statuses that change on their own, so they are read again. */
+const MOVING = new Set<PurchaseStatus>(["authorised", "serving"])
+/** Statuses after which a fresh Pay can still buy the name. */
+const PAYABLE = new Set<PurchaseStatus>([
+  "abandoned",
+  "failed",
+  "price_changed",
+])
+const REREAD_MS = 5000
+// While Checkout is open, so an expired one says so instead of Stripe's
+// "You're all done here", which reads the same for paid and timed out.
+const PAYING_REREAD_MS = 20_000
+
+/** A purchase's status as its one line in the thread. */
+function StatusLine({
+  name,
+  status,
+}: {
+  name: string
+  status: PurchaseStatus
+}) {
+  const ticked = TICKED.has(status)
+  return (
+    <p
+      className="my-3 flex max-w-md items-start gap-2 text-sm"
+      data-slot="buy-domain"
+      role="status"
+    >
+      {ticked ? (
+        <CheckCircleIcon
+          aria-hidden
+          className="mt-0.5 size-4 shrink-0 text-primary"
+        />
+      ) : null}
+      {STATUS_TEXT[status](name)}
+    </p>
+  )
+}
+
+/** Where Your details is: filling in, opening Checkout, paying, or refused. */
+type Phase =
+  | { at: "filling" }
+  | { at: "starting" }
+  | {
+      at: "paying"
+      publishable_key: string
+      client_secret: string
+      details: RegistrantDetails
+    }
+  | { at: "refused"; code: string | null }
+
+function DetailsPage({
+  name,
+  given,
+  frame,
+  onBack,
+  onPaid,
+  onSettled,
+}: {
+  name: string
+  /** What `buy_domain` already prefilled, so the page needs no read of its own. */
+  given?: DomainRegistrantPrefill | undefined
+  frame: Frame
+  /** Back to Choose, when the page came from it. */
+  onBack?: (() => void) | undefined
+  /** Checkout completed on the page. */
+  onPaid: () => void
+  /** The name's purchase already went past paying: its line takes over. */
+  onSettled: () => void
+}) {
+  const purchase = useContext(DomainPurchaseContext)
+  const id = useId()
+  const [prefill, setPrefill] = useState<
+    DomainRegistrantPrefill | Refused | undefined
+  >(given)
+  const [phase, setPhase] = useState<Phase>({ at: "filling" })
+  const [errors, setErrors] = useState<
+    Partial<Record<RegistrantField, string>>
+  >({})
+  const [all, setAll] = useState(false)
+  const [type, setType] = useState<RegistrantType>()
+  const status = usePurchaseStatus(purchase, name, false, phase.at === "paying")
+
+  useEffect(() => {
+    if (!purchase || given) return
+    let live = true
+    purchase.registrant(name).then(
+      (read) => live && setPrefill(read),
+      () => live && setPrefill({ refused: null })
+    )
+    return () => {
+      live = false
+    }
+  }, [purchase, name, given])
+
+  // Paid or taken already: the thread says so in a line. An expiry while
+  // Checkout is open closes it and leaves a fresh Pay.
+  useEffect(() => {
+    if (!status) return
+    if (!PAYABLE.has(status)) onSettled()
+    else if (phase.at === "paying") setPhase({ at: "filling" })
+  }, [status, phase.at, onSettled])
+
+  const ask =
+    prefill && !("refused" in prefill)
+      ? new Set<RegistrantField>(
+          all ? TEXT_FIELDS.map(([k]) => k) : prefill.missing
+        )
+      : null
+  const price =
+    prefill && !("refused" in prefill) ? prefill.price_gbp_year : null
+
+  const pay = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!purchase) return
+    const read = readDetails(name, new FormData(event.currentTarget))
+    if (!read.ok) {
+      setErrors(read.errors)
+      // A prefilled value that does not read is shown so it can be fixed.
+      if (TEXT_FIELDS.some(([key]) => read.errors[key] && !ask?.has(key))) {
+        setAll(true)
+      }
+      return
+    }
+    setErrors({})
+    setPhase({ at: "starting" })
+    try {
+      const started = await purchase.checkout(name, read.details)
+      setPhase(
+        started.outcome === "open"
+          ? { at: "paying", ...started, details: read.details }
+          : { at: "refused", code: started.code }
+      )
+    } catch {
+      setPhase({ at: "refused", code: null })
+    }
+  }
+
+  const ready = ask !== null && price !== null && status !== undefined
+  const refused = !purchase
+    ? "domain.buy_unavailable"
+    : prefill && "refused" in prefill
+      ? (prefill.refused ?? "")
+      : phase.at === "refused"
+        ? (phase.code ?? "")
+        : null
+  // The form may be scrolled to Pay, so a refusal is brought into view.
+  const alert = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (refused !== null) alert.current?.scrollIntoView({ block: "nearest" })
+  }, [refused])
+
+  return (
+    <TrayFrame
+      {...frame}
+      hint={
+        price === null
+          ? name
+          : `${name}, ${pounds(price)} for 1 year, renews yearly`
+      }
+      question="Your details"
+      skip={onBack ? { label: "Back", onSkip: onBack } : undefined}
+      status={
+        status && PAYABLE.has(status) ? STATUS_TEXT[status](name) : undefined
+      }
+      submit={
+        ready && refused !== "domain.buy_unavailable"
+          ? {
+              label:
+                phase.at === "starting"
+                  ? "Opening payment"
+                  : `Pay ${pounds(price)}`,
+              form: `${id}-form`,
+              disabled: phase.at === "starting" || phase.at === "paying",
+            }
+          : undefined
+      }
+    >
+      {refused !== null ? (
+        <div className="px-2" ref={alert} role="alert">
+          <Problem
+            text={refusalText(
+              refused || null,
+              "The payment could not be started. Try again."
+            )}
+          />
+        </div>
+      ) : null}
+      {ask === null ? (
+        refused === null ? (
+          <p aria-busy className={cn(META, "px-2")} role="status">
+            Getting your details
+          </p>
+        ) : null
+      ) : (
+        <form
+          aria-label="Registration details"
+          className="flex flex-col gap-3 px-2 pb-1"
+          id={`${id}-form`}
+          noValidate
+          onSubmit={pay}
+        >
+          {all ? null : (
+            <p className={META}>
+              {ask.size === 0
+                ? "We have everything we need to register it in your business's name."
+                : "We filled in what we know. Add the rest to register it in your business's name."}{" "}
+              <button
+                className="rounded-sm underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary"
+                onClick={() => setAll(true)}
+                type="button"
+              >
+                Check every detail
+              </button>
+            </p>
+          )}
+          {TEXT_FIELDS.map(([key, label, extra]) => {
+            const value =
+              prefill && !("refused" in prefill)
+                ? prefilled(prefill, key)
+                : undefined
+            return ask.has(key) ? (
+              <Field
+                error={errors[key]}
+                id={`${id}-${key}`}
+                key={key}
+                label={label}
+              >
+                {(wiring) => (
+                  <Input
+                    {...wiring}
+                    className={TRAY_FIELD}
+                    defaultValue={value}
+                    name={key}
+                    {...extra}
+                  />
+                )}
+              </Field>
+            ) : (
+              <input key={key} name={key} type="hidden" value={value ?? ""} />
+            )
+          })}
+          {needsRegistrantType(name) ? (
+            <fieldset className="flex flex-col gap-2">
+              <legend className="mb-2 text-sm">Kind of business</legend>
+              <div className="flex flex-wrap gap-2">
+                {(Object.keys(TYPES) as RegistrantType[]).map((each) => (
+                  <label
+                    className={cn(OPTION, OPTION_PILL, "gap-2")}
+                    key={each}
+                  >
+                    <input
+                      className="accent-primary"
+                      name="registrant_type"
+                      onChange={() => setType(each)}
+                      type="radio"
+                      value={each}
+                    />
+                    {TYPES[each]}
+                  </label>
+                ))}
+              </div>
+              {errors.registrant_type ? (
+                <p className={FIELD_ERROR} role="alert">
+                  {errors.registrant_type}
+                </p>
+              ) : null}
+            </fieldset>
+          ) : null}
+          {type === "LTD" || type === "LLP" ? (
+            <Field
+              autoCapitalize="characters"
+              error={errors.company_number}
+              id={`${id}-company_number`}
+              label="Companies House number"
+              maxLength={8}
+              name="company_number"
+            />
+          ) : null}
+          <p className={META}>
+            Hidden from public WHOIS where the registry allows. It's yours: you
+            can move it away any time after 60 days. By paying you authorise
+            Reme to register it in your business's name and accept the{" "}
+            <Out href={AGREEMENT}>Cloudflare Domain Registration Agreement</Out>{" "}
+            and <Out href={ICANN}>ICANN registrant rights</Out>.
+          </p>
+        </form>
+      )}
+      {phase.at === "paying" && price !== null ? (
+        <PayDialog
+          clientSecret={phase.client_secret}
+          name={name}
+          // Closed unpaid: the next Pay opens a fresh Checkout.
+          onClose={() => setPhase({ at: "filling" })}
+          onPaid={onPaid}
+          priceGbp={price}
+          publishableKey={phase.publishable_key}
+          registrant={phase.details.registrant}
+        />
+      ) : null}
+    </TrayFrame>
+  )
+}
+
+/* Bought elsewhere ---------------------------------------------------------- */
+
+function WaitingPage({
+  name,
+  frame,
+  onBack,
+  onBought,
+}: {
+  name: string
+  frame: Frame
+  onBack: () => void
+  onBought: (output: Connecting) => void
+}) {
+  const purchase = useContext(DomainPurchaseContext)
+  const [sending, setSending] = useState(false)
+  const [said, setSaid] = useState<string | null>(null)
+  const done = async () => {
+    if (!purchase) return
+    setSending(true)
+    setSaid(null)
+    const answer = await purchase.bought(name).catch(() => ({ refused: null }))
+    setSending(false)
+    if ("refused" in answer) {
+      setSaid(refusalText(answer.refused, "That didn't go through. Try again."))
+    } else if (answer.outcome === "connecting") {
+      onBought(answer)
+    } else if (answer.outcome === "not_registered_yet") {
+      setSaid(
+        `I can't see ${name} at the registry yet. It can take a few minutes, and I check each day too.`
+      )
+    } else {
+      setSaid(refusalText(answer.error.code, "I couldn't connect it just now."))
+    }
+  }
+  return (
+    <TrayFrame
+      {...frame}
+      hint={`Buying ${name}`}
+      question="Tell me when you've bought it"
+      skip={{ label: "Back", onSkip: onBack, disabled: sending }}
+      status={said}
+      submit={{
+        label: sending ? "Checking" : "Done, I bought it",
+        onSubmit: () => void done(),
+        disabled: sending,
+      }}
+    >
+      <div className="flex flex-col gap-2 px-2 pb-1">
+        <Elsewhere name={name} />
+        <p className={META}>
+          Your email and anything else there stay as they are.
+        </p>
+      </div>
+    </TrayFrame>
+  )
+}
+
+/* The tray ------------------------------------------------------------------ */
+
+/** The frame state every page shares. */
+type Frame = {
+  collapsed: boolean
+  onCollapsedChange: (collapsed: boolean) => void
+}
+
+type Connecting = Extract<BoughtElsewhereOutput, { outcome: "connecting" }>
+
+/**
+ * Where the tray is, and how it ended. Kept in the tab, so a reload resumes
+ * there and an ended tray stays one line.
+ */
+type Draft =
+  | { at: "choose" }
+  | { at: "details"; name: string }
+  | { at: "elsewhere"; name: string }
+  | { at: "not_now" }
+  /** Paid on this page, or found past paying already. */
+  | { at: "bought"; name: string; paid: boolean }
+  | { at: "connecting"; name: string; output: Connecting }
+
+/** A purchase's line in the thread, read from the api. */
+function BoughtLine({ name, paid }: { name: string; paid: boolean }) {
+  const purchase = useContext(DomainPurchaseContext)
+  const status = usePurchaseStatus(purchase, name, paid, false)
+  return status ? <StatusLine name={name} status={status} /> : null
+}
+
+/**
+ * The buy tray for one call or posted button. It docks until the owner says
+ * something after it, which moves the conversation on (they can ask again).
+ * A message the assistant posts below it, such as the site going live,
+ * leaves it open with what was typed.
+ */
+export function BuyTray({
+  draftId,
+  rows,
+  name,
+  prefill,
+}: {
+  draftId: string
+  /** The names to choose from; without them it opens on Your details for `name`. */
+  rows?: readonly DomainStemOffer[] | undefined
+  name?: string | undefined
+  /** Your details for `name` as `buy_domain` prefilled them. */
+  prefill?: DomainRegistrantPrefill | undefined
+}) {
+  const purchase = useContext(DomainPurchaseContext)
+  const last = useAuiState((s) => {
+    const at = s.thread.messages.findIndex((m) => m.id === s.message.id)
+    return !s.thread.messages.slice(at + 1).some((m) => m.role === "user")
+  })
+  const start: Draft = rows
+    ? { at: "choose" }
+    : { at: "details", name: name ?? "" }
+  const { draft, keep } = useTabDraft<Draft>(`buy:${draftId}`, start)
+  const [collapsed, setCollapsed] = useState(false)
+  const frame = { collapsed, onCollapsedChange: setCollapsed }
+
+  switch (draft.at) {
+    case "bought":
+      return <BoughtLine name={draft.name} paid={draft.paid} />
+    case "connecting":
+      return (
+        <section
+          className="my-3 flex max-w-md flex-col gap-2"
+          data-slot="buy-domain"
+        >
+          <Done>{draft.name} is yours. Next, the settings to change.</Done>
+          <ConnectSteps name={draft.name} output={draft.output} />
+        </section>
+      )
+    case "not_now":
+      return <Line text="You said not now." />
+  }
+  if (!last) {
+    return rows ? (
+      <Line
+        text={`Names I found: ${rows.map((row) => row.stem).join(", ")}.`}
+      />
+    ) : null
+  }
+
+  return (
+    <Docked name="buy-domain">
+      {draft.at === "choose" && rows ? (
+        <ChoosePage
+          frame={frame}
+          onElsewhere={(picked) => {
+            keep({ at: "elsewhere", name: picked })
+            // A lost note only skips the daily registry look: "Done, I
+            // bought it" asks the registry itself.
+            void purchase?.elsewhere(picked).catch(() => undefined)
+          }}
+          onNotNow={() => keep({ at: "not_now" })}
+          onPick={(picked) => keep({ at: "details", name: picked })}
+          rows={rows}
+        />
+      ) : draft.at === "elsewhere" ? (
+        <WaitingPage
+          frame={frame}
+          name={draft.name}
+          onBack={() => keep(start)}
+          onBought={(output) =>
+            keep({ at: "connecting", name: draft.name, output })
+          }
+        />
+      ) : draft.at === "details" ? (
+        <DetailsPage
+          frame={frame}
+          given={prefill?.name === draft.name ? prefill : undefined}
+          name={draft.name}
+          onBack={rows ? () => keep({ at: "choose" }) : undefined}
+          onPaid={() => keep({ at: "bought", name: draft.name, paid: true })}
+          onSettled={() =>
+            keep({ at: "bought", name: draft.name, paid: false })
+          }
+        />
+      ) : null}
+    </Docked>
+  )
+}
+
+export const FindDomain: ToolCallMessagePartComponent = (props) => {
+  const streaming = useAuiState((s) => s.message.status?.type === "running")
+  const view = readView(props, FindDomainOutput)
   if (view.state !== "done") {
     return (
       <div data-slot="find-domain">
         <ToolLine
           args={{ query: FindDomainInput.safeParse(props.args).data?.query }}
           state={view.state}
-          tool="find_domain"
           streaming={streaming}
+          tool="find_domain"
         />
       </div>
     )
@@ -245,638 +1101,29 @@ export const FindDomain: ToolCallMessagePartComponent = (props) => {
       </div>
     )
   }
-
-  const { best } = view.output
-  const others = view.output.options
-    .filter((offer) => offer.name !== best.name)
-    .slice(0, 3)
-  const choose = (name: string) => {
-    setChosen(name)
-    aui.thread().append(chooseText(name))
-  }
-
-  return (
-    <section
-      aria-labelledby={`${id}-title`}
-      className="my-3 flex max-w-md flex-col"
-      data-slot="find-domain"
-    >
-      <h3 className={META} id={`${id}-title`}>
-        Free to register now
-      </h3>
-      <div className="flex flex-col divide-y divide-border">
-        {[best, ...others].map((offer) => (
-          <Offer
-            best={offer === best}
-            disabled={running || chosen !== null}
-            key={offer.name}
-            offer={offer}
-            onChoose={() => choose(offer.name)}
-          />
-        ))}
+  // A search from before the name rows: its offers are stale, so one line.
+  if (!("rows" in view.output)) {
+    return (
+      <div data-slot="find-domain">
+        <Line text="I suggested some names here earlier. Ask me to look again for today's prices." />
       </div>
-      <p className={META}>
-        Renews yearly at the same price. Nothing is charged until you pay.
-      </p>
-    </section>
-  )
+    )
+  }
+  return <BuyTray draftId={props.toolCallId} rows={view.output.rows} />
 }
 FindDomain.displayName = "FindDomain"
-
-/* buy_domain ------------------------------------------------------------ */
-
-const TYPES: Record<RegistrantType, string> = {
-  STRA: "Sole trader",
-  LTD: "Limited company",
-  LLP: "Limited liability partnership",
-  PTNR: "Partnership",
-  IND: "Individual",
-}
-
-/** .co.uk and .uk need who the registrant is in law. */
-const needsType = (name: string) => {
-  const tld = sellableTld(name)
-  return tld === "co.uk" || tld === "uk"
-}
-
-/** The details as one plain paragraph. */
-function DetailsText({ details }: { details: RegistrantDetails }) {
-  const { registrant: who, registrant_type: type } = details
-  const address = who.address
-  return (
-    <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-      {who.business_name ? (
-        <>
-          <dt className="text-muted-foreground">Business</dt>
-          <dd className="min-w-0 break-words">
-            {who.business_name}
-            {type ? `, ${TYPES[type].toLowerCase()}` : ""}
-            {details.company_number ? ` (${details.company_number})` : ""}
-          </dd>
-        </>
-      ) : null}
-      <dt className="text-muted-foreground">Name</dt>
-      <dd className="min-w-0 break-words">
-        {who.name}
-        {!who.business_name && type ? `, ${TYPES[type].toLowerCase()}` : ""}
-      </dd>
-      <dt className="text-muted-foreground">Address</dt>
-      <dd className="min-w-0 break-words">
-        {[
-          address.street,
-          address.city,
-          address.state === address.city ? undefined : address.state,
-          address.postal_code,
-          address.country_code,
-        ]
-          .filter(Boolean)
-          .join(", ")}
-      </dd>
-      <dt className="text-muted-foreground">Email</dt>
-      <dd className="min-w-0 break-all">{who.email}</dd>
-      <dt className="text-muted-foreground">Phone</dt>
-      <dd className="min-w-0 break-words">{who.phone}</dd>
-    </dl>
-  )
-}
-
-const MESSAGES = {
-  name: "Write your full name.",
-  business_name: "Write your business's name.",
-  email: "Write an email address you read.",
-  phone: "Write a phone number, such as 07700 900123.",
-  street: "Write the street address.",
-  city: "Write the town or city.",
-  state: "Check the county.",
-  postal_code: "Write the postcode.",
-  country_code: "Write the two-letter country code, such as GB.",
-  registrant_type: "Choose what kind of business this is.",
-  company_number: "Write the 8-character Companies House number.",
-} satisfies Record<string, string>
-
-/** A form value, trimmed, or undefined when empty. */
-const field = (data: FormData, key: string) => {
-  const value = String(data.get(key) ?? "").trim()
-  return value || undefined
-}
-
-/**
- * The details from the form, checked against the contract and the rules a
- * .co.uk or .uk adds. Errors are keyed by the field's name.
- */
-export function readDetails(
-  name: string,
-  data: FormData
-):
-  | { ok: true; details: RegistrantDetails }
-  | { ok: false; errors: Record<string, string> } {
-  const type = field(data, "registrant_type") as RegistrantType | undefined
-  const company = field(data, "company_number")?.replace(/\s/g, "")
-  const phone = field(data, "phone")
-  const candidate = {
-    registrant: {
-      name: field(data, "name"),
-      business_name: field(data, "business_name"),
-      email: field(data, "email"),
-      phone: phone ? (toE164(phone) ?? phone) : undefined,
-      address: {
-        street: field(data, "street"),
-        city: field(data, "city"),
-        state: field(data, "state"),
-        postal_code: field(data, "postal_code")?.toUpperCase(),
-        country_code: field(data, "country_code")?.toUpperCase(),
-      },
-    },
-    registrant_type: needsType(name) ? type : undefined,
-    company_number:
-      needsType(name) && (type === "LTD" || type === "LLP")
-        ? company?.toUpperCase()
-        : undefined,
-  }
-  const errors: Record<string, string> = {}
-  const parsed = RegistrantDetails.safeParse(candidate)
-  if (!parsed.success) {
-    for (const issue of parsed.error.issues) {
-      const key = String(issue.path.at(-1) ?? "")
-      errors[key] ??=
-        (MESSAGES as Record<string, string | undefined>)[key] ?? "Check this."
-    }
-  }
-  if (needsType(name)) {
-    if (!type) errors.registrant_type ??= MESSAGES.registrant_type
-    if (type !== "IND" && !candidate.registrant.business_name) {
-      errors.business_name ??= MESSAGES.business_name
-    }
-  }
-  if ((type === "LTD" || type === "LLP") && !candidate.company_number) {
-    errors.company_number ??= MESSAGES.company_number
-  }
-  return parsed.success && Object.keys(errors).length === 0
-    ? { ok: true, details: parsed.data }
-    : { ok: false, errors }
-}
-
-/** The details form. Saving checks every field in place. */
-function DetailsForm({
-  name,
-  details,
-  onSave,
-  onCancel,
-}: {
-  name: string
-  details: RegistrantDetails
-  onSave: (details: RegistrantDetails) => void
-  onCancel: () => void
-}) {
-  const id = useId()
-  const first = useRef<HTMLInputElement>(null)
-  const [errors, setErrors] = useState<Record<string, string>>({})
-  const [type, setType] = useState(details.registrant_type)
-  const who = details.registrant
-  useEffect(() => first.current?.focus(), [])
-
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const read = readDetails(name, new FormData(event.currentTarget))
-    if (read.ok) onSave(read.details)
-    else setErrors(read.errors)
-  }
-  const text = (
-    key: string,
-    label: string,
-    value: string | undefined,
-    extra: Partial<ComponentProps<"input">> = {}
-  ) => (
-    <Field
-      defaultValue={value}
-      error={errors[key]}
-      id={`${id}-${key}`}
-      label={label}
-      name={key}
-      {...extra}
-    />
-  )
-
-  return (
-    <form
-      aria-label="Registration details"
-      className="flex flex-col gap-3"
-      noValidate
-      onSubmit={submit}
-    >
-      <Field
-        autoComplete="name"
-        defaultValue={who.name}
-        error={errors.name}
-        id={`${id}-name`}
-        label="Your full name"
-        name="name"
-        ref={first}
-      />
-      {text("business_name", "Business name", who.business_name, {
-        autoComplete: "organization",
-      })}
-      {needsType(name) ? (
-        <fieldset className="flex flex-col gap-2">
-          <legend className="mb-2 text-sm">Kind of business</legend>
-          <div className="flex flex-wrap gap-2">
-            {(Object.keys(TYPES) as RegistrantType[]).map((each) => (
-              <label
-                className="flex min-h-9 cursor-pointer items-center gap-2 rounded-full border border-border px-3 text-sm has-[:checked]:border-primary has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring"
-                key={each}
-              >
-                <input
-                  className="accent-primary"
-                  defaultChecked={type === each}
-                  name="registrant_type"
-                  onChange={() => setType(each)}
-                  type="radio"
-                  value={each}
-                />
-                {TYPES[each]}
-              </label>
-            ))}
-          </div>
-          {errors.registrant_type ? (
-            <p className={FIELD_ERROR} role="alert">
-              {errors.registrant_type}
-            </p>
-          ) : null}
-        </fieldset>
-      ) : null}
-      {type === "LTD" || type === "LLP"
-        ? text(
-            "company_number",
-            "Companies House number",
-            details.company_number,
-            {
-              autoCapitalize: "characters",
-              maxLength: 8,
-            }
-          )
-        : null}
-      {text("email", "Email", who.email, {
-        autoComplete: "email",
-        type: "email",
-      })}
-      {text("phone", "Phone", who.phone, { autoComplete: "tel", type: "tel" })}
-      {text("street", "Street address", who.address.street, {
-        autoComplete: "street-address",
-      })}
-      {text("city", "Town or city", who.address.city, {
-        autoComplete: "address-level2",
-      })}
-      {text("state", "County (optional)", who.address.state, {
-        autoComplete: "address-level1",
-      })}
-      {text("postal_code", "Postcode", who.address.postal_code, {
-        autoComplete: "postal-code",
-      })}
-      {text("country_code", "Country code", who.address.country_code, {
-        autoComplete: "country",
-        maxLength: 2,
-      })}
-      <div className="flex gap-2">
-        <Button size="sm" type="submit">
-          Save details
-        </Button>
-        <Button onClick={onCancel} size="sm" type="button" variant="outline">
-          Cancel
-        </Button>
-      </div>
-    </form>
-  )
-}
-
-/** Stripe's embedded Checkout, mounted while this is on screen. */
-function Checkout({
-  publishableKey,
-  clientSecret,
-  onComplete,
-}: {
-  publishableKey: string
-  clientSecret: string
-  onComplete: () => void
-}) {
-  const host = useRef<HTMLDivElement>(null)
-  const complete = useRef(onComplete)
-  complete.current = onComplete
-  const [failed, setFailed] = useState(false)
-  useEffect(() => {
-    const element = host.current
-    if (!element) return
-    element.focus()
-    let live = true
-    let unmount: (() => void) | null = null
-    mountCheckout(element, publishableKey, clientSecret, () =>
-      complete.current()
-    ).then(
-      (done) => {
-        if (live) unmount = done
-        else done()
-      },
-      () => live && setFailed(true)
-    )
-    return () => {
-      live = false
-      unmount?.()
-    }
-  }, [publishableKey, clientSecret])
-  return failed ? (
-    <Problem text="The payment form did not load. Check your connection and try again." />
-  ) : (
-    // Focus moves here as the pay button gives way to it, so a keyboard
-    // owner lands on the payment form rather than the page.
-    <section
-      aria-label="Payment"
-      className="min-h-96 overflow-hidden rounded-2xl outline-none"
-      data-slot="domain-checkout"
-      ref={host}
-      tabIndex={-1}
-    />
-  )
-}
-
-const STATUS_TEXT: Record<PurchaseStatus, (name: string) => string> = {
-  authorised: (name) =>
-    `Payment approved. I'm registering ${name} now and will message you when it's done.`,
-  serving: (name) =>
-    `${name} is registered to your business. Your website goes on it in the next few minutes.`,
-  registered: (name) => `${name} is yours, and your website is on it.`,
-  test: (name) =>
-    `Test purchase complete: paid in test mode, registered in Cloudflare's sandbox, not live on the internet. No real money moved for ${name}.`,
-  failed: (name) =>
-    `${name} could not be registered, so your card was not charged.`,
-  price_changed: (name) =>
-    `The price of ${name} went up before it could be registered, so your card was not charged. Ask me for a fresh price.`,
-  unavailable: (name) =>
-    `Someone registered ${name} first, so your card was not charged.`,
-  abandoned: (name) =>
-    `The payment for ${name} timed out before it was made. Ask me again if you still want it.`,
-  removed: (name) => `${name} is yours, and no longer on your website.`,
-}
-
-const TICKED = new Set<PurchaseStatus>([
-  "authorised",
-  "serving",
-  "registered",
-  "test",
-  "removed",
-])
-
-/** Statuses that change on their own, so the card reads them again. */
-const MOVING = new Set<PurchaseStatus>(["authorised", "serving"])
-const REREAD_MS = 5000
-// While Checkout is open, so an expired one says so instead of Stripe's
-// "You're all done here", which reads the same for paid and timed out.
-const PAYING_REREAD_MS = 20_000
-
-/**
- * The purchase's status, read when the card shows and again every few
- * seconds while registering. `undefined` until the first read answers; a
- * read that fails counts as none, and the api refuses a second payment.
- * `paid` is Checkout's word that the payment completed on this page: the
- * hold is authorised even while the webhook has not reached the row yet.
- * `paying` keeps reading an unpaid purchase, which the webhook may expire.
- */
-function usePurchaseStatus(
-  purchase: DomainPurchase | null,
-  name: string,
-  paid: boolean,
-  paying: boolean
-): PurchaseStatus | null | undefined {
-  const [status, setStatus] = useState<PurchaseStatus | null | undefined>(
-    purchase ? undefined : null
-  )
-  useEffect(() => {
-    if (!purchase) return
-    let live = true
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const read = async () => {
-      const next =
-        (await purchase.status(name).then(purchaseStatusOf, () => null)) ??
-        (paid ? "authorised" : null)
-      if (!live) return
-      setStatus(next)
-      if (next && MOVING.has(next)) timer = setTimeout(read, REREAD_MS)
-      else if (!next && paying) timer = setTimeout(read, PAYING_REREAD_MS)
-    }
-    void read()
-    return () => {
-      live = false
-      clearTimeout(timer)
-    }
-  }, [purchase, name, paid, paying])
-  return status
-}
-
-/** What the purchase card shows, by where the owner is in it. */
-type Phase =
-  | { at: "review" }
-  | { at: "editing" }
-  | { at: "starting" }
-  | { at: "paying"; publishable_key: string; client_secret: string }
-  | { at: "refused"; code: string | null }
-
-function Purchase({
-  name,
-  price,
-  initial,
-}: {
-  name: string
-  price: number
-  initial: RegistrantDetails
-}) {
-  const purchase = useContext(DomainPurchaseContext)
-  const id = useId()
-  const [details, setDetails] = useState(initial)
-  const [phase, setPhase] = useState<Phase>({ at: "review" })
-  const edit = useRef<HTMLButtonElement>(null)
-  const [paid, setPaid] = useState(false)
-  const status = usePurchaseStatus(purchase, name, paid, phase.at === "paying")
-
-  if (status) {
-    // A tick only for a purchase that went through, or a test one that did.
-    const Icon = TICKED.has(status) ? CheckCircleIcon : null
-    return (
-      <section
-        className="my-3 flex max-w-md flex-col gap-1"
-        data-slot="buy-domain"
-      >
-        <h3 className="break-all font-medium">{name}</h3>
-        <p className="flex items-start gap-2 text-sm" role="status">
-          {Icon ? (
-            <Icon aria-hidden className="mt-0.5 size-4 shrink-0 text-primary" />
-          ) : null}
-          {STATUS_TEXT[status](name)}
-        </p>
-      </section>
-    )
-  }
-
-  const pay = async () => {
-    if (!purchase) {
-      setPhase({ at: "refused", code: "domain.buy_unavailable" })
-      return
-    }
-    setPhase({ at: "starting" })
-    try {
-      const started = await purchase.checkout(name, details)
-      setPhase(
-        started.outcome === "open"
-          ? { at: "paying", ...started }
-          : { at: "refused", code: started.code }
-      )
-    } catch {
-      setPhase({ at: "refused", code: null })
-    }
-  }
-
-  return (
-    <section
-      aria-labelledby={`${id}-title`}
-      className={cn(CARD_SURFACE, "my-3 flex max-w-md flex-col gap-3")}
-      data-slot="buy-domain"
-    >
-      <div className="flex flex-col gap-0.5">
-        <h3 className="break-all font-medium" id={`${id}-title`}>
-          {name}
-        </h3>
-        <p className="text-sm">{pounds(price)} for 1 year, renews yearly.</p>
-      </div>
-      {phase.at === "editing" ? (
-        <DetailsForm
-          details={details}
-          name={name}
-          onCancel={() => {
-            setPhase({ at: "review" })
-            requestAnimationFrame(() => edit.current?.focus())
-          }}
-          onSave={(saved) => {
-            setDetails(saved)
-            setPhase({ at: "review" })
-            requestAnimationFrame(() => edit.current?.focus())
-          }}
-        />
-      ) : (
-        <>
-          <div className="flex flex-col gap-2">
-            <p className={META}>Registered to your business</p>
-            <DetailsText
-              details={
-                // Who the registrant is in law matters to .co.uk and .uk only.
-                needsType(name) ? details : { registrant: details.registrant }
-              }
-            />
-            {phase.at === "paying" ? null : (
-              <div>
-                <Button
-                  className="-ms-2.5"
-                  onClick={() => setPhase({ at: "editing" })}
-                  ref={edit}
-                  size="sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  <PencilSimpleIcon aria-hidden />
-                  Edit details
-                </Button>
-              </div>
-            )}
-          </div>
-          <p className={META}>
-            Hidden from public WHOIS where the registry allows. It's yours: you
-            can move it away any time after 60 days. By paying you authorise
-            Reme to register it in your business's name and accept the{" "}
-            <a
-              className="underline underline-offset-2 hover:text-foreground"
-              href={AGREEMENT}
-              rel="noopener noreferrer"
-              target="_blank"
-            >
-              Cloudflare Domain Registration Agreement
-              <ArrowSquareOutIcon
-                aria-hidden
-                className="ms-0.5 inline size-3"
-              />
-              <span className="sr-only"> (opens in a new tab)</span>
-            </a>{" "}
-            and{" "}
-            <a
-              className="underline underline-offset-2 hover:text-foreground"
-              href={ICANN}
-              rel="noopener noreferrer"
-              target="_blank"
-            >
-              ICANN registrant rights
-              <ArrowSquareOutIcon
-                aria-hidden
-                className="ms-0.5 inline size-3"
-              />
-              <span className="sr-only"> (opens in a new tab)</span>
-            </a>
-            .
-          </p>
-          {phase.at === "paying" ? (
-            <Checkout
-              clientSecret={phase.client_secret}
-              onComplete={() => setPaid(true)}
-              publishableKey={phase.publishable_key}
-            />
-          ) : phase.at === "refused" ? (
-            <>
-              <div role="alert">
-                <Problem
-                  text={refusalText(
-                    phase.code,
-                    "The payment could not be started. Try again."
-                  )}
-                />
-              </div>
-              {phase.code === "domain.buy_unavailable" ? null : (
-                <div>
-                  <Button onClick={pay} size="sm" type="button">
-                    Try again
-                  </Button>
-                </div>
-              )}
-            </>
-          ) : (
-            <div aria-busy={phase.at === "starting" || status === undefined}>
-              {/* Not offered until the read says the purchase still waits. */}
-              <Button
-                disabled={phase.at === "starting" || status === undefined}
-                onClick={pay}
-                size="sm"
-                type="button"
-              >
-                {phase.at === "starting"
-                  ? "Opening payment"
-                  : status === undefined
-                    ? "Checking the purchase"
-                    : `Continue to pay ${pounds(price)}`}
-              </Button>
-            </div>
-          )}
-        </>
-      )}
-    </section>
-  )
-}
 
 export const BuyDomain: ToolCallMessagePartComponent = (props) => {
   const streaming = useAuiState((s) => s.message.status?.type === "running")
   const view = readView(props, BuyDomainOutput)
-  const input = BuyDomainInput.safeParse(props.args).data
-
   if (view.state !== "done") {
     return (
       <div data-slot="buy-domain">
         <ToolLine
-          args={{ domain: input?.name }}
+          args={{ domain: BuyDomainInput.safeParse(props.args).data?.name }}
           state={view.state}
-          tool="buy_domain"
           streaming={streaming}
+          tool="buy_domain"
         />
       </div>
     )
@@ -893,19 +1140,12 @@ export const BuyDomain: ToolCallMessagePartComponent = (props) => {
       </div>
     )
   }
-  if (!input) {
-    return (
-      <div data-slot="buy-domain">
-        <Problem text="This did not come through whole. Ask again." />
-      </div>
-    )
-  }
-  const { name: _name, ...details } = input
+  const { output } = view
   return (
-    <Purchase
-      initial={details}
-      name={view.output.name}
-      price={view.output.price_gbp}
+    <BuyTray
+      draftId={props.toolCallId}
+      name={output.name}
+      prefill={output.outcome === "details" ? output : undefined}
     />
   )
 }

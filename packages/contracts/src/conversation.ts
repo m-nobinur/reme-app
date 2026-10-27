@@ -8,6 +8,7 @@ import {
   OwnerAnswerText,
   REVIEW_FACT_KEYS,
 } from "./owner.ts"
+import { Hostname } from "./site.ts"
 import { Text } from "./text.ts"
 
 /**
@@ -90,12 +91,19 @@ export const ConversationMessage = z.strictObject({
 /**
  * A button on a message the server posted. `ask` sends `text` as the owner's
  * next message, which the chat already does for a suggestion; `open` opens an
- * https link in a new tab.
+ * https link in a new tab; `pay` opens the details and Pay page for buying
+ * `name`, which makes a fresh Checkout; `connect` starts signing in to
+ * `service` straight from the message, the way its card does.
  */
 export const ServerButton = z.strictObject({
   label: Text(60),
   action: z.discriminatedUnion("kind", [
     z.strictObject({ kind: z.literal("ask"), text: Text(500) }),
+    z.strictObject({ kind: z.literal("pay"), name: Hostname }),
+    z.strictObject({
+      kind: z.literal("connect"),
+      service: z.literal("google"),
+    }),
     z.strictObject({
       kind: z.literal("open"),
       url: z
@@ -176,17 +184,24 @@ export const BuildQuestion = z.strictObject({
   field: z.string().min(1).max(100).optional(),
 })
 
+const Questions = z.array(BuildQuestion).min(1).max(10)
+
 /**
  * The questions one message asks, drawn as one stack. `build`: what a
  * build waits on, and an answer resumes it. `offer`: what a ready draft
  * left out; once every one is settled, the answers start one change on top
  * of that draft. `assignment_id` is the build's, read by the server only.
+ * `address`: whether the owner has a web address (`ADDRESS_ASK`); it belongs
+ * to the owner's address task, not to a build, so it names no assignment.
  */
-export const BuildQuestions = z.strictObject({
-  kind: z.enum(["build", "offer"]),
-  assignment_id: Uuid,
-  questions: z.array(BuildQuestion).min(1).max(10),
-})
+export const BuildQuestions = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.enum(["build", "offer"]),
+    assignment_id: Uuid,
+    questions: Questions,
+  }),
+  z.strictObject({ kind: z.literal("address"), questions: Questions }),
+])
 
 /** How `BuildQuestions` is stored among a message's parts: an AI SDK data part. */
 export const BuildQuestionsPart = z.strictObject({

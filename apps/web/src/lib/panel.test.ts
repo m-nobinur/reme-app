@@ -569,7 +569,7 @@ describe("later jobs", () => {
     // A review is answered in the panel's own list, not drawn twice.
     expect(rest).toEqual([])
     expect(domain?.title).toMatch(/fixture\.example\.invalid$/)
-    expect(domain?.line).toBe("One change to make at your DNS provider")
+    expect(domain?.line).toBe("Changes to make at your DNS provider")
     expect(domain?.steps.map((each) => [each.label, each.state])).toEqual([
       ["Your DNS change", "waiting"],
       ["Certificate", "next"],
@@ -586,14 +586,111 @@ describe("later jobs", () => {
     expect(purchase?.icon).toBe("payment")
   })
 
-  it("opens the site once live, and offers nothing else", () => {
-    expect(jobs?.suggestions).toEqual([
-      { kind: "visit-site", host: HOST, url: URL_ },
+  it("offers no next step once the site is live: the Website page links it", () => {
+    expect(jobs?.suggestions).toEqual([])
+  })
+})
+
+describe("tasks not started", () => {
+  const unbegun = (kind: "address" | "google") =>
+    segment(
+      kind,
+      "upcoming",
+      (kind === "address"
+        ? ["find_out", "choose", "records"]
+        : ["sign_in", "verify"]
+      ).map((id) => step(id, "next")),
+      { id: kind === "google" ? "google" : "address:1" }
+    )
+  const withUpcoming = (...upcoming: ActivitySegment[]) =>
+    panelFor(
+      input({
+        workspace: live({
+          assistantName: "Ellie",
+          activity: activity({ upcoming }),
+        }),
+      })
+    )
+
+  it("offers the next one as Up next with one button, the address before Google", () => {
+    const panel = withUpcoming(unbegun("google"), unbegun("address"))
+    expect(panel?.upNext).toEqual({
+      id: "address:1",
+      text: expect.stringMatching(/address/i),
+      label: "Use your own domain",
+      ask: "I'd like to use my own domain",
+    })
+    expect(panel?.upcoming).toEqual([])
+    expect(withUpcoming(unbegun("google"))?.upNext).toMatchObject({
+      label: "Connect Google",
+    })
+  })
+
+  it("keeps a task that has begun in Coming up", () => {
+    const panel = withUpcoming(
+      segment("google", "upcoming", [
+        step("sign_in", "done"),
+        step("first_data", "next"),
+      ])
+    )
+    expect(panel?.upNext).toBeNull()
+    expect(panel?.upcoming.map((row) => row.text)).toEqual([
+      "Your first search numbers from Google",
     ])
   })
 })
 
 describe("completedOf", () => {
+  it("gives a task still open a row for its furthest done step, dated by that step", () => {
+    const records = "2026-10-01T08:30:00.000Z"
+    const open = segment(
+      "address",
+      "now",
+      [
+        step("find_out", "done", { at: "2026-10-01T08:00:00.000Z" }),
+        step("records", "done", { at: records }),
+        step("certificate", "now"),
+      ],
+      { id: "address:1", names: { domain: "spark.example.invalid" } }
+    )
+    const rows = completedOf(
+      live({ activity: activity({ standing: [open] }) }),
+      {
+        orgId: ORG,
+        assistant: "Ellie",
+      }
+    )
+    expect(rows).toEqual([
+      {
+        id: "address:1:proof",
+        text: "Your DNS points spark.example.invalid at your website",
+        at: records,
+        brief: null,
+      },
+    ])
+    // Done, the task is one row, and its brief is what its last step proved.
+    const done = completedOf(
+      live({
+        activity: activity({
+          standing: [
+            {
+              ...open,
+              state: "done",
+              steps: [step("loads", "done", { at: records })],
+            },
+          ],
+        }),
+      }),
+      { orgId: ORG, assistant: "Ellie" }
+    )
+    expect(done.map((row) => [row.text, row.brief])).toEqual([
+      [
+        "Spark.example.invalid connected",
+        "Your website loads at spark.example.invalid",
+      ],
+    ])
+  })
+
   it("lists a first publish once, though the feed and the site's standing both hold it", () => {
     const published = (id: string) =>
       segment("golive", "done", along(GOLIVE_STEPS, GOLIVE_STEPS.length), {
@@ -609,8 +706,22 @@ describe("completedOf", () => {
       }),
       { orgId: ORG, assistant: "Ellie" }
     )
+    expect(rows.map((row) => row.text)).toEqual(["Website published"])
+  })
+
+  it("lists a domain once, though its address task and its standing row both hold it", () => {
+    const names = { domain: "spark.example.invalid" }
+    const rows = completedOf(
+      live({
+        activity: activity({
+          done: [segment("address", "done", [], { id: "address:1", names })],
+          standing: [segment("domain", "done", [], { id: "domain:1", names })],
+        }),
+      }),
+      { orgId: ORG, assistant: "Ellie" }
+    )
     expect(rows.map((row) => row.text)).toEqual([
-      `Website published at ${HOST}`,
+      "Spark.example.invalid connected",
     ])
   })
 })

@@ -23,12 +23,42 @@ const script = vi.hoisted(() => ({
   calls: [] as string[],
   pullError: null as Error | null,
   stale: null as string | null,
+  healthy: true,
+  say: null as { key: string; text: string } | null,
 }))
 vi.mock("../src/domain-flow.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/domain-flow.ts")>()),
   withKit: async (_env: unknown, fn: (kit: unknown) => unknown) => fn({}),
 }))
+// The engine is tested against a database in probe.test.ts; here it is the step it runs in.
+vi.mock("../src/probe.ts", () => ({
+  probe: async (
+    step: { do: (...args: unknown[]) => Promise<unknown> },
+    name: string,
+    _env: unknown,
+    _target: unknown,
+    read: (kit: unknown) => Promise<{ result: object }>,
+    config: unknown
+  ) =>
+    step.do(name, config, async () => ({
+      ...(await read({})).result,
+      ...(script.say && { say: script.say }),
+    })),
+}))
+vi.mock("../src/search.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/search.ts")>()),
+  tell: async (_kit: unknown, _org: string, key: string) => {
+    script.calls.push(`tell ${key}`)
+  },
+}))
+vi.mock("../src/search-payoff.ts", () => ({
+  sayPayoff: async () => {
+    script.calls.push("payoff")
+    return null
+  },
+}))
 vi.mock("../src/search-sync.ts", () => ({
+  checkGrant: async () => ({ result: { healthy: script.healthy } }),
   syncTargets: async () => [
     "https://a.example.test/",
     "https://b.example.test/",
@@ -73,6 +103,8 @@ beforeEach(() => {
   script.calls.length = 0
   script.pullError = null
   script.stale = null
+  script.healthy = true
+  script.say = null
 })
 
 describe("the daily search sync", () => {
@@ -85,6 +117,7 @@ describe("the daily search sync", () => {
       "inspect https://a.example.test/",
       "pull https://b.example.test/",
       "inspect https://b.example.test/",
+      "payoff",
     ])
     expect(configs["pull 1"]).toBe(SYNC_RETRIES)
   })
@@ -98,6 +131,7 @@ describe("the daily search sync", () => {
       "pull https://a.example.test/",
       "pull https://b.example.test/",
       "inspect https://b.example.test/",
+      "payoff",
     ])
   })
 
@@ -106,6 +140,15 @@ describe("the daily search sync", () => {
     const { names, result } = await drive()
     expect(names).toEqual(steps.SearchSyncWorkflow["needs reauth"])
     expect(result).toEqual({ outcome: "needs_reauth" })
+  })
+
+  it("says a lost permission once and ends the day", async () => {
+    script.healthy = false
+    script.say = { key: "task:t:permissions:abc", text: "Google needs more" }
+    const { names, result } = await drive()
+    expect(names).toEqual(steps.SearchSyncWorkflow["lost permission"])
+    expect(result).toEqual({ outcome: "needs_permission" })
+    expect(script.calls).toEqual(["tell task:t:permissions:abc"])
   })
 
   it("retries only Google's outage", async () => {

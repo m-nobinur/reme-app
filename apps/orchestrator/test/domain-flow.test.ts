@@ -1,12 +1,15 @@
+import { SITE_HEADER } from "@workspace/contracts"
 import type { Tenancy } from "@workspace/db"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import {
   connect,
   currentCheck,
+  inspectDomain,
   look,
   nextWait,
   normalizeName,
   postStatus,
+  reaches,
   statusText,
 } from "../src/domain-flow.ts"
 import { CAA_FOR_US } from "../src/domains.ts"
@@ -83,6 +86,8 @@ function fakeKit() {
   const writes = { n: 0 }
   const db = {
     select: () => ({ from: () => ({ where: async () => [row] }) }),
+    // The task sync after a row write; tasks are tested in packages/db.
+    execute: async () => [],
     update: () => ({
       set: (values: object) => ({
         where: () => {
@@ -118,31 +123,39 @@ afterEach(() => {
 })
 
 describe("a look", () => {
-  it("tells the owner about a planted A record exactly once, then goes ready when it is fixed", async () => {
+  it("reads a planted A record as the owner's to fix, then goes ready when it is fixed", async () => {
     const { kit, row, writes } = fakeKit()
     const pending = {
       [`${BASE}/h-${NAME}`]: () => hostname(NAME, "pending", "initializing"),
       [`${BASE}/h-${WWW}`]: () => hostname(WWW, "pending", "initializing"),
     }
     stubNet(pending, { [`${NAME} CAA`]: { Status: 0 } })
-    expect(await look(env, kit, "org", "dom", 1)).toEqual({
+    const first = await look(env, kit, "org", "dom")
+    expect(first.result).toEqual({
       gone: false,
       at: expect.any(Number),
       status: "conflicting_record",
       ready: false,
-      say: {
-        key: "dom:look:1",
-        text: `Nearly there. ${WWW} still has an old A record (192.0.2.10) in the way. Delete it and I'll pick it up from there.`,
-        button: {
-          label: "Open GoDaddy DNS settings",
-          action: { kind: "open", url: "https://dcc.godaddy.com/manage/dns" },
-        },
+      changed: true,
+    })
+    expect(first.reading).toMatchObject({
+      step: "records",
+      write: {
+        state: "blocked",
+        blocked_on: "owner_action",
+        note: "Delete the old A record at GoDaddy",
       },
     })
-    // The same record still there: nothing new to say.
-    const again = await look(env, kit, "org", "dom", 2)
-    expect(again).toMatchObject({ status: "conflicting_record" })
-    expect(again).not.toHaveProperty("say")
+    expect(await first.reading?.tell?.()).toEqual({
+      text: `Nearly there. ${WWW} still has an old A record (192.0.2.10) in the way. Delete it and I'll pick it up from there.`,
+      button: {
+        label: "Open GoDaddy DNS settings",
+        action: { kind: "open", url: "https://dcc.godaddy.com/manage/dns" },
+      },
+    })
+    // The same record still there: the same evidence, so the probe says nothing.
+    const again = await look(env, kit, "org", "dom")
+    expect(again.reading?.evidence).toEqual(first.reading?.evidence)
     expect(row.state).toBe("awaiting_dns")
     // A look that finds what the last one did writes nothing.
     expect(writes.n).toBe(1)
@@ -157,10 +170,12 @@ describe("a look", () => {
       },
       FIXED
     )
-    const ready = await look(env, kit, "org", "dom", 3)
-    expect(ready).toMatchObject({ status: "valid", ready: true })
-    // Live has its own message, from the activation.
-    expect(ready).not.toHaveProperty("say")
+    const ready = await look(env, kit, "org", "dom")
+    expect(ready.result).toMatchObject({ status: "valid", ready: true })
+    // Live has its own message, from the `loads` probe after activation.
+    expect(ready.reading).toMatchObject({ step: "certificate" })
+    expect(ready.reading).not.toHaveProperty("tell")
+    expect(ready.reading).not.toHaveProperty("write")
     expect(row).toMatchObject({
       state: "verifying",
       primaryHost: WWW,
@@ -178,14 +193,16 @@ describe("a look", () => {
       },
       FIXED
     )
-    const seen = await look(env, kit, "org", "dom", 1)
-    expect(seen).toMatchObject({
+    const seen = await look(env, kit, "org", "dom")
+    expect(seen.result).toMatchObject({
       status: "pending_certificate",
       ready: false,
-      say: { key: "dom:look:1" },
     })
-    // Nothing for the owner to do here, so no button.
-    expect(seen.gone || seen.say?.button).toBeUndefined()
+    // Nothing for the owner to do here, so no button and no block.
+    expect(await seen.reading?.tell?.()).toEqual({
+      text: expect.stringContaining("Your secure certificate is being issued"),
+    })
+    expect(seen.reading).not.toHaveProperty("write")
     expect(row.state).toBe("verifying")
   })
 
@@ -201,9 +218,26 @@ describe("a look", () => {
       [`https://${WWW}/`]: () => new Response("not here", { status: 404 }),
     }
     stubNet(net, FIXED)
-    expect(await look(env, kit, "org", "dom", 1)).toMatchObject({
+    const held = await look(env, kit, "org", "dom")
+    expect(held.result).toMatchObject({
       status: "pending_verification",
       ready: false,
+    })
+    // The records are in, so the one step left is the TXT, said with its value.
+    expect(row.state).toBe("verifying")
+    expect(held.reading).toMatchObject({
+      step: "ownership",
+      write: {
+        state: "blocked",
+        blocked_on: "owner_action",
+        note: "Add the TXT record at GoDaddy",
+      },
+    })
+    expect(await held.reading?.tell?.()).toMatchObject({
+      text: expect.stringContaining(
+        "add this TXT record at GoDaddy: _cf-custom-hostname.www = 0e2d5a7f-uuid."
+      ),
+      button: { label: "Open GoDaddy DNS settings" },
     })
     // A TXT with another value is not the owner's proof either.
     const txt = (value: string) => ({
@@ -214,19 +248,19 @@ describe("a look", () => {
     })
     vi.unstubAllGlobals()
     stubNet(net, { ...FIXED, ...txt("someone-else") })
-    expect(await look(env, kit, "org", "dom", 2)).toMatchObject({
+    expect((await look(env, kit, "org", "dom")).result).toMatchObject({
       status: "pending_verification",
       ready: false,
     })
     vi.unstubAllGlobals()
     stubNet(net, { ...FIXED, ...txt(own.value) })
-    expect(await look(env, kit, "org", "dom", 3)).toMatchObject({
+    expect((await look(env, kit, "org", "dom")).result).toMatchObject({
       status: "valid",
       ready: true,
     })
     // A host with no stored TXT is never taken as proven.
     row.ownership = {}
-    expect(await look(env, kit, "org", "dom", 4)).toMatchObject({
+    expect((await look(env, kit, "org", "dom")).result).toMatchObject({
       status: "pending_verification",
     })
   })
@@ -234,7 +268,25 @@ describe("a look", () => {
   it("is gone for a claim that is no longer connecting", async () => {
     const { kit, row } = fakeKit()
     row.state = "removed"
-    expect(await look(env, kit, "org", "dom", 1)).toEqual({ gone: true })
+    expect((await look(env, kit, "org", "dom")).result).toEqual({ gone: true })
+  })
+
+  it("takes a failed read as no news: the row stays as it was and nothing is recorded", async () => {
+    const { kit, row, writes } = fakeKit()
+    row.state = "verifying"
+    vi.stubGlobal("fetch", async () => {
+      throw new Error("network down")
+    })
+    expect(await look(env, kit, "org", "dom")).toEqual({
+      result: {
+        gone: false,
+        at: expect.any(Number),
+        status: "unknown_error",
+        ready: false,
+      },
+    })
+    expect(writes.n).toBe(0)
+    expect(row.state).toBe("verifying")
   })
 })
 
@@ -276,6 +328,7 @@ describe("the check", () => {
         ],
       },
       primary: WWW,
+      apex: NAME,
     })
     vi.unstubAllGlobals()
     vi.stubGlobal("fetch", async () => {
@@ -446,4 +499,94 @@ it("looks every minute for the first half hour, every 10 to two hours, then hour
   expect([0, 29, 30, 119, 120, 71 * 60].map((m) => nextWait(m * MIN))).toEqual(
     [1, 1, 10, 10, 60, 60].map((m) => m * MIN)
   )
+})
+
+describe("whether a host serves the site", () => {
+  const SITE = "site-1"
+  const answer = (status: number, headers: Record<string, string> = {}) =>
+    vi.stubGlobal("fetch", async () => new Response("ok", { status, headers }))
+
+  it("is true only for a 2xx the router marked with this site's id", async () => {
+    answer(404)
+    expect(await reaches(NAME, SITE)).toBe(false)
+    answer(404, { [SITE_HEADER]: SITE })
+    expect(await reaches(NAME, SITE)).toBe(false)
+    answer(200)
+    expect(await reaches(NAME, SITE)).toBe(false)
+    answer(200, { [SITE_HEADER]: "another-site" })
+    expect(await reaches(NAME, SITE)).toBe(false)
+    answer(200, { [SITE_HEADER]: SITE })
+    expect(await reaches(NAME, SITE)).toBe(true)
+    vi.stubGlobal("fetch", async () => {
+      throw new Error("offline")
+    })
+    expect(await reaches(NAME, SITE)).toBe(false)
+  })
+})
+
+describe("inspecting a name the owner has", () => {
+  const RDAP = "https://rdap.nominet.uk/uk/domain"
+  const BOOTSTRAP = "https://data.iana.org/rdap/dns.json"
+  const registry = () =>
+    Response.json({ services: [[["uk"], ["https://rdap.nominet.uk/uk/"]]] })
+  const held = (fn: string) => () =>
+    Response.json({
+      entities: [
+        {
+          roles: ["registrar"],
+          vcardArray: ["vcard", [["fn", {}, "text", fn]]],
+        },
+      ],
+    })
+  const noCache = () =>
+    vi.stubGlobal("caches", {
+      default: { match: async () => undefined, put: async () => undefined },
+    })
+
+  it("names the registrar and the DNS host, and sees the old website", async () => {
+    noCache()
+    stubNet({
+      [BOOTSTRAP]: registry,
+      [`${RDAP}/${NAME}`]: held("123-Reg Limited t/a 123-reg"),
+    })
+    expect(await inspectDomain(`WWW.${NAME}`)).toEqual({
+      name: NAME,
+      registered: true,
+      registrar: "123-reg",
+      dns_host: {
+        name: "GoDaddy",
+        settings_url: "https://dcc.godaddy.com/manage/dns",
+      },
+      in_use: true,
+    })
+  })
+
+  it("reads a free name from RDAP alone", async () => {
+    noCache()
+    const fetched = stubNet({
+      [BOOTSTRAP]: registry,
+      [`${RDAP}/free-name.co.uk`]: () => new Response("{}", { status: 404 }),
+    })
+    expect(await inspectDomain("free-name.co.uk")).toEqual({
+      name: "free-name.co.uk",
+      registered: false,
+      in_use: false,
+    })
+    expect(
+      fetched.mock.calls.every(([u]) => !String(u).includes("dns-query"))
+    ).toBe(true)
+  })
+
+  it("falls back on DNS when the registry cannot answer", async () => {
+    noCache()
+    stubNet({ [BOOTSTRAP]: () => new Response("{}", { status: 503 }) })
+    expect(await inspectDomain(NAME)).toMatchObject({
+      registered: true,
+      in_use: true,
+    })
+    expect(await inspectDomain("not a domain")).toMatchObject({
+      refused: true,
+      code: "domain.invalid",
+    })
+  })
 })

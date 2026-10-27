@@ -318,6 +318,22 @@ const TOOLS: Record<CosToolName, ToolCopy> = {
     done: () => "Added the review",
     fail: () => "add the review",
   },
+  domain_bought: {
+    kind: "domain",
+    working: (a) =>
+      withDomain(a, (d) => `Looking for ${d}`, "Looking for your domain"),
+    done: (a) =>
+      withDomain(a, (d) => `Looked for ${d}`, "Looked for your domain"),
+    fail: (a) => withDomain(a, (d) => `look for ${d}`, "look for your domain"),
+  },
+  inspect_domain: {
+    kind: "domain",
+    working: (a) =>
+      withDomain(a, (d) => `Looking up ${d}`, "Looking up your domain"),
+    done: (a) =>
+      withDomain(a, (d) => `Looked up ${d}`, "Looked up your domain"),
+    fail: (a) => withDomain(a, (d) => `look up ${d}`, "look up your domain"),
+  },
   check_domain: {
     kind: "domain",
     working: (a) =>
@@ -396,6 +412,12 @@ const TOOLS: Record<CosToolName, ToolCopy> = {
     working: () => "Noting that down",
     done: () => "Noted that down",
     fail: () => "note that down",
+  },
+  put_off: {
+    kind: "thinking",
+    working: () => "Noting that for later",
+    done: () => "Noted that for later",
+    fail: () => "note that for later",
   },
 }
 
@@ -685,6 +707,7 @@ type JobKind =
   | "website"
   | "golive"
   | "change"
+  | "address"
   | "domain"
   | "purchase"
   | "google"
@@ -694,8 +717,9 @@ type Names = {
   business: string | null
   /** What a change changes, in the owner's terms: "your hero title". */
   change: string | null
-  host: string | null
   domain: string | null
+  /** The DNS host the owner changes records at. */
+  provider: string | null
 }
 
 type JobCopy = {
@@ -741,13 +765,7 @@ const JOBS: Record<JobKind, JobCopy> = {
     title: () => ["Putting your website live", "Taking your website live"],
     next: () => ["Then it goes live", "Then your website goes live"],
     waiting: () => ["Your website is ready"],
-    done: (n) =>
-      n.host
-        ? [
-            `${biz(n)} is live at ${n.host}`,
-            `${biz(n)} is now live at ${n.host}`,
-          ]
-        : [`${biz(n)} is live`, `${biz(n)} is now live`],
+    done: (n) => [`${biz(n)} is live`, `${biz(n)} is now live`],
     noun: "website launch",
     pill: () => "putting your website live",
   },
@@ -756,6 +774,19 @@ const JOBS: Record<JobKind, JobCopy> = {
     done: () => ["Your changes are made", "Finished making your changes"],
     noun: "update",
     pill: (n) => `updating ${n.change ?? "your website"}`,
+  },
+  address: {
+    title: (n) =>
+      n.domain
+        ? [`Putting your website on ${n.domain}`, `Setting up ${n.domain}`]
+        : ["Getting your own web address", "Setting up your web address"],
+    next: () => ["Your own web address comes next", "Next, your own address"],
+    done: (n) => [`${cap(domain(n))} is live`, `${cap(domain(n))} is working`],
+    noun: "address setup",
+    pill: (n) =>
+      n.domain
+        ? `putting your website on ${n.domain}`
+        : "setting up your web address",
   },
   domain: {
     title: (n) => [
@@ -780,6 +811,7 @@ const JOBS: Record<JobKind, JobCopy> = {
   },
   google: {
     title: () => ["Connecting Google", "Linking your site to Google"],
+    next: () => ["Your site on Google comes next", "Next, your site on Google"],
     done: () => ["Your site is on Google", "Your site is connected to Google"],
     noun: "Google connection",
     pill: () => "connecting Google",
@@ -822,6 +854,33 @@ const WAITING: Partial<Record<ActivitySegment["kind"], string>> = {
   question: "your answer",
 }
 
+/** What an owner task waits for, by the step that waits. */
+const STEP_WAITING: Readonly<Record<string, string>> = {
+  find_out: "your answer",
+  choose: "your choice of name",
+  purchase: "your payment",
+  records: "your DNS change",
+  ownership: "your DNS change",
+  sign_in: "you to sign in",
+  permissions: "you to allow access",
+  verify: "your help with Google",
+}
+
+/** The step a task segment waits on, else null; other kinds name theirs by kind. */
+const waitingStep = (segment: ActivitySegment) =>
+  segment.kind === "address" || segment.kind === "google"
+    ? (segment.steps.find((s) => s.state === "waiting") ?? null)
+    : null
+
+const waitsFor = (segment: ActivitySegment) => {
+  const step = waitingStep(segment)
+  // Buying it elsewhere waits on the owner's own purchase, not a payment here.
+  if (step?.id === "purchase" && step.note?.startsWith("buying ")) {
+    return "you to buy it"
+  }
+  return STEP_WAITING[step?.id ?? ""] ?? WAITING[segment.kind]
+}
+
 const job = (segment: ActivitySegment) =>
   Object.hasOwn(JOBS, segment.kind) ? JOBS[segment.kind as JobKind] : null
 
@@ -831,8 +890,8 @@ const namesOf = (segment: ActivitySegment, ctx: CopyContext): Names => {
     assistant: named(ctx.assistant),
     business: cleanArg(n?.business, "text", 60),
     change: cleanArg(n?.change, "text", 40),
-    host: cleanArg(n?.host, "domain"),
     domain: cleanArg(n?.domain, "domain"),
+    provider: cleanArg(n?.provider),
   }
 }
 
@@ -938,23 +997,62 @@ export function segmentLine(
     case "golive":
       // Waiting, its one step says what it waits for.
       return waiting ? null : "Going live in a minute"
+    case "address": {
+      // The step's own note first: code wrote it for this wait.
+      const step = waiting
+        ? waitingStep(segment)
+        : segment.steps.find((s) => s.state === "now")
+      const note = waiting ? cleanArg(step?.note, "text", 80) : null
+      if (note) return cap(note)
+      if (step?.id === "purchase" && waiting) return payBy(extras)
+      if ((step?.id === "records" || step?.id === "ownership") && waiting)
+        return dnsChanges(segment, n.provider)
+      return (step && ADDRESS_NOW[step.id]) ?? null
+    }
     case "domain":
       return waiting
-        ? `One change to make at ${cleanArg(extras.provider) ?? "your DNS provider"}`
+        ? dnsChanges(segment, cleanArg(extras.provider) ?? n.provider)
         : "The certificate is on its way"
-    case "purchase": {
-      const by = cleanArg(extras.until, "text", 40)
-      return waiting
-        ? by
-          ? `Pay by ${by} to keep the name`
-          : "Pay soon to keep the name"
-        : "Registering the name"
+    case "purchase":
+      return waiting ? payBy(extras) : "Registering the name"
+    case "google": {
+      if (!waiting) return "Checking your site with Google"
+      const step = waitingStep(segment)
+      return (
+        cleanArg(step?.note, "text", 80) ??
+        (step?.id === "permissions"
+          ? "Google needs one more permission"
+          : "Google needs you to sign in again")
+      )
     }
-    case "google":
-      return waiting
-        ? "Finish signing in within 10 minutes"
-        : "Checking your site with Google"
   }
+}
+
+/**
+ * The DNS changes the owner has to make, at their provider by name: as many
+ * as the connect card listed, carried as the records step's count, and no
+ * number when the count is not known.
+ */
+const dnsChanges = (segment: ActivitySegment, provider: string | null) => {
+  const total = segment.steps.find((s) => s.id === "records")?.count?.total
+  const where = provider ?? "your DNS provider"
+  if (!total) return `Changes to make at ${where}`
+  return `${total === 1 ? "One change" : `${total} changes`} to make at ${where}`
+}
+
+/** A purchase waiting on payment, by when the name's hold ends. */
+const payBy = (extras: LineExtras) => {
+  const by = cleanArg(extras.until, "text", 40)
+  return by ? `Pay by ${by} to keep the name` : "Pay soon to keep the name"
+}
+
+/** An address step at work, as the line under its title. */
+const ADDRESS_NOW: Readonly<Record<string, string>> = {
+  purchase: "Registering the name",
+  records: "Setting up the records",
+  ownership: "Checking the domain is yours",
+  certificate: "The certificate is on its way",
+  loads: "Checking your website loads on it",
 }
 
 /** The panel pill: "Ellie is building your website", or "Ellie is waiting for your payment". Null when nothing runs or waits. */
@@ -965,8 +1063,8 @@ export function pillLine(segment: ActivitySegment, ctx: CopyContext) {
     return copy ? `The ${copy.noun} stopped` : null
   }
   if (segment.state === "waiting") {
-    const waitsFor = WAITING[segment.kind]
-    return waitsFor ? is(assistant, `waiting for ${waitsFor}`) : null
+    const what = waitsFor(segment)
+    return what ? is(assistant, `waiting for ${what}`) : null
   }
   const copy = job(segment)
   if (segment.state !== "now" || !copy) return null
@@ -975,10 +1073,10 @@ export function pillLine(segment: ActivitySegment, ctx: CopyContext) {
 
 /** A waiting row under its segment: "Waiting for your payment, until 11:50". */
 export function waitingRow(segment: ActivitySegment, until?: string) {
-  const waitsFor = WAITING[segment.kind]
-  if (!waitsFor) return null
+  const what = waitsFor(segment)
+  if (!what) return null
   const by = cleanArg(until, "text", 40)
-  return `Waiting for ${waitsFor}${by ? `, until ${by}` : ""}`
+  return `Waiting for ${what}${by ? `, until ${by}` : ""}`
 }
 
 // ---------------------------------------------------------------------------
@@ -1019,6 +1117,15 @@ const STEP_LABELS: Partial<
     checking: "Checking",
     ready: "Ready",
   },
+  address: {
+    find_out: "Your web address",
+    choose: "Choosing a name",
+    purchase: "Buying it",
+    records: "Your DNS change",
+    ownership: "Proving it's yours",
+    certificate: "Certificate",
+    loads: "Site loads on the new address",
+  },
   domain: {
     dns: "Your DNS change",
     certificate: "Certificate",
@@ -1032,8 +1139,10 @@ const STEP_LABELS: Partial<
   },
   google: {
     sign_in: "Sign in",
+    permissions: "Permissions",
     verify: "Verifying your site",
     sitemap: "Sending your pages to Google",
+    first_data: "Your first search numbers",
   },
 }
 
@@ -1097,6 +1206,7 @@ const SEGMENT_KIND: Record<ActivitySegment["kind"], StatusKind> = {
   website: "building",
   golive: "publishing",
   change: "building",
+  address: "domain",
   domain: "domain",
   purchase: "payment",
   google: "google",
@@ -1126,12 +1236,48 @@ export const stepKind = (
 const COMPLETED: Record<JobKind, (n: Names) => string> = {
   onboarding: (n) => `${biz(n)} set up`,
   website: () => "Website built",
-  golive: (n) =>
-    n.host ? `Website published at ${n.host}` : "Website published",
+  golive: () => "Website published",
   change: () => "Website changes made",
+  address: (n) => `${cap(domain(n))} connected`,
   domain: (n) => `${cap(domain(n))} connected`,
   purchase: (n) => `${cap(domain(n))} registered`,
   google: () => "Connected to Google",
+}
+
+/** An owner task nothing has begun: the panel offers it as Up next. */
+export const notStarted = (segment: ActivitySegment) =>
+  (segment.kind === "address" || segment.kind === "google") &&
+  segment.state === "upcoming" &&
+  segment.steps.every((s) => s.state === "next")
+
+/**
+ * What a done step of an owner task proved, as the line under its Done row.
+ * A step with no line here (finding out, choosing) earns no row of its own.
+ */
+const PROVED: Readonly<Record<string, (n: Names) => string>> = {
+  purchase: (n) => `${cap(domain(n))} is registered in your name`,
+  records: (n) => `Your DNS points ${domain(n)} at your website`,
+  ownership: (n) => `Ownership of ${domain(n)} is confirmed`,
+  certificate: (n) => `The certificate for ${domain(n)} is active`,
+  loads: (n) => `Your website loads at ${domain(n)}`,
+  sign_in: () => "You signed in to Google",
+  permissions: () => "Google can read your search data",
+  verify: () => "Google confirmed the site is yours",
+  sitemap: () => "Your pages were sent to Google",
+  first_data: () => "Google sent its first search numbers",
+}
+
+/** The line an owner task's furthest done step earns, and when that step moved. */
+export function proofOf(segment: ActivitySegment, ctx: CopyContext) {
+  // A go-live segment has a "loads" step of its own, which proves something else.
+  if (segment.kind !== "address" && segment.kind !== "google") return null
+  const step = segment.steps
+    .filter((s) => s.state === "done" && Object.hasOwn(PROVED, s.id))
+    .at(-1)
+  const line = step && PROVED[step.id]
+  return step && line
+    ? { text: line(namesOf(segment, ctx)), at: step.at }
+    : null
 }
 
 /** The check-in sent the owner a message. */
@@ -1171,6 +1317,12 @@ export function rowLine(
         return name ? `${name} is due for renewal` : "Your domain renewal"
       }
       return segmentTitle(segment, ctx)
+    case "google":
+      // Signed in and sent, the one step left is Google's first numbers.
+      return segment.state === "upcoming" &&
+        segment.steps.some((s) => s.id === "sign_in" && s.state === "done")
+        ? "Your first search numbers from Google"
+        : segmentTitle(segment, ctx)
     default:
       return segmentTitle(segment, ctx)
   }
@@ -1217,15 +1369,16 @@ export function completedBrief(
         : "Planned, written and checked"
     }
     case "golive":
-      return `Anyone can now visit ${n.host ?? "your website"}`
+      return "Anyone can now visit your website"
     case "change":
       return cleanArg(segment.step, "text", 60) ?? "Made and checked"
+    case "address":
+    case "google":
+      return proofOf(segment, ctx)?.text ?? null
     case "domain":
       return `Your website now loads at ${n.domain ?? "your domain"}`
     case "purchase":
       return "Registered in your name"
-    case "google":
-      return "Your pages were sent to Google"
     case "checkin":
       return wroteToOwner(segment)
         ? "Sent you a message in the chat"
@@ -1299,10 +1452,18 @@ export function standingLine(
       return extras.when ? `Published ${extras.when}` : "Published"
     case "purchase":
       return extras.renews ? `Renews ${extras.renews}` : "Registered"
-    case "google":
+    case "address":
+      return extras.renews ? `Live. Renews ${extras.renews}` : "Live"
+    case "google": {
+      const seen = segment.numbers
+      if (seen) {
+        const counts = `${plural(seen.clicks, "click")} and ${plural(seen.impressions, "appearance")} on Google in the last 28 days`
+        return extras.synced ? `${counts}. Data read ${extras.synced}` : counts
+      }
       return extras.synced
         ? `Verified, pages sent. Data read ${extras.synced}`
         : "Verified, pages sent. No data yet"
+    }
     default:
       return "Live"
   }

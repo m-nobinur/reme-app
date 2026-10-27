@@ -2,10 +2,11 @@ import {
   AGENT_NOTE,
   type AnswerQuestionInput,
   type AnswerQuestionOutput,
+  BoughtElsewhereOutput,
   BuildStopCause,
   BuildSummary,
   type BuyDomainInput,
-  BuyDomainOutput,
+  type BuyDomainOutput,
   type CheckDomainInput,
   CheckDomainOutput,
   type ConnectDomainInput,
@@ -16,7 +17,10 @@ import {
   CosWorkspace,
   type CreateReminderOutput,
   type CreateReminderRequest,
+  type DomainBoughtInput,
   DomainCheck,
+  DomainInspection,
+  DomainRegistrantPrefill,
   ErrorEnvelope,
   type FactRecord,
   FactValue,
@@ -27,9 +31,13 @@ import {
   type GetPreviewInput,
   GetPreviewOutput,
   InformationAnswer,
+  type InspectDomainInput,
+  type InspectDomainOutput,
   OwnerAnswerText,
   PreviewLink,
   type ProfileLine,
+  type PutOffInput,
+  type PutOffOutput,
   type QuestionAnswer,
   REVIEW_FACT_KEYS,
   type RecordReviewInput,
@@ -48,11 +56,14 @@ import {
   events,
   failureCode,
   type OrgScopedDb,
+  openTask,
+  readTasks,
   siteRevisions,
   sql,
   type Tenancy,
 } from "@workspace/db"
 import { rangeText } from "@workspace/ui/lib/activity-copy"
+import type { ModelMessage } from "ai"
 import {
   type Bridged,
   bridge,
@@ -69,8 +80,10 @@ import {
   buyUnavailable,
   isOrgOwner,
   notOwner,
+  registrantPrefill,
 } from "../domain-buy.ts"
 import { failure } from "../http.ts"
+import { jevBought, jevPutOn } from "../jev.ts"
 import {
   ASSISTANT_KEY_PREFIX,
   createReminder as storeReminder,
@@ -262,7 +275,7 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
   reminders: Opening["reminders"]
 }> {
   const now = new Date()
-  const [{ status, facts }, rows, { lines: profile }, reports, repairs, lives] =
+  const [read, rows, { lines: profile }, reports, repairs, lives] =
     await kit.withOrg({ orgId: owner.orgId }, (db) =>
       Promise.all([
         statusWithFacts(db, env, now),
@@ -290,6 +303,7 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
         ),
       ])
     )
+  const { status, facts, tasks } = read
   const roundsOf = (assignmentId: string) =>
     [...repairs].find((r) => r.assignment_id === assignmentId)?.rounds ?? 0
   const failedChecks = (assignmentId: string | null) => {
@@ -371,6 +385,7 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
       // A check stored before the contract changed reads as none yet.
       last_check: DomainCheck.safeParse(r.lastCheck).data ?? null,
     })),
+    tasks,
     expected_seconds: status.expected_seconds,
     expected_range: {
       quick: rangeOf(status.expected_seconds, "quick"),
@@ -1003,6 +1018,28 @@ export async function checkDomain(
   )
 }
 
+/**
+ * What a name the owner says they have is, read before anything is
+ * connected: whether it is registered, with whom, who runs its DNS and
+ * whether it already points somewhere. Public registry and DNS reads only,
+ * through the orchestrator, so no card.
+ */
+export async function inspectDomain(
+  { env, owner }: ToolContext,
+  { name }: InspectDomainInput
+): Promise<InspectDomainOutput> {
+  const answered = relay(
+    await bridge(env, owner, `/domains/${name}/inspect`, { method: "GET" }),
+    DomainInspection.parse
+  )
+  if (!answered.ok) return refused(answered)
+  // The route answers the bare inspection; the tool's output is tagged.
+  return {
+    outcome: "inspected",
+    ...DomainInspection.parse(await answered.json()),
+  }
+}
+
 /** The orchestrator's connect answers that a second look a moment later can turn into records. */
 const PASSING = new Set(["dns.unavailable", "domain.records_pending"])
 
@@ -1039,6 +1076,162 @@ export async function connectDomain(
 }
 
 /**
+ * What the owner last typed in `sessionId`, or null when there is none or it
+ * was an emailed reply (`eml_`): that crosses a channel the owner does not
+ * see, so it is never a yes. Read from the log, not from the model's
+ * `messages`, so a context note or a summary can never stand for the owner.
+ */
+async function typedByOwner(
+  { kit, owner }: Pick<ToolContext, "kit" | "owner">,
+  sessionId: string
+): Promise<string | null> {
+  const log = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+    readSession(db, sessionId)
+  )
+  const last = log
+    .flatMap((e) => {
+      const m =
+        e.type === "cos.message" ? CosMessage.safeParse(e.payload) : null
+      return m?.success && m.data.message.role === "user"
+        ? [m.data.message]
+        : []
+    })
+    .at(-1)
+  if (!last || last.id.startsWith("eml_")) return null
+  return last.parts
+    .flatMap((p) =>
+      p.type === "text" && typeof p.text === "string" ? [p.text] : []
+    )
+    .join("\n")
+}
+
+/**
+ * Whether a connect (`connect_domain` or `domain_bought`) was already
+ * proposed since the owner's last message, whatever came of it. A no, a
+ * refusal or a run is the end of that message's yes.
+ */
+const connectProposed = (messages: readonly ModelMessage[]) =>
+  messages
+    .slice(messages.map((m) => m.role).lastIndexOf("user"))
+    .some(
+      (m) =>
+        m.role === "assistant" &&
+        Array.isArray(m.content) &&
+        m.content.some(
+          (p) =>
+            p.type === "tool-call" &&
+            (p.toolName === "connect_domain" || p.toolName === "domain_bought")
+        )
+    )
+
+/** Whether the org already has `name` live: connecting it again moves live DNS. */
+async function isLive(
+  { kit, owner }: Pick<ToolContext, "kit" | "owner">,
+  name: string
+): Promise<boolean> {
+  const [active] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+    db
+      .select({ id: domains.id })
+      .from(domains)
+      .where(sql`${eq(domains.name, name)} and ${domains.state} = 'active'`)
+  )
+  return Boolean(active)
+}
+
+/**
+ * Whether connecting `name` still asks on a card. It does not when the
+ * owner's last typed message puts the site on exactly that name (Jev, at
+ * `sure`). It always does for a name the org already has live, since
+ * connecting moves live DNS, and for anything unsure: no key, a message
+ * without the name, a Jev error. A connect already proposed since that
+ * message (declined, refused or run) never skips the card again, so a no
+ * cannot be retried past.
+ */
+export async function connectApproval(
+  { env, kit, owner }: Pick<ToolContext, "env" | "kit" | "owner">,
+  { name }: ConnectDomainInput,
+  sessionId: string,
+  messages: readonly ModelMessage[],
+  fetchImpl?: typeof fetch
+): Promise<"user-approval" | "not-applicable"> {
+  if (!env.OPENROUTER_API_KEY || connectProposed(messages)) {
+    return "user-approval"
+  }
+  const said = await typedByOwner({ kit, owner }, sessionId)
+  if (said === null || (await isLive({ kit, owner }, name))) {
+    return "user-approval"
+  }
+  return (await jevPutOn(env.OPENROUTER_API_KEY, said, name, fetchImpl))
+    ? "not-applicable"
+    : "user-approval"
+}
+
+/**
+ * Whether the owner's last typed message says they bought `name`, the
+ * domain the address task is waiting on them to buy, and Jev is sure it
+ * does. The connect this starts has the owner's word as its only consent, so
+ * any doubt is a no, and so is a name the org has live or a connect already
+ * proposed since that message, as for `connectApproval`. A domain they bought
+ * without us offering it goes through `connect_domain` instead.
+ */
+export async function boughtSaid(
+  { env, kit, owner }: Pick<ToolContext, "env" | "kit" | "owner">,
+  name: string,
+  sessionId: string,
+  messages: readonly ModelMessage[],
+  fetchImpl?: typeof fetch
+): Promise<boolean> {
+  if (!env.OPENROUTER_API_KEY || connectProposed(messages)) return false
+  const said = await typedByOwner({ kit, owner }, sessionId)
+  if (said === null || (await isLive({ kit, owner }, name))) return false
+  const address = (await kit.withOrg({ orgId: owner.orgId }, readTasks)).find(
+    (t) => t.kind === "address"
+  )
+  const waiting =
+    address?.kind === "address" &&
+    address.detail.name === name &&
+    address.detail.origin === "buying_elsewhere" &&
+    address.steps.some((s) => s.step === "purchase" && s.state !== "done")
+  return waiting && jevBought(env.OPENROUTER_API_KEY, said, name, fetchImpl)
+}
+
+const unconfirmed = () =>
+  failure(409, {
+    class: "validation",
+    code: "domain.bought_unconfirmed",
+    message:
+      "The owner has not said they bought this domain, or it is not one they are buying. Ask them which domain they bought.",
+    detail: {},
+  })
+
+/**
+ * The owner saying they bought `name` themselves: the orchestrator asks the
+ * registry, wakes the purchase hold and, once the registry shows the name,
+ * starts the connect with the owner's word as its consent. So it runs only on
+ * the owner's own typed message, read by Jev against the waiting purchase;
+ * the owner alone, as buying is.
+ */
+export async function domainBought(
+  { env, kit, owner }: ToolContext,
+  { name }: DomainBoughtInput,
+  key: string,
+  turn: Turn,
+  _zone: string | null = null,
+  messages: readonly ModelMessage[] = []
+): Promise<BoughtElsewhereOutput | Refused> {
+  if (!(await isOrgOwner(kit, owner))) return refused(notOwner("buy"))
+  if (
+    !(await boughtSaid({ env, kit, owner }, name, turn.sessionId, messages))
+  ) {
+    return refused(unconfirmed())
+  }
+  return domainAnswer(
+    await bridge(env, owner, "/domains/bought", { body: { name }, key }),
+    BoughtElsewhereOutput.parse
+  )
+}
+
+/**
  * The org's removal of a connected domain, for the owner's route and the
  * CoS tool alike: the org's owner only, checked as account deletion checks
  * it, then the orchestrator's `DELETE /domains/{name}` (`remove` in
@@ -1058,6 +1251,26 @@ export async function removal(
   return relay(result, () => {
     throw new Error("a removal answers 204 and no body")
   })
+}
+
+/**
+ * An offer the owner said not now to, asked again after `days` (a week when
+ * left out). The kind's open task is made if the offer came before it, then
+ * set to `later`, so the same row comes back as the offer it was. Only the
+ * owner's words move it, and the owner can start it again whenever they ask.
+ */
+export async function putOff(
+  { kit, owner }: Pick<ToolContext, "kit" | "owner">,
+  { kind, days = 7 }: PutOffInput
+): Promise<PutOffOutput> {
+  const until = new Date(Date.now() + days * 86_400_000).toISOString()
+  await kit.withOrg({ orgId: owner.orgId }, async (db) => {
+    await openTask(db, owner.orgId, kind)
+    await db.execute(sql`
+      update owner_tasks set state = 'later', later_until = ${until}::timestamptz
+      where kind = ${kind}::task_kind and state in ('active', 'later')`)
+  })
+  return { outcome: "put_off", until }
 }
 
 /** A connected domain taken off the site once the owner said yes, keyed by the approval. */
@@ -1088,21 +1301,22 @@ export async function findDomain(
 }
 
 /**
- * A purchase prepared and nothing charged: the orchestrator rechecks the
- * name and its price and holds it as `awaiting_payment`, keyed by the tool
- * call, so a rerun replays it. It takes no approval: the owner's payment in
- * the card's Checkout is the consent, and the amount there comes from the
- * row's price. The owner only, and only once this Worker can take payments.
+ * The details page for buying `name`, prefilled: the same read as
+ * `GET /domains/{name}/registrant`. Nothing is reserved or charged and it
+ * takes no approval, since the owner's payment on the page is the consent.
+ * The model never collects or sends the registrant. The owner only, and only
+ * once this Worker can take payments.
  */
 export async function buyDomain(
   { env, kit, owner }: ToolContext,
-  input: BuyDomainInput,
-  key: string
+  { name }: BuyDomainInput
 ): Promise<BuyDomainOutput> {
   if (!buyConfigured(env)) return refused(buyUnavailable())
-  if (!(await isOrgOwner(kit, owner))) return refused(notOwner("buy"))
-  return domainAnswer(
-    await bridge(env, owner, "/domains/buy", { body: input, key }),
-    BuyDomainOutput.parse
-  )
+  // The owner only, and a name the registrar sells, as the page asks it.
+  const prefill = await registrantPrefill(kit, owner, name)
+  if (!prefill.ok) return refused(prefill)
+  return {
+    outcome: "details",
+    ...DomainRegistrantPrefill.parse(await prefill.json()),
+  }
 }

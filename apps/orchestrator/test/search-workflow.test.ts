@@ -28,6 +28,17 @@ vi.mock("../src/domain-flow.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/domain-flow.ts")>()),
   withKit: async (_env: unknown, fn: (kit: unknown) => unknown) => fn({}),
 }))
+// The engine is tested against a database in probe.test.ts; here it is the step it runs in.
+vi.mock("../src/probe.ts", () => ({
+  probe: (
+    step: { do: (...args: unknown[]) => unknown },
+    name: string,
+    _env: unknown,
+    _target: unknown,
+    read: (kit: unknown) => Promise<{ result: unknown }>,
+    config: unknown
+  ) => step.do(name, config, () => read({}).then((seen) => seen.result)),
+}))
 vi.mock("../src/search.ts", () => ({
   fileToken: async () => {
     if (script.tokenError) throw script.tokenError
@@ -48,6 +59,9 @@ vi.mock("../src/search.ts", () => ({
   },
   announce: async () => {
     script.calls.push("announce")
+  },
+  sayVerifyFailed: async () => {
+    script.calls.push("say failed")
   },
 }))
 
@@ -102,7 +116,7 @@ describe("the search Workflow", () => {
     expect(configs.token).toBe(GOOGLE_RETRIES)
   })
 
-  it("tries three times 30 s apart, then backs off to 72 hours, then fails with no message", async () => {
+  it("tries three times 30 s apart, then backs off to 72 hours, then fails and says so once", async () => {
     const { names, waits, result } = await drive()
     expect(names).toEqual(steps.SearchWorkflow["never verified"])
     expect(waits).toEqual([
@@ -116,7 +130,11 @@ describe("the search Workflow", () => {
       "72 hours",
     ])
     expect(result).toEqual({ outcome: "failed" })
-    expect(script.calls).toEqual(["place google1a2b.html", "failed"])
+    expect(script.calls).toEqual([
+      "place google1a2b.html",
+      "failed",
+      "say failed",
+    ])
   })
 
   it("retries only Google's outage: any other Google answer is final", async () => {

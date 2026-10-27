@@ -8,7 +8,10 @@ import type {
 import {
   type CopyContext,
   completedBrief,
+  notStarted,
+  pageAction,
   pillLine,
+  proofOf,
   rowLine,
   type StatusKind,
   segmentKind,
@@ -45,7 +48,6 @@ export type Suggestion =
   | { kind: "name-business" }
   | { kind: "onboarding"; id: string }
   | { kind: "start-website" }
-  | { kind: "visit-site"; host: string; url: string }
 
 /** Something with a time: what is coming up, or what finished. */
 export type Timed = { id: string; text: string; at: string }
@@ -89,6 +91,9 @@ export type SegmentView = {
 
 type Approval = Extract<AttentionItem, { kind: "approval" }>
 
+/** The next task not started, and the one button that starts it in the chat. */
+export type UpNext = { id: string; text: string; label: string; ask: string }
+
 export type Panel = {
   /** The collapsed pill, and the panel's header. */
   line: Line
@@ -106,6 +111,7 @@ export type Panel = {
   waiting: AttentionItem[]
   /** The review the going-live segment holds while its first step waits. */
   review: Approval | null
+  upNext: UpNext | null
   /** Reminders, renewals and the next check-in, soonest first. */
   upcoming: Timed[]
   /** What finished, newest first. */
@@ -228,14 +234,21 @@ const rowTitle = (workspace: Workspace, segment: ActivitySegment) =>
       null)
     : null
 
-/** One piece of work: a publish is listed by the feed and by where the site stands, under two ids. */
+/**
+ * One piece of work: a publish is listed by the feed and by where the site
+ * stands, under two ids, and so is a domain, as its address task and as its
+ * standing row.
+ */
 const sameWork = (a: ActivitySegment, b: ActivitySegment) =>
-  a.id === b.id || (a.kind === "golive" && b.kind === "golive" && a.at === b.at)
+  a.id === b.id ||
+  (a.kind === "golive" && b.kind === "golive" && a.at === b.at) ||
+  (a.names?.domain !== undefined && a.names.domain === b.names?.domain)
 
 /**
  * Finished work, newest first, each once: the first run's finished
  * segments, the last day's, and where the site stands (its latest publish,
- * domains, Google), which keeps older work in view.
+ * address, Google), which keeps older work in view. A task still open earns
+ * a row for its furthest done step, dated by when that step moved.
  */
 export function completedOf(
   workspace: Workspace,
@@ -252,21 +265,35 @@ export function completedOf(
       segment.state === "done" &&
       all.findIndex((other) => sameWork(other, segment)) === i
   )
-  return finished
-    .sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
-    .flatMap((segment) => {
-      const text = rowLine(segment, ctx, rowTitle(workspace, segment))
-      return text
-        ? [
-            {
-              id: segment.id,
-              text,
-              at: segment.at,
-              brief: completedBrief(segment, ctx),
-            },
-          ]
-        : []
-    })
+  const done = finished.flatMap((segment): Completed[] => {
+    const text = rowLine(segment, ctx, rowTitle(workspace, segment))
+    return text
+      ? [
+          {
+            id: segment.id,
+            text,
+            at: segment.at,
+            brief: completedBrief(segment, ctx),
+          },
+        ]
+      : []
+  })
+  const proved = (activity.standing ?? []).flatMap((segment): Completed[] => {
+    const proof = segment.state === "done" ? null : proofOf(segment, ctx)
+    return proof?.at
+      ? [
+          {
+            id: `${segment.id}:proof`,
+            text: proof.text,
+            at: proof.at,
+            brief: null,
+          },
+        ]
+      : []
+  })
+  return [...done, ...proved].sort(
+    (a, b) => Date.parse(b.at) - Date.parse(a.at)
+  )
 }
 
 const running = (segment: ActivitySegment | undefined) =>
@@ -276,7 +303,7 @@ const running = (segment: ActivitySegment | undefined) =>
 
 export function panelFor(input: PanelInput): Panel | null {
   const { workspace, business, now, zone } = input
-  const { live, host, url, builds, attention } = workspace
+  const { live, host, builds, attention } = workspace
   const activity = workspace.activity ?? NO_ACTIVITY
   const onboarding = business
     ? onboardingFor(workspace, input.conversations)
@@ -390,13 +417,29 @@ export function panelFor(input: PanelInput): Panel | null {
   )
   const upcoming = zone
     ? rows(
-        activity.upcoming.filter((segment) =>
-          segment.kind === "reminder"
-            ? page !== "reminders"
-            : segment.kind !== "checkin" || !settingUp
+        activity.upcoming.filter(
+          (segment) =>
+            !notStarted(segment) &&
+            (segment.kind === "reminder"
+              ? page !== "reminders"
+              : segment.kind !== "checkin" || !settingUp)
         )
       )
     : []
+  // The address before Google, as the owner meets them. No time in it, so it
+  // needs no zone.
+  const unstarted = activity.upcoming.filter(notStarted)
+  const queued =
+    unstarted.find((segment) => segment.kind === "address") ?? unstarted[0]
+  const upText = queued && rowLine(queued, ctx)
+  const upNext: UpNext | null =
+    queued && upText
+      ? {
+          id: queued.id,
+          text: upText,
+          ...pageAction(queued.kind === "google" ? "google" : "own"),
+        }
+      : null
   const done = zone ? completedOf(workspace, ctx) : []
 
   // Where the panel has something to say. Getting started belongs to the
@@ -406,6 +449,7 @@ export function panelFor(input: PanelInput): Panel | null {
     builds.length > 0 ||
     waiting.length > 0 ||
     upcoming.length > 0 ||
+    upNext !== null ||
     activity.now.length > 0 ||
     blocked.length > 0 ||
     running(current)
@@ -489,9 +533,6 @@ export function panelFor(input: PanelInput): Panel | null {
       suggestions.push({ kind: "start-website" })
     }
   }
-  if (live && host && url && page !== "website") {
-    suggestions.push({ kind: "visit-site", host, url })
-  }
 
   return {
     line,
@@ -501,6 +542,7 @@ export function panelFor(input: PanelInput): Panel | null {
     blocked: blocked.map(view),
     waiting,
     review,
+    upNext,
     upcoming,
     done,
     suggestions,

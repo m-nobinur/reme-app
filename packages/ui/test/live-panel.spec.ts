@@ -299,7 +299,7 @@ test("a next step looks like a button, with a visible border", async ({
   page,
 }) => {
   for (const theme of ["light", "dark"] as const) {
-    await page.goto(`/?entry=NextSteps getting started&theme=${theme}`)
+    await page.goto(`/?entry=NextSteps&theme=${theme}`)
     const link = page.getByRole("link", { name: "Continue getting started" })
     await expect(link).toBeVisible()
     const border = await link.evaluate(

@@ -1,0 +1,133 @@
+{
+  "promises": [
+    { "said": "Got it, I'll set that up now.", "watched": false },
+    { "said": "I'll add the new phone number to your site.", "watched": false },
+    { "said": "Let me check where your domain stands.", "watched": false },
+    {
+      "said": "Sure, I'm going to connect your domain and let you know how it goes.",
+      "watched": false
+    },
+    {
+      "said": "I'll look into why Google hasn't picked up your pages.",
+      "watched": false
+    },
+    {
+      "said": "On it. I'll put the new photos on the home page.",
+      "watched": false
+    },
+    {
+      "said": "Great, I'll find a few domain names for you now.",
+      "watched": false
+    },
+    {
+      "said": "I'll remind you about the van service on Friday.",
+      "watched": false
+    },
+    { "said": "Let me pull up your search numbers.", "watched": false },
+    { "said": "I'll start on that change in a moment.", "watched": false },
+    { "said": "Perfect. I'll connect Google for you next.", "watched": false },
+    { "said": "I'll get back to you once I've checked.", "watched": false },
+    { "said": "I'll let you know when your domain is live.", "watched": false },
+    {
+      "said": "I'll keep an eye on it and tell you if anything changes.",
+      "watched": false
+    },
+    {
+      "said": "I'll update you as soon as the review is saved.",
+      "watched": false
+    },
+    {
+      "said": "Thanks, that's helpful. I'll save that to your profile now.",
+      "watched": false
+    },
+    { "said": "I'll take that domain off your site now.", "watched": false },
+    {
+      "said": "Leave it with me, I'll sort out the opening hours.",
+      "watched": false
+    },
+    {
+      "said": "I'll draft that reply to Mrs Patel for you now.",
+      "watched": false
+    },
+    {
+      "said": "Next I'll set up Search Console so people can find you.",
+      "watched": false
+    }
+  ],
+  "honest": [
+    {
+      "said": "I've started your change. The new hours will show on the site after the next build.",
+      "watched": true
+    },
+    {
+      "said": "Your domain is connected and the certificate is active.",
+      "watched": false
+    },
+    {
+      "said": "In the 28 days to 14 October, 212 people saw your site in Google and 9 clicked.",
+      "watched": false
+    },
+    {
+      "said": "Which would you like, the .co.uk or the .com?",
+      "watched": false
+    },
+    {
+      "said": "I can't do that from here: buying domains isn't switched on yet. I can connect one you already own instead.",
+      "watched": false
+    },
+    {
+      "said": "I've added the phone number to the build under way.",
+      "watched": true
+    },
+    { "said": "On it, I'll let you know when it's ready.", "watched": true },
+    {
+      "said": "I'm putting your site together, three of seven pages done. I'll tell you here when the draft is ready.",
+      "watched": true
+    },
+    {
+      "said": "Your records are in place. I'll tell you here when the domain goes live.",
+      "watched": true
+    },
+    {
+      "said": "The card shows the details, so check them and pay when you're ready.",
+      "watched": false
+    },
+    {
+      "said": "I couldn't confirm that went through, so I haven't assumed it did. Want me to try again?",
+      "watched": false
+    },
+    {
+      "said": "Done: your reminder is set for Friday at 9am.",
+      "watched": false
+    },
+    {
+      "said": "Google hasn't indexed that page yet. New sites usually take days to a few weeks.",
+      "watched": false
+    },
+    { "said": "That's saved to your profile.", "watched": false },
+    {
+      "said": "Nothing is stopping me, I just need your postal address first. What is it?",
+      "watched": false
+    },
+    {
+      "said": "You have no domain connected yet. Do you want me to find a few names to buy?",
+      "watched": false
+    },
+    {
+      "said": "Two of the three records are in place and the TXT record is still missing.",
+      "watched": true
+    },
+    {
+      "said": "Your review is saved in slot two, replacing the old one.",
+      "watched": false
+    },
+    {
+      "said": "Your email isn't affected, because only the website's address is added.",
+      "watched": false
+    },
+    {
+      "said": "I restarted the build because it got stuck on the photos, and I'll tell you here when it's back.",
+      "watched": true
+    }
+  ]
+}
