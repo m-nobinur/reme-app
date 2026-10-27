@@ -40,6 +40,7 @@ import {
 import {
   AnswerQuestionInput,
   AnswerQuestionOutput,
+  BoughtElsewhereOutput,
   BuyDomainInput,
   BuyDomainOutput,
   CheckDomainInput,
@@ -86,7 +87,9 @@ import {
   DomainPrice,
   DomainProvider,
   DomainPurchaseStatus,
+  DomainRegistrantPrefill,
   DomainRegistration,
+  DomainStemOffer,
   DomainStripe,
 } from "./domain.ts"
 import { ErrorEnvelope, FailureReport } from "./error.ts"
@@ -205,6 +208,7 @@ export const contracts = {
   AttentionItem,
   Blueprint,
   BuildSummary,
+  BoughtElsewhereOutput,
   BuyDomainInput,
   BuyDomainOutput,
   CapabilityCall,
@@ -252,7 +256,9 @@ export const contracts = {
   DomainPrice,
   DomainProvider,
   DomainPurchaseStatus,
+  DomainRegistrantPrefill,
   DomainRegistration,
+  DomainStemOffer,
   DomainStripe,
   ErrorEnvelope,
   EventEnvelope,

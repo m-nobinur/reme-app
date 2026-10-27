@@ -2078,9 +2078,12 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
     it("find_domain relays the orchestrator's offers, with or without the Stripe keys", async () => {
       const found = {
         outcome: "found",
-        best: { name: "sparkleclean.com", price_gbp_year: 12, why: "Short." },
-        options: [
-          { name: "sparkleclean.net", price_gbp_year: 12, why: "Close." },
+        rows: [
+          {
+            stem: "sparkleclean",
+            why: "matches your business name",
+            endings: { com: { state: "free", price_gbp_year: 12 } },
+          },
         ],
       }
       const stub = stubOrchestrator(() => Response.json(found))

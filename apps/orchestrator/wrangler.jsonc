@@ -87,6 +87,12 @@
       "name": "reme-search-sync",
       "binding": "SEARCH_SYNC",
       "class_name": "SearchSyncWorkflow"
+    },
+    // One instance per org and name the owner buys elsewhere (src/elsewhere-workflow.ts).
+    {
+      "name": "reme-elsewhere",
+      "binding": "ELSEWHERE",
+      "class_name": "ElsewhereWorkflow"
     }
   ],
   // The hourly retention sweep (ADR-032), created by the `scheduled` handler
@@ -241,6 +247,11 @@
           "name": "reme-search-sync-production",
           "binding": "SEARCH_SYNC",
           "class_name": "SearchSyncWorkflow"
+        },
+        {
+          "name": "reme-elsewhere-production",
+          "binding": "ELSEWHERE",
+          "class_name": "ElsewhereWorkflow"
         }
       ],
       "kv_namespaces": [
