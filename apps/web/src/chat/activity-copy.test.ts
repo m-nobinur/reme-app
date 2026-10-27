@@ -400,6 +400,10 @@ describe("segment copy", () => {
     expect(pillLine(address("purchase"), ctx)).toBe(
       "Ellie is waiting for your payment"
     )
+    // Buying it elsewhere waits on the owner's own purchase.
+    expect(pillLine(address("purchase", "buying spark.co.uk"), ctx)).toBe(
+      "Ellie is waiting for you to buy it"
+    )
     expect(segmentLine(address("purchase", "Buying spark.co.uk"), ctx)).toBe(
       "Buying spark.co.uk"
     )

@@ -879,8 +879,14 @@ const waitingStep = (segment: ActivitySegment) =>
     ? (segment.steps.find((s) => s.state === "waiting") ?? null)
     : null
 
-const waitsFor = (segment: ActivitySegment) =>
-  STEP_WAITING[waitingStep(segment)?.id ?? ""] ?? WAITING[segment.kind]
+const waitsFor = (segment: ActivitySegment) => {
+  const step = waitingStep(segment)
+  // Buying it elsewhere waits on the owner's own purchase, not a payment here.
+  if (step?.id === "purchase" && step.note?.startsWith("buying ")) {
+    return "you to buy it"
+  }
+  return STEP_WAITING[step?.id ?? ""] ?? WAITING[segment.kind]
+}
 
 const job = (segment: ActivitySegment) =>
   Object.hasOwn(JOBS, segment.kind) ? JOBS[segment.kind as JobKind] : null
