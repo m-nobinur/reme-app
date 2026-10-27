@@ -260,6 +260,7 @@ export class DomainWorkflow extends WorkflowEntrypoint<Env, DomainParams> {
       probe(step, `look ${n}`, env, address, (kit) =>
         look(env, kit, orgId, domainId)
       )
+    let quietSince = started
     let nudged = false
     let checks = 0
     let seen = await lookAt(1)
@@ -276,9 +277,20 @@ export class DomainWorkflow extends WorkflowEntrypoint<Env, DomainParams> {
         await say("say failed", message)
         return { outcome: "failed" }
       }
-      if (!nudged && seen.at - started >= NUDGE_AFTER_MS) {
+      // A day after the claim last moved, once per quiet period, and only
+      // while the owner is the one to act: a certificate being issued is ours.
+      if (seen.changed) {
+        quietSince = seen.at
+        nudged = false
+      }
+      if (
+        !nudged &&
+        seen.status !== "pending_certificate" &&
+        seen.at - quietSince >= NUDGE_AFTER_MS
+      ) {
+        const since = quietSince
         const message = await step.do("nudge", () =>
-          withKit(env, (kit) => nudge(env, kit, orgId, domainId))
+          withKit(env, (kit) => nudge(env, kit, orgId, domainId, since))
         )
         await say("say nudge", message)
         nudged = true
