@@ -25,6 +25,8 @@ export const ActivityStep = z.strictObject({
     .optional(),
   /** A waiting step's note from its owner task, written by code: shown as data. */
   note: Text(200).optional(),
+  /** An owner task's step: when it last moved, which dates the line a done step earns. */
+  at: Timestamp.optional(),
 })
 
 /** The most steps a segment lists. */
@@ -83,6 +85,13 @@ export const ActivitySegment = z.strictObject({
   restarted: z.literal(true).optional(),
   /** Google only: when Search Console data was last read. */
   synced_at: Timestamp.optional(),
+  /** Google only: what the last 28 days of searches brought, once Google has sent any. */
+  numbers: z
+    .strictObject({
+      clicks: z.int().nonnegative(),
+      impressions: z.int().nonnegative(),
+    })
+    .optional(),
 })
 
 /** The most segments one group lists. */
