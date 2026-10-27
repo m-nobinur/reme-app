@@ -1,3 +1,4 @@
+import { SITE_HEADER } from "@workspace/contracts"
 import { deployments, domains, eq, events, sql } from "@workspace/db"
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest"
 import {
@@ -78,6 +79,8 @@ type Net = {
   /** `domain-check` answers by name; anything unlisted is taken. */
   checks: Record<string, unknown>
   registered: Set<string>
+  /** The site id the router's edge probe names, once a test has a site. */
+  site?: string
   pi: Record<string, unknown>
   calls: Array<{ method: string; url: string; body: string }>
 }
@@ -162,7 +165,9 @@ function stubNet(live: boolean, checks: Record<string, unknown> = {}): Net {
       if (href === `${STRIPE}/invoices/in_123`) return json(INVOICE)
       // The edge probe: the bought domain answers.
       if (href.startsWith("https://") && method === "GET")
-        return new Response("ok")
+        return new Response("ok", {
+          headers: net.site ? { [SITE_HEADER]: net.site } : {},
+        })
       throw new Error(`unexpected ${method} ${href}`)
     })
   )
@@ -672,6 +677,11 @@ describe.skipIf(!url)("buying a domain against a database", () => {
       code: "domain.purchase_in_progress",
     })
 
+    // Not live until the router names the site: the 404 is not an answer.
+    await expect(activateDomain(p.env, kit, p.orgId, p.row.id)).rejects.toThrow(
+      "domain.not_served"
+    )
+    p.net.site = p.orgId
     const live = await activateDomain(p.env, kit, p.orgId, p.row.id)
     expect(live?.text).toMatch(new RegExp(`^${p.name} is live`))
     expect(

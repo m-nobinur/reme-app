@@ -1,5 +1,6 @@
 import {
   formatSiteRevision,
+  SITE_HEADER,
   SITE_PROBE_HEADER,
   SITE_REVISION_HEADER,
 } from "@workspace/contracts"
@@ -742,6 +743,34 @@ describe("a custom domain", () => {
       expect(res.status, host).toBe(404)
       expect(seen, host).toEqual([])
     }
+  })
+})
+
+describe("the site header", () => {
+  it("names the site on a page and an asset it serves, and on nothing else", async () => {
+    pointers.set(`host:${SITE_HOST}`, {
+      org_id: ORG,
+      site_id: ORG,
+      revision_id: REV,
+      config_version: 1,
+    })
+    expect((await get(SITE_HOST, "/")).headers.get(SITE_HEADER)).toBe(ORG)
+    expect(
+      (await get(SITE_HOST, "/_astro/index.C1.css")).headers.get(SITE_HEADER)
+    ).toBe(ORG)
+    // The router's own 404, a path the site lacks, and a preview carry none.
+    const lacking = await get(SITE_HOST, "/nope")
+    expect(lacking.status).toBe(404)
+    expect(lacking.headers.get(SITE_HEADER)).toBeNull()
+    const nobody = await get(`nobody${SUFFIX}`, "/")
+    expect(nobody.status).toBe(404)
+    expect(nobody.headers.get(SITE_HEADER)).toBeNull()
+    const preview = await get(PREVIEW_HOST, "/", {
+      headers: cookie(await claimFor()),
+    })
+    expect(preview.status).toBe(200)
+    expect(preview.headers.get(SITE_HEADER)).toBeNull()
+    pointers.delete(`host:${SITE_HOST}`)
   })
 })
 
