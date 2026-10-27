@@ -342,7 +342,7 @@ describe("the CoS's instructions", () => {
 })
 
 describe("a tool's step line", () => {
-  it("is offered on the reads whose line shows it, and on request_change with its own words", async () => {
+  it("is offered on every tool, with request_change's in its own words", async () => {
     const { tools } = await cosPrefix()
     const step = (name: string) => {
       const found = tools.find((t) => t.name === name)
@@ -360,7 +360,9 @@ describe("a tool's step line", () => {
       expect(step(name)).toContain("in your own voice")
     }
     expect(step("request_change")).toContain("owner's language")
-    expect(step("create_reminder")).toBeUndefined()
+    // The model sends a step to any tool, so every tool takes one.
+    expect(step("find_domain")).toContain("in your own voice")
+    expect(step("create_reminder")).toContain("in your own voice")
   })
 
   it("is cleaned before the call is logged, and kept from the tool", () => {

@@ -174,7 +174,7 @@ export const LIMITS = {
 } as const
 
 /** Bumped with any change to `INSTRUCTIONS` or a tool's description. */
-const PREFIX_VERSION = "36"
+const PREFIX_VERSION = "37"
 
 export const INSTRUCTIONS = `You are the Chief of Staff for a small service business. You talk with the business owner in a chat and help them run the business. Their website is one of the things you look after; a Developer agent builds it.
 
@@ -242,10 +242,10 @@ Rules:
 - In Ask mode you can only read. If the owner asks for a change, tell them to switch to Act.`
 
 /**
- * The tools that may carry a `step`, the few words their line in the thread
+ * The tools whose `step` shows, the few words their line in the thread
  * shows while they run: the reads `cos-tools.tsx` draws. `request_change`
- * has its own. The rest draw a card or nothing, and a key their card's
- * strict schema does not know would break it.
+ * has its own. The rest take a `step` too but drop it before the call is
+ * logged, since their card's strict schema does not know it.
  */
 const STEPPED: readonly CosToolName[] = [
   "get_workspace",
@@ -267,10 +267,13 @@ const STEP = z
  * shows one. Typed as the contract's own, since `step` is stripped before any
  * tool reads the input.
  */
-const inputOf = <N extends CosToolName>(name: N) =>
-  (STEPPED.includes(name)
-    ? (COS_TOOLS[name].input as z.ZodObject).extend({ step: STEP })
-    : COS_TOOLS[name].input) as (typeof COS_TOOLS)[N]["input"]
+const inputOf = <N extends CosToolName>(name: N) => {
+  const input = COS_TOOLS[name].input as z.ZodObject
+  // `request_change` defines its own step, in the owner's language.
+  return ("step" in input.shape
+    ? input
+    : input.extend({ step: STEP })) as unknown as (typeof COS_TOOLS)[N]["input"]
+}
 
 export const DESCRIPTIONS: Record<CosToolName, string> = {
   get_workspace:
@@ -1374,13 +1377,17 @@ export function cosAgent(
     maxOutputTokens: LIMITS.maxOutputTokens,
     // The `step` the panel shows is cleaned before the call is logged, so the
     // part holds what the owner may read; the tool body never gets it.
-    experimental_refineToolInput: {
-      request_change: cleanedChange,
-      get_workspace: cleanedChange,
-      get_facts: cleanedChange,
-      get_preview: cleanedChange,
-      check_domain: cleanedChange,
-    },
+    // A tool that draws no step line still takes one, since the model sends
+    // it anywhere; it goes before the call is logged, so a card's strict
+    // schema never meets it.
+    experimental_refineToolInput: Object.fromEntries(
+      (Object.keys(COS_TOOLS) as CosToolName[]).map((name) => [
+        name,
+        name === "request_change" || STEPPED.includes(name)
+          ? cleanedChange
+          : withoutStep,
+      ])
+    ),
     repairToolCall: async ({ toolCall }) => repairedChange(toolCall),
     // The instructions and tools come first and never change, and only the
     // turn's context and the owner's newest message follow the history, so
