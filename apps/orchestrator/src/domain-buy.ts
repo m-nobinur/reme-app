@@ -26,13 +26,13 @@ import {
   type Tenancy,
 } from "@workspace/db"
 import {
+  answers,
   domainInstanceId,
   eventKey,
   moveTo,
   normalizeName,
   postStatus,
   type Refusal,
-  reaches,
   readClaim,
   refuse,
   type Say,
@@ -48,6 +48,7 @@ import {
   checkDomains,
   ensureZone,
   getRegistration,
+  offeredTlds,
   type Registrant,
   type RegistrationStatus,
   register,
@@ -163,10 +164,12 @@ export async function find(
   const suggested = input.data.query
     ? await searchDomains(env, input.data.query).catch(() => [])
     : []
-  // Best first: the ranker's order, then the registrar's suggestions.
-  const names = [
-    ...new Set([...ranked.map((r) => r.name), ...suggested]),
-  ].slice(0, CHECK_MAX)
+  // Best first: the ranker's order, then the registrar's suggestions, in the
+  // endings offered here only, so the check is not spent on the rest.
+  const offered = offeredTlds(env)
+  const names = [...new Set([...ranked.map((r) => r.name), ...suggested])]
+    .filter((n) => offered.some((tld) => tld === sellableTld(n)))
+    .slice(0, CHECK_MAX)
   let checked: Checked[]
   try {
     checked = await checkDomains(env, names)
@@ -682,21 +685,23 @@ async function apply(
       return
     }
     case "expired": {
-      if (
-        row.state !== "awaiting_payment" ||
-        stripe.checkout_session !== event.checkout_session
-      )
+      if (stripe.checkout_session !== event.checkout_session) return
+      if (row.state === "awaiting_payment") {
+        const closed = await kit.withOrg({ orgId }, (db) =>
+          close(db, row, "abandoned", ["awaiting_payment"], "expired")
+        )
+        if (!closed) return
+        try {
+          const instance = await env.DOMAINS.get(domainInstanceId(row.id))
+          await instance.terminate()
+        } catch {
+          // Never started, or already ended.
+        }
+      } else if (row.state !== "abandoned") {
         return
-      const closed = await kit.withOrg({ orgId }, (db) =>
-        close(db, row, "abandoned", ["awaiting_payment"], "expired")
-      )
-      if (!closed) return
-      try {
-        const instance = await env.DOMAINS.get(domainInstanceId(row.id))
-        await instance.terminate()
-      } catch {
-        // Never started, or already ended.
       }
+      // Also on Stripe's retry after a busy chat, when the row is closed already.
+      await sayExpired(kit, orgId, row)
       return
     }
     case "renewal_paid":
@@ -764,7 +769,7 @@ export async function paymentState(
   return row?.state === "awaiting_payment" ? "waiting" : "gone"
 }
 
-/** No payment in any round: the purchase is abandoned. Nothing was held. */
+/** No payment in any round: the purchase is abandoned and the owner told. Nothing was held. */
 export async function abandonUnpaid(
   kit: Tenancy,
   orgId: string,
@@ -772,10 +777,26 @@ export async function abandonUnpaid(
 ): Promise<void> {
   const row = await readPurchase(kit, orgId, domainId)
   if (!row) return
-  await kit.withOrg({ orgId }, (db) =>
+  const closed = await kit.withOrg({ orgId }, (db) =>
     close(db, row, "abandoned", ["awaiting_payment"], "expired")
   )
+  if (closed || row.state === "abandoned") await sayExpired(kit, orgId, row)
 }
+
+/**
+ * A Checkout that ran out, said once whichever of Stripe's event and the
+ * Workflow's last round sees it first. Nothing was charged; the button asks
+ * for a fresh payment.
+ */
+const sayExpired = (kit: Tenancy, orgId: string, row: DomainRow) =>
+  postStatus(kit, orgId, {
+    key: `${row.id}:expired`,
+    text: `The payment for ${row.name} ran out of time, so nothing was charged and the name is free again. I can set up a fresh payment whenever you're ready.`,
+    button: {
+      label: "Pay again",
+      action: { kind: "ask", text: `Buy ${row.name} for my website.` },
+    },
+  })
 
 /**
  * The hold released and the purchase failed with `outcome`, and what to tell
@@ -1118,7 +1139,7 @@ export async function boughtReady(
 ): Promise<{ gone: true } | { gone: false; ready: boolean; at: number }> {
   const row = await readPurchase(kit, orgId, domainId)
   if (row?.state !== "verifying") return { gone: true }
-  return { gone: false, ready: await reaches(row.name), at: Date.now() }
+  return { gone: false, ready: await answers(row.name), at: Date.now() }
 }
 
 /**

@@ -71,10 +71,11 @@ hash do not change.
 review and Developer-answer cards keep ADR-034's rule: a typed message cancels them. An emailed
 "yes" approves nothing.
 
-- **Which card.** `lookAhead` reads the tail for a typed message: its last step holds exactly one
-  pending call, and it is one of those two cards. Two pending cards, or any other tool, and the
-  message takes the normal turn. The tail is the message a click answers, so a card behind a later
-  row is out of reach. That also gives one card to answer without a "superseded" state: a typed
+- **Which card.** `lookAhead` reads the newest message holding an open card for a typed message:
+  its last step holds exactly one pending call, and it is one of those two cards. Two pending
+  cards, or any other tool, and the message takes the normal turn. A click answers the row it
+  names, so an assistant post that lands after an open card leaves the card answerable where it
+  sits (amended 2026-10-27). That also gives one card to answer without a "superseded" state: a typed
   message cancels the open card before the CoS can propose another, and an emailed reply is not
   stored while a card waits (`postOwnerEmail` returns `waiting`).
 - **What counts.** A whole reply that is one short phrase (`PHRASES` in `jev.ts`: yes, yes please,

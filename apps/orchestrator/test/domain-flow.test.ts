@@ -1,3 +1,4 @@
+import { SITE_HEADER } from "@workspace/contracts"
 import type { Tenancy } from "@workspace/db"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import {
@@ -7,6 +8,7 @@ import {
   nextWait,
   normalizeName,
   postStatus,
+  reaches,
   statusText,
 } from "../src/domain-flow.ts"
 import { CAA_FOR_US } from "../src/domains.ts"
@@ -446,4 +448,27 @@ it("looks every minute for the first half hour, every 10 to two hours, then hour
   expect([0, 29, 30, 119, 120, 71 * 60].map((m) => nextWait(m * MIN))).toEqual(
     [1, 1, 10, 10, 60, 60].map((m) => m * MIN)
   )
+})
+
+describe("whether a host serves the site", () => {
+  const SITE = "site-1"
+  const answer = (status: number, headers: Record<string, string> = {}) =>
+    vi.stubGlobal("fetch", async () => new Response("ok", { status, headers }))
+
+  it("is true only for a 2xx the router marked with this site's id", async () => {
+    answer(404)
+    expect(await reaches(NAME, SITE)).toBe(false)
+    answer(404, { [SITE_HEADER]: SITE })
+    expect(await reaches(NAME, SITE)).toBe(false)
+    answer(200)
+    expect(await reaches(NAME, SITE)).toBe(false)
+    answer(200, { [SITE_HEADER]: "another-site" })
+    expect(await reaches(NAME, SITE)).toBe(false)
+    answer(200, { [SITE_HEADER]: SITE })
+    expect(await reaches(NAME, SITE)).toBe(true)
+    vi.stubGlobal("fetch", async () => {
+      throw new Error("offline")
+    })
+    expect(await reaches(NAME, SITE)).toBe(false)
+  })
 })

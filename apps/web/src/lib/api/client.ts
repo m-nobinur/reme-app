@@ -638,6 +638,15 @@ async function googleConnect(
     : "failed"
 }
 
+async function googleFailed(
+  attempt: string,
+  result: "failed" | "scopes_missing"
+): Promise<void> {
+  await post("/google/failed", { attempt, result }, `google-failed:${attempt}`)
+    .then((response) => response.body?.cancel())
+    .catch(() => undefined)
+}
+
 /** The newest purchase of a domain in the owner's business, or null when there is none. */
 async function domainStatus(
   name: string
@@ -865,6 +874,7 @@ export const apiSource: OwnerDataSource = {
   domainCheckout,
   domainStatus,
   googleConnect,
+  googleFailed,
   conversations,
   conversation,
   createConversation,

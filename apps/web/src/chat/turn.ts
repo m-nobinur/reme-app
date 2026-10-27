@@ -34,19 +34,22 @@ export const textOf = (message: ChatMessage) =>
  * The one turn `/chat` reads, from the thread as the AI SDK holds it. The
  * server keeps the history, so only what the owner just did is sent: a typed
  * message, or every answer to an onboarding card and every yes or no on a tool in
- * the last step, as the SDK sends them together. `intent` goes with a typed
- * message only.
+ * the last step, as the SDK sends them together. `messageId` is the
+ * assistant message the SDK sends a yes or no for, which a message the
+ * assistant posted since may follow. `intent` goes with a typed message only.
  */
 export function chatTurn(
   conversationId: string,
   mode: ChatRequest["mode"],
   messages: ChatMessage[],
-  intent?: ChatRequest["intent"]
+  intent?: ChatRequest["intent"],
+  messageId?: string
 ): ChatRequest {
   // The browser's zone, so the Chief of Staff can read "Friday at 9". The
   // reminder card names the same zone, from the same source.
   const time_zone = browserZone()
-  const last = messages.at(-1)
+  const named = messages.find((m) => m.id === messageId)
+  const last = named?.role === "assistant" ? named : messages.at(-1)
   // The owner's reply to a card goes with the answers of the message before it.
   if (last?.role === "user" && last.metadata?.reply) {
     const card = messages.at(-2)
@@ -156,11 +159,26 @@ export function withStoredCard(
 }
 
 /**
+ * The index of the newest assistant message with a call in one of `states`,
+ * or -1. It is the last message, or one the assistant posted after on its
+ * own, since a post never waits on a card.
+ */
+const newestWith = (messages: ChatMessage[], states: readonly string[]) =>
+  messages
+    .map(
+      (m) =>
+        m.role === "assistant" &&
+        m.parts.some((p) => isToolUIPart(p) && states.includes(p.state))
+    )
+    .lastIndexOf(true)
+
+/**
  * A typed message overtakes the calls still waiting on the owner, the way
- * `apps/api` cancels them in the stored row: an unanswered question or an
- * undecided change becomes cancelled. So does a yes or no held back while
- * another card in its step waited: it was never sent, so the stored row
- * still has the call undecided and the api cancels it. A decision the
+ * `apps/api` cancels them in the stored row, in the newest message that
+ * holds one: an unanswered question or an undecided change becomes
+ * cancelled. So does a yes or no held back while another card in its step
+ * waited: it was never sent, so the stored row still has the call undecided
+ * and the api cancels it. A decision the
  * server already has, a "not now" included, stays as it was.
  * assistant-ui's own `cancelPendingToolCallsOnSend` also turns that "not
  * now" into cancelled, which a reload would then contradict. A call still
@@ -168,8 +186,13 @@ export function withStoredCard(
  * stores an unfinished call, so a reload does not show one either.
  */
 export function cancelOvertaken(messages: ChatMessage[]): ChatMessage[] {
-  const last = messages.at(-1)
-  if (last?.role !== "assistant") return messages
+  const at = newestWith(messages, [
+    "input-streaming",
+    "input-available",
+    "approval-requested",
+  ])
+  const last = messages[at]
+  if (!last) return messages
   let changed = false
   const parts = last.parts.flatMap((part): ChatMessage["parts"] => {
     if (isToolUIPart(part) && part.state === "input-streaming") {
@@ -193,7 +216,9 @@ export function cancelOvertaken(messages: ChatMessage[]): ChatMessage[] {
     }
     return [cancelled]
   })
-  return changed ? [...messages.slice(0, -1), { ...last, parts }] : messages
+  return changed
+    ? messages.map((m, i) => (i === at ? { ...last, parts } : m))
+    : messages
 }
 
 /**
@@ -241,14 +266,19 @@ export function quoteChanges(
  * on them, all in one turn. A step whose calls the server finished itself,
  * such as a read at the step limit, sends nothing, and neither does an
  * answer to an onboarding card: `replyTo` sends that as the owner's reply.
+ * The step is the newest one with a yes or no in it, so a card stays
+ * answerable under a message the assistant posted after it.
  */
 export const sendsOn = ({ messages }: { messages: ChatMessage[] }) => {
-  const results = ownerResults(messages.at(-1))
+  const card =
+    messages[newestWith(messages, ["approval-requested", "approval-responded"])]
+  const results = ownerResults(card)
+  const step = card ? [card] : []
   return (
     results.length > 0 &&
     results.every((result) => result.kind === "approval") &&
-    (lastAssistantMessageIsCompleteWithToolCalls({ messages }) ||
-      lastAssistantMessageIsCompleteWithApprovalResponses({ messages }))
+    (lastAssistantMessageIsCompleteWithToolCalls({ messages: step }) ||
+      lastAssistantMessageIsCompleteWithApprovalResponses({ messages: step }))
   )
 }
 
@@ -368,13 +398,20 @@ export const turnBody =
   async ({
     messages,
     body,
+    messageId,
   }: {
     messages: ChatMessage[]
     body?: { intent?: ChatRequest["intent"] } | undefined
+    messageId?: string | undefined
   }) => {
-    sending.current = messages.at(-1)
+    // A yes or no is sent for its card's message, which may not be the last.
+    sending.current =
+      messages.find((m) => m.id === messageId && m.role === "assistant") ??
+      messages.at(-1)
     const { remoteId } = await initialize()
-    return { body: chatTurn(remoteId, mode(), messages, body?.intent) }
+    return {
+      body: chatTurn(remoteId, mode(), messages, body?.intent, messageId),
+    }
   }
 
 /**

@@ -43,6 +43,15 @@ export const GoogleConnectRequest = z.strictObject({
   redirect_uri: z.string().min(1).max(512),
 })
 
+/**
+ * `POST /google/failed`'s body: a callback that could not connect Google.
+ * `attempt` is the OAuth state, which is what one attempt's message is keyed by.
+ */
+export const GoogleFailedRequest = z.strictObject({
+  attempt: z.string().min(1).max(128),
+  result: z.enum(["failed", "scopes_missing"]),
+})
+
 /** The connection as the web app and the model read it: no token, no Google id. */
 export const SearchConnection = z.strictObject({
   state: SearchConnectionState,
@@ -182,6 +191,7 @@ export const GetIndexingOutput = z.union([
 
 export type GoogleConnectRequest = z.infer<typeof GoogleConnectRequest>
 export type SearchConnectionState = z.infer<typeof SearchConnectionState>
+export type GoogleFailedRequest = z.infer<typeof GoogleFailedRequest>
 export type SearchConnection = z.infer<typeof SearchConnection>
 export type SearchProperty = z.infer<typeof SearchProperty>
 export type SearchTotals = z.infer<typeof SearchTotals>

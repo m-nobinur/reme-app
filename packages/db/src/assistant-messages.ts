@@ -29,10 +29,11 @@ export const emailMessageId = (key: string) => `eml_${digest(key)}`
  * conversation the rail's Chat icon opens (newest `updated_at`, not
  * archived), parented on its tail as a turn's reply would be. It takes the
  * turn lock `apps/api/src/chat.ts` takes, and only tries it, so a post never
- * lands inside a turn. It waits while the tail holds a card or an approval
- * the owner has not answered, because the chat answers cards on the last
- * message only, and while the onboarding script still runs there, because
- * the script reads that conversation's cards.
+ * lands inside a turn. It lands after a card the owner has not answered,
+ * which stays answerable where it sits: `apps/api/src/chat.ts` answers the
+ * row a click names and cancels the newest open card on a typed message. It
+ * waits only while the onboarding script still runs there, because the
+ * script reads that conversation's cards from its tail.
  *
  * `conversationId` names the conversation instead (a reminder goes to the
  * one it was set in), archived or not; one the org does not have is `none`.
@@ -75,12 +76,11 @@ export async function postAssistantMessage(
 /**
  * An owner's emailed reply, stored as the owner's message in the conversation
  * the reply token named, under the same gates as an assistant post: it never
- * lands inside a turn, nor after a card or approval the owner has not
- * answered (it would stop being the last message, and the chat answers cards
- * on the last message only), nor before the onboarding script has ended. So
- * an emailed "yes" can never answer a card, and one sent while a card is open
- * is `waiting` and stored nowhere. `key` is the mail's Message-ID, so
- * redelivery is `exists`.
+ * lands inside a turn, nor before the onboarding script has ended. Unlike an
+ * assistant post it also waits while a card or approval the owner has not
+ * answered is open anywhere there, so an emailed "yes" can never sit beside
+ * a card as if it answered it (ADR-042): one sent then is `waiting` and
+ * stored nowhere. `key` is the mail's Message-ID, so redelivery is `exists`.
  *
  * The caller has already checked who sent it. Logged to the CoS by the owner's
  * next typed turn, with the taint of any owner message.
@@ -188,16 +188,22 @@ async function post(
     if (target.kind === "onboarding" && !(await scriptEnded(db, target.id))) {
       return "waiting"
     }
-    const [tail] = await db.execute<{ id: string; waits: boolean }>(sql`
-      select id, content->>'role' = 'assistant' and exists (
-          select 1 from jsonb_array_elements(content->'parts') p
+    // The owner's words wait behind an open card, wherever it sits, since an
+    // assistant post may have landed on top of it; the assistant's never do.
+    if (role === "user") {
+      const [card] = await db.execute(sql`
+        select 1 from ${conversationMessages} m
+        where m.conversation_id = ${target.id} and exists (
+          select 1 from jsonb_array_elements(m.content->'parts') p
           where p->>'type' like 'tool-%'
-            and p->>'state' in ('input-available', 'approval-requested', 'approval-responded')
-        ) as waits
-      from ${conversationMessages}
+            and p->>'state' in ('input-available', 'approval-requested'))
+        limit 1`)
+      if (card) return "waiting"
+    }
+    const [tail] = await db.execute<{ id: string }>(sql`
+      select id from ${conversationMessages}
       where conversation_id = ${target.id}
       order by seq desc limit 1`)
-    if (tail?.waits) return "waiting"
     await db.insert(conversationMessages).values({
       conversationId: target.id,
       id,

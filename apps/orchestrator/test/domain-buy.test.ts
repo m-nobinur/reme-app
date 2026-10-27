@@ -1,3 +1,4 @@
+import { type DomainRegistration, SITE_HEADER } from "@workspace/contracts"
 import { deployments, domains, eq, events, sql } from "@workspace/db"
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest"
 import {
@@ -15,7 +16,15 @@ import {
   startRegistration,
   subscribeRenewal,
 } from "../src/domain-buy.ts"
-import { activateDomain, remove, revokeDomains } from "../src/domain-flow.ts"
+import {
+  activateDomain,
+  postStatus,
+  remove,
+  revokeDomains,
+  type Say,
+  sweepDomains,
+} from "../src/domain-flow.ts"
+import { chatTexts, openChat } from "./chat.ts"
 import {
   ACCOUNT,
   CHECK_SANDBOX,
@@ -78,6 +87,10 @@ type Net = {
   /** `domain-check` answers by name; anything unlisted is taken. */
   checks: Record<string, unknown>
   registered: Set<string>
+  /** The site id the router's edge probe names, once a test has a site. */
+  site?: string
+  /** The expiry the registrar reports for a registered name. */
+  expires?: string
   pi: Record<string, unknown>
   calls: Array<{ method: string; url: string; body: string }>
 }
@@ -116,7 +129,7 @@ function stubNet(live: boolean, checks: Record<string, unknown> = {}): Net {
       const reg = href.match(new RegExp(`^${base}/registrations/([^/]+)$`))
       if (reg?.[1] && method === "GET")
         return net.registered.has(reg[1])
-          ? json(REGISTRATION(reg[1]))
+          ? json(REGISTRATION(reg[1], true, net.expires))
           : json(NOT_FOUND, 404)
       if (reg?.[1] && method === "PATCH") return json(REG_PENDING(reg[1]))
       const progress = href.match(
@@ -162,7 +175,9 @@ function stubNet(live: boolean, checks: Record<string, unknown> = {}): Net {
       if (href === `${STRIPE}/invoices/in_123`) return json(INVOICE)
       // The edge probe: the bought domain answers.
       if (href.startsWith("https://") && method === "GET")
-        return new Response("ok")
+        return new Response("ok", {
+          headers: net.site ? { [SITE_HEADER]: net.site } : {},
+        })
       throw new Error(`unexpected ${method} ${href}`)
     })
   )
@@ -312,21 +327,29 @@ describe.skipIf(!url)("buying a domain against a database", () => {
       "brightclean.co.uk": unsupported("brightclean.co.uk"),
       "brightclean.com": priced("brightclean.com"),
     }
-    stubNet(false, sandboxChecks)
+    const asked = (net: Net) =>
+      net.calls
+        .filter((c) => c.url.endsWith("/domain-check"))
+        .flatMap((c) => JSON.parse(c.body).domains as string[])
+    const sandboxNet = stubNet(false, sandboxChecks)
     const { env } = buyEnv(site.store)
     const sandbox = await find(env, kit, site.orgId, {})
     expect(sandbox).toMatchObject({
       outcome: "found",
       best: { name: "brightclean.com", price_gbp_year: 12 },
     })
+    // The sandbox is asked about .com only, and offers nothing else.
+    expect(asked(sandboxNet).length).toBeGreaterThan(0)
+    expect(asked(sandboxNet).every((n) => n.endsWith(".com"))).toBe(true)
 
     vi.unstubAllGlobals()
-    stubNet(true, {
+    const liveNet = stubNet(true, {
       "brightclean.co.uk": priced("brightclean.co.uk", "5.30"),
       "brightclean.com": priced("brightclean.com"),
       "brightclean.uk": priced("brightclean.uk", "5.30"),
     })
     const live = await find(buyEnv(site.store, true).env, kit, site.orgId, {})
+    expect(asked(liveNet).some((n) => n.endsWith(".net"))).toBe(false)
     expect(live).toMatchObject({
       outcome: "found",
       best: { name: "brightclean.co.uk", price_gbp_year: 8 },
@@ -542,6 +565,7 @@ describe.skipIf(!url)("buying a domain against a database", () => {
       })
     await expired("cs_old", "evt_old")
     expect((await rowOf(p.orgId, p.name)).state).toBe("awaiting_payment")
+    await openChat(kit, p.orgId)
     await expired("cs_new", "evt_new")
     const row = await rowOf(p.orgId, p.name)
     expect(row).toMatchObject({
@@ -549,6 +573,12 @@ describe.skipIf(!url)("buying a domain against a database", () => {
       registrant: null,
       registration: { outcome: "expired" },
     })
+    // Said once: Stripe's resend and the Workflow's last round add nothing.
+    await expired("cs_new", "evt_again")
+    await abandonUnpaid(kit, p.orgId, p.row.id)
+    expect(await chatTexts(kit, p.orgId)).toEqual([
+      expect.stringContaining(`payment for ${p.name} ran out of time`),
+    ])
   })
 
   it("registers in the sandbox with Cloudflare's phone form, captures, subscribes, and ends as a test", async () => {
@@ -672,6 +702,11 @@ describe.skipIf(!url)("buying a domain against a database", () => {
       code: "domain.purchase_in_progress",
     })
 
+    // Not live until the router names the site: the 404 is not an answer.
+    await expect(activateDomain(p.env, kit, p.orgId, p.row.id)).rejects.toThrow(
+      "domain.not_served"
+    )
+    p.net.site = p.orgId
     const live = await activateDomain(p.env, kit, p.orgId, p.row.id)
     expect(live?.text).toMatch(new RegExp(`^${p.name} is live`))
     expect(
@@ -701,6 +736,65 @@ describe.skipIf(!url)("buying a domain against a database", () => {
     expect(renewal.map((c) => JSON.parse(c.body))).toContainEqual({
       auto_renew: false,
     })
+  })
+
+  it("live: a bought domain past its expiry is kept when the registrar renewed it, and taken down and told when it lapsed", async () => {
+    const p = await paid(true)
+    await startRegistration(p.env, kit, p.orgId, p.row.id)
+    await captureRegistered(p.env, kit, p.orgId, p.row.id)
+    await subscribeRenewal(p.env, kit, p.orgId, p.row.id)
+    await serveBought(p.env, kit, p.orgId, p.row.id)
+    p.net.site = p.orgId
+    await activateDomain(p.env, kit, p.orgId, p.row.id)
+    await openChat(kit, p.orgId)
+    const day = 86_400_000
+    const expire = async () => {
+      const row = await rowOf(p.orgId, p.name)
+      const registration = row.registration as DomainRegistration
+      await kit.withOrg({ orgId: p.orgId }, (db) =>
+        db
+          .update(domains)
+          .set({
+            registration: {
+              ...registration,
+              expires_at: new Date(Date.now() - day).toISOString(),
+            },
+          })
+          .where(eq(domains.id, row.id))
+      )
+    }
+    const pointer = () => p.store.ROUTES.get(`host:${p.name}`)
+
+    // Not yet past: no question asked of the registrar.
+    const calls = p.net.calls.length
+    expect(await sweepDomains(p.env, kit, p.orgId, "2026102706")).toEqual([])
+    expect(p.net.calls).toHaveLength(calls)
+
+    // Past, but renewed: the new date is kept and nothing is said.
+    const renewed = new Date(Date.now() + 365 * day).toISOString()
+    p.net.expires = renewed
+    await expire()
+    expect(await sweepDomains(p.env, kit, p.orgId, "2026102706")).toEqual([])
+    expect((await rowOf(p.orgId, p.name)).state).toBe("active")
+    expect((await rowOf(p.orgId, p.name)).registration).toMatchObject({
+      expires_at: renewed,
+    })
+    expect(await pointer()).not.toBeNull()
+
+    // Past and gone from the registrar: out of active, no longer served, told once.
+    await expire()
+    p.net.registered.delete(p.name)
+    const says = await sweepDomains(p.env, kit, p.orgId, "2026102706")
+    expect(says).toHaveLength(1)
+    expect(says[0]?.text).toContain(`${p.name} wasn't renewed`)
+    expect((await rowOf(p.orgId, p.name)).state).toBe("removed")
+    expect(await pointer()).toBeNull()
+    expect(await sweepDomains(p.env, kit, p.orgId, "2026102806")).toEqual([])
+    await postStatus(kit, p.orgId, says[0] as Say)
+    await postStatus(kit, p.orgId, says[0] as Say)
+    expect(await chatTexts(kit, p.orgId)).toEqual([
+      expect.stringContaining("wasn't renewed"),
+    ])
   })
 
   it("renewals: keeps auto-renew on a paid invoice, says how to pay a failed one, turns it off when the subscription ends", async () => {

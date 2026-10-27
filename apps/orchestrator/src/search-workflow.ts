@@ -18,6 +18,7 @@ import {
   markVerified,
   placeToken,
   type SearchParams,
+  sayVerifyFailed,
   verifyOnce,
 } from "./search.ts"
 import {
@@ -107,6 +108,11 @@ export class SearchWorkflow extends WorkflowEntrypoint<Env, SearchParams> {
           GOOGLE_RETRIES,
           google((kit) => markFailed(kit, params))
         )
+        await step
+          .do("say failed", SAY_RETRIES, () =>
+            withKit(env, (kit) => sayVerifyFailed(env, kit, params))
+          )
+          .catch(() => undefined) // a chat busy past every retry; the alert stands
         return { outcome: "failed" }
       }
       await step.sleep(`wait ${n}`, wait)

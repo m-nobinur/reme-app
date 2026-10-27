@@ -4,8 +4,10 @@ import {
   DomainCheck,
   DomainName,
   DomainProvider,
+  type DomainRegistration,
   type DomainState,
   type ServerButton,
+  SITE_HEADER,
   siteHost,
 } from "@workspace/contracts"
 import {
@@ -13,6 +15,7 @@ import {
   domainHeldElsewhere,
   domains,
   eq,
+  failureCode,
   type OrgScopedDb,
   orgs,
   pgCode,
@@ -50,7 +53,12 @@ import {
   otherHost,
   writePointer,
 } from "./publish.ts"
-import { detachHostname, type RegistrarEnv, setAutoRenew } from "./registrar.ts"
+import {
+  detachHostname,
+  getRegistration,
+  type RegistrarEnv,
+  setAutoRenew,
+} from "./registrar.ts"
 import { forgetHost } from "./search.ts"
 import { cancelRenewal } from "./stripe.ts"
 
@@ -351,8 +359,12 @@ function nextStep(
   )
 }
 
-/** Whether a host answers through our edge with a certificate: anything short of a 5xx. */
-export async function reaches(host: string): Promise<boolean> {
+/**
+ * Whether a host answers through our edge with a certificate: anything short
+ * of a 5xx. The certificate's proof alone, for a domain not yet active: the
+ * router has no site for it until `activateDomain`, so it answers 404 here.
+ */
+export async function answers(host: string): Promise<boolean> {
   try {
     const response = await fetch(`https://${host}/`, {
       redirect: "manual",
@@ -360,6 +372,23 @@ export async function reaches(host: string): Promise<boolean> {
     })
     await response.body?.cancel()
     return response.status < 500
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Whether `host` serves this site: a 2xx after redirects that the router
+ * marked with the site's id. The router's own 404 and any other server fail.
+ * Every "it is live" is said on this, run when it is said.
+ */
+export async function reaches(host: string, siteId: string): Promise<boolean> {
+  try {
+    const response = await fetch(`https://${host}/`, {
+      signal: AbortSignal.timeout(10_000),
+    })
+    await response.body?.cancel()
+    return response.ok && response.headers.get(SITE_HEADER) === siteId
   } catch {
     return false
   }
@@ -518,7 +547,7 @@ export async function look(
   if (!row || !connecting(row.state)) return { gone: true }
   const seen = await currentCheck(env, row)
   let check = seen.check
-  const ready = check.status === "valid" && (await reaches(seen.primary))
+  const ready = check.status === "valid" && (await answers(seen.primary))
   // Valid at Cloudflare but not yet answering: the certificate is still deploying.
   if (check.status === "valid" && !ready)
     check = { status: "pending_certificate" }
@@ -594,7 +623,8 @@ export async function nudge(
 /**
  * The domain goes live: the row first, then every pointer written from it
  * (`writePointer` reads the active domain), then what to tell the owner.
- * Null when the claim was removed meanwhile. A retry after the row moved
+ * Null when the claim was removed meanwhile; a throw while the host does not
+ * yet serve the site, which the step retries. A retry after the row moved
  * finds it active and writes the pointers again, which repeats what is live.
  */
 export async function activateDomain(
@@ -624,6 +654,11 @@ export async function activateDomain(
   })
   if (!done) return null
   await writePointer(env, kit, orgId, done.row.siteId, done.slug)
+  // Live is said on a fresh look at the host. Until KV has the pointer the
+  // router answers 404, so this throws and the step retries.
+  if (!(await reaches(done.row.primaryHost, done.row.siteId))) {
+    throw new Error("domain.not_served")
+  }
   return {
     key: `${domainId}:active`,
     text: await writeUpdate(env, kit, orgId, {
@@ -1023,22 +1058,105 @@ export async function remove(
       "domain.not_found",
       `${name} isn't connected to this site.`
     )
-  await repoint(env, kit, orgId, found.row.id)
-  await revoke(env, found.row)
+  await stopServing(env, kit, orgId, found.row)
+  return null
+}
+
+/**
+ * A claim that has left `active` stops being served: its pointers rewritten
+ * from the row, its hostnames and billing revoked, its Google files
+ * forgotten, and the pointers written once more after `SETTLE`. Idempotent.
+ * A removal and a lapsed registration share it.
+ */
+async function stopServing(
+  env: Env,
+  kit: Tenancy,
+  orgId: string,
+  row: DomainRow
+) {
+  await repoint(env, kit, orgId, row.id)
+  await revoke(env, row)
   // This org's Google files must not prove the name for whoever claims it next.
-  const primary = found.row.primaryHost
-  for (const host of [primary, otherHost(primary)]) {
+  for (const host of [row.primaryHost, otherHost(row.primaryHost)]) {
     await forgetHost(env, kit, orgId, host)
   }
   try {
     await env.DOMAINS.create({
-      id: settleInstanceId(found.row.id),
-      params: { org_id: orgId, domain_id: found.row.id, settle: true },
+      id: settleInstanceId(row.id),
+      params: { org_id: orgId, domain_id: row.id, settle: true },
     })
   } catch {
     // Already settling: a repeated removal.
   }
-  return null
+}
+
+/**
+ * A bought domain past its stored expiry, asked of the registrar, which knows
+ * if it renewed: a later date is kept, and none or a past one means it
+ * lapsed. A lapsed domain leaves `active` and stops being served, as a
+ * removal does, and the owner is told. Cleanup that fails after the row moved
+ * raises an alert, since the sweep will not find the row again.
+ */
+async function lapse(
+  env: Env,
+  kit: Tenancy,
+  orgId: string,
+  row: DomainRow
+): Promise<Say | null> {
+  const registration = row.registration as DomainRegistration | null
+  const expiry = registration?.expires_at
+  if (!(registration && expiry) || Date.parse(expiry) > Date.now()) return null
+  const live = await getRegistration(env, row.name)
+  if (live?.expires_at && Date.parse(live.expires_at) > Date.now()) {
+    const renewed = { ...registration, expires_at: live.expires_at }
+    await kit.withOrg({ orgId }, (db) =>
+      db
+        .update(domains)
+        .set({ registration: renewed })
+        .where(eq(domains.id, row.id))
+    )
+    return null
+  }
+  const found = await kit.withOrg({ orgId }, async (db) => {
+    const claim = await readClaim(db, env, eq(domains.id, row.id))
+    return claim &&
+      (await moveTo(
+        db,
+        claim.row,
+        "removed",
+        ["active"],
+        { removedAt: new Date() },
+        { type: "domain.expired", payload: { domain_id: row.id } }
+      ))
+      ? claim
+      : null
+  })
+  if (!found) return null
+  try {
+    await stopServing(env, kit, orgId, found.row)
+  } catch (error) {
+    await kit.withOrg({ orgId }, (db) =>
+      appendEvent(db, {
+        orgId,
+        assignmentId: null,
+        staffId: null,
+        type: "alert.raised",
+        payload: {
+          kind: "domain.expiry_cleanup_failed",
+          domain_id: row.id,
+          code: failureCode(error),
+        },
+      })
+    )
+  }
+  return {
+    key: `${row.id}:lapsed`,
+    text: `${row.name} wasn't renewed and has run out, so visitors there no longer reach your website. It's back at ${found.slug}. If you still want ${row.name}, I can buy it again.`,
+    button: {
+      label: "Buy it again",
+      action: { kind: "ask", text: `Buy ${row.name} for my website.` },
+    },
+  }
 }
 
 /**
@@ -1110,7 +1228,7 @@ export async function repoint(
  * here as it would there, so the 72-hour bound holds without the Workflow.
  */
 export async function sweepDomains(
-  env: CloudflareEnv & Pick<Env, "SITE_HOST_SUFFIX">,
+  env: Env,
   kit: Tenancy,
   orgId: string,
   hour: string
@@ -1128,6 +1246,12 @@ export async function sweepDomains(
   for (const row of rows) {
     if (connecting(row.state)) {
       const say = await expireDomain(env, kit, orgId, row.id, "timeout")
+      if (say) says.push(say)
+      continue
+    }
+    // A bought domain has no custom hostname to read; its registration is the check.
+    if (row.origin === "purchased") {
+      const say = await lapse(env, kit, orgId, row)
       if (say) says.push(say)
       continue
     }

@@ -505,7 +505,7 @@ export async function markVerified(
   })
 }
 
-/** `failed`: Google never found the file. Ours to look at, so an alert and no owner message. */
+/** `failed`: Google never found the file. Ours to look at, so an alert; the owner hears it from `sayVerifyFailed`. */
 export async function markFailed(
   kit: Tenancy,
   { org_id: orgId, host }: SearchParams
@@ -529,10 +529,22 @@ export async function markFailed(
   })
 }
 
+/** One message in the owner's chat. A busy chat or one holding a card throws, for the step's retries. */
+async function tell(
+  kit: Tenancy,
+  orgId: string,
+  key: string,
+  message: Parameters<typeof postAssistantMessage>[1]["message"]
+): Promise<void> {
+  const posted = await postAssistantMessage(kit, { orgId, key, message })
+  if (posted === "busy" || posted === "waiting") {
+    throw new GoogleError(`search.chat_${posted}`)
+  }
+}
+
 /**
  * `announce`: one message, keyed by the instance, worded by the model from
- * the host or else the template (heartbeat-write.ts). A busy chat or one
- * holding a card throws, for the step's retries.
+ * the host or else the template (heartbeat-write.ts).
  */
 export async function announce(
   env: { OPENROUTER_API_KEY?: string },
@@ -543,12 +555,28 @@ export async function announce(
     facts: { host },
     template: `${host} is now in your Google Search Console. I've sent Google your page list. New sites take days to a few weeks to show up.`,
   })
-  const posted = await postAssistantMessage(kit, {
-    orgId,
-    key: searchInstanceId(orgId, host),
-    message: { text: [text] },
+  await tell(kit, orgId, searchInstanceId(orgId, host), { text: [text] })
+}
+
+/**
+ * `say failed`: Google never found the file, said once after `markFailed`,
+ * with a button to start it over. Keyed apart from `announce`, which a
+ * restarted instance may still post.
+ */
+export async function sayVerifyFailed(
+  env: { OPENROUTER_API_KEY?: string },
+  kit: Tenancy,
+  { org_id: orgId, host }: SearchParams
+): Promise<void> {
+  const text = await writeUpdate(env, kit, orgId, {
+    facts: { host },
+    template: `Google couldn't confirm that ${host} is yours, even after trying for several days, so it isn't in your Search Console yet. Say the word and I'll start it over.`,
   })
-  if (posted === "busy" || posted === "waiting") {
-    throw new GoogleError(`search.chat_${posted}`)
-  }
+  await tell(kit, orgId, `${searchInstanceId(orgId, host)}:failed`, {
+    text: [text],
+    button: {
+      label: "Try again",
+      action: { kind: "ask", text: `Put ${host} on Google again.` },
+    },
+  })
 }

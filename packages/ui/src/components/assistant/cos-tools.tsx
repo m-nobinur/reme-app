@@ -26,8 +26,8 @@ import {
   RemoveDomain,
 } from "@workspace/ui/components/assistant/domain"
 import { ConnectGoogle } from "@workspace/ui/components/assistant/google"
-import { ToolStatus } from "@workspace/ui/components/status-line"
-import type { ToolArgs } from "@workspace/ui/lib/activity-copy"
+import { StatusLine, ToolStatus } from "@workspace/ui/components/status-line"
+import { type ToolArgs, toolKind } from "@workspace/ui/lib/activity-copy"
 import { factLabel, factText } from "@workspace/ui/lib/facts"
 import { formatDateTime } from "@workspace/ui/lib/format"
 import { refusalText } from "@workspace/ui/lib/refusal"
@@ -49,16 +49,27 @@ import { createContext, useContext } from "react"
 
 /* Reads ----------------------------------------------------------------- */
 
-/** One read: a line while it runs, then nothing, since the reply says what it found. */
+/**
+ * The few words the model wrote for what a read is doing, which the api
+ * cleaned before the call was stored.
+ */
+const stepOf = ({ args }: { args: unknown }) => {
+  const { step } = (args ?? {}) as { step?: unknown }
+  return typeof step === "string" ? step : undefined
+}
+
+/** One read: its own few words, or the copy table's, while it runs, then nothing, since the reply says what it found. */
 function Read<O>({
   view,
   tool,
   args,
+  step,
   slot,
 }: {
   view: ReadView<O>
   tool: string
   args?: ToolArgs
+  step?: string | undefined
   slot: string
 }) {
   // A read the stream left running is over once its message is.
@@ -70,21 +81,23 @@ function Read<O>({
       : view.state === "failed"
         ? "failed"
         : "stopped"
-  return (
-    <ToolStatus
-      args={args}
-      className="flex px-1 py-1.5 text-chat-step"
-      data-slot={slot}
-      delay={state === "working" ? undefined : 0}
-      state={state}
-      tool={tool}
-    />
+  const line = {
+    className: "flex px-1 py-1.5 text-chat-step",
+    "data-slot": slot,
+    delay: state === "working" ? undefined : 0,
+    state,
+  } as const
+  return step && state === "working" ? (
+    <StatusLine {...line} kind={toolKind(tool)} label={step} />
+  ) : (
+    <ToolStatus {...line} args={args} tool={tool} />
   )
 }
 
 const WorkspaceRead: ToolCallMessagePartComponent = (props) => (
   <Read
     slot="cos-read-workspace"
+    step={stepOf(props)}
     tool="get_workspace"
     view={readView(props, CosWorkspace)}
   />
@@ -93,6 +106,7 @@ const WorkspaceRead: ToolCallMessagePartComponent = (props) => (
 const FactsRead: ToolCallMessagePartComponent = (props) => (
   <Read
     slot="cos-read-facts"
+    step={stepOf(props)}
     tool="get_facts"
     view={readView(props, CosFacts)}
   />
@@ -101,6 +115,7 @@ const FactsRead: ToolCallMessagePartComponent = (props) => (
 const PreviewRead: ToolCallMessagePartComponent = (props) => (
   <Read
     slot="cos-read-preview"
+    step={stepOf(props)}
     tool="get_preview"
     view={readView(props, GetPreviewOutput)}
   />
@@ -112,7 +127,9 @@ const PreviewRead: ToolCallMessagePartComponent = (props) => (
  */
 const DomainRead: ToolCallMessagePartComponent = (props) => {
   const view = readView(props, CheckDomainOutput)
-  const asked = CheckDomainInput.safeParse(props.args).data?.name
+  // The step is not part of the question the owner asked.
+  const { step: _step, ...asking } = props.args
+  const asked = CheckDomainInput.safeParse(asking).data?.name
   const name = asked ?? "Your domain"
   if (view.state === "done") {
     return (
@@ -133,6 +150,7 @@ const DomainRead: ToolCallMessagePartComponent = (props) => {
     <Read
       args={asked ? { domain: asked } : {}}
       slot="cos-read-domain"
+      step={stepOf(props)}
       tool="check_domain"
       view={view}
     />

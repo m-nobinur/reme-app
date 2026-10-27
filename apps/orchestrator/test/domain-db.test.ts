@@ -1,4 +1,4 @@
-import { siteHost } from "@workspace/contracts"
+import { SITE_HEADER, siteHost } from "@workspace/contracts"
 import {
   deployments,
   domains,
@@ -24,7 +24,7 @@ import {
   revokeDomains,
   sweepDomains,
 } from "../src/domain-flow.ts"
-import { writePointer } from "../src/publish.ts"
+import { clearPointers, writePointer } from "../src/publish.ts"
 import { searchInstanceId } from "../src/search.ts"
 import { DOH } from "./fixtures/domains.ts"
 import { kit, previewed, SUFFIX, type storage, workflowEnv } from "./site.ts"
@@ -49,6 +49,9 @@ vi.mock("../src/agents/developer.ts", () => ({ Developer: {} }))
 const url = process.env.DATABASE_URL
 const NAME = "sparklecleanbristol.co.uk"
 const CF = "https://api.cloudflare.com/client/v4/zones/zone/custom_hostnames"
+
+/** The site the edge probe answers for: the last one `published` made. */
+let served = ""
 
 /** DNS from the recordings plus a SOA for any other name asked; Cloudflare's hostnames in a map. */
 /**
@@ -111,7 +114,11 @@ function stubNet(
         }
         return envelope([])
       }
-      // Domain Connect settings hosts and the edge probe: nothing there.
+      // The edge probe: the router serving the last published site.
+      if (u.pathname === "/" && served) {
+        return new Response("ok", { headers: { [SITE_HEADER]: served } })
+      }
+      // Domain Connect settings hosts: nothing there.
       return new Response(null, { status: 404 })
     }
   )
@@ -122,6 +129,7 @@ function stubNet(
 /** An org with a published site: the preview fixture plus a deployment of its revision. */
 async function published() {
   const site = await previewed()
+  served = site.orgId
   await kit.withOrg({ orgId: site.orgId }, (db) =>
     db.insert(deployments).values({
       orgId: site.orgId,
@@ -471,6 +479,27 @@ describe.skipIf(!url)("custom domains against a database", () => {
     expect(
       await connect(env, kit, other.orgId, { name, approval_id: "b" })
     ).toMatchObject({ status: 201 })
+  })
+
+  it("stops serving a live domain's hosts at takedown", async () => {
+    stubNet()
+    const site = await published()
+    const { env } = domainEnv(site.store)
+    const name = unique()
+    await connect(env, kit, site.orgId, { name, approval_id: "a" })
+    const domainId = (await rowOf(site.orgId, name))?.id ?? ""
+    await kit.withOrg({ orgId: site.orgId }, (db) =>
+      db
+        .update(domains)
+        .set({ state: "verifying" })
+        .where(eq(domains.id, domainId))
+    )
+    await activateDomain(env, kit, site.orgId, domainId)
+    const hosts = [`www.${name}`, name, site.slug]
+    expect(hosts.every((h) => site.store.pointers.has(`host:${h}`))).toBe(true)
+    await clearPointers(env, kit, site.orgId)
+    await revokeDomains(env, kit, site.orgId)
+    expect(hosts.some((h) => site.store.pointers.has(`host:${h}`))).toBe(false)
   })
 
   it("revokes every claim at takedown, hostnames first", async () => {
