@@ -357,6 +357,7 @@ const JOBS = [
   "website",
   "golive",
   "change",
+  "address",
   "domain",
   "purchase",
   "google",
@@ -365,6 +366,38 @@ const STATES = ["upcoming", "now", "waiting", "done", "failed"] as const
 const ORGS = Array.from({ length: 30 }, (_, i) => `org-${i}`)
 
 describe("segment copy", () => {
+  it("says what an owner task waits for by the step that waits, its note first", () => {
+    const ctx = { orgId: "org-1", assistant: "Ellie" }
+    const address = (id: string, note?: string) =>
+      segment("address", "waiting", {
+        steps: [
+          { id: "find_out", state: "done" },
+          { id, state: "waiting", ...(note && { note }) },
+        ],
+        names: { domain: "spark.co.uk", provider: "123-reg" },
+      })
+    expect(pillLine(address("records"), ctx)).toBe(
+      "Ellie is waiting for your DNS change"
+    )
+    expect(segmentLine(address("records"), ctx)).toBe(
+      "One change to make at 123-reg"
+    )
+    expect(pillLine(address("purchase"), ctx)).toBe(
+      "Ellie is waiting for your payment"
+    )
+    expect(segmentLine(address("purchase", "Buying spark.co.uk"), ctx)).toBe(
+      "Buying spark.co.uk"
+    )
+    const google = segment("google", "waiting", {
+      steps: [
+        { id: "sign_in", state: "done" },
+        { id: "permissions", state: "waiting" },
+      ],
+    })
+    expect(waitingRow(google)).toBe("Waiting for you to allow access")
+    expect(segmentLine(google, ctx)).toBe("Google needs one more permission")
+  })
+
   it("writes clean titles, lines and pills for every job, state, org and name", () => {
     for (const kind of JOBS) {
       for (const state of STATES) {

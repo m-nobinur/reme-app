@@ -3,6 +3,7 @@ import {
   type ActivitySegment,
   type AssignmentState,
   type BuildSummary,
+  type OwnerTask,
 } from "@workspace/contracts"
 import { describe, expect, it } from "vitest"
 import {
@@ -58,6 +59,7 @@ const rows = (over: Partial<ActivityRows> = {}): ActivityRows => ({
   heartbeat: null,
   first_live: null,
   live_at: null,
+  tasks: [],
   ...over,
 })
 
@@ -334,12 +336,14 @@ describe("change", () => {
   })
 })
 
+/** The Website page's row for the domain, Google or a purchase. */
+const standingRow = (over: Partial<ActivityRows>) =>
+  view({ rows: rows(over) }).standing?.[0]
+
 describe("domain", () => {
   it("waits on the owner's DNS change, then the certificate, then the load", () => {
-    const at = (row: Partial<DomainRow>) => {
-      const a = view({ rows: rows({ domains: [domain(row)] }) })
-      return [...a.now, ...a.waiting, ...a.done][0]
-    }
+    const at = (row: Partial<DomainRow>) =>
+      standingRow({ domains: [domain(row)] })
     expect(states(at({}))).toEqual([
       "dns:waiting",
       "certificate:next",
@@ -367,7 +371,7 @@ describe("purchase", () => {
     domain({ origin: "purchased", state: "awaiting_payment", ...over })
 
   it("waits on the details, then the payment, until the name's hold runs out", () => {
-    const details = view({ rows: rows({ domains: [bought({})] }) }).waiting[0]
+    const details = standingRow({ domains: [bought({})] })
     expect(states(details)).toEqual([
       "details:waiting",
       "payment:next",
@@ -377,40 +381,34 @@ describe("purchase", () => {
     expect(details?.deadline).toBe(
       new Date(Date.parse(ago(10)) + PURCHASE_HOLD_MS).toISOString()
     )
-    const pay = view({ rows: rows({ domains: [bought({ checkout: true })] }) })
-      .waiting[0]
+    const pay = standingRow({ domains: [bought({ checkout: true })] })
     expect(pay?.steps[1]).toEqual({ id: "payment", state: "waiting" })
   })
 
-  it("lists an expired Checkout as stopped in Done today", () => {
-    const { done, waiting } = view({
-      rows: rows({
+  it("leaves an expired Checkout off the Website page", () => {
+    expect(
+      standingRow({
         domains: [
           bought({ state: "abandoned", checkout: true, created_at: ago(180) }),
         ],
-      }),
-    })
-    expect(waiting).toEqual([])
-    expect(done[0]).toMatchObject({ kind: "purchase", state: "failed" })
-    expect(done[0]?.steps[1]?.state).toBe("now")
+      })
+    ).toBeUndefined()
   })
 
   it("registers, then connects", () => {
-    const paying = view({
-      rows: rows({ domains: [bought({ state: "verifying", checkout: true })] }),
-    }).now[0]
+    const paying = standingRow({
+      domains: [bought({ state: "verifying", checkout: true })],
+    })
     expect(paying?.steps[2]?.state).toBe("now")
-    const connecting = view({
-      rows: rows({
-        domains: [
-          bought({
-            state: "verifying",
-            checkout: true,
-            registration: { status: "registered" },
-          }),
-        ],
-      }),
-    }).now[0]
+    const connecting = standingRow({
+      domains: [
+        bought({
+          state: "verifying",
+          checkout: true,
+          registration: { status: "registered" },
+        }),
+      ],
+    })
     expect(connecting?.steps[3]?.state).toBe("now")
   })
 
@@ -438,19 +436,17 @@ describe("purchase", () => {
 
 describe("google", () => {
   const google = (over: Partial<NonNullable<ActivityRows["google"]>>) =>
-    view({
-      rows: rows({
-        google: {
-          state: "active",
-          connected_at: ago(20),
-          property: null,
-          ...over,
-        },
-      }),
+    standingRow({
+      google: {
+        state: "active",
+        connected_at: ago(20),
+        property: null,
+        ...over,
+      },
     })
 
   it("waits on a sign in again when the connection needs it", () => {
-    expect(states(google({ state: "needs_reauth" }).waiting[0])).toEqual([
+    expect(states(google({ state: "needs_reauth" }))).toEqual([
       "sign_in:waiting",
       "verify:next",
       "sitemap:next",
@@ -465,20 +461,110 @@ describe("google", () => {
       synced_at: null,
       created_at: ago(20),
     }
-    expect(google({ property }).now[0]?.steps[1]?.state).toBe("now")
+    expect(google({ property })?.steps[1]?.state).toBe("now")
     const verified = {
       ...property,
       state: "verified" as const,
       verified_at: ago(15),
     }
-    expect(google({ property: verified }).now[0]?.steps[2]?.state).toBe("now")
+    expect(google({ property: verified })?.steps[2]?.state).toBe("now")
     const sent = google({ property: { ...verified, sitemap_at: ago(10) } })
-    expect(sent.done[0]).toMatchObject({ kind: "google", at: ago(10) })
+    expect(sent).toMatchObject({ kind: "google", state: "done", at: ago(10) })
   })
 
   it("has no segment before a connection or after it ended", () => {
-    expect(google({ state: "revoked" }).now).toEqual([])
-    expect(view().now).toEqual([])
+    expect(google({ state: "revoked" })).toBeUndefined()
+    expect(view().standing).toEqual([])
+  })
+})
+
+describe("owner tasks", () => {
+  const step = (
+    name: string,
+    state: string,
+    over: Record<string, unknown> = {}
+  ) => ({
+    step: name,
+    state,
+    note: null,
+    blocked_on: null,
+    deadline: null,
+    changed_at: null,
+    ...over,
+  })
+  const task = (steps: ReturnType<typeof step>[], over = {}) =>
+    ({
+      id: ID(30),
+      kind: "address",
+      state: "active",
+      later_until: null,
+      detail: { name: "sparkcleaning.co.uk", provider: "123-reg" },
+      created_at: ago(30),
+      done_at: null,
+      steps,
+      ...over,
+    }) as OwnerTask
+  const groups = (...tasks: OwnerTask[]) => view({ rows: rows({ tasks }) })
+
+  it("waits on the owner with the step's note and deadline, named by domain and provider", () => {
+    const { waiting, now } = groups(
+      task([
+        step("find_out", "done"),
+        step("records", "blocked", {
+          blocked_on: "owner_action",
+          note: "Two records to add",
+          deadline: ago(-60),
+        }),
+        step("loads", "pending"),
+      ])
+    )
+    expect(now).toEqual([])
+    expect(waiting).toEqual([
+      {
+        id: `address:${ID(30)}`,
+        kind: "address",
+        state: "waiting",
+        steps: [
+          { id: "find_out", state: "done" },
+          { id: "records", state: "waiting", note: "Two records to add" },
+          { id: "loads", state: "next" },
+        ],
+        at: ago(30),
+        deadline: ago(-60),
+        names: { domain: "sparkcleaning.co.uk", provider: "123-reg" },
+      },
+    ])
+  })
+
+  it("puts a step at work in Now, one not begun in Coming up, a finished one in Done", () => {
+    expect(
+      groups(task([step("records", "done"), step("loads", "in_progress")]))
+        .now[0]?.kind
+    ).toBe("address")
+    const google = task(
+      [step("sign_in", "done"), step("first_data", "pending")],
+      {
+        kind: "google",
+        detail: {},
+      }
+    )
+    expect(groups(google).upcoming).toEqual([
+      expect.objectContaining({ id: "google", state: "upcoming" }),
+    ])
+    const done = groups(
+      task([step("loads", "done")], { state: "done", done_at: ago(5) })
+    ).done
+    expect(done[0]).toMatchObject({ state: "done", at: ago(5) })
+  })
+
+  it("has no segment for a task put off or declined", () => {
+    const off = groups(
+      task([step("purchase", "pending")], { state: "later" }),
+      task([step("records", "blocked")], { state: "declined" })
+    )
+    expect([...off.now, ...off.waiting, ...off.upcoming, ...off.done]).toEqual(
+      []
+    )
   })
 })
 

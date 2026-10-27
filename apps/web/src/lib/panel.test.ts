@@ -613,6 +613,22 @@ describe("completedOf", () => {
       `Website published at ${HOST}`,
     ])
   })
+
+  it("lists a domain once, though its address task and its standing row both hold it", () => {
+    const names = { domain: "spark.example.invalid" }
+    const rows = completedOf(
+      live({
+        activity: activity({
+          done: [segment("address", "done", [], { id: "address:1", names })],
+          standing: [segment("domain", "done", [], { id: "domain:1", names })],
+        }),
+      }),
+      { orgId: ORG, assistant: "Ellie" }
+    )
+    expect(rows.map((row) => row.text)).toEqual([
+      "Spark.example.invalid connected",
+    ])
+  })
 })
 
 describe("coming up and done today", () => {
