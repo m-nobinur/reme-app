@@ -1339,7 +1339,7 @@ async function lapse(
     text: `${row.name} wasn't renewed and has run out, so visitors there no longer reach your website. It's back at ${found.slug}. If you still want ${row.name}, I can buy it again.`,
     button: {
       label: "Buy it again",
-      action: { kind: "ask", text: `Buy ${row.name} for my website.` },
+      action: { kind: "pay", name: row.name },
     },
   }
 }
