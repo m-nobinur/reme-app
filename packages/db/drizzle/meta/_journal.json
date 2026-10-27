@@ -183,6 +183,13 @@
       "when": 1793097590289,
       "tag": "0025_owner_tasks",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1793132892531,
+      "tag": "0026_resolve_domain_claim",
+      "breakpoints": true
     }
   ]
 }

@@ -92,6 +92,7 @@ export {
   ORG_SETTING,
   pgCode,
   recentDesigns,
+  resolveDomainClaim,
   resolveDomainHost,
   resolveOrg,
   resolveOrgBySlug,

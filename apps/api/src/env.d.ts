@@ -38,6 +38,11 @@ interface Env {
    */
   STRIPE_SECRET_KEY?: string
   STRIPE_WEBHOOK_SECRET?: string
+  /**
+   * What Cloudflare's certificate alert sends in `cf-webhook-auth`. Unset,
+   * `/webhooks/cloudflare` is not a route and the Workflow's own looks decide.
+   */
+  CF_WEBHOOK_SECRET?: string
   /** Search Console's Google client id. Unset, `connect_google` answers that Google is not available. */
   GOOGLE_CLIENT_ID?: string
   /**
