@@ -318,6 +318,14 @@ const TOOLS: Record<CosToolName, ToolCopy> = {
     done: () => "Added the review",
     fail: () => "add the review",
   },
+  domain_bought: {
+    kind: "domain",
+    working: (a) =>
+      withDomain(a, (d) => `Looking for ${d}`, "Looking for your domain"),
+    done: (a) =>
+      withDomain(a, (d) => `Looked for ${d}`, "Looked for your domain"),
+    fail: (a) => withDomain(a, (d) => `look for ${d}`, "look for your domain"),
+  },
   inspect_domain: {
     kind: "domain",
     working: (a) =>

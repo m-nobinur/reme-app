@@ -1169,6 +1169,7 @@ export const samples: Record<ContractName, unknown> = {
     source: "owner_said",
     at: NOW,
   },
+  DomainBoughtInput: { name: "sparkleclean.co.uk" },
   InspectDomainInput: { name: "sparkleclean.co.uk" },
   InspectDomainOutput: {
     outcome: "inspected",
