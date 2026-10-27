@@ -23,7 +23,6 @@ import {
 import { Done, Problem } from "@workspace/ui/components/assistant/decision"
 import { ConnectSteps } from "@workspace/ui/components/assistant/domain"
 import {
-  ACCENT_RING,
   Docked,
   TRAY_FIELD,
   TrayFrame,
@@ -223,69 +222,85 @@ function ToolLine({
 
 /* Choose ------------------------------------------------------------------ */
 
-/** One name and its endings: a chip each, free with its price or taken. */
-function NameRow({
+/** An ending's row in a card: a native radio under a label, or "taken". */
+const ENDING_ROW =
+  "min-h-10 items-center justify-between gap-2 rounded-lg px-3 text-sm"
+
+/**
+ * One name and its endings, a row each: free with its yearly price, or taken.
+ * The free rows are radios of the grid's one group, so a card holds no choice
+ * of its own.
+ */
+function NameCard({
   row,
   best,
+  group,
+  picked,
   onPick,
 }: {
   row: DomainStemOffer
   best: boolean
+  group: string
+  picked: string | null
   onPick: (name: string) => void
 }) {
-  const id = useId()
   return (
-    <fieldset
-      aria-labelledby={`${id}-stem`}
-      className="flex min-w-0 flex-col gap-2 py-3"
-    >
+    <div className="flex min-w-0 flex-col gap-3 rounded-xl border border-border p-3">
       <div className="flex flex-col gap-0.5">
         {best ? (
           <span className={cn(META, "text-primary")}>Best pick</span>
         ) : null}
-        <span className="break-all font-medium" id={`${id}-stem`}>
-          {row.stem}
-        </span>
+        <span className="break-all font-medium">{row.stem}</span>
         <span className={META}>{row.why}</span>
       </div>
-      <div className="flex flex-wrap gap-2">
+      <div className="mt-auto flex flex-col gap-1.5">
         {ENDINGS.map((tld) => {
           const ending = row.endings[tld]
           if (!ending) return null
           const name = `${row.stem}.${tld}`
           return ending.state === "free" ? (
-            <button
-              aria-label={`${name}, ${pounds(ending.price_gbp_year)} a year`}
+            <label
               className={cn(
                 OPTION,
-                OPTION_PILL,
-                "gap-2 outline-none focus-visible:ring-3",
-                ACCENT_RING
+                ENDING_ROW,
+                "group has-[:checked]:inset-ring-1 has-[:checked]:inset-ring-foreground has-[:checked]:border-foreground has-[:focus-visible]:border-primary has-[:checked]:bg-card has-[:focus-visible]:ring-primary"
               )}
               key={tld}
-              onClick={() => onPick(name)}
-              type="button"
             >
+              <input
+                aria-label={`${name}, ${pounds(ending.price_gbp_year)} a year`}
+                checked={picked === name}
+                className="sr-only"
+                name={group}
+                onChange={() => onPick(name)}
+                type="radio"
+                value={name}
+              />
               <span className="font-medium">.{tld}</span>
-              <span className="text-muted-foreground tabular-nums">
+              <span className="flex items-center gap-1.5 text-muted-foreground tabular-nums">
                 {pounds(ending.price_gbp_year)}/yr
+                <CheckCircleIcon
+                  aria-hidden
+                  className="hidden size-4 text-foreground group-has-[:checked]:block"
+                  weight="fill"
+                />
               </span>
-            </button>
+            </label>
           ) : (
-            <span
+            <div
               className={cn(
-                OPTION_PILL,
-                "inline-flex cursor-default gap-2 border border-border border-dashed text-muted-foreground"
+                ENDING_ROW,
+                "flex border border-border border-dashed text-muted-foreground"
               )}
               key={tld}
             >
               <span>.{tld}</span>
               <span>taken</span>
-            </span>
+            </div>
           )
         })}
       </div>
-    </fieldset>
+    </div>
   )
 }
 
@@ -338,6 +353,8 @@ function ChoosePage({
 }) {
   const [away, setAway] = useState(false)
   const best = bestName(rows)
+  const [picked, setPicked] = useState(best)
+  const group = useId()
   // The rows open under the list, so they are brought into view.
   const places = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -349,10 +366,27 @@ function ChoosePage({
       hint="We register it in your business's name, renew it every year and handle the settings."
       question="Choose your web address"
       skip={{ label: "Not now", onSkip: onNotNow }}
+      submit={{
+        label: "Continue",
+        onSubmit: () => picked && onPick(picked),
+        disabled: !picked,
+      }}
     >
-      <div className="flex flex-col divide-y divide-border px-2">
+      {/* Two to a row at any width: three would strand the fourth name. */}
+      <div
+        aria-label="Web address"
+        className="grid grid-cols-2 gap-2 px-2"
+        role="radiogroup"
+      >
         {rows.map((row, at) => (
-          <NameRow best={at === 0} key={row.stem} onPick={onPick} row={row} />
+          <NameCard
+            best={at === 0}
+            group={group}
+            key={row.stem}
+            onPick={setPicked}
+            picked={picked}
+            row={row}
+          />
         ))}
       </div>
       {best ? (

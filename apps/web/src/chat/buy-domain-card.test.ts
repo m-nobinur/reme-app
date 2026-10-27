@@ -188,6 +188,20 @@ const button = (within: Element, label: string) => {
 const press = (within: Element, label: string) =>
   act(async () => button(within, label).click())
 
+const radio = (within: Element, label: string) => {
+  const match = within.querySelector<HTMLInputElement>(
+    `input[type=radio][aria-label="${label}"]`
+  )
+  if (!match) throw new Error(`no ${label} option`)
+  return match
+}
+
+/** Picks an ending on Choose, then goes on, as the owner does. */
+const choose = async (within: Element, label: string) => {
+  await act(async () => radio(within, label).click())
+  await press(within, "Continue")
+}
+
 /** Fills the fields the details page asks for, as the owner types them. */
 const fill = (tray: HTMLElement, values: Record<string, string>) => {
   for (const [name, value] of Object.entries(values)) {
@@ -214,16 +228,33 @@ const submit = (tray: HTMLElement) =>
 
 it("offers one row a name, best first, with each ending's price or taken", async () => {
   const { tray } = await found()
-  const rows = tray.querySelectorAll("fieldset")
+  const rows = tray.querySelectorAll('[role="radiogroup"] > div')
   expect([...rows].map((row) => row.textContent)).toEqual([
     "Best picksparkleclean" +
       "Short, and it is your name." +
       ".co.uk£8/yr.comtaken.uk£8/yr",
     "sparklecleanbristolSays where you work..com£12/yr",
   ])
-  // A taken ending is no button.
-  expect(() => button(tray, "sparkleclean.com, £12 a year")).toThrow()
-  expect(button(tray, "sparklecleanbristol.com, £12 a year")).toBeTruthy()
+  // A taken ending is no option; the free ones are one radio group, the best ticked.
+  expect(() => radio(tray, "sparkleclean.com, £12 a year")).toThrow()
+  const options = [
+    ...tray.querySelectorAll<HTMLInputElement>("input[type=radio]"),
+  ]
+  expect(new Set(options.map((option) => option.name)).size).toBe(1)
+  expect(
+    options.filter((option) => option.checked).map((o) => o.value)
+  ).toEqual([NAME])
+})
+
+it("goes on with the ending picked, not the best one", async () => {
+  const purchase = purchaseOf()
+  const { tray } = await draw(
+    "find_domain",
+    { args: {}, result: FOUND },
+    purchase
+  )
+  await choose(tray, "sparklecleanbristol.com, £12 a year")
+  expect(purchase.registrant).toHaveBeenCalledWith("sparklecleanbristol.com")
 })
 
 it("says plainly when no name was free", async () => {
@@ -258,7 +289,7 @@ it("asks only for the gaps, pays in a dialog, and leaves one line once paid", as
     { args: {}, result: FOUND },
     purchase
   )
-  await press(tray, `${NAME}, £8 a year`)
+  await choose(tray, `${NAME}, £8 a year`)
   expect(purchase.registrant).toHaveBeenCalledWith(NAME)
   // What Reme holds is not asked again; the address and the legal type are.
   const asked = [
@@ -385,7 +416,7 @@ it("shows a name already bought as its line, with no Pay", async () => {
     { args: {}, result: FOUND },
     purchaseOf({ status: vi.fn(async () => ({ name: NAME, ...read })) })
   )
-  await press(tray, `${NAME}, £8 a year`)
+  await choose(tray, `${NAME}, £8 a year`)
   await vi.waitFor(() =>
     expect(chat.textContent).toContain(
       `${NAME} is yours, and your website is on it.`
