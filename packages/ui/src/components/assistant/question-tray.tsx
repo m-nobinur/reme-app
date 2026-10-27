@@ -228,7 +228,7 @@ function StackSteps(steps: ReturnType<typeof useStacked>) {
 
 /**
  * Draws an open question in the thread's tray slot once no turn runs, so it
- * never appears mid-stream, fading and rising in. It is then brought into
+ * never appears mid-stream, fading and rising in when a turn brought it. It is then brought into
  * view, and takes the focus only from an empty composer. Where the call sits
  * in the transcript it says the assistant is waiting; the thread dims behind
  * an open tray (globals.css). With more than one docked, the tray shows one,
@@ -254,6 +254,10 @@ function Docked({
   const slot = useContext(SlotContext)
   const running = useRevealWaiting(!settled)
   const away = running && !settled
+  // One that was there when the page loaded appears still; only one a turn
+  // brought glides in.
+  const brought = useRef<boolean>(false)
+  if (running) brought.current = true
   const ref = useRef<HTMLDivElement>(null)
   const mark = useRef<HTMLSpanElement>(null)
   const key = useId()
@@ -283,7 +287,11 @@ function Docked({
               <div
                 data-slot={name}
                 ref={ref}
-                className="motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-2 flex flex-col gap-1 duration-enter ease-standard motion-safe:animate-in"
+                className={cn(
+                  "flex flex-col gap-1",
+                  brought.current &&
+                    "motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-2 duration-enter ease-standard motion-safe:animate-in"
+                )}
               >
                 {steps.total > 1 ? <StackSteps {...steps} /> : null}
                 {children}

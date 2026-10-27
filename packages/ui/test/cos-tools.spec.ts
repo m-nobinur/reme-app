@@ -56,8 +56,15 @@ for (const [entry, slot, yes, busy, target, detail, done, refused] of [
 ] as const) {
   test(`${entry} shows every state in the owner's words`, async ({ page }) => {
     await open(page, entry)
-    const cards = page.locator(`[data-entry="${entry}"] [data-slot="${slot}"]`)
-    await expect(cards).toHaveCount(14)
+    const everything = page.locator(`[data-entry="${entry}"]`)
+    const all = everything.locator(`[data-slot="${slot}"]`)
+    await expect(all).toHaveCount(14)
+    // A card waiting on the owner sits in the tray, not the thread: the thread
+    // keeps the other twelve.
+    const cards = all.filter({
+      hasNot: page.locator('[data-slot="question-tray"]'),
+    })
+    await expect(cards).toHaveCount(12)
     // Nothing to approve while the model is still writing it, and a call
     // the stream left unfinished stops rather than working forever.
     await expect(cards.nth(0)).toHaveText(
@@ -68,47 +75,51 @@ for (const [entry, slot, yes, busy, target, detail, done, refused] of [
     await expect(cards.nth(0).getByRole("button")).toHaveCount(0)
     await expect(cards.nth(1)).toContainText("This was not finished.")
     await expect(cards.nth(1).getByRole("button")).toHaveCount(0)
-    const asking = cards.nth(2)
-    await expect(asking.getByRole("heading")).toHaveText(target)
-    await expect(asking).toContainText(detail)
-    await expect(asking.getByRole("button", { name: yes })).toBeEnabled()
-    await expect(asking.getByRole("button", { name: "Not now" })).toBeEnabled()
+    // The tray shows one waiting card, the newest, with "1 of 3" to reach the
+    // rest: the target it cannot read, then the one asking.
+    const shown = everything.locator('[data-slot="question-tray"]:visible')
+    await everything.getByRole("button", { name: "Older" }).click()
     // A target it cannot read gets no yes, only a way to let the step go on.
-    await expect(cards.nth(3)).toContainText("did not come through")
-    await expect(cards.nth(3).getByRole("button")).toHaveText(["Not now"])
-    // Sent and waiting on the server: never optimistic.
-    await expect(
-      cards.nth(4).getByRole("button", { name: busy })
-    ).toBeDisabled()
-    await expect(cards.nth(4).locator('[aria-busy="true"]')).toHaveCount(1)
-    await expect(cards.nth(5).getByRole("button", { name: yes })).toBeDisabled()
-    await expect(cards.nth(5).getByRole("button", { name: busy })).toHaveCount(
-      0
-    )
+    await expect(shown).toContainText("did not come through")
+    await expect(shown.getByRole("button", { name: "Not now" })).toBeEnabled()
+    await expect(shown.getByRole("button", { name: yes })).toHaveCount(0)
+    await everything.getByRole("button", { name: "Older" }).click()
+    await expect(shown.getByRole("heading")).toHaveText(target)
+    await expect(shown).toContainText(detail)
+    await expect(shown.getByRole("button", { name: yes })).toBeEnabled()
+    await expect(shown.getByRole("button", { name: "Not now" })).toBeEnabled()
+    // Sent and waiting on the server: never optimistic. The tray is gone and
+    // the thread's one line says it is on its way.
+    await expect(cards.nth(2)).toContainText(`${busy}…`)
+    await expect(cards.nth(2).locator('[aria-busy="true"]')).toHaveCount(1)
+    await expect(cards.nth(2).getByRole("button")).toHaveCount(0)
+    await expect(cards.nth(3)).toContainText("You said not now.")
+    await expect(cards.nth(3).locator('[aria-busy="true"]')).toHaveCount(0)
+    await expect(cards.nth(3).getByRole("button")).toHaveCount(0)
     // Held while another card in its step waits.
-    await expect(cards.nth(6).getByRole("status")).toHaveText(
+    await expect(cards.nth(4).getByRole("status")).toHaveText(
       "You said yes. Sent once you answer the other cards."
     )
-    await expect(cards.nth(6).getByRole("button")).toHaveCount(0)
-    await expect(cards.nth(7)).toContainText(done)
-    await expect(cards.nth(8)).toContainText(refused)
-    await expect(cards.nth(9)).toContainText("You said not now.")
-    await expect(cards.nth(10)).not.toContainText("You sent a message instead.")
-    await expect(cards.nth(11)).toContainText(
+    await expect(cards.nth(4).getByRole("button")).toHaveCount(0)
+    await expect(cards.nth(5)).toContainText(done)
+    await expect(cards.nth(6)).toContainText(refused)
+    await expect(cards.nth(7)).toContainText("You said not now.")
+    await expect(cards.nth(8)).not.toContainText("You sent a message instead.")
+    await expect(cards.nth(9)).toContainText(
       "We could not confirm this went through."
     )
-    await expect(cards.nth(12)).toContainText(
+    await expect(cards.nth(10)).toContainText(
       "This did not go through. Ask again."
     )
     // A yes that came after the card's time ran out: nothing was done.
-    await expect(cards.nth(13)).toContainText(
+    await expect(cards.nth(11)).toContainText(
       "This expired before your yes, so nothing was done."
     )
-    await expect(cards.nth(13).getByRole("button")).toHaveCount(0)
-    const shown = await page.locator(`[data-entry="${entry}"]`).innerText()
-    expect(shown).not.toMatch(WIRE)
+    await expect(cards.nth(11).getByRole("button")).toHaveCount(0)
+    const text = await everything.innerText()
+    expect(text).not.toMatch(WIRE)
     // The api's refusal message is never what the owner reads.
-    expect(shown).not.toMatch(/No build asked/)
+    expect(text).not.toMatch(/No build asked/)
   })
 }
 

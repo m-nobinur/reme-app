@@ -1495,6 +1495,32 @@ const REMOVE_DOMAIN_STATES = decisionStates(
   refusal("domain.not_found", "That domain is not connected.")
 )
 
+// What domain_bought answers once the owner says they bought it: a look still
+// running, the connect's records, the registry not showing the name yet, and a refusal.
+const bought = (id: string, result?: unknown) =>
+  cosCall(
+    "domain_bought",
+    `bought_${id}`,
+    { args: { name: DOMAIN }, result },
+    result === undefined ? IN_FLIGHT : DONE
+  )
+const DOMAIN_BOUGHT_STATES = [
+  bought("looking"),
+  bought("connecting", {
+    outcome: "connecting",
+    method: "records",
+    email_affected: false,
+    apex: "forward",
+    provider: GODADDY,
+    steps: [WWW],
+  }),
+  bought("not_yet", { outcome: "not_registered_yet", name: DOMAIN }),
+  bought(
+    "refused",
+    refusal("domain.in_use", "That domain belongs to another business.")
+  ),
+]
+
 const FREE_UK = { state: "free", price_gbp_year: 8 } as const
 const FREE_COM = { state: "free", price_gbp_year: 12 } as const
 const TAKEN = { state: "taken" } as const
@@ -2617,21 +2643,21 @@ const assistantCatalog = [
   },
   // The card the three tools share, its outcome lines and its provider, on
   // a waiting card, a done one and a refused one.
-  ...(["Decision", "Done", "Problem", "CosToolsProvider"] as const).map(
-    (name) => ({
-      name,
-      render: () => (
-        <FixtureThread
-          height="h-[36rem]"
-          messages={[
-            CREATE_REMINDER_STATES[2],
-            CREATE_REMINDER_STATES[8],
-            CREATE_REMINDER_STATES[9],
-          ].filter((message) => message !== undefined)}
-        />
-      ),
-    })
-  ),
+  ...(
+    ["Decision", "Done", "Problem", "TrayApproval", "CosToolsProvider"] as const
+  ).map((name) => ({
+    name,
+    render: () => (
+      <FixtureThread
+        height="h-[36rem]"
+        messages={[
+          CREATE_REMINDER_STATES[2],
+          CREATE_REMINDER_STATES[8],
+          CREATE_REMINDER_STATES[9],
+        ].filter((message) => message !== undefined)}
+      />
+    ),
+  })),
   {
     name: "ReplyFeedback",
     render: () => <FixtureThread height="h-[30rem]" messages={RATED} rates />,
@@ -2660,10 +2686,17 @@ const assistantCatalog = [
       <FixtureThread height="h-[180rem]" messages={RECORD_REVIEW_STATES} />
     ),
   },
-  {
-    name: "ConnectDomain",
+  // The connect card and the records it ends on.
+  ...(["ConnectDomain", "ConnectSteps"] as const).map((name) => ({
+    name,
     render: () => (
       <FixtureThread height="h-[230rem]" messages={CONNECT_DOMAIN_STATES} />
+    ),
+  })),
+  {
+    name: "DomainBought",
+    render: () => (
+      <FixtureThread height="h-[80rem]" messages={DOMAIN_BOUGHT_STATES} />
     ),
   },
   {
@@ -2678,15 +2711,17 @@ const assistantCatalog = [
       <FixtureThread height="h-[60rem]" messages={FIND_DOMAIN_STATES} />
     ),
   },
-  // The purchase card and the provider that gives it the app's checkout.
-  ...(["BuyDomain", "DomainPurchaseProvider"] as const).map((name) => ({
-    name,
-    render: () => (
-      <DomainPurchaseProvider value={CATALOG_PURCHASE}>
-        <FixtureThread height="h-[260rem]" messages={BUY_DOMAIN_STATES} />
-      </DomainPurchaseProvider>
-    ),
-  })),
+  // The purchase card, its tray and the provider that gives it the app's checkout.
+  ...(["BuyDomain", "BuyTray", "DomainPurchaseProvider"] as const).map(
+    (name) => ({
+      name,
+      render: () => (
+        <DomainPurchaseProvider value={CATALOG_PURCHASE}>
+          <FixtureThread height="h-[260rem]" messages={BUY_DOMAIN_STATES} />
+        </DomainPurchaseProvider>
+      ),
+    })
+  ),
   {
     name: "DomainCheck",
     render: () => (
