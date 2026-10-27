@@ -343,6 +343,18 @@ export const SETTINGS_LINKS: Readonly<Record<string, string>> = {
   "dash.cloudflare.com": "https://dash.cloudflare.com/",
 }
 
+/**
+ * The Domain Connect pages an apply link may open, keyed by the provider's
+ * `urlSyncUX` as `host[/path]`, each with the API we ask whether our template
+ * is live there. Ours for the same reason as `SETTINGS_LINKS`: a domain's own
+ * DNS could otherwise send the owner to any page. Add a provider once our
+ * template is live there and tested.
+ */
+const APPLY_PAGES: Readonly<Record<string, string>> = {
+  "dash.cloudflare.com/domainconnect":
+    "api.cloudflare.com/client/v4/dns/domainconnect",
+}
+
 const IONOS: DomainProvider = {
   name: "IONOS",
   settings_url: "https://my.ionos.co.uk/domains",
@@ -550,18 +562,17 @@ async function discover(apex: string): Promise<DomainProvider | null> {
 
 /**
  * The provider's Domain Connect page for `apex`, as `host[/path]`, when its
- * settings name one and its API answers that our template is live there
- * (the spec's template query: 2xx yes, 404 no). That answer is per provider,
- * so it is kept by API host. Null otherwise; never throws.
+ * settings name one of `APPLY_PAGES` and that provider's API answers that our
+ * template is live there (the spec's template query: 2xx yes, 404 no). That
+ * answer is per provider, so it is kept by API host. Null otherwise; never
+ * throws.
  */
 export async function applyBase(apex: string): Promise<string | null> {
-  const base = (value: unknown) =>
-    typeof value === "string" ? settingsBase(value) : null
   try {
-    const settings = await settingsOf(apex)
-    const api = base(settings?.urlAPI)
-    const ux = base(settings?.urlSyncUX)
-    if (!api || !ux) return null
+    const ux = (await settingsOf(apex))?.urlSyncUX
+    const page = typeof ux === "string" ? settingsBase(ux) : null
+    const api = page && APPLY_PAGES[page]
+    if (!page || !api) return null
     const live = await remembered(`template ${api}`, async () => {
       const response = await fetch(
         `https://${api}/v2/domainTemplates/providers/${TEMPLATE.provider}/services/${TEMPLATE.service}`,
@@ -572,7 +583,7 @@ export async function applyBase(apex: string): Promise<string | null> {
       if (response.status >= 500) throw new DomainError("provider.unavailable")
       return response.ok
     })
-    return live ? ux : null
+    return live ? page : null
   } catch {
     return null
   }

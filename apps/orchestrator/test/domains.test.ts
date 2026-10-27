@@ -765,4 +765,11 @@ describe("Domain Connect apply page", () => {
     expect(await applyBase("sparkleclean.co.uk")).toBeNull()
     expect(await applyBase("nowhere-at-all.co.uk")).toBeNull()
   })
+
+  it("opens no page a domain's own DNS names that is not one of ours", async () => {
+    // GoDaddy answers Domain Connect, but its page is not on our list yet.
+    const fetched = stubNet()
+    expect(await applyBase("sparklecleanbristol.co.uk")).toBeNull()
+    expect(urls(fetched).some((u) => u.includes("domainTemplates"))).toBe(false)
+  })
 })
