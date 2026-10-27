@@ -7,6 +7,7 @@ const jar = new Map<
 >()
 const getAuth = vi.fn()
 const googleConnect = vi.fn()
+const googleFailed = vi.fn()
 
 vi.mock("@tanstack/react-router", () => ({
   createFileRoute: () => (options: unknown) => ({ options }),
@@ -18,7 +19,7 @@ vi.mock("@tanstack/react-start/server", () => ({
   deleteCookie: (name: string) => jar.delete(name),
 }))
 vi.mock("@workos/authkit-tanstack-react-start", () => ({ getAuth }))
-vi.mock("@/lib/api/source", () => ({ source: { googleConnect } }))
+vi.mock("@/lib/api/source", () => ({ source: { googleConnect, googleFailed } }))
 vi.mock("@/lib/auth/workos", () => ({ redirectUri: () => "unused" }))
 
 const ORIGIN = "https://staging.remeai.co.uk"
@@ -54,6 +55,7 @@ beforeEach(() => {
   jar.clear()
   getAuth.mockReset().mockResolvedValue(signedIn)
   googleConnect.mockReset().mockResolvedValue("connected")
+  googleFailed.mockReset().mockResolvedValue(undefined)
   process.env.GOOGLE_CLIENT_ID = "client-123"
 })
 
@@ -127,6 +129,7 @@ describe("/api/google/callback", () => {
     })
     expect(where(response)).toBe(`${ORIGIN}/app?google=connected`)
     expect(jar.has("reme-google-state")).toBe(false)
+    expect(googleFailed).not.toHaveBeenCalled()
   })
 
   it("passes on a missing scope", async () => {
@@ -134,6 +137,10 @@ describe("/api/google/callback", () => {
     const state = (await start()).searchParams.get("state")
     const response = await run("callback", `?code=abc&state=${state}`)
     expect(where(response)).toBe(`${ORIGIN}/app?google=scopes_missing`)
+    expect(googleFailed).toHaveBeenCalledExactlyOnceWith(
+      state,
+      "scopes_missing"
+    )
   })
 
   it("fails on a state that does not match, and spends the cookie", async () => {
@@ -142,6 +149,7 @@ describe("/api/google/callback", () => {
     expect(where(response)).toBe(`${ORIGIN}/app?google=failed`)
     expect(googleConnect).not.toHaveBeenCalled()
     expect(jar.has("reme-google-state")).toBe(false)
+    expect(googleFailed).toHaveBeenCalledExactlyOnceWith("forged", "failed")
   })
 
   it("fails with no state cookie", async () => {
@@ -155,6 +163,7 @@ describe("/api/google/callback", () => {
     const response = await run("callback", "?error=access_denied&state=x")
     expect(where(response)).toBe(`${ORIGIN}/app?google=cancelled`)
     expect(googleConnect).not.toHaveBeenCalled()
+    expect(googleFailed).not.toHaveBeenCalled()
     expect(jar.has("reme-google-state")).toBe(false)
   })
 })
