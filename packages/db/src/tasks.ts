@@ -425,6 +425,11 @@ export async function syncTasks(
   orgId: string,
   address: Pick<AddressDetail, "changes"> = {}
 ) {
+  // One sync per org at a time, so two connects at once cannot both make the
+  // task. Key 6: 2 to 5 are taken (turns, assets, domain claims, facts).
+  await db.execute(
+    sql`select pg_advisory_xact_lock(6, hashtext(${orgId}::text))`
+  )
   const [row] = await db.execute<{
     domain: DomainFacts | null
     google: GoogleFacts | null

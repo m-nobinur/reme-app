@@ -22,6 +22,7 @@ import {
   postAssistantMessage,
   type SQL,
   sql,
+  syncTasks,
   type Tenancy,
   tenancy,
 } from "@workspace/db"
@@ -193,6 +194,7 @@ export async function moveTo(
     staffId: null,
     ...event,
   })
+  await syncTasks(db, row.orgId)
   return true
 }
 
@@ -568,15 +570,17 @@ export async function look(
       : "awaiting_dns"
   // A quiet look writes nothing; a removal since the read is the next look's.
   if (!same || state !== row.state || seen.primary !== row.primaryHost) {
-    const updated = await kit.withOrg({ orgId }, (db) =>
-      db
+    const updated = await kit.withOrg({ orgId }, async (db) => {
+      const moved = await db
         .update(domains)
         .set({ lastCheck: check, state, primaryHost: seen.primary })
         .where(
           sql`${domains.id} = ${domainId} and ${domains.state} in ('awaiting_dns', 'verifying')`
         )
         .returning({ id: domains.id })
-    )
+      if (moved.length > 0) await syncTasks(db, orgId)
+      return moved
+    })
     if (updated.length === 0) return { gone: true }
   }
   return {
@@ -902,9 +906,14 @@ export async function connect(
     }
     await start(env, orgId, claimed.id)
   }
-  const status = claimed.created ? 201 : 200
-  if (!claimed.needsTxt)
-    return { status, output: ConnectDomainOutput.parse(base) }
+  const status: 200 | 201 = claimed.created ? 201 : 200
+  // The task keeps how many changes the card lists, which no row holds.
+  const answer = async (steps: typeof base.steps) => {
+    const changes = steps.length + ("apex" in base ? 1 : 0)
+    await kit.withOrg({ orgId }, (db) => syncTasks(db, orgId, { changes }))
+    return { status, output: ConnectDomainOutput.parse({ ...base, steps }) }
+  }
+  if (!claimed.needsTxt) return answer(base.steps)
   // www first, as the card lists it; jsonb keeps its own key order.
   const txt = [`www.${name}`, name].flatMap((host) => {
     const own = ownership[host]
@@ -925,13 +934,7 @@ export async function connect(
       "domain.records_pending",
       "I've started connecting the domain but its records aren't ready yet. Ask me again in a minute."
     )
-  return {
-    status,
-    output: ConnectDomainOutput.parse({
-      ...base,
-      steps: [...base.steps, ...txt],
-    }),
-  }
+  return answer([...base.steps, ...txt])
 }
 
 /** The claim's Workflow, created; one already there is fine. */
@@ -1340,10 +1343,11 @@ export async function revokeDomains(
   // The hostnames before the rows, so a retried takedown still finds them.
   // Failed claims are included: their hostnames are deleted again, idempotently.
   for (const row of held) await revoke(env, row)
-  await kit.withOrg({ orgId }, (db) =>
-    db
+  await kit.withOrg({ orgId }, async (db) => {
+    await db
       .update(domains)
       .set({ state: "removed", removedAt: new Date() })
       .where(kept)
-  )
+    await syncTasks(db, orgId)
+  })
 }

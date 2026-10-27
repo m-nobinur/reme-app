@@ -85,6 +85,8 @@ function fakeKit() {
   const writes = { n: 0 }
   const db = {
     select: () => ({ from: () => ({ where: async () => [row] }) }),
+    // The owner task sync reads nothing here, so it writes nothing.
+    execute: async () => [],
     update: () => ({
       set: (values: object) => ({
         where: () => {
