@@ -2,6 +2,7 @@ import type {
   Activity,
   ActivitySegment,
   ActivityStep,
+  AddressDetail,
   AssignmentState,
   AttentionItem,
   BuildSummary,
@@ -475,12 +476,13 @@ export function taskSegment(task: OwnerTask): Segment | null {
         : task.steps.some((s) => s.state === "in_progress")
           ? "now"
           : "upcoming"
-  const detail = task.kind === "address" ? task.detail : {}
+  const detail: AddressDetail = task.kind === "address" ? task.detail : {}
   const names = {
-    ...("name" in detail && detail.name && { domain: detail.name }),
-    ...("provider" in detail &&
-      detail.provider && { provider: detail.provider }),
+    ...(detail.name && { domain: detail.name }),
+    ...(detail.provider && { provider: detail.provider }),
   }
+  // The records step counts the changes the connect card listed.
+  const changes = detail.changes
   return {
     id: task.kind === "google" ? "google" : `address:${task.id}`,
     kind: task.kind,
@@ -489,6 +491,10 @@ export function taskSegment(task: OwnerTask): Segment | null {
       id: s.step,
       state: STEP_STATE[s.state],
       ...(s.state === "blocked" && s.note && { note: s.note }),
+      ...(s.step === "records" &&
+        changes && {
+          count: { done: s.state === "done" ? changes : 0, total: changes },
+        }),
     })),
     at: iso((state === "done" && task.done_at) || task.created_at),
     ...(blocked?.deadline && { deadline: blocked.deadline }),

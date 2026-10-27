@@ -569,7 +569,7 @@ describe("later jobs", () => {
     // A review is answered in the panel's own list, not drawn twice.
     expect(rest).toEqual([])
     expect(domain?.title).toMatch(/fixture\.example\.invalid$/)
-    expect(domain?.line).toBe("One change to make at your DNS provider")
+    expect(domain?.line).toBe("Changes to make at your DNS provider")
     expect(domain?.steps.map((each) => [each.label, each.state])).toEqual([
       ["Your DNS change", "waiting"],
       ["Certificate", "next"],

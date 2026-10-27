@@ -67,6 +67,10 @@ describe("owner tasks", () => {
     const records = first?.steps.find((s) => s.step === "records")
     expect(records).toMatchObject({ blocked_on: "owner_action" })
     expect(records?.deadline).not.toBeNull()
+    // The connect's count of changes stays through a sync that has none.
+    await run((db) => syncTasks(db, ORG, { changes: 2 }))
+    await sync()
+    expect((await tasks())[0]?.detail).toMatchObject({ changes: 2 })
 
     await run((db) =>
       db

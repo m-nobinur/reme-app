@@ -557,6 +557,19 @@ describe("owner tasks", () => {
     expect(done[0]).toMatchObject({ state: "done", at: ago(5) })
   })
 
+  it("counts the records step by the changes the connect card listed", () => {
+    const [waiting] = groups(
+      task([step("records", "blocked", { blocked_on: "owner_action" })], {
+        detail: { name: "sparkcleaning.co.uk", changes: 3 },
+      })
+    ).waiting
+    expect(waiting?.steps[0]).toEqual({
+      id: "records",
+      state: "waiting",
+      count: { done: 0, total: 3 },
+    })
+  })
+
   it("has no segment for a task put off or declined", () => {
     const off = groups(
       task([step("purchase", "pending")], { state: "later" }),

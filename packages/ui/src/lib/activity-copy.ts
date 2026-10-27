@@ -985,12 +985,12 @@ export function segmentLine(
       if (note) return note
       if (step?.id === "purchase" && waiting) return payBy(extras)
       if ((step?.id === "records" || step?.id === "ownership") && waiting)
-        return `One change to make at ${n.provider ?? "your DNS provider"}`
+        return dnsChanges(segment, n.provider)
       return (step && ADDRESS_NOW[step.id]) ?? null
     }
     case "domain":
       return waiting
-        ? `One change to make at ${cleanArg(extras.provider) ?? "your DNS provider"}`
+        ? dnsChanges(segment, cleanArg(extras.provider) ?? n.provider)
         : "The certificate is on its way"
     case "purchase":
       return waiting ? payBy(extras) : "Registering the name"
@@ -1001,10 +1001,22 @@ export function segmentLine(
         cleanArg(step?.note, "text", 80) ??
         (step?.id === "permissions"
           ? "Google needs one more permission"
-          : "Finish signing in within 10 minutes")
+          : "Google needs you to sign in again")
       )
     }
   }
+}
+
+/**
+ * The DNS changes the owner has to make, at their provider by name: as many
+ * as the connect card listed, carried as the records step's count, and no
+ * number when the count is not known.
+ */
+const dnsChanges = (segment: ActivitySegment, provider: string | null) => {
+  const total = segment.steps.find((s) => s.id === "records")?.count?.total
+  const where = provider ?? "your DNS provider"
+  if (!total) return `Changes to make at ${where}`
+  return `${total === 1 ? "One change" : `${total} changes`} to make at ${where}`
 }
 
 /** A purchase waiting on payment, by when the name's hold ends. */

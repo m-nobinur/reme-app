@@ -401,9 +401,14 @@ async function apply(
  * after it writes either. The domain followed is the newest live claim, else
  * the newest row. Idempotent: the same rows write the same states, and
  * `changed_at` moves only when a state does. Run inside the writer's
- * `withOrg`, so the task changes with the row or not at all.
+ * `withOrg`, so the task changes with the row or not at all. A connect gives
+ * the number of changes its card listed, which no row holds.
  */
-export async function syncTasks(db: OrgScopedDb, orgId: string) {
+export async function syncTasks(
+  db: OrgScopedDb,
+  orgId: string,
+  address: Pick<AddressDetail, "changes"> = {}
+) {
   const [row] = await db.execute<{
     domain: DomainFacts | null
     google: GoogleFacts | null
@@ -423,6 +428,12 @@ export async function syncTasks(db: OrgScopedDb, orgId: string) {
           from search_properties p order by p.created_at desc limit 1),
         'data', exists (select 1 from search_daily s where s.impressions > 0))
         from search_connections c) as google`)
-  if (row?.domain) await apply(db, orgId, "address", addressPlan(row.domain))
+  if (row?.domain) {
+    const plan = addressPlan(row.domain)
+    await apply(db, orgId, "address", {
+      ...plan,
+      detail: { ...plan.detail, ...address },
+    })
+  }
   if (row?.google) await apply(db, orgId, "google", googlePlan(row.google))
 }
