@@ -348,7 +348,13 @@ describe("the name ranker", () => {
       town: "Leeds",
       trade: "Dog grooming",
     })
-    expect(ranked.map((r) => r.stem)).toEqual(["northsidedoggrooming"])
+    // A long name gets shorter forms of itself instead of a word added.
+    expect(ranked.map((r) => r.stem)).toEqual([
+      "northsidedoggrooming",
+      "northsidegrooming",
+      "northsideleeds",
+    ])
+    expect(ranked[1]?.why).toBe("shorter, northside grooming")
     expect(
       candidates({ name: "Leeds Cleaning", town: "Leeds" }).map((r) => r.stem)
     ).toEqual(["leedscleaning"])

@@ -481,6 +481,16 @@ export function candidates(facts: RankFacts): Ranked[] {
     stems.push([`${brand}-${town}`, 25, `${yours} and ${where}, with a dash`])
   }
   if (!said) stems.push([`${brand}${trade}`, 20, `${yours} plus ${trade}`])
+  // A long name gets shorter forms of itself, since a word added to it would
+  // pass `ADDED_MAX`: its first and last words, and its first word and town.
+  if (words.length >= 3 && brand.length > 15) {
+    const first = label(words[0] ?? "")
+    const last = label(words.at(-1) ?? "")
+    stems.push([`${first}${last}`, 30, `shorter, ${words[0]} ${words.at(-1)}`])
+    if (town && first !== town) {
+      stems.push([`${first}${town}`, 22, `${words[0]} plus ${where}`])
+    }
+  }
   return stems
     .filter(([s], i) => s.length <= (i === 0 ? 63 : ADDED_MAX))
     .map(([stem, points, why]) => ({
