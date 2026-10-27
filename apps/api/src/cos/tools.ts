@@ -17,6 +17,7 @@ import {
   type CreateReminderOutput,
   type CreateReminderRequest,
   DomainCheck,
+  DomainInspection,
   ErrorEnvelope,
   type FactRecord,
   FactValue,
@@ -27,6 +28,8 @@ import {
   type GetPreviewInput,
   GetPreviewOutput,
   InformationAnswer,
+  type InspectDomainInput,
+  type InspectDomainOutput,
   OwnerAnswerText,
   PreviewLink,
   type ProfileLine,
@@ -1008,6 +1011,28 @@ export async function checkDomain(
     await bridge(env, owner, `/domains/${name}/check`),
     CheckDomainOutput.parse
   )
+}
+
+/**
+ * What a name the owner says they have is, read before anything is
+ * connected: whether it is registered, with whom, who runs its DNS and
+ * whether it already points somewhere. Public registry and DNS reads only,
+ * through the orchestrator, so no card.
+ */
+export async function inspectDomain(
+  { env, owner }: ToolContext,
+  { name }: InspectDomainInput
+): Promise<InspectDomainOutput> {
+  const answered = relay(
+    await bridge(env, owner, `/domains/${name}/inspect`, { method: "GET" }),
+    DomainInspection.parse
+  )
+  if (!answered.ok) return refused(answered)
+  // The route answers the bare inspection; the tool's output is tagged.
+  return {
+    outcome: "inspected",
+    ...DomainInspection.parse(await answered.json()),
+  }
 }
 
 /** The orchestrator's connect answers that a second look a moment later can turn into records. */

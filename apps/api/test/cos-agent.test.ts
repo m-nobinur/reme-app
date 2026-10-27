@@ -1423,6 +1423,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       "get_preview",
       "get_search_performance",
       "get_workspace",
+      "inspect_domain",
       "put_off",
       "remember",
     ])

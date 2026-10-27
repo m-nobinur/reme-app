@@ -47,6 +47,7 @@ import {
   getFacts,
   getPreview,
   getWorkspace,
+  inspectDomain,
   newContact,
   ownersAnswer,
   paceOf,
@@ -1710,6 +1711,55 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       expect((await getFacts(context(me), {})).facts).toContainEqual({
         key: "testimonials.review_1",
         value: owen,
+      })
+    })
+  })
+
+  describe("inspect_domain", () => {
+    const inspected = {
+      name: "sparkleclean.co.uk",
+      registered: true,
+      registrar: "123-reg",
+      dns_host: { name: "GoDaddy", settings_url: "https://dcc.godaddy.com/" },
+      in_use: false,
+    }
+
+    it("reads the name through the orchestrator and returns the inspection", async () => {
+      const stub = stubOrchestrator(() => Response.json(inspected))
+      const output = kept(
+        "inspect_domain",
+        await inspectDomain(context(me, stub), { name: "sparkleclean.co.uk" })
+      )
+      expect(output).toEqual({ outcome: "inspected", ...inspected })
+      const [call] = stub.calls
+      expect(call?.request.method).toBe("GET")
+      expect(new URL(call?.request.url ?? "").pathname).toBe(
+        "/assignments/domains/sparkleclean.co.uk/inspect"
+      )
+      expect(call?.request.headers.get("x-reme-org-id")).toBe(me.orgId)
+    })
+
+    it("refuses as the closed shape when the orchestrator does", async () => {
+      const stub = stubOrchestrator(() =>
+        Response.json(
+          {
+            class: "validation",
+            code: "domain.invalid",
+            message: "Not a domain.",
+            detail: {},
+            occurred_at: AT,
+          },
+          { status: 400 }
+        )
+      )
+      expect(
+        kept(
+          "inspect_domain",
+          await inspectDomain(context(me, stub), { name: "bad.example" })
+        )
+      ).toMatchObject({
+        outcome: "refused",
+        error: { code: "domain.invalid" },
       })
     })
   })
