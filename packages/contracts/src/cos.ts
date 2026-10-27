@@ -8,9 +8,10 @@ import {
   DomainCheck,
   DomainInspection,
   DomainName,
-  DomainOffer,
   DomainProvider,
   DomainState,
+  DomainStemOffer,
+  NotRegisteredYet,
   Registrant,
   RegistrantDetails,
 } from "./domain.ts"
@@ -368,16 +369,26 @@ export const FindDomainInput = z.strictObject({
 })
 
 /**
- * `find_domain`'s output: names free to register now, at the price table's
- * price. The model quotes no other price. None free is `domain.unavailable`.
+ * `find_domain`'s output: one row per name stem, best first, each ending free
+ * at the price table's price or taken. The model quotes no other price. No
+ * stem with a free ending is `domain.unavailable`.
  */
 export const FindDomainOutput = z.discriminatedUnion("outcome", [
   z.strictObject({
     outcome: z.literal("found"),
-    best: DomainOffer,
-    options: z.array(DomainOffer).max(4),
+    rows: z.array(DomainStemOffer).min(1).max(5),
   }),
   Refused,
+])
+
+/**
+ * `POST /domains/{name}/bought`, the owner saying they bought the name
+ * elsewhere, from the tray or through the CoS: the registry is asked again,
+ * and once it shows the name the connect starts and this is its output.
+ */
+export const BoughtElsewhereOutput = z.discriminatedUnion("outcome", [
+  ...ConnectDomainOutput.options,
+  NotRegisteredYet,
 ])
 
 /**
@@ -748,6 +759,7 @@ export type PutOffInput = z.infer<typeof PutOffInput>
 export type PutOffOutput = z.infer<typeof PutOffOutput>
 export type FindDomainInput = z.infer<typeof FindDomainInput>
 export type FindDomainOutput = z.infer<typeof FindDomainOutput>
+export type BoughtElsewhereOutput = z.infer<typeof BoughtElsewhereOutput>
 export type BuyDomainInput = z.infer<typeof BuyDomainInput>
 export type BuyDomainOutput = z.infer<typeof BuyDomainOutput>
 export type CosTurn = z.infer<typeof CosTurn>

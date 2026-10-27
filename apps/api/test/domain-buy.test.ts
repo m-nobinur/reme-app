@@ -1,10 +1,15 @@
-import { DomainCheckout, ErrorEnvelope } from "@workspace/contracts"
+import {
+  DomainCheckout,
+  DomainRegistrantPrefill,
+  ErrorEnvelope,
+} from "@workspace/contracts"
 import {
   domains,
   eq,
   memberships,
   orgs,
   sql,
+  supersedeFact,
   type Tenancy,
   tenancy,
 } from "@workspace/db"
@@ -193,7 +198,12 @@ describe.skipIf(!url)("buying a domain, on a live connection", () => {
     expect(ttl).toBeGreaterThan(30 * 60)
     expect(ttl).toBeLessThanOrEqual(31 * 60)
 
-    const [call] = stub.calls
+    // The purchase is opened or refreshed first, then told its session.
+    const [opened, call] = stub.calls
+    expect(new URL(opened?.request.url ?? "").pathname).toBe(
+      "/assignments/domains/buy"
+    )
+    expect(opened?.body).toEqual({ name, ...details })
     expect(new URL(call?.request.url ?? "").pathname).toBe(
       `/assignments/domains/${id}/checkout-session`
     )
@@ -241,7 +251,7 @@ describe.skipIf(!url)("buying a domain, on a live connection", () => {
       ["GET", "checkout/sessions/cs_test_open"],
     ])
     // The owner's latest details still reach the orchestrator.
-    expect(stub.calls[0]?.body).toMatchObject({
+    expect(stub.calls[1]?.body).toMatchObject({
       session_id: "cs_test_open",
       customer: "cus_kept",
     })
@@ -273,7 +283,81 @@ describe.skipIf(!url)("buying a domain, on a live connection", () => {
       "domain.not_owner"
     )
     expect(stripe).toEqual([])
-    expect(stub.calls).toEqual([])
+    // Only the owner's own Pay reached the orchestrator, which opens nothing
+    // for a name another org holds.
+    expect(stub.calls.map((c) => new URL(c.request.url).pathname)).toEqual([
+      "/assignments/domains/buy",
+    ])
+  })
+
+  it("relays the orchestrator's refusal to open the purchase and asks Stripe nothing", async () => {
+    const stripe = stubStripe()
+    const taken = stubOrchestrator(() =>
+      Response.json(
+        {
+          class: "resource",
+          code: "domain.unavailable",
+          message: "That name isn't free to register.",
+          detail: {},
+          occurred_at: new Date().toISOString(),
+        },
+        { status: 409 }
+      )
+    )
+    const refused = await checkout(me, taken, unique("taken"))
+    expect(refused.status).toBe(409)
+    expect(ErrorEnvelope.parse(await refused.json()).code).toBe(
+      "domain.unavailable"
+    )
+    expect(stripe).toEqual([])
+  })
+
+  it("prefills the details page from the facts and the owner, and lists only the gaps", async () => {
+    const prefill = async (who: Owner, name: string) => {
+      const response = await who.call(told(), `/domains/${name}/registrant`)
+      return { status: response.status, body: await response.json() }
+    }
+    const fresh = await owner(kit, url as string, "buy-prefill")
+    await kit.withOrg({ orgId: fresh.orgId }, async (db) => {
+      for (const [key, value] of [
+        ["business.name", { name: "Sparkle Clean" }],
+        ["business.phone", { e164: "+447700900123" }],
+        ["business.email", { address: "hello@sparkle.invalid" }],
+      ] as const)
+        await supersedeFact(db, {
+          orgId: fresh.orgId,
+          key,
+          factType: "business",
+          value,
+          provenance: { source: "owner_stated", confidence: 1 },
+        })
+    })
+    const com = await prefill(
+      fresh,
+      `fresh-${crypto.randomUUID().slice(0, 8)}.com`
+    )
+    expect(com.status).toBe(200)
+    const body = DomainRegistrantPrefill.parse(com.body)
+    expect(body).toMatchObject({
+      price_gbp_year: 12,
+      registrant: { business_name: "Sparkle Clean", phone: "+447700900123" },
+    })
+    expect(body.registrant.email).toBeTruthy()
+    // The address is the only gap; a .com never asks who registers it.
+    expect(body.missing).toEqual(
+      expect.arrayContaining(["street", "city", "postal_code", "country_code"])
+    )
+    expect(body.missing).not.toContain("phone")
+    expect(body.missing).not.toContain("email")
+    expect(body.missing).not.toContain("registrant_type")
+    // An open purchase's details win, and a .co.uk asks the registrant type.
+    await purchase(fresh, unique("held"), { registrant: details })
+    const uk = DomainRegistrantPrefill.parse(
+      (await prefill(fresh, unique("next"))).body
+    )
+    expect(uk.registrant).toEqual(details.registrant)
+    expect(uk.missing).toEqual(["registrant_type"])
+    expect((await prefill(fresh, "nope.example")).status).toBe(409)
   })
 
   it("refuses a purchase past payment, a body off the contract and a missing key", async () => {
@@ -324,6 +408,37 @@ describe.skipIf(!url)("buying a domain, on a live connection", () => {
     expect(ErrorEnvelope.parse(await refused.json()).code).toBe(
       "domain.registrant_invalid"
     )
+  })
+
+  it("bridges buying elsewhere and the owner's done, owner only and with no Stripe keys", async () => {
+    const name = `away-${crypto.randomUUID().slice(0, 8)}.com`
+    const stub = stubOrchestrator((request) =>
+      request.url.endsWith("/bought")
+        ? Response.json({ outcome: "not_registered_yet", name })
+        : new Response(null, { status: 204 })
+    )
+    const post = (who: Owner, action: string) =>
+      who.call(stub, `/domains/${name}/${action}`, {
+        method: "POST",
+        headers: { "idempotency-key": crypto.randomUUID() },
+      })
+    expect((await post(me, "elsewhere")).status).toBe(204)
+    const done = await post(me, "bought")
+    expect(await done.json()).toEqual({ outcome: "not_registered_yet", name })
+    expect(
+      stub.calls.map((c) => [new URL(c.request.url).pathname, c.body])
+    ).toEqual([
+      ["/assignments/domains/elsewhere", { name }],
+      ["/assignments/domains/bought", { name }],
+    ])
+    const member = await owner(kit, url as string, "away-member")
+    await kit.withOrg({ orgId: member.orgId }, (db) =>
+      db
+        .update(memberships)
+        .set({ role: "member" })
+        .where(sql`${memberships.orgId} = ${member.orgId}`)
+    )
+    expect((await post(member, "bought")).status).toBe(403)
   })
 
   it("reads the newest purchase of a name, its sandbox flag and how it closed", async () => {
