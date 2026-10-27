@@ -326,6 +326,26 @@ export async function resolveDomainHost(
 }
 
 /**
+ * The claim waiting on a hostname, for the custom-hostname alert, which names
+ * a host and no org. Connecting or live, matched on the name or its `www.`
+ * (migration 0026); null for anything else, so a host cannot be probed for
+ * what state it is in.
+ */
+export async function resolveDomainClaim(
+  kit: Tenancy,
+  host: string
+): Promise<{ orgId: string; name: string } | null> {
+  return kit[pool].transaction(async (tx) => {
+    await tx.execute(ENTER_APP_ROLE)
+    const rows = await tx.execute<{ org_id: string; name: string }>(
+      sql`select * from public.resolve_domain_claim(${host})`
+    )
+    const row = rows[0]
+    return row ? { orgId: row.org_id, name: row.name } : null
+  })
+}
+
+/**
  * Every org id, for a platform job that then opens each org's own `withOrg`:
  * the hourly retention sweep is the caller today, and nothing enforces that
  * it stays the only one. The function is SECURITY DEFINER (migration 0009)
