@@ -717,7 +717,6 @@ type Names = {
   business: string | null
   /** What a change changes, in the owner's terms: "your hero title". */
   change: string | null
-  host: string | null
   domain: string | null
   /** The DNS host the owner changes records at. */
   provider: string | null
@@ -766,13 +765,7 @@ const JOBS: Record<JobKind, JobCopy> = {
     title: () => ["Putting your website live", "Taking your website live"],
     next: () => ["Then it goes live", "Then your website goes live"],
     waiting: () => ["Your website is ready"],
-    done: (n) =>
-      n.host
-        ? [
-            `${biz(n)} is live at ${n.host}`,
-            `${biz(n)} is now live at ${n.host}`,
-          ]
-        : [`${biz(n)} is live`, `${biz(n)} is now live`],
+    done: (n) => [`${biz(n)} is live`, `${biz(n)} is now live`],
     noun: "website launch",
     pill: () => "putting your website live",
   },
@@ -897,7 +890,6 @@ const namesOf = (segment: ActivitySegment, ctx: CopyContext): Names => {
     assistant: named(ctx.assistant),
     business: cleanArg(n?.business, "text", 60),
     change: cleanArg(n?.change, "text", 40),
-    host: cleanArg(n?.host, "domain"),
     domain: cleanArg(n?.domain, "domain"),
     provider: cleanArg(n?.provider),
   }
@@ -1244,8 +1236,7 @@ export const stepKind = (
 const COMPLETED: Record<JobKind, (n: Names) => string> = {
   onboarding: (n) => `${biz(n)} set up`,
   website: () => "Website built",
-  golive: (n) =>
-    n.host ? `Website published at ${n.host}` : "Website published",
+  golive: () => "Website published",
   change: () => "Website changes made",
   address: (n) => `${cap(domain(n))} connected`,
   domain: (n) => `${cap(domain(n))} connected`,
@@ -1378,7 +1369,7 @@ export function completedBrief(
         : "Planned, written and checked"
     }
     case "golive":
-      return `Anyone can now visit ${n.host ?? "your website"}`
+      return "Anyone can now visit your website"
     case "change":
       return cleanArg(segment.step, "text", 60) ?? "Made and checked"
     case "address":

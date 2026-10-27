@@ -1,5 +1,4 @@
 import {
-  ArrowSquareOutIcon,
   ChatCircleDotsIcon,
   ChatCircleTextIcon,
   CheckCircleIcon,
@@ -411,20 +410,6 @@ function Suggested({ suggestion }: { suggestion: Suggestion }) {
         >
           Start your website
         </Link>
-      )
-    case "visit-site":
-      return (
-        <a
-          className={NEXT_STEP}
-          href={suggestion.url}
-          rel="noreferrer"
-          target="_blank"
-          title={suggestion.host}
-        >
-          Visit your website
-          <span className="sr-only"> (opens in a new tab)</span>
-          <ArrowSquareOutIcon aria-hidden className="text-muted-foreground" />
-        </a>
       )
   }
 }

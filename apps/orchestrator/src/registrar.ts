@@ -437,6 +437,18 @@ const slug = (s: string) =>
     .replace(/[^\p{L}\p{N}\s-]/gu, "")
 const label = (s: string) => slug(s).replace(/[^a-z0-9]/g, "")
 
+/** The business name as words, and as the one run of letters its stems build on. */
+function brandOf(facts: RankFacts) {
+  // "sparklecleaning.com" names the brand: drop the TLD before slugging.
+  const words = slug(
+    facts.name.trim().replace(/\.[a-z]{2,}(\.[a-z]{2})?$/i, "")
+  )
+    .replace(LEGAL, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+  return { words, brand: words.join("").replace(/[^a-z0-9]/g, "") }
+}
+
 /**
  * The candidate stems for a business, best first: its brand, brand plus town,
  * brand plus trade (when the name does not already say it) and brand-town,
@@ -446,14 +458,7 @@ const label = (s: string) => slug(s).replace(/[^a-z0-9]/g, "")
  * function: no model, no network.
  */
 export function candidates(facts: RankFacts): Ranked[] {
-  // "sparklecleaning.com" names the brand: drop the TLD before slugging.
-  const words = slug(
-    facts.name.trim().replace(/\.[a-z]{2,}(\.[a-z]{2})?$/i, "")
-  )
-    .replace(LEGAL, " ")
-    .split(/\s+/)
-    .filter(Boolean)
-  const brand = words.join("").replace(/[^a-z0-9]/g, "")
+  const { words, brand } = brandOf(facts)
   if (!brand) return []
   const town = facts.town ? label(facts.town.split(",")[0] ?? "") : ""
   // The trade's last word names it: "Dog grooming" is grooming.
@@ -503,4 +508,31 @@ export function candidates(facts: RankFacts): Ranked[] {
         (/\d/.test(stem) ? 20 : 0),
     }))
     .sort((a, b) => b.score - a.score)
+}
+
+/**
+ * The registrar's suggested names as stems, to fill the rows the ranker's own
+ * leave short. The ranker's rules hold: none repeats a word of the name or
+ * runs past `ADDED_MAX`, and the reason says how the stem differs from the
+ * brand, so no two read alike.
+ */
+export function suggestions(facts: RankFacts, names: string[]): Ranked[] {
+  const { words, brand } = brandOf(facts)
+  const yours = facts.asked ? "your words" : "your name"
+  return [...new Set(names.map((n) => n.slice(0, n.indexOf("."))))]
+    .filter(
+      (stem) =>
+        stem.length <= ADDED_MAX &&
+        !words.some((w) => w.length >= 3 && stem.split(w).length > 2)
+    )
+    .map((stem) => ({
+      stem,
+      score: 10 - Math.max(0, stem.length - 12),
+      why:
+        brand && stem.startsWith(brand) && stem.length > brand.length
+          ? `${yours} plus ${stem.slice(brand.length)}`
+          : brand && stem.endsWith(brand) && stem.length > brand.length
+            ? `${stem.slice(0, -brand.length)} before ${yours}`
+            : `another take on ${yours}`,
+    }))
 }

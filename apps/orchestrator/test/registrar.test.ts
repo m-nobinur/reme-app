@@ -13,6 +13,7 @@ import {
   searchDomains,
   sellable,
   setAutoRenew,
+  suggestions,
 } from "../src/registrar.ts"
 import {
   ACCOUNT,
@@ -360,6 +361,23 @@ describe("the name ranker", () => {
     ).toEqual(["leedscleaning"])
     for (const r of candidates({ name: "Ab", town: "Leeds", trade: "x" }))
       expect(r.stem.length).toBeLessThanOrEqual(ADDED_MAX)
+  })
+
+  it("fills from the registrar's names without a repeated word, a long stem or a shared reason", () => {
+    const filled = suggestions({ name: "Sparkle Clean" }, [
+      "sparklecleanpro.com",
+      "sparklecleanpro.co.uk",
+      "getsparkleclean.uk",
+      "sparklesparkleclean.com",
+      "sparklecleanbristolservices.com",
+      "freshstart.com",
+    ])
+    expect(filled.map((r) => [r.stem, r.why])).toEqual([
+      ["sparklecleanpro", "your name plus pro"],
+      ["getsparkleclean", "get before your name"],
+      ["freshstart", "another take on your name"],
+    ])
+    expect(filled.every((r) => r.stem.length <= ADDED_MAX)).toBe(true)
   })
 
   it("says the owner's own words when they typed the search", () => {

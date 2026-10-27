@@ -525,7 +525,8 @@ describe("segment copy", () => {
     expect(segmentTitle(segment("onboarding", "done"), ctx)).toContain(
       "Spark Cleaning"
     )
-    expect(segmentTitle(segment("golive", "done"), ctx)).toContain(
+    // The published site's host is the panel's noise, not its meaning.
+    expect(segmentTitle(segment("golive", "done"), ctx)).not.toContain(
       "spark.mnobinur.dev"
     )
     expect(segmentTitle(segment("domain", "now"), ctx)).toContain(

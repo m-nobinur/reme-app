@@ -137,6 +137,8 @@ type Net = {
   /** `domain-check` answers by name; anything unlisted is taken. */
   checks: Record<string, unknown>
   registered: Set<string>
+  /** The names `domain-search` suggests. */
+  suggests?: string[]
   /** The site id the router's edge probe names, once a test has a site. */
   site?: string
   /** The expiry the registrar reports for a registered name. */
@@ -172,7 +174,9 @@ function stubNet(live: boolean, checks: Record<string, unknown> = {}): Net {
         )
       }
       if (href.startsWith(`${base}/domain-search`))
-        return json(envelope({ domains: [] }))
+        return json(
+          envelope({ domains: (net.suggests ?? []).map((name) => ({ name })) })
+        )
       if (href === `${base}/extensions/co.uk`)
         return json(live ? EXTENSION_CO_UK : NOT_FOUND, live ? 200 : 400)
       if (href.startsWith(`${base}/extensions/`)) return json(EXTENSION_COM)
@@ -449,6 +453,33 @@ describe.skipIf(!url)("buying a domain against a database", () => {
       blocked_on: "owner_action",
       note: "picking a name",
     })
+  })
+
+  it("fills four rows from the registrar's suggestions for the business name, each its own reason", async () => {
+    const site = await published()
+    const suggests = [
+      "brightcleanpro.com",
+      "getbrightclean.com",
+      "brightcleanhome.com",
+      "brightcleanplus.com",
+    ]
+    const net = stubNet(false, {
+      "brightclean.com": priced("brightclean.com"),
+      ...Object.fromEntries(suggests.map((n) => [n, priced(n)])),
+    })
+    net.suggests = suggests
+    const found = await find(buyEnv(site.store).env, kit, site.orgId, {})
+    expect(
+      net.calls.some((c) => c.url.includes("domain-search?q=BrightClean"))
+    ).toBe(true)
+    expect(found).toMatchObject({ outcome: "found" })
+    const rows = (found as { rows: Array<{ stem: string; why: string }> }).rows
+    expect(rows.map((r) => [r.stem, r.why])).toEqual([
+      ["brightclean", "matches your business name"],
+      ["brightcleanpro", "your name plus pro"],
+      ["getbrightclean", "get before your name"],
+      ["brightcleanhome", "your name plus home"],
+    ])
   })
 
   it("refuses when nothing is free or over its cap, and when the registrar is down", async () => {

@@ -206,10 +206,8 @@ describe("journey", () => {
     })
     expect(journey).toEqual([])
     expect(done.map((s) => s.kind)).toEqual(["golive"])
-    expect(done[0]?.names).toEqual({
-      business: "Spark Cleaning",
-      host: "spark.example.com",
-    })
+    // The site's host is no copy input: the panel says "published", not where.
+    expect(done[0]?.names).toEqual({ business: "Spark Cleaning" })
   })
 })
 
