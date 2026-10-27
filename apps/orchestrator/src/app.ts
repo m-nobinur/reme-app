@@ -70,6 +70,7 @@ import { buy, checkoutSession, find, paymentEvent } from "./domain-buy.ts"
 import {
   checkNow,
   connect,
+  inspectDomain,
   type Refusal,
   remove,
   revokeDomains,
@@ -961,6 +962,12 @@ ownerOnly.post("/domains/:name/check", async (c) => {
     c.get("orgId"),
     c.req.param("name")
   )
+  if ("refused" in result) return domainRefused(c, result)
+  return c.json(result)
+})
+
+ownerOnly.get("/domains/:name/inspect", async (c) => {
+  const result = await inspectDomain(c.req.param("name"))
   if ("refused" in result) return domainRefused(c, result)
   return c.json(result)
 })

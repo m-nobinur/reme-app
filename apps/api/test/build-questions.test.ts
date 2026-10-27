@@ -1,4 +1,5 @@
 import {
+  ADDRESS_ASK,
   type BuildQuestions,
   Conversation,
   type QuestionInput,
@@ -7,6 +8,7 @@ import {
 import {
   currentFact,
   postAssistantMessage,
+  readTasks,
   serverMessageId,
   type Tenancy,
   tenancy,
@@ -230,5 +232,87 @@ describe.skipIf(!url)("answering a question card, on a live connection", () => {
     expect(goals).toEqual([
       "Add these details to the site: What helps new customers trust you? Family run since 2009",
     ])
+  })
+
+  const addressStack = () => {
+    const [have, name] = [crypto.randomUUID(), crypto.randomUUID()]
+    const stack: BuildQuestions = {
+      kind: "address",
+      questions: [
+        {
+          id: have,
+          text: ADDRESS_ASK.have,
+          input: {
+            kind: "choice",
+            options: [ADDRESS_ASK.yes, ADDRESS_ASK.no, ADDRESS_ASK.later],
+          },
+          skippable: false,
+        },
+        {
+          id: name,
+          text: ADDRESS_ASK.name,
+          input: { kind: "text", maxLength: 253, email: false },
+          skippable: true,
+        },
+      ],
+    }
+    return { have, name, stack }
+  }
+  const addressTask = async () =>
+    (await kit.withOrg({ orgId: who.orgId }, (db) => readTasks(db))).find(
+      (t) => t.kind === "address"
+    )
+
+  it("closes the name page and picks a name next when the owner has no address", async () => {
+    const { have, name, stack } = addressStack()
+    const { reply } = await posted(stack)
+    const sent = await reply(stubOrchestrator(), {
+      question_id: have,
+      answer: { kind: "value", value: ADDRESS_ASK.no },
+    })
+    const stored = (await sent.json()) as BuildQuestions
+    expect(stored.questions.map((q) => q.answer?.kind)).toEqual([
+      "value",
+      "closed",
+    ])
+    const task = await addressTask()
+    const step = (s: string) => task?.steps.find((x) => x.step === s)
+    expect(step("find_out")?.state).toBe("done")
+    expect(step("choose")).toMatchObject({
+      state: "blocked",
+      blocked_on: "owner_action",
+      note: "Picking a name",
+    })
+    // The name page was closed by the server, so a skip of it is refused.
+    const late = await reply(stubOrchestrator(), {
+      question_id: name,
+      answer: { kind: "skipped" },
+    })
+    expect(late.status).toBe(409)
+  })
+
+  it("puts the address task off for a week on Not now, and leaves a Yes to the reply", async () => {
+    const { have, stack } = addressStack()
+    const { reply } = await posted(stack)
+    await reply(stubOrchestrator(), {
+      question_id: have,
+      answer: { kind: "value", value: ADDRESS_ASK.later },
+    })
+    const task = await addressTask()
+    expect(task?.state).toBe("later")
+    const days =
+      (Date.parse(task?.later_until ?? "") - Date.now()) / (24 * 3600 * 1000)
+    expect(days).toBeGreaterThan(6.9)
+    expect(days).toBeLessThan(7.1)
+
+    const yes = addressStack()
+    const asked = await posted(yes.stack)
+    const sent = await asked.reply(stubOrchestrator(), {
+      question_id: yes.have,
+      answer: { kind: "value", value: ADDRESS_ASK.yes },
+    })
+    expect(
+      ((await sent.json()) as BuildQuestions).questions.map((q) => q.answer)
+    ).toEqual([{ kind: "value", value: ADDRESS_ASK.yes }, undefined])
   })
 })
