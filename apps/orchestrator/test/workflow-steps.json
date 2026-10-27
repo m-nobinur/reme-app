@@ -863,7 +863,8 @@
       "verify 7",
       "wait 7",
       "verify 8",
-      "failed"
+      "failed",
+      "say failed"
     ]
   },
   "SearchSyncWorkflow": {

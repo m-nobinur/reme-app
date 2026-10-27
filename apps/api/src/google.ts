@@ -1,8 +1,13 @@
 import {
   type ConnectGoogleOutput,
   GoogleConnectRequest,
+  GoogleFailedRequest,
 } from "@workspace/contracts"
-import { searchConnections, type Tenancy } from "@workspace/db"
+import {
+  postAssistantMessage,
+  searchConnections,
+  type Tenancy,
+} from "@workspace/db"
 import { bridge, type Owner, relay } from "./changes.ts"
 import { isOrgOwner } from "./domain-buy.ts"
 import { failure, invalid, readBody } from "./http.ts"
@@ -50,6 +55,44 @@ export async function googleConnect(
   return relay(result, () => {
     throw new Error("a connect answers 204 and no body")
   })
+}
+
+const FAILED_TEXT = {
+  failed:
+    "Google didn't connect, so your site isn't in Search Console yet. The sign-in link runs out if it sits for a while. Say the word and I'll send a fresh one.",
+  scopes_missing:
+    "Google connected but didn't give me permission to add your site. Connect again and leave both boxes ticked.",
+}
+
+/**
+ * `POST /google/failed`: the callback could not connect Google. One message
+ * from the assistant says so, keyed by the attempt so a reloaded callback says
+ * it once, besides the banner the web shows.
+ *
+ * shortcut: a chat in a turn drops the message (the banner still shows);
+ * retry from a Workflow if that ever matters.
+ */
+export async function googleFailed(
+  request: Request,
+  kit: Tenancy,
+  owner: Owner
+): Promise<Response> {
+  if (!(await isOrgOwner(kit, owner))) return notOwner()
+  const parsed = GoogleFailedRequest.safeParse(await readBody(request))
+  if (!parsed.success) return invalid(parsed.error.issues)
+  const { attempt, result } = parsed.data
+  await postAssistantMessage(kit, {
+    orgId: owner.orgId,
+    key: `google.failed:${attempt}`,
+    message: {
+      text: [FAILED_TEXT[result]],
+      button: {
+        label: "Connect Google",
+        action: { kind: "ask", text: "Connect Google to my website." },
+      },
+    },
+  })
+  return new Response(null, { status: 204 })
 }
 
 /**

@@ -15,26 +15,38 @@ export const Route = createFileRoute("/api/google/callback")({
       GET: async ({ request }) => {
         const url = new URL(request.url)
         const flow = googleFlow(url.origin)
-        const stored = consumeOAuthState(url.searchParams.get("state"), flow)
-        const back = (result: string) => {
+        const state = url.searchParams.get("state")
+        const stored = consumeOAuthState(state, flow)
+        const back = (shown: string) => {
           // The cookie is ours, but a sibling host on the zone could toss one.
           const to = new URL(safeReturnTo(stored?.returnTo), url.origin)
-          to.searchParams.set("google", result)
+          to.searchParams.set("google", shown)
           return seeOther(to.href)
+        }
+        // Besides the banner, the chat says it, once per attempt. Only a
+        // state that matched our cookie names its attempt; any other request
+        // (an expired cookie, a forged link) shares one key an hour, so a link
+        // someone else made cannot fill the chat.
+        const failed = async (why: "failed" | "scopes_missing") => {
+          const attempt =
+            stored && state
+              ? state
+              : `unverified-${new Date().toISOString().slice(0, 13)}`
+          await source.googleFailed(attempt, why)
+          return back(why)
         }
         if (url.searchParams.get("error") === "access_denied") {
           return back("cancelled")
         }
         const code = url.searchParams.get("code")
-        if (!(code && stored?.verifier)) return back("failed")
+        if (!(code && stored?.verifier)) return failed("failed")
 
-        return back(
-          await source.googleConnect({
-            code,
-            verifier: stored.verifier,
-            redirect_uri: flow.redirectUri,
-          })
-        )
+        const result = await source.googleConnect({
+          code,
+          verifier: stored.verifier,
+          redirect_uri: flow.redirectUri,
+        })
+        return result === "connected" ? back(result) : failed(result)
       },
     },
   },

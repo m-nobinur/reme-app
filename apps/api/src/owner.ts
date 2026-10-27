@@ -40,7 +40,7 @@ import { conversationRoute } from "./conversations.ts"
 import { memoryRoute } from "./cos/memory.ts"
 import { removal } from "./cos/tools.ts"
 import { checkout, isOrgOwner, purchaseStatus } from "./domain-buy.ts"
-import { googleConnect } from "./google.ts"
+import { googleConnect, googleFailed } from "./google.ts"
 import { failure, invalid, keyMissing, readBody } from "./http.ts"
 import { drawLogos, keepLogo, readLogos } from "./logo.ts"
 import { pushRoute } from "./push.ts"
@@ -64,7 +64,7 @@ const LOGO_KEEP_PATH =
 
 /** The routes `ownerRoute` answers, for `index.ts` to resolve an org before. */
 export const OWNER_PATH =
-  /^\/(workspace|facts|assets(\/review)?|site\/media|photos\/[^/]+|revisions\/[^/]+\/[^/]+|logos(\/[^/]+\/keep)?|palettes\/from-(image|logo)|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback|questions))?)?|reminders(\/[^/]+)?|memory(\/(undo|review))?|push\/(config|subscriptions(\/[^/]+)?)|domains\/[^/]+(\/checkout)?|google\/(connect|disconnect)|time-zone|chat)$/
+  /^\/(workspace|facts|assets(\/review)?|site\/media|photos\/[^/]+|revisions\/[^/]+\/[^/]+|logos(\/[^/]+\/keep)?|palettes\/from-(image|logo)|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback|questions))?)?|reminders(\/[^/]+)?|memory(\/(undo|review))?|push\/(config|subscriptions(\/[^/]+)?)|domains\/[^/]+(\/checkout)?|google\/(connect|disconnect|failed)|time-zone|chat)$/
 
 async function setFacts(request: Request, kit: Tenancy, owner: Owner) {
   if (!idempotencyKey(request)) return keyMissing()
@@ -309,6 +309,9 @@ export async function ownerRoute(
   }
   if (pathname === "/google/connect" && method === "POST") {
     return googleConnect(request, env, kit, owner)
+  }
+  if (pathname === "/google/failed" && method === "POST") {
+    return googleFailed(request, kit, owner)
   }
   if (pathname === "/activity" && method === "GET") {
     return Response.json(await readActivity(kit, owner.orgId))
