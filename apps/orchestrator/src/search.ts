@@ -3,10 +3,12 @@ import {
   activeDomainHost,
   appendEvent,
   eq,
+  type OrgScopedDb,
   orgs,
   postAssistantMessage,
   searchConnections,
   searchProperties,
+  setStep,
   sql,
   syncTasks,
   type Tenancy,
@@ -17,6 +19,7 @@ import {
   addSite,
   exchangeCode,
   GoogleError,
+  hasScopes,
   NeedsReauth,
   openToken,
   revokeToken,
@@ -26,6 +29,7 @@ import {
   verifyResource,
 } from "./google.ts"
 import { writeUpdate } from "./heartbeat-write.ts"
+import { stepOf } from "./probe.ts"
 import {
   activeDeployment,
   dropVerification,
@@ -95,15 +99,15 @@ export async function ownProperty(
 }
 
 /**
- * An access token for the org's live connection. A refresh token Google
- * rotated is sealed back; a revoked grant marks the connection
- * `needs_reauth` with its audit row, once, and throws `NeedsReauth`.
+ * An access token for the org's live connection, with the scopes it carries.
+ * A refresh token Google rotated is sealed back; a revoked grant marks the
+ * connection `needs_reauth` with its audit row, once, and throws `NeedsReauth`.
  */
-export async function accessToken(
+export async function grant(
   env: Env,
   kit: Tenancy,
   orgId: string
-): Promise<string> {
+): Promise<{ token: string; scopes: string[] }> {
   const [row] = await kit.withOrg({ orgId }, (db) =>
     db
       .select({ token: searchConnections.refreshToken })
@@ -113,7 +117,11 @@ export async function accessToken(
   if (!row?.token) throw new NeedsReauth()
   const stored = row.token
   try {
-    const { accessToken: token, sealed } = await accessFor(env, orgId, stored)
+    const {
+      accessToken: token,
+      scopes,
+      sealed,
+    } = await accessFor(env, orgId, stored)
     if (sealed) {
       await kit.withOrg({ orgId }, (db) =>
         db
@@ -122,7 +130,7 @@ export async function accessToken(
           .where(eq(searchConnections.refreshToken, stored))
       )
     }
-    return token
+    return { token, scopes }
   } catch (error) {
     if (!(error instanceof NeedsReauth)) throw error
     await kit.withOrg({ orgId }, async (db) => {
@@ -146,6 +154,32 @@ export async function accessToken(
     })
     throw error
   }
+}
+
+export const accessToken = async (env: Env, kit: Tenancy, orgId: string) =>
+  (await grant(env, kit, orgId)).token
+
+/** What the `permissions` step says while the owner has to act, in chat, the panel and the Website page. */
+export const NEEDS_PERMISSION = "Google needs one more permission"
+export const NEEDS_SIGN_IN = "Google needs you to sign in again"
+
+/**
+ * Blocks the Google task's `permissions` step on the owner. `syncTasks` never
+ * moves a done step back, so a grant that loses something after it was fine
+ * has to be written to the step itself; the note keeps the wait there until
+ * the rows say it is done again.
+ */
+export async function blockPermissions(
+  db: OrgScopedDb,
+  orgId: string,
+  note: string
+): Promise<void> {
+  const { taskId } = await stepOf(db, orgId, "google", "permissions")
+  await setStep(db, taskId, "permissions", {
+    state: "blocked",
+    blocked_on: "permission",
+    note,
+  })
 }
 
 /**
@@ -239,7 +273,9 @@ export async function forgetHost(
 /**
  * `POST /search/connect`: trade the callback's code for tokens under the
  * org the bridge named, and save the sealed refresh token. A partial consent
- * saves nothing. A connection to another Google account replaces the old
+ * is saved too, as `needs_permission` with the scopes Google granted, so the
+ * panel and the daily check can see it; it answers 422 and starts no
+ * Workflow, and the owner is asked to connect again. A connection to another Google account replaces the old
  * one, whose grant is revoked first; the same account's old token is not,
  * since Google revokes the whole grant and that would take the new token
  * with it. Then the `SearchWorkflow` of the host the site is served on, from
@@ -292,14 +328,7 @@ export async function connectGoogle(
           "Google did not accept that sign-in. Try again."
         )
   }
-  if ("error" in exchanged) {
-    return refuse(
-      422,
-      "validation",
-      "search.scopes_missing",
-      "Both Search Console boxes need to be ticked on Google's screen."
-    )
-  }
+  const complete = hasScopes(exchanged.scopes)
 
   const [old] = await kit.withOrg({ orgId }, (db) =>
     db
@@ -340,7 +369,7 @@ export async function connectGoogle(
       googleEmail: exchanged.email,
       refreshToken: sealed,
       scopes: exchanged.scopes,
-      state: "active" as const,
+      state: complete ? ("active" as const) : ("needs_permission" as const),
       connectedAt: now,
       lastRefreshAt: now,
       declined: false,
@@ -353,11 +382,20 @@ export async function connectGoogle(
       orgId,
       assignmentId: null,
       staffId: null,
-      type: "search.connected",
+      type: complete ? "search.connected" : "search.needs_permission",
       payload: { google_email: exchanged.email },
     })
     await syncTasks(db, orgId)
+    if (!complete) await blockPermissions(db, orgId, NEEDS_PERMISSION)
   })
+  if (!complete) {
+    return refuse(
+      422,
+      "validation",
+      "search.scopes_missing",
+      "Both Search Console boxes need to be ticked on Google's screen."
+    )
+  }
   // The host the site answers on; a redirecting slug host is one Google cannot fetch.
   const { slug, domain } = await heldHosts(env, kit, orgId)
   const canonical = domain ?? slug
@@ -539,7 +577,7 @@ export async function markFailed(
 }
 
 /** One message in the owner's chat. A busy chat or one holding a card throws, for the step's retries. */
-async function tell(
+export async function tell(
   kit: Tenancy,
   orgId: string,
   key: string,

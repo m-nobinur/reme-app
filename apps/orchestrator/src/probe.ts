@@ -51,7 +51,7 @@ export const timeless = (value: unknown): unknown =>
       : value
 
 /** The newest task of `kind` holding `step`, open first, made from the org's rows if missing. */
-async function stepOf(
+export async function stepOf(
   db: OrgScopedDb,
   orgId: string,
   kind: TaskKind,

@@ -6,6 +6,7 @@ import {
   eq,
   events,
   readTasks,
+  searchConnections,
   sql,
 } from "@workspace/db"
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest"
@@ -21,6 +22,7 @@ import {
   finishSandbox,
   followUpElsewhere,
   heldDetails,
+  isRegistered,
   lookElsewhere,
   MAX_OPEN_PURCHASES,
   paymentEvent,
@@ -69,12 +71,29 @@ vi.mock("../src/agents/developer.ts", () => ({ Developer: {} }))
 
 // The registry's answer for a name bought elsewhere, and the connect it
 // starts, whose own tests are in domain-flow.test.ts.
-const rdap = vi.hoisted(() => ({ registered: new Set<string>() }))
-vi.mock("../src/rdap.ts", () => ({
-  rdapLookup: async (name: string) => ({
-    registered: rdap.registered.has(name),
-  }),
+const rdap = vi.hoisted(() => ({
+  registered: new Set<string>(),
+  /** Endings with no RDAP server, which fall back on DNS. */
+  unlisted: new Set<string>(),
+  /** Names DNS delegates as a zone of their own. */
+  zones: new Set<string>(),
 }))
+vi.mock("../src/rdap.ts", () => ({
+  rdapLookup: async (name: string) =>
+    rdap.unlisted.has(name.slice(name.indexOf(".") + 1))
+      ? null
+      : { registered: rdap.registered.has(name) },
+}))
+vi.mock("../src/domains.ts", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../src/domains.ts")>()
+  return {
+    ...real,
+    zoneApex: async (name: string) => {
+      if (rdap.zones.has(name)) return { apex: name, missing: false }
+      throw new real.DomainError("domain.not_found")
+    },
+  }
+})
 vi.mock("../src/domain-flow.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/domain-flow.ts")>()),
   connect: async (_e: unknown, _k: unknown, _o: unknown, body: unknown) => ({
@@ -797,12 +816,18 @@ describe.skipIf(!url)("buying a domain against a database", () => {
     expect(unserved.result).toMatchObject({ ready: false })
     expect(unserved.reading).not.toHaveProperty("tell")
     p.net.site = p.orgId
+    // An org connected to Google hears that its new host is going there too.
+    await kit.withOrg({ orgId: p.orgId }, (db) =>
+      db
+        .insert(searchConnections)
+        .values({ orgId: p.orgId, state: "active", refreshToken: "v1.aXY.Y3Q" })
+    )
     const live = await served(p.env, kit, p.orgId, p.row.id)
     expect(live.result).toMatchObject({ ready: true })
     expect(live.reading?.write).toEqual({ state: "done" })
     expect(unserved.reading).not.toHaveProperty("write")
     expect((await live.reading?.tell?.())?.text).toMatch(
-      new RegExp(`^${p.name} is live`)
+      new RegExp(`^${p.name} is live.*adding it to your Google Search Console`)
     )
     expect(
       JSON.parse((await p.store.ROUTES.get(`host:${p.name}`)) ?? "{}")
@@ -1033,6 +1058,16 @@ describe.skipIf(!url)("buying a name elsewhere, against a database", () => {
     expect((await lookElsewhere(kit, site.orgId, name)).result).toMatchObject({
       claimed: true,
     })
+  })
+
+  it("reads an ending with no RDAP server from DNS, never as not bought", async () => {
+    rdap.unlisted.add("io")
+    const name = `bright${crypto.randomUUID().slice(0, 8)}.io`
+    expect(await isRegistered(name)).toBe(false)
+    rdap.zones.add(name)
+    expect(await isRegistered(name)).toBe(true)
+    rdap.registered.add("rdap-says.com")
+    expect(await isRegistered("rdap-says.com")).toBe(true)
   })
 
   it("follows up once and puts the address task off for a week", async () => {

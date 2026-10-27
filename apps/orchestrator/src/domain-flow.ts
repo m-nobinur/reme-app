@@ -67,6 +67,7 @@ import {
   setAutoRenew,
 } from "./registrar.ts"
 import { forgetHost } from "./search.ts"
+import { moveGoogle } from "./search-start.ts"
 import { cancelRenewal } from "./stripe.ts"
 
 /**
@@ -766,6 +767,9 @@ export async function served(
   if (claim?.row.state !== "active") return { result: { gone: true } }
   const { row, slug } = claim
   const ready = await reaches(row.primaryHost, row.siteId)
+  // Serving is the proof Google is moved on: the new host added, the old one let go.
+  const google = ready ? await moveGoogle(env, kit, orgId, slug) : null
+  const gsc = "Google Search Console"
   return {
     result: { gone: false, at: Date.now(), ready },
     reading: {
@@ -776,8 +780,18 @@ export async function served(
         write: { state: "done" },
         tell: async () => ({
           text: await writeUpdate(env, kit, orgId, {
-            facts: { host: row.primaryHost, old_host: slug },
-            template: `${row.primaryHost} is live. ${slug} now forwards to it, so links you've shared still work.`,
+            facts: {
+              host: row.primaryHost,
+              old_host: slug,
+              ...(google && { google: gsc }),
+            },
+            template: `${row.primaryHost} is live. ${slug} now forwards to it, so links you've shared still work.${
+              google === "moved"
+                ? ` I'm adding it to your ${gsc} and have stopped tracking ${slug} there; that property stays in your Google account.`
+                : google
+                  ? ` I'm adding it to your ${gsc} too.`
+                  : ""
+            }`,
           }),
           button: {
             label: "Open your website",
@@ -1325,7 +1339,7 @@ async function lapse(
     text: `${row.name} wasn't renewed and has run out, so visitors there no longer reach your website. It's back at ${found.slug}. If you still want ${row.name}, I can buy it again.`,
     button: {
       label: "Buy it again",
-      action: { kind: "ask", text: `Buy ${row.name} for my website.` },
+      action: { kind: "pay", name: row.name },
     },
   }
 }

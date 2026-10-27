@@ -47,7 +47,7 @@ import {
   purchaseStatus,
   registrantPrefill,
 } from "./domain-buy.ts"
-import { googleConnect, googleFailed } from "./google.ts"
+import { googleConnect, googleResult } from "./google.ts"
 import { failure, invalid, keyMissing, readBody } from "./http.ts"
 import { drawLogos, keepLogo, readLogos } from "./logo.ts"
 import { pushRoute } from "./push.ts"
@@ -71,7 +71,7 @@ const LOGO_KEEP_PATH =
 
 /** The routes `ownerRoute` answers, for `index.ts` to resolve an org before. */
 export const OWNER_PATH =
-  /^\/(workspace|facts|assets(\/review)?|site\/media|photos\/[^/]+|revisions\/[^/]+\/[^/]+|logos(\/[^/]+\/keep)?|palettes\/from-(image|logo)|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback|questions))?)?|reminders(\/[^/]+)?|memory(\/(undo|review))?|push\/(config|subscriptions(\/[^/]+)?)|domains\/[^/]+(\/(checkout|registrant|elsewhere|bought))?|google\/(connect|disconnect|failed)|time-zone|chat)$/
+  /^\/(workspace|facts|assets(\/review)?|site\/media|photos\/[^/]+|revisions\/[^/]+\/[^/]+|logos(\/[^/]+\/keep)?|palettes\/from-(image|logo)|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback|questions))?)?|reminders(\/[^/]+)?|memory(\/(undo|review))?|push\/(config|subscriptions(\/[^/]+)?)|domains\/[^/]+(\/(checkout|registrant|elsewhere|bought))?|google\/(connect|disconnect|result)|time-zone|chat)$/
 
 async function setFacts(request: Request, kit: Tenancy, owner: Owner) {
   if (!idempotencyKey(request)) return keyMissing()
@@ -317,8 +317,8 @@ export async function ownerRoute(
   if (pathname === "/google/connect" && method === "POST") {
     return googleConnect(request, env, kit, owner)
   }
-  if (pathname === "/google/failed" && method === "POST") {
-    return googleFailed(request, kit, owner)
+  if (pathname === "/google/result" && method === "POST") {
+    return googleResult(request, kit, owner)
   }
   if (pathname === "/activity" && method === "GET") {
     return Response.json(await readActivity(kit, owner.orgId))

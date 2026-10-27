@@ -100,9 +100,9 @@ describe.skipIf(!url)("connecting Google through the api", () => {
     expect(stub.calls).toEqual([])
   })
 
-  it("says a failed callback once in the chat, per attempt, and only for the owner", async () => {
-    const failed = (who: Owner, body: unknown) =>
-      who.call(stubOrchestrator(), "/google/failed", {
+  it("says how a callback ended once in the chat, per attempt, and only for the owner", async () => {
+    const result = (who: Owner, body: unknown) =>
+      who.call(stubOrchestrator(), "/google/result", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
@@ -120,13 +120,16 @@ describe.skipIf(!url)("connecting Google through the api", () => {
     )
     const before = (await posted()).length
     const attempt = { attempt: "state-1", result: "failed" }
-    expect((await failed(me, attempt)).status).toBe(204)
-    expect((await failed(me, attempt)).status).toBe(204)
+    expect((await result(me, attempt)).status).toBe(204)
+    expect((await result(me, attempt)).status).toBe(204)
     expect(await posted()).toHaveLength(before + 1)
-    await failed(me, { attempt: "state-2", result: "scopes_missing" })
+    await result(me, { attempt: "state-2", result: "scopes_missing" })
     expect(await posted()).toHaveLength(before + 2)
-    expect((await failed(member, attempt)).status).toBe(403)
-    expect((await failed(me, { attempt: "", result: "failed" })).status).toBe(
+    await result(me, { attempt: "state-3", result: "connected" })
+    await result(me, { attempt: "state-4", result: "cancelled" })
+    expect(await posted()).toHaveLength(before + 4)
+    expect((await result(member, attempt)).status).toBe(403)
+    expect((await result(me, { attempt: "", result: "failed" })).status).toBe(
       400
     )
   })

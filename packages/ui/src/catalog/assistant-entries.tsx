@@ -1494,14 +1494,12 @@ const REMOVE_DOMAIN_STATES = decisionStates(
   refusal("domain.not_found", "That domain is not connected.")
 )
 
-const offer = (name: string, price: number, why: string) => ({
-  name,
-  price_gbp_year: price,
-  why,
-})
+const FREE_UK = { state: "free", price_gbp_year: 8 } as const
+const FREE_COM = { state: "free", price_gbp_year: 12 } as const
+const TAKEN = { state: "taken" } as const
 
-// What find_domain answers: the best pick and three others, none free, and
-// a search still running.
+// What find_domain answers: name rows best first, one ending taken, none
+// free, and a search still running.
 const FIND_DOMAIN_STATES: ThreadMessageLike[] = [
   ask("I don't have a website address. Can you sort one?"),
   cosCall("find_domain", "find_running", { args: {} }, IN_FLIGHT),
@@ -1509,11 +1507,17 @@ const FIND_DOMAIN_STATES: ThreadMessageLike[] = [
     args: {},
     result: {
       outcome: "found",
-      best: offer(DOMAIN, 8, "Short, matches your name, and .co.uk says UK."),
-      options: [
-        offer("sparklecleanbristol.co.uk", 8, "Says where you work."),
-        offer("sparkleclean.uk", 8, "The shortest UK ending."),
-        offer("sparklecleanbristol.com", 12, "Known everywhere."),
+      rows: [
+        {
+          stem: "sparkleclean",
+          why: "Short, and it is your name.",
+          endings: { "co.uk": FREE_UK, com: TAKEN, uk: FREE_UK },
+        },
+        {
+          stem: "sparklecleanbristol",
+          why: "Says where you work.",
+          endings: { "co.uk": FREE_UK, com: FREE_COM, uk: FREE_UK },
+        },
       ],
     },
   }),
@@ -1569,9 +1573,22 @@ const PAID: Record<string, Omit<DomainPurchaseStatus, "name">> = {
   "abandoned.co.uk": { state: "abandoned", test: false, outcome: "expired" },
 }
 
-// No Stripe in the catalog: Continue answers as an environment without
-// buying does.
+// No Stripe in the catalog: Pay answers as an environment without buying
+// does, and the details page asks for the address only.
 const CATALOG_PURCHASE: DomainPurchase = {
+  registrant: async (name) => ({
+    name,
+    price_gbp_year: name.endsWith(".com") ? 12 : 8,
+    registrant: {
+      name: REGISTRANT.name,
+      business_name: REGISTRANT.business_name,
+      email: REGISTRANT.email,
+      phone: REGISTRANT.phone,
+    },
+    missing: ["street", "city", "postal_code", "country_code"],
+  }),
+  elsewhere: async () => undefined,
+  bought: async (name) => ({ outcome: "not_registered_yet", name }),
   checkout: async () => ({
     outcome: "refused",
     code: "domain.buy_unavailable",

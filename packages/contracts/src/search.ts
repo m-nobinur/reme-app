@@ -9,7 +9,8 @@ import { Text } from "./text.ts"
 
 /**
  * Where the owner's Google connection is. `needs_reauth` is a token Google
- * refused; `needs_permission` a sign-in that left a Search Console box unticked.
+ * refused; `needs_permission` a sign-in that left a Search Console box unticked,
+ * or a grant that has since lost a scope or the Owner role on the property.
  */
 export const SearchConnectionState = z.enum([
   "active",
@@ -44,12 +45,13 @@ export const GoogleConnectRequest = z.strictObject({
 })
 
 /**
- * `POST /google/failed`'s body: a callback that could not connect Google.
- * `attempt` is the OAuth state, which is what one attempt's message is keyed by.
+ * `POST /google/result`'s body: how the callback ended, for the one message
+ * the assistant says about it. `attempt` is the OAuth state, which is what one
+ * attempt's message is keyed by; `cancelled` is the owner declining on Google's screen.
  */
-export const GoogleFailedRequest = z.strictObject({
+export const GoogleResultRequest = z.strictObject({
   attempt: z.string().min(1).max(128),
-  result: z.enum(["failed", "scopes_missing"]),
+  result: z.enum(["connected", "cancelled", "failed", "scopes_missing"]),
 })
 
 /** The connection as the web app and the model read it: no token, no Google id. */
@@ -191,7 +193,7 @@ export const GetIndexingOutput = z.union([
 
 export type GoogleConnectRequest = z.infer<typeof GoogleConnectRequest>
 export type SearchConnectionState = z.infer<typeof SearchConnectionState>
-export type GoogleFailedRequest = z.infer<typeof GoogleFailedRequest>
+export type GoogleResultRequest = z.infer<typeof GoogleResultRequest>
 export type SearchConnection = z.infer<typeof SearchConnection>
 export type SearchProperty = z.infer<typeof SearchProperty>
 export type SearchTotals = z.infer<typeof SearchTotals>
