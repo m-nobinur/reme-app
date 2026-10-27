@@ -7486,63 +7486,79 @@ export interface components {
           /** @constant */
           tool: "find_domain"
           output:
+            | (
+                | {
+                    /** @constant */
+                    outcome: "found"
+                    rows: {
+                      stem: string
+                      why: string
+                      endings: {
+                        "co.uk"?:
+                          | {
+                              /** @constant */
+                              state: "free"
+                              price_gbp_year: number
+                            }
+                          | {
+                              /** @constant */
+                              state: "taken"
+                            }
+                        com?:
+                          | {
+                              /** @constant */
+                              state: "free"
+                              price_gbp_year: number
+                            }
+                          | {
+                              /** @constant */
+                              state: "taken"
+                            }
+                        uk?:
+                          | {
+                              /** @constant */
+                              state: "free"
+                              price_gbp_year: number
+                            }
+                          | {
+                              /** @constant */
+                              state: "taken"
+                            }
+                      }
+                    }[]
+                  }
+                | {
+                    /** @constant */
+                    outcome: "refused"
+                    error: {
+                      /** @enum {string} */
+                      class:
+                        | "validation"
+                        | "permission"
+                        | "transient"
+                        | "resource"
+                        | "provider"
+                        | "integrity"
+                        | "security"
+                        | "budgetary"
+                      code: string
+                      message: string
+                    }
+                  }
+              )
             | {
                 /** @constant */
                 outcome: "found"
-                rows: {
-                  stem: string
+                best: {
+                  name: string
+                  price_gbp_year: number
                   why: string
-                  endings: {
-                    "co.uk"?:
-                      | {
-                          /** @constant */
-                          state: "free"
-                          price_gbp_year: number
-                        }
-                      | {
-                          /** @constant */
-                          state: "taken"
-                        }
-                    com?:
-                      | {
-                          /** @constant */
-                          state: "free"
-                          price_gbp_year: number
-                        }
-                      | {
-                          /** @constant */
-                          state: "taken"
-                        }
-                    uk?:
-                      | {
-                          /** @constant */
-                          state: "free"
-                          price_gbp_year: number
-                        }
-                      | {
-                          /** @constant */
-                          state: "taken"
-                        }
-                  }
-                }[]
-              }
-            | {
-                /** @constant */
-                outcome: "refused"
-                error: {
-                  /** @enum {string} */
-                  class:
-                    | "validation"
-                    | "permission"
-                    | "transient"
-                    | "resource"
-                    | "provider"
-                    | "integrity"
-                    | "security"
-                    | "budgetary"
-                  code: string
-                  message: string
                 }
+                options: {
+                  name: string
+                  price_gbp_year: number
+                  why: string
+                }[]
               }
         }
       | {
@@ -9396,63 +9412,79 @@ export interface components {
       query?: string
     }
     FindDomainOutput:
+      | (
+          | {
+              /** @constant */
+              outcome: "found"
+              rows: {
+                stem: string
+                why: string
+                endings: {
+                  "co.uk"?:
+                    | {
+                        /** @constant */
+                        state: "free"
+                        price_gbp_year: number
+                      }
+                    | {
+                        /** @constant */
+                        state: "taken"
+                      }
+                  com?:
+                    | {
+                        /** @constant */
+                        state: "free"
+                        price_gbp_year: number
+                      }
+                    | {
+                        /** @constant */
+                        state: "taken"
+                      }
+                  uk?:
+                    | {
+                        /** @constant */
+                        state: "free"
+                        price_gbp_year: number
+                      }
+                    | {
+                        /** @constant */
+                        state: "taken"
+                      }
+                }
+              }[]
+            }
+          | {
+              /** @constant */
+              outcome: "refused"
+              error: {
+                /** @enum {string} */
+                class:
+                  | "validation"
+                  | "permission"
+                  | "transient"
+                  | "resource"
+                  | "provider"
+                  | "integrity"
+                  | "security"
+                  | "budgetary"
+                code: string
+                message: string
+              }
+            }
+        )
       | {
           /** @constant */
           outcome: "found"
-          rows: {
-            stem: string
+          best: {
+            name: string
+            price_gbp_year: number
             why: string
-            endings: {
-              "co.uk"?:
-                | {
-                    /** @constant */
-                    state: "free"
-                    price_gbp_year: number
-                  }
-                | {
-                    /** @constant */
-                    state: "taken"
-                  }
-              com?:
-                | {
-                    /** @constant */
-                    state: "free"
-                    price_gbp_year: number
-                  }
-                | {
-                    /** @constant */
-                    state: "taken"
-                  }
-              uk?:
-                | {
-                    /** @constant */
-                    state: "free"
-                    price_gbp_year: number
-                  }
-                | {
-                    /** @constant */
-                    state: "taken"
-                  }
-            }
-          }[]
-        }
-      | {
-          /** @constant */
-          outcome: "refused"
-          error: {
-            /** @enum {string} */
-            class:
-              | "validation"
-              | "permission"
-              | "transient"
-              | "resource"
-              | "provider"
-              | "integrity"
-              | "security"
-              | "budgetary"
-            code: string
-            message: string
           }
+          options: {
+            name: string
+            price_gbp_year: number
+            why: string
+          }[]
         }
     FontPair: {
       /** @enum {string} */

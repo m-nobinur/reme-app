@@ -25928,7 +25928,214 @@
                 "const": "find_domain"
               },
               "output": {
-                "oneOf": [
+                "anyOf": [
+                  {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "outcome": {
+                            "type": "string",
+                            "const": "found"
+                          },
+                          "rows": {
+                            "minItems": 1,
+                            "maxItems": 5,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "stem": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 63,
+                                  "pattern": "\\S"
+                                },
+                                "why": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200,
+                                  "pattern": "\\S"
+                                },
+                                "endings": {
+                                  "type": "object",
+                                  "properties": {
+                                    "co.uk": {
+                                      "oneOf": [
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "state": {
+                                              "type": "string",
+                                              "const": "free"
+                                            },
+                                            "price_gbp_year": {
+                                              "type": "integer",
+                                              "exclusiveMinimum": 0,
+                                              "maximum": 9007199254740991
+                                            }
+                                          },
+                                          "required": [
+                                            "state",
+                                            "price_gbp_year"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "state": {
+                                              "type": "string",
+                                              "const": "taken"
+                                            }
+                                          },
+                                          "required": [
+                                            "state"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      ]
+                                    },
+                                    "com": {
+                                      "oneOf": [
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "state": {
+                                              "type": "string",
+                                              "const": "free"
+                                            },
+                                            "price_gbp_year": {
+                                              "type": "integer",
+                                              "exclusiveMinimum": 0,
+                                              "maximum": 9007199254740991
+                                            }
+                                          },
+                                          "required": [
+                                            "state",
+                                            "price_gbp_year"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "state": {
+                                              "type": "string",
+                                              "const": "taken"
+                                            }
+                                          },
+                                          "required": [
+                                            "state"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      ]
+                                    },
+                                    "uk": {
+                                      "oneOf": [
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "state": {
+                                              "type": "string",
+                                              "const": "free"
+                                            },
+                                            "price_gbp_year": {
+                                              "type": "integer",
+                                              "exclusiveMinimum": 0,
+                                              "maximum": 9007199254740991
+                                            }
+                                          },
+                                          "required": [
+                                            "state",
+                                            "price_gbp_year"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "state": {
+                                              "type": "string",
+                                              "const": "taken"
+                                            }
+                                          },
+                                          "required": [
+                                            "state"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "stem",
+                                "why",
+                                "endings"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "outcome",
+                          "rows"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "outcome": {
+                            "type": "string",
+                            "const": "refused"
+                          },
+                          "error": {
+                            "type": "object",
+                            "properties": {
+                              "class": {
+                                "type": "string",
+                                "enum": [
+                                  "validation",
+                                  "permission",
+                                  "transient",
+                                  "resource",
+                                  "provider",
+                                  "integrity",
+                                  "security",
+                                  "budgetary"
+                                ]
+                              },
+                              "code": {
+                                "type": "string",
+                                "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+                              },
+                              "message": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 500
+                              }
+                            },
+                            "required": [
+                              "class",
+                              "code",
+                              "message"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "outcome",
+                          "error"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
                   {
                     "type": "object",
                     "properties": {
@@ -25936,144 +26143,60 @@
                         "type": "string",
                         "const": "found"
                       },
-                      "rows": {
-                        "minItems": 1,
-                        "maxItems": 5,
+                      "best": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "maxLength": 253,
+                            "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+                          },
+                          "price_gbp_year": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "why": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200,
+                            "pattern": "\\S"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "price_gbp_year",
+                          "why"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "options": {
+                        "maxItems": 4,
                         "type": "array",
                         "items": {
                           "type": "object",
                           "properties": {
-                            "stem": {
+                            "name": {
                               "type": "string",
-                              "minLength": 1,
-                              "maxLength": 63,
-                              "pattern": "\\S"
+                              "maxLength": 253,
+                              "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+                            },
+                            "price_gbp_year": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
                             },
                             "why": {
                               "type": "string",
                               "minLength": 1,
                               "maxLength": 200,
                               "pattern": "\\S"
-                            },
-                            "endings": {
-                              "type": "object",
-                              "properties": {
-                                "co.uk": {
-                                  "oneOf": [
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "state": {
-                                          "type": "string",
-                                          "const": "free"
-                                        },
-                                        "price_gbp_year": {
-                                          "type": "integer",
-                                          "exclusiveMinimum": 0,
-                                          "maximum": 9007199254740991
-                                        }
-                                      },
-                                      "required": [
-                                        "state",
-                                        "price_gbp_year"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "state": {
-                                          "type": "string",
-                                          "const": "taken"
-                                        }
-                                      },
-                                      "required": [
-                                        "state"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  ]
-                                },
-                                "com": {
-                                  "oneOf": [
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "state": {
-                                          "type": "string",
-                                          "const": "free"
-                                        },
-                                        "price_gbp_year": {
-                                          "type": "integer",
-                                          "exclusiveMinimum": 0,
-                                          "maximum": 9007199254740991
-                                        }
-                                      },
-                                      "required": [
-                                        "state",
-                                        "price_gbp_year"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "state": {
-                                          "type": "string",
-                                          "const": "taken"
-                                        }
-                                      },
-                                      "required": [
-                                        "state"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  ]
-                                },
-                                "uk": {
-                                  "oneOf": [
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "state": {
-                                          "type": "string",
-                                          "const": "free"
-                                        },
-                                        "price_gbp_year": {
-                                          "type": "integer",
-                                          "exclusiveMinimum": 0,
-                                          "maximum": 9007199254740991
-                                        }
-                                      },
-                                      "required": [
-                                        "state",
-                                        "price_gbp_year"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "state": {
-                                          "type": "string",
-                                          "const": "taken"
-                                        }
-                                      },
-                                      "required": [
-                                        "state"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  ]
-                                }
-                              },
-                              "additionalProperties": false
                             }
                           },
                           "required": [
-                            "stem",
-                            "why",
-                            "endings"
+                            "name",
+                            "price_gbp_year",
+                            "why"
                           ],
                           "additionalProperties": false
                         }
@@ -26081,54 +26204,8 @@
                     },
                     "required": [
                       "outcome",
-                      "rows"
-                    ],
-                    "additionalProperties": false
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "outcome": {
-                        "type": "string",
-                        "const": "refused"
-                      },
-                      "error": {
-                        "type": "object",
-                        "properties": {
-                          "class": {
-                            "type": "string",
-                            "enum": [
-                              "validation",
-                              "permission",
-                              "transient",
-                              "resource",
-                              "provider",
-                              "integrity",
-                              "security",
-                              "budgetary"
-                            ]
-                          },
-                          "code": {
-                            "type": "string",
-                            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
-                          },
-                          "message": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 500
-                          }
-                        },
-                        "required": [
-                          "class",
-                          "code",
-                          "message"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "required": [
-                      "outcome",
-                      "error"
+                      "best",
+                      "options"
                     ],
                     "additionalProperties": false
                   }
@@ -32690,7 +32767,214 @@
       },
       "FindDomainOutput": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "oneOf": [
+        "anyOf": [
+          {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "outcome": {
+                    "type": "string",
+                    "const": "found"
+                  },
+                  "rows": {
+                    "minItems": 1,
+                    "maxItems": 5,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "stem": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 63,
+                          "pattern": "\\S"
+                        },
+                        "why": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "pattern": "\\S"
+                        },
+                        "endings": {
+                          "type": "object",
+                          "properties": {
+                            "co.uk": {
+                              "oneOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "state": {
+                                      "type": "string",
+                                      "const": "free"
+                                    },
+                                    "price_gbp_year": {
+                                      "type": "integer",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 9007199254740991
+                                    }
+                                  },
+                                  "required": [
+                                    "state",
+                                    "price_gbp_year"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "state": {
+                                      "type": "string",
+                                      "const": "taken"
+                                    }
+                                  },
+                                  "required": [
+                                    "state"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            },
+                            "com": {
+                              "oneOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "state": {
+                                      "type": "string",
+                                      "const": "free"
+                                    },
+                                    "price_gbp_year": {
+                                      "type": "integer",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 9007199254740991
+                                    }
+                                  },
+                                  "required": [
+                                    "state",
+                                    "price_gbp_year"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "state": {
+                                      "type": "string",
+                                      "const": "taken"
+                                    }
+                                  },
+                                  "required": [
+                                    "state"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            },
+                            "uk": {
+                              "oneOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "state": {
+                                      "type": "string",
+                                      "const": "free"
+                                    },
+                                    "price_gbp_year": {
+                                      "type": "integer",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 9007199254740991
+                                    }
+                                  },
+                                  "required": [
+                                    "state",
+                                    "price_gbp_year"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "state": {
+                                      "type": "string",
+                                      "const": "taken"
+                                    }
+                                  },
+                                  "required": [
+                                    "state"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            }
+                          },
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "stem",
+                        "why",
+                        "endings"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "outcome",
+                  "rows"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "outcome": {
+                    "type": "string",
+                    "const": "refused"
+                  },
+                  "error": {
+                    "type": "object",
+                    "properties": {
+                      "class": {
+                        "type": "string",
+                        "enum": [
+                          "validation",
+                          "permission",
+                          "transient",
+                          "resource",
+                          "provider",
+                          "integrity",
+                          "security",
+                          "budgetary"
+                        ]
+                      },
+                      "code": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+                      },
+                      "message": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                      }
+                    },
+                    "required": [
+                      "class",
+                      "code",
+                      "message"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "outcome",
+                  "error"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
           {
             "type": "object",
             "properties": {
@@ -32698,144 +32982,60 @@
                 "type": "string",
                 "const": "found"
               },
-              "rows": {
-                "minItems": 1,
-                "maxItems": 5,
+              "best": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 253,
+                    "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+                  },
+                  "price_gbp_year": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "why": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "pattern": "\\S"
+                  }
+                },
+                "required": [
+                  "name",
+                  "price_gbp_year",
+                  "why"
+                ],
+                "additionalProperties": false
+              },
+              "options": {
+                "maxItems": 4,
                 "type": "array",
                 "items": {
                   "type": "object",
                   "properties": {
-                    "stem": {
+                    "name": {
                       "type": "string",
-                      "minLength": 1,
-                      "maxLength": 63,
-                      "pattern": "\\S"
+                      "maxLength": 253,
+                      "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+                    },
+                    "price_gbp_year": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
                     },
                     "why": {
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 200,
                       "pattern": "\\S"
-                    },
-                    "endings": {
-                      "type": "object",
-                      "properties": {
-                        "co.uk": {
-                          "oneOf": [
-                            {
-                              "type": "object",
-                              "properties": {
-                                "state": {
-                                  "type": "string",
-                                  "const": "free"
-                                },
-                                "price_gbp_year": {
-                                  "type": "integer",
-                                  "exclusiveMinimum": 0,
-                                  "maximum": 9007199254740991
-                                }
-                              },
-                              "required": [
-                                "state",
-                                "price_gbp_year"
-                              ],
-                              "additionalProperties": false
-                            },
-                            {
-                              "type": "object",
-                              "properties": {
-                                "state": {
-                                  "type": "string",
-                                  "const": "taken"
-                                }
-                              },
-                              "required": [
-                                "state"
-                              ],
-                              "additionalProperties": false
-                            }
-                          ]
-                        },
-                        "com": {
-                          "oneOf": [
-                            {
-                              "type": "object",
-                              "properties": {
-                                "state": {
-                                  "type": "string",
-                                  "const": "free"
-                                },
-                                "price_gbp_year": {
-                                  "type": "integer",
-                                  "exclusiveMinimum": 0,
-                                  "maximum": 9007199254740991
-                                }
-                              },
-                              "required": [
-                                "state",
-                                "price_gbp_year"
-                              ],
-                              "additionalProperties": false
-                            },
-                            {
-                              "type": "object",
-                              "properties": {
-                                "state": {
-                                  "type": "string",
-                                  "const": "taken"
-                                }
-                              },
-                              "required": [
-                                "state"
-                              ],
-                              "additionalProperties": false
-                            }
-                          ]
-                        },
-                        "uk": {
-                          "oneOf": [
-                            {
-                              "type": "object",
-                              "properties": {
-                                "state": {
-                                  "type": "string",
-                                  "const": "free"
-                                },
-                                "price_gbp_year": {
-                                  "type": "integer",
-                                  "exclusiveMinimum": 0,
-                                  "maximum": 9007199254740991
-                                }
-                              },
-                              "required": [
-                                "state",
-                                "price_gbp_year"
-                              ],
-                              "additionalProperties": false
-                            },
-                            {
-                              "type": "object",
-                              "properties": {
-                                "state": {
-                                  "type": "string",
-                                  "const": "taken"
-                                }
-                              },
-                              "required": [
-                                "state"
-                              ],
-                              "additionalProperties": false
-                            }
-                          ]
-                        }
-                      },
-                      "additionalProperties": false
                     }
                   },
                   "required": [
-                    "stem",
-                    "why",
-                    "endings"
+                    "name",
+                    "price_gbp_year",
+                    "why"
                   ],
                   "additionalProperties": false
                 }
@@ -32843,54 +33043,8 @@
             },
             "required": [
               "outcome",
-              "rows"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "outcome": {
-                "type": "string",
-                "const": "refused"
-              },
-              "error": {
-                "type": "object",
-                "properties": {
-                  "class": {
-                    "type": "string",
-                    "enum": [
-                      "validation",
-                      "permission",
-                      "transient",
-                      "resource",
-                      "provider",
-                      "integrity",
-                      "security",
-                      "budgetary"
-                    ]
-                  },
-                  "code": {
-                    "type": "string",
-                    "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
-                  },
-                  "message": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 500
-                  }
-                },
-                "required": [
-                  "class",
-                  "code",
-                  "message"
-                ],
-                "additionalProperties": false
-              }
-            },
-            "required": [
-              "outcome",
-              "error"
+              "best",
+              "options"
             ],
             "additionalProperties": false
           }
