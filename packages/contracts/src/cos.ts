@@ -379,12 +379,28 @@ export const FindDomainInput = z.strictObject({
  * at the price table's price or taken. The model quotes no other price. No
  * stem with a free ending is `domain.unavailable`.
  */
-export const FindDomainOutput = z.discriminatedUnion("outcome", [
+/** One name as `find_domain` offered it before the name rows. */
+const LegacyOffer = z.strictObject({
+  name: DomainName,
+  price_gbp_year: z.int().positive(),
+  why: Text(200),
+})
+
+export const FindDomainOutput = z.union([
+  z.discriminatedUnion("outcome", [
+    z.strictObject({
+      outcome: z.literal("found"),
+      rows: z.array(DomainStemOffer).min(1).max(5),
+    }),
+    Refused,
+  ]),
+  // A result stored before the name rows, so older sessions still parse.
+  // Nothing writes it any more.
   z.strictObject({
     outcome: z.literal("found"),
-    rows: z.array(DomainStemOffer).min(1).max(5),
+    best: LegacyOffer,
+    options: z.array(LegacyOffer).max(4),
   }),
-  Refused,
 ])
 
 /**

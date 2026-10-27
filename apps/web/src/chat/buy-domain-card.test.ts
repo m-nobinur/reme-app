@@ -232,6 +232,19 @@ it("says plainly when no name was free", async () => {
   expect(tray.textContent).toBe("")
 })
 
+it("reads a search stored before the name rows as one line, not a failure", async () => {
+  const { chat, tray } = await draw("find_domain", {
+    args: {},
+    result: {
+      outcome: "found",
+      best: { name: "sparkleclean.com", price_gbp_year: 12, why: "Short." },
+      options: [],
+    },
+  })
+  expect(chat.textContent).toContain("I suggested some names here earlier.")
+  expect(tray.textContent).toBe("")
+})
+
 it("asks only for the gaps, pays in a dialog, and leaves one line once paid", async () => {
   const purchase = purchaseOf()
   const { chat, tray } = await draw(

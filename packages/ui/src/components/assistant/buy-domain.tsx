@@ -1103,6 +1103,14 @@ export const FindDomain: ToolCallMessagePartComponent = (props) => {
       </div>
     )
   }
+  // A search from before the name rows: its offers are stale, so one line.
+  if (!("rows" in view.output)) {
+    return (
+      <div data-slot="find-domain">
+        <Line text="I suggested some names here earlier. Ask me to look again for today's prices." />
+      </div>
+    )
+  }
   return <BuyTray draftId={props.toolCallId} rows={view.output.rows} />
 }
 FindDomain.displayName = "FindDomain"
