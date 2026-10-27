@@ -141,6 +141,9 @@ type TokenResponse = {
   error?: string
 }
 
+const scopesOf = (json: TokenResponse) =>
+  (json.scope ?? "").split(" ").filter(Boolean)
+
 /** Google's own error word (`invalid_grant`), never anything it echoed back. */
 const errorWord = (json: TokenResponse) =>
   typeof json.error === "string" && /^[a-z_]{1,40}$/.test(json.error)
@@ -172,6 +175,10 @@ async function tokenCall(
   )
 }
 
+/** Whether a grant carries both Search Console scopes; the consent screen lets an owner untick one. */
+export const hasScopes = (scopes: string[]) =>
+  SCOPES.every((scope) => scopes.includes(scope))
+
 export type Exchanged = {
   refreshToken: string
   accessToken: string
@@ -183,24 +190,21 @@ export type Exchanged = {
 }
 
 /**
- * Trades the callback's code and PKCE verifier for tokens. Users can untick a
- * scope on the consent screen, so the granted list is checked here and a
- * partial grant comes back as `scopes_missing` and is not to be saved.
+ * Trades the callback's code and PKCE verifier for tokens. `scopes` is what
+ * Google granted, which may be short of `SCOPES`: the caller decides what a
+ * partial grant means (`hasScopes`).
  */
 export async function exchangeCode(
   env: GoogleEnv,
   input: { code: string; verifier: string; redirect_uri: string }
-): Promise<Exchanged | { error: "scopes_missing"; scopes: string[] }> {
+): Promise<Exchanged> {
   const json = await tokenCall(env, {
     code: input.code,
     code_verifier: input.verifier,
     redirect_uri: input.redirect_uri,
     grant_type: "authorization_code",
   })
-  const scopes = (json.scope ?? "").split(" ").filter(Boolean)
-  if (!SCOPES.every((scope) => scopes.includes(scope))) {
-    return { error: "scopes_missing", scopes }
-  }
+  const scopes = scopesOf(json)
   // Only with access_type=offline and prompt=consent, which /api/google/start sends.
   if (!json.refresh_token) throw new GoogleError("google.no_refresh_token")
   return {
@@ -232,10 +236,15 @@ function emailOf(idToken: string | undefined): string | null {
  * org and checked against the stored value, so a reconnect to another Google
  * account never reuses the old account's token.
  */
-const access = new Map<string, { stored: string; token: string; exp: number }>()
+const access = new Map<
+  string,
+  { stored: string; token: string; scopes: string[]; exp: number }
+>()
 
 /**
- * An access token for the org, refreshed 5 minutes before it expires.
+ * An access token for the org, refreshed 5 minutes before it expires, with
+ * the scopes the grant carries now (Google's refresh answer names them; its
+ * tokeninfo endpoint is documented for ID tokens only).
  * `invalid_grant` throws `NeedsReauth`. When Google rotates the refresh token,
  * `sealed` is the new value to write to `search_connections.refresh_token`.
  */
@@ -243,10 +252,10 @@ export async function accessFor(
   env: GoogleEnv,
   orgId: string,
   stored: string
-): Promise<{ accessToken: string; sealed?: string }> {
+): Promise<{ accessToken: string; scopes: string[]; sealed?: string }> {
   const cached = access.get(orgId)
   if (cached?.stored === stored && cached.exp - REFRESH_EARLY_MS > Date.now()) {
-    return { accessToken: cached.token }
+    return { accessToken: cached.token, scopes: cached.scopes }
   }
   const refreshToken = await openToken(env, orgId, stored)
   let json: TokenResponse
@@ -267,12 +276,14 @@ export async function accessFor(
       ? await sealToken(env, orgId, json.refresh_token)
       : undefined
   const accessToken = json.access_token as string
+  const scopes = scopesOf(json)
   access.set(orgId, {
     stored: sealed ?? stored,
     token: accessToken,
+    scopes,
     exp: Date.now() + (json.expires_in ?? 3600) * 1000,
   })
-  return sealed ? { accessToken, sealed } : { accessToken }
+  return sealed ? { accessToken, scopes, sealed } : { accessToken, scopes }
 }
 
 /**
@@ -360,6 +371,21 @@ export function verifyResource(
     "POST",
     `${VERIFY_API}/webResource?verificationMethod=${method}`,
     { site: siteOf(identifier, method) }
+  )
+}
+
+/**
+ * The account's role on a property, as Search Console names it. Google
+ * answers 403 or 404 for a property the account no longer has.
+ */
+export function getSite(
+  accessToken: string,
+  siteUrl: string
+): Promise<{ permissionLevel?: string }> {
+  return google(
+    accessToken,
+    "GET",
+    `${WEBMASTERS_API}/${encodeURIComponent(siteUrl)}`
   )
 }
 
