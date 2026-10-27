@@ -262,7 +262,7 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
   reminders: Opening["reminders"]
 }> {
   const now = new Date()
-  const [{ status, facts }, rows, { lines: profile }, reports, repairs, lives] =
+  const [read, rows, { lines: profile }, reports, repairs, lives] =
     await kit.withOrg({ orgId: owner.orgId }, (db) =>
       Promise.all([
         statusWithFacts(db, env, now),
@@ -290,6 +290,7 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
         ),
       ])
     )
+  const { status, facts, tasks } = read
   const roundsOf = (assignmentId: string) =>
     [...repairs].find((r) => r.assignment_id === assignmentId)?.rounds ?? 0
   const failedChecks = (assignmentId: string | null) => {
@@ -371,6 +372,7 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
       // A check stored before the contract changed reads as none yet.
       last_check: DomainCheck.safeParse(r.lastCheck).data ?? null,
     })),
+    tasks,
     expected_seconds: status.expected_seconds,
     expected_range: {
       quick: rangeOf(status.expected_seconds, "quick"),
