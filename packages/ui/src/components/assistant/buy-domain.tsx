@@ -338,6 +338,11 @@ function ChoosePage({
 }) {
   const [away, setAway] = useState(false)
   const best = bestName(rows)
+  // The rows open under the list, so they are brought into view.
+  const places = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (away) places.current?.scrollIntoView({ block: "nearest" })
+  }, [away])
   return (
     <TrayFrame
       {...frame}
@@ -361,7 +366,9 @@ function ChoosePage({
             Buy it somewhere else
           </button>
           {away ? (
-            <Elsewhere name={best} onFollow={() => onElsewhere(best)} />
+            <div className="flex flex-col gap-2" ref={places}>
+              <Elsewhere name={best} onFollow={() => onElsewhere(best)} />
+            </div>
           ) : null}
         </div>
       ) : null}
