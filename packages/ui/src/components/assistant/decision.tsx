@@ -2,12 +2,15 @@ import { type ToolCallMessagePartProps, useAuiState } from "@assistant-ui/react"
 import {
   CheckCircleIcon,
   ProhibitIcon,
-  SealQuestionIcon,
+  SpinnerGapIcon,
   WarningCircleIcon,
 } from "@phosphor-icons/react"
-import { Button } from "@workspace/ui/components/button"
+import {
+  Docked,
+  TrayFrame,
+  useTraySlot,
+} from "@workspace/ui/components/assistant/question-tray"
 import { StatusLine, ToolStatus } from "@workspace/ui/components/status-line"
-import { useRevealWaiting } from "@workspace/ui/hooks/use-reveal-waiting"
 import { toolKind } from "@workspace/ui/lib/activity-copy"
 import { refusalText } from "@workspace/ui/lib/refusal"
 import {
@@ -19,14 +22,16 @@ import {
   NOT_DONE,
   UNCONFIRMED,
 } from "@workspace/ui/lib/tool-state"
-import { cn, META } from "@workspace/ui/lib/utils"
-import { type ReactNode, useId } from "react"
+import { cn } from "@workspace/ui/lib/utils"
+import { type ReactNode, useId, useState } from "react"
 
 /**
  * The card every tool that waits for the owner's yes is drawn with, so an
- * approval fix lands once. The target stays on screen in every state. It is
- * never optimistic: after a tap the buttons wait for the server, and a held
- * answer says it has not been sent while another card in its step waits.
+ * approval fix lands once. While it waits it sits in the question tray
+ * (`TrayApproval`); answered, it is one line in the thread, and the target
+ * stays named in every state. It is never optimistic: after a tap the line
+ * says it is on its way until the server answers, and a held answer says it
+ * has not been sent while another card in its step waits.
  * No yes is offered on a target the owner cannot read or check, and a call
  * the stream left unfinished never shimmers on after it ends.
  */
@@ -73,7 +78,6 @@ export function Decision<I, O>({
   const id = useId()
   const held = useAuiState((s) => isHeld(s.message.parts, props.toolCallId))
   const running = useAuiState((s) => s.message.status?.type === "running")
-  useRevealWaiting(view.state === "asking")
 
   if (view.state === "drafting") {
     return running ? (
@@ -95,82 +99,152 @@ export function Decision<I, O>({
   }
 
   const input = "input" in view ? view.input : null
-  const withheld =
-    view.state === "asking" && input && blocked ? blocked(input) : null
-  const deciding = view.state === "asking" || view.state === "responding"
-  const waiting = deciding || (view.state === "broken" && view.waiting)
+  const heading = input ? title(input) : "Something the assistant asked for"
 
+  if (view.state === "asking" || (view.state === "broken" && view.waiting)) {
+    const withheld = input && blocked ? blocked(input) : null
+    const problem = view.state === "broken" ? CANNOT_APPROVE : withheld
+    return (
+      <TrayApproval
+        name={slot}
+        no={{
+          label: no,
+          onNo: () => props.respondToApproval({ approved: false }),
+        }}
+        title={heading}
+        yes={
+          problem
+            ? undefined
+            : {
+                label: yes,
+                onYes: () => props.respondToApproval({ approved: true }),
+              }
+        }
+      >
+        {input ? <p>{detail(input)}</p> : null}
+        {problem ? <Problem text={problem} /> : null}
+      </TrayApproval>
+    )
+  }
+
+  if (view.state === "done") {
+    return (
+      <section
+        aria-labelledby={`${id}-title`}
+        className="my-3 flex max-w-md flex-col gap-2"
+        data-slot={slot}
+      >
+        <h3 className="break-words font-medium" id={`${id}-title`}>
+          {heading}
+        </h3>
+        {done(view.output)}
+      </section>
+    )
+  }
+
+  // Answered: one line in the thread, what was asked and how it ended.
+  const sending = view.state === "responding" && view.approved && !held
+  const [line, failed] = endLine(view, held, busy, cancelled, refused)
+  const Icon = sending
+    ? SpinnerGapIcon
+    : failed
+      ? WarningCircleIcon
+      : ProhibitIcon
   return (
-    <section
-      aria-labelledby={`${id}-title`}
+    <p
       className={cn(
-        "my-3 flex max-w-md flex-col gap-2",
-        waiting && "rounded-2xl border border-border bg-card p-4"
+        "my-3 flex max-w-md items-start gap-2 text-sm",
+        failed ? "text-destructive" : "text-muted-foreground"
       )}
       data-slot={slot}
     >
-      {deciding ? (
-        <p className="flex items-center gap-2 text-muted-foreground text-sm">
-          <SealQuestionIcon aria-hidden className="size-4 text-primary" />
-          Needs your yes
-        </p>
-      ) : null}
-      <h3 className="break-words font-medium" id={`${id}-title`}>
-        {input ? title(input) : "Something the assistant asked for"}
-      </h3>
-      {input && deciding ? <p className={META}>{detail(input)}</p> : null}
-      {view.state === "broken" ? (
-        <Problem text={view.waiting ? CANNOT_APPROVE : BROKEN} />
-      ) : null}
-      {withheld ? <Problem text={withheld} /> : null}
-      {held && view.state === "responding" ? (
-        // Answered while another card in the step waits: the answer is
-        // recorded and nothing is running, so no buttons, only the answer.
-        <p className={META} role="status">
-          {heldText(view.approved)}
-        </p>
-      ) : waiting ? (
-        <div aria-busy={view.state === "responding"} className="flex gap-2">
-          {view.state === "broken" || withheld ? null : (
-            <Button
-              disabled={view.state === "responding"}
-              onClick={() => props.respondToApproval({ approved: true })}
-              size="sm"
-              type="button"
-            >
-              {view.state === "responding" && view.approved ? busy : yes}
-            </Button>
-          )}
-          <Button
-            disabled={view.state === "responding"}
-            onClick={() => props.respondToApproval({ approved: false })}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            {no}
-          </Button>
-        </div>
-      ) : view.state === "done" ? (
-        done(view.output)
-      ) : view.state === "refused" ? (
-        <Problem text={refusalText(view.code, refused)} />
-      ) : view.state === "denied" ? (
-        <p className="flex items-center gap-2 text-muted-foreground text-sm">
-          <ProhibitIcon aria-hidden className="size-4 shrink-0" />
-          You said not now.
-        </p>
-      ) : view.state === "cancelled" ? (
-        <p className="text-muted-foreground text-sm">{cancelled}</p>
-      ) : view.state === "unconfirmed" ? (
-        <Problem text={UNCONFIRMED} />
-      ) : view.state === "failed" ? (
-        <Problem text={NOT_DONE} />
-      ) : view.state === "expired" ? (
-        <Problem text={EXPIRED} />
-      ) : null}
-    </section>
+      <Icon
+        aria-hidden
+        className={cn(
+          "mt-0.5 size-4 shrink-0",
+          sending && "motion-safe:animate-spin"
+        )}
+      />
+      <span className="min-w-0 break-words">
+        <span className="font-medium text-foreground">{heading}</span>{" "}
+        <span
+          aria-busy={sending || undefined}
+          role={view.state === "responding" ? "status" : undefined}
+        >
+          {line}
+        </span>
+      </span>
+    </p>
   )
+}
+
+/** How an answered call ended, and whether that is a failure. */
+function endLine<I, O>(
+  view: DecisionView<I, O>,
+  held: boolean,
+  busy: string,
+  cancelled: string,
+  refused: string
+): [string, boolean] {
+  switch (view.state) {
+    case "responding":
+      return [
+        held
+          ? heldText(view.approved)
+          : view.approved
+            ? `${busy}…`
+            : "You said not now.",
+        false,
+      ]
+    case "denied":
+      return ["You said not now.", false]
+    case "cancelled":
+      return [cancelled, false]
+    case "refused":
+      return [refusalText(view.code, refused), true]
+    case "unconfirmed":
+      return [UNCONFIRMED, true]
+    case "failed":
+      return [NOT_DONE, true]
+    case "expired":
+      return [EXPIRED, true]
+    default:
+      return [BROKEN, true]
+  }
+}
+
+/**
+ * An approval in the question tray: its title, what a yes does and what it
+ * leaves alone, then the no and the yes. Without `yes` only the no is
+ * offered. Outside a thread it is drawn where it stands.
+ */
+export function TrayApproval({
+  name,
+  title,
+  yes,
+  no,
+  children,
+}: {
+  name: string
+  title: string
+  yes?: { label: string; onYes: () => void } | undefined
+  no: { label: string; onNo: () => void }
+  children: ReactNode
+}) {
+  const slot = useTraySlot()
+  const [collapsed, setCollapsed] = useState(false)
+  const frame = (
+    <TrayFrame
+      collapsed={collapsed}
+      onCollapsedChange={setCollapsed}
+      question={title}
+      skip={{ label: no.label, onSkip: no.onNo }}
+      submit={yes ? { label: yes.label, onSubmit: yes.onYes } : undefined}
+    >
+      <div className="flex flex-col gap-2 px-2 py-1 text-sm">{children}</div>
+    </TrayFrame>
+  )
+  return slot ? <Docked name={name}>{frame}</Docked> : frame
 }
 
 export function Problem({ text }: { text: string }) {

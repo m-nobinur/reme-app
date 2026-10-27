@@ -1,7 +1,12 @@
 // @vitest-environment happy-dom
+import {
+  AssistantRuntimeProvider,
+  type ThreadMessageLike,
+  useExternalStoreRuntime,
+} from "@assistant-ui/react"
 import { TraySlotProvider } from "@workspace/ui/components/assistant/question-tray"
 import { SiteReady } from "@workspace/ui/components/assistant/site-ready"
-import { act, createElement } from "react"
+import { act, createElement, type ReactNode } from "react"
 import { createRoot } from "react-dom/client"
 import { afterEach, expect, it } from "vitest"
 
@@ -19,6 +24,16 @@ afterEach(() => {
   document.body.innerHTML = ""
 })
 
+/** An empty thread, which the docked card's tray item reads. */
+function Runtime({ children }: { children: ReactNode }) {
+  const runtime = useExternalStoreRuntime({
+    messages: [] as ThreadMessageLike[],
+    convertMessage: (message: ThreadMessageLike) => message,
+    onNew: async () => undefined,
+  })
+  return createElement(AssistantRuntimeProvider, { runtime }, children)
+}
+
 it("moves into the tray as the same card and closes on a new message", async () => {
   const tray = document.createElement("div")
   const chat = document.createElement("div")
@@ -29,18 +44,22 @@ it("moves into the tray as the same card and closes on a new message", async () 
     act(async () =>
       root.render(
         createElement(
-          TraySlotProvider,
-          { value: tray },
-          createElement(SiteReady, {
-            closeOn,
-            docked,
-            meta: "Ready now",
-            onApprove: () => undefined,
-            onMakeChanges: () => undefined,
-            pictures: null,
-            preview: "loading",
-            title: "Sparkle website",
-          })
+          Runtime,
+          null,
+          createElement(
+            TraySlotProvider,
+            { value: tray },
+            createElement(SiteReady, {
+              closeOn,
+              docked,
+              meta: "Ready now",
+              onApprove: () => undefined,
+              onMakeChanges: () => undefined,
+              pictures: null,
+              preview: "loading",
+              title: "Sparkle website",
+            })
+          )
         )
       )
     )

@@ -950,6 +950,12 @@ const RESOLVED = {
 const changeCard = (container: HTMLElement) =>
   container.querySelector<HTMLElement>('[data-slot="request-change"]')
 
+/** A card's buttons that have words; the tray's collapse and steps are icons. */
+const labelled = (card: Element | null | undefined) =>
+  [...(card?.querySelectorAll("button") ?? [])]
+    .map((each) => each.textContent)
+    .filter(Boolean)
+
 /** Resolves once the SDK has asked `sendsOn` `times` times, with the answers. */
 async function decided(times: number) {
   await vi.waitFor(() =>
@@ -1010,7 +1016,9 @@ it("the question card holds its yes the same way", async () => {
 it("a held not now says so on either card", async () => {
   const NOT_NOW = "You said not now. Sent once you answer the other cards."
   const first = await open(COS_HISTORY)
-  await press(first, "Not now")
+  const change = changeCard(first)
+  if (!change) throw new Error("no change card")
+  await act(async () => button(change, "Not now").click())
   expect(await decided(1)).toEqual([false])
   expect(changeCard(first)?.querySelector('[role="status"]')?.textContent).toBe(
     NOT_NOW
@@ -1023,7 +1031,11 @@ it("a held not now says so on either card", async () => {
   if (!question) throw new Error("no question card")
   await act(async () => button(question, "Not now").click())
   expect(await decided(2)).toEqual([false, false])
-  expect(question.querySelector('[role="status"]')?.textContent).toBe(NOT_NOW)
+  // Answered, it leaves the tray for its one line in the thread.
+  expect(
+    second.querySelector('[data-slot="answer-question"] [role="status"]')
+      ?.textContent
+  ).toBe(NOT_NOW)
 })
 
 it("a message typed while a yes is held cancels it, as the api stores it", async () => {
@@ -1128,14 +1140,15 @@ for (const [action, run] of Object.entries(ACTIONS)) {
     )
     // The alert shows only once the one request has failed for good.
     expect(sent).toHaveLength(1)
-    // Back to what is stored: both cards open, a typed message in the
-    // composer to send again once the other turn ends.
+    // Back to what is stored: both cards open in the tray, a typed message
+    // in the composer to send again once the other turn ends.
     await vi.waitFor(() =>
       expect(
         [...chat.querySelectorAll("button")]
           .filter((each) => !each.disabled)
           .map((each) => each.textContent?.trim())
           .filter((name) => name === "Approve" || name === "Send answer")
+          .sort()
       ).toEqual(["Approve", "Send answer"])
     )
     if (action === "a typed message") {
@@ -1333,9 +1346,7 @@ it("an answer names the question it goes to, and offers no yes for one no longer
     '[data-slot="answer-question"]'
   )
   expect(orphan?.textContent).toContain("no longer open")
-  expect(
-    [...(orphan?.querySelectorAll("button") ?? [])].map((b) => b.textContent)
-  ).toEqual(["Not now"])
+  expect(labelled(orphan)).toEqual(["Not now"])
 })
 
 it("a change it cannot read offers no yes, only a way to let the step go on", async () => {
@@ -1359,9 +1370,7 @@ it("a change it cannot read offers no yes, only a way to let the step go on", as
   })
   const card = changeCard(chat)
   expect(card?.textContent).toContain("did not come through")
-  expect(
-    [...(card?.querySelectorAll("button") ?? [])].map((b) => b.textContent)
-  ).toEqual(["Not now"])
+  expect(labelled(card)).toEqual(["Not now"])
 })
 
 it("a call the stream left unfinished stops, rather than working forever", async () => {

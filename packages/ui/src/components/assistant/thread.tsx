@@ -958,10 +958,20 @@ const Composer: FC<{ autoFocus: boolean; expanded: boolean }> = ({
   const aui = useAui()
   const idea =
     useCycle([placeholder, ...(placeholderIdeas ?? [])], 5000).item ?? ""
-  // A question waits in the tray: what the owner types instead is an
-  // ordinary turn, and the placeholder says so.
+  // A question or an approval waits in the tray, in any message since a
+  // post may land after it: what the owner types instead is an ordinary
+  // turn, and the placeholder says so.
   const asking = useAuiState((s) =>
-    waitsOnTray(s.thread.messages.at(-1)?.parts)
+    s.thread.messages.some(
+      ({ parts }) =>
+        waitsOnTray(parts) ||
+        parts.some(
+          (part) =>
+            part.type === "tool-call" &&
+            part.approval != null &&
+            part.approval.approved === undefined
+        )
+    )
   )
   // Disabled, not only kept from sending: words typed into the placeholder
   // thread would stay behind with it when the stored one replaces it. The
