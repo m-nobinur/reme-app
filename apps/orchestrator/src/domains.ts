@@ -340,7 +340,18 @@ export const SETTINGS_LINKS: Readonly<Record<string, string>> = {
   "dash.cloudflare.com": "https://dash.cloudflare.com/",
 }
 
-/** Without a Domain Connect record: the nameserver suffix names the provider. */
+const IONOS: DomainProvider = {
+  name: "IONOS",
+  settings_url: "https://my.ionos.co.uk/domains",
+}
+
+/**
+ * Without a Domain Connect record: the nameserver suffix names the provider.
+ * Each link was fetched on 2026-10-27 and answered 200 or a redirect to the
+ * provider's sign-in; the owner lands on their account's domain list or DNS
+ * page after signing in. GoDaddy and Cloudflare answer a script 403 behind
+ * bot checks and were checked by their redirects to sign-in alone.
+ */
 const NAMESERVERS: ReadonlyArray<[string, DomainProvider]> = [
   [
     ".cloudflare.com",
@@ -349,6 +360,47 @@ const NAMESERVERS: ReadonlyArray<[string, DomainProvider]> = [
   [
     ".domaincontrol.com",
     { name: "GoDaddy", settings_url: "https://dcc.godaddy.com/manage/dns" },
+  ],
+  [
+    ".123-reg.co.uk",
+    { name: "123-reg", settings_url: "https://www.123-reg.co.uk/secure/" },
+  ],
+  [".ui-dns.com", IONOS],
+  [".ui-dns.org", IONOS],
+  [".ui-dns.biz", IONOS],
+  [".ui-dns.de", IONOS],
+  [
+    ".registrar-servers.com",
+    {
+      name: "Namecheap",
+      settings_url: "https://ap.www.namecheap.com/domains/list/",
+    },
+  ],
+  [
+    ".googledomains.com",
+    {
+      name: "Squarespace",
+      settings_url: "https://account.squarespace.com/domains",
+    },
+  ],
+  [
+    ".wixdns.net",
+    { name: "Wix", settings_url: "https://manage.wix.com/account/domains" },
+  ],
+  [
+    ".livedns.co.uk",
+    { name: "Fasthosts", settings_url: "https://admin.fasthosts.co.uk/" },
+  ],
+  [
+    ".gandi.net",
+    { name: "Gandi", settings_url: "https://admin.gandi.net/domain" },
+  ],
+  [
+    ".ns.porkbun.com",
+    {
+      name: "Porkbun",
+      settings_url: "https://porkbun.com/account/domainsSpeedy",
+    },
   ],
 ]
 
@@ -458,18 +510,24 @@ async function discover(apex: string): Promise<DomainProvider | null> {
 
 /**
  * Who runs the domain's DNS: Domain Connect discovery first, which tells
- * GoDaddy's brands apart, then the nameserver table, then nobody. Never
- * throws: a card without a provider still works.
+ * GoDaddy's brands apart, then the nameserver table, then nobody. A provider
+ * discovery names without a page of ours gets the table's page for the same
+ * nameservers. Never throws: a card without a provider still works.
  */
 export async function detectProvider(
   apex: string,
   nameservers: string[]
 ): Promise<DomainProvider | null> {
   const discovered = await discover(apex).catch(() => null)
-  if (discovered) return discovered
   const row = NAMESERVERS.find(([suffix]) =>
     nameservers.some((n) => bare(n).endsWith(suffix))
   )
+  if (discovered) {
+    const link = row?.[1].settings_url
+    return discovered.settings_url || !link
+      ? discovered
+      : { ...discovered, settings_url: link }
+  }
   return row ? { ...row[1] } : null
 }
 
@@ -535,6 +593,28 @@ export function recordsFor(input: {
     records.push({ type: "CAA", name: "@", value: CAA_FOR_US })
   }
   return records
+}
+
+/**
+ * The records still to add: those of `recordsFor` that public DNS does not
+ * already show reaching us, so a card never asks for what is there. A CAA line
+ * is only ever in the list because the domain's own blocks us. Strict on the
+ * owner's Cloudflare, as `alreadyPointsAtUs` is, where only a visible CNAME counts.
+ */
+export function stillToAdd(
+  records: DnsRecord[],
+  inspection: Inspection
+): DnsRecord[] {
+  const strict = { ...inspection, onCloudflare: false }
+  return records.filter((record) => {
+    if (record.type === "CAA") return true
+    const host =
+      record.name === "@"
+        ? inspection.apex
+        : `${record.name}.${inspection.apex}`
+    const seen = inspection.hosts[host]
+    return !(seen && pointsAtUs(seen, strict))
+  })
 }
 
 /**
