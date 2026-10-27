@@ -490,12 +490,18 @@ export const samples: Record<ContractName, unknown> = {
     outcome: "not_registered_yet",
     name: "brightclean.co.uk",
   },
-  BuyDomainInput: { name: "brightclean.co.uk", ...REGISTRANT },
+  BuyDomainInput: { name: "brightclean.co.uk" },
   BuyDomainOutput: {
-    outcome: "awaiting_payment",
+    outcome: "details",
     name: "brightclean.co.uk",
-    price_gbp: 8,
-    checkout: "embedded",
+    price_gbp_year: 8,
+    registrant: {
+      name: "Jane Smith",
+      business_name: "Bright Clean",
+      email: "jane@brightclean.example",
+      phone: "+447700900123",
+    },
+    missing: ["street", "city", "postal_code", "registrant_type"],
   },
   CapabilityCall: {
     call_id: "8192a3b4-c5d6-4192-a354-8f9001122334",

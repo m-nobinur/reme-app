@@ -13987,110 +13987,127 @@
             "type": "string",
             "maxLength": 253,
             "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
-          },
-          "registrant": {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 200,
-                "pattern": "\\S",
-                "description": "The owner's full legal name, first and last."
-              },
-              "business_name": {
-                "description": "The business's registered or trading name.",
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 200,
-                "pattern": "\\S"
-              },
-              "email": {
-                "type": "string",
-                "maxLength": 254,
-                "format": "email",
-                "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
-              },
-              "phone": {
-                "type": "string",
-                "pattern": "^\\+[1-9]\\d{6,14}$"
-              },
-              "address": {
-                "type": "object",
-                "properties": {
-                  "street": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 200,
-                    "pattern": "\\S"
-                  },
-                  "city": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 100,
-                    "pattern": "\\S"
-                  },
-                  "state": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 100,
-                    "pattern": "\\S"
-                  },
-                  "postal_code": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 20,
-                    "pattern": "\\S"
-                  },
-                  "country_code": {
-                    "type": "string",
-                    "pattern": "^[A-Z]{2}$",
-                    "description": "ISO 3166-1 alpha-2, such as GB."
-                  }
-                },
-                "required": [
-                  "street",
-                  "city",
-                  "postal_code",
-                  "country_code"
-                ],
-                "additionalProperties": false
-              }
-            },
-            "required": [
-              "name",
-              "email",
-              "phone",
-              "address"
-            ],
-            "additionalProperties": false
-          },
-          "registrant_type": {
-            "description": "Required for .co.uk and .uk: STRA sole trader, LTD limited company, LLP, PTNR partnership, IND individual.",
-            "type": "string",
-            "enum": [
-              "STRA",
-              "LTD",
-              "LLP",
-              "PTNR",
-              "IND"
-            ]
-          },
-          "company_number": {
-            "description": "The Companies House number, required with LTD and LLP.",
-            "type": "string",
-            "pattern": "^[A-Z0-9]{8}$"
           }
         },
         "required": [
-          "name",
-          "registrant"
+          "name"
         ],
         "additionalProperties": false
       },
       "BuyDomainOutput": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "details"
+              },
+              "name": {
+                "type": "string",
+                "maxLength": 253,
+                "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+              },
+              "price_gbp_year": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "registrant": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "pattern": "\\S",
+                    "description": "The owner's full legal name, first and last."
+                  },
+                  "business_name": {
+                    "description": "The business's registered or trading name.",
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "pattern": "\\S"
+                  },
+                  "email": {
+                    "type": "string",
+                    "maxLength": 254,
+                    "format": "email",
+                    "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                  },
+                  "phone": {
+                    "type": "string",
+                    "pattern": "^\\+[1-9]\\d{6,14}$"
+                  },
+                  "address": {
+                    "type": "object",
+                    "properties": {
+                      "street": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "pattern": "\\S"
+                      },
+                      "city": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100,
+                        "pattern": "\\S"
+                      },
+                      "state": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100,
+                        "pattern": "\\S"
+                      },
+                      "postal_code": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 20,
+                        "pattern": "\\S"
+                      },
+                      "country_code": {
+                        "type": "string",
+                        "pattern": "^[A-Z]{2}$",
+                        "description": "ISO 3166-1 alpha-2, such as GB."
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
+              },
+              "missing": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "name",
+                    "business_name",
+                    "email",
+                    "phone",
+                    "street",
+                    "city",
+                    "state",
+                    "postal_code",
+                    "country_code",
+                    "registrant_type",
+                    "company_number"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "outcome",
+              "name",
+              "price_gbp_year",
+              "registrant",
+              "missing"
+            ],
+            "additionalProperties": false
+          },
           {
             "type": "object",
             "properties": {
@@ -25993,6 +26010,117 @@
               },
               "output": {
                 "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "const": "details"
+                      },
+                      "name": {
+                        "type": "string",
+                        "maxLength": 253,
+                        "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+                      },
+                      "price_gbp_year": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "registrant": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200,
+                            "pattern": "\\S",
+                            "description": "The owner's full legal name, first and last."
+                          },
+                          "business_name": {
+                            "description": "The business's registered or trading name.",
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200,
+                            "pattern": "\\S"
+                          },
+                          "email": {
+                            "type": "string",
+                            "maxLength": 254,
+                            "format": "email",
+                            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                          },
+                          "phone": {
+                            "type": "string",
+                            "pattern": "^\\+[1-9]\\d{6,14}$"
+                          },
+                          "address": {
+                            "type": "object",
+                            "properties": {
+                              "street": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200,
+                                "pattern": "\\S"
+                              },
+                              "city": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 100,
+                                "pattern": "\\S"
+                              },
+                              "state": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 100,
+                                "pattern": "\\S"
+                              },
+                              "postal_code": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 20,
+                                "pattern": "\\S"
+                              },
+                              "country_code": {
+                                "type": "string",
+                                "pattern": "^[A-Z]{2}$",
+                                "description": "ISO 3166-1 alpha-2, such as GB."
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      "missing": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "name",
+                            "business_name",
+                            "email",
+                            "phone",
+                            "street",
+                            "city",
+                            "state",
+                            "postal_code",
+                            "country_code",
+                            "registrant_type",
+                            "company_number"
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "outcome",
+                      "name",
+                      "price_gbp_year",
+                      "registrant",
+                      "missing"
+                    ],
+                    "additionalProperties": false
+                  },
                   {
                     "type": "object",
                     "properties": {
