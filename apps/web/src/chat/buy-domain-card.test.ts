@@ -371,10 +371,16 @@ it("asks only for the gaps, pays in a dialog, and leaves one line once paid", as
     { billingAddress: contact },
   ])
   // What confirm sends, the card form must not also ask for, or Stripe
-  // refuses the confirm.
+  // refuses the confirm. Link is the button above, not a sign-up in the
+  // card form, and the renewal consent is ours, under Pay.
   expect(stripe.options.payment).toEqual({
     fields: { billingDetails: { name: "never", address: "never" } },
+    wallets: { link: "never" },
+    terms: { card: "never" },
   })
+  expect(dialog?.textContent).toContain(
+    `By paying you let Reme charge this card £8 a year to renew ${NAME} until you cancel.`
+  )
 
   // Wallets that fail to load go away, and the card form still pays.
   await vi.waitFor(() =>
