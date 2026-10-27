@@ -11,12 +11,7 @@ import type {
   TaskStepState,
   WorkspaceStatus,
 } from "@workspace/contracts"
-import {
-  type OrgScopedDb,
-  PURCHASE_HOLD_MS,
-  readTasks,
-  sql,
-} from "@workspace/db"
+import { type OrgScopedDb, readTasks, sql } from "@workspace/db"
 import { STAGES } from "./workspace.ts"
 
 /**
@@ -42,37 +37,18 @@ type Logged = Extract<AttentionItem, { kind: "report" | "alert" }>
 type Segment = ActivitySegment
 type Step = ActivityStep
 
-/** A domain row as `readActivityRows` selects it; times as the database wrote them. */
+/** A bought domain as `readActivityRows` selects it, for its renewal; the rest of a domain is its task's. */
 export type DomainRow = {
   id: string
   name: string
-  origin: "connected" | "purchased"
-  state: string
-  /** The last `DomainCheck`'s status. */
-  check: string | null
-  /** A purchase's `DomainRegistration`, as stored. */
-  registration: {
-    status?: string
-    outcome?: string
-    expires_at?: string
-  } | null
-  /** The owner sent their details and a Checkout Session is stored. */
-  checkout: boolean
-  created_at: string
-  activated_at: string | null
+  registration: { expires_at?: string } | null
 }
 
-export type GoogleRow = {
-  state: "active" | "needs_reauth" | "revoked" | "needs_permission"
-  connected_at: string | null
-  /** The newest property: the site Google is reading now. */
-  property: {
-    state: "pending" | "verified" | "failed" | "stale"
-    verified_at: string | null
-    sitemap_at: string | null
-    synced_at: string | null
-    created_at: string
-  } | null
+/** Google's last read and what the last 28 days of searches brought. */
+export type SearchRow = {
+  synced_at: string | null
+  clicks: number
+  impressions: number
 }
 
 export type HeartbeatRow = {
@@ -86,7 +62,7 @@ export type ActivityRows = {
   /** When the org was made: the `at` of a journey segment nothing has started. */
   since: string | Date
   domains: DomainRow[]
-  google: GoogleRow | null
+  search: SearchRow
   heartbeat: HeartbeatRow | null
   /** The site's first publish, and the build it published. */
   first_live: { at: string; assignment_id: string | null } | null
@@ -102,9 +78,10 @@ const dayBefore = (now: Date) =>
 
 /**
  * The rows only the activity view reads, in one statement from the org's
- * own row: its domains by `domains_org_state_idx`, the Google connection by
- * its key and its newest property by `search_properties_org_site_url`, the
- * heartbeat's newest run by `job_runs_pkey`, and the first publish by
+ * own row: its bought domains by `domains_org_state_idx`, Google's last read
+ * and its 28 days of searches ending at the newest stored day (Google's data
+ * runs a few days behind, so the window is not "today"), the heartbeat's
+ * newest run by `job_runs_pkey`, and the first publish by
  * `deployments_site_config_version_key`. The owner tasks are a second
  * statement, pipelined beside it.
  *
@@ -120,16 +97,15 @@ export async function readActivityRows(
     db.execute<Omit<ActivityRows, "tasks">>(sql`
     select o.created_at as since,
       (select coalesce(json_agg(d), '[]'::json) from (
-        select id, name, origin, state, last_check->>'status' as check,
-          registration, stripe is not null as checkout, created_at, activated_at
-        from domains where state <> 'removed'
+        select id, name, registration
+        from domains where state = 'active' and origin = 'purchased'
         order by created_at desc limit 10) d) as domains,
-      (select json_build_object('state', c.state, 'connected_at', c.connected_at,
-        'property', (select json_build_object('state', p.state,
-          'verified_at', p.verified_at, 'sitemap_at', p.sitemap->>'submitted_at',
-          'synced_at', p.last_synced_at, 'created_at', p.created_at)
-          from search_properties p order by p.created_at desc limit 1))
-        from search_connections c) as google,
+      (select json_build_object(
+        'synced_at', (select max(last_synced_at) from search_properties),
+        'clicks', coalesce(sum(clicks), 0)::int,
+        'impressions', coalesce(sum(impressions), 0)::int)
+        from search_daily
+        where date > (select max(date) from search_daily) - 28) as search,
       (select json_build_object(
         'next', case when j.paused_at is null then j.next_run_at end,
         'last', (select json_build_object('at', r.run_at, 'outcome', r.outcome)
@@ -161,14 +137,6 @@ export const CHANGE_STEPS = [
   "checking",
   "ready",
 ] as const
-export const DOMAIN_STEPS = ["dns", "certificate", "loads"] as const
-export const PURCHASE_STEPS = [
-  "details",
-  "payment",
-  "registration",
-  "connecting",
-] as const
-export const GOOGLE_STEPS = ["sign_in", "verify", "sitemap"] as const
 
 /** Where a change stands, by the build stage it is on. */
 const CHANGE_OF_STAGE: Record<string, number> = {
@@ -288,109 +256,12 @@ export function changeSegment(
 }
 
 // ---------------------------------------------------------------------------
-// Domains and purchases
-
-/** A connected domain: the owner's DNS change, the certificate, the site loading on it. */
-export function domainSegment(row: DomainRow): Segment {
-  const base = {
-    id: `domain:${row.id}`,
-    kind: "domain" as const,
-    names: { domain: row.name },
-  }
-  if (row.state === "active")
-    return {
-      ...base,
-      state: "done",
-      steps: along(DOMAIN_STEPS, DOMAIN_STEPS.length),
-      at: iso(row.activated_at ?? row.created_at),
-    }
-  // Valid at Cloudflare and still verifying: only the first load is left.
-  const here = row.state === "verifying" ? (row.check === "valid" ? 2 : 1) : 0
-  if (row.state === "failed")
-    // shortcut: a failed row keeps no time of its own, so it reads as of
-    // when it was made; read its `domain.*` event if that shows wrongly.
-    return {
-      ...base,
-      state: "failed",
-      steps: along(DOMAIN_STEPS, here),
-      at: iso(row.created_at),
-    }
-  return {
-    ...base,
-    state: here === 0 ? "waiting" : "now",
-    steps: along(DOMAIN_STEPS, here, here === 0 ? "waiting" : "now"),
-    at: iso(row.created_at),
-  }
-}
-
-// shortcut: `PURCHASE_HOLD_MS` (packages/db) is the name's hold, since the
-// Checkout Session's own `expires_at` is not stored and the owner may open a
-// fresh one until then; store it on the row if the panel needs the session's
-// 31 minutes instead.
-export { PURCHASE_HOLD_MS }
-
-/** A bought domain: details, payment, registration, then connecting it. */
-export function purchaseSegment(row: DomainRow): Segment {
-  const base = {
-    id: `purchase:${row.id}`,
-    kind: "purchase" as const,
-    names: { domain: row.name },
-  }
-  const created = Date.parse(row.created_at)
-  const deadline = new Date(created + PURCHASE_HOLD_MS).toISOString()
-  if (row.state === "awaiting_payment") {
-    const here = row.checkout ? 1 : 0
-    return {
-      ...base,
-      state: "waiting",
-      steps: along(PURCHASE_STEPS, here, "waiting"),
-      at: iso(row.created_at),
-      deadline,
-    }
-  }
-  if (row.state === "abandoned")
-    // The Checkout ran out unpaid: "Payment form expired".
-    return {
-      ...base,
-      state: "failed",
-      steps: along(PURCHASE_STEPS, row.checkout ? 1 : 0),
-      at: deadline,
-      deadline,
-    }
-  if (row.state === "failed")
-    // Paid, then the registration was refused or the hold released.
-    // shortcut: no close time is kept, so it reads as of when it was made.
-    return {
-      ...base,
-      state: "failed",
-      steps: along(PURCHASE_STEPS, 2),
-      at: iso(row.created_at),
-    }
-  if (row.state === "active")
-    return {
-      ...base,
-      state: "done",
-      steps: along(PURCHASE_STEPS, PURCHASE_STEPS.length),
-      at: iso(row.activated_at ?? row.created_at),
-    }
-  // Paid: registering until Cloudflare says registered, then connecting.
-  const registered =
-    row.registration?.status === "registered" ||
-    row.registration?.outcome === "registered" ||
-    row.registration?.outcome === "test_registered"
-  return {
-    ...base,
-    state: "now",
-    steps: along(PURCHASE_STEPS, registered ? 3 : 2),
-    at: iso(row.created_at),
-  }
-}
+// Renewals
 
 /** A bought domain's renewal, when its registration says when it lapses. */
 function renewalOf(row: DomainRow): Segment | null {
   const expires = row.registration?.expires_at
-  if (row.origin !== "purchased" || row.state !== "active" || !expires)
-    return null
+  if (!expires) return null
   return {
     id: `renewal:${row.id}`,
     kind: "purchase",
@@ -398,51 +269,6 @@ function renewalOf(row: DomainRow): Segment | null {
     steps: [],
     at: iso(expires),
     names: { domain: row.name },
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Google
-
-/**
- * The Search Console connection: signed in, the site verified, the sitemap
- * sent. No segment before the owner connects or after they ended it.
- *
- * shortcut: the consent screen's state lives in a cookie, so an owner who
- * has the link but has not signed in yet has no row and no segment; a
- * `needs_reauth` connection waits on sign in with no deadline.
- */
-export function googleSegment(row: GoogleRow | null): Segment | null {
-  if (!row || row.state === "revoked") return null
-  const at = row.connected_at ?? row.property?.created_at
-  if (!at) return null
-  const base = { id: "google", kind: "google" as const }
-  if (row.state === "needs_reauth")
-    return {
-      ...base,
-      state: "waiting",
-      steps: along(GOOGLE_STEPS, 0, "waiting"),
-      at: iso(at),
-    }
-  const p = row.property
-  const verified = p?.state === "verified" || p?.state === "stale"
-  const here = !verified ? 1 : p?.sitemap_at ? 3 : 2
-  if (p?.state === "failed")
-    return {
-      ...base,
-      state: "failed",
-      steps: along(GOOGLE_STEPS, 1),
-      at: iso(p.created_at),
-    }
-  const finished = [row.connected_at, p?.verified_at, p?.sitemap_at]
-    .filter((t): t is string => Boolean(t))
-    .map(Date.parse)
-  return {
-    ...base,
-    state: here === 3 ? "done" : "now",
-    steps: along(GOOGLE_STEPS, here),
-    at: here === 3 ? new Date(Math.max(...finished)).toISOString() : iso(at),
-    ...(p?.synced_at && { synced_at: iso(p.synced_at) }),
   }
 }
 
@@ -490,6 +316,7 @@ export function taskSegment(task: OwnerTask): Segment | null {
     steps: task.steps.map((s) => ({
       id: s.step,
       state: STEP_STATE[s.state],
+      ...(s.state === "done" && s.changed_at && { at: s.changed_at }),
       ...(s.state === "blocked" && s.note && { note: s.note }),
       ...(s.step === "records" &&
         changes && {
@@ -661,11 +488,12 @@ const liveNames = (input: ActivityInput) => ({
 
 /**
  * Where the site stands whatever the age, for the Website page: the latest
- * publish, each domain with its renewal, and the Google connection. An
- * unpaid purchase that ran out is not a standing state, so it is left out.
+ * publish, the address and Google tasks, and each bought domain's renewal.
+ * The Google task carries when its data was last read and the 28 days of
+ * searches, once Google has sent any.
  */
 export function standingOf(input: ActivityInput): Segment[] {
-  const { domains, google, live_at } = input.rows
+  const { domains, live_at, search, tasks } = input.rows
   const standing: Segment[] = []
   if (input.site.live && live_at)
     standing.push({
@@ -676,16 +504,25 @@ export function standingOf(input: ActivityInput): Segment[] {
       at: iso(live_at),
       names: liveNames(input),
     })
-  for (const row of domains) {
-    if (row.state === "abandoned") continue
+  for (const task of tasks) {
+    const segment = taskSegment(task)
+    if (!segment) continue
     standing.push(
-      row.origin === "purchased" ? purchaseSegment(row) : domainSegment(row)
+      segment.kind === "google"
+        ? {
+            ...segment,
+            ...(search.synced_at && { synced_at: iso(search.synced_at) }),
+            ...(search.impressions > 0 && {
+              numbers: {
+                clicks: search.clicks,
+                impressions: search.impressions,
+              },
+            }),
+          }
+        : segment
     )
-    const renewal = renewalOf(row)
-    if (renewal) standing.push(renewal)
   }
-  const segment = googleSegment(google)
-  if (segment) standing.push(segment)
+  standing.push(...domains.flatMap((row) => renewalOf(row) ?? []))
   return standing
 }
 
