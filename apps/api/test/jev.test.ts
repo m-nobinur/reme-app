@@ -1,3 +1,4 @@
+import { ADDRESS_ASK, addressReply } from "@workspace/contracts"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import replies from "../../../evals/typed-replies/replies.json" with {
   type: "json",
@@ -8,6 +9,7 @@ import {
   jev,
   jevApproval,
   jevPromise,
+  jevPutOn,
   jevReading,
   matched,
   phrased,
@@ -544,5 +546,74 @@ describe("the reading of a reply that may promise work", () => {
     expect(await jevPromise("k", "Hmm.", never, fake({}, 500).fetchImpl)).toBe(
       false
     )
+  })
+})
+
+describe("the reading of a message that may put the site on a name", () => {
+  afterEach(() => vi.restoreAllMocks())
+  const read = (score: number) =>
+    fake({ answers: { puts_it_on: { type: "noul", noul: score } } })
+
+  it("is sure only at the bar, and sends the message and the name as data", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined)
+    const said = "Put the site on sparkleclean.co.uk"
+    const sure = read(0.95)
+    expect(
+      await jevPutOn("k", said, "sparkleclean.co.uk", sure.fetchImpl)
+    ).toBe(true)
+    expect(JSON.parse(sure.sent[0]?.init.body as string).state).toEqual({
+      owner_said: said,
+      domain: "sparkleclean.co.uk",
+    })
+    expect(
+      await jevPutOn("k", said, "sparkleclean.co.uk", read(0.89).fetchImpl)
+    ).toBe(false)
+  })
+
+  it("takes the tray's own yes with no reading, and never reads a message without the name", async () => {
+    const name = "sparkleclean.co.uk"
+    const never = fake({}, 500)
+    expect(
+      await jevPutOn(
+        "k",
+        addressReply(ADDRESS_ASK.yes, name) ?? "",
+        name,
+        never.fetchImpl
+      )
+    ).toBe(true)
+    expect(
+      await jevPutOn(
+        "k",
+        "Yes, it's sparkleclean.com",
+        name,
+        read(0.99).fetchImpl
+      )
+    ).toBe(false)
+    expect(never.sent).toHaveLength(0)
+  })
+
+  it("reads as no on a non-200, a missing answer and the time limit, one log line each", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined)
+    const slow = ((_url: string, init: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        init.signal?.addEventListener("abort", () =>
+          reject(init.signal?.reason)
+        )
+      })) as unknown as typeof fetch
+    for (const fetchImpl of [
+      fake({}, 500).fetchImpl,
+      fake({}).fetchImpl,
+      slow,
+    ]) {
+      expect(
+        await jevPutOn("k", "put it on a.co.uk", "a.co.uk", fetchImpl)
+      ).toBe(false)
+    }
+    expect(log).toHaveBeenCalledTimes(3)
+    expect(JSON.parse(log.mock.calls.at(-1)?.[0] as string)).toMatchObject({
+      code: "put_on.jev",
+      sure: false,
+      error: "timeout",
+    })
   })
 })
