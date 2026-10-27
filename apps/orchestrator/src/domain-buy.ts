@@ -67,6 +67,7 @@ import {
   searchDomains,
   sellable,
   setAutoRenew,
+  suggestions,
 } from "./registrar.ts"
 import {
   capturePayment,
@@ -147,8 +148,8 @@ async function rankFacts(db: OrgScopedDb, query?: string) {
 /** The endings a row shows, in the order the owner reads them. */
 const ROW_TLDS = ["co.uk", "com", "uk"] as const
 
-/** Rows `find_domain` returns at most. */
-const ROWS_MAX = 5
+/** Rows `find_domain` returns at most: a 2 by 2 grid. */
+const ROWS_MAX = 4
 
 /**
  * `POST /domains/find`: one row per name stem, best first, each ending this
@@ -176,17 +177,13 @@ export async function find(
   const facts = await kit.withOrg({ orgId }, (db) =>
     rankFacts(db, input.data.query)
   )
-  const suggested = input.data.query
-    ? await searchDomains(env, input.data.query).catch(() => [])
+  // The registrar fills the rows the ranker's own leave short, for the
+  // owner's words or else the business name.
+  const suggested = facts.name
+    ? await searchDomains(env, facts.name).catch(() => [])
     : []
   const offered = ROW_TLDS.filter((tld) => offeredTlds(env).includes(tld))
-  const stems = [
-    ...candidates(facts),
-    ...suggested.map((name) => ({
-      stem: name.slice(0, name.indexOf(".")),
-      why: "close to what you asked for",
-    })),
-  ]
+  const stems = [...candidates(facts), ...suggestions(facts, suggested)]
   // Whole stems only, so a row never shows an ending it did not check.
   const perStem = offered.length
   const rows = stems
