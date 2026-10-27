@@ -437,6 +437,17 @@ export async function jevPromise(
 }
 
 /**
+ * Whether `said` holds the domain `name` as a whole name: `notsparkle.co.uk`
+ * and `sparkle.co.uk.example.com` are other names, a leading www is not.
+ * `name` is a `DomainName`, so only its dots need escaping.
+ */
+const holdsName = (said: string, name: string) =>
+  new RegExp(
+    `(?<![a-z0-9.-])(?:www\\.)?${name.replaceAll(".", "\\.")}(?![a-z0-9-]|\\.[a-z0-9])`,
+    "i"
+  ).test(said)
+
+/**
  * Whether the owner's `said` tells the assistant to put the website on
  * exactly the domain `name`, so connecting it needs no card. A question, a
  * wish, another name or a doubt is not a yes, and a message without the
@@ -451,7 +462,7 @@ export async function jevPutOn(
   name: string,
   fetchImpl: typeof fetch = fetch
 ): Promise<boolean> {
-  if (!said.toLowerCase().includes(name)) return false
+  if (!holdsName(said, name)) return false
   if (said === addressReply(ADDRESS_ASK.yes, name)) return true
   const began = Date.now()
   const { body, error } = await ask(

@@ -17,6 +17,7 @@ import {
   type CreateReminderOutput,
   type CreateReminderRequest,
   DomainCheck,
+  DomainInspection,
   ErrorEnvelope,
   type FactRecord,
   FactValue,
@@ -27,9 +28,13 @@ import {
   type GetPreviewInput,
   GetPreviewOutput,
   InformationAnswer,
+  type InspectDomainInput,
+  type InspectDomainOutput,
   OwnerAnswerText,
   PreviewLink,
   type ProfileLine,
+  type PutOffInput,
+  type PutOffOutput,
   type QuestionAnswer,
   REVIEW_FACT_KEYS,
   type RecordReviewInput,
@@ -48,6 +53,7 @@ import {
   events,
   failureCode,
   type OrgScopedDb,
+  openTask,
   siteRevisions,
   sql,
   type Tenancy,
@@ -1007,6 +1013,28 @@ export async function checkDomain(
   )
 }
 
+/**
+ * What a name the owner says they have is, read before anything is
+ * connected: whether it is registered, with whom, who runs its DNS and
+ * whether it already points somewhere. Public registry and DNS reads only,
+ * through the orchestrator, so no card.
+ */
+export async function inspectDomain(
+  { env, owner }: ToolContext,
+  { name }: InspectDomainInput
+): Promise<InspectDomainOutput> {
+  const answered = relay(
+    await bridge(env, owner, `/domains/${name}/inspect`, { method: "GET" }),
+    DomainInspection.parse
+  )
+  if (!answered.ok) return refused(answered)
+  // The route answers the bare inspection; the tool's output is tagged.
+  return {
+    outcome: "inspected",
+    ...DomainInspection.parse(await answered.json()),
+  }
+}
+
 /** The orchestrator's connect answers that a second look a moment later can turn into records. */
 const PASSING = new Set(["dns.unavailable", "domain.records_pending"])
 
@@ -1047,22 +1075,49 @@ export async function connectDomain(
  * owner's last message puts the site on exactly that name (Jev, at `sure`).
  * It always does for a name the org already has live, since connecting moves
  * live DNS, and for anything unsure: no key, a message without the name, a
- * Jev error. The context note sits before the owner's message, so the last user
- * message is theirs.
+ * Jev error. The owner's words are read from the log, not from `messages`,
+ * so a context note or a summary can never stand for them, and an emailed
+ * reply (`eml_`) is not a yes: it crosses a channel the owner does not see.
+ * A connect already proposed since that message (declined, refused or run)
+ * never skips the card again, so a no cannot be retried past.
  */
 export async function connectApproval(
   { env, kit, owner }: Pick<ToolContext, "env" | "kit" | "owner">,
   { name }: ConnectDomainInput,
+  sessionId: string,
   messages: readonly ModelMessage[],
   fetchImpl?: typeof fetch
 ): Promise<"user-approval" | "not-applicable"> {
-  const content =
-    messages.filter((m) => m.role === "user").at(-1)?.content ?? ""
-  const said =
-    typeof content === "string"
-      ? content
-      : content.flatMap((p) => (p.type === "text" ? [p.text] : [])).join("\n")
   if (!env.OPENROUTER_API_KEY) return "user-approval"
+  const proposed = messages
+    .slice(messages.map((m) => m.role).lastIndexOf("user"))
+    .some(
+      (m) =>
+        m.role === "assistant" &&
+        Array.isArray(m.content) &&
+        m.content.some(
+          (p) => p.type === "tool-call" && p.toolName === "connect_domain"
+        )
+    )
+  if (proposed) return "user-approval"
+  const log = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+    readSession(db, sessionId)
+  )
+  const last = log
+    .flatMap((e) => {
+      const m =
+        e.type === "cos.message" ? CosMessage.safeParse(e.payload) : null
+      return m?.success && m.data.message.role === "user"
+        ? [m.data.message]
+        : []
+    })
+    .at(-1)
+  if (!last || last.id.startsWith("eml_")) return "user-approval"
+  const said = last.parts
+    .flatMap((p) =>
+      p.type === "text" && typeof p.text === "string" ? [p.text] : []
+    )
+    .join("\n")
   const [active] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
     db
       .select({ id: domains.id })
@@ -1095,6 +1150,26 @@ export async function removal(
   return relay(result, () => {
     throw new Error("a removal answers 204 and no body")
   })
+}
+
+/**
+ * An offer the owner said not now to, asked again after `days` (a week when
+ * left out). The kind's open task is made if the offer came before it, then
+ * set to `later`, so the same row comes back as the offer it was. Only the
+ * owner's words move it, and the owner can start it again whenever they ask.
+ */
+export async function putOff(
+  { kit, owner }: Pick<ToolContext, "kit" | "owner">,
+  { kind, days = 7 }: PutOffInput
+): Promise<PutOffOutput> {
+  const until = new Date(Date.now() + days * 86_400_000).toISOString()
+  await kit.withOrg({ orgId: owner.orgId }, async (db) => {
+    await openTask(db, owner.orgId, kind)
+    await db.execute(sql`
+      update owner_tasks set state = 'later', later_until = ${until}::timestamptz
+      where kind = ${kind}::task_kind and state in ('active', 'later')`)
+  })
+  return { outcome: "put_off", until }
 }
 
 /** A connected domain taken off the site once the owner said yes, keyed by the approval. */

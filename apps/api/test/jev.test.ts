@@ -592,6 +592,26 @@ describe("the reading of a message that may put the site on a name", () => {
     expect(never.sent).toHaveLength(0)
   })
 
+  it("reads only a whole name, so a longer or lookalike name is never the one named", async () => {
+    const name = "sparkleclean.co.uk"
+    const sure = read(0.99)
+    for (const said of [
+      "Put it on notsparkleclean.co.uk",
+      "Put it on sparkleclean.co.uk.example.com",
+      "Put it on sparkleclean.co.ukx",
+      "Put it on sparklecleanXco.uk",
+    ]) {
+      expect(await jevPutOn("k", said, name, sure.fetchImpl)).toBe(false)
+    }
+    expect(sure.sent).toHaveLength(0)
+    for (const said of [
+      "Put it on sparkleclean.co.uk.",
+      "Put it on www.SparkleClean.co.uk, please",
+    ]) {
+      expect(await jevPutOn("k", said, name, sure.fetchImpl)).toBe(true)
+    }
+  })
+
   it("reads as no on a non-200, a missing answer and the time limit, one log line each", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined)
     const slow = ((_url: string, init: RequestInit) =>

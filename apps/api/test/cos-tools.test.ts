@@ -13,6 +13,8 @@ import {
   facts,
   memberships,
   NEXT_DUE_KEY,
+  openTask,
+  readTasks,
   reminders,
   sql,
   supersedeFact,
@@ -45,9 +47,11 @@ import {
   getFacts,
   getPreview,
   getWorkspace,
+  inspectDomain,
   newContact,
   ownersAnswer,
   paceOf,
+  putOff,
   recordReview,
   removeDomain,
   requestChange,
@@ -1711,6 +1715,55 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
     })
   })
 
+  describe("inspect_domain", () => {
+    const inspected = {
+      name: "sparkleclean.co.uk",
+      registered: true,
+      registrar: "123-reg",
+      dns_host: { name: "GoDaddy", settings_url: "https://dcc.godaddy.com/" },
+      in_use: false,
+    }
+
+    it("reads the name through the orchestrator and returns the inspection", async () => {
+      const stub = stubOrchestrator(() => Response.json(inspected))
+      const output = kept(
+        "inspect_domain",
+        await inspectDomain(context(me, stub), { name: "sparkleclean.co.uk" })
+      )
+      expect(output).toEqual({ outcome: "inspected", ...inspected })
+      const [call] = stub.calls
+      expect(call?.request.method).toBe("GET")
+      expect(new URL(call?.request.url ?? "").pathname).toBe(
+        "/assignments/domains/sparkleclean.co.uk/inspect"
+      )
+      expect(call?.request.headers.get("x-reme-org-id")).toBe(me.orgId)
+    })
+
+    it("refuses as the closed shape when the orchestrator does", async () => {
+      const stub = stubOrchestrator(() =>
+        Response.json(
+          {
+            class: "validation",
+            code: "domain.invalid",
+            message: "Not a domain.",
+            detail: {},
+            occurred_at: AT,
+          },
+          { status: 400 }
+        )
+      )
+      expect(
+        kept(
+          "inspect_domain",
+          await inspectDomain(context(me, stub), { name: "bad.example" })
+        )
+      ).toMatchObject({
+        outcome: "refused",
+        error: { code: "domain.invalid" },
+      })
+    })
+  })
+
   describe("check_domain", () => {
     const checked = {
       outcome: "checked",
@@ -1811,18 +1864,22 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
           Response.json({
             answers: { puts_it_on: { type: "noul", noul } },
           })) as unknown as typeof fetch
-      const user = (text: string): ModelMessage[] => [
-        { role: "user", content: "earlier" },
-        { role: "user", content: [{ type: "text", text }] },
-      ]
-      const asked = (who: Owner, name: string, text: string, noul = 0.97) =>
+      const keyed = (who: Owner) => ({
+        ...context(who),
+        env: { ...context(who).env, OPENROUTER_API_KEY: "k" } as Env,
+      })
+      /** The owner's typed `text` is in the log; `messages` is what the model saw. */
+      const asked = async (
+        who: Owner,
+        name: string,
+        text: string,
+        { noul = 0.97, messages = [] as ModelMessage[] } = {}
+      ) =>
         connectApproval(
-          {
-            ...context(who),
-            env: { ...context(who).env, OPENROUTER_API_KEY: "k" } as Env,
-          },
+          keyed(who),
           { name },
-          user(text),
+          (await turnOf(who, [text])).sessionId,
+          messages,
           sure(noul)
         )
 
@@ -1838,17 +1895,77 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
 
       it("shows the card when Jev is unsure, the name is not in the message, or the key is missing", async () => {
         const text = "what about sparkleclean.co.uk?"
-        expect(await asked(me, "sparkleclean.co.uk", text, 0.4)).toBe(
+        expect(await asked(me, "sparkleclean.co.uk", text, { noul: 0.4 })).toBe(
           "user-approval"
         )
         expect(
           await asked(me, "sparkleclean.co.uk", "put it on my domain")
         ).toBe("user-approval")
+        const { sessionId } = await turnOf(me, ["Put it on sparkleclean.co.uk"])
         expect(
           await connectApproval(
             context(me),
             { name: "sparkleclean.co.uk" },
-            user("Put it on sparkleclean.co.uk")
+            sessionId,
+            []
+          )
+        ).toBe("user-approval")
+      })
+
+      it("asks again for a connect already proposed since the owner's message, as after a no", async () => {
+        const called: ModelMessage[] = [
+          { role: "user", content: "Put it on sparkleclean.co.uk" },
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "tool-call",
+                toolCallId: "c1",
+                toolName: "connect_domain",
+                input: { name: "sparkleclean.co.uk" },
+              },
+            ],
+          },
+        ]
+        expect(
+          await asked(
+            me,
+            "sparkleclean.co.uk",
+            "Put it on sparkleclean.co.uk",
+            {
+              messages: called,
+            }
+          )
+        ).toBe("user-approval")
+      })
+
+      it("does not take an emailed reply as the owner's yes", async () => {
+        const { sessionId } = await turnOf(me)
+        await kit.withOrg({ orgId: me.orgId }, (db) =>
+          appendSessionEvent(db, {
+            orgId: me.orgId,
+            staffId: me.chiefId,
+            assignmentId: null,
+            sessionId,
+            type: "cos.message",
+            payload: {
+              turn_id: "01J00000000000000000000000",
+              message: {
+                id: "eml_1",
+                role: "user",
+                parts: [{ type: "text", text: "Put it on sparkleclean.co.uk" }],
+              },
+            },
+            taint: ["untrusted_input"],
+          })
+        )
+        expect(
+          await connectApproval(
+            keyed(me),
+            { name: "sparkleclean.co.uk" },
+            sessionId,
+            [],
+            sure(0.99)
           )
         ).toBe("user-approval")
       })
@@ -2190,6 +2307,49 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
     )
     expect(output).toEqual({
       url: "https://staging.remeai.co.uk/api/google/start",
+    })
+  })
+
+  describe("put_off", () => {
+    it("makes the kind's task when the offer came first and puts it off for the days given", async () => {
+      const fresh = await owner(kit, url as string, "cos-put-off")
+      const output = kept(
+        "put_off",
+        await putOff(context(fresh), { kind: "google", days: 3 })
+      )
+      if (output.outcome !== "put_off") throw new Error("not put off")
+      const tasks = await kit.withOrg({ orgId: fresh.orgId }, readTasks)
+      expect(tasks).toHaveLength(1)
+      expect(tasks[0]).toMatchObject({ kind: "google", state: "later" })
+      expect(new Date(tasks[0]?.later_until as string).getTime()).toBe(
+        new Date(output.until).getTime()
+      )
+      const days = (new Date(output.until).getTime() - Date.now()) / 86_400_000
+      expect(days).toBeGreaterThan(2.9)
+      expect(days).toBeLessThan(3.1)
+    })
+
+    it("puts the open task off without making a second, and the workspace shows each kind's latest task, finished included", async () => {
+      const fresh = await owner(kit, url as string, "cos-put-off-open")
+      await kit.withOrg({ orgId: fresh.orgId }, async (db) => {
+        await openTask(db, fresh.orgId, "address")
+        await openTask(db, fresh.orgId, "google")
+        await db.execute(sql`
+          update owner_tasks set state = 'done', done_at = now()
+          where kind = 'address'`)
+      })
+      kept("put_off", await putOff(context(fresh), { kind: "google" }))
+      const tasks = (
+        kept("get_workspace", await getWorkspace(context(fresh), {})).tasks ??
+        []
+      ).map((t) => [t.kind, t.state])
+      expect(tasks).toEqual([
+        ["address", "done"],
+        ["google", "later"],
+      ])
+      expect(await kit.withOrg({ orgId: fresh.orgId }, readTasks)).toHaveLength(
+        2
+      )
     })
   })
 
