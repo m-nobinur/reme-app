@@ -5317,6 +5317,7 @@ export interface components {
         | "get_search_performance"
         | "get_indexing"
         | "remember"
+        | "put_off"
       )[]
       text: string
       reserved_usd: number
@@ -5717,6 +5718,7 @@ export interface components {
           | "get_search_performance"
           | "get_indexing"
           | "remember"
+          | "put_off"
         description: string
         input_schema: {
           [key: string]: unknown
@@ -7645,6 +7647,37 @@ export interface components {
                 }
               }
         }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "put_off"
+          output:
+            | {
+                /** @constant */
+                outcome: "put_off"
+                /** Format: date-time */
+                until: string
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                }
+              }
+        }
     CosToolStarted: {
       tool_call_id: string
       approval_id: string
@@ -7682,6 +7715,7 @@ export interface components {
             | "get_search_performance"
             | "get_indexing"
             | "remember"
+            | "put_off"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -7716,6 +7750,7 @@ export interface components {
             | "get_search_performance"
             | "get_indexing"
             | "remember"
+            | "put_off"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -7748,6 +7783,7 @@ export interface components {
             | "get_search_performance"
             | "get_indexing"
             | "remember"
+            | "put_off"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -7780,6 +7816,7 @@ export interface components {
             | "get_search_performance"
             | "get_indexing"
             | "remember"
+            | "put_off"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -7812,6 +7849,7 @@ export interface components {
             | "get_search_performance"
             | "get_indexing"
             | "remember"
+            | "put_off"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -9821,6 +9859,36 @@ export interface components {
       /** Format: uuid */
       id: string
     }
+    PutOffInput: {
+      /** @enum {string} */
+      kind: "address" | "google"
+      days?: number
+    }
+    PutOffOutput:
+      | {
+          /** @constant */
+          outcome: "put_off"
+          /** Format: date-time */
+          until: string
+        }
+      | {
+          /** @constant */
+          outcome: "refused"
+          error: {
+            /** @enum {string} */
+            class:
+              | "validation"
+              | "permission"
+              | "transient"
+              | "resource"
+              | "provider"
+              | "integrity"
+              | "security"
+              | "budgetary"
+            code: string
+            message: string
+          }
+        }
     QuestionReply: {
       message_id: string
       /** Format: uuid */

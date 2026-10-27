@@ -168,8 +168,8 @@ export const CosWorkspace = z.strictObject({
     .max(10)
     .optional(),
   /**
-   * The owner tasks still open, one per kind, with each step's state and the
-   * note of a step that waits on the owner. Optional, as `domains`.
+   * Each kind's latest owner task in any state, with each step's state and
+   * the note of a step that waits on the owner. Optional, as `domains`.
    */
   tasks: z.array(OwnerTask).max(TaskKind.options.length).optional(),
   /** How long each lane usually takes, so the CoS quotes the measured wait. */
@@ -402,6 +402,18 @@ export const BuyDomainOutput = z.discriminatedUnion("outcome", [
 
 const Empty = z.strictObject({})
 
+/** `put_off`'s input: the offer the owner said not now to, and for how many days (7 when left out). */
+export const PutOffInput = z.strictObject({
+  kind: TaskKind,
+  days: z.int().min(1).max(60).optional(),
+})
+
+/** `put_off`'s output: when the offer may come back. */
+export const PutOffOutput = z.discriminatedUnion("outcome", [
+  z.strictObject({ outcome: z.literal("put_off"), until: Timestamp }),
+  Refused,
+])
+
 /**
  * The CoS's tools, by name. Every input is an object at its root, which
  * provider tool APIs require. The reads run in both modes; each act tool
@@ -430,6 +442,7 @@ export const COS_TOOLS = {
   },
   get_indexing: { input: GetIndexingInput, output: GetIndexingOutput },
   remember: { input: RememberInput, output: RememberOutput },
+  put_off: { input: PutOffInput, output: PutOffOutput },
 } as const
 
 export type CosToolName = keyof typeof COS_TOOLS
@@ -606,6 +619,11 @@ export const CosToolResult = z.discriminatedUnion("tool", [
     tool: z.literal("remember"),
     output: COS_TOOLS.remember.output,
   }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("put_off"),
+    output: COS_TOOLS.put_off.output,
+  }),
 ])
 
 /** The `cos.step` payload: a step's response messages as the SDK holds them. Model-written, so `inferred`. */
@@ -701,6 +719,8 @@ export type ConnectDomainInput = z.infer<typeof ConnectDomainInput>
 export type ConnectDomainOutput = z.infer<typeof ConnectDomainOutput>
 export type RemoveDomainInput = z.infer<typeof RemoveDomainInput>
 export type RemoveDomainOutput = z.infer<typeof RemoveDomainOutput>
+export type PutOffInput = z.infer<typeof PutOffInput>
+export type PutOffOutput = z.infer<typeof PutOffOutput>
 export type FindDomainInput = z.infer<typeof FindDomainInput>
 export type FindDomainOutput = z.infer<typeof FindDomainOutput>
 export type BuyDomainInput = z.infer<typeof BuyDomainInput>

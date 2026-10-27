@@ -18625,7 +18625,8 @@
                 "connect_google",
                 "get_search_performance",
                 "get_indexing",
-                "remember"
+                "remember",
+                "put_off"
               ]
             }
           },
@@ -19962,7 +19963,8 @@
                     "connect_google",
                     "get_search_performance",
                     "get_indexing",
-                    "remember"
+                    "remember",
+                    "put_off"
                   ]
                 },
                 "description": {
@@ -26589,6 +26591,100 @@
               "output"
             ],
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "turn_id": {
+                "type": "string",
+                "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+              },
+              "tool_call_id": {
+                "type": "string",
+                "pattern": "^[\\x21-\\x7E]{1,128}$"
+              },
+              "tool": {
+                "type": "string",
+                "const": "put_off"
+              },
+              "output": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "const": "put_off"
+                      },
+                      "until": {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                      }
+                    },
+                    "required": [
+                      "outcome",
+                      "until"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "const": "refused"
+                      },
+                      "error": {
+                        "type": "object",
+                        "properties": {
+                          "class": {
+                            "type": "string",
+                            "enum": [
+                              "validation",
+                              "permission",
+                              "transient",
+                              "resource",
+                              "provider",
+                              "integrity",
+                              "security",
+                              "budgetary"
+                            ]
+                          },
+                          "code": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+                          },
+                          "message": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500
+                          }
+                        },
+                        "required": [
+                          "class",
+                          "code",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "outcome",
+                      "error"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "required": [
+              "turn_id",
+              "tool_call_id",
+              "tool",
+              "output"
+            ],
+            "additionalProperties": false
           }
         ]
       },
@@ -26698,7 +26794,8 @@
                     "connect_google",
                     "get_search_performance",
                     "get_indexing",
-                    "remember"
+                    "remember",
+                    "put_off"
                   ]
                 }
               },
@@ -26805,7 +26902,8 @@
                     "connect_google",
                     "get_search_performance",
                     "get_indexing",
-                    "remember"
+                    "remember",
+                    "put_off"
                   ]
                 }
               },
@@ -26905,7 +27003,8 @@
                     "connect_google",
                     "get_search_performance",
                     "get_indexing",
-                    "remember"
+                    "remember",
+                    "put_off"
                   ]
                 }
               },
@@ -27004,7 +27103,8 @@
                     "connect_google",
                     "get_search_performance",
                     "get_indexing",
-                    "remember"
+                    "remember",
+                    "put_off"
                   ]
                 }
               },
@@ -27103,7 +27203,8 @@
                     "connect_google",
                     "get_search_performance",
                     "get_indexing",
-                    "remember"
+                    "remember",
+                    "put_off"
                   ]
                 }
               },
@@ -34252,6 +34353,99 @@
           "id"
         ],
         "additionalProperties": false
+      },
+      "PutOffInput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "address",
+              "google"
+            ]
+          },
+          "days": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 60
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "additionalProperties": false
+      },
+      "PutOffOutput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "put_off"
+              },
+              "until": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+              }
+            },
+            "required": [
+              "outcome",
+              "until"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "refused"
+              },
+              "error": {
+                "type": "object",
+                "properties": {
+                  "class": {
+                    "type": "string",
+                    "enum": [
+                      "validation",
+                      "permission",
+                      "transient",
+                      "resource",
+                      "provider",
+                      "integrity",
+                      "security",
+                      "budgetary"
+                    ]
+                  },
+                  "code": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+                  },
+                  "message": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "class",
+                  "code",
+                  "message"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "outcome",
+              "error"
+            ],
+            "additionalProperties": false
+          }
+        ]
       },
       "QuestionReply": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",

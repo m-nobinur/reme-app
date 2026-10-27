@@ -1141,6 +1141,8 @@ export const samples: Record<ContractName, unknown> = {
     source: "owner_said",
     at: NOW,
   },
+  PutOffInput: { kind: "google", days: 7 },
+  PutOffOutput: { outcome: "put_off", until: "2026-11-03T08:00:00.000Z" },
   RememberInput: {
     operations: [{ action: "add", text: "Prefers calls after 4pm" }],
   },
