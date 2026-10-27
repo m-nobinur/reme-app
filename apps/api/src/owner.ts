@@ -40,6 +40,8 @@ import { conversationRoute } from "./conversations.ts"
 import { memoryRoute } from "./cos/memory.ts"
 import { removal } from "./cos/tools.ts"
 import {
+  boughtElsewhere,
+  buyElsewhere,
   checkout,
   isOrgOwner,
   purchaseStatus,
@@ -69,7 +71,7 @@ const LOGO_KEEP_PATH =
 
 /** The routes `ownerRoute` answers, for `index.ts` to resolve an org before. */
 export const OWNER_PATH =
-  /^\/(workspace|facts|assets(\/review)?|site\/media|photos\/[^/]+|revisions\/[^/]+\/[^/]+|logos(\/[^/]+\/keep)?|palettes\/from-(image|logo)|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback|questions))?)?|reminders(\/[^/]+)?|memory(\/(undo|review))?|push\/(config|subscriptions(\/[^/]+)?)|domains\/[^/]+(\/(checkout|registrant))?|google\/(connect|disconnect|failed)|time-zone|chat)$/
+  /^\/(workspace|facts|assets(\/review)?|site\/media|photos\/[^/]+|revisions\/[^/]+\/[^/]+|logos(\/[^/]+\/keep)?|palettes\/from-(image|logo)|changes|activity|builds\/[^/]+\/(answer|cancel|preview)|approvals\/[^/]+\/decision|conversations(\/[^/]+(\/(messages|feedback|questions))?)?|reminders(\/[^/]+)?|memory(\/(undo|review))?|push\/(config|subscriptions(\/[^/]+)?)|domains\/[^/]+(\/(checkout|registrant|elsewhere|bought))?|google\/(connect|disconnect|failed)|time-zone|chat)$/
 
 async function setFacts(request: Request, kit: Tenancy, owner: Owner) {
   if (!idempotencyKey(request)) return keyMissing()
@@ -347,6 +349,12 @@ export async function ownerRoute(
   }
   if (noun === "domains" && method === "GET" && action === "registrant") {
     return registrantPrefill(kit, owner, id)
+  }
+  if (noun === "domains" && method === "POST" && action === "elsewhere") {
+    return buyElsewhere(request, env, kit, owner, id)
+  }
+  if (noun === "domains" && method === "POST" && action === "bought") {
+    return boughtElsewhere(request, env, kit, owner, id)
   }
   if (noun === "approvals" && method === "POST") {
     return decide(request, env, kit, owner, id)

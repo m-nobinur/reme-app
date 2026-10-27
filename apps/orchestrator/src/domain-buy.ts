@@ -1,4 +1,5 @@
 import {
+  type BoughtElsewhereOutput,
   BUY_REFUSALS,
   BuyDomainInput,
   type BuyDomainOutput,
@@ -22,6 +23,7 @@ import {
   events,
   type OrgScopedDb,
   openTask,
+  ownerTasks,
   pgCode,
   setStep,
   sql,
@@ -30,6 +32,7 @@ import {
 } from "@workspace/db"
 import {
   answers,
+  connect,
   domainInstanceId,
   eventKey,
   moveTo,
@@ -42,7 +45,9 @@ import {
   start,
 } from "./domain-flow.ts"
 import { DomainError } from "./domains.ts"
+import type { Observed } from "./probe.ts"
 import { activeDeployment } from "./publish.ts"
+import { rdapLookup } from "./rdap.ts"
 import {
   attachHostname,
   CHECK_MAX,
@@ -1132,6 +1137,184 @@ export async function finishSandbox(
     text: `That was a test purchase of ${found.row.name}: paid in test mode, registered in Cloudflare's sandbox, and not live on the internet. Your site stays on ${found.slug}.`,
   }
 }
+
+// ---------------------------------------------------------------------------
+// Buying it elsewhere
+// ---------------------------------------------------------------------------
+
+/** The hold's instance: one per org and name, so a second click finds the first. */
+export const elsewhereId = async (orgId: string, name: string) =>
+  `elsewhere-${await eventKey(`${orgId}:${name}`, "domain.elsewhere")}`
+
+/** A claim is open for the org: the owner has moved on to connecting a name. */
+async function claimed(kit: Tenancy, orgId: string) {
+  const [open] = await kit.withOrg({ orgId }, (db) =>
+    db
+      .select({ id: domains.id })
+      .from(domains)
+      .where(sql`${domains.state} in ('awaiting_dns', 'verifying', 'active')`)
+      .limit(1)
+  )
+  return Boolean(open)
+}
+
+const rdapDown = () =>
+  refuse(
+    503,
+    "transient",
+    "rdap.unavailable",
+    "I couldn't ask the domain registry just now. Try again in a minute."
+  )
+
+/**
+ * `POST /domains/elsewhere`: the owner buys `name` themselves. The address
+ * task's `purchase` step waits on them with the note "buying <name>", and
+ * the hold starts, which looks at the registry daily and wakes on their
+ * done. A hold that ended (done, or past its month) runs again.
+ */
+export async function buyElsewhere(
+  env: Env,
+  kit: Tenancy,
+  orgId: string,
+  body: unknown
+): Promise<Refusal | null> {
+  const name = normalizeName((body as { name?: unknown } | null)?.name)
+  if (!name)
+    return refuse(
+      400,
+      "validation",
+      "domain.invalid",
+      "That isn't a domain name I can look for."
+    )
+  await kit.withOrg({ orgId }, async (db) => {
+    const task = await openTask(db, orgId, "address", {
+      name,
+      origin: "buying_elsewhere",
+    })
+    await setStep(db, task, "choose", { state: "done" })
+    await setStep(db, task, "purchase", {
+      state: "blocked",
+      blocked_on: "owner_action",
+      note: `buying ${name}`,
+    })
+  })
+  const id = await elsewhereId(orgId, name)
+  try {
+    await env.ELSEWHERE.create({ id, params: { org_id: orgId, name } })
+  } catch {
+    // The id is kept for a month after the instance ends; a live one is the same hold.
+    const instance = await env.ELSEWHERE.get(id)
+    const { status } = await instance.status()
+    if (["complete", "errored", "terminated"].includes(status))
+      await instance.restart()
+  }
+  return null
+}
+
+/**
+ * `POST /domains/bought`: the owner says they bought `name`, from the tray
+ * or through the CoS. The registry is asked now and the hold is woken either
+ * way. Once the registry shows the name, `purchase` is done and the connect
+ * starts with it, its consent the owner's own word; until then the answer
+ * says so and the hold looks again daily.
+ */
+export async function boughtElsewhere(
+  env: Env,
+  kit: Tenancy,
+  orgId: string,
+  body: unknown
+): Promise<Refusal | { status: 200 | 201; output: BoughtElsewhereOutput }> {
+  const name = normalizeName((body as { name?: unknown } | null)?.name)
+  if (!name)
+    return refuse(
+      400,
+      "validation",
+      "domain.invalid",
+      "That isn't a domain name I can look for."
+    )
+  let seen: Awaited<ReturnType<typeof rdapLookup>>
+  try {
+    seen = await rdapLookup(name)
+  } catch {
+    return rdapDown()
+  }
+  try {
+    const hold = await env.ELSEWHERE.get(await elsewhereId(orgId, name))
+    await hold.sendEvent({ type: "owner_done", payload: {} })
+  } catch {
+    // No hold for this name: the owner bought one we never offered.
+  }
+  if (!seen?.registered)
+    return { status: 200, output: { outcome: "not_registered_yet", name } }
+  await kit.withOrg({ orgId }, async (db) => {
+    const task = await openTask(db, orgId, "address", { name })
+    await setStep(db, task, "purchase", { state: "done" })
+  })
+  return connect(env, kit, orgId, { name, approval_id: `owner_done:${name}` })
+}
+
+/**
+ * The hold's daily look: whether the registry shows the name, or the owner
+ * has a claim already. Registered and unclaimed, Ellie offers to connect it
+ * once; a look the owner's done woke finds the claim and says nothing.
+ */
+export async function lookElsewhere(
+  kit: Tenancy,
+  orgId: string,
+  name: string
+): Promise<Observed<{ registered: boolean; claimed: boolean; at: number }>> {
+  const done = await claimed(kit, orgId)
+  const at = Date.now()
+  if (done) return { result: { registered: false, claimed: true, at } }
+  const registered = (await rdapLookup(name))?.registered === true
+  return {
+    result: { registered, claimed: false, at },
+    reading: {
+      step: "purchase",
+      evidence: { name, registered },
+      ...(registered && { write: { state: "done" } }),
+      tell: async () =>
+        registered && !(await claimed(kit, orgId))
+          ? {
+              text: `${name} is registered now. Shall I put your website on it?`,
+              button: {
+                label: "Put my site on it",
+                action: { kind: "ask", text: `Put my site on ${name}.` },
+              },
+            }
+          : null,
+    },
+  }
+}
+
+/**
+ * Three days and the registry still does not show the name: one follow-up,
+ * and the address task put off for a week. The hold keeps looking.
+ */
+export async function followUpElsewhere(
+  kit: Tenancy,
+  orgId: string,
+  name: string
+): Promise<Say> {
+  await kit.withOrg({ orgId }, (db) =>
+    db
+      .update(ownerTasks)
+      .set({ state: "later", laterUntil: new Date(Date.now() + WEEK_MS) })
+      .where(
+        sql`${ownerTasks.kind} = 'address' and ${ownerTasks.state} = 'active'`
+      )
+  )
+  return {
+    key: `${orgId}:elsewhere:${name}:follow-up`,
+    text: `Did you get ${name}? Once it's yours, tell me and I'll put your website on it.`,
+    button: {
+      label: "I've bought it",
+      action: { kind: "ask", text: `I've bought ${name}.` },
+    },
+  }
+}
+
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 
 /**
  * A live purchase is served: the bought zone, then a Workers Custom Domain

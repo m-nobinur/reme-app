@@ -1,4 +1,5 @@
 import {
+  BoughtElsewhereOutput,
   BUY_REFUSALS,
   DOMAIN_PRICES,
   DomainCheckout,
@@ -385,6 +386,50 @@ export async function checkout(
       detail: {},
     })
   }
+}
+
+/**
+ * `POST /domains/{name}/elsewhere`: the owner buys `name` themselves. The
+ * orchestrator marks the address task's purchase step as theirs ("buying
+ * <name>") and starts the hold that watches the registry. Finding is free,
+ * so this needs no Stripe keys.
+ */
+export async function buyElsewhere(
+  request: Request,
+  env: Env,
+  kit: Tenancy,
+  owner: Owner,
+  name: string
+): Promise<Response> {
+  if (!(await isOrgOwner(kit, owner))) return notOwner("buy")
+  const result = await bridge(env, owner, "/domains/elsewhere", {
+    body: { name },
+    key: idempotencyKey(request),
+  })
+  if (result.status === 204) return new Response(null, { status: 204 })
+  return relay(result, () => null)
+}
+
+/**
+ * `POST /domains/{name}/bought`: the owner says they bought `name`. Once the
+ * registry shows it, the answer is the connect's, with the records to add;
+ * until then `not_registered_yet`.
+ */
+export async function boughtElsewhere(
+  request: Request,
+  env: Env,
+  kit: Tenancy,
+  owner: Owner,
+  name: string
+): Promise<Response> {
+  if (!(await isOrgOwner(kit, owner))) return notOwner("buy")
+  return relay(
+    await bridge(env, owner, "/domains/bought", {
+      body: { name },
+      key: idempotencyKey(request),
+    }),
+    BoughtElsewhereOutput.parse
+  )
 }
 
 /** The parts of a Stripe event this file reads. */

@@ -66,7 +66,14 @@ import { HTTPException } from "hono/http-exception"
 import { Developer } from "./agents/developer.ts"
 import { hideFacts, updateFacts } from "./brief.ts"
 import type { AssignmentParams } from "./cloudflare.ts"
-import { buy, checkoutSession, find, paymentEvent } from "./domain-buy.ts"
+import {
+  boughtElsewhere,
+  buy,
+  buyElsewhere,
+  checkoutSession,
+  find,
+  paymentEvent,
+} from "./domain-buy.ts"
 import {
   checkNow,
   connect,
@@ -924,6 +931,26 @@ ownerOnly.post("/domains/find", async (c) => {
 ownerOnly.post("/domains/buy", async (c) => {
   const body = await c.req.json().catch(() => null)
   const result = await buy(c.env, c.get("kit"), c.get("orgId"), body)
+  if ("refused" in result) return domainRefused(c, result)
+  return c.json(result.output, result.status)
+})
+
+/** The owner buying a name themselves, and saying they have (domain-buy.ts). */
+ownerOnly.post("/domains/elsewhere", async (c) => {
+  const body = await c.req.json().catch(() => null)
+  const refusal = await buyElsewhere(c.env, c.get("kit"), c.get("orgId"), body)
+  if (refusal) return domainRefused(c, refusal)
+  return c.body(null, 204)
+})
+
+ownerOnly.post("/domains/bought", async (c) => {
+  const body = await c.req.json().catch(() => null)
+  const result = await boughtElsewhere(
+    c.env,
+    c.get("kit"),
+    c.get("orgId"),
+    body
+  )
   if ("refused" in result) return domainRefused(c, result)
   return c.json(result.output, result.status)
 })

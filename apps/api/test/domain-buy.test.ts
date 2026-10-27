@@ -410,6 +410,37 @@ describe.skipIf(!url)("buying a domain, on a live connection", () => {
     )
   })
 
+  it("bridges buying elsewhere and the owner's done, owner only and with no Stripe keys", async () => {
+    const name = `away-${crypto.randomUUID().slice(0, 8)}.com`
+    const stub = stubOrchestrator((request) =>
+      request.url.endsWith("/bought")
+        ? Response.json({ outcome: "not_registered_yet", name })
+        : new Response(null, { status: 204 })
+    )
+    const post = (who: Owner, action: string) =>
+      who.call(stub, `/domains/${name}/${action}`, {
+        method: "POST",
+        headers: { "idempotency-key": crypto.randomUUID() },
+      })
+    expect((await post(me, "elsewhere")).status).toBe(204)
+    const done = await post(me, "bought")
+    expect(await done.json()).toEqual({ outcome: "not_registered_yet", name })
+    expect(
+      stub.calls.map((c) => [new URL(c.request.url).pathname, c.body])
+    ).toEqual([
+      ["/assignments/domains/elsewhere", { name }],
+      ["/assignments/domains/bought", { name }],
+    ])
+    const member = await owner(kit, url as string, "away-member")
+    await kit.withOrg({ orgId: member.orgId }, (db) =>
+      db
+        .update(memberships)
+        .set({ role: "member" })
+        .where(sql`${memberships.orgId} = ${member.orgId}`)
+    )
+    expect((await post(member, "bought")).status).toBe(403)
+  })
+
   it("reads the newest purchase of a name, its sandbox flag and how it closed", async () => {
     const name = unique("status")
     const status = async (who: Owner) => {
