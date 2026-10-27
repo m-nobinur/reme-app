@@ -23,13 +23,19 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest"
 
 // The tray reads the thread through assistant-ui's store; these tests stand
 // in for it, since what they check is the tray, not the runtime.
-const store = vi.hoisted(() => ({ isLast: true }))
+const store = vi.hoisted(() => ({ after: [] as ("user" | "assistant")[] }))
 vi.mock("@assistant-ui/react", async (original) => ({
   ...(await original<typeof import("@assistant-ui/react")>()),
   useAuiState: (select: (state: unknown) => unknown) =>
     select({
-      message: { id: "msg-1", parts: [], isLast: store.isLast },
-      thread: { isRunning: false },
+      message: { id: "msg-1", parts: [] },
+      thread: {
+        isRunning: false,
+        messages: [
+          { id: "msg-1", role: "assistant" },
+          ...store.after.map((role, i) => ({ id: `after-${i}`, role })),
+        ],
+      },
     }),
   useAui: () => ({ thread: () => ({ append: vi.fn() }) }),
   useThreadViewportStore: () => null,
@@ -127,7 +133,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  store.isLast = true
+  store.after = []
   stripe.mount.mockClear()
   stripe.unmount.mockClear()
   sessionStorage.clear()
@@ -446,12 +452,18 @@ it("leaves one line on Not now, and none of the tray once the chat moves on", as
   expect(tray.textContent).toBe("")
 
   sessionStorage.clear()
-  store.isLast = false
+  store.after = ["user"]
   const later = await found()
   expect(later.chat.textContent).toBe(
     "Names I found: sparkleclean, sparklecleanbristol."
   )
   expect(later.tray.textContent).toBe("")
+})
+
+it("stays open when the assistant posts below it, as the site going live does", async () => {
+  store.after = ["assistant"]
+  const { tray } = await found()
+  expect(tray.textContent).toContain("sparkleclean")
 })
 
 it("reads every purchase outcome in the card's words", () => {

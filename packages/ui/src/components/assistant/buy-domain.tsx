@@ -987,9 +987,10 @@ function BoughtLine({ name, paid }: { name: string; paid: boolean }) {
 }
 
 /**
- * The buy tray for one call or posted button. It docks while its message is
- * the last in the thread: anything said after it moves the conversation on,
- * and the owner can ask again.
+ * The buy tray for one call or posted button. It docks until the owner says
+ * something after it, which moves the conversation on (they can ask again).
+ * A message the assistant posts below it, such as the site going live,
+ * leaves it open with what was typed.
  */
 export function BuyTray({
   draftId,
@@ -1005,7 +1006,10 @@ export function BuyTray({
   prefill?: DomainRegistrantPrefill | undefined
 }) {
   const purchase = useContext(DomainPurchaseContext)
-  const last = useAuiState((s) => s.message.isLast)
+  const last = useAuiState((s) => {
+    const at = s.thread.messages.findIndex((m) => m.id === s.message.id)
+    return !s.thread.messages.slice(at + 1).some((m) => m.role === "user")
+  })
   const start: Draft = rows
     ? { at: "choose" }
     : { at: "details", name: name ?? "" }
