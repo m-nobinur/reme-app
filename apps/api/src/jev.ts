@@ -441,7 +441,7 @@ export async function jevPromise(
  * and `sparkle.co.uk.example.com` are other names, a leading www is not.
  * `name` is a `DomainName`, so only its dots need escaping.
  */
-export const holdsName = (said: string, name: string) =>
+const holdsName = (said: string, name: string) =>
   new RegExp(
     `(?<![a-z0-9.-])(?:www\\.)?${name.replaceAll(".", "\\.")}(?![a-z0-9-]|\\.[a-z0-9])`,
     "i"
@@ -471,7 +471,10 @@ async function jevYes(
         criteria: { true: question.true, false: question.false },
       },
     },
-    fetchImpl
+    fetchImpl,
+    // The promise gate's limit: a yes here waits on nothing else, and the
+    // card is the cost of a timeout.
+    JEV.promiseMs
   )
   const score = num(body?.answers?.yes?.noul)
   console.log(

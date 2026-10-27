@@ -4061,32 +4061,44 @@ export interface components {
     }
     BuyDomainInput: {
       name: string
-      registrant: {
-        /** @description The owner's full legal name, first and last. */
-        name: string
-        /** @description The business's registered or trading name. */
-        business_name?: string
-        /** Format: email */
-        email: string
-        phone: string
-        address: {
-          street: string
-          city: string
-          state?: string
-          postal_code: string
-          /** @description ISO 3166-1 alpha-2, such as GB. */
-          country_code: string
-        }
-      }
-      /**
-       * @description Required for .co.uk and .uk: STRA sole trader, LTD limited company, LLP, PTNR partnership, IND individual.
-       * @enum {string}
-       */
-      registrant_type?: "STRA" | "LTD" | "LLP" | "PTNR" | "IND"
-      /** @description The Companies House number, required with LTD and LLP. */
-      company_number?: string
     }
     BuyDomainOutput:
+      | {
+          /** @constant */
+          outcome: "details"
+          name: string
+          price_gbp_year: number
+          registrant: {
+            /** @description The owner's full legal name, first and last. */
+            name?: string
+            /** @description The business's registered or trading name. */
+            business_name?: string
+            /** Format: email */
+            email?: string
+            phone?: string
+            address?: {
+              street?: string
+              city?: string
+              state?: string
+              postal_code?: string
+              /** @description ISO 3166-1 alpha-2, such as GB. */
+              country_code?: string
+            }
+          }
+          missing: (
+            | "name"
+            | "business_name"
+            | "email"
+            | "phone"
+            | "street"
+            | "city"
+            | "state"
+            | "postal_code"
+            | "country_code"
+            | "registrant_type"
+            | "company_number"
+          )[]
+        }
       | {
           /** @constant */
           outcome: "awaiting_payment"
@@ -7539,6 +7551,42 @@ export interface components {
           /** @constant */
           tool: "buy_domain"
           output:
+            | {
+                /** @constant */
+                outcome: "details"
+                name: string
+                price_gbp_year: number
+                registrant: {
+                  /** @description The owner's full legal name, first and last. */
+                  name?: string
+                  /** @description The business's registered or trading name. */
+                  business_name?: string
+                  /** Format: email */
+                  email?: string
+                  phone?: string
+                  address?: {
+                    street?: string
+                    city?: string
+                    state?: string
+                    postal_code?: string
+                    /** @description ISO 3166-1 alpha-2, such as GB. */
+                    country_code?: string
+                  }
+                }
+                missing: (
+                  | "name"
+                  | "business_name"
+                  | "email"
+                  | "phone"
+                  | "street"
+                  | "city"
+                  | "state"
+                  | "postal_code"
+                  | "country_code"
+                  | "registrant_type"
+                  | "company_number"
+                )[]
+              }
             | {
                 /** @constant */
                 outcome: "awaiting_payment"

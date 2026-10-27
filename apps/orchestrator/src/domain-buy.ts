@@ -351,6 +351,9 @@ export const MAX_OPEN_PURCHASES = 3
  * cross-org count no route here may make; add it as a definer once buying
  * goes live.
  */
+/** What Pay sends to open a purchase: the tool's name plus the details page. */
+const BuyRequest = BuyDomainInput.extend(RegistrantDetails.shape)
+
 export async function buy(
   env: Env,
   kit: Tenancy,
@@ -359,7 +362,7 @@ export async function buy(
 ): Promise<Refusal | { status: 200 | 201; output: BuyDomainOutput }> {
   if (!env.STRIPE_SECRET_KEY)
     return fromEnvelope(409, BUY_REFUSALS.buy_unavailable)
-  const parsed = BuyDomainInput.safeParse(body)
+  const parsed = BuyRequest.safeParse(body)
   const name = normalizeName((body as { name?: unknown } | null)?.name)
   if (!name || !sellableTld(name))
     return fromEnvelope(409, BUY_REFUSALS.unavailable)

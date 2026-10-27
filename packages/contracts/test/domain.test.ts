@@ -3,8 +3,8 @@ import {
   ADDRESS_ASK,
   addressReply,
   BUY_REFUSALS,
-  BuyDomainAsk,
   BuyDomainInput,
+  BuyDomainOutput,
   CheckDomainOutput,
   ConnectDomainOutput,
   DnsRecord,
@@ -277,38 +277,24 @@ describe("sellableTld", () => {
 })
 
 describe("BuyDomainInput", () => {
-  const input = samples.BuyDomainInput as {
-    registrant: { address: object }
-  }
-  const registrant = (patch: object) => ({
-    ...input,
-    registrant: { ...input.registrant, ...patch },
-  })
+  const input = samples.BuyDomainInput as object
   it.each([
-    [
-      "a company number in lower case",
-      { ...input, company_number: "sc123456" },
-    ],
-    [
-      "a country by name",
-      registrant({
-        address: { ...input.registrant.address, country_code: "UK " },
-      }),
-    ],
-    ["a phone not in E.164", registrant({ phone: "07700 900123" })],
-    ["a registrant type of its own", { ...input, registrant_type: "CHARITY" }],
+    ["a registrant", { ...input, registrant: { name: "Jane Smith" } }],
     ["a price from the model", { ...input, price_gbp: 1 }],
+    ["no name", {}],
   ])("refuses %s", (_name, value) => {
     expect(verdict("BuyDomainInput", BuyDomainInput, value)).toEqual(REFUSED)
   })
 
-  it("takes a county from a stored input, never from the model", () => {
-    const county = registrant({
-      address: { ...input.registrant.address, state: "Somerset" },
-    })
-    expect(BuyDomainInput.safeParse(county).success).toBe(true)
-    expect(BuyDomainAsk.safeParse(county).success).toBe(false)
-    expect(BuyDomainAsk.safeParse(input).success).toBe(true)
+  it("still reads the answer it gave before the details page", () => {
+    expect(
+      BuyDomainOutput.safeParse({
+        outcome: "awaiting_payment",
+        name: "brightclean.co.uk",
+        price_gbp: 8,
+        checkout: "embedded",
+      }).success
+    ).toBe(true)
   })
 })
 
