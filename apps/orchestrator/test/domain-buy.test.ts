@@ -1,5 +1,12 @@
 import { type DomainRegistration, SITE_HEADER } from "@workspace/contracts"
-import { deployments, domains, eq, events, sql } from "@workspace/db"
+import {
+  deployments,
+  domains,
+  eq,
+  events,
+  searchConnections,
+  sql,
+} from "@workspace/db"
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest"
 import {
   abandonUnpaid,
@@ -709,12 +716,18 @@ describe.skipIf(!url)("buying a domain against a database", () => {
     expect(unserved.result).toMatchObject({ ready: false })
     expect(unserved.reading).not.toHaveProperty("tell")
     p.net.site = p.orgId
+    // An org connected to Google hears that its new host is going there too.
+    await kit.withOrg({ orgId: p.orgId }, (db) =>
+      db
+        .insert(searchConnections)
+        .values({ orgId: p.orgId, state: "active", refreshToken: "v1.aXY.Y3Q" })
+    )
     const live = await served(p.env, kit, p.orgId, p.row.id)
     expect(live.result).toMatchObject({ ready: true })
     expect(live.reading?.write).toEqual({ state: "done" })
     expect(unserved.reading).not.toHaveProperty("write")
     expect((await live.reading?.tell?.())?.text).toMatch(
-      new RegExp(`^${p.name} is live`)
+      new RegExp(`^${p.name} is live.*adding it to your Google Search Console`)
     )
     expect(
       JSON.parse((await p.store.ROUTES.get(`host:${p.name}`)) ?? "{}")
