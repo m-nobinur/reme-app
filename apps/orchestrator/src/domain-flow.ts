@@ -806,7 +806,7 @@ export async function served(
             },
             template: `${row.primaryHost} is live. ${slug} now forwards to it, so links you've shared still work.${
               google === "moved"
-                ? ` I'm adding it to your ${gsc} and have stopped tracking ${slug} there; that property stays in your Google account.`
+                ? ` I'm adding it to your ${gsc} and taking ${slug} out of it.`
                 : google
                   ? ` I'm adding it to your ${gsc} too.`
                   : ""
