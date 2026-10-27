@@ -708,7 +708,9 @@ export async function served(
     reading: {
       step: "loads",
       evidence: { domain_id: domainId, host: row.primaryHost, ready },
+      // Only this proof makes `loads` done; the rows keep it in progress.
       ...(ready && {
+        write: { state: "done" },
         tell: async () => ({
           text: await writeUpdate(env, kit, orgId, {
             facts: { host: row.primaryHost, old_host: slug },
