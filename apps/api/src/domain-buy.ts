@@ -42,7 +42,7 @@ import { StripeFailed, stripe, verifyStripeSignature } from "./stripe.ts"
 
 /**
  * The buy path's api half (custom-domains plan, "Buy and pay path"): the
- * owner's embedded Checkout for a domain the orchestrator holds as
+ * owner's Checkout Session for a domain the orchestrator holds as
  * `awaiting_payment`, and Stripe's webhook, verified here and handed to the
  * orchestrator, which owns the domains row and every state it moves to.
  * The amount comes from the row's price, never from the client or the model.
@@ -266,7 +266,7 @@ export async function registrantPrefill(
 }
 
 /**
- * `POST /domains/{name}/checkout`: the embedded Checkout for the org's
+ * `POST /domains/{name}/checkout`: the Checkout Session for the org's
  * purchase of that name, opened (or refreshed) first through the
  * orchestrator's `buy`, the owner only. The body is the registrant as the
  * page shows it or the owner corrected it; the orchestrator stores it with
@@ -327,8 +327,9 @@ export async function checkout(
       "checkout/sessions",
       {
         mode: "payment",
-        ui_mode: "embedded_page",
-        redirect_on_completion: "if_required",
+        // The web draws the form with Stripe's Elements and confirms a card
+        // on the page; only a redirect-based method goes to return_url.
+        ui_mode: "elements",
         return_url: returnUrl(env, row.name),
         customer,
         line_items: [

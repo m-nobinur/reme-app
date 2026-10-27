@@ -41,24 +41,42 @@ vi.mock("@assistant-ui/react", async (original) => ({
   useThreadViewportStore: () => null,
 }))
 
-// Stripe.js is Stripe's to load; the tray's part is mounting it with the
-// client secret the api returned, and hearing that the payment completed.
-const stripe = vi.hoisted(() => ({
-  mount: vi.fn(
+// Stripe.js is Stripe's to load; the dialog's part is starting Checkout with
+// the client secret the api returned, mounting the Elements, showing
+// Stripe's total and confirming with what the owner already gave.
+const stripe = vi.hoisted(() => {
+  const element = () => ({ mount: vi.fn(), destroy: vi.fn(), on: vi.fn() })
+  const confirm = vi.fn(
     async (
-      _element: HTMLElement,
-      _key: string,
-      _secret: string,
-      complete: () => void
-    ) => {
-      stripe.complete = complete
-      return stripe.unmount
-    }
-  ),
-  unmount: vi.fn(),
-  complete: (() => undefined) as () => void,
+      _options: unknown
+    ): Promise<
+      { type: "success" } | { type: "error"; error: { message: string } }
+    > => ({
+      type: "success",
+    })
+  )
+  const session = {
+    currency: "gbp",
+    minorUnitsAmountDivisor: 100,
+    total: { total: { minorUnitsAmount: 800 } },
+  }
+  return {
+    confirm,
+    init: vi.fn(async (..._args: unknown[]) => ({
+      on: vi.fn(),
+      createExpressCheckoutElement: vi.fn(element),
+      createPaymentElement: vi.fn(element),
+      loadActions: async () => ({
+        type: "success" as const,
+        actions: { confirm, getSession: () => session },
+      }),
+    })),
+  }
+})
+vi.mock("@workspace/ui/lib/stripe", async (original) => ({
+  ...(await original<typeof import("@workspace/ui/lib/stripe")>()),
+  initCheckout: stripe.init,
 }))
-vi.mock("@workspace/ui/lib/stripe", () => ({ mountCheckout: stripe.mount }))
 
 const NAME = "sparkleclean.co.uk"
 const REGISTRANT = {
@@ -134,8 +152,8 @@ beforeEach(() => {
 
 afterEach(() => {
   store.after = []
-  stripe.mount.mockClear()
-  stripe.unmount.mockClear()
+  stripe.init.mockClear()
+  stripe.confirm.mockClear()
   sessionStorage.clear()
   document.body.innerHTML = ""
   vi.unstubAllGlobals()
@@ -288,10 +306,43 @@ it("asks only for the gaps, pays in a dialog, and leaves one line once paid", as
     registrant_type: "STRA",
   })
   const dialog = document.querySelector('[data-slot="dialog-content"]')
-  expect(dialog?.textContent).toContain(`Pay for ${NAME}`)
-  expect(stripe.mount.mock.calls[0]?.slice(1, 3)).toEqual(["pk_test_1", "cs_x"])
+  expect(dialog?.textContent).toContain("Payment details")
+  expect(dialog?.textContent).toContain("Renews at £8 a year, cancel any time.")
+  // Stripe gets the email and address the owner already gave, not a blank.
+  const contact = {
+    name: REGISTRANT.name,
+    address: {
+      country: "GB",
+      line1: "12 Mill Lane",
+      city: "Bristol",
+      postal_code: "BS1 4AB",
+    },
+  }
+  expect(stripe.init.mock.calls[0]?.slice(1)).toEqual([
+    "pk_test_1",
+    "cs_x",
+    { email: REGISTRANT.email, billingAddress: contact },
+  ])
 
-  await act(async () => stripe.complete())
+  // Stripe answers a decline in words, under Pay, and Pay comes back.
+  stripe.confirm.mockResolvedValueOnce({
+    type: "error",
+    error: { message: "Your card was declined." },
+  })
+  const pay = () => button(dialog as Element, "Pay £8")
+  await vi.waitFor(() => expect(pay().getAttribute("aria-busy")).toBeNull())
+  await act(async () => pay().click())
+  expect(dialog?.querySelector('[role="alert"]')?.textContent).toBe(
+    "Your card was declined."
+  )
+  expect(pay().getAttribute("aria-busy")).toBeNull()
+
+  await act(async () => pay().click())
+  expect(stripe.confirm).toHaveBeenLastCalledWith({
+    redirect: "if_required",
+    email: REGISTRANT.email,
+    billingAddress: contact,
+  })
   await vi.waitFor(() =>
     expect(chat.textContent).toContain(
       `Payment approved. I'm registering ${NAME}`

@@ -177,9 +177,8 @@ describe.skipIf(!url)("buying a domain, on a live connection", () => {
     const form = Object.fromEntries(session?.body ?? [])
     expect(form).toMatchObject({
       mode: "payment",
-      ui_mode: "embedded_page",
+      ui_mode: "elements",
       customer: CUSTOMER,
-      redirect_on_completion: "if_required",
       return_url: `https://staging.remeai.co.uk/app/domains/return?name=${name}&session_id={CHECKOUT_SESSION_ID}`,
       "line_items[0][price_data][currency]": "gbp",
       "line_items[0][price_data][unit_amount]": "800",

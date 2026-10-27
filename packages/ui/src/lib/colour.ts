@@ -47,7 +47,8 @@ const ratio = (a: Rgb, b: Rgb) => {
   return (light + 0.05) / (dark + 0.05)
 }
 
-const toHex = (value: Rgb) =>
+/** `#rrggbb` from red, green and blue, 0 to 255 each. */
+export const toHex = (value: Rgb) =>
   `#${value.map((part) => part.toString(16).padStart(2, "0")).join("")}`
 
 /** The contrast of two `#rrggbb` colours, 1 to 21. */

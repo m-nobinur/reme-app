@@ -22,6 +22,7 @@ import {
 } from "@workspace/contracts"
 import { Done, Problem } from "@workspace/ui/components/assistant/decision"
 import { ConnectSteps } from "@workspace/ui/components/assistant/domain"
+import { PayDialog } from "@workspace/ui/components/assistant/pay-dialog"
 import {
   ACCENT_RING,
   Docked,
@@ -30,20 +31,12 @@ import {
   useTabDraft,
 } from "@workspace/ui/components/assistant/question-tray"
 import { ConnectRow, ConnectRows } from "@workspace/ui/components/connect-row"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@workspace/ui/components/dialog"
 import { Field } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import { ToolStatus } from "@workspace/ui/components/status-line"
 import type { ToolArgs } from "@workspace/ui/lib/activity-copy"
 import { FIELD_ERROR, OPTION, OPTION_PILL } from "@workspace/ui/lib/card"
 import { refusalText } from "@workspace/ui/lib/refusal"
-import { mountCheckout } from "@workspace/ui/lib/stripe"
 import { type Failure, readView } from "@workspace/ui/lib/tool-state"
 import { cn, META } from "@workspace/ui/lib/utils"
 import {
@@ -62,9 +55,9 @@ import {
  * Choose: one row a name, a chip for each ending with its yearly price or
  * "taken", best first, and "Buy it somewhere else" under them. A chip goes
  * to Your details, prefilled from what the api holds and asking only for
- * the gaps, and Pay opens Stripe's embedded Checkout in a dialog, where
- * paying is the consent. Buying elsewhere opens Cloudflare's or GoDaddy's
- * search and leaves the tray waiting for "Done, I bought it". `buy_domain`
+ * the gaps, and Pay opens the payment dialog on the purchase's Stripe
+ * Checkout Session, where paying is the consent. Buying elsewhere opens
+ * Cloudflare's or GoDaddy's search and leaves the tray waiting for "Done, I bought it". `buy_domain`
  * and a posted Pay button open Your details for their name. The price shown
  * is the api's, from the price table, never the model's text. Done, the
  * tray goes and the thread keeps one line.
@@ -581,56 +574,16 @@ function StatusLine({
   )
 }
 
-/** Stripe's embedded Checkout, mounted while this is on screen. */
-function Checkout({
-  publishableKey,
-  clientSecret,
-  onComplete,
-}: {
-  publishableKey: string
-  clientSecret: string
-  onComplete: () => void
-}) {
-  const host = useRef<HTMLDivElement>(null)
-  const complete = useRef(onComplete)
-  complete.current = onComplete
-  const [failed, setFailed] = useState(false)
-  useEffect(() => {
-    const element = host.current
-    if (!element) return
-    let live = true
-    let unmount: (() => void) | null = null
-    mountCheckout(element, publishableKey, clientSecret, () =>
-      complete.current()
-    ).then(
-      (done) => {
-        if (live) unmount = done
-        else done()
-      },
-      () => live && setFailed(true)
-    )
-    return () => {
-      live = false
-      unmount?.()
-    }
-  }, [publishableKey, clientSecret])
-  return failed ? (
-    <Problem text="The payment form did not load. Check your connection and try again." />
-  ) : (
-    <section
-      aria-label="Payment"
-      className="min-h-96 overflow-hidden rounded-2xl"
-      data-slot="domain-checkout"
-      ref={host}
-    />
-  )
-}
-
 /** Where Your details is: filling in, opening Checkout, paying, or refused. */
 type Phase =
   | { at: "filling" }
   | { at: "starting" }
-  | { at: "paying"; publishable_key: string; client_secret: string }
+  | {
+      at: "paying"
+      publishable_key: string
+      client_secret: string
+      details: RegistrantDetails
+    }
   | { at: "refused"; code: string | null }
 
 function DetailsPage({
@@ -712,7 +665,7 @@ function DetailsPage({
       const started = await purchase.checkout(name, read.details)
       setPhase(
         started.outcome === "open"
-          ? { at: "paying", ...started }
+          ? { at: "paying", ...started, details: read.details }
           : { at: "refused", code: started.code }
       )
     } catch {
@@ -870,31 +823,18 @@ function DetailsPage({
           </p>
         </form>
       )}
-      <Dialog
-        onOpenChange={(open) => {
+      {phase.at === "paying" && price !== null ? (
+        <PayDialog
+          clientSecret={phase.client_secret}
+          name={name}
           // Closed unpaid: the next Pay opens a fresh Checkout.
-          if (!open) setPhase({ at: "filling" })
-        }}
-        open={phase.at === "paying"}
-      >
-        {phase.at === "paying" ? (
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Pay for {name}</DialogTitle>
-              <DialogDescription>
-                {price === null
-                  ? null
-                  : `${pounds(price)} for 1 year, renews yearly.`}
-              </DialogDescription>
-            </DialogHeader>
-            <Checkout
-              clientSecret={phase.client_secret}
-              onComplete={onPaid}
-              publishableKey={phase.publishable_key}
-            />
-          </DialogContent>
-        ) : null}
-      </Dialog>
+          onClose={() => setPhase({ at: "filling" })}
+          onPaid={onPaid}
+          priceGbp={price}
+          publishableKey={phase.publishable_key}
+          registrant={phase.details.registrant}
+        />
+      ) : null}
     </TrayFrame>
   )
 }
