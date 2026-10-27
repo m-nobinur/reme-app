@@ -92,6 +92,35 @@ describe("the workspace the CoS reads", () => {
     })
   })
 
+  it("shows a finished task and a put-off one with its date, so the next offer can wait on them", () => {
+    const task = {
+      id: BUILD,
+      created_at: "2026-10-20T08:00:00.000Z",
+      done_at: null,
+      later_until: null,
+      detail: {},
+      steps: [],
+    }
+    const data = dumped({
+      ...WORKSPACE,
+      tasks: [
+        { ...task, kind: "address", state: "declined", detail: {} },
+        {
+          ...task,
+          kind: "google",
+          state: "later",
+          later_until: "2026-11-03T08:00:00.000Z",
+        },
+      ],
+    }) as { tasks: Record<string, unknown>[] }
+    expect(data.tasks[0]).toMatchObject({ finished: "declined" })
+    expect(data.tasks[1]).toMatchObject({
+      put_off: true,
+      put_off_until: "2026-11-03T08:00:00.000Z",
+    })
+    expect(data.tasks[1]).not.toHaveProperty("finished")
+  })
+
   it("says how long a build has run, a long quiet and a restart, in plain words", () => {
     const [build] = WORKSPACE.builds
     if (!build) throw new Error("no build")

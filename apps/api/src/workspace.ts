@@ -22,6 +22,7 @@ import {
   SiteFields,
   siteHost,
   siteUrl,
+  TaskKind,
   TERMINAL_STATES,
   thumbnailOf,
   WorkspaceStatus,
@@ -1012,8 +1013,8 @@ export async function statusOf(
 }
 
 /**
- * `statusOf` with the facts it was read from and the owner tasks still open
- * (active or put off), for the assistant's view, which needs all three.
+ * `statusOf` with the facts it was read from and each kind's latest owner
+ * task in any state, for the assistant's view, which needs all three.
  */
 export async function statusWithFacts(
   db: OrgScopedDb,
@@ -1079,8 +1080,10 @@ export async function statusWithFacts(
       now
     ),
   })
-  const tasks = rows.tasks.filter(
-    (t) => t.state === "active" || t.state === "later"
+  // Rows come newest first, so each kind's first is its latest, a finished
+  // one included: the assistant reads the address task's end to time Google.
+  const tasks = TaskKind.options.flatMap(
+    (kind) => rows.tasks.find((t) => t.kind === kind) ?? []
   )
   return { status, facts: current, tasks }
 }

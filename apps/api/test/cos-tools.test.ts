@@ -13,6 +13,8 @@ import {
   facts,
   memberships,
   NEXT_DUE_KEY,
+  openTask,
+  readTasks,
   reminders,
   sql,
   supersedeFact,
@@ -48,6 +50,7 @@ import {
   newContact,
   ownersAnswer,
   paceOf,
+  putOff,
   recordReview,
   removeDomain,
   requestChange,
@@ -2251,6 +2254,49 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
     )
     expect(output).toEqual({
       url: "https://staging.remeai.co.uk/api/google/start",
+    })
+  })
+
+  describe("put_off", () => {
+    it("makes the kind's task when the offer came first and puts it off for the days given", async () => {
+      const fresh = await owner(kit, url as string, "cos-put-off")
+      const output = kept(
+        "put_off",
+        await putOff(context(fresh), { kind: "google", days: 3 })
+      )
+      if (output.outcome !== "put_off") throw new Error("not put off")
+      const tasks = await kit.withOrg({ orgId: fresh.orgId }, readTasks)
+      expect(tasks).toHaveLength(1)
+      expect(tasks[0]).toMatchObject({ kind: "google", state: "later" })
+      expect(new Date(tasks[0]?.later_until as string).getTime()).toBe(
+        new Date(output.until).getTime()
+      )
+      const days = (new Date(output.until).getTime() - Date.now()) / 86_400_000
+      expect(days).toBeGreaterThan(2.9)
+      expect(days).toBeLessThan(3.1)
+    })
+
+    it("puts the open task off without making a second, and the workspace shows each kind's latest task, finished included", async () => {
+      const fresh = await owner(kit, url as string, "cos-put-off-open")
+      await kit.withOrg({ orgId: fresh.orgId }, async (db) => {
+        await openTask(db, fresh.orgId, "address")
+        await openTask(db, fresh.orgId, "google")
+        await db.execute(sql`
+          update owner_tasks set state = 'done', done_at = now()
+          where kind = 'address'`)
+      })
+      kept("put_off", await putOff(context(fresh), { kind: "google" }))
+      const tasks = (
+        kept("get_workspace", await getWorkspace(context(fresh), {})).tasks ??
+        []
+      ).map((t) => [t.kind, t.state])
+      expect(tasks).toEqual([
+        ["address", "done"],
+        ["google", "later"],
+      ])
+      expect(await kit.withOrg({ orgId: fresh.orgId }, readTasks)).toHaveLength(
+        2
+      )
     })
   })
 

@@ -277,10 +277,12 @@ const RecordReview: ToolCallMessagePartComponent = (props) => (
 
 /**
  * Tools that show nothing in the thread: the chat tells the owner what was
- * remembered on the next reply, as a chip, so no tool card is drawn.
+ * remembered on the next reply, as a chip, and Ellie's own words say an offer
+ * is put off, so no tool card is drawn.
  */
 export const COS_QUIET: Record<string, ToolCallMessagePartComponent> = {
   remember: () => null,
+  put_off: () => null,
 }
 
 /** The reads, which the thread may fold together, by tool name. */

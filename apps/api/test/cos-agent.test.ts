@@ -1407,7 +1407,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     await shownAsStored(me, id, done.chunks)
   })
 
-  it("gives Ask mode the read tools and remember", async () => {
+  it("gives Ask mode the read tools, remember and put_off", async () => {
     const id = await conversation(me)
     const { model, sent } = scripted(said("Here is what I can see."))
     await turn(me, typed(id, "What can you do?", "ask"), { model })
@@ -1423,6 +1423,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       "get_preview",
       "get_search_performance",
       "get_workspace",
+      "put_off",
       "remember",
     ])
   })

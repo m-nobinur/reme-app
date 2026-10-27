@@ -397,6 +397,12 @@ const TOOLS: Record<CosToolName, ToolCopy> = {
     done: () => "Noted that down",
     fail: () => "note that down",
   },
+  put_off: {
+    kind: "thinking",
+    working: () => "Noting that for later",
+    done: () => "Noted that for later",
+    fail: () => "note that for later",
+  },
 }
 
 /** Any other tool: a plain line, never the tool's name. */

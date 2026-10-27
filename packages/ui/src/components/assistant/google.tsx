@@ -1,11 +1,12 @@
 import {
   type ToolCallMessagePartComponent,
+  useAui,
   useAuiState,
 } from "@assistant-ui/react"
 import { CheckCircleIcon } from "@phosphor-icons/react"
 import { ConnectGoogleOutput } from "@workspace/contracts"
 import { Problem } from "@workspace/ui/components/assistant/decision"
-import { buttonVariants } from "@workspace/ui/components/button"
+import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { ToolStatus } from "@workspace/ui/components/status-line"
 import { CARD_SURFACE } from "@workspace/ui/lib/card"
 import { refusalText } from "@workspace/ui/lib/refusal"
@@ -21,6 +22,7 @@ const START = "/api/google/start"
  * card is a plain link in the same tab, never an approval.
  */
 export const ConnectGoogle: ToolCallMessagePartComponent = (props) => {
+  const aui = useAui()
   const running = useAuiState((s) => s.message.status?.type === "running")
   const view = readView(props, ConnectGoogleOutput)
   if (view.state !== "done") {
@@ -49,10 +51,20 @@ export const ConnectGoogle: ToolCallMessagePartComponent = (props) => {
             Google will ask you to let me see how your website shows up in
             search and to add it to Search Console.
           </p>
-          <div>
+          <div className="flex gap-2">
             <a className={buttonVariants({ size: "sm" })} href={output.url}>
               Connect Google
             </a>
+            {/* Sent as the owner's words, so Ellie puts the offer off. */}
+            <Button
+              disabled={running}
+              onClick={() => aui.thread().append("Not now")}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              Not now
+            </Button>
           </div>
         </>
       ) : "connected" in output ? (

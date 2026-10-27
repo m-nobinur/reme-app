@@ -171,7 +171,14 @@ export function workspaceLabels(workspace: CosWorkspace) {
       tasks: tasks.map((t) => ({
         about: t.kind === "address" ? "the website's own address" : "Google",
         ...(t.kind === "address" && t.detail.name && { domain: t.detail.name }),
-        ...(t.state === "later" && { put_off: true }),
+        ...(t.state === "later" && {
+          put_off: true,
+          ...(t.later_until && { put_off_until: t.later_until }),
+        }),
+        // A finished task stays in view so the next one can wait on its end.
+        ...((t.state === "done" || t.state === "declined") && {
+          finished: t.state,
+        }),
         steps: t.steps.map(
           (s) =>
             `${s.step.replaceAll("_", " ")}: ${STEP[s.state]}${s.note ? ` (${s.note})` : ""}`
