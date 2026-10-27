@@ -4,9 +4,13 @@ import type { OAuthFlow } from "@/lib/auth/oauth"
 export const SCOPES =
   "openid email https://www.googleapis.com/auth/webmasters https://www.googleapis.com/auth/siteverification.verify_only"
 
-/** The connect flow's cookie, scoped to its own two routes, and its callback. */
+/**
+ * The connect flow's cookie, scoped to its own two routes, and its callback.
+ * An hour, since Google may ask for a password or a second factor first.
+ */
 export const googleFlow = (origin: string): OAuthFlow => ({
   cookie: "reme-google-state",
   path: "/api/google",
   redirectUri: `${origin}/api/google/callback`,
+  maxAge: 60 * 60,
 })

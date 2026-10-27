@@ -20,9 +20,8 @@ export const Route = createFileRoute("/api/google/start")({
         const owner = ownerFrom(await getAuth())
         if (!owner?.orgId) return seeOther(new URL("/sign-in", origin).href)
         const clientId = process.env.GOOGLE_CLIENT_ID
-        if (!clientId) {
-          return seeOther(new URL("/app?google=unavailable", origin).href)
-        }
+        // The card never offers the link without a client id; a stale one lands in the app.
+        if (!clientId) return seeOther(new URL("/app", origin).href)
 
         // Back to the chat the card was in, where the result is announced.
         let from: URL | null = null

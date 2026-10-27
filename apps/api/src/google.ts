@@ -1,7 +1,8 @@
 import {
   type ConnectGoogleOutput,
   GoogleConnectRequest,
-  GoogleFailedRequest,
+  GoogleResultRequest,
+  type ServerButton,
 } from "@workspace/contracts"
 import {
   postAssistantMessage,
@@ -57,40 +58,53 @@ export async function googleConnect(
   })
 }
 
-const FAILED_TEXT = {
-  failed:
-    "Google didn't connect, so your site isn't in Search Console yet. The sign-in link runs out if it sits for a while. Say the word and I'll send a fresh one.",
-  scopes_missing:
-    "Google connected but didn't give me permission to add your site. Connect again and leave both boxes ticked.",
+const CONNECT: ServerButton = {
+  label: "Connect Google",
+  action: { kind: "ask", text: "Connect Google to my website." },
+}
+
+const RESULT: Record<
+  GoogleResultRequest["result"],
+  { text: string; button?: ServerButton }
+> = {
+  connected: {
+    text: "Google is connected. I'm adding your site to Search Console now and I'll tell you when it's in.",
+  },
+  // The owner's choice, not a fault: one quiet line and no button.
+  cancelled: {
+    text: "No problem, Google isn't connected. Say the word whenever you want to try again.",
+  },
+  failed: {
+    text: "Google didn't connect, so your site isn't in Search Console yet. The sign-in link runs out if it sits for a while. Say the word and I'll send a fresh one.",
+    button: CONNECT,
+  },
+  scopes_missing: {
+    text: "Google needs one more permission before I can add your site. Connect again and leave both boxes ticked.",
+    button: { ...CONNECT, label: "Reconnect Google" },
+  },
 }
 
 /**
- * `POST /google/failed`: the callback could not connect Google. One message
- * from the assistant says so, keyed by the attempt so a reloaded callback says
- * it once, besides the banner the web shows.
+ * `POST /google/result`: how the callback ended. One message from the
+ * assistant says so, keyed by the attempt so a reloaded callback says it once.
  *
- * shortcut: a chat in a turn drops the message (the banner still shows);
- * retry from a Workflow if that ever matters.
+ * shortcut: a chat in a turn drops the message; retry from a Workflow if
+ * that ever matters.
  */
-export async function googleFailed(
+export async function googleResult(
   request: Request,
   kit: Tenancy,
   owner: Owner
 ): Promise<Response> {
   if (!(await isOrgOwner(kit, owner))) return notOwner()
-  const parsed = GoogleFailedRequest.safeParse(await readBody(request))
+  const parsed = GoogleResultRequest.safeParse(await readBody(request))
   if (!parsed.success) return invalid(parsed.error.issues)
   const { attempt, result } = parsed.data
+  const { text, button } = RESULT[result]
   await postAssistantMessage(kit, {
     orgId: owner.orgId,
-    key: `google.failed:${attempt}`,
-    message: {
-      text: [FAILED_TEXT[result]],
-      button: {
-        label: "Connect Google",
-        action: { kind: "ask", text: "Connect Google to my website." },
-      },
-    },
+    key: `google.result:${attempt}`,
+    message: { text: [text], ...(button && { button }) },
   })
   return new Response(null, { status: 204 })
 }
