@@ -560,7 +560,14 @@ async function speak(kit: Tenancy, env: Env, models: Models, beat: Beat) {
         message: {
           text: [text],
           ...(chip && {
-            button: { label: chip, action: { kind: "ask", text: chip } },
+            button: {
+              label: chip,
+              // The report's Google chip starts the sign-in from the row itself.
+              action:
+                chip === "Connect Google"
+                  ? { kind: "connect", service: "google" }
+                  : { kind: "ask", text: chip },
+            },
           }),
         },
       }),
