@@ -245,12 +245,16 @@ export const REG_FAILED = (name: string) =>
     message: "Registry rejected the request.",
   })
 
-export const REGISTRATION = (name: string, autoRenew = true) =>
+export const REGISTRATION = (
+  name: string,
+  autoRenew = true,
+  expires = "2027-10-16T12:00:05Z"
+) =>
   envelope({
     domain_name: name,
     status: "active",
     created_at: "2026-10-16T12:00:05Z",
-    expires_at: "2027-10-16T12:00:05Z",
+    expires_at: expires,
     auto_renew: autoRenew,
     privacy_mode: "redaction",
     locked: true,

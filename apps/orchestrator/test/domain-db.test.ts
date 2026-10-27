@@ -24,7 +24,7 @@ import {
   revokeDomains,
   sweepDomains,
 } from "../src/domain-flow.ts"
-import { writePointer } from "../src/publish.ts"
+import { clearPointers, writePointer } from "../src/publish.ts"
 import { searchInstanceId } from "../src/search.ts"
 import { DOH } from "./fixtures/domains.ts"
 import { kit, previewed, SUFFIX, type storage, workflowEnv } from "./site.ts"
@@ -479,6 +479,27 @@ describe.skipIf(!url)("custom domains against a database", () => {
     expect(
       await connect(env, kit, other.orgId, { name, approval_id: "b" })
     ).toMatchObject({ status: 201 })
+  })
+
+  it("stops serving a live domain's hosts at takedown", async () => {
+    stubNet()
+    const site = await published()
+    const { env } = domainEnv(site.store)
+    const name = unique()
+    await connect(env, kit, site.orgId, { name, approval_id: "a" })
+    const domainId = (await rowOf(site.orgId, name))?.id ?? ""
+    await kit.withOrg({ orgId: site.orgId }, (db) =>
+      db
+        .update(domains)
+        .set({ state: "verifying" })
+        .where(eq(domains.id, domainId))
+    )
+    await activateDomain(env, kit, site.orgId, domainId)
+    const hosts = [`www.${name}`, name, site.slug]
+    expect(hosts.every((h) => site.store.pointers.has(`host:${h}`))).toBe(true)
+    await clearPointers(env, kit, site.orgId)
+    await revokeDomains(env, kit, site.orgId)
+    expect(hosts.some((h) => site.store.pointers.has(`host:${h}`))).toBe(false)
   })
 
   it("revokes every claim at takedown, hostnames first", async () => {

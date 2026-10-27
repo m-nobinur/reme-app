@@ -4,6 +4,7 @@ import {
   DomainCheck,
   DomainName,
   DomainProvider,
+  type DomainRegistration,
   type DomainState,
   type ServerButton,
   SITE_HEADER,
@@ -14,6 +15,7 @@ import {
   domainHeldElsewhere,
   domains,
   eq,
+  failureCode,
   type OrgScopedDb,
   orgs,
   pgCode,
@@ -51,7 +53,12 @@ import {
   otherHost,
   writePointer,
 } from "./publish.ts"
-import { detachHostname, type RegistrarEnv, setAutoRenew } from "./registrar.ts"
+import {
+  detachHostname,
+  getRegistration,
+  type RegistrarEnv,
+  setAutoRenew,
+} from "./registrar.ts"
 import { forgetHost } from "./search.ts"
 import { cancelRenewal } from "./stripe.ts"
 
@@ -1051,22 +1058,105 @@ export async function remove(
       "domain.not_found",
       `${name} isn't connected to this site.`
     )
-  await repoint(env, kit, orgId, found.row.id)
-  await revoke(env, found.row)
+  await stopServing(env, kit, orgId, found.row)
+  return null
+}
+
+/**
+ * A claim that has left `active` stops being served: its pointers rewritten
+ * from the row, its hostnames and billing revoked, its Google files
+ * forgotten, and the pointers written once more after `SETTLE`. Idempotent.
+ * A removal and a lapsed registration share it.
+ */
+async function stopServing(
+  env: Env,
+  kit: Tenancy,
+  orgId: string,
+  row: DomainRow
+) {
+  await repoint(env, kit, orgId, row.id)
+  await revoke(env, row)
   // This org's Google files must not prove the name for whoever claims it next.
-  const primary = found.row.primaryHost
-  for (const host of [primary, otherHost(primary)]) {
+  for (const host of [row.primaryHost, otherHost(row.primaryHost)]) {
     await forgetHost(env, kit, orgId, host)
   }
   try {
     await env.DOMAINS.create({
-      id: settleInstanceId(found.row.id),
-      params: { org_id: orgId, domain_id: found.row.id, settle: true },
+      id: settleInstanceId(row.id),
+      params: { org_id: orgId, domain_id: row.id, settle: true },
     })
   } catch {
     // Already settling: a repeated removal.
   }
-  return null
+}
+
+/**
+ * A bought domain past its stored expiry, asked of the registrar, which knows
+ * if it renewed: a later date is kept, and none or a past one means it
+ * lapsed. A lapsed domain leaves `active` and stops being served, as a
+ * removal does, and the owner is told. Cleanup that fails after the row moved
+ * raises an alert, since the sweep will not find the row again.
+ */
+async function lapse(
+  env: Env,
+  kit: Tenancy,
+  orgId: string,
+  row: DomainRow
+): Promise<Say | null> {
+  const registration = row.registration as DomainRegistration | null
+  const expiry = registration?.expires_at
+  if (!(registration && expiry) || Date.parse(expiry) > Date.now()) return null
+  const live = await getRegistration(env, row.name)
+  if (live?.expires_at && Date.parse(live.expires_at) > Date.now()) {
+    const renewed = { ...registration, expires_at: live.expires_at }
+    await kit.withOrg({ orgId }, (db) =>
+      db
+        .update(domains)
+        .set({ registration: renewed })
+        .where(eq(domains.id, row.id))
+    )
+    return null
+  }
+  const found = await kit.withOrg({ orgId }, async (db) => {
+    const claim = await readClaim(db, env, eq(domains.id, row.id))
+    return claim &&
+      (await moveTo(
+        db,
+        claim.row,
+        "removed",
+        ["active"],
+        { removedAt: new Date() },
+        { type: "domain.expired", payload: { domain_id: row.id } }
+      ))
+      ? claim
+      : null
+  })
+  if (!found) return null
+  try {
+    await stopServing(env, kit, orgId, found.row)
+  } catch (error) {
+    await kit.withOrg({ orgId }, (db) =>
+      appendEvent(db, {
+        orgId,
+        assignmentId: null,
+        staffId: null,
+        type: "alert.raised",
+        payload: {
+          kind: "domain.expiry_cleanup_failed",
+          domain_id: row.id,
+          code: failureCode(error),
+        },
+      })
+    )
+  }
+  return {
+    key: `${row.id}:lapsed`,
+    text: `${row.name} wasn't renewed and has run out, so visitors there no longer reach your website. It's back at ${found.slug}. If you still want ${row.name}, I can buy it again.`,
+    button: {
+      label: "Buy it again",
+      action: { kind: "ask", text: `Buy ${row.name} for my website.` },
+    },
+  }
 }
 
 /**
@@ -1138,7 +1228,7 @@ export async function repoint(
  * here as it would there, so the 72-hour bound holds without the Workflow.
  */
 export async function sweepDomains(
-  env: CloudflareEnv & Pick<Env, "SITE_HOST_SUFFIX">,
+  env: Env,
   kit: Tenancy,
   orgId: string,
   hour: string
@@ -1156,6 +1246,12 @@ export async function sweepDomains(
   for (const row of rows) {
     if (connecting(row.state)) {
       const say = await expireDomain(env, kit, orgId, row.id, "timeout")
+      if (say) says.push(say)
+      continue
+    }
+    // A bought domain has no custom hostname to read; its registration is the check.
+    if (row.origin === "purchased") {
+      const say = await lapse(env, kit, orgId, row)
       if (say) says.push(say)
       continue
     }
