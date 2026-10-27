@@ -50,28 +50,27 @@ export type CustomHostname = {
 
 export const CF_API = "https://api.cloudflare.com/client/v4"
 export const CF_TIMEOUT_MS = 10_000
+/** HTTP DCV, as created; a refresh must send the same method and type. */
+const SSL = { method: "http", type: "dv" } as const
 
-async function customHostnames(
+async function zoneApi(
   env: CloudflareEnv,
-  method: "GET" | "POST" | "DELETE",
+  method: "GET" | "POST" | "PATCH" | "DELETE",
   path: string,
   body?: unknown
 ): Promise<Response> {
   if (!env.CF_DOMAINS_TOKEN || !env.CF_DOMAINS_ZONE_ID) {
     throw new DomainError("domains.not_configured")
   }
-  return fetch(
-    `${CF_API}/zones/${env.CF_DOMAINS_ZONE_ID}/custom_hostnames${path}`,
-    {
-      method,
-      headers: {
-        authorization: `Bearer ${env.CF_DOMAINS_TOKEN}`,
-        "content-type": "application/json",
-      },
-      body: body === undefined ? undefined : JSON.stringify(body),
-      signal: AbortSignal.timeout(CF_TIMEOUT_MS),
-    }
-  )
+  return fetch(`${CF_API}/zones/${env.CF_DOMAINS_ZONE_ID}${path}`, {
+    method,
+    headers: {
+      authorization: `Bearer ${env.CF_DOMAINS_TOKEN}`,
+      "content-type": "application/json",
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    signal: AbortSignal.timeout(CF_TIMEOUT_MS),
+  })
 }
 
 /** The `result` of a v4 envelope, or the first error's code as the failure. */
@@ -110,10 +109,10 @@ export async function ensureHostname(
   claim: { id?: string }
 ): Promise<CustomHostname> {
   const found = await resultOf<CustomHostname[]>(
-    await customHostnames(
+    await zoneApi(
       env,
       "GET",
-      `?hostname.exact=${encodeURIComponent(hostname)}`
+      `/custom_hostnames?hostname.exact=${encodeURIComponent(hostname)}`
     )
   )
   const existing = found.find((h) => h.hostname === hostname)
@@ -122,10 +121,7 @@ export async function ensureHostname(
     throw new DomainError("domain.hostname_held")
   }
   return resultOf<CustomHostname>(
-    await customHostnames(env, "POST", "", {
-      hostname,
-      ssl: { method: "http", type: "dv" },
-    })
+    await zoneApi(env, "POST", "/custom_hostnames", { hostname, ssl: SSL })
   )
 }
 
@@ -134,10 +130,10 @@ export async function getHostname(
   env: CloudflareEnv,
   id: string
 ): Promise<CustomHostname | null> {
-  const response = await customHostnames(
+  const response = await zoneApi(
     env,
     "GET",
-    `/${encodeURIComponent(id)}`
+    `/custom_hostnames/${encodeURIComponent(id)}`
   )
   if (response.status === 404) {
     await response.body?.cancel()
@@ -151,14 +147,101 @@ export async function deleteHostname(
   env: CloudflareEnv,
   id: string
 ): Promise<void> {
-  const response = await customHostnames(
+  const response = await zoneApi(
     env,
     "DELETE",
-    `/${encodeURIComponent(id)}`
+    `/custom_hostnames/${encodeURIComponent(id)}`
   )
   await response.body?.cancel()
   if (!response.ok && response.status !== 404) {
     throw new DomainError(`cloudflare.${response.status}`)
+  }
+}
+
+/**
+ * Asks Cloudflare to validate a hostname that is not yet active now, rather
+ * than on its own backoff, and returns its state after the ask. An active one
+ * is left alone. A failed refresh only leaves Cloudflare on its own schedule,
+ * so it returns the state it was given.
+ */
+export async function refreshHostname(
+  env: CloudflareEnv,
+  hostname: CustomHostname
+): Promise<CustomHostname> {
+  if (hostname.status === "active" && hostname.ssl?.status === "active")
+    return hostname
+  try {
+    return await resultOf<CustomHostname>(
+      await zoneApi(
+        env,
+        "PATCH",
+        `/custom_hostnames/${encodeURIComponent(hostname.id)}`,
+        { ssl: SSL }
+      )
+    )
+  } catch {
+    return hostname
+  }
+}
+
+/** Staging only: the Worker a claimed host is routed to (see `setRoutes`). */
+export type RouteEnv = CloudflareEnv & { CF_ROUTE_SCRIPT?: string }
+
+/** The hosts a claim's custom hostnames serve: its name, and `www` when it has one. */
+export const claimHosts = (
+  name: string,
+  ids: { apex?: string; www?: string }
+) => [...(ids.apex ? [name] : []), ...(ids.www ? [`www.${name}`] : [])]
+
+/**
+ * Routes `{host}/*` to `CF_ROUTE_SCRIPT` for each host, or removes those
+ * routes. Only staging sets it: production's router holds the zone-wide
+ * route and catches every custom hostname, so without a route of its own a
+ * staging domain reaches production's router. Idempotent, and it only ever removes a
+ * route to `CF_ROUTE_SCRIPT`. A failure logs one line and returns false: a
+ * route is never worth failing a claim over, and the hourly restore retries.
+ */
+export async function setRoutes(
+  env: RouteEnv,
+  hosts: string[],
+  routed: boolean
+): Promise<boolean> {
+  const script = env.CF_ROUTE_SCRIPT
+  if (!script || hosts.length === 0) return true
+  try {
+    const routes = await resultOf<
+      Array<{ id: string; pattern: string; script?: string }>
+    >(await zoneApi(env, "GET", "/workers/routes"))
+    for (const host of hosts) {
+      const pattern = `${host}/*`
+      const ours = routes.find(
+        (r) => r.pattern === pattern && r.script === script
+      )
+      if (routed && !ours) {
+        await resultOf(
+          await zoneApi(env, "POST", "/workers/routes", { pattern, script })
+        )
+      } else if (!routed && ours) {
+        await resultOf(
+          await zoneApi(
+            env,
+            "DELETE",
+            `/workers/routes/${encodeURIComponent(ours.id)}`
+          )
+        )
+      }
+    }
+    return true
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        type: "domain.route_failed",
+        routed,
+        hosts,
+        code: (error as Error).name,
+      })
+    )
+    return false
   }
 }
 

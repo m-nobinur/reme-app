@@ -80,6 +80,7 @@ import {
   inspectDomain,
   type Refusal,
   remove,
+  restoreRoutes,
   revokeDomains,
 } from "./domain-flow.ts"
 import {
@@ -196,6 +197,18 @@ app.get("/sandbox/probe", async (c) => {
   const result = await probe(c.env, "console")
   console.log(JSON.stringify({ type: "sandbox.probed", ...result }))
   return c.json(result)
+})
+
+/**
+ * Staging's custom-domain routes put back after a router deploy wiped them
+ * (domain-flow.ts `restoreRoutes`). Behind the bearer alone, since it spans
+ * every org and takes nothing from the request. `ok` false means a route
+ * call failed and the log line says which.
+ */
+app.post("/domains/routes", async (c) => {
+  const denied = await refuseBearer(c)
+  if (denied) return denied
+  return c.json(await restoreRoutes(c.env))
 })
 
 /** The console: the bearer, then `?org=<slug>` resolved here and nowhere else. */
