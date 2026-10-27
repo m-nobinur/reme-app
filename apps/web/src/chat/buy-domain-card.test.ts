@@ -45,7 +45,15 @@ vi.mock("@assistant-ui/react", async (original) => ({
 // the client secret the api returned, mounting the Elements, showing
 // Stripe's total and confirming with what the owner already gave.
 const stripe = vi.hoisted(() => {
-  const element = () => ({ mount: vi.fn(), destroy: vi.fn(), on: vi.fn() })
+  // Each Element's event handlers, by "kind:event", for the test to fire.
+  const handlers: Record<string, (event: unknown) => void> = {}
+  const element = (kind: string) => () => ({
+    mount: vi.fn(),
+    destroy: vi.fn(),
+    on: vi.fn((event: string, handler: (event: unknown) => void) => {
+      handlers[`${kind}:${event}`] = handler
+    }),
+  })
   const confirm = vi.fn(
     async (
       _options: unknown
@@ -62,10 +70,11 @@ const stripe = vi.hoisted(() => {
   }
   return {
     confirm,
+    handlers,
     init: vi.fn(async (..._args: unknown[]) => ({
       on: vi.fn(),
-      createExpressCheckoutElement: vi.fn(element),
-      createPaymentElement: vi.fn(element),
+      createExpressCheckoutElement: vi.fn(element("express")),
+      createPaymentElement: vi.fn(element("payment")),
       loadActions: async () => ({
         type: "success" as const,
         actions: { confirm, getSession: () => session },
@@ -308,7 +317,8 @@ it("asks only for the gaps, pays in a dialog, and leaves one line once paid", as
   const dialog = document.querySelector('[data-slot="dialog-content"]')
   expect(dialog?.textContent).toContain("Payment details")
   expect(dialog?.textContent).toContain("Renews at £8 a year, cancel any time.")
-  // Stripe gets the email and address the owner already gave, not a blank.
+  // Stripe gets the address the owner already gave, not a blank. The email
+  // is the Customer's, set by the api: Elements refuse a second one.
   const contact = {
     name: REGISTRANT.name,
     address: {
@@ -321,8 +331,18 @@ it("asks only for the gaps, pays in a dialog, and leaves one line once paid", as
   expect(stripe.init.mock.calls[0]?.slice(1)).toEqual([
     "pk_test_1",
     "cs_x",
-    { email: REGISTRANT.email, billingAddress: contact },
+    { billingAddress: contact },
   ])
+
+  // Wallets that fail to load go away, and the card form still pays.
+  await vi.waitFor(() =>
+    expect(stripe.handlers["express:loaderror"]).toBeTruthy()
+  )
+  await act(async () => stripe.handlers["express:loaderror"]?.({}))
+  expect(
+    dialog?.querySelector<HTMLElement>('[data-slot="domain-wallets"]')?.hidden
+  ).toBe(true)
+  expect(dialog?.textContent).not.toContain("did not load")
 
   // Stripe answers a decline in words, under Pay, and Pay comes back.
   stripe.confirm.mockResolvedValueOnce({
@@ -340,7 +360,6 @@ it("asks only for the gaps, pays in a dialog, and leaves one line once paid", as
   await act(async () => pay().click())
   expect(stripe.confirm).toHaveBeenLastCalledWith({
     redirect: "if_required",
-    email: REGISTRANT.email,
     billingAddress: contact,
   })
   await vi.waitFor(() =>

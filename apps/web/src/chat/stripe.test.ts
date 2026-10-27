@@ -3,7 +3,6 @@ import { initCheckout, STRIPE_JS, totalOf } from "@workspace/ui/lib/stripe"
 import { expect, it, vi } from "vitest"
 
 const PREFILL = {
-  email: "jane@sparkle.example",
   billingAddress: {
     name: "Jane Smith",
     address: { country: "GB", line1: "12 Mill Lane", city: "Bristol" },

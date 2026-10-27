@@ -171,10 +171,14 @@ describe.skipIf(!url)("buying a domain, on a live connection", () => {
       client_secret: "cs_secret1",
     })
 
-    const [customer, session] = stripe
+    const [customer, email, session] = stripe
     expect(customer?.path).toBe("customers")
     expect(customer?.key).toBe(`customer:${me.orgId}`)
+    // Checkout reads the email from the Customer, so the page sends none.
+    expect(email?.path).toBe(`customers/${CUSTOMER}`)
+    expect(email?.body.get("email")).toBe(details.registrant.email)
     expect(session?.path).toBe("checkout/sessions")
+    expect(session?.body.has("customer_email")).toBe(false)
     const form = Object.fromEntries(session?.body ?? [])
     expect(form).toMatchObject({
       mode: "payment",
@@ -225,7 +229,10 @@ describe.skipIf(!url)("buying a domain, on a live connection", () => {
     await purchase(me, second)
     const again = stubStripe()
     expect((await checkout(me, told(), second)).status).toBe(200)
-    expect(again.map((a) => a.path)).toEqual(["checkout/sessions"])
+    expect(again.map((a) => a.path)).toEqual([
+      `customers/${CUSTOMER}`,
+      "checkout/sessions",
+    ])
   })
 
   it("hands back a session Stripe still holds open instead of making a second", async () => {
@@ -294,6 +301,7 @@ describe.skipIf(!url)("buying a domain, on a live connection", () => {
     )
     expect(stripe.map((a) => [a.method, a.path])).toEqual([
       ["GET", "checkout/sessions/cs_test_old"],
+      ["POST", "customers/cus_kept"],
       ["POST", "checkout/sessions"],
       ["POST", "checkout/sessions/cs_test_old/expire"],
     ])

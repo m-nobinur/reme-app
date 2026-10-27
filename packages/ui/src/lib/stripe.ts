@@ -35,7 +35,6 @@ export type CheckoutActions = {
   getSession: () => CheckoutSession
   confirm: (options: {
     redirect: "if_required"
-    email?: string
     billingAddress?: CheckoutContact
     expressCheckoutConfirmEvent?: unknown
   }) => Promise<{ type: "success" } | Failed>
@@ -60,7 +59,7 @@ type Stripe = {
   initCheckoutElementsSdk: (options: {
     clientSecret: string
     elementsOptions: { appearance: object }
-    defaultValues: { email: string; billingAddress: CheckoutContact }
+    defaultValues: { billingAddress: CheckoutContact }
   }) => CheckoutSdk
 }
 
@@ -95,15 +94,17 @@ function stripeGlobal(): Promise<StripeGlobal> {
 const instances = new Map<string, Stripe>()
 
 /**
- * Checkout for a session's client secret, prefilled with what the owner
- * already gave so Stripe asks for neither again, and drawn in the page's
- * own colours, read from `element`, which sits where the form will.
+ * Checkout for a session's client secret, prefilled with the billing
+ * address the owner already gave, and drawn in the page's own colours,
+ * read from `element`, which sits where the form will. The email is not
+ * passed: it comes from the session's Customer, and Elements fail to load
+ * when the page sends one as well.
  */
 export async function initCheckout(
   element: HTMLElement,
   publishableKey: string,
   clientSecret: string,
-  defaultValues: { email: string; billingAddress: CheckoutContact }
+  defaultValues: { billingAddress: CheckoutContact }
 ): Promise<CheckoutSdk> {
   const Stripe = await stripeGlobal()
   let stripe = instances.get(publishableKey)
