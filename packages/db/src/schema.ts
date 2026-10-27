@@ -1458,6 +1458,7 @@ export const searchConnectionState = pgEnum("search_connection_state", [
   "active",
   "needs_reauth",
   "revoked",
+  "needs_permission",
 ])
 
 /** `SearchPropertyKind`: the free subdomain, a connected domain's address, or a whole purchased domain. */
@@ -1642,5 +1643,156 @@ export const searchUrlStatus = pgTable(
     primaryKey({ columns: [t.orgId, t.propertyId, t.url] }),
     propertyFk("search_url_status", t),
     orgIsolation("search_url_status"),
+  ]
+)
+
+/** `TaskKind`: the site's own address, or Google Search Console. */
+export const taskKind = pgEnum("task_kind", ["address", "google"])
+
+/** `TaskState`. */
+export const taskState = pgEnum("task_state", [
+  "active",
+  "done",
+  "declined",
+  "later",
+])
+
+/** `TaskStepName`: both kinds' steps, in their orders. */
+export const taskStep = pgEnum("task_step", [
+  "find_out",
+  "choose",
+  "purchase",
+  "records",
+  "ownership",
+  "certificate",
+  "loads",
+  "sign_in",
+  "permissions",
+  "verify",
+  "sitemap",
+  "first_data",
+])
+
+/** `TaskStepState`. */
+export const taskStepState = pgEnum("task_step_state", [
+  "pending",
+  "in_progress",
+  "blocked",
+  "done",
+  "skipped",
+])
+
+/** `TaskBlockedOn`. */
+export const taskBlockedOn = pgEnum("task_blocked_on", [
+  "approval",
+  "owner_action",
+  "purchase",
+  "permission",
+])
+
+/**
+ * Work the assistant leads over days, such as putting the site on the
+ * owner's address. `domains` and `search_connections` stay the record of
+ * their own facts; a task holds progress and what the owner is asked. One
+ * open task per kind: a task put off for later is the same task when it
+ * comes back, so its steps keep their progress.
+ */
+export const ownerTasks = pgTable(
+  "owner_tasks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    kind: taskKind("kind").notNull(),
+    state: taskState("state").notNull().default("active"),
+    laterUntil: timestamp("later_until", { withTimezone: true }),
+    /** `AddressDetail` for an address task; `{}` for Google. */
+    detail: jsonb("detail").notNull().default(sql`'{}'::jsonb`),
+    createdAt,
+    doneAt: timestamp("done_at", { withTimezone: true }),
+  },
+  (t) => [
+    // The target of `task_steps`' composite key.
+    unique("owner_tasks_id_org").on(t.id, t.orgId),
+    uniqueIndex("owner_tasks_open_kind")
+      .on(t.orgId, t.kind)
+      .where(sql`state in ('active', 'later')`),
+    check("owner_tasks_done_at", sql`(state = 'done') = (done_at is not null)`),
+    orgIsolation("owner_tasks"),
+  ]
+)
+
+/**
+ * One row per step of a task, made with the task and never added or removed
+ * after, so the panel's list is fixed from the first moment. `probe_hash` is
+ * the sha256 of the last probe's normalized output; `changed_at` moves when
+ * the state does.
+ */
+export const taskSteps = pgTable(
+  "task_steps",
+  {
+    taskId: uuid("task_id").notNull(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    step: taskStep("step").notNull(),
+    state: taskStepState("state").notNull().default("pending"),
+    /** Why it waits, in the owner's terms, written by code. */
+    note: text("note"),
+    blockedOn: taskBlockedOn("blocked_on"),
+    deadline: timestamp("deadline", { withTimezone: true }),
+    /** What proved the state, such as the DNS answer or the status a load got. */
+    evidence: jsonb("evidence"),
+    probeHash: text("probe_hash"),
+    probedAt: timestamp("probed_at", { withTimezone: true }),
+    changedAt: timestamp("changed_at", { withTimezone: true }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.taskId, t.step] }),
+    foreignKey({
+      name: "task_steps_task_fk",
+      columns: [t.taskId, t.orgId],
+      foreignColumns: [ownerTasks.id, ownerTasks.orgId],
+    }).onDelete("cascade"),
+    // A blocked step says what it waits for, and only a blocked step does.
+    check(
+      "task_steps_blocked_on",
+      sql`(state = 'blocked') = (blocked_on is not null)`
+    ),
+    check(
+      "task_steps_note_length",
+      sql`note is null or char_length(note) between 1 and 200`
+    ),
+    check(
+      "task_steps_probe_hash",
+      sql`probe_hash is null or probe_hash ~ '^[0-9a-f]{64}$'`
+    ),
+    orgIsolation("task_steps"),
+  ]
+)
+
+/**
+ * A follow-up the heartbeat sent, keyed by its fingerprint
+ * (`task:{id}:{step}:{state}`) so the same one is never sent twice, and
+ * latched once the owner dismisses it.
+ */
+export const taskFollowups = pgTable(
+  "task_followups",
+  {
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    fingerprint: text("fingerprint").notNull(),
+    sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+    dismissedAt: timestamp("dismissed_at", { withTimezone: true }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.orgId, t.fingerprint] }),
+    check(
+      "task_followups_fingerprint",
+      sql`char_length(fingerprint) between 1 and 200`
+    ),
+    orgIsolation("task_followups"),
   ]
 )

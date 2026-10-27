@@ -16,6 +16,7 @@ import {
   jobRuns,
   memberships,
   orgs,
+  ownerTasks,
   pushSubscriptions,
   reminders,
   roles,
@@ -28,6 +29,8 @@ import {
   siteRevisions,
   staff,
   staffEvents,
+  taskFollowups,
+  taskSteps,
   users,
 } from "../src/schema.ts"
 
@@ -410,6 +413,25 @@ export async function seedTwoOrgs() {
       url: SEARCH_URL_OF[tag],
       verdict: "PASS",
       inspectedAt: new Date(),
+    })
+    // The address task for that domain, done, with a step and a follow-up.
+    await db.insert(ownerTasks).values({
+      id: per(tag, 21),
+      orgId: org,
+      kind: "address",
+      state: "done",
+      detail: { name: DOMAIN_OF[tag], origin: "owned" },
+      doneAt: new Date(),
+    })
+    await db.insert(taskSteps).values({
+      taskId: per(tag, 21),
+      orgId: org,
+      step: "loads",
+      state: "done",
+    })
+    await db.insert(taskFollowups).values({
+      orgId: org,
+      fingerprint: `task:${per(tag, 21)}:loads:done`,
     })
   }
   // A connect still waiting on DNS: the definer must not answer for it.

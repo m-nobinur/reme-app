@@ -31,6 +31,7 @@
                     "website",
                     "golive",
                     "change",
+                    "address",
                     "domain",
                     "purchase",
                     "google",
@@ -96,6 +97,12 @@
                           "total"
                         ],
                         "additionalProperties": false
+                      },
+                      "note": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "pattern": "\\S"
                       }
                     },
                     "required": [
@@ -134,6 +141,12 @@
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 253,
+                      "pattern": "\\S"
+                    },
+                    "provider": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80,
                       "pattern": "\\S"
                     },
                     "change": {
@@ -200,6 +213,7 @@
                     "website",
                     "golive",
                     "change",
+                    "address",
                     "domain",
                     "purchase",
                     "google",
@@ -265,6 +279,12 @@
                           "total"
                         ],
                         "additionalProperties": false
+                      },
+                      "note": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "pattern": "\\S"
                       }
                     },
                     "required": [
@@ -303,6 +323,12 @@
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 253,
+                      "pattern": "\\S"
+                    },
+                    "provider": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80,
                       "pattern": "\\S"
                     },
                     "change": {
@@ -369,6 +395,7 @@
                     "website",
                     "golive",
                     "change",
+                    "address",
                     "domain",
                     "purchase",
                     "google",
@@ -434,6 +461,12 @@
                           "total"
                         ],
                         "additionalProperties": false
+                      },
+                      "note": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "pattern": "\\S"
                       }
                     },
                     "required": [
@@ -472,6 +505,12 @@
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 253,
+                      "pattern": "\\S"
+                    },
+                    "provider": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80,
                       "pattern": "\\S"
                     },
                     "change": {
@@ -538,6 +577,7 @@
                     "website",
                     "golive",
                     "change",
+                    "address",
                     "domain",
                     "purchase",
                     "google",
@@ -603,6 +643,12 @@
                           "total"
                         ],
                         "additionalProperties": false
+                      },
+                      "note": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "pattern": "\\S"
                       }
                     },
                     "required": [
@@ -641,6 +687,12 @@
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 253,
+                      "pattern": "\\S"
+                    },
+                    "provider": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80,
                       "pattern": "\\S"
                     },
                     "change": {
@@ -707,6 +759,7 @@
                     "website",
                     "golive",
                     "change",
+                    "address",
                     "domain",
                     "purchase",
                     "google",
@@ -772,6 +825,12 @@
                           "total"
                         ],
                         "additionalProperties": false
+                      },
+                      "note": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "pattern": "\\S"
                       }
                     },
                     "required": [
@@ -810,6 +869,12 @@
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 253,
+                      "pattern": "\\S"
+                    },
+                    "provider": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80,
                       "pattern": "\\S"
                     },
                     "change": {
@@ -876,6 +941,7 @@
                     "website",
                     "golive",
                     "change",
+                    "address",
                     "domain",
                     "purchase",
                     "google",
@@ -941,6 +1007,12 @@
                           "total"
                         ],
                         "additionalProperties": false
+                      },
+                      "note": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "pattern": "\\S"
                       }
                     },
                     "required": [
@@ -979,6 +1051,12 @@
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 253,
+                      "pattern": "\\S"
+                    },
+                    "provider": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80,
                       "pattern": "\\S"
                     },
                     "change": {
@@ -20366,6 +20444,364 @@
                       "additionalProperties": false
                     }
                   },
+                  "tasks": {
+                    "maxItems": 2,
+                    "type": "array",
+                    "items": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "state": {
+                              "type": "string",
+                              "enum": [
+                                "active",
+                                "done",
+                                "declined",
+                                "later"
+                              ]
+                            },
+                            "later_until": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "created_at": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                            },
+                            "done_at": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "kind": {
+                              "type": "string",
+                              "const": "address"
+                            },
+                            "detail": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "maxLength": 253,
+                                  "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+                                },
+                                "provider": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80,
+                                  "pattern": "\\S"
+                                },
+                                "registrar": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80,
+                                  "pattern": "\\S"
+                                },
+                                "origin": {
+                                  "type": "string",
+                                  "enum": [
+                                    "owned",
+                                    "buying_elsewhere",
+                                    "purchased"
+                                  ]
+                                },
+                                "ending": {
+                                  "type": "string",
+                                  "pattern": "^[a-z]{2,24}(\\.[a-z]{2,24})?$"
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            "steps": {
+                              "maxItems": 7,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "step": {
+                                    "type": "string",
+                                    "enum": [
+                                      "find_out",
+                                      "choose",
+                                      "purchase",
+                                      "records",
+                                      "ownership",
+                                      "certificate",
+                                      "loads"
+                                    ]
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "in_progress",
+                                      "blocked",
+                                      "done",
+                                      "skipped"
+                                    ]
+                                  },
+                                  "note": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 200,
+                                        "pattern": "\\S"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "blocked_on": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "enum": [
+                                          "approval",
+                                          "owner_action",
+                                          "purchase",
+                                          "permission"
+                                        ]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "deadline": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "format": "date-time",
+                                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "changed_at": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "format": "date-time",
+                                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "step",
+                                  "state",
+                                  "note",
+                                  "blocked_on",
+                                  "deadline",
+                                  "changed_at"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "state",
+                            "later_until",
+                            "created_at",
+                            "done_at",
+                            "kind",
+                            "detail",
+                            "steps"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "state": {
+                              "type": "string",
+                              "enum": [
+                                "active",
+                                "done",
+                                "declined",
+                                "later"
+                              ]
+                            },
+                            "later_until": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "created_at": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                            },
+                            "done_at": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "kind": {
+                              "type": "string",
+                              "const": "google"
+                            },
+                            "detail": {
+                              "type": "object",
+                              "properties": {},
+                              "additionalProperties": false
+                            },
+                            "steps": {
+                              "maxItems": 5,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "step": {
+                                    "type": "string",
+                                    "enum": [
+                                      "sign_in",
+                                      "permissions",
+                                      "verify",
+                                      "sitemap",
+                                      "first_data"
+                                    ]
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "in_progress",
+                                      "blocked",
+                                      "done",
+                                      "skipped"
+                                    ]
+                                  },
+                                  "note": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 200,
+                                        "pattern": "\\S"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "blocked_on": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "enum": [
+                                          "approval",
+                                          "owner_action",
+                                          "purchase",
+                                          "permission"
+                                        ]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "deadline": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "format": "date-time",
+                                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "changed_at": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "format": "date-time",
+                                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "step",
+                                  "state",
+                                  "note",
+                                  "blocked_on",
+                                  "deadline",
+                                  "changed_at"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "state",
+                            "later_until",
+                            "created_at",
+                            "done_at",
+                            "kind",
+                            "detail",
+                            "steps"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
                   "expected_seconds": {
                     "type": "object",
                     "properties": {
@@ -27094,6 +27530,364 @@
                 "last_check"
               ],
               "additionalProperties": false
+            }
+          },
+          "tasks": {
+            "maxItems": 2,
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "active",
+                        "done",
+                        "declined",
+                        "later"
+                      ]
+                    },
+                    "later_until": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "created_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                    },
+                    "done_at": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "kind": {
+                      "type": "string",
+                      "const": "address"
+                    },
+                    "detail": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "maxLength": 253,
+                          "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+                        },
+                        "provider": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80,
+                          "pattern": "\\S"
+                        },
+                        "registrar": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80,
+                          "pattern": "\\S"
+                        },
+                        "origin": {
+                          "type": "string",
+                          "enum": [
+                            "owned",
+                            "buying_elsewhere",
+                            "purchased"
+                          ]
+                        },
+                        "ending": {
+                          "type": "string",
+                          "pattern": "^[a-z]{2,24}(\\.[a-z]{2,24})?$"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "steps": {
+                      "maxItems": 7,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "step": {
+                            "type": "string",
+                            "enum": [
+                              "find_out",
+                              "choose",
+                              "purchase",
+                              "records",
+                              "ownership",
+                              "certificate",
+                              "loads"
+                            ]
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "in_progress",
+                              "blocked",
+                              "done",
+                              "skipped"
+                            ]
+                          },
+                          "note": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200,
+                                "pattern": "\\S"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "blocked_on": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "approval",
+                                  "owner_action",
+                                  "purchase",
+                                  "permission"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "deadline": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "changed_at": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "step",
+                          "state",
+                          "note",
+                          "blocked_on",
+                          "deadline",
+                          "changed_at"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "state",
+                    "later_until",
+                    "created_at",
+                    "done_at",
+                    "kind",
+                    "detail",
+                    "steps"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "active",
+                        "done",
+                        "declined",
+                        "later"
+                      ]
+                    },
+                    "later_until": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "created_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                    },
+                    "done_at": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "kind": {
+                      "type": "string",
+                      "const": "google"
+                    },
+                    "detail": {
+                      "type": "object",
+                      "properties": {},
+                      "additionalProperties": false
+                    },
+                    "steps": {
+                      "maxItems": 5,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "step": {
+                            "type": "string",
+                            "enum": [
+                              "sign_in",
+                              "permissions",
+                              "verify",
+                              "sitemap",
+                              "first_data"
+                            ]
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "in_progress",
+                              "blocked",
+                              "done",
+                              "skipped"
+                            ]
+                          },
+                          "note": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200,
+                                "pattern": "\\S"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "blocked_on": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "approval",
+                                  "owner_action",
+                                  "purchase",
+                                  "permission"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "deadline": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "changed_at": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "step",
+                          "state",
+                          "note",
+                          "blocked_on",
+                          "deadline",
+                          "changed_at"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "state",
+                    "later_until",
+                    "created_at",
+                    "done_at",
+                    "kind",
+                    "detail",
+                    "steps"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
             }
           },
           "expected_seconds": {
@@ -37052,7 +37846,8 @@
             "enum": [
               "active",
               "needs_reauth",
-              "revoked"
+              "revoked",
+              "needs_permission"
             ]
           },
           "google_email": {
@@ -42835,6 +43630,7 @@
                         "website",
                         "golive",
                         "change",
+                        "address",
                         "domain",
                         "purchase",
                         "google",
@@ -42900,6 +43696,12 @@
                               "total"
                             ],
                             "additionalProperties": false
+                          },
+                          "note": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200,
+                            "pattern": "\\S"
                           }
                         },
                         "required": [
@@ -42938,6 +43740,12 @@
                           "type": "string",
                           "minLength": 1,
                           "maxLength": 253,
+                          "pattern": "\\S"
+                        },
+                        "provider": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80,
                           "pattern": "\\S"
                         },
                         "change": {
@@ -43004,6 +43812,7 @@
                         "website",
                         "golive",
                         "change",
+                        "address",
                         "domain",
                         "purchase",
                         "google",
@@ -43069,6 +43878,12 @@
                               "total"
                             ],
                             "additionalProperties": false
+                          },
+                          "note": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200,
+                            "pattern": "\\S"
                           }
                         },
                         "required": [
@@ -43107,6 +43922,12 @@
                           "type": "string",
                           "minLength": 1,
                           "maxLength": 253,
+                          "pattern": "\\S"
+                        },
+                        "provider": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80,
                           "pattern": "\\S"
                         },
                         "change": {
@@ -43173,6 +43994,7 @@
                         "website",
                         "golive",
                         "change",
+                        "address",
                         "domain",
                         "purchase",
                         "google",
@@ -43238,6 +44060,12 @@
                               "total"
                             ],
                             "additionalProperties": false
+                          },
+                          "note": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200,
+                            "pattern": "\\S"
                           }
                         },
                         "required": [
@@ -43276,6 +44104,12 @@
                           "type": "string",
                           "minLength": 1,
                           "maxLength": 253,
+                          "pattern": "\\S"
+                        },
+                        "provider": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80,
                           "pattern": "\\S"
                         },
                         "change": {
@@ -43342,6 +44176,7 @@
                         "website",
                         "golive",
                         "change",
+                        "address",
                         "domain",
                         "purchase",
                         "google",
@@ -43407,6 +44242,12 @@
                               "total"
                             ],
                             "additionalProperties": false
+                          },
+                          "note": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200,
+                            "pattern": "\\S"
                           }
                         },
                         "required": [
@@ -43445,6 +44286,12 @@
                           "type": "string",
                           "minLength": 1,
                           "maxLength": 253,
+                          "pattern": "\\S"
+                        },
+                        "provider": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80,
                           "pattern": "\\S"
                         },
                         "change": {
@@ -43511,6 +44358,7 @@
                         "website",
                         "golive",
                         "change",
+                        "address",
                         "domain",
                         "purchase",
                         "google",
@@ -43576,6 +44424,12 @@
                               "total"
                             ],
                             "additionalProperties": false
+                          },
+                          "note": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200,
+                            "pattern": "\\S"
                           }
                         },
                         "required": [
@@ -43614,6 +44468,12 @@
                           "type": "string",
                           "minLength": 1,
                           "maxLength": 253,
+                          "pattern": "\\S"
+                        },
+                        "provider": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80,
                           "pattern": "\\S"
                         },
                         "change": {
@@ -43680,6 +44540,7 @@
                         "website",
                         "golive",
                         "change",
+                        "address",
                         "domain",
                         "purchase",
                         "google",
@@ -43745,6 +44606,12 @@
                               "total"
                             ],
                             "additionalProperties": false
+                          },
+                          "note": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200,
+                            "pattern": "\\S"
                           }
                         },
                         "required": [
@@ -43783,6 +44650,12 @@
                           "type": "string",
                           "minLength": 1,
                           "maxLength": 253,
+                          "pattern": "\\S"
+                        },
+                        "provider": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80,
                           "pattern": "\\S"
                         },
                         "change": {

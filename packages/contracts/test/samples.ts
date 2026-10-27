@@ -780,6 +780,39 @@ export const samples: Record<ContractName, unknown> = {
         last_check: { status: "pending_verification" },
       },
     ],
+    tasks: [
+      {
+        id: ASSIGNMENT,
+        kind: "address",
+        state: "active",
+        later_until: null,
+        detail: {
+          name: "brightclean.example",
+          provider: "123-reg",
+          origin: "owned",
+        },
+        created_at: NOW,
+        done_at: null,
+        steps: [
+          {
+            step: "records",
+            state: "blocked",
+            note: "Two records to add at 123-reg",
+            blocked_on: "owner_action",
+            deadline: LATER,
+            changed_at: NOW,
+          },
+          {
+            step: "loads",
+            state: "pending",
+            note: null,
+            blocked_on: null,
+            deadline: null,
+            changed_at: null,
+          },
+        ],
+      },
+    ],
   },
   CreateOrgRequest: {
     name: "Brightclean Cleaning Co. (fixture)",
