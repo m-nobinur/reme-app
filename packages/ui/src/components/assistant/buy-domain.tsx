@@ -728,6 +728,11 @@ function DetailsPage({
       : phase.at === "refused"
         ? (phase.code ?? "")
         : null
+  // The form may be scrolled to Pay, so a refusal is brought into view.
+  const alert = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (refused !== null) alert.current?.scrollIntoView({ block: "nearest" })
+  }, [refused])
 
   return (
     <TrayFrame
@@ -756,7 +761,7 @@ function DetailsPage({
       }
     >
       {refused !== null ? (
-        <div className="px-2" role="alert">
+        <div className="px-2" ref={alert} role="alert">
           <Problem
             text={refusalText(
               refused || null,
