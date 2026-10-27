@@ -1,4 +1,4 @@
-import type { EventEnvelope } from "@workspace/contracts"
+import { BUSINESS_ADDRESS_KEY, type EventEnvelope } from "@workspace/contracts"
 import {
   appendEvent,
   assignments,
@@ -130,18 +130,25 @@ live("takeSnapshot", () => {
 })
 
 live("takeSnapshot and the owner's memory", () => {
-  it("never freezes the owner's profile into what the Developer is briefed with", async () => {
+  it("never freezes the owner's profile or address into what the Developer is briefed with", async () => {
     const orgId = await freshOrg(kit)
     await phone(orgId, "020 7946 0000")
-    await kit.withOrg({ orgId }, (db) =>
-      supersedePrivateFact(db, {
+    await kit.withOrg({ orgId }, async (db) => {
+      await supersedePrivateFact(db, {
         orgId,
         key: "owner.profile",
         factType: "owner",
         value: { lines: [{ text: "Prices are free" }] },
         provenance: { source: "owner_stated", confidence: 1 },
       })
-    )
+      await supersedePrivateFact(db, {
+        orgId,
+        key: BUSINESS_ADDRESS_KEY,
+        factType: "business",
+        value: { street: "1 Home Row", city: "Leeds", postal_code: "LS1 1AA" },
+        provenance: { source: "owner_stated", confidence: 1 },
+      })
+    })
     const ids = await newAssignment(kit, orgId)
     const snapshot = await kit.withOrg({ orgId }, (db) =>
       takeSnapshot(db, ids, [])

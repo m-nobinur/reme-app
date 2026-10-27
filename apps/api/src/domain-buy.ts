@@ -1,5 +1,6 @@
 import {
   BoughtElsewhereOutput,
+  BUSINESS_ADDRESS_KEY,
   BUY_REFUSALS,
   DOMAIN_PRICES,
   DomainCheckout,
@@ -20,12 +21,14 @@ import {
   Uuid,
 } from "@workspace/contracts"
 import {
+  currentFact,
   currentFacts,
   domains,
   eq,
   memberships,
   orgs,
   sql,
+  supersedePrivateFact,
   type Tenancy,
   users,
 } from "@workspace/db"
@@ -36,6 +39,7 @@ import {
   invalid,
   keyMissing,
   readBody,
+  sortedKeys,
   tooLarge,
 } from "./http.ts"
 import { StripeFailed, stripe, verifyStripeSignature } from "./stripe.ts"
@@ -216,9 +220,9 @@ const REQUIRED = [
  * purchase still open for any name gives the details the owner already
  * typed; otherwise the business facts (name, phone) and the signed-in owner
  * (their name, and their email, since Cloudflare's confirmation link goes
- * there). A value that would not pass the registrant's own rules is left as a
- * gap rather than shown. Registrant details live only on an open purchase,
- * so after an expiry the address is asked again.
+ * there), with the business address the owner last paid with. A value that
+ * would not pass the registrant's own rules is left as a gap rather than
+ * shown.
  */
 export async function registrantPrefill(
   kit: Tenancy,
@@ -240,6 +244,9 @@ export async function registrantPrefill(
   )
   const held = RegistrantDetails.safeParse(open?.registrant).data
   const fact = await factValues(kit, owner.orgId)
+  const address = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+    currentFact(db, BUSINESS_ADDRESS_KEY)
+  )
   const keep = <K extends keyof typeof Registrant.shape>(k: K, v: unknown) =>
     Registrant.shape[k].safeParse(v).success ? { [k]: v } : {}
   const registrant = RegistrantDraft.parse(
@@ -248,6 +255,7 @@ export async function registrantPrefill(
       ...keep("business_name", fact("business.name")?.name),
       ...keep("email", owner.session.email || fact("business.email")?.address),
       ...keep("phone", fact("business.phone")?.e164),
+      ...keep("address", address?.value),
     }
   )
   const filled = { ...registrant, ...registrant.address }
@@ -264,6 +272,30 @@ export async function registrantPrefill(
       missing,
     })
   )
+}
+
+/**
+ * The address the owner paid with, as the business's, so Your details offers
+ * it again once the purchase's registrant is purged. The same address again
+ * writes nothing.
+ */
+async function keepAddress(
+  kit: Tenancy,
+  orgId: string,
+  address: Registrant["address"]
+) {
+  await kit.withOrg({ orgId }, async (db) => {
+    const held = await currentFact(db, BUSINESS_ADDRESS_KEY)
+    const same = (v: unknown) => JSON.stringify(v, sortedKeys)
+    if (held && same(held.value) === same(address)) return
+    await supersedePrivateFact(db, {
+      orgId,
+      key: BUSINESS_ADDRESS_KEY,
+      factType: "business",
+      value: address,
+      provenance: { source: "owner_stated", confidence: 1 },
+    })
+  })
 }
 
 /**
@@ -299,6 +331,7 @@ export async function checkout(
     key: `buy:${name}:${key}`,
   })
   if (opened.status >= 300) return relay(opened, () => null)
+  await keepAddress(kit, owner.orgId, details.data.registrant.address)
   const row = await newest(kit, owner.orgId, name)
   if (!row) return noPurchase()
   if (row.state !== "awaiting_payment") {
