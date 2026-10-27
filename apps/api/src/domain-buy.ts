@@ -42,7 +42,7 @@ import { StripeFailed, stripe, verifyStripeSignature } from "./stripe.ts"
 
 /**
  * The buy path's api half (custom-domains plan, "Buy and pay path"): the
- * owner's embedded Checkout for a domain the orchestrator holds as
+ * owner's Checkout Session for a domain the orchestrator holds as
  * `awaiting_payment`, and Stripe's webhook, verified here and handed to the
  * orchestrator, which owns the domains row and every state it moves to.
  * The amount comes from the row's price, never from the client or the model.
@@ -143,6 +143,7 @@ type Session = {
   status: "open" | "complete" | "expired"
   client_secret: string | null
   expires_at: number
+  ui_mode: string
 }
 
 /**
@@ -266,13 +267,13 @@ export async function registrantPrefill(
 }
 
 /**
- * `POST /domains/{name}/checkout`: the embedded Checkout for the org's
+ * `POST /domains/{name}/checkout`: the Checkout Session for the org's
  * purchase of that name, opened (or refreshed) first through the
  * orchestrator's `buy`, the owner only. The body is the registrant as the
  * page shows it or the owner corrected it; the orchestrator stores it with
  * the session and checks it
- * against the name's ending. A session still open for the row is handed
- * back rather than replaced, so a reopened card leaves no second one to
+ * against the name's ending. An Elements session still open for the row
+ * is handed back rather than replaced, so a reopened card leaves no second one to
  * expire under it. Otherwise a new one: a manual capture hold (the Workflow
  * captures after registering), the card saved for the renewal
  * subscription, dynamic payment methods, and `org_id` with `domain_id` in
@@ -313,12 +314,18 @@ export async function checkout(
   const held = DomainStripe.partial().safeParse(row.stripe ?? {}).data
   try {
     let session: Session | null = null
+    // An open session from before the move to Elements (`embedded_page`)
+    // would never load in the payment dialog, so it is replaced.
+    let stale: string | null = null
     if (held?.checkout_session) {
       const open = await stripe<Session>(
         secretKey,
         `checkout/sessions/${held.checkout_session}`
       )
-      if (open.status === "open" && open.client_secret) session = open
+      if (open.status === "open" && open.client_secret) {
+        if (open.ui_mode === "elements") session = open
+        else stale = open.id
+      }
     }
     const customer = held?.customer ?? (await customerOf(env, kit, owner.orgId))
     const metadata = { org_id: owner.orgId, domain_id: row.id }
@@ -327,8 +334,9 @@ export async function checkout(
       "checkout/sessions",
       {
         mode: "payment",
-        ui_mode: "embedded_page",
-        redirect_on_completion: "if_required",
+        // The web draws the form with Stripe's Elements and confirms a card
+        // on the page; only a redirect-based method goes to return_url.
+        ui_mode: "elements",
         return_url: returnUrl(env, row.name),
         customer,
         line_items: [
@@ -362,6 +370,19 @@ export async function checkout(
       }
     )
     if (told.status >= 300) return relay(told, () => null)
+    if (stale) {
+      // Only now: the orchestrator acts on an expiry only for the session
+      // it holds, which is the new one, so this cannot abandon the purchase.
+      // A failed expire is harmless, since it lapses on its own.
+      await stripe(secretKey, `checkout/sessions/${stale}/expire`, {}).catch(
+        (error: unknown) => {
+          if (!(error instanceof StripeFailed)) throw error
+          console.error(
+            JSON.stringify({ code: "stripe.expire_failed", stripe: error.code })
+          )
+        }
+      )
+    }
     return Response.json(
       DomainCheckout.parse({
         name: row.name,

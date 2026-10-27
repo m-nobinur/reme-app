@@ -1,23 +1,67 @@
 /**
  * Stripe.js, loaded from js.stripe.com on first use, as Stripe requires: it
  * is never bundled or self-hosted, so card data stays in Stripe's frames.
- * Only the calls embedded Checkout needs are typed here, which is why there
- * is no @stripe/stripe-js dependency.
+ * Only the calls the payment dialog makes on a Checkout Session in
+ * `ui_mode: elements` are typed here, from @stripe/stripe-js 10's
+ * `checkout.d.ts`, which is why there is no @stripe/stripe-js dependency.
  */
 
-/** The versioned script URL from Stripe's embedded Checkout quickstart. */
+import { toHex } from "@workspace/ui/lib/colour"
+
+/** The versioned script URL from Stripe's Checkout Sessions quickstart. */
 export const STRIPE_JS = "https://js.stripe.com/endive/stripe.js"
 
-export type EmbeddedCheckout = {
+/** The part of the Checkout Session the page shows. */
+export type CheckoutSession = {
+  currency: string
+  minorUnitsAmountDivisor: number
+  total: { total: { minorUnitsAmount: number } }
+}
+
+export type CheckoutContact = {
+  name: string
+  address: {
+    country: string
+    line1?: string
+    city?: string
+    postal_code?: string
+    state?: string
+  }
+}
+
+type Failed = { type: "error"; error: { message: string } }
+
+export type CheckoutActions = {
+  getSession: () => CheckoutSession
+  confirm: (options: {
+    redirect: "if_required"
+    email?: string
+    billingAddress?: CheckoutContact
+    expressCheckoutConfirmEvent?: unknown
+  }) => Promise<{ type: "success" } | Failed>
+}
+
+export type StripeElement = {
   mount: (element: HTMLElement) => void
   destroy: () => void
+  on: (event: string, handler: (event: never) => void) => void
+}
+
+export type CheckoutSdk = {
+  on: (event: "change", handler: (session: CheckoutSession) => void) => void
+  loadActions: () => Promise<
+    { type: "success"; actions: CheckoutActions } | Failed
+  >
+  createPaymentElement: (options: object) => StripeElement
+  createExpressCheckoutElement: (options?: object) => StripeElement
 }
 
 type Stripe = {
-  createEmbeddedCheckoutPage: (options: {
-    fetchClientSecret: () => Promise<string>
-    onComplete?: () => void
-  }) => Promise<EmbeddedCheckout>
+  initCheckoutElementsSdk: (options: {
+    clientSecret: string
+    elementsOptions: { appearance: object }
+    defaultValues: { email: string; billingAddress: CheckoutContact }
+  }) => CheckoutSdk
 }
 
 type StripeGlobal = (publishableKey: string) => Stripe
@@ -50,54 +94,90 @@ function stripeGlobal(): Promise<StripeGlobal> {
 
 const instances = new Map<string, Stripe>()
 
-// Stripe allows one embedded Checkout on a page at a time.
-let current: EmbeddedCheckout | null = null
-
 /**
- * Mounts embedded Checkout in `element` and returns what unmounts it. Any
- * Checkout already on the page is destroyed first. `onComplete` runs when
- * the payment completes on the page, which is every payment that needs no
- * redirect: the api asks for `redirect_on_completion: if_required`.
+ * Checkout for a session's client secret, prefilled with what the owner
+ * already gave so Stripe asks for neither again, and drawn in the page's
+ * own colours, read from `element`, which sits where the form will.
  */
-export function mountCheckout(
+export async function initCheckout(
   element: HTMLElement,
   publishableKey: string,
   clientSecret: string,
-  onComplete: () => void
-): Promise<() => void> {
-  // Mounts run one at a time: two in flight (React's dev double effect) would
-  // both create before either is current, and Stripe refuses the second.
-  const run = queue.then(() =>
-    mountNow(element, publishableKey, clientSecret, onComplete)
-  )
-  queue = run.catch(() => undefined)
-  return run
-}
-
-let queue: Promise<unknown> = Promise.resolve()
-
-async function mountNow(
-  element: HTMLElement,
-  publishableKey: string,
-  clientSecret: string,
-  onComplete: () => void
-): Promise<() => void> {
+  defaultValues: { email: string; billingAddress: CheckoutContact }
+): Promise<CheckoutSdk> {
   const Stripe = await stripeGlobal()
   let stripe = instances.get(publishableKey)
   if (!stripe) {
     stripe = Stripe(publishableKey)
     instances.set(publishableKey, stripe)
   }
-  current?.destroy()
-  current = null
-  const checkout = await stripe.createEmbeddedCheckoutPage({
-    fetchClientSecret: async () => clientSecret,
-    onComplete,
+  return stripe.initCheckoutElementsSdk({
+    clientSecret,
+    elementsOptions: { appearance: appearanceOf(element) },
+    defaultValues,
   })
-  current = checkout
-  checkout.mount(element)
-  return () => {
-    if (current === checkout) current = null
-    checkout.destroy()
+}
+
+/**
+ * The total as the page shows it, "£12" or "£12.50". Stripe's confirm
+ * refuses unless the page reads and shows the session's total, so the
+ * amount on Pay is always Stripe's, never ours.
+ */
+export function totalOf(session: CheckoutSession): string {
+  const amount =
+    session.total.total.minorUnitsAmount / session.minorUnitsAmountDivisor
+  return new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency: session.currency,
+    minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+  }).format(amount)
+}
+
+/**
+ * A token's colour as `#rrggbb`. The tokens are oklch(), and this does not
+ * count on Stripe's frames parsing that; a canvas pixel does the conversion.
+ */
+function colourOf(style: CSSStyleDeclaration, token: string) {
+  const value = style.getPropertyValue(token).trim()
+  const paint = document.createElement("canvas").getContext("2d")
+  if (!paint || !value) return value
+  paint.fillStyle = value
+  paint.fillRect(0, 0, 1, 1)
+  const [r = 0, g = 0, b = 0] = paint.getImageData(0, 0, 1, 1).data
+  return toHex([r, g, b])
+}
+
+/**
+ * Stripe's Appearance from the design tokens where the form sits, so the
+ * fields match the dialog in light and dark. Read once at mount; a theme
+ * switch while the dialog is open keeps the old colours until it reopens.
+ */
+function appearanceOf(element: HTMLElement) {
+  const style = getComputedStyle(element)
+  const colour = (token: string) => colourOf(style, token)
+  const dark = element.closest(".dark") !== null
+  return {
+    theme: dark ? "night" : "stripe",
+    variables: {
+      colorPrimary: colour("--primary"),
+      colorBackground: colour("--popover"),
+      colorText: colour("--popover-foreground"),
+      colorTextSecondary: colour("--muted-foreground"),
+      colorDanger: colour("--destructive"),
+      fontFamily: style.fontFamily,
+      fontSizeBase: "14px",
+      borderRadius: "10px",
+    },
+    // The tray's own fields: a quiet edge, and the accent ring in focus.
+    rules: {
+      ".Input, .Tab": {
+        border: `1px solid ${colour("--border")}`,
+        boxShadow: "none",
+      },
+      ".Input:focus, .Tab:focus": {
+        border: `1px solid ${colour("--primary")}`,
+        boxShadow: `0 0 0 3px ${colour("--primary")}`,
+      },
+    },
   }
 }
