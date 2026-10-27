@@ -61,6 +61,10 @@ export const ConnectGoogle: ToolCallMessagePartComponent = (props) => {
     )
   }
   const { output } = view
+  // Before a domain is live the assistant says why in its own words.
+  if ("outcome" in output && output.error.code === "search.needs_domain") {
+    return null
+  }
   return (
     <section
       aria-label="Connect Google"

@@ -100,6 +100,20 @@ it("shows a refusal as a line, not the api's words", async () => {
   expect(card.links).toEqual([])
 })
 
+it("draws nothing while the site waits for its own domain: the assistant says why", async () => {
+  const card = await draw({
+    result: {
+      outcome: "refused",
+      error: {
+        class: "validation",
+        code: "search.needs_domain",
+        message: "Google comes once the website's own domain is live.",
+      },
+    },
+  })
+  expect(card).toEqual({ text: "", links: [], buttons: [] })
+})
+
 it("keeps a call that has no result quiet, and an unreadable one honest", async () => {
   expect((await draw({})).links).toEqual([])
   const bad = await draw({ result: { url: "http://insecure.test" } })

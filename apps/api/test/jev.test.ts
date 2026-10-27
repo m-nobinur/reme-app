@@ -8,6 +8,7 @@ import {
   JEV,
   jev,
   jevApproval,
+  jevAsksGoogle,
   jevBought,
   jevPromise,
   jevPutOn,
@@ -669,6 +670,34 @@ describe("the reading of a message that says a domain is bought", () => {
     ).toBe(false)
     expect(
       await jevBought("k", "done", "a.co.uk", fake({}, 500).fetchImpl)
+    ).toBe(false)
+  })
+})
+
+describe("the reading of a message that asks for Google before a domain", () => {
+  afterEach(() => vi.restoreAllMocks())
+  const read = (score: number) =>
+    fake({ answers: { yes: { type: "noul", noul: score } } })
+
+  it("reads only a message naming Google or search, with no domain sent", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined)
+    const unread = read(0.99)
+    expect(
+      await jevAsksGoogle("k", "can you add my prices?", unread.fetchImpl)
+    ).toBe(false)
+    expect(unread.sent).toHaveLength(0)
+    const sure = read(0.96)
+    expect(
+      await jevAsksGoogle("k", "Connect Google to my site", sure.fetchImpl)
+    ).toBe(true)
+    expect(JSON.parse(sure.sent[0]?.init.body as string).state).toEqual({
+      owner_said: "Connect Google to my site",
+    })
+    expect(
+      await jevAsksGoogle("k", "reply to my Google review", read(0.1).fetchImpl)
+    ).toBe(false)
+    expect(
+      await jevAsksGoogle("k", "get me on Google", fake({}, 500).fetchImpl)
     ).toBe(false)
   })
 })

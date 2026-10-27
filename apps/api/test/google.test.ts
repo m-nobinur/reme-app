@@ -2,6 +2,7 @@ import { ErrorEnvelope } from "@workspace/contracts"
 import {
   conversationMessages,
   conversations,
+  domains,
   memberships,
   searchConnections,
   sql,
@@ -134,7 +135,7 @@ describe.skipIf(!url)("connecting Google through the api", () => {
     )
   })
 
-  it("connect_google: off, the consent link, the connected account, or refused for a member", async () => {
+  it("connect_google: off, waiting for a live domain, the consent link, the connected account, or refused for a member", async () => {
     const as = (who: Owner) => ({
       orgId: who.orgId,
       session: { workosUserId: who.workosUserId } as never,
@@ -146,6 +147,23 @@ describe.skipIf(!url)("connecting Google through the api", () => {
         {}
       )
     ).toEqual({ available: false })
+    // Google learns the address customers keep, so no link before a live domain.
+    expect(await connectGoogle({ env, kit, owner: as(me) }, {})).toMatchObject({
+      outcome: "refused",
+      error: { code: "search.needs_domain" },
+    })
+    const name = `g${crypto.randomUUID().slice(0, 8)}.co.uk`
+    await kit.withOrg({ orgId: me.orgId }, (db) =>
+      db.insert(domains).values({
+        orgId: me.orgId,
+        siteId: me.orgId,
+        name,
+        primaryHost: `www.${name}`,
+        origin: "connected",
+        method: "records",
+        state: "active",
+      })
+    )
     expect(await connectGoogle({ env, kit, owner: as(me) }, {})).toEqual({
       url: `${WEB}/api/google/start`,
     })

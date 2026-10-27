@@ -448,14 +448,15 @@ const holdsName = (said: string, name: string) =>
   ).test(said)
 
 /**
- * One yes or no from Jev about the owner's `said` and the domain `name`,
- * sure at `JEV.sure`. False when unsure, on an error, a non-200 or the time
- * limit. One log line per call, `code` naming the question.
+ * One yes or no from Jev about the owner's `said`, and the domain `name` when
+ * the question is about one, sure at `JEV.sure`. False when unsure, on an
+ * error, a non-200 or the time limit. One log line per call, `code` naming
+ * the question.
  */
 async function jevYes(
   apiKey: string,
   said: string,
-  name: string,
+  name: string | null,
   code: string,
   question: { instructions: string; true: string; false: string },
   fetchImpl: typeof fetch
@@ -463,7 +464,10 @@ async function jevYes(
   const began = Date.now()
   const { body, error } = await ask(
     apiKey,
-    { owner_said: said.slice(0, 1_000), domain: name },
+    {
+      owner_said: said.slice(0, 1_000),
+      ...(name !== null && { domain: name }),
+    },
     {
       yes: {
         type: "noul",
@@ -550,6 +554,39 @@ export const jevBought = (
     },
     fetchImpl
   )
+
+/** A message that could be about Google; any other is never read. */
+const NAMES_GOOGLE = /\bgoogle\b|search console|search engine|\bseo\b/i
+
+/**
+ * Whether the owner's `said` asks to get their website on Google: to connect
+ * Google or Search Console, or to be found in Google search. Read only before
+ * the site has a domain of its own, so the assistant can say why the address
+ * comes first. A question about their search numbers, or Google meant as
+ * something else, is not a yes. False when unsure, on an error, a non-200 or
+ * the time limit. One log line per call.
+ */
+export const jevAsksGoogle = (
+  apiKey: string,
+  said: string,
+  fetchImpl: typeof fetch = fetch
+) =>
+  NAMES_GOOGLE.test(said)
+    ? jevYes(
+        apiKey,
+        said,
+        null,
+        "google_first.jev",
+        {
+          instructions:
+            "Does the owner's message ask to get their website on Google: to connect Google or Search Console, or to show up when people search on Google?",
+          true: "It asks to connect Google or Search Console, to get the site on Google, or to be found in Google search, such as 'connect Google', 'get me on Google' or 'can people find me on Google?'",
+          false:
+            "It asks about Google reviews, Google Business Profile, ads, email or a Google account in general, asks something else, only mentions Google, or is unclear",
+        },
+        fetchImpl
+      )
+    : Promise.resolve(false)
 
 /**
  * What a typed message is doing, for the waiting line only: Jev decides

@@ -69,6 +69,7 @@ import {
   costOf,
   DEFAULT_MODEL,
   DESCRIPTIONS,
+  GOOGLE_FIRST_LINE,
   INSTRUCTIONS,
   knownZone,
   LIMITS,
@@ -726,6 +727,22 @@ describe("the CoS's model and price", () => {
     expect(lines("act", "site_change")[2]).toMatch(/^Now: /)
     expect(lines("act")).not.toContain(SITE_CHANGE_LINE)
     expect(lines("ask", "site_change")).not.toContain(SITE_CHANGE_LINE)
+  })
+
+  it("tells the model why Google waits only on the turn Jev read the owner asking for it", () => {
+    const lines = (googleFirst: boolean) =>
+      contextOf(
+        "act",
+        EMPTY,
+        null,
+        new Date(),
+        undefined,
+        undefined,
+        null,
+        googleFirst
+      ).text.split("\n")
+    expect(lines(true)[1]).toBe(GOOGLE_FIRST_LINE)
+    expect(lines(false)).not.toContain(GOOGLE_FIRST_LINE)
   })
 
   it("tells the model the owner's time at their offset, or UTC and that the zone is not known", () => {
