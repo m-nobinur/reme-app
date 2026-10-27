@@ -453,6 +453,13 @@ export async function buy(
         type: "domain.buy_requested",
         payload: { domain_id: row.id, name, price: priced.price },
       })
+      // Buying with us now: the task names this purchase, and a note left
+      // from buying it elsewhere goes, so the rows set the step.
+      const task = await openTask(db, orgId, "address", {
+        name,
+        origin: "purchased",
+      })
+      await setStep(db, task, "purchase", { note: null })
       await syncTasks(db, orgId)
       return row
     })

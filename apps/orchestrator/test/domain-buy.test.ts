@@ -1032,6 +1032,20 @@ describe.skipIf(!url)("buying a name elsewhere, against a database", () => {
     ).toMatchObject({ status: 400 })
   })
 
+  it("drops the buying-elsewhere note once the owner buys the name with us", async () => {
+    const site = await published()
+    const name = unique()
+    stubNet(false, { [name]: priced(name) })
+    const setup = buyEnv(site.store)
+    await buyElsewhere(setup.env, kit, site.orgId, { name })
+    expect(
+      await buy(setup.env, kit, site.orgId, { name, ...details })
+    ).toMatchObject({ status: 201 })
+    const { task, step } = await stepOf(site.orgId, "purchase")
+    expect(step?.note ?? null).toBeNull()
+    expect(task?.detail).toMatchObject({ name, origin: "purchased" })
+  })
+
   it("on the owner's done, wakes the hold, and connects once the registry shows the name", async () => {
     const site = await published()
     const setup = buyEnv(site.store)
