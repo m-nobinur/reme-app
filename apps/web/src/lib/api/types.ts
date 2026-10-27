@@ -18,6 +18,7 @@ import type {
   DomainRegistrantPrefill,
   FactRecord,
   FactValueKey,
+  GoogleResultRequest,
   MemoryReviewAction,
   MemoryView,
   MessageFeedback,
@@ -326,10 +327,10 @@ export type OwnerDataSource = {
     verifier: string
     redirect_uri: string
   }) => Promise<"connected" | "scopes_missing" | "failed">
-  /** Tells the api a callback could not connect Google, so the chat says so. Never throws. */
-  googleFailed: (
+  /** Tells the api how a callback ended, so the chat says so once. Never throws. */
+  googleResult: (
     attempt: string,
-    result: "failed" | "scopes_missing"
+    result: GoogleResultRequest["result"]
   ) => Promise<void>
   /** The newest purchase of a domain, or null when there is none. */
   domainStatus: (name: string) => Promise<DomainPurchaseStatus | null>

@@ -30,15 +30,22 @@ import { redirectUri } from "./workos"
 const PROVIDERS = new Set(["GoogleOAuth"])
 
 /**
- * Where a flow keeps its state: the cookie, the path it is scoped to and the
- * redirect URI it sends the provider to. Sign in with Google is the default.
+ * Where a flow keeps its state: the cookie, the path it is scoped to, the
+ * redirect URI it sends the provider to and the seconds the owner has on the
+ * provider's screen. Sign in with Google is the default.
  */
-export type OAuthFlow = { cookie: string; path: string; redirectUri: string }
+export type OAuthFlow = {
+  cookie: string
+  path: string
+  redirectUri: string
+  maxAge: number
+}
 
 const signIn = (): OAuthFlow => ({
   cookie: "reme-oauth-state",
   path: "/",
   redirectUri: redirectUri(),
+  maxAge: 10 * 60,
 })
 
 /**
@@ -77,7 +84,7 @@ export function beginOAuth(
     // as a cross-site top-level navigation, and strict would withhold the
     // cookie on exactly that request.
     secure: flow.redirectUri.startsWith("https:"),
-    maxAge: 10 * 60,
+    maxAge: flow.maxAge,
   })
   return { state, redirectUri: flow.redirectUri }
 }

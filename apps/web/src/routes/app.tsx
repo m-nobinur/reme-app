@@ -13,7 +13,6 @@ import {
   useLocation,
   useMatches,
   useMatchRoute,
-  useNavigate,
   useParams,
   useRouter,
 } from "@tanstack/react-router"
@@ -36,18 +35,12 @@ import {
 } from "@workspace/ui/components/workspace-shell"
 import { formatDate } from "@workspace/ui/lib/format"
 import { SiteNameProvider } from "@workspace/ui/lib/site-name"
-import { useCallback, useEffect, useId, useState } from "react"
+import { useEffect, useId, useState } from "react"
 import { lastChat } from "@/chat/history"
 import { getWorkspaceFrame, pollWorkspace } from "@/lib/api/server"
 import type { WorkspacePoll } from "@/lib/api/types"
 import { retryOrgWrite } from "@/lib/auth/actions"
 import { useAutoPanel } from "@/lib/auto-panel"
-import {
-  GoogleNotice,
-  type GoogleResult,
-  googleResult,
-  useGoogleResult,
-} from "@/lib/google-notice"
 import {
   laterSeen,
   markSeen,
@@ -131,13 +124,6 @@ export const Route = createFileRoute("/app")({
           ]
         : [],
     }
-  },
-  // `?google=` is where the Google connect callback sends the owner back.
-  validateSearch: (
-    search: Record<string, unknown>
-  ): { google?: GoogleResult } => {
-    const google = googleResult(search.google)
-    return google ? { google } : {}
   },
   component: AppLayout,
 })
@@ -242,20 +228,6 @@ function AppLayout() {
       () => undefined
     )
   }, [orgPending, router])
-  const navigate = useNavigate()
-  const clearGoogle = useCallback(
-    () =>
-      navigate({
-        to: ".",
-        search: (prev) => ({ ...prev, google: undefined }),
-        replace: true,
-      }),
-    [navigate]
-  )
-  const [google, dismissGoogle] = useGoogleResult(
-    Route.useSearch().google,
-    clearGoogle
-  )
   // A link here asked for the panel, or the bell's menu did.
   const arrived = useLocation({ select: (at) => at.state.panel })
   const [press, setPress] = useState(arrived)
@@ -434,7 +406,6 @@ function AppLayout() {
             </>
           }
         >
-          <GoogleNotice onDismiss={dismissGoogle} result={google} />
           {conversation ? (
             <Outlet />
           ) : (

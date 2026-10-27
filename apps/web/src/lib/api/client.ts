@@ -16,6 +16,7 @@ import {
   DomainRegistrantPrefill,
   ErrorEnvelope,
   FactList,
+  type GoogleResultRequest,
   type MemoryReviewAction,
   MemoryView,
   type MessageFeedback,
@@ -644,11 +645,11 @@ async function googleConnect(
     : "failed"
 }
 
-async function googleFailed(
+async function googleResult(
   attempt: string,
-  result: "failed" | "scopes_missing"
+  result: GoogleResultRequest["result"]
 ): Promise<void> {
-  await post("/google/failed", { attempt, result }, `google-failed:${attempt}`)
+  await post("/google/result", { attempt, result }, `google-result:${attempt}`)
     .then((response) => response.body?.cancel())
     .catch(() => undefined)
 }
@@ -927,7 +928,7 @@ export const apiSource: OwnerDataSource = {
   domainElsewhere,
   domainBought,
   googleConnect,
-  googleFailed,
+  googleResult,
   conversations,
   conversation,
   createConversation,
