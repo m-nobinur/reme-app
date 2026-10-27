@@ -6,6 +6,7 @@ import {
   DomainProvider,
   type DomainState,
   type ServerButton,
+  SITE_HEADER,
   siteHost,
 } from "@workspace/contracts"
 import {
@@ -351,8 +352,12 @@ function nextStep(
   )
 }
 
-/** Whether a host answers through our edge with a certificate: anything short of a 5xx. */
-export async function reaches(host: string): Promise<boolean> {
+/**
+ * Whether a host answers through our edge with a certificate: anything short
+ * of a 5xx. The certificate's proof alone, for a domain not yet active: the
+ * router has no site for it until `activateDomain`, so it answers 404 here.
+ */
+export async function answers(host: string): Promise<boolean> {
   try {
     const response = await fetch(`https://${host}/`, {
       redirect: "manual",
@@ -360,6 +365,23 @@ export async function reaches(host: string): Promise<boolean> {
     })
     await response.body?.cancel()
     return response.status < 500
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Whether `host` serves this site: a 2xx after redirects that the router
+ * marked with the site's id. The router's own 404 and any other server fail.
+ * Every "it is live" is said on this, run when it is said.
+ */
+export async function reaches(host: string, siteId: string): Promise<boolean> {
+  try {
+    const response = await fetch(`https://${host}/`, {
+      signal: AbortSignal.timeout(10_000),
+    })
+    await response.body?.cancel()
+    return response.ok && response.headers.get(SITE_HEADER) === siteId
   } catch {
     return false
   }
@@ -518,7 +540,7 @@ export async function look(
   if (!row || !connecting(row.state)) return { gone: true }
   const seen = await currentCheck(env, row)
   let check = seen.check
-  const ready = check.status === "valid" && (await reaches(seen.primary))
+  const ready = check.status === "valid" && (await answers(seen.primary))
   // Valid at Cloudflare but not yet answering: the certificate is still deploying.
   if (check.status === "valid" && !ready)
     check = { status: "pending_certificate" }
@@ -594,7 +616,8 @@ export async function nudge(
 /**
  * The domain goes live: the row first, then every pointer written from it
  * (`writePointer` reads the active domain), then what to tell the owner.
- * Null when the claim was removed meanwhile. A retry after the row moved
+ * Null when the claim was removed meanwhile; a throw while the host does not
+ * yet serve the site, which the step retries. A retry after the row moved
  * finds it active and writes the pointers again, which repeats what is live.
  */
 export async function activateDomain(
@@ -624,6 +647,11 @@ export async function activateDomain(
   })
   if (!done) return null
   await writePointer(env, kit, orgId, done.row.siteId, done.slug)
+  // Live is said on a fresh look at the host. Until KV has the pointer the
+  // router answers 404, so this throws and the step retries.
+  if (!(await reaches(done.row.primaryHost, done.row.siteId))) {
+    throw new Error("domain.not_served")
+  }
   return {
     key: `${domainId}:active`,
     text: await writeUpdate(env, kit, orgId, {

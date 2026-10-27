@@ -6,6 +6,7 @@ import {
   isPreviewHost,
   REQUEST_FAILED,
   RedirectPointer,
+  SITE_HEADER,
   SITE_PROBE_HEADER,
   SITE_REVISION_HEADER,
   SitePointer,
@@ -575,6 +576,7 @@ app.on(["GET", "HEAD"], "*", async (c) => {
   const file = resolveSitePath(url.pathname, found.manifest.files)
   if (!file) return notHere(c)
   const headers = previewHeaders(found.manifest.headers, file, cacheFor(file))
+  headers.set(SITE_HEADER, pointer.site_id)
   // Which version answered a page, so the publisher's probe judges only its
   // own, and told to the probe alone. An immutable asset names its revision
   // in its path already.

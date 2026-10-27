@@ -26,13 +26,13 @@ import {
   type Tenancy,
 } from "@workspace/db"
 import {
+  answers,
   domainInstanceId,
   eventKey,
   moveTo,
   normalizeName,
   postStatus,
   type Refusal,
-  reaches,
   readClaim,
   refuse,
   type Say,
@@ -1118,7 +1118,7 @@ export async function boughtReady(
 ): Promise<{ gone: true } | { gone: false; ready: boolean; at: number }> {
   const row = await readPurchase(kit, orgId, domainId)
   if (row?.state !== "verifying") return { gone: true }
-  return { gone: false, ready: await reaches(row.name), at: Date.now() }
+  return { gone: false, ready: await answers(row.name), at: Date.now() }
 }
 
 /**

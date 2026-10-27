@@ -202,6 +202,14 @@ export const RedirectPointer = z.strictObject({ redirect_to: Hostname })
  */
 export const SITE_REVISION_HEADER = "x-reme-revision"
 
+/**
+ * The header the router puts on every page it serves for a site, naming the
+ * pointer's `site_id`, so a check that a host is live can tell our site from
+ * the router's own 404 or a stranger's server. The id is no secret: it is an
+ * unguessable uuid and opens nothing.
+ */
+export const SITE_HEADER = "x-reme-site"
+
 /** The probe's proof that it is the probe, made by `probeProof` in `@workspace/gates/preview`. */
 export const SITE_PROBE_HEADER = "x-reme-probe"
 

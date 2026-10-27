@@ -1,4 +1,4 @@
-import { siteHost } from "@workspace/contracts"
+import { SITE_HEADER, siteHost } from "@workspace/contracts"
 import {
   deployments,
   domains,
@@ -49,6 +49,9 @@ vi.mock("../src/agents/developer.ts", () => ({ Developer: {} }))
 const url = process.env.DATABASE_URL
 const NAME = "sparklecleanbristol.co.uk"
 const CF = "https://api.cloudflare.com/client/v4/zones/zone/custom_hostnames"
+
+/** The site the edge probe answers for: the last one `published` made. */
+let served = ""
 
 /** DNS from the recordings plus a SOA for any other name asked; Cloudflare's hostnames in a map. */
 /**
@@ -111,7 +114,11 @@ function stubNet(
         }
         return envelope([])
       }
-      // Domain Connect settings hosts and the edge probe: nothing there.
+      // The edge probe: the router serving the last published site.
+      if (u.pathname === "/" && served) {
+        return new Response("ok", { headers: { [SITE_HEADER]: served } })
+      }
+      // Domain Connect settings hosts: nothing there.
       return new Response(null, { status: 404 })
     }
   )
@@ -122,6 +129,7 @@ function stubNet(
 /** An org with a published site: the preview fixture plus a deployment of its revision. */
 async function published() {
   const site = await previewed()
+  served = site.orgId
   await kit.withOrg({ orgId: site.orgId }, (db) =>
     db.insert(deployments).values({
       orgId: site.orgId,
