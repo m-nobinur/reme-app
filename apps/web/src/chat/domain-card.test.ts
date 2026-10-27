@@ -349,3 +349,25 @@ it("says the domain is no longer connected once removed, and what a refusal or a
   expect(kept.container.textContent).toContain("You said not now.")
   await kept.unmount()
 })
+
+it("draws a domain bought elsewhere as the connect's records, or that the registry can't see it yet", async () => {
+  const connected = await draw({
+    toolName: "domain_bought",
+    result: { ...RECORDS, provider: GODADDY },
+  })
+  expect(connected.container.textContent).toContain(`${NAME} is yours.`)
+  expect(connected.container.querySelectorAll("ol > li")).toHaveLength(3)
+  expect(connected.container.querySelector("a")?.textContent).toContain(
+    "Open GoDaddy DNS settings"
+  )
+  await connected.unmount()
+
+  const waiting = await draw({
+    toolName: "domain_bought",
+    result: { outcome: "not_registered_yet", name: NAME },
+  })
+  expect(waiting.container.textContent).toBe(
+    `I can't see ${NAME} at the registry yet. It can take a few minutes, and I check each day too.`
+  )
+  await waiting.unmount()
+})
