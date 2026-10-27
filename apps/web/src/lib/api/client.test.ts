@@ -988,6 +988,53 @@ it("reads a domain purchase's status, and none when the api has no such purchase
   expect(await apiSource.domainStatus("other.co.uk")).toBeNull()
 })
 
+it("reads the details page, notes buying elsewhere, and asks the registry once bought", async () => {
+  const NAME = "sparkleclean.co.uk"
+  const prefill = {
+    name: NAME,
+    price_gbp_year: 8,
+    registrant: { name: "Jane Smith" },
+    missing: ["street", "registrant_type"],
+  }
+  answers[`GET /domains/${NAME}/registrant`] = prefill
+  expect(await apiSource.domainRegistrant(NAME)).toEqual(prefill)
+  answers[`GET /domains/${NAME}/registrant`] = refusal(
+    409,
+    "domain.unavailable"
+  )
+  expect(await apiSource.domainRegistrant(NAME)).toEqual({
+    refused: "domain.unavailable",
+  })
+
+  answers[`POST /domains/${NAME}/elsewhere`] = new Response(null, {
+    status: 204,
+  })
+  expect(await apiSource.domainElsewhere(NAME, "k-12")).toEqual({ done: true })
+  expect(headerOf(calls.at(-1), "idempotency-key")).toBe("k-12")
+
+  answers[`POST /domains/${NAME}/bought`] = {
+    outcome: "not_registered_yet",
+    name: NAME,
+  }
+  expect(await apiSource.domainBought(NAME, "k-13")).toEqual({
+    outcome: "not_registered_yet",
+    name: NAME,
+  })
+  const connecting = {
+    outcome: "connecting",
+    method: "records",
+    email_affected: false,
+    steps: [{ type: "CNAME", name: "www", value: "domains.remeai.co.uk" }],
+  }
+  answers[`POST /domains/${NAME}/bought`] = connecting
+  expect(await apiSource.domainBought(NAME, "k-14")).toEqual(connecting)
+
+  // A name that is not a hostname never becomes a path.
+  const before = calls.length
+  await expect(apiSource.domainBought("../account", "k-15")).rejects.toThrow()
+  expect(calls).toHaveLength(before)
+})
+
 it("reads the open reminders in the order /workspace lists them", async () => {
   const written = (id: string, due_at: string | null) => ({
     id,
