@@ -2,7 +2,11 @@ import {
   type ToolCallMessagePartComponent,
   useAuiState,
 } from "@assistant-ui/react"
-import { ArrowSquareOutIcon, CheckCircleIcon } from "@phosphor-icons/react"
+import {
+  ArrowSquareOutIcon,
+  CaretDownIcon,
+  CheckCircleIcon,
+} from "@phosphor-icons/react"
 import {
   type BoughtElsewhereOutput,
   BuyDomainInput,
@@ -53,7 +57,7 @@ import {
 /**
  * Buying a domain, in the question tray. `find_domain`'s rows open it on
  * Choose: a card for each free full domain with its yearly price, best
- * first, and "Buy it somewhere else" under them. A card goes
+ * first, and "Buy directly from a provider" under them. A card goes
  * to Your details, prefilled from what the api holds and asking only for
  * the gaps, and Pay opens the payment dialog on the purchase's Stripe
  * Checkout Session, where paying is the consent. Buying elsewhere opens
@@ -296,25 +300,23 @@ function Elsewhere({
   const links = buyElsewhereLinks(name)
   return (
     <>
-      <ConnectRows heading="Other places to buy it">
+      <ConnectRows heading={`Search for ${name}`}>
         <ConnectRow
           href={links.cloudflare}
-          line={`Search for ${name}`}
+          line="cloudflare.com"
           name="Cloudflare"
           newTab
           onClick={onFollow}
         />
         <ConnectRow
           href={links.godaddy}
-          line={`Search for ${name}`}
+          line="godaddy.com"
           name="GoDaddy"
           newTab
           onClick={onFollow}
         />
       </ConnectRows>
-      <p className={META}>
-        You manage it there, and I connect it once it's yours.
-      </p>
+      <p className={META}>Tell me once it's yours and I'll connect it.</p>
     </>
   )
 }
@@ -375,11 +377,18 @@ function ChoosePage({
         <div className="flex flex-col gap-2 px-2 pb-1">
           <button
             aria-expanded={away}
-            className="self-start rounded-sm text-sm underline decoration-muted-foreground/60 underline-offset-3 outline-none hover:decoration-foreground focus-visible:ring-2 focus-visible:ring-primary"
+            className="flex items-center gap-1.5 self-start rounded-sm text-muted-foreground text-sm outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary"
             onClick={() => setAway(!away)}
             type="button"
           >
-            Buy it somewhere else
+            Buy directly from a provider
+            <CaretDownIcon
+              aria-hidden
+              className={cn(
+                "size-3.5 transition-transform motion-reduce:transition-none",
+                away && "rotate-180"
+              )}
+            />
           </button>
           {away ? (
             <div className="flex flex-col gap-2" ref={places}>

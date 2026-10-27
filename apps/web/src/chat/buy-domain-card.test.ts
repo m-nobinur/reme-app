@@ -532,7 +532,7 @@ it("buys elsewhere: links with the name, tells the api, then waits for done", as
     { args: {}, result: FOUND },
     purchase
   )
-  await press(tray, "Buy it somewhere else")
+  await press(tray, "Buy directly from a provider")
   const links = [...tray.querySelectorAll("a")].map((a) => a.href)
   expect(links).toEqual([
     `https://domains.cloudflare.com/?domain=${NAME}`,
@@ -568,7 +568,7 @@ it("connects a name bought elsewhere once the registry shows it", async () => {
       })),
     })
   )
-  await press(tray, "Buy it somewhere else")
+  await press(tray, "Buy directly from a provider")
   await act(async () => tray.querySelector("a")?.click())
   await press(tray, "Done, I bought it")
   expect(chat.textContent).toContain(`${NAME} is yours.`)
