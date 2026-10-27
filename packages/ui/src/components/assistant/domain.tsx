@@ -110,7 +110,7 @@ function WaitButton() {
 }
 
 /** The records to add; only drawn when there is at least one. */
-function Records({
+export function Records({
   output,
   steps,
   name,

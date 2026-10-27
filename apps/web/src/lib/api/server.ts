@@ -313,6 +313,32 @@ export const getDomainPurchase = createServerFn({ method: "GET" })
     return await source.domainStatus(data.name)
   })
 
+/** The details page for buying a name, prefilled from what Reme holds. */
+export const getDomainRegistrant = createServerFn({ method: "GET" })
+  .validator((input: unknown) => ({
+    name: DomainName.parse(record(input).name),
+  }))
+  .handler(async ({ data }) => await source.domainRegistrant(data.name))
+
+/** A name the owner buys themselves, which the api then watches for. */
+export const buyDomainElsewhere = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const data = record(input)
+    return { name: DomainName.parse(data.name), key: keyOf(data.key) }
+  })
+  .handler(
+    async ({ data }): Promise<WriteOutcome> =>
+      await source.domainElsewhere(data.name, data.key)
+  )
+
+/** The owner's word that they bought it elsewhere. */
+export const sayDomainBought = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const data = record(input)
+    return { name: DomainName.parse(data.name), key: keyOf(data.key) }
+  })
+  .handler(async ({ data }) => await source.domainBought(data.name, data.key))
+
 export const createReminder = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const data = record(input)
