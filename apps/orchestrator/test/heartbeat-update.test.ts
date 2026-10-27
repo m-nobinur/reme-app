@@ -3,8 +3,10 @@ import {
   conversationMessages,
   conversations,
   eq,
+  openTask,
   readTasks,
   serverMessageId,
+  setStep,
   staff,
   supersedeFact,
   type Tenancy,
@@ -75,8 +77,19 @@ describe.skipIf(!process.env.DATABASE_URL)("today's templates", () => {
   })
 
   /** The parts and the address task of a fresh org after `sayLive`, with `email` as its business email. */
-  async function liveFor(email?: string) {
+  async function liveFor(email?: string, picking = false) {
     const orgId = await freshOrg(pool)
+    if (picking) {
+      await pool.withOrg({ orgId }, async (db) => {
+        const task = await openTask(db, orgId, "address")
+        await setStep(db, task, "find_out", { state: "done" })
+        await setStep(db, task, "choose", {
+          state: "blocked",
+          blocked_on: "owner_action",
+          note: "picking a name",
+        })
+      })
+    }
     await pool.withOrg({ orgId }, async (db) => {
       const [chief] = await db
         .select({ id: staff.id })
@@ -125,6 +138,16 @@ describe.skipIf(!process.env.DATABASE_URL)("today's templates", () => {
     expect(task?.steps.find((s) => s.step === "find_out")).toMatchObject({
       state: "blocked",
       blocked_on: "owner_action",
+    })
+  })
+
+  it("asks nothing when the owner is already past finding out", async () => {
+    const { parts, task } = await liveFor("jo@gmail.com", true)
+    expect(parts.some((p) => p.type === "data-build_questions")).toBe(false)
+    expect(task?.steps.find((s) => s.step === "find_out")?.state).toBe("done")
+    expect(task?.steps.find((s) => s.step === "choose")).toMatchObject({
+      state: "blocked",
+      note: "picking a name",
     })
   })
 

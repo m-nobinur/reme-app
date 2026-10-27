@@ -29,6 +29,7 @@ import {
   orgOpen,
   orgs,
   postAssistantMessage,
+  readTasks,
   setStep,
   siteRevisions,
   sql,
@@ -693,7 +694,17 @@ export async function sayLive(
   url: string
 ): Promise<void> {
   const host = url.replace(/^https?:\/\//, "").replace(/\/$/, "")
-  const own = await ownAddress(kit, orgId)
+  // Past finding out already: the owner is picking or buying a name, put it
+  // off or said no. Then the line says the site is live and asks nothing.
+  const settled = await kit.withOrg({ orgId }, async (db) => {
+    const task = (await readTasks(db)).find((t) => t.kind === "address")
+    return (
+      !!task &&
+      (task.state !== "active" ||
+        task.steps.some((s) => s.step === "find_out" && s.state === "done"))
+    )
+  })
+  const own = settled ? null : await ownAddress(kit, orgId)
   const where = own?.dns_host?.name ?? own?.registrar
   const text = await writeUpdate(env, kit, orgId, {
     facts: { host, ...(own && { address: own.name }), ...(where && { where }) },
@@ -721,37 +732,38 @@ export async function sayLive(
                 action: { kind: "open", url },
               },
             }),
-            questions: {
-              kind: "address",
-              questions: [
-                {
-                  id: crypto.randomUUID(),
-                  text: ADDRESS_ASK.have,
-                  input: {
-                    kind: "choice",
-                    options: [
-                      ADDRESS_ASK.yes,
-                      ADDRESS_ASK.no,
-                      ADDRESS_ASK.later,
-                    ],
-                  },
-                  skippable: false,
-                },
-                {
-                  id: crypto.randomUUID(),
-                  text: ADDRESS_ASK.name,
-                  input: { kind: "text", maxLength: 253, email: false },
-                  skippable: true,
-                },
-              ],
-            },
           }),
+      ...(!own &&
+        !settled && {
+          questions: {
+            kind: "address",
+            questions: [
+              {
+                id: crypto.randomUUID(),
+                text: ADDRESS_ASK.have,
+                input: {
+                  kind: "choice",
+                  options: [ADDRESS_ASK.yes, ADDRESS_ASK.no, ADDRESS_ASK.later],
+                },
+                skippable: false,
+              },
+              {
+                id: crypto.randomUUID(),
+                text: ADDRESS_ASK.name,
+                input: { kind: "text", maxLength: 253, email: false },
+                skippable: true,
+              },
+            ],
+          },
+        }),
     },
   })
   if (posted === "busy" || posted === "waiting") {
     throw new Error(`site.live_${posted}`)
   }
-  // After the post, so a chat that was busy retries both. A repeat changes nothing.
+  // After the post, so a chat that was busy retries both. A repeat changes
+  // nothing, and a task past finding out keeps its steps.
+  if (settled) return
   await kit.withOrg({ orgId }, async (db) => {
     const task = await openTask(
       db,
