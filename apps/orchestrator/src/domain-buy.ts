@@ -44,7 +44,7 @@ import {
   type Say,
   start,
 } from "./domain-flow.ts"
-import { DomainError } from "./domains.ts"
+import { DomainError, zoneApex } from "./domains.ts"
 import type { Observed } from "./probe.ts"
 import { activeDeployment } from "./publish.ts"
 import { rdapLookup } from "./rdap.ts"
@@ -1167,6 +1167,24 @@ const rdapDown = () =>
   )
 
 /**
+ * Whether `name` is registered: RDAP, or for an ending with no RDAP server,
+ * DNS, where a registered name is delegated as a zone of its own (its SOA
+ * apex is the name) and an unregistered one is not. A registry or DNS
+ * outage throws, which is never "not bought".
+ */
+export async function isRegistered(name: string): Promise<boolean> {
+  const seen = await rdapLookup(name)
+  if (seen) return seen.registered
+  try {
+    return (await zoneApex(name)).apex === name
+  } catch (error) {
+    if (error instanceof DomainError && error.name === "domain.not_found")
+      return false
+    throw error
+  }
+}
+
+/**
  * `POST /domains/elsewhere`: the owner buys `name` themselves. The address
  * task's `purchase` step waits on them with the note "buying <name>", and
  * the hold starts, which looks at the registry daily and wakes on their
@@ -1232,9 +1250,9 @@ export async function boughtElsewhere(
       "domain.invalid",
       "That isn't a domain name I can look for."
     )
-  let seen: Awaited<ReturnType<typeof rdapLookup>>
+  let registered: boolean
   try {
-    seen = await rdapLookup(name)
+    registered = await isRegistered(name)
   } catch {
     return rdapDown()
   }
@@ -1244,7 +1262,7 @@ export async function boughtElsewhere(
   } catch {
     // No hold for this name: the owner bought one we never offered.
   }
-  if (!seen?.registered)
+  if (!registered)
     return { status: 200, output: { outcome: "not_registered_yet", name } }
   await kit.withOrg({ orgId }, async (db) => {
     const task = await openTask(db, orgId, "address", { name })
@@ -1266,7 +1284,7 @@ export async function lookElsewhere(
   const done = await claimed(kit, orgId)
   const at = Date.now()
   if (done) return { result: { registered: false, claimed: true, at } }
-  const registered = (await rdapLookup(name))?.registered === true
+  const registered = await isRegistered(name)
   return {
     result: { registered, claimed: false, at },
     reading: {
