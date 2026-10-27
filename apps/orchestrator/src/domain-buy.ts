@@ -156,7 +156,7 @@ const ROWS_MAX = 4
  * registrar sells free at the price table's price or taken. The ranker's
  * stems from the business facts (or the owner's words), then the registrar's
  * own suggestions for those words, in one authoritative check. A stem with
- * no free ending, or whose reason another row already gives, is left out.
+ * no free ending is left out; up to four rows, so the owner has a choice.
  * The address task's `choose` step then waits on the owner picking. Needs no
  * Stripe: finding is free.
  */
@@ -199,7 +199,6 @@ export async function find(
     return registrarDown()
   }
   const answer = new Map(checked.map((c) => [c.name, c]))
-  const reasons = new Set<string>()
   const out: DomainStemOffer[] = []
   for (const { stem, why } of rows) {
     const endings = Object.fromEntries(
@@ -216,9 +215,7 @@ export async function find(
         ]
       })
     )
-    const free = Object.values(endings).some((e) => e.state === "free")
-    if (!free || reasons.has(why)) continue
-    reasons.add(why)
+    if (!Object.values(endings).some((e) => e.state === "free")) continue
     out.push({ stem, why, endings })
   }
   if (out.length === 0) return fromEnvelope(409, BUY_REFUSALS.unavailable)

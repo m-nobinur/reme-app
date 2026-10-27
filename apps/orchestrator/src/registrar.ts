@@ -496,6 +496,13 @@ export function candidates(facts: RankFacts): Ranked[] {
       stems.push([`${first}${town}`, 22, `${words[0]} plus ${where}`])
     }
   }
+  // Where and what, without the brand: what people type to find a trade.
+  const tradeWords = facts.trade
+    ? label(facts.trade.trim().split(/\s+/).slice(-2).join(""))
+    : ""
+  if (town && tradeWords && !brand.includes(town)) {
+    stems.push([`${town}${tradeWords}`, 15, `${where} plus what you do`])
+  }
   return stems
     .filter(([s], i) => s.length <= (i === 0 ? 63 : ADDED_MAX))
     .map(([stem, points, why]) => ({

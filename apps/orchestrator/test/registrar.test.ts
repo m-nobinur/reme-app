@@ -317,6 +317,7 @@ describe("the name ranker", () => {
     expect(ranked).toEqual([
       { stem: "sparkleclean", why: "matches your business name", score: 40 },
       { stem: "sparklecleanbristol", why: "your name plus Bristol", score: 18 },
+      { stem: "bristolcleaning", why: "Bristol plus what you do", score: 12 },
       {
         stem: "sparkleclean-bristol",
         why: "your name and Bristol, with a dash",
@@ -336,6 +337,7 @@ describe("the name ranker", () => {
       "brightbath",
       "brightcleaning",
       "bright-bath",
+      "bathcleaning",
     ])
     expect(new Set(ranked.map((r) => r.why)).size).toBe(ranked.length)
     expect(ranked.find((r) => r.stem === "brightcleaning")?.why).toBe(
@@ -354,6 +356,7 @@ describe("the name ranker", () => {
       "northsidedoggrooming",
       "northsidegrooming",
       "northsideleeds",
+      "leedsdoggrooming",
     ])
     expect(ranked[1]?.why).toBe("shorter, northside grooming")
     expect(
