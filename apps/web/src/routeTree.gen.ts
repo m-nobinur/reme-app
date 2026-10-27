@@ -41,6 +41,7 @@ import { Route as AppWebsiteRouteImport } from './routes/app/website'
 import { Route as ApiAssetsReviewRouteImport } from './routes/api.assets.review'
 import { Route as ApiAuthCallbackRouteImport } from './routes/api.auth.callback'
 import { Route as ApiAuthSocialRouteImport } from './routes/api.auth.social'
+import { Route as ApiDomainsAppliedRouteImport } from './routes/api.domains.applied'
 import { Route as ApiGoogleCallbackRouteImport } from './routes/api.google.callback'
 import { Route as ApiGoogleStartRouteImport } from './routes/api.google.start'
 import { Route as ApiPalettesFromImageRouteImport } from './routes/api.palettes.from-image'
@@ -211,6 +212,11 @@ const ApiAuthSocialRoute = ApiAuthSocialRouteImport.update({
   path: '/api/auth/social',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiDomainsAppliedRoute = ApiDomainsAppliedRouteImport.update({
+  id: '/api/domains/applied',
+  path: '/api/domains/applied',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiGoogleCallbackRoute = ApiGoogleCallbackRouteImport.update({
   id: '/api/google/callback',
   path: '/api/google/callback',
@@ -294,6 +300,7 @@ export interface FileRoutesByFullPath {
   '/api/assets/review': typeof ApiAssetsReviewRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/social': typeof ApiAuthSocialRoute
+  '/api/domains/applied': typeof ApiDomainsAppliedRoute
   '/api/google/callback': typeof ApiGoogleCallbackRoute
   '/api/google/start': typeof ApiGoogleStartRoute
   '/api/palettes/from-image': typeof ApiPalettesFromImageRoute
@@ -337,6 +344,7 @@ export interface FileRoutesByTo {
   '/api/assets/review': typeof ApiAssetsReviewRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/social': typeof ApiAuthSocialRoute
+  '/api/domains/applied': typeof ApiDomainsAppliedRoute
   '/api/google/callback': typeof ApiGoogleCallbackRoute
   '/api/google/start': typeof ApiGoogleStartRoute
   '/api/palettes/from-image': typeof ApiPalettesFromImageRoute
@@ -381,6 +389,7 @@ export interface FileRoutesById {
   '/api/assets/review': typeof ApiAssetsReviewRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/social': typeof ApiAuthSocialRoute
+  '/api/domains/applied': typeof ApiDomainsAppliedRoute
   '/api/google/callback': typeof ApiGoogleCallbackRoute
   '/api/google/start': typeof ApiGoogleStartRoute
   '/api/palettes/from-image': typeof ApiPalettesFromImageRoute
@@ -426,6 +435,7 @@ export interface FileRouteTypes {
     | '/api/assets/review'
     | '/api/auth/callback'
     | '/api/auth/social'
+    | '/api/domains/applied'
     | '/api/google/callback'
     | '/api/google/start'
     | '/api/palettes/from-image'
@@ -469,6 +479,7 @@ export interface FileRouteTypes {
     | '/api/assets/review'
     | '/api/auth/callback'
     | '/api/auth/social'
+    | '/api/domains/applied'
     | '/api/google/callback'
     | '/api/google/start'
     | '/api/palettes/from-image'
@@ -512,6 +523,7 @@ export interface FileRouteTypes {
     | '/api/assets/review'
     | '/api/auth/callback'
     | '/api/auth/social'
+    | '/api/domains/applied'
     | '/api/google/callback'
     | '/api/google/start'
     | '/api/palettes/from-image'
@@ -545,6 +557,7 @@ export interface RootRouteChildren {
   ApiLogosRoute: typeof ApiLogosRouteWithChildren
   ApiAuthCallbackRoute: typeof ApiAuthCallbackRoute
   ApiAuthSocialRoute: typeof ApiAuthSocialRoute
+  ApiDomainsAppliedRoute: typeof ApiDomainsAppliedRoute
   ApiGoogleCallbackRoute: typeof ApiGoogleCallbackRoute
   ApiGoogleStartRoute: typeof ApiGoogleStartRoute
   ApiPalettesFromImageRoute: typeof ApiPalettesFromImageRoute
@@ -779,6 +792,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSocialRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/domains/applied': {
+      id: '/api/domains/applied'
+      path: '/api/domains/applied'
+      fullPath: '/api/domains/applied'
+      preLoaderRoute: typeof ApiDomainsAppliedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/google/callback': {
       id: '/api/google/callback'
       path: '/api/google/callback'
@@ -943,6 +963,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiLogosRoute: ApiLogosRouteWithChildren,
   ApiAuthCallbackRoute: ApiAuthCallbackRoute,
   ApiAuthSocialRoute: ApiAuthSocialRoute,
+  ApiDomainsAppliedRoute: ApiDomainsAppliedRoute,
   ApiGoogleCallbackRoute: ApiGoogleCallbackRoute,
   ApiGoogleStartRoute: ApiGoogleStartRoute,
   ApiPalettesFromImageRoute: ApiPalettesFromImageRoute,

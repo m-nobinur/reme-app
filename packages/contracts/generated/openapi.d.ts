@@ -3223,6 +3223,7 @@ export interface components {
             name: string
             settings_url?: string
           }
+          apply_url?: string
         }
       | {
           /** @constant */
@@ -5233,6 +5234,7 @@ export interface components {
             name: string
             settings_url?: string
           }
+          apply_url?: string
         }
       | {
           /** @constant */
@@ -7431,6 +7433,7 @@ export interface components {
                   name: string
                   settings_url?: string
                 }
+                apply_url?: string
               }
             | {
                 /** @constant */
@@ -7912,6 +7915,7 @@ export interface components {
                   name: string
                   settings_url?: string
                 }
+                apply_url?: string
               }
             | {
                 /** @constant */
