@@ -168,12 +168,20 @@ describe.skipIf(!url)("heartbeat follow-ups over a week", () => {
       await kit.withOrg({ orgId }, (db) =>
         db
           .update(scheduledJobs)
-          .set({ nextRunAt: now.at, claimedAt: now.at })
+          // Claimed by the real clock and paused between beats, so a scan in
+          // a suite running alongside never finds this past week's job due.
+          .set({ nextRunAt: now.at, claimedAt: new Date(), pausedAt: null })
           .where(eq(scheduledJobs.id, jobId))
       )
       expect(
         await runJob(kit, env, { jobId, orgId }, handlers, now.at)
       ).not.toMatch(/failed|paused/)
+      await kit.withOrg({ orgId }, (db) =>
+        db
+          .update(scheduledJobs)
+          .set({ pausedAt: new Date() })
+          .where(eq(scheduledJobs.id, jobId))
+      )
       const key = `heartbeat:${orgId}:${jobId}:${now.at.toISOString()}`
       const [sent] = await kit.withOrg({ orgId }, (db) =>
         db.select().from(deliveries).where(eq(deliveries.key, key))
