@@ -190,8 +190,12 @@ type StepPlan = {
 }
 
 export type TaskPlan = {
-  state: TaskState
+  /** `active` is done once every step is done or skipped, which `apply` decides. */
+  state: Exclude<TaskState, "done">
+  /** When it finished, if it does: a back-filled live domain's activation. */
   done_at: Date | null
+  /** When the row the plan follows was made; a closed task older than it was another claim's. */
+  since?: Date
   detail: AddressDetail | Record<string, never>
   /** Absent: the steps stay as they are. */
   steps?: Partial<Record<TaskStepName, StepPlan>>
@@ -212,7 +216,9 @@ const after = (at: string, ms: number) => new Date(Date.parse(at) + ms)
  * The address task a domain row implies. A removed domain ends the task as
  * declined and an unpaid Checkout that ran out puts it off, both with the
  * steps left as they were. A connect that stopped waits on the owner's DNS
- * change, and a bought name Cloudflare refused waits on a new choice.
+ * change, and a bought name Cloudflare refused waits on a new choice. An
+ * active row leaves the site loading on it to the probe, whose check of the
+ * page and its `x-reme-site` header alone marks `loads` done.
  */
 export function addressPlan(d: DomainFacts): TaskPlan {
   const bought = d.origin === "purchased"
@@ -230,7 +236,12 @@ export function addressPlan(d: DomainFacts): TaskPlan {
     certificate: pending,
     loads: pending,
   }
-  const active = { state: "active" as const, done_at: null, detail }
+  const active = {
+    state: "active" as const,
+    done_at: null,
+    detail,
+    since: new Date(d.created_at),
+  }
   switch (d.state) {
     case "removed":
       return { ...active, state: "declined" }
@@ -238,15 +249,14 @@ export function addressPlan(d: DomainFacts): TaskPlan {
       return { ...active, state: "later" }
     case "active":
       return {
-        state: "done",
+        ...active,
         done_at: new Date(d.activated_at ?? d.created_at),
-        detail,
         steps: {
           ...base,
           records: done,
           ownership: d.needs_txt ? done : skipped,
           certificate: done,
-          loads: done,
+          loads: working,
         },
       }
     case "awaiting_payment":
@@ -300,7 +310,8 @@ export function addressPlan(d: DomainFacts): TaskPlan {
 /**
  * The Google task a connection implies. Ended or declined, the task is
  * declined with its steps as they were; first data is pending until Google
- * has some, so a site Google reads but nobody has seen yet is Coming up.
+ * has some, so a site Google reads but nobody has seen yet is Coming up, and
+ * the task is done once it has.
  */
 export function googlePlan(g: GoogleFacts): TaskPlan {
   if (g.state === "revoked")
@@ -319,19 +330,15 @@ export function googlePlan(g: GoogleFacts): TaskPlan {
     sitemap: p?.sitemap ? done : verified ? working : pending,
     first_data: g.data ? done : pending,
   }
-  const finished = Object.values(steps).every((s) => s.state === "done")
-  return {
-    state: finished ? "done" : "active",
-    done_at: finished ? new Date() : null,
-    detail: {},
-    steps,
-  }
+  return { state: "active", done_at: null, detail: {}, steps }
 }
 
 /**
  * Applies a plan to the newest task of its kind: the open one, or a closed
- * one for the same domain, which opens again if the plan says so. Otherwise
- * a new task. A task that stays done keeps its first `done_at`.
+ * one that follows the same row (Google's one connection, or the same domain
+ * claim), which opens again if the plan says so; otherwise a new task. Then
+ * the steps, and last the task's state from them: an active plan whose steps
+ * are all done or skipped is done, keeping its first `done_at`.
  */
 async function apply(
   db: OrgScopedDb,
@@ -344,6 +351,7 @@ async function apply(
       id: ownerTasks.id,
       open: sql<boolean>`${ownerTasks.state} in ('active', 'later')`,
       name: sql<string | null>`${ownerTasks.detail}->>'name'`,
+      createdAt: ownerTasks.createdAt,
     })
     .from(ownerTasks)
     .where(eq(ownerTasks.kind, kind))
@@ -354,61 +362,58 @@ async function apply(
     .limit(1)
   const name = "name" in plan.detail ? plan.detail.name : undefined
   const same =
-    latest && (latest.open || kind === "google" || latest.name === name)
+    latest &&
+    (latest.open ||
+      kind === "google" ||
+      (latest.name === name && (!plan.since || latest.createdAt >= plan.since)))
   let id: string
-  if (same) {
-    id = latest.id
-    await db
-      .update(ownerTasks)
-      .set({
-        state: plan.state,
-        laterUntil:
-          plan.state === "later" ? sql`${ownerTasks.laterUntil}` : null,
-        detail: sql`${ownerTasks.detail} || ${JSON.stringify(plan.detail)}::jsonb`,
-        doneAt:
-          plan.state === "done"
-            ? sql`coalesce(${ownerTasks.doneAt}, ${plan.done_at?.toISOString() ?? null}::timestamptz)`
-            : null,
-      })
-      .where(eq(ownerTasks.id, id))
-  } else {
-    // A task that starts closed (a back-filled live domain) is made in its state.
+  if (same) id = latest.id
+  else {
     const [row] = await db
       .insert(ownerTasks)
-      .values({
-        orgId,
-        kind,
-        state: plan.state,
-        detail: plan.detail,
-        doneAt: plan.state === "done" ? plan.done_at : null,
-      })
+      .values({ orgId, kind, detail: plan.detail })
       .returning({ id: ownerTasks.id })
     id = (row as { id: string }).id
     await addSteps(db, orgId, id, kind)
   }
   const steps = Object.entries(plan.steps ?? {})
-  if (steps.length === 0) return
-  // Every step in one statement, since `look()` syncs on each change it sees.
-  // The probe's fields are never written, and a step the probe blocked with a
-  // note keeps its wait until the rows say the step is done or does not apply.
-  const values = sql.join(
-    steps.map(
-      ([step, s]) =>
-        sql`(${step}, ${s.state}, ${s.blocked_on ?? null}, ${s.deadline?.toISOString() ?? null})`
-    ),
-    sql`, `
-  )
+  if (steps.length > 0) {
+    // Every step in one statement, since `look()` syncs on each change it
+    // sees. The probe's fields are never written, a done step is never moved
+    // back, and a step the probe blocked with a note keeps its wait until the
+    // rows say the step is done or does not apply.
+    const values = sql.join(
+      steps.map(
+        ([step, s]) =>
+          sql`(${step}, ${s.state}, ${s.blocked_on ?? null}, ${s.deadline?.toISOString() ?? null})`
+      ),
+      sql`, `
+    )
+    await db.execute(sql`
+      update task_steps s set
+        state = v.state::task_step_state,
+        blocked_on = v.blocked_on::task_blocked_on,
+        deadline = v.deadline::timestamptz,
+        note = case when v.state = 'blocked' then s.note end,
+        changed_at = case when s.state::text <> v.state then now() else s.changed_at end
+      from (values ${values}) as v(step, state, blocked_on, deadline)
+      where s.task_id = ${id} and s.step::text = v.step and s.state <> 'done'
+        and not (s.state = 'blocked' and s.note is not null
+          and v.state not in ('done', 'skipped'))`)
+  }
   await db.execute(sql`
-    update task_steps s set
-      state = v.state::task_step_state,
-      blocked_on = v.blocked_on::task_blocked_on,
-      deadline = v.deadline::timestamptz,
-      note = case when v.state = 'blocked' then s.note end,
-      changed_at = case when s.state::text <> v.state then now() else s.changed_at end
-    from (values ${values}) as v(step, state, blocked_on, deadline)
-    where s.task_id = ${id} and s.step::text = v.step
-      and not (s.state = 'blocked' and s.note is not null
-        and v.state not in ('done', 'skipped'))`)
+    update owner_tasks t set
+      state = x.state::task_state,
+      later_until = case when x.state = 'later' then t.later_until end,
+      detail = t.detail || ${JSON.stringify(plan.detail)}::jsonb,
+      done_at = case when x.state = 'done' then
+        coalesce(t.done_at, ${plan.done_at?.toISOString() ?? null}::timestamptz, now()) end
+    from (select case
+      when ${plan.state} <> 'active' then ${plan.state}
+      when exists (select 1 from task_steps s where s.task_id = ${id}
+        and s.state not in ('done', 'skipped')) then 'active'
+      else 'done' end as state) x
+    where t.id = ${id}`)
 }
 
 /**
@@ -425,6 +430,11 @@ export async function syncTasks(
   orgId: string,
   address: Pick<AddressDetail, "changes"> = {}
 ) {
+  // One sync per org at a time, so two connects at once cannot both make the
+  // task. Key 6: 2 to 5 are taken (turns, assets, domain claims, facts).
+  await db.execute(
+    sql`select pg_advisory_xact_lock(6, hashtext(${orgId}::text))`
+  )
   const [row] = await db.execute<{
     domain: DomainFacts | null
     google: GoogleFacts | null

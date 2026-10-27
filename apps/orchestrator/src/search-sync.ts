@@ -14,6 +14,7 @@ import {
   searchUrlStatus,
   serverMessageId,
   sql,
+  syncTasks,
   type Tenancy,
 } from "@workspace/db"
 import {
@@ -363,12 +364,13 @@ export async function pullProperty(
     sitemaps = await listSitemaps(access, property.siteUrl)
   } catch (error) {
     if (!refusedBy(error)) throw error
-    await kit.withOrg({ orgId }, (db) =>
-      db
+    await kit.withOrg({ orgId }, async (db) => {
+      await db
         .update(searchProperties)
         .set({ state: "stale" })
         .where(eq(searchProperties.id, property.id))
-    )
+      await syncTasks(db, orgId)
+    })
     return { days: 0, pairs: 0, stale: true }
   }
   const ours =
@@ -431,6 +433,7 @@ export async function pullProperty(
         }),
       })
       .where(eq(searchProperties.id, property.id))
+    await syncTasks(db, orgId)
   })
   return { days: days.length, pairs: top.length }
 }
@@ -806,5 +809,6 @@ export async function disconnectSearch(
       type: "search.disconnected",
       payload: { properties: properties.length },
     })
+    await syncTasks(db, orgId)
   })
 }

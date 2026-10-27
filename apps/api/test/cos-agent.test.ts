@@ -490,6 +490,47 @@ describe("the CoS's change kinds", () => {
     expect(text).not.toContain("p50")
     expect(text).toContain('"lane":"quick"')
   })
+
+  it("carries an open owner task with its blocked note, and no task id", () => {
+    const id = "3f2b9c1e-8a4d-4f6b-9c2a-1d5e7f8a9b0e"
+    const text = contextOf("act", {
+      site: { host: null, live_version: null },
+      questions: [],
+      approvals: [],
+      missing_facts: [],
+      builds: [],
+      tasks: [
+        {
+          id,
+          kind: "address",
+          state: "active",
+          later_until: null,
+          detail: { name: "spark.example" },
+          created_at: "2026-10-27T09:00:00.000Z",
+          done_at: null,
+          steps: [
+            {
+              step: "records",
+              state: "blocked",
+              note: "Two records to add at 123-reg",
+              blocked_on: "owner_action",
+              deadline: null,
+              changed_at: null,
+            },
+          ],
+        },
+      ],
+      expected_seconds: {
+        quick: { p50: 15, p95: 45 },
+        full: { p50: 180, p95: 330 },
+      },
+    }).text
+    expect(text).toContain(
+      '"steps":["records: waiting on the owner (Two records to add at 123-reg)"]'
+    )
+    expect(text).toContain('"domain":"spark.example"')
+    expect(text).not.toContain(id)
+  })
 })
 
 describe("the CoS's routing table", () => {

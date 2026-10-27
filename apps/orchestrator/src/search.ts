@@ -8,6 +8,7 @@ import {
   searchConnections,
   searchProperties,
   sql,
+  syncTasks,
   type Tenancy,
   users,
 } from "@workspace/db"
@@ -140,6 +141,7 @@ export async function accessToken(
           type: "search.needs_reauth",
           payload: {},
         })
+        await syncTasks(db, orgId)
       }
     })
     throw error
@@ -228,7 +230,10 @@ export async function forgetHost(
       await dropVerification(env, host, row.token)
     }
   }
-  await kit.withOrg({ orgId }, (db) => db.delete(searchProperties).where(where))
+  await kit.withOrg({ orgId }, async (db) => {
+    await db.delete(searchProperties).where(where)
+    await syncTasks(db, orgId)
+  })
 }
 
 /**
@@ -351,6 +356,7 @@ export async function connectGoogle(
       type: "search.connected",
       payload: { google_email: exchanged.email },
     })
+    await syncTasks(db, orgId)
   })
   // The host the site answers on; a redirecting slug host is one Google cannot fetch.
   const { slug, domain } = await heldHosts(env, kit, orgId)
@@ -407,8 +413,8 @@ export async function placeToken(
   if (old?.token && old.token !== file) {
     await dropVerification(env, host, old.token)
   }
-  await kit.withOrg({ orgId }, (db) =>
-    db
+  await kit.withOrg({ orgId }, async (db) => {
+    await db
       .insert(searchProperties)
       .values({
         orgId,
@@ -423,7 +429,8 @@ export async function placeToken(
         target: [searchProperties.orgId, searchProperties.siteUrl],
         set: { token: file, state: "pending" },
       })
-  )
+    await syncTasks(db, orgId)
+  })
 }
 
 /** `verify`: whether Google found the file. Google answers 4xx while it cannot. */
@@ -502,6 +509,7 @@ export async function markVerified(
         payload: { property_id: row.id, host },
       })
     }
+    await syncTasks(db, orgId)
   })
 }
 
@@ -526,6 +534,7 @@ export async function markFailed(
       type: "alert.raised",
       payload: { kind: "search.verify_failed", property_id: row.id, host },
     })
+    await syncTasks(db, orgId)
   })
 }
 

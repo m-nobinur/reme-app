@@ -429,6 +429,7 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         approvals: [],
         missing_facts: expect.any(Array),
         domains: [],
+        tasks: [],
         expected_seconds: expect.any(Object),
         expected_range: {
           quick: "about 1 to 2 minutes",

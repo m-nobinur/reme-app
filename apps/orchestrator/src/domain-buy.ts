@@ -23,6 +23,7 @@ import {
   type OrgScopedDb,
   pgCode,
   sql,
+  syncTasks,
   type Tenancy,
 } from "@workspace/db"
 import {
@@ -414,6 +415,7 @@ export async function buy(
         type: "domain.buy_requested",
         payload: { domain_id: row.id, name, price: priced.price },
       })
+      await syncTasks(db, orgId)
       return row
     })
   } catch (error) {
@@ -540,12 +542,13 @@ async function setRegistration(
   row: DomainRow,
   set: Partial<DomainRegistration>
 ) {
-  await kit.withOrg({ orgId }, (db) =>
-    db
+  await kit.withOrg({ orgId }, async (db) => {
+    await db
       .update(domains)
       .set({ registration: merged(row, set) })
       .where(eq(domains.id, row.id))
-  )
+    await syncTasks(db, orgId)
+  })
 }
 
 const day = (iso: unknown) =>
@@ -994,8 +997,8 @@ export async function captureRegistered(
   const sandbox = !registrarLive(env)
   // The outcome and the details dropped in one update; a sandbox purchase's
   // outcome is `finishSandbox`'s.
-  await kit.withOrg({ orgId }, (db) =>
-    db
+  await kit.withOrg({ orgId }, async (db) => {
+    await db
       .update(domains)
       .set({
         registrant: null,
@@ -1009,7 +1012,8 @@ export async function captureRegistered(
         }),
       })
       .where(eq(domains.id, domainId))
-  )
+    await syncTasks(db, orgId)
+  })
   if (sandbox) return null
   const email = RegistrantDetails.safeParse(row.registrant).data?.registrant
     .email
