@@ -1,7 +1,9 @@
 import {
   CheckDomainOutput,
   ConnectDomainOutput,
+  type DnsRecord,
   DomainCheck,
+  DomainInspection,
   DomainName,
   DomainProvider,
   type DomainRegistration,
@@ -41,10 +43,12 @@ import {
   ensureHostname,
   getHostname,
   hasTxt,
+  type Inspection,
   inspect,
   OUR_ZONE,
   recordsFor,
   relative,
+  stillToAdd,
   zoneApex,
 } from "./domains.ts"
 import { writeUpdate } from "./heartbeat-write.ts"
@@ -55,6 +59,7 @@ import {
   otherHost,
   writePointer,
 } from "./publish.ts"
+import { rdapLookup } from "./rdap.ts"
 import {
   detachHostname,
   getRegistration,
@@ -100,8 +105,8 @@ export const MAX_PENDING = 3
 export const DEADLINE_MS = 72 * 60 * 60 * 1000
 /**
  * One reminder, with the provider again, for a claim still connecting a day
- * after it started. shortcut: counts from the start, not from the last status
- * change; move the clock to the last change if owners find it early.
+ * after the last time it moved, so an owner who is making progress is not
+ * nagged.
  */
 export const NUDGE_AFTER_MS = 24 * 60 * 60 * 1000
 const MINUTE = 60 * 1000
@@ -404,6 +409,26 @@ const PAST_VERIFICATION: DomainCheck["status"][] = [
   "valid",
 ]
 
+/** The ownership TXT records a card lists, `www` first, named relative to the zone's apex. */
+function txtRecords(
+  ownership: Ownership,
+  name: string,
+  apex: string
+): DnsRecord[] {
+  return [`www.${name}`, name].flatMap((host) => {
+    const own = ownership[host]
+    return own
+      ? [
+          {
+            type: "TXT" as const,
+            name: relative(own.name, apex),
+            value: own.value,
+          },
+        ]
+      : []
+  })
+}
+
 /** Every host's stored ownership TXT is in public DNS; a host with none fails. */
 async function ownedByTxt(
   ownership: Ownership,
@@ -422,7 +447,9 @@ async function ownedByTxt(
  * The domain's check now, from public DNS and its two custom hostnames, and
  * the host it would be served on. Never throws: a failed read is
  * `unknown_error`, which the Workflow looks past. Before any hostname exists
- * the check is `not_found` whatever DNS says, so DNS is not read.
+ * the check is `not_found` whatever DNS says, so DNS is not read. `txtMissing`
+ * is the guard below holding a domain whose records are otherwise in, and
+ * `apex` the zone the owner's DNS page is for.
  */
 export async function currentCheck(
   env: CloudflareEnv,
@@ -430,7 +457,12 @@ export async function currentCheck(
     DomainRow,
     "name" | "cfIds" | "primaryHost" | "needsTxt" | "ownership"
   >
-): Promise<{ check: DomainCheck; primary: string }> {
+): Promise<{
+  check: DomainCheck
+  primary: string
+  apex?: string
+  txtMissing?: true
+}> {
   const ids = row.cfIds as CfIds
   if (!ids.apex && !ids.www)
     return { check: { status: "not_found" }, primary: row.primaryHost }
@@ -454,14 +486,21 @@ export async function currentCheck(
     // The takeover guard: a name another org held, or one that pointed at us
     // before this claim, is not verified until each host's ownership TXT is
     // in public DNS. Cloudflare's own `active` may come from the CNAME alone.
+    let txtMissing = false
     if (
       row.needsTxt &&
       PAST_VERIFICATION.includes(check.status) &&
       !(await ownedByTxt(row.ownership as Ownership, hosts))
     ) {
       check = { status: "pending_verification" }
+      txtMissing = true
     }
-    return { check, primary: alias ? row.name : wwwHost }
+    return {
+      check,
+      primary: alias ? row.name : wwwHost,
+      apex: inspection.apex,
+      ...(txtMissing && { txtMissing }),
+    }
   } catch {
     return { check: { status: "unknown_error" }, primary: row.primaryHost }
   }
@@ -529,6 +568,8 @@ export type Seen =
       at: number
       status: DomainCheck["status"]
       ready: boolean
+      /** The row moved on this look: the owner's quiet period starts over. */
+      changed?: boolean
       /** What to tell the owner, which the probe adds when the check changed. */
       say?: Say
     }
@@ -563,18 +604,33 @@ export async function look(
   if (check.status === "unknown_error") return { result }
   // jsonb keeps keys in its own order, so the stored check is compared canonically.
   const same = canonical(row.lastCheck) === canonical(check)
-  const text = statusText(check, row.name, seen.primary)
+  const provider = DomainProvider.safeParse(row.provider)
+  const where = provider.success ? provider.data.name : "your DNS provider"
+  // Records in, ownership TXT not: the owner's one step left is the TXT.
+  const txt =
+    seen.txtMissing && seen.apex
+      ? txtRecords(row.ownership as Ownership, row.name, seen.apex)
+      : []
+  const text =
+    txt.length > 0
+      ? `Your records for ${seen.primary} are in. One more thing, so I know the domain is yours: add ${txt.length === 1 ? "this TXT record" : "these TXT records"} at ${where}: ${txt.map((r) => `${r.name} = ${r.value}`).join("; ")}. Your email isn't affected.`
+      : statusText(check, row.name, seen.primary)
   const button =
+    txt.length > 0 ||
     check.status === "conflicting_record" ||
     check.status === "invalid_configuration"
       ? settingsButton(row.provider)
       : undefined
   const state: DomainState =
-    check.status === "pending_certificate" || check.status === "valid"
+    txt.length > 0 ||
+    check.status === "pending_certificate" ||
+    check.status === "valid"
       ? "verifying"
       : "awaiting_dns"
+  const changed =
+    !same || state !== row.state || seen.primary !== row.primaryHost
   // A quiet look writes nothing; a removal since the read is the next look's.
-  if (!same || state !== row.state || seen.primary !== row.primaryHost) {
+  if (changed) {
     const updated = await kit.withOrg({ orgId }, async (db) => {
       const moved = await db
         .update(domains)
@@ -590,23 +646,29 @@ export async function look(
   }
   // Until the records are seen the owner is the one to act; past them, Cloudflare is.
   const waiting = state === "awaiting_dns"
-  const provider = DomainProvider.safeParse(row.provider)
-  const where = provider.success ? provider.data.name : "your DNS provider"
   const [conflict] =
     check.status === "conflicting_record" ? check.conflicts : []
   return {
-    result,
+    result: { ...result, changed },
     reading: {
-      step: waiting ? "records" : "certificate",
+      step: txt.length > 0 ? "ownership" : waiting ? "records" : "certificate",
       // The claim's id, so a new claim on the same task is news again.
-      evidence: { domain_id: domainId, check, host: seen.primary },
-      ...(waiting && {
+      evidence: {
+        domain_id: domainId,
+        check,
+        host: seen.primary,
+        ...(txt.length > 0 && { txt: true }),
+      },
+      ...((waiting || txt.length > 0) && {
         write: {
           state: "blocked",
           blocked_on: "owner_action",
-          note: conflict
-            ? `Delete the old ${conflict.type} record at ${where}`
-            : `Add the records at ${where}`,
+          note:
+            txt.length > 0
+              ? `Add the TXT record${txt.length > 1 ? "s" : ""} at ${where}`
+              : conflict
+                ? `Delete the old ${conflict.type} record at ${where}`
+                : `Add the records at ${where}`,
         },
       }),
       ...(text && { tell: async () => ({ text, ...(button && { button }) }) }),
@@ -615,16 +677,17 @@ export async function look(
 }
 
 /**
- * The 24-hour reminder, once, with where the owner's DNS settings are. This
- * line, the live one and the failed ones are worded by the model from their
- * facts, or else are the template (heartbeat-write.ts); `statusText`'s DNS
- * records stay fixed.
+ * The reminder for a claim quiet since `since`, once per quiet period, with
+ * where the owner's DNS settings are. This line, the live one and the failed
+ * ones are worded by the model from their facts, or else are the template
+ * (heartbeat-write.ts); `statusText`'s DNS records stay fixed.
  */
 export async function nudge(
   env: { OPENROUTER_API_KEY?: string },
   kit: Tenancy,
   orgId: string,
-  domainId: string
+  domainId: string,
+  since: number
 ): Promise<Say | null> {
   const row = await kit.withOrg({ orgId }, (db) => readDomain(db, domainId))
   if (!row || !connecting(row.state)) return null
@@ -634,7 +697,7 @@ export async function nudge(
     : ""
   const button = settingsButton(row.provider)
   return {
-    key: `${domainId}:nudge`,
+    key: `${domainId}:nudge:${since}`,
     text: await writeUpdate(env, kit, orgId, {
       facts: {
         domain: row.name,
@@ -833,6 +896,47 @@ const invalid = () =>
   )
 
 /**
+ * `GET /domains/{name}/inspect`: what a name the owner already has is, before
+ * anything is connected. Whether it is registered and with whom comes from
+ * RDAP; a registry that is down or rate-limiting leaves DNS to say whether
+ * the name exists, and the registrar unknown. Then who runs its DNS (the
+ * connect card's detection) and whether it already points somewhere.
+ */
+export async function inspectDomain(
+  raw: unknown
+): Promise<Refusal | DomainInspection> {
+  const name = normalizeName(raw)
+  if (!name) return invalid()
+  const known = await rdapLookup(name).catch(() => null)
+  if (known && !known.registered)
+    return { name, registered: false, in_use: false }
+  let inspection: Inspection | null = null
+  try {
+    inspection = await inspect(name)
+  } catch (error) {
+    if (!(error instanceof DomainError && error.name === "domain.not_found"))
+      return refuse(
+        503,
+        "transient",
+        "dns.unavailable",
+        "I couldn't read the domain's DNS just now. Try again in a minute."
+      )
+  }
+  const dnsHost =
+    inspection &&
+    (await detectProvider(inspection.apex, inspection.nameservers))
+  return DomainInspection.parse({
+    name,
+    registered: known?.registered ?? inspection !== null,
+    ...(known?.registrar && { registrar: known.registrar }),
+    ...(dnsHost && { dns_host: dnsHost }),
+    in_use: Object.values(inspection?.hosts ?? {}).some(
+      (h) => h.cname || h.a.length + h.aaaa.length > 0
+    ),
+  })
+}
+
+/**
  * `POST /domains`: inspect the domain, claim it for the org and start its
  * Workflow, answering with the records to add. The same org asking again for
  * a name it is connecting gets the same answer; one name has one live claim
@@ -872,7 +976,7 @@ export async function connect(
     outcome: "connecting" as const,
     method: "records" as const,
     email_affected: false,
-    steps: recordsFor({ inspection, apex }),
+    steps: stillToAdd(recordsFor({ inspection, apex }), inspection),
     // A subdomain has no bare-address choice.
     ...(!inspection.sub && { apex }),
     ...(provider && { provider }),
@@ -990,19 +1094,7 @@ export async function connect(
     return { status, output: ConnectDomainOutput.parse({ ...base, steps }) }
   }
   if (!claimed.needsTxt) return answer(base.steps)
-  // www first, as the card lists it; jsonb keeps its own key order.
-  const txt = [`www.${name}`, name].flatMap((host) => {
-    const own = ownership[host]
-    return own
-      ? [
-          {
-            type: "TXT" as const,
-            name: relative(own.name, inspection.apex),
-            value: own.value,
-          },
-        ]
-      : []
-  })
+  const txt = txtRecords(ownership, name, inspection.apex)
   if (txt.length === 0)
     return refuse(
       503,

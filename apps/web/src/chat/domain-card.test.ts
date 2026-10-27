@@ -80,9 +80,15 @@ const done = (output: unknown) => ({
 const buttons = (container: HTMLElement) =>
   [...container.querySelectorAll("button")].map((b) => b.textContent?.trim())
 
+/** The tray's labelled buttons, its no before its yes; Collapse has only an icon. */
+const choices = (container: HTMLElement) =>
+  buttons(container).filter((label) => label !== "")
+
 /** Presses the card's yes, then its no, and checks what each told the thread. */
 async function answer(card: Awaited<ReturnType<typeof draw>>) {
-  const [yes, no] = card.container.querySelectorAll("button")
+  const [no, yes] = [...card.container.querySelectorAll("button")].filter(
+    (button) => button.textContent?.trim()
+  )
   await act(async () => yes?.click())
   expect(card.respondToApproval).toHaveBeenLastCalledWith({ approved: true })
   await act(async () => no?.click())
@@ -97,10 +103,11 @@ afterEach(() => {
 
 it("asks for the owner's yes through the existing approval flow", async () => {
   const card = await draw({ approval: { approved: undefined } })
-  expect(card.container.querySelector("h3")?.textContent).toBe(
+  expect(card.container.querySelector("h2")?.textContent).toBe(
     `Put your website on ${NAME}.`
   )
-  expect(buttons(card.container)).toEqual(["Connect", "Cancel"])
+  expect(card.container.textContent).toContain("Your email is not affected.")
+  expect(choices(card.container)).toEqual(["Cancel", "Connect"])
   await answer(card)
   await card.unmount()
 })
@@ -299,13 +306,13 @@ it("asks before taking the website off a domain, and says nothing is deleted", a
     toolName: "remove_domain",
     approval: { approved: undefined },
   })
-  expect(card.container.querySelector("h3")?.textContent).toBe(
+  expect(card.container.querySelector("h2")?.textContent).toBe(
     `Take your website off ${NAME}?`
   )
   expect(card.container.textContent).toContain(
     "Your website goes back to its own address. Nothing is deleted at your domain's provider."
   )
-  expect(buttons(card.container)).toEqual(["Remove", "Keep it"])
+  expect(choices(card.container)).toEqual(["Keep it", "Remove"])
   await answer(card)
   await card.unmount()
 })

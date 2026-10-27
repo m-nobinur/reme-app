@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import {
   connect,
   currentCheck,
+  inspectDomain,
   look,
   nextWait,
   normalizeName,
@@ -135,6 +136,7 @@ describe("a look", () => {
       at: expect.any(Number),
       status: "conflicting_record",
       ready: false,
+      changed: true,
     })
     expect(first.reading).toMatchObject({
       step: "records",
@@ -216,9 +218,26 @@ describe("a look", () => {
       [`https://${WWW}/`]: () => new Response("not here", { status: 404 }),
     }
     stubNet(net, FIXED)
-    expect((await look(env, kit, "org", "dom")).result).toMatchObject({
+    const held = await look(env, kit, "org", "dom")
+    expect(held.result).toMatchObject({
       status: "pending_verification",
       ready: false,
+    })
+    // The records are in, so the one step left is the TXT, said with its value.
+    expect(row.state).toBe("verifying")
+    expect(held.reading).toMatchObject({
+      step: "ownership",
+      write: {
+        state: "blocked",
+        blocked_on: "owner_action",
+        note: "Add the TXT record at GoDaddy",
+      },
+    })
+    expect(await held.reading?.tell?.()).toMatchObject({
+      text: expect.stringContaining(
+        "add this TXT record at GoDaddy: _cf-custom-hostname.www = 0e2d5a7f-uuid."
+      ),
+      button: { label: "Open GoDaddy DNS settings" },
     })
     // A TXT with another value is not the owner's proof either.
     const txt = (value: string) => ({
@@ -309,6 +328,7 @@ describe("the check", () => {
         ],
       },
       primary: WWW,
+      apex: NAME,
     })
     vi.unstubAllGlobals()
     vi.stubGlobal("fetch", async () => {
@@ -501,5 +521,72 @@ describe("whether a host serves the site", () => {
       throw new Error("offline")
     })
     expect(await reaches(NAME, SITE)).toBe(false)
+  })
+})
+
+describe("inspecting a name the owner has", () => {
+  const RDAP = "https://rdap.nominet.uk/uk/domain"
+  const BOOTSTRAP = "https://data.iana.org/rdap/dns.json"
+  const registry = () =>
+    Response.json({ services: [[["uk"], ["https://rdap.nominet.uk/uk/"]]] })
+  const held = (fn: string) => () =>
+    Response.json({
+      entities: [
+        {
+          roles: ["registrar"],
+          vcardArray: ["vcard", [["fn", {}, "text", fn]]],
+        },
+      ],
+    })
+  const noCache = () =>
+    vi.stubGlobal("caches", {
+      default: { match: async () => undefined, put: async () => undefined },
+    })
+
+  it("names the registrar and the DNS host, and sees the old website", async () => {
+    noCache()
+    stubNet({
+      [BOOTSTRAP]: registry,
+      [`${RDAP}/${NAME}`]: held("123-Reg Limited t/a 123-reg"),
+    })
+    expect(await inspectDomain(`WWW.${NAME}`)).toEqual({
+      name: NAME,
+      registered: true,
+      registrar: "123-reg",
+      dns_host: {
+        name: "GoDaddy",
+        settings_url: "https://dcc.godaddy.com/manage/dns",
+      },
+      in_use: true,
+    })
+  })
+
+  it("reads a free name from RDAP alone", async () => {
+    noCache()
+    const fetched = stubNet({
+      [BOOTSTRAP]: registry,
+      [`${RDAP}/free-name.co.uk`]: () => new Response("{}", { status: 404 }),
+    })
+    expect(await inspectDomain("free-name.co.uk")).toEqual({
+      name: "free-name.co.uk",
+      registered: false,
+      in_use: false,
+    })
+    expect(
+      fetched.mock.calls.every(([u]) => !String(u).includes("dns-query"))
+    ).toBe(true)
+  })
+
+  it("falls back on DNS when the registry cannot answer", async () => {
+    noCache()
+    stubNet({ [BOOTSTRAP]: () => new Response("{}", { status: 503 }) })
+    expect(await inspectDomain(NAME)).toMatchObject({
+      registered: true,
+      in_use: true,
+    })
+    expect(await inspectDomain("not a domain")).toMatchObject({
+      refused: true,
+      code: "domain.invalid",
+    })
   })
 })

@@ -1,10 +1,21 @@
-import type { BuildQuestion, QuestionReply } from "@workspace/contracts"
-import { nextOpen } from "@workspace/ui/components/assistant/build-questions"
+import {
+  ADDRESS_ASK,
+  type BuildQuestion,
+  type BuildQuestions,
+  type QuestionAnswer,
+  type QuestionReply,
+} from "@workspace/contracts"
+import {
+  addressSaid,
+  nextOpen,
+} from "@workspace/ui/components/assistant/build-questions"
 import { expect, it, vi } from "vitest"
 
 const server = vi.hoisted(() => ({
   answerQuestion: vi.fn<
-    () => Promise<{ done: true } | { done: false; reason: string }>
+    () => Promise<
+      { done: true; stack?: BuildQuestions } | { done: false; reason: string }
+    >
   >(async () => ({ done: true })),
 }))
 vi.mock("@/lib/api/server", () => server)
@@ -56,4 +67,42 @@ it("sends a retry of the same answer as the same request, and says a refusal", a
   // Stored: the next answer is a new request.
   await send("Yes")
   expect(keyOf(2)).not.toBe(keyOf(1))
+})
+
+it("hands the card the stack as stored, so a closed question is not asked", async () => {
+  const stack: BuildQuestions = {
+    kind: "address",
+    questions: [question("a", true), question("b", true)],
+  }
+  server.answerQuestion.mockResolvedValueOnce({ done: true, stack })
+  expect(
+    await answerBuildQuestion({ conversationId: "c", reply: reply("No") })
+  ).toEqual(stack)
+})
+
+it("says the address answer as the owner's message, and nothing for Not now", () => {
+  const have = {
+    id: "00000000-0000-4000-8000-000000000001",
+    text: ADDRESS_ASK.have,
+    input: { kind: "choice", options: [ADDRESS_ASK.yes] },
+    skippable: false,
+  } as BuildQuestion
+  const name = {
+    id: "00000000-0000-4000-8000-000000000002",
+    text: ADDRESS_ASK.name,
+    input: { kind: "text", maxLength: 253, email: false },
+    skippable: true,
+  } as BuildQuestion
+  const said = (choice: string, named: QuestionAnswer) =>
+    addressSaid([have, name], (each) =>
+      each === have ? { kind: "value", value: choice } : named
+    )
+  expect(said(ADDRESS_ASK.yes, { kind: "value", value: "sparkle.co.uk" })).toBe(
+    "Yes, it's sparkle.co.uk"
+  )
+  expect(said(ADDRESS_ASK.yes, { kind: "skipped" })).toBe(
+    "Yes, I have a web address"
+  )
+  expect(said(ADDRESS_ASK.no, { kind: "closed" })).toBe(ADDRESS_ASK.no)
+  expect(said(ADDRESS_ASK.later, { kind: "closed" })).toBeNull()
 })

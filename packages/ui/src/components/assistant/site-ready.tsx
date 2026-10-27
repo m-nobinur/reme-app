@@ -4,7 +4,10 @@ import {
   RocketLaunchIcon,
   SpinnerGapIcon,
 } from "@phosphor-icons/react"
-import { useTraySlot } from "@workspace/ui/components/assistant/question-tray"
+import {
+  Docked,
+  useTraySlot,
+} from "@workspace/ui/components/assistant/question-tray"
 import { UpdateRow } from "@workspace/ui/components/assistant/update-deck"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -24,7 +27,8 @@ import { createPortal } from "react-dom"
  * It is drawn from the workspace, not stored in the thread, and never
  * optimistic: Publish waits for the server, and "approved" shows only once
  * the decision is recorded. Docked, it is held above the composer until the
- * site is published, as its first row, which opens the whole card. In a
+ * site is published, as its first row, which opens the whole card, and it
+ * takes its turn in the tray's stack with any other item there. In a
  * thread it is drawn into one node that moves from the chat to the tray, so
  * docking moves the card rather than drawing it again.
  * As a row, it is that row alone, for the new chat's updates.
@@ -82,10 +86,11 @@ export function SiteReady({
     typeof document === "undefined" ? null : document.createElement("div")
   )
   const [spot, setSpot] = useState<HTMLElement | null>(null)
+  const [traySpot, setTraySpot] = useState<HTMLElement | null>(null)
   useLayoutEffect(() => {
-    const into = inTray ? slot : spot
+    const into = inTray ? traySpot : spot
     if (host && into && host.parentElement !== into) into.appendChild(host)
-  }, [host, inTray, slot, spot])
+  }, [host, inTray, traySpot, spot])
   useLayoutEffect(() => () => void host?.remove(), [host])
   const done = (
     <p
@@ -174,9 +179,7 @@ export function SiteReady({
       aria-labelledby={`${id}-title`}
       className={cn(
         "flex flex-col overflow-hidden rounded-2xl border border-border bg-card",
-        inTray
-          ? "motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-2 duration-enter ease-standard motion-safe:animate-in"
-          : ["max-w-xl", className]
+        !inTray && ["max-w-xl", className]
       )}
       data-slot={inTray ? "site-ready-docked" : "site-ready"}
     >
@@ -228,7 +231,15 @@ export function SiteReady({
   if (!slot || !host) return card
   return (
     <>
-      {inTray ? null : <div ref={setSpot} />}
+      {inTray ? (
+        // One item of the tray's stack; the owner already moved on, so it
+        // asks nothing where it stood.
+        <Docked name="site-ready-tray" settled>
+          <div ref={setTraySpot} />
+        </Docked>
+      ) : (
+        <div ref={setSpot} />
+      )}
       {createPortal(
         inTray && approved ? (
           <div className="rounded-2xl border border-border bg-card">{done}</div>

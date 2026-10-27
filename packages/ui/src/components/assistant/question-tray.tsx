@@ -56,6 +56,7 @@ import {
   useContext,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -131,11 +132,107 @@ export function ShowFoldedQuestion({ className }: { className?: string }) {
 }
 
 /**
+ * Every item docked in a tray, in transcript order, and the one it shows:
+ * the newest, unless the owner stepped to another. The rest stay drawn and
+ * hidden, so what was typed into them is kept. Kept by the tray's slot, so
+ * two threads on a page each have their own.
+ */
+type Stacked = { key: string; mark: Element }
+type Stack = { items: Stacked[]; shown: string | null }
+const EMPTY: Stack = { items: [], shown: null }
+const stacks = new WeakMap<Element, Stack>()
+const stackWatchers = new Set<() => void>()
+const setStack = (slot: Element, next: Stack) => {
+  stacks.set(slot, next)
+  for (const watch of stackWatchers) watch()
+}
+const watchStack = (watch: () => void) => {
+  stackWatchers.add(watch)
+  return () => {
+    stackWatchers.delete(watch)
+  }
+}
+const earlier = (a: Stacked, b: Stacked) =>
+  a.mark.compareDocumentPosition(b.mark) & Node.DOCUMENT_POSITION_FOLLOWING
+    ? -1
+    : 1
+
+/** Puts an item in its tray's stack and shows the newest; the return takes it out. */
+function enlist(slot: Element, key: string, mark: Element) {
+  const items = [
+    ...(stacks.get(slot) ?? EMPTY).items.filter((each) => each.key !== key),
+    { key, mark },
+  ].sort(earlier)
+  setStack(slot, { items, shown: items.at(-1)?.key ?? null })
+  return () => {
+    const now = stacks.get(slot) ?? EMPTY
+    const rest = now.items.filter((each) => each.key !== key)
+    setStack(slot, {
+      items: rest,
+      shown: now.shown === key ? (rest.at(-1)?.key ?? null) : now.shown,
+    })
+  }
+}
+
+/** Where an item stands in its tray's stack, counted from the newest, and the steps to its neighbours. */
+function useStacked(slot: Element | null, key: string) {
+  const read = () => (slot && stacks.get(slot)) || EMPTY
+  const { items, shown } = useSyncExternalStore(watchStack, read, read)
+  const at = items.findIndex((each) => each.key === key)
+  const show = (to: number) => {
+    const next = items[to]
+    if (slot && next) setStack(slot, { items, shown: next.key })
+  }
+  return {
+    shown: at !== -1 && shown === key,
+    place: items.length - at,
+    total: items.length,
+    newer: at < items.length - 1 ? () => show(at + 1) : undefined,
+    older: at > 0 ? () => show(at - 1) : undefined,
+  }
+}
+
+/** "1 of 3" over the tray, newest first, with a step to each side. */
+function StackSteps(steps: ReturnType<typeof useStacked>) {
+  return (
+    <div className="flex items-center justify-end gap-1 px-2 text-muted-foreground text-xs">
+      <span aria-live="polite" className="px-1 tabular-nums">
+        <span className="sr-only">Waiting on you: </span>
+        {`${steps.place} of ${steps.total}`}
+      </span>
+      <Button
+        aria-label="Newer"
+        className={ACCENT_RING}
+        disabled={!steps.newer}
+        onClick={steps.newer}
+        size="icon-sm"
+        type="button"
+        variant="ghost"
+      >
+        <CaretLeftIcon aria-hidden />
+      </Button>
+      <Button
+        aria-label="Older"
+        className={ACCENT_RING}
+        disabled={!steps.older}
+        onClick={steps.older}
+        size="icon-sm"
+        type="button"
+        variant="ghost"
+      >
+        <CaretRightIcon aria-hidden />
+      </Button>
+    </div>
+  )
+}
+
+/**
  * Draws an open question in the thread's tray slot once no turn runs, so it
  * never appears mid-stream, fading and rising in. It is then brought into
  * view, and takes the focus only from an empty composer. Where the call sits
  * in the transcript it says the assistant is waiting; the thread dims behind
- * an open tray (globals.css).
+ * an open tray (globals.css). With more than one docked, the tray shows one,
+ * newest first, and "1 of 2" steps between them.
  */
 function Docked({
   name,
@@ -146,35 +243,52 @@ function Docked({
   name: string
   /** The tray asks more than one question. */
   many?: boolean
-  /** Every answer is in: nothing waits, and the keyboard stays put. */
+  /**
+   * Nothing is asked where it stands: every answer is in, or it docked
+   * after the owner moved on. No waiting line, the keyboard stays put, and
+   * it stays through a turn.
+   */
   settled?: boolean
   children: ReactNode
 }) {
   const slot = useContext(SlotContext)
-  const running = useRevealWaiting(true)
+  const running = useRevealWaiting(!settled)
+  const away = running && !settled
   const ref = useRef<HTMLDivElement>(null)
-  useFocusWhenIdle(!settled, running, ref)
+  const mark = useRef<HTMLSpanElement>(null)
+  const key = useId()
+  const steps = useStacked(slot, key)
+  useLayoutEffect(() => {
+    if (!slot || away || !mark.current) return
+    return enlist(slot, key, mark.current)
+  }, [slot, away, key])
+  useFocusWhenIdle(!settled && steps.shown, running, ref)
   if (!slot) return null
   return (
     <>
+      {/* Its place in the transcript, which orders the stack. */}
+      <span hidden ref={mark} />
       {/* Drawn with the call as it streams in, so the reply has its full
           height before the turn ends and nothing under it moves then. */}
       {settled ? null : (
         <p className="flex flex-wrap items-baseline gap-x-2 pt-3 text-muted-foreground text-sm">
           {many ? "Waiting for your answers" : "Waiting for your answer"}
-          <ShowFoldedQuestion />
+          {steps.shown ? <ShowFoldedQuestion /> : null}
         </p>
       )}
-      {running
+      {away
         ? null
         : createPortal(
-            <div
-              data-slot={name}
-              ref={ref}
-              className="motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-2 duration-enter ease-standard motion-safe:animate-in"
-            >
-              {children}
-            </div>,
+            <Activity mode={steps.shown ? "visible" : "hidden"}>
+              <div
+                data-slot={name}
+                ref={ref}
+                className="motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-2 flex flex-col gap-1 duration-enter ease-standard motion-safe:animate-in"
+              >
+                {steps.total > 1 ? <StackSteps {...steps} /> : null}
+                {children}
+              </div>
+            </Activity>,
             slot
           )}
     </>

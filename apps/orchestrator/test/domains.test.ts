@@ -14,6 +14,7 @@ import {
   recordsFor,
   SETTINGS_MAX_BYTES,
   settingsBase,
+  stillToAdd,
 } from "../src/domains.ts"
 import { stubNet } from "./fixtures/domains.ts"
 
@@ -76,6 +77,46 @@ describe("provider detection", () => {
     ).toEqual({
       name: "Cloudflare",
       settings_url: "https://dash.cloudflare.com/",
+    })
+  })
+
+  it.each([
+    ["ns.123-reg.co.uk", "123-reg", "https://www.123-reg.co.uk/secure/"],
+    ["ns1043.ui-dns.com", "IONOS", "https://my.ionos.co.uk/domains"],
+    [
+      "dns1.registrar-servers.com",
+      "Namecheap",
+      "https://ap.www.namecheap.com/domains/list/",
+    ],
+  ])(
+    "names the owner's DNS host from its nameserver %s",
+    async (ns, name, link) => {
+      stubNet()
+      expect(await detectProvider("plain.co.uk", [ns])).toEqual({
+        name,
+        settings_url: link,
+      })
+    }
+  )
+
+  it("gives a provider that discovery names without a page the page of its nameservers", async () => {
+    stubNet(
+      {
+        "https://dc.ionos.example/v2/plain.co.uk/settings": Response.json({
+          providerDisplayName: "IONOS",
+          urlControlPanel: "https://elsewhere.example/dns",
+        }),
+      },
+      {
+        "_domainconnect.plain.co.uk TXT": txtAnswer(
+          "plain.co.uk",
+          "dc.ionos.example"
+        ),
+      }
+    )
+    expect(await detectProvider("plain.co.uk", ["ns1043.ui-dns.com"])).toEqual({
+      name: "IONOS",
+      settings_url: "https://my.ionos.co.uk/domains",
     })
   })
 
@@ -571,6 +612,30 @@ describe("the records list", () => {
       { type: "CNAME", name: "www", value: CNAME_TARGET },
       { type: "CAA", name: "@", value: CAA_FOR_US },
     ])
+  })
+
+  it("lists only the records DNS does not already show", () => {
+    const listed = (inspection: Inspection) =>
+      stillToAdd(recordsFor({ inspection, apex: "alias" }), inspection)
+    // www already CNAMEs to us: only the apex ALIAS and the CAA line remain.
+    const blocked = fakeInspection({ caa: ['0 issue "digicert.com"'] })
+    expect(listed(blocked).map((r) => r.type)).toEqual(["ALIAS", "CAA"])
+    // An old A at www is in the way, so its CNAME is still to add.
+    const old = fakeInspection({
+      hosts: {
+        [APEX]: { a: ["192.0.2.10"], aaaa: [] },
+        [WWW]: { a: ["192.0.2.10"], aaaa: [] },
+      },
+    })
+    expect(listed(old).map((r) => r.type)).toEqual(["CNAME", "ALIAS"])
+    // The apex already answering as our target needs no ALIAS.
+    const flat = fakeInspection({
+      hosts: {
+        [APEX]: { a: ["104.21.0.10"], aaaa: [] },
+        [WWW]: { cname: CNAME_TARGET, a: [], aaaa: [] },
+      },
+    })
+    expect(listed(flat)).toEqual([])
   })
 })
 
