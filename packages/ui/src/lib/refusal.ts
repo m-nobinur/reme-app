@@ -36,14 +36,11 @@ const COPY: Record<string, string> = {
   "domain.buy_unavailable": "Buying a domain isn't available yet.",
   "site.not_published":
     "Publish your website first, then I can buy the name for it. Nothing was charged.",
-  "domain.in_use": "That name is already on your website.",
   "domain.too_many_pending":
     "You have several names waiting for payment. Finish or drop one first.",
   "domain.not_awaiting_payment":
     "That name isn't waiting for payment any more.",
   "domain.paid": "That name is already paid for.",
-  "domain.not_found":
-    "I can't find that purchase any more. Ask me to look again.",
   "domain.not_owner": "Only the business owner can buy a name.",
   "registrar.unavailable":
     "The domain registry isn't answering just now. Nothing was charged. Try again in a minute.",

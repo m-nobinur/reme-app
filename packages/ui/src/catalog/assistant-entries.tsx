@@ -36,6 +36,7 @@ import { ChangeAskedUI } from "@workspace/ui/components/assistant/change-asked"
 import { CosToolsProvider } from "@workspace/ui/components/assistant/cos-tools"
 import { ConnectGoogleRow } from "@workspace/ui/components/assistant/google"
 import { MemoryChipUI } from "@workspace/ui/components/assistant/memory-chip"
+import { PayDialog } from "@workspace/ui/components/assistant/pay-dialog"
 import { PersonaCardUI } from "@workspace/ui/components/assistant/persona-card"
 import { TrayFrame } from "@workspace/ui/components/assistant/question-tray"
 import { ServerButtonUI } from "@workspace/ui/components/assistant/server-button"
@@ -2314,6 +2315,39 @@ const READY = {
   onMakeChanges: noop,
 }
 
+/** The payment dialog behind its button, with test values. */
+function PayDialogSample() {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <Button onClick={() => setOpen(true)} variant="outline">
+        Pay £8
+      </Button>
+      {open ? (
+        <PayDialog
+          clientSecret="catalog"
+          name="sparkleclean.co.uk"
+          onClose={() => setOpen(false)}
+          onPaid={() => setOpen(false)}
+          priceGbp={8}
+          publishableKey="pk_test_catalog"
+          registrant={{
+            name: "Jo Bright",
+            email: "jo@sparkleclean.co.uk",
+            phone: "+447700900123",
+            address: {
+              street: "1 High Street",
+              city: "Bristol",
+              postal_code: "BS1 1AA",
+              country_code: "GB",
+            },
+          }}
+        />
+      ) : null}
+    </>
+  )
+}
+
 const assistantCatalog = [
   { name: "Collapsible", render: () => <CollapsibleSample /> },
   { name: "CollapsibleTrigger", render: () => <CollapsibleSample /> },
@@ -2722,6 +2756,9 @@ const assistantCatalog = [
       ),
     })
   ),
+  // Opened from its button: Stripe.js cannot start here, so the payment side
+  // shows its "did not load" line beside the order summary.
+  { name: "PayDialog", render: () => <PayDialogSample /> },
   {
     name: "DomainCheck",
     render: () => (

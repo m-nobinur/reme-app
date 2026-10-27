@@ -438,7 +438,7 @@ function SamplePanelLine() {
 
 const panelCatalog: Entry[] = [
   {
-    name: "NextSteps getting started",
+    name: "NextSteps",
     render: () => (
       <NextSteps>
         <a className={STEP} href="#getting-started" key="continue">
