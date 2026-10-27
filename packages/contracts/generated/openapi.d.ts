@@ -3171,69 +3171,131 @@ export interface components {
     BuildQuestionsPart: {
       /** @constant */
       type: "data-build_questions"
-      data: {
-        /** @enum {string} */
-        kind: "build" | "offer"
-        /** Format: uuid */
-        assignment_id: string
-        questions: {
-          /** Format: uuid */
-          id: string
-          text: string
-          input:
-            | {
-                /** @constant */
-                kind: "fact"
-                /** @enum {string} */
-                key:
-                  | "business.name"
-                  | "business.phone"
-                  | "business.email"
-                  | "hours.weekday"
-                  | "service_area.radius"
-                  | "business.tagline"
-                  | "business.offerings"
-                  | "business.audience"
-                  | "business.overview"
-                  | "business.proof"
-                  | "business.disclaimer"
-                  | "service_area.text"
-                  | "assistant.name"
-                  | "owner.preferred_name"
-              }
-            | {
-                /** @constant */
-                kind: "choice"
-                options: string[]
-              }
-            | {
-                /** @constant */
-                kind: "text"
-                maxLength: number
-                email: boolean
-              }
-          skippable: boolean
-          answer?:
-            | {
-                /** @constant */
-                kind: "value"
-                value:
-                  | string
-                  | {
-                      [key: string]: unknown
-                    }
-              }
-            | {
-                /** @constant */
-                kind: "skipped"
-              }
-            | {
-                /** @constant */
-                kind: "closed"
-              }
-          field?: string
-        }[]
-      }
+      data:
+        | {
+            /** @enum {string} */
+            kind: "build" | "offer"
+            /** Format: uuid */
+            assignment_id: string
+            questions: {
+              /** Format: uuid */
+              id: string
+              text: string
+              input:
+                | {
+                    /** @constant */
+                    kind: "fact"
+                    /** @enum {string} */
+                    key:
+                      | "business.name"
+                      | "business.phone"
+                      | "business.email"
+                      | "hours.weekday"
+                      | "service_area.radius"
+                      | "business.tagline"
+                      | "business.offerings"
+                      | "business.audience"
+                      | "business.overview"
+                      | "business.proof"
+                      | "business.disclaimer"
+                      | "service_area.text"
+                      | "assistant.name"
+                      | "owner.preferred_name"
+                  }
+                | {
+                    /** @constant */
+                    kind: "choice"
+                    options: string[]
+                  }
+                | {
+                    /** @constant */
+                    kind: "text"
+                    maxLength: number
+                    email: boolean
+                  }
+              skippable: boolean
+              answer?:
+                | {
+                    /** @constant */
+                    kind: "value"
+                    value:
+                      | string
+                      | {
+                          [key: string]: unknown
+                        }
+                  }
+                | {
+                    /** @constant */
+                    kind: "skipped"
+                  }
+                | {
+                    /** @constant */
+                    kind: "closed"
+                  }
+              field?: string
+            }[]
+          }
+        | {
+            /** @constant */
+            kind: "address"
+            questions: {
+              /** Format: uuid */
+              id: string
+              text: string
+              input:
+                | {
+                    /** @constant */
+                    kind: "fact"
+                    /** @enum {string} */
+                    key:
+                      | "business.name"
+                      | "business.phone"
+                      | "business.email"
+                      | "hours.weekday"
+                      | "service_area.radius"
+                      | "business.tagline"
+                      | "business.offerings"
+                      | "business.audience"
+                      | "business.overview"
+                      | "business.proof"
+                      | "business.disclaimer"
+                      | "service_area.text"
+                      | "assistant.name"
+                      | "owner.preferred_name"
+                  }
+                | {
+                    /** @constant */
+                    kind: "choice"
+                    options: string[]
+                  }
+                | {
+                    /** @constant */
+                    kind: "text"
+                    maxLength: number
+                    email: boolean
+                  }
+              skippable: boolean
+              answer?:
+                | {
+                    /** @constant */
+                    kind: "value"
+                    value:
+                      | string
+                      | {
+                          [key: string]: unknown
+                        }
+                  }
+                | {
+                    /** @constant */
+                    kind: "skipped"
+                  }
+                | {
+                    /** @constant */
+                    kind: "closed"
+                  }
+              field?: string
+            }[]
+          }
     }
     BuildSummary: {
       /** Format: uuid */
@@ -10871,69 +10933,131 @@ export interface components {
               url: string
             }
       }
-      questions?: {
-        /** @enum {string} */
-        kind: "build" | "offer"
-        /** Format: uuid */
-        assignment_id: string
-        questions: {
-          /** Format: uuid */
-          id: string
-          text: string
-          input:
-            | {
-                /** @constant */
-                kind: "fact"
-                /** @enum {string} */
-                key:
-                  | "business.name"
-                  | "business.phone"
-                  | "business.email"
-                  | "hours.weekday"
-                  | "service_area.radius"
-                  | "business.tagline"
-                  | "business.offerings"
-                  | "business.audience"
-                  | "business.overview"
-                  | "business.proof"
-                  | "business.disclaimer"
-                  | "service_area.text"
-                  | "assistant.name"
-                  | "owner.preferred_name"
-              }
-            | {
-                /** @constant */
-                kind: "choice"
-                options: string[]
-              }
-            | {
-                /** @constant */
-                kind: "text"
-                maxLength: number
-                email: boolean
-              }
-          skippable: boolean
-          answer?:
-            | {
-                /** @constant */
-                kind: "value"
-                value:
-                  | string
-                  | {
-                      [key: string]: unknown
-                    }
-              }
-            | {
-                /** @constant */
-                kind: "skipped"
-              }
-            | {
-                /** @constant */
-                kind: "closed"
-              }
-          field?: string
-        }[]
-      }
+      questions?:
+        | {
+            /** @enum {string} */
+            kind: "build" | "offer"
+            /** Format: uuid */
+            assignment_id: string
+            questions: {
+              /** Format: uuid */
+              id: string
+              text: string
+              input:
+                | {
+                    /** @constant */
+                    kind: "fact"
+                    /** @enum {string} */
+                    key:
+                      | "business.name"
+                      | "business.phone"
+                      | "business.email"
+                      | "hours.weekday"
+                      | "service_area.radius"
+                      | "business.tagline"
+                      | "business.offerings"
+                      | "business.audience"
+                      | "business.overview"
+                      | "business.proof"
+                      | "business.disclaimer"
+                      | "service_area.text"
+                      | "assistant.name"
+                      | "owner.preferred_name"
+                  }
+                | {
+                    /** @constant */
+                    kind: "choice"
+                    options: string[]
+                  }
+                | {
+                    /** @constant */
+                    kind: "text"
+                    maxLength: number
+                    email: boolean
+                  }
+              skippable: boolean
+              answer?:
+                | {
+                    /** @constant */
+                    kind: "value"
+                    value:
+                      | string
+                      | {
+                          [key: string]: unknown
+                        }
+                  }
+                | {
+                    /** @constant */
+                    kind: "skipped"
+                  }
+                | {
+                    /** @constant */
+                    kind: "closed"
+                  }
+              field?: string
+            }[]
+          }
+        | {
+            /** @constant */
+            kind: "address"
+            questions: {
+              /** Format: uuid */
+              id: string
+              text: string
+              input:
+                | {
+                    /** @constant */
+                    kind: "fact"
+                    /** @enum {string} */
+                    key:
+                      | "business.name"
+                      | "business.phone"
+                      | "business.email"
+                      | "hours.weekday"
+                      | "service_area.radius"
+                      | "business.tagline"
+                      | "business.offerings"
+                      | "business.audience"
+                      | "business.overview"
+                      | "business.proof"
+                      | "business.disclaimer"
+                      | "service_area.text"
+                      | "assistant.name"
+                      | "owner.preferred_name"
+                  }
+                | {
+                    /** @constant */
+                    kind: "choice"
+                    options: string[]
+                  }
+                | {
+                    /** @constant */
+                    kind: "text"
+                    maxLength: number
+                    email: boolean
+                  }
+              skippable: boolean
+              answer?:
+                | {
+                    /** @constant */
+                    kind: "value"
+                    value:
+                      | string
+                      | {
+                          [key: string]: unknown
+                        }
+                  }
+                | {
+                    /** @constant */
+                    kind: "skipped"
+                  }
+                | {
+                    /** @constant */
+                    kind: "closed"
+                  }
+              field?: string
+            }[]
+          }
     }
     SetFactsRequest: {
       facts: (

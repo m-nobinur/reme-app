@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
+  ADDRESS_ASK,
+  addressReply,
   BUY_REFUSALS,
   BuyDomainAsk,
   BuyDomainInput,
@@ -14,6 +16,7 @@ import {
   DomainRegistration,
   DomainTld,
   ErrorEnvelope,
+  ownDomain,
   RemoveDomainOutput,
   ServerButtonPart,
   ServerMessage,
@@ -358,5 +361,35 @@ describe("DomainRegistration", () => {
 describe("BUY_REFUSALS", () => {
   it.each(Object.values(BUY_REFUSALS))("$code is an envelope code", (r) => {
     expect(ErrorEnvelope.shape.code.safeParse(r.code).success).toBe(true)
+  })
+})
+
+describe("ownDomain", () => {
+  it.each([
+    ["Hello@NorthsideGrooming.co.uk", "northsidegrooming.co.uk"],
+    ["jo@mail.brightclean.com", "mail.brightclean.com"],
+  ])("takes the own domain of %s", (email, domain) => {
+    expect(ownDomain(email)).toBe(domain)
+  })
+
+  it.each(["jo@gmail.com", "jo@Hotmail.co.uk", "jo@btinternet.com", "nobody"])(
+    "takes none from %s",
+    (email) => {
+      expect(ownDomain(email)).toBeNull()
+    }
+  )
+})
+
+describe("addressReply", () => {
+  it("speaks for Yes with and without a name, and for No", () => {
+    expect(addressReply(ADDRESS_ASK.yes, "sparkle.co.uk")).toBe(
+      "Yes, it's sparkle.co.uk"
+    )
+    expect(addressReply(ADDRESS_ASK.yes)).toBe("Yes, I have a web address")
+    expect(addressReply(ADDRESS_ASK.no)).toBe(ADDRESS_ASK.no)
+  })
+
+  it("says nothing for Not now", () => {
+    expect(addressReply(ADDRESS_ASK.later)).toBeNull()
   })
 })
