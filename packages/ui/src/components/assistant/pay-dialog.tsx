@@ -62,16 +62,18 @@ export function PayDialog({
       }}
       open
     >
-      <DialogContent className="gap-0 p-0 sm:max-w-3xl md:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+      <DialogContent className="gap-0 p-0 sm:max-w-4xl md:grid-cols-[16rem_minmax(0,1fr)]">
         <OrderSummary name={name} priceGbp={priceGbp} today={today} />
-        <section className="flex flex-col gap-5 p-6">
+        <section className="flex flex-col gap-4 p-6">
           <DialogHeader>
             <DialogTitle>Payment details</DialogTitle>
           </DialogHeader>
           <PaymentForm
             clientSecret={clientSecret}
+            name={name}
             onPaid={onPaid}
             onTotal={setTotal}
+            priceGbp={priceGbp}
             publishableKey={publishableKey}
             registrant={registrant}
             today={today}
@@ -102,7 +104,7 @@ function OrderSummary({
   return (
     <aside
       aria-label="Your order"
-      className="flex flex-col gap-4 bg-rail p-6 text-rail-foreground"
+      className="flex flex-col gap-4 bg-rail px-6 py-4 text-rail-foreground md:p-5"
     >
       <button
         aria-controls={id}
@@ -125,14 +127,14 @@ function OrderSummary({
         </span>
       </button>
       <div
-        className={cn("flex-col gap-6", open ? "flex" : "hidden md:flex")}
+        className={cn("flex-col gap-5", open ? "flex" : "hidden md:flex")}
         id={id}
       >
         <h2 className="hidden font-heading font-medium text-base leading-none md:block">
           Your order
         </h2>
-        <div className="flex flex-col gap-4">
-          <dl className="flex flex-col gap-2">
+        <div className="flex flex-col gap-3">
+          <dl className="flex flex-col gap-1.5">
             <div className="flex justify-between gap-4">
               <dt className="text-muted-foreground">Domain</dt>
               <dd className="min-w-0 break-all text-end font-medium">{name}</dd>
@@ -143,10 +145,10 @@ function OrderSummary({
             </div>
           </dl>
           <hr className="border-border" />
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-0.5">
             <p className="flex items-baseline justify-between gap-4">
               <span className="font-medium">Today's total</span>
-              <span className="font-semibold text-lg text-primary tabular-nums">
+              <span className="font-semibold text-base text-primary tabular-nums">
                 {today}
               </span>
             </p>
@@ -155,11 +157,11 @@ function OrderSummary({
             </p>
           </div>
         </div>
-        <section className="flex flex-col gap-3">
+        <section className="flex flex-col gap-2.5">
           <h3 className="font-medium">What happens next</h3>
           <ol>
             {NEXT.map(([when, what], index) => (
-              <li className="relative flex gap-3 pb-4 last:pb-0" key={when}>
+              <li className="relative flex gap-3 pb-3 last:pb-0" key={when}>
                 {index < NEXT.length - 1 ? (
                   <span
                     aria-hidden
@@ -206,6 +208,8 @@ function PaymentForm({
   publishableKey,
   clientSecret,
   registrant,
+  name,
+  priceGbp,
   today,
   onTotal,
   onPaid,
@@ -213,6 +217,8 @@ function PaymentForm({
   publishableKey: string
   clientSecret: string
   registrant: Registrant
+  name: string
+  priceGbp: number
   today: string
   onTotal: (total: string) => void
   onPaid: () => void
@@ -281,9 +287,13 @@ function PaymentForm({
         )
         // The name and address are the registrant's, sent on confirm, and
         // Stripe refuses a confirm that sends a field the form also asks
-        // for, so the card form asks for the card alone.
+        // for, so the card form asks for the card alone. Link is the button
+        // above, so its sign-up is not repeated inside the card form, and
+        // Stripe's card mandate gives way to the renewal line under Pay.
         const payment = checkout.createPaymentElement({
           fields: { billingDetails: { name: "never", address: "never" } },
+          wallets: { link: "never" },
+          terms: { card: "never" },
         })
         payment.on("loaderror", () => live && setState("failed"))
         mounted.push(express, payment)
@@ -341,9 +351,9 @@ function PaymentForm({
         </p>
       ) : null}
       <div className="min-h-40" data-slot="domain-card" ref={card} />
-      {/* Pinned to the dialog's foot, so Stripe's form (Link's sign-up,
-          a 3D Secure note) can grow without pushing Pay out of sight. */}
-      <div className="sticky bottom-0 -mx-6 -mb-6 flex flex-col gap-2 border-border border-t bg-popover px-6 pt-4 pb-6">
+      {/* Pinned to the dialog's foot, so anything Stripe adds to its form
+          (a 3D Secure note, another payment method) leaves Pay in sight. */}
+      <div className="sticky bottom-0 -mx-6 -mb-6 flex flex-col gap-2 border-border border-t bg-popover px-6 pt-4 pb-5">
         <SubmitButton
           pending={state !== "ready"}
           pendingLabel={state === "paying" ? "Paying" : "Loading"}
@@ -355,9 +365,14 @@ function PaymentForm({
             <Problem text={error} />
           </div>
         ) : null}
-        <p className={cn(META, "flex items-center justify-center gap-1.5")}>
-          <LockSimpleIcon aria-hidden className="size-3.5" />
-          Paid securely through Stripe. We never see your card number.
+        {/* The consent the saved card needs for the yearly renewal, in place
+            of Stripe's longer card mandate. */}
+        <p className={cn(META, "flex gap-1.5")}>
+          <LockSimpleIcon aria-hidden className="mt-0.5 size-3.5 shrink-0" />
+          <span>
+            Paid securely through Stripe. By paying you let Reme charge this
+            card £{priceGbp} a year to renew {name} until you cancel.
+          </span>
         </p>
       </div>
     </form>
