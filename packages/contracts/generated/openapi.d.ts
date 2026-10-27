@@ -5318,6 +5318,7 @@ export interface components {
         | "get_indexing"
         | "remember"
         | "put_off"
+        | "inspect_domain"
       )[]
       text: string
       reserved_usd: number
@@ -5719,6 +5720,7 @@ export interface components {
           | "get_indexing"
           | "remember"
           | "put_off"
+          | "inspect_domain"
         description: string
         input_schema: {
           [key: string]: unknown
@@ -7678,6 +7680,43 @@ export interface components {
                 }
               }
         }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "inspect_domain"
+          output:
+            | {
+                /** @constant */
+                outcome: "inspected"
+                name: string
+                registered: boolean
+                registrar?: string
+                dns_host?: {
+                  name: string
+                  settings_url?: string
+                }
+                in_use: boolean
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                }
+              }
+        }
     CosToolStarted: {
       tool_call_id: string
       approval_id: string
@@ -7716,6 +7755,7 @@ export interface components {
             | "get_indexing"
             | "remember"
             | "put_off"
+            | "inspect_domain"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -7751,6 +7791,7 @@ export interface components {
             | "get_indexing"
             | "remember"
             | "put_off"
+            | "inspect_domain"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -7784,6 +7825,7 @@ export interface components {
             | "get_indexing"
             | "remember"
             | "put_off"
+            | "inspect_domain"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -7817,6 +7859,7 @@ export interface components {
             | "get_indexing"
             | "remember"
             | "put_off"
+            | "inspect_domain"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -7850,6 +7893,7 @@ export interface components {
             | "get_indexing"
             | "remember"
             | "put_off"
+            | "inspect_domain"
           )[]
           steps: number
           first_chunk_ms: number | null
@@ -9382,6 +9426,40 @@ export interface components {
       requested_at: string
       expires_at: string | null
     }
+    InspectDomainInput: {
+      name: string
+    }
+    InspectDomainOutput:
+      | {
+          /** @constant */
+          outcome: "inspected"
+          name: string
+          registered: boolean
+          registrar?: string
+          dns_host?: {
+            name: string
+            settings_url?: string
+          }
+          in_use: boolean
+        }
+      | {
+          /** @constant */
+          outcome: "refused"
+          error: {
+            /** @enum {string} */
+            class:
+              | "validation"
+              | "permission"
+              | "transient"
+              | "resource"
+              | "provider"
+              | "integrity"
+              | "security"
+              | "budgetary"
+            code: string
+            message: string
+          }
+        }
     JobRun: {
       /** Format: uuid */
       job_id: string

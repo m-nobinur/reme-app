@@ -1141,6 +1141,15 @@ export const samples: Record<ContractName, unknown> = {
     source: "owner_said",
     at: NOW,
   },
+  InspectDomainInput: { name: "sparkleclean.co.uk" },
+  InspectDomainOutput: {
+    outcome: "inspected",
+    name: "sparkleclean.co.uk",
+    registered: true,
+    registrar: "123-reg",
+    dns_host: { name: "GoDaddy", settings_url: "https://dcc.godaddy.com/" },
+    in_use: false,
+  },
   PutOffInput: { kind: "google", days: 7 },
   PutOffOutput: { outcome: "put_off", until: "2026-11-03T08:00:00.000Z" },
   RememberInput: {

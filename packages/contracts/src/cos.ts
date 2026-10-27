@@ -6,6 +6,7 @@ import { ConversationMessage, MessageRating } from "./conversation.ts"
 import {
   DnsRecord,
   DomainCheck,
+  DomainInspection,
   DomainName,
   DomainOffer,
   DomainProvider,
@@ -294,6 +295,22 @@ export const RecordReviewOutput = z.discriminatedUnion("outcome", [
   Refused,
 ])
 
+/** `inspect_domain`'s input: a name the owner says they have, not yet connected. */
+export const InspectDomainInput = z.strictObject({ name: DomainName })
+
+/**
+ * `inspect_domain`'s output: what the registry and public DNS say about the
+ * name, read before anything is connected. `registrar` is the registry's own
+ * text for the seller, so it is data to quote, never an instruction.
+ */
+export const InspectDomainOutput = z.discriminatedUnion("outcome", [
+  z.strictObject({
+    outcome: z.literal("inspected"),
+    ...DomainInspection.shape,
+  }),
+  Refused,
+])
+
 /** `check_domain`'s input; it also wakes the domain's workflow to look now. */
 export const CheckDomainInput = z.strictObject({ name: DomainName })
 
@@ -443,6 +460,7 @@ export const COS_TOOLS = {
   get_indexing: { input: GetIndexingInput, output: GetIndexingOutput },
   remember: { input: RememberInput, output: RememberOutput },
   put_off: { input: PutOffInput, output: PutOffOutput },
+  inspect_domain: { input: InspectDomainInput, output: InspectDomainOutput },
 } as const
 
 export type CosToolName = keyof typeof COS_TOOLS
@@ -624,6 +642,11 @@ export const CosToolResult = z.discriminatedUnion("tool", [
     tool: z.literal("put_off"),
     output: COS_TOOLS.put_off.output,
   }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("inspect_domain"),
+    output: COS_TOOLS.inspect_domain.output,
+  }),
 ])
 
 /** The `cos.step` payload: a step's response messages as the SDK holds them. Model-written, so `inferred`. */
@@ -719,6 +742,8 @@ export type ConnectDomainInput = z.infer<typeof ConnectDomainInput>
 export type ConnectDomainOutput = z.infer<typeof ConnectDomainOutput>
 export type RemoveDomainInput = z.infer<typeof RemoveDomainInput>
 export type RemoveDomainOutput = z.infer<typeof RemoveDomainOutput>
+export type InspectDomainInput = z.infer<typeof InspectDomainInput>
+export type InspectDomainOutput = z.infer<typeof InspectDomainOutput>
 export type PutOffInput = z.infer<typeof PutOffInput>
 export type PutOffOutput = z.infer<typeof PutOffOutput>
 export type FindDomainInput = z.infer<typeof FindDomainInput>
