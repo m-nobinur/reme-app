@@ -6,7 +6,8 @@ import {
   syncTasks,
   type Tenancy,
 } from "@workspace/db"
-import { searchInstanceId, startSearch } from "./search.ts"
+import { removeSite } from "./google.ts"
+import { accessToken, searchInstanceId, startSearch } from "./search.ts"
 
 /**
  * A domain going live starts the Search Console workflow for its new primary
@@ -49,11 +50,11 @@ export async function startSearchForDomain(
 
 /**
  * A domain serving the site replaces `oldHost`, the free host Google may
- * already hold a property for. With Google connected, that property is
- * forgotten in our records only: its Workflow stopped and its rows gone, so
- * nothing syncs it again. Nothing is done at Google, and the verification
- * file stays served, so the owner's property there is left as it is. The new
- * host's own Workflow was started when the domain activated.
+ * already hold a property for. With Google connected, that property is let
+ * go: its Workflow stopped, taken out of the owner's Search Console when Reme
+ * verified and added it there, and its rows gone, so nothing syncs it again.
+ * A property Reme never added at Google is not touched there. The new host's
+ * own Workflow was started when the domain activated.
  *
  * Returns what to tell the owner: null when Google is not connected,
  * `added` when the new host went to Google, `moved` when an old property was
@@ -71,18 +72,36 @@ export async function moveGoogle(
         .select({ state: searchConnections.state })
         .from(searchConnections)
       if (connection?.state !== "active") return null
-      const rows = await db
-        .select({ id: searchProperties.id })
+      return db
+        .select({
+          siteUrl: searchProperties.siteUrl,
+          state: searchProperties.state,
+        })
         .from(searchProperties)
         .where(eq(searchProperties.host, oldHost))
-      return rows.length > 0
     })
     if (held === null) return null
-    if (!held) return "added"
+    if (held.length === 0) return "added"
     await env.SEARCHES.get(searchInstanceId(orgId, oldHost))
       .then((running) => running.terminate())
       // None, or one already settled.
       .catch(() => undefined)
+    // Only `verified` proves Reme's `add` step put it in the owner's list.
+    const added = held.filter((p) => p.state === "verified")
+    if (added.length > 0) {
+      try {
+        const access = await accessToken(env, kit, orgId)
+        for (const { siteUrl } of added) await removeSite(access, siteUrl)
+      } catch (error) {
+        // Left in the owner's Search Console; the move goes on.
+        console.warn(
+          JSON.stringify({
+            code: "search.unlist_failed",
+            reason: error instanceof Error ? error.name : "unknown",
+          })
+        )
+      }
+    }
     await kit.withOrg({ orgId }, async (db) => {
       await db
         .delete(searchProperties)
