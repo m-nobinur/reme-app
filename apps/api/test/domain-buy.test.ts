@@ -70,6 +70,7 @@ function stubStripe(
           status: "open",
           client_secret: "cs_secret1",
           expires_at: Math.floor(Date.now() / 1000) + 31 * 60,
+          ui_mode: "elements",
         })
 ) {
   const jwks = stubJwksFetch()
@@ -238,6 +239,7 @@ describe.skipIf(!url)("buying a domain, on a live connection", () => {
         status: "open",
         client_secret: "cs_secret2",
         expires_at: Math.floor(Date.now() / 1000) + 600,
+        ui_mode: "elements",
       })
     )
     const stub = told()
@@ -254,6 +256,50 @@ describe.skipIf(!url)("buying a domain, on a live connection", () => {
       session_id: "cs_test_open",
       customer: "cus_kept",
     })
+  })
+
+  it("replaces an open embedded_page session, expiring it only once the orchestrator holds the new one", async () => {
+    const name = unique("embedded")
+    await purchase(me, name, {
+      stripe: { customer: "cus_kept", checkout_session: "cs_test_old" },
+    })
+    const stub = told()
+    let toldBeforeExpire = -1
+    const later = Math.floor(Date.now() / 1000) + 600
+    const stripe = stubStripe(({ method, path }) => {
+      if (path.endsWith("/expire")) {
+        toldBeforeExpire = stub.calls.length
+        return Response.json({ id: "cs_test_old", status: "expired" })
+      }
+      return method === "GET"
+        ? Response.json({
+            id: "cs_test_old",
+            status: "open",
+            client_secret: "cs_old",
+            expires_at: later,
+            ui_mode: "embedded_page",
+          })
+        : Response.json({
+            id: "cs_test_new",
+            status: "open",
+            client_secret: "cs_new",
+            expires_at: later,
+            ui_mode: "elements",
+          })
+    })
+    const response = await checkout(me, stub, name)
+    expect(response.status).toBe(200)
+    expect(DomainCheckout.parse(await response.json()).client_secret).toBe(
+      "cs_new"
+    )
+    expect(stripe.map((a) => [a.method, a.path])).toEqual([
+      ["GET", "checkout/sessions/cs_test_old"],
+      ["POST", "checkout/sessions"],
+      ["POST", "checkout/sessions/cs_test_old/expire"],
+    ])
+    expect(stub.calls[1]?.body).toMatchObject({ session_id: "cs_test_new" })
+    // The old session's expiry webhook then names a session not held.
+    expect(toldBeforeExpire).toBe(2)
   })
 
   it("refuses without the Stripe keys, for a member who is not the owner, and for another org's purchase", async () => {
