@@ -234,7 +234,7 @@ export function SiteReady({
       {inTray ? (
         // One item of the tray's stack; the owner already moved on, so it
         // asks nothing where it stood.
-        <Docked name="site-ready-tray" settled>
+        <Docked name="site-ready-tray" settled standing>
           <div ref={setTraySpot} />
         </Docked>
       ) : (

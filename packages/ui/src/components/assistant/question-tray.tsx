@@ -137,7 +137,7 @@ export function ShowFoldedQuestion({ className }: { className?: string }) {
  * hidden, so what was typed into them is kept. Kept by the tray's slot, so
  * two threads on a page each have their own.
  */
-type Stacked = { key: string; mark: Element }
+type Stacked = { key: string; mark: Element; standing: boolean }
 type Stack = { items: Stacked[]; shown: string | null }
 const EMPTY: Stack = { items: [], shown: null }
 const stacks = new WeakMap<Element, Stack>()
@@ -152,16 +152,22 @@ const watchStack = (watch: () => void) => {
     stackWatchers.delete(watch)
   }
 }
+// A standing card (the website-ready one, drawn after the transcript) sorts
+// before every item a message docked, so the newest of those shows first.
 const earlier = (a: Stacked, b: Stacked) =>
-  a.mark.compareDocumentPosition(b.mark) & Node.DOCUMENT_POSITION_FOLLOWING
-    ? -1
-    : 1
+  a.standing !== b.standing
+    ? a.standing
+      ? -1
+      : 1
+    : a.mark.compareDocumentPosition(b.mark) & Node.DOCUMENT_POSITION_FOLLOWING
+      ? -1
+      : 1
 
 /** Puts an item in its tray's stack and shows the newest; the return takes it out. */
-function enlist(slot: Element, key: string, mark: Element) {
+function enlist(slot: Element, key: string, mark: Element, standing: boolean) {
   const items = [
     ...(stacks.get(slot) ?? EMPTY).items.filter((each) => each.key !== key),
-    { key, mark },
+    { key, mark, standing },
   ].sort(earlier)
   setStack(slot, { items, shown: items.at(-1)?.key ?? null })
   return () => {
@@ -238,9 +244,12 @@ function Docked({
   name,
   many = false,
   settled = false,
+  standing = false,
   children,
 }: {
   name: string
+  /** Drawn outside the transcript, so it never counts as the newest. */
+  standing?: boolean
   /** The tray asks more than one question. */
   many?: boolean
   /**
@@ -264,8 +273,8 @@ function Docked({
   const steps = useStacked(slot, key)
   useLayoutEffect(() => {
     if (!slot || away || !mark.current) return
-    return enlist(slot, key, mark.current)
-  }, [slot, away, key])
+    return enlist(slot, key, mark.current, standing)
+  }, [slot, away, key, standing])
   useFocusWhenIdle(!settled && steps.shown, running, ref)
   if (!slot) return null
   return (

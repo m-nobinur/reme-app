@@ -5,7 +5,10 @@ import {
   useExternalStoreRuntime,
 } from "@assistant-ui/react"
 import { TrayApproval } from "@workspace/ui/components/assistant/decision"
-import { TraySlotProvider } from "@workspace/ui/components/assistant/question-tray"
+import {
+  Docked,
+  TraySlotProvider,
+} from "@workspace/ui/components/assistant/question-tray"
 import { act, createElement } from "react"
 import { createRoot } from "react-dom/client"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
@@ -104,4 +107,55 @@ it("shows the newest item first and steps to the older one", async () => {
 
   await act(async () => root.unmount())
   expect(slot.childElementCount).toBe(0)
+})
+
+it("shows a message's item before a standing card drawn after the transcript", async () => {
+  const chat = document.createElement("div")
+  const slot = document.createElement("div")
+  document.body.appendChild(chat)
+  document.body.appendChild(slot)
+  function Both() {
+    const runtime = useExternalStoreRuntime({
+      messages: [] as ThreadMessageLike[],
+      convertMessage: (message: ThreadMessageLike) => message,
+      onNew: async () => undefined,
+    })
+    return createElement(
+      AssistantRuntimeProvider,
+      { runtime },
+      createElement(TraySlotProvider, { value: slot }, [
+        createElement(
+          TrayApproval,
+          {
+            key: "ask",
+            name: "approval",
+            no: { label: "Not now", onNo: () => undefined },
+            title: "Choose a name",
+            yes: { label: "Approve", onYes: () => undefined },
+          } as never,
+          createElement("p", null, "rows")
+        ),
+        // The website-ready card is drawn after the messages but is older.
+        createElement(
+          Docked,
+          {
+            key: "ready",
+            name: "site-ready-tray",
+            settled: true,
+            standing: true,
+          },
+          createElement("p", null, "Publish")
+        ),
+      ])
+    )
+  }
+  const root = createRoot(chat)
+  await act(async () => root.render(createElement(Both)))
+  const visible = (name: string) =>
+    slot.querySelector<HTMLElement>(`[data-slot="${name}"]`)?.style.display !==
+    "none"
+  expect(visible("approval")).toBe(true)
+  expect(visible("site-ready-tray")).toBe(false)
+  expect(slot.textContent).toContain("1 of 2")
+  await act(async () => root.unmount())
 })
