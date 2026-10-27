@@ -47,7 +47,7 @@ it("lists a live site with its own domain and Google, with each next action", ()
   const rows = checklistFor(
     workspace([
       seg("golive", "done"),
-      seg("domain", "done", { id: "d", names: { domain: "spark.co.uk" } }),
+      seg("address", "done", { id: "d", names: { domain: "spark.co.uk" } }),
       seg("google", "done", { synced_at: "2026-10-22T09:30:00.000Z" }),
     ]),
     ZONE,
@@ -62,6 +62,45 @@ it("lists a live site with its own domain and Google, with each next action", ()
   expect(rows[2]?.title).toBe("spark.co.uk")
 })
 
+it("shows Google's clicks and appearances for the last 28 days once it has sent some", () => {
+  const rows = checklistFor(
+    workspace([
+      seg("golive", "done"),
+      seg("google", "done", {
+        synced_at: "2026-10-22T09:30:00.000Z",
+        numbers: { clicks: 1, impressions: 340 },
+      }),
+    ]),
+    ZONE,
+    NOW
+  )
+  expect(summary(rows).at(-1)).toBe(
+    "google|done|1 click and 340 appearances on Google in the last 28 days. Data read today, 10:30 am|-"
+  )
+})
+
+it("treats a task nothing has begun as no row, and offers it", () => {
+  const unbegun = (kind: "address" | "google") =>
+    seg(kind, "upcoming", { steps: [{ id: "find_out", state: "next" }] })
+  expect(
+    summary(
+      checklistFor(
+        workspace([
+          seg("golive", "done"),
+          unbegun("address"),
+          unbegun("google"),
+        ]),
+        ZONE,
+        NOW
+      )
+    )
+  ).toEqual([
+    "published|done|Published today, 12:00 pm|Visit your website",
+    "address|done|spark.example.com|Use your own domain",
+    "google|next|Not connected|Connect Google",
+  ])
+})
+
 it("offers a domain and Google when the site has neither", () => {
   expect(
     summary(checklistFor(workspace([seg("golive", "done")]), ZONE, NOW))
@@ -72,38 +111,34 @@ it("offers a domain and Google when the site has neither", () => {
   ])
 })
 
-it("shows a domain waiting on the owner, a purchase with its renewal and Google signing in", () => {
-  const rows = checklistFor(
-    workspace([
-      seg("golive", "done"),
-      seg("domain", "waiting", { id: "a", names: { domain: "a.co.uk" } }),
-      seg("purchase", "done", { id: "b", names: { domain: "b.co.uk" } }),
+it("shows an address waiting on the owner, a bought one with its renewal, and Google signing in", () => {
+  const waiting = (step: string) =>
+    seg("address", "waiting", {
+      id: "a",
+      names: { domain: "a.co.uk" },
+      steps: [{ id: step, state: "waiting" }],
+    })
+  const rows = (...segments: ActivitySegment[]) =>
+    summary(
+      checklistFor(workspace([seg("golive", "done"), ...segments]), ZONE, NOW)
+    ).slice(2)
+  expect(rows(waiting("records"), seg("google", "waiting"))).toEqual([
+    "a|waiting|Waiting for your DNS change|Show the change",
+    "google|waiting|Waiting for you to sign in|Sign in again",
+  ])
+  expect(rows(waiting("purchase"))[0]).toBe(
+    "a|waiting|Waiting for your payment|Continue to payment"
+  )
+  expect(
+    rows(
+      seg("address", "done", { id: "b", names: { domain: "b.co.uk" } }),
       seg("purchase", "upcoming", {
         id: "renewal",
         at: "2027-10-01T00:00:00.000Z",
         names: { domain: "b.co.uk" },
-      }),
-      seg("google", "waiting"),
-    ]),
-    ZONE,
-    NOW
-  )
-  expect(summary(rows).slice(2)).toEqual([
-    "a|waiting|Waiting for your DNS change|Show the change",
-    "b|done|Renews 1 October 2027|-",
-    "google|waiting|Waiting for you to sign in|Sign in again",
-  ])
-})
-
-it("marks a stopped job and asks what happened", () => {
-  const rows = checklistFor(
-    workspace([seg("golive", "done"), seg("google", "failed")]),
-    ZONE,
-    NOW
-  )
-  expect(summary(rows).at(-1)).toBe(
-    "google|failed|The Google connection stopped. Ask Ellie to try again|Ask what happened"
-  )
+      })
+    )[0]
+  ).toBe("b|done|Live. Renews 1 October 2027|-")
 })
 
 it("sends the owner to the approval before the first publish, and waits on go-live otherwise", () => {

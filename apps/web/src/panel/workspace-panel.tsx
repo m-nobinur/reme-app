@@ -1,5 +1,6 @@
 import {
   ArrowSquareOutIcon,
+  ChatCircleDotsIcon,
   ChatCircleTextIcon,
   CheckCircleIcon,
   PulseIcon,
@@ -36,6 +37,7 @@ import {
   StageDetail,
   StopBuild,
   type Thumbnail,
+  UpNext,
   WaitingOnYou,
   YourWebsite,
 } from "@workspace/ui/components/live-panel"
@@ -624,6 +626,9 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
       ) : null}
     </Segment>
   )
+  // The first run's segment waits on the owner (the publish review) or is at work.
+  const held = panel.journey.filter((each) => each.state === "waiting")
+  const going = panel.journey.filter((each) => each.state !== "waiting")
   const row = (each: SegmentView) => (
     <div className="py-3" key={each.id}>
       {segment(each)}
@@ -631,17 +636,16 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
   )
   const activity = (
     <>
-      {/* The first run, then every question and approval, never behind
-          "Show more": links and the pill focus them by their anchors. */}
+      {/* What waits on the owner comes first: the first run's publish
+          review, every question and approval, then the jobs blocked on them.
+          The first three kinds never sit behind "Show more": links and the
+          pill focus them by their anchors. */}
       <WaitingOnYou
-        error={stale}
-        icon={PulseIcon}
-        limit={Math.max(SHOWN.now, panel.journey.length + panel.waiting.length)}
-        onRetry={refresh}
+        icon={ChatCircleDotsIcon}
+        limit={Math.max(SHOWN.now, held.length + panel.waiting.length)}
         status={status}
-        title="Now"
       >
-        {panel.journey.map(row)}
+        {held.map(row)}
         {panel.waiting.map((item) =>
           item.kind === "approval" ? (
             <div
@@ -663,8 +667,31 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
             </div>
           ) : null
         )}
-        {[...panel.now, ...panel.blocked].map(row)}
+        {panel.blocked.map(row)}
       </WaitingOnYou>
+      <WaitingOnYou
+        error={stale}
+        icon={PulseIcon}
+        limit={SHOWN.now}
+        onRetry={refresh}
+        title="Now"
+      >
+        {[...going, ...panel.now].map(row)}
+      </WaitingOnYou>
+      {panel.upNext ? (
+        <UpNext text={panel.upNext.text}>
+          <Link
+            className={NEXT_STEP}
+            state={() => ({
+              chat: crypto.randomUUID(),
+              ask: panel.upNext?.ask,
+            })}
+            to="/app"
+          >
+            {panel.upNext.label}
+          </Link>
+        </UpNext>
+      ) : null}
       <ComingUp
         action={
           panel.upcoming.length > SHOWN.upcoming ? (

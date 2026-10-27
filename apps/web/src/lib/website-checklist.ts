@@ -1,6 +1,7 @@
 import type { ActivitySegment } from "@workspace/contracts"
 import {
   type CopyContext,
+  notStarted,
   PAGE_WORDS,
   type PageActionKey,
   pageAction,
@@ -49,23 +50,18 @@ const asked = (key: PageActionKey, subject?: string | null): RowAction => ({
   ...pageAction(key, subject),
 })
 
-/** The action a domain, purchase or Google segment offers where it stands. */
+/** The action an address or Google task offers, by the step that waits on the owner. */
 function nextAction(
   segment: ActivitySegment,
   subject: string | null
 ): RowAction | null {
-  if (segment.state === "failed") return asked("failed", subject)
   if (segment.state !== "waiting") return null
-  switch (segment.kind) {
-    case "domain":
-      return asked("dns", subject)
-    case "purchase":
-      return asked("pay", subject)
-    case "google":
-      return asked("signin")
-    default:
-      return null
-  }
+  if (segment.kind === "google") return asked("signin")
+  const step = segment.steps.find((s) => s.state === "waiting")?.id
+  if (step === "purchase") return asked("pay", subject)
+  return step === "records" || step === "ownership"
+    ? asked("dns", subject)
+    : null
 }
 
 export function checklistFor(
@@ -129,11 +125,8 @@ export function checklistFor(
     })
   }
 
-  const domains =
-    standing?.filter(
-      (s) =>
-        (s.kind === "domain" || s.kind === "purchase") && s.state !== "upcoming"
-    ) ?? []
+  // A task nothing has begun is no row yet: the address offers its own start.
+  const address = standing?.find((s) => s.kind === "address" && !notStarted(s))
   if (workspace.host) {
     rows.push({
       id: "address",
@@ -141,11 +134,11 @@ export function checklistFor(
       line: workspace.host,
       mark: "done",
       status: "domain",
-      action: standing && !domains.length ? asked("own") : null,
+      action: standing && !address ? asked("own") : null,
     })
   }
-  for (const segment of domains) {
-    const name = segment.names?.domain ?? null
+  if (address) {
+    const name = address.names?.domain ?? null
     const renewal = standing?.find(
       (s) =>
         s.kind === "purchase" &&
@@ -153,22 +146,22 @@ export function checklistFor(
         s.names?.domain === name
     )
     rows.push({
-      id: segment.id,
+      id: address.id,
       title: name ?? "Your domain",
-      line: standingLine(segment, ctx, {
+      line: standingLine(address, ctx, {
         renews: renewal && day(renewal.at),
-        until: segment.deadline && when(segment.deadline),
+        until: address.deadline && when(address.deadline),
       }),
-      mark: MARK[segment.state],
-      status: segmentKind(segment),
-      action: nextAction(segment, name),
+      mark: MARK[address.state],
+      status: segmentKind(address),
+      action: nextAction(address, name),
     })
   }
 
   // Without the standing group (an older api) Google's state is unknown, and
   // "not connected" would be a guess.
   if (standing) {
-    const google = standing.find((s) => s.kind === "google")
+    const google = standing.find((s) => s.kind === "google" && !notStarted(s))
     rows.push(
       google
         ? {

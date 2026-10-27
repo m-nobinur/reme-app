@@ -21,6 +21,7 @@ import {
   SECTION_ACTION,
   StageDetail,
   StopBuild,
+  UpNext,
   WaitingOnYou,
   YourWebsite,
 } from "@workspace/ui/components/live-panel"
@@ -465,6 +466,18 @@ const panelCatalog: Entry[] = [
           Continue getting started
         </a>
       </NextSteps>
+    ),
+  },
+  {
+    name: "UpNext",
+    render: () => (
+      <div className="max-w-88">
+        <UpNext text="Your own web address comes next">
+          <a className={STEP} href="#up-next">
+            Use your own domain
+          </a>
+        </UpNext>
+      </div>
     ),
   },
   {
