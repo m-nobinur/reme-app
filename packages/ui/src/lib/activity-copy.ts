@@ -1011,7 +1011,7 @@ export function segmentLine(
         ? waitingStep(segment)
         : segment.steps.find((s) => s.state === "now")
       const note = waiting ? cleanArg(step?.note, "text", 80) : null
-      if (note) return note
+      if (note) return cap(note)
       if (step?.id === "purchase" && waiting) return payBy(extras)
       if ((step?.id === "records" || step?.id === "ownership") && waiting)
         return dnsChanges(segment, n.provider)
