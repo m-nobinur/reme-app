@@ -101,14 +101,30 @@ describe("owner tasks", () => {
         .where(eq(domains.name, NAME))
     )
     await sync()
-    const [live] = await tasks()
-    expect(live).toMatchObject({ id: first?.id, state: "done" })
-    expect(live?.done_at).not.toBeNull()
-    expect(live?.steps.find((s) => s.step === "records")).toMatchObject({
-      state: "done",
+    const [active] = await tasks()
+    // Live on the row, but only the probe's load check finishes the task.
+    expect(active).toMatchObject({ id: first?.id, state: "active" })
+    expect(states(active as NonNullable<typeof active>)).toMatchObject({
+      records: "done",
+      loads: "in_progress",
+    })
+    expect(active?.steps.find((s) => s.step === "records")).toMatchObject({
       blocked_on: null,
       deadline: null,
     })
+    await run((db) =>
+      setStep(db, first?.id as string, "loads", {
+        state: "done",
+        evidence: { status: 200 },
+      })
+    )
+    await sync()
+    const [live] = await tasks()
+    expect(live).toMatchObject({ id: first?.id, state: "done" })
+    expect(live?.done_at).not.toBeNull()
+    // A second sync neither moves the done step back nor the finish time.
+    await sync()
+    expect(await tasks()).toEqual([live])
   })
 
   it("adds the Google task beside it, and opening it again keeps one", async () => {

@@ -17,9 +17,11 @@ import {
   domains,
   eq,
   postAssistantMessage,
+  readTasks,
   reminders,
   searchConnections,
   serverMessageId,
+  setStep,
   sql,
   staff,
   steerKeyHash,
@@ -483,6 +485,12 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
         .set({ state: "active", activatedAt: new Date() })
         .where(eq(domains.name, name))
     )
+    // Live on the row, still checking it loads until the probe says so.
+    expect((await panel())?.now.map((s) => s.kind)).toEqual(["address"])
+    await write(async (db) => {
+      const [task] = await readTasks(db)
+      await setStep(db, task?.id as string, "loads", { state: "done" })
+    })
     expect((await panel())?.done).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ kind: "address", state: "done" }),

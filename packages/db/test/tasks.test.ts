@@ -58,6 +58,18 @@ describe("addressPlan", () => {
     expect(plan.detail).toMatchObject({ origin: "purchased" })
   })
 
+  it("leaves the site loading on an active domain to the probe", () => {
+    const plan = addressPlan(
+      row({ state: "active", activated_at: "2026-10-27T10:00:00.000Z" })
+    )
+    expect(plan.state).toBe("active")
+    expect(stateOf(plan)).toMatchObject({
+      certificate: "done",
+      loads: "in_progress",
+    })
+    expect(plan.done_at).toEqual(new Date("2026-10-27T10:00:00.000Z"))
+  })
+
   it("leaves the steps alone for a removed or abandoned row", () => {
     expect(addressPlan(row({ state: "removed" }))).toMatchObject({
       state: "declined",
@@ -69,15 +81,16 @@ describe("addressPlan", () => {
 })
 
 describe("googlePlan", () => {
-  it("is done only once Google has data", () => {
+  it("leaves first data pending until Google has some", () => {
     const facts = {
       state: "active" as const,
       property: { state: "verified", sitemap: true },
     }
-    expect(googlePlan({ ...facts, data: false }).state).toBe("active")
     expect(googlePlan({ ...facts, data: false }).steps?.first_data).toEqual({
       state: "pending",
     })
-    expect(googlePlan({ ...facts, data: true }).state).toBe("done")
+    expect(googlePlan({ ...facts, data: true }).steps?.first_data).toEqual({
+      state: "done",
+    })
   })
 })
