@@ -45,15 +45,20 @@ vi.mock("@assistant-ui/react", async (original) => ({
 // the client secret the api returned, mounting the Elements, showing
 // Stripe's total and confirming with what the owner already gave.
 const stripe = vi.hoisted(() => {
-  // Each Element's event handlers, by "kind:event", for the test to fire.
+  // Each Element's options by kind, and its event handlers by "kind:event"
+  // for the test to fire.
+  const options: Record<string, unknown> = {}
   const handlers: Record<string, (event: unknown) => void> = {}
-  const element = (kind: string) => () => ({
-    mount: vi.fn(),
-    destroy: vi.fn(),
-    on: vi.fn((event: string, handler: (event: unknown) => void) => {
-      handlers[`${kind}:${event}`] = handler
-    }),
-  })
+  const element = (kind: string) => (given?: unknown) => {
+    options[kind] = given
+    return {
+      mount: vi.fn(),
+      destroy: vi.fn(),
+      on: vi.fn((event: string, handler: (event: unknown) => void) => {
+        handlers[`${kind}:${event}`] = handler
+      }),
+    }
+  }
   const confirm = vi.fn(
     async (
       _options: unknown
@@ -70,6 +75,7 @@ const stripe = vi.hoisted(() => {
   }
   return {
     confirm,
+    options,
     handlers,
     init: vi.fn(async (..._args: unknown[]) => ({
       on: vi.fn(),
@@ -333,6 +339,11 @@ it("asks only for the gaps, pays in a dialog, and leaves one line once paid", as
     "cs_x",
     { billingAddress: contact },
   ])
+  // What confirm sends, the card form must not also ask for, or Stripe
+  // refuses the confirm.
+  expect(stripe.options.payment).toEqual({
+    fields: { billingDetails: { name: "never", address: "never" } },
+  })
 
   // Wallets that fail to load go away, and the card form still pays.
   await vi.waitFor(() =>
@@ -356,6 +367,16 @@ it("asks only for the gaps, pays in a dialog, and leaves one line once paid", as
     "Your card was declined."
   )
   expect(pay().getAttribute("aria-busy")).toBeNull()
+
+  // A confirm Stripe throws from is said the same way, not swallowed.
+  const logged = vi.spyOn(console, "error").mockImplementation(() => undefined)
+  stripe.confirm.mockRejectedValueOnce(new Error("IntegrationError"))
+  await act(async () => pay().click())
+  expect(dialog?.querySelector('[role="alert"]')?.textContent).toBe(
+    "The payment could not be made. Try again."
+  )
+  expect(pay().getAttribute("aria-busy")).toBeNull()
+  logged.mockRestore()
 
   await act(async () => pay().click())
   expect(stripe.confirm).toHaveBeenLastCalledWith({
