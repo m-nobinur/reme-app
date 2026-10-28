@@ -201,6 +201,7 @@ const propertyOf = (orgId: string, host: string, token?: string) =>
       method: "file",
       token,
       state: "verified",
+      verifiedAt: new Date(),
     })
   )
 

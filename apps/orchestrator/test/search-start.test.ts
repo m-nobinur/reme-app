@@ -99,6 +99,7 @@ describe.skipIf(!url)("moving Google to a live domain", () => {
         kind: "subdomain",
         method: "file",
         state,
+        verifiedAt: state === "verified" ? new Date() : null,
       })
     )
   /**
@@ -156,14 +157,20 @@ describe.skipIf(!url)("moving Google to a live domain", () => {
     expect(calls).toHaveLength(1)
   })
 
-  it("asks Google about a property in any state, and a 404 counts as gone", async () => {
+  it("counts a 404 as gone, and leaves a property Reme never added alone at Google", async () => {
     const orgId = await freshOrg(kit)
     await domainOf(orgId, "active")
-    await propertyOf(orgId, "pending")
+    await propertyOf(orgId)
     const { env } = stopping()
     const calls = await google(orgId, env, 404)
     expect(await moveGoogle(env, kit, orgId, OLD)).toBe("moved")
     expect(calls).toEqual([DELETE])
+    expect(await held(orgId)).toEqual([])
+
+    // Pending: Reme's `add` step never ran, so only our row goes.
+    await propertyOf(orgId, "pending")
+    expect(await moveGoogle(env, kit, orgId, OLD)).toBe("moved")
+    expect(calls).toHaveLength(1)
     expect(await held(orgId)).toEqual([])
   })
 
@@ -202,6 +209,7 @@ describe.skipIf(!url)("moving Google to a live domain", () => {
         kind: "url_prefix",
         method: "file",
         state: "verified",
+        verifiedAt: new Date(),
       })
     )
     const { env } = stopping()

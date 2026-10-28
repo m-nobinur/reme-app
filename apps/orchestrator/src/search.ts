@@ -237,7 +237,8 @@ export async function startSearch(
  * Search Console, its property row gone (the child rows cascade). For a host
  * the org lets go of, so a file of this org's never proves the host for
  * whoever holds it next. The files go before the row, which is how a repeat
- * finds them. The row goes only once Google has let the property go;
+ * finds them. Only a property Reme added is taken out of Search Console, and
+ * its row goes only once Google has let it go (2xx, or 404 when it is gone);
  * otherwise it stays for the hourly `forgetStrays` to try again, and this
  * answers false. `unlist` false leaves Google alone (a disconnect, whose
  * grant is already revoked). Safe to repeat.
@@ -262,6 +263,7 @@ export async function forgetHost(
         siteUrl: searchProperties.siteUrl,
         token: searchProperties.token,
         method: searchProperties.method,
+        verifiedAt: searchProperties.verifiedAt,
       })
       .from(searchProperties)
       .where(where)
@@ -272,11 +274,13 @@ export async function forgetHost(
       await dropVerification(env, host, row.token)
     }
   }
-  if (unlist) {
+  // Only what Reme's `add` step put in the list (`verifiedAt` is set after
+  // it); a property the owner added there themselves is theirs.
+  const added = unlist ? rows.filter((r) => r.verifiedAt) : []
+  if (added.length > 0) {
     try {
-      // Every state: a 404 for one Google never listed counts as gone.
       const access = await accessToken(env, kit, orgId)
-      for (const { siteUrl } of rows) await removeSite(access, siteUrl)
+      for (const { siteUrl } of added) await removeSite(access, siteUrl)
     } catch (error) {
       console.warn(
         JSON.stringify({
