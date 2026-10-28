@@ -53,10 +53,12 @@ jobs:
 
       # The ui Playwright suite runs here, not in pre-push, and only when the
       # change reaches packages/ui, so other PRs skip the browser install too.
+      # No main to diff against (the local gate's single-branch clone) runs it.
       - run: |
-          if pnpm exec turbo test --affected --filter=@workspace/ui --dry=json | jq -e '.tasks | length > 0' >/dev/null; then
+          affected=$(pnpm exec turbo test --affected --filter=@workspace/ui --dry=json | jq '[.tasks[] | select(.taskId == "@workspace/ui#test")] | length' || true)
+          if [ "${affected:-1}" != 0 ]; then
             pnpm --filter @workspace/ui exec playwright install --with-deps chromium
-            pnpm exec turbo test --affected --filter=@workspace/ui
+            pnpm exec turbo test --filter=@workspace/ui
           fi
 
       # Tier 1 in replay, per the eng guide's suite table: every recorded
