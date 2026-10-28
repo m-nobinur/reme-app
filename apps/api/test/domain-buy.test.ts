@@ -405,10 +405,13 @@ describe.skipIf(!url)("buying a domain, on a live connection", () => {
       registrant: { business_name: "Sparkle Clean", phone: "+447700900123" },
     })
     expect(body.registrant.email).toBeTruthy()
-    // The address is the only gap; a .com never asks who registers it.
+    // The address is the only gap, but for its country, which the UK number
+    // gives; a .com never asks who registers it.
+    expect(body.registrant.address).toEqual({ country_code: "GB" })
     expect(body.missing).toEqual(
-      expect.arrayContaining(["street", "city", "postal_code", "country_code"])
+      expect.arrayContaining(["street", "city", "postal_code"])
     )
+    expect(body.missing).not.toContain("country_code")
     expect(body.missing).not.toContain("phone")
     expect(body.missing).not.toContain("email")
     expect(body.missing).not.toContain("registrant_type")

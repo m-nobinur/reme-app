@@ -8,6 +8,7 @@ import {
   DomainProvider,
   type DomainRegistration,
   type DomainState,
+  DomainStripe,
   type ServerButton,
   SITE_HEADER,
   siteHost,
@@ -176,6 +177,24 @@ export async function readClaim(
   return found
     ? { row: found.row, slug: siteHost(found.slug, env.SITE_HOST_SUFFIX) }
     : undefined
+}
+
+/**
+ * An unpaid purchase the owner moved on from, closed without a message. Its
+ * Checkout session is forgotten, so the session running out says nothing; a
+ * payment made anyway is released, as for any closed purchase.
+ */
+async function dropUnpaid(db: OrgScopedDb, row: DomainRow) {
+  const { checkout_session: _, ...stripe } =
+    DomainStripe.partial().safeParse(row.stripe ?? {}).data ?? {}
+  return moveTo(
+    db,
+    row,
+    "abandoned",
+    ["awaiting_payment"],
+    { registrant: null, stripe },
+    { type: "domain.abandoned", payload: { domain_id: row.id } }
+  )
 }
 
 /**
@@ -1137,6 +1156,12 @@ export async function connect(
         })
         .returning({ id: domains.id })
       if (!row) throw new Error("domains insert returned nothing")
+      // Connecting a domain is moving on from buying one not yet paid for.
+      for (const unpaid of await db
+        .select()
+        .from(domains)
+        .where(eq(domains.state, "awaiting_payment")))
+        await dropUnpaid(db, unpaid)
       await appendEvent(db, {
         orgId,
         assignmentId: null,
@@ -1330,12 +1355,14 @@ export async function remove(
   if (!name) return invalid()
   const found = await kit.withOrg({ orgId }, async (db) => {
     const claim = await readClaim(db, env, eq(domains.name, name))
-    // A purchase being paid for or registered holds money: it finishes first.
-    if (
-      claim?.row.origin === "purchased" &&
-      ["awaiting_payment", "verifying"].includes(claim.row.state)
-    )
+    // A purchase that is paid for and registering holds money: it finishes
+    // first. One still waiting for the payment holds nothing, so it goes.
+    if (claim?.row.origin === "purchased" && claim.row.state === "verifying")
       return "buying" as const
+    if (claim?.row.state === "awaiting_payment") {
+      await dropUnpaid(db, claim.row)
+      return "dropped" as const
+    }
     // From any state, so a removal racing an activation still removes it.
     if (claim)
       await moveTo(
@@ -1351,6 +1378,7 @@ export async function remove(
       )
     return claim
   })
+  if (found === "dropped") return null
   if (found === "buying")
     return refuse(
       409,

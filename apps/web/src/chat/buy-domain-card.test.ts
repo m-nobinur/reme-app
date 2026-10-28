@@ -604,7 +604,7 @@ it("leaves one line on Not now, and none of the tray once the chat moves on", as
   store.after = ["user"]
   const later = await found()
   expect(later.chat.textContent).toBe(
-    "Names I found: sparkleclean, sparklecleanbristol."
+    "Names I offered: sparkleclean.co.uk, sparkleclean.uk, sparklecleanbristol.com."
   )
   expect(later.tray.textContent).toBe("")
 })

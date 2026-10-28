@@ -249,12 +249,19 @@ export async function registrantPrefill(
   )
   const keep = <K extends keyof typeof Registrant.shape>(k: K, v: unknown) =>
     Registrant.shape[k].safeParse(v).success ? { [k]: v } : {}
+  const phone = fact("business.phone")?.e164
+  // A UK number places the business until an address is paid with.
+  const country =
+    typeof phone === "string" && phone.startsWith("+44")
+      ? { address: { country_code: "GB" } }
+      : {}
   const registrant = RegistrantDraft.parse(
     held?.registrant ?? {
       ...keep("name", owner.session.name),
       ...keep("business_name", fact("business.name")?.name),
       ...keep("email", owner.session.email || fact("business.email")?.address),
-      ...keep("phone", fact("business.phone")?.e164),
+      ...keep("phone", phone),
+      ...country,
       ...keep("address", address?.value),
     }
   )
