@@ -369,7 +369,11 @@ async function apply(
       id: ownerTasks.id,
       open: sql<boolean>`${ownerTasks.state} in ('active', 'later')`,
       name: sql<string | null>`${ownerTasks.detail}->>'name'`,
-      createdAt: ownerTasks.createdAt,
+      // A task reused while open (an unpaid purchase the owner moved on
+      // from) can predate its domain row; its finish cannot.
+      at: sql<Date>`coalesce(${ownerTasks.doneAt}, ${ownerTasks.createdAt})`.mapWith(
+        ownerTasks.createdAt
+      ),
     })
     .from(ownerTasks)
     .where(eq(ownerTasks.kind, kind))
@@ -383,7 +387,7 @@ async function apply(
     latest &&
     (latest.open ||
       kind === "google" ||
-      (latest.name === name && (!plan.since || latest.createdAt >= plan.since)))
+      (latest.name === name && (!plan.since || latest.at >= plan.since)))
   let id: string
   if (same) id = latest.id
   else {
