@@ -135,9 +135,9 @@ function OrderSummary({
         </h2>
         <div className="flex flex-col gap-3">
           <dl className="flex flex-col gap-1.5">
-            <div className="flex justify-between gap-4">
+            <div className="flex flex-col gap-0.5">
               <dt className="text-muted-foreground">Domain</dt>
-              <dd className="min-w-0 break-all text-end font-medium">{name}</dd>
+              <dd className="break-words font-medium">{name}</dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-muted-foreground">Length</dt>
