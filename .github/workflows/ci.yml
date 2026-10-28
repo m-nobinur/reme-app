@@ -49,6 +49,7 @@ jobs:
 
       - run: pnpm lint:ci --reporter=github
 
+      # api and orchestrator run once, with their database, in `database`.
       - run: pnpm test:ci
 
       # The ui Playwright suite runs here, not in pre-push, and only when the
@@ -165,8 +166,8 @@ jobs:
         run: pnpm test:tenancy
 
       # `apps/api` reaches the database through a Hyperdrive binding, so its
-      # suite skips in the unit job where there is no DATABASE_URL and runs
-      # here, where a claim about the tenant path can be checked against one.
+      # suite runs here, where a claim about the tenant path can be checked
+      # against one, and not in the unit job too (nor does orchestrator's).
       # It reads the seeded rows written two steps above, which is what makes
       # "an absent org sees zero" evidence rather than an empty database.
       - name: The API reaches the database through the tenant path
