@@ -35,35 +35,63 @@ describe("a bounded WorkOS call", () => {
 })
 
 describe("a JWKS that never answers", () => {
-  it("answers 503 within jose's 5 s rather than hanging", async () => {
-    // Stalls the way an unreachable host does: nothing until the abort.
-    globalThis.fetch = ((_input: RequestInfo | URL, init?: RequestInit) =>
-      new Promise((_, reject) => {
-        init?.signal?.addEventListener("abort", () =>
-          reject(init.signal?.reason)
-        )
-      })) as typeof fetch
+  it("answers 503 at jose's 5 s rather than hanging", async () => {
     const headers = await cookieHeader({
       sub: "user_probe_jwks_stall",
       org_id: "org_probe_jwks_stall",
     })
+    vi.useFakeTimers()
+    // jose bounds the fetch with `AbortSignal.timeout`, which fake timers do not reach.
+    const timeout = vi
+      .spyOn(AbortSignal, "timeout")
+      .mockImplementation((ms) => {
+        const controller = new AbortController()
+        setTimeout(
+          () =>
+            controller.abort(
+              new DOMException("signal timed out", "TimeoutError")
+            ),
+          ms
+        )
+        return controller.signal
+      })
+    let fetched!: () => void
+    const asked = new Promise<void>((resolve) => {
+      fetched = resolve
+    })
+    // Stalls the way an unreachable host does: nothing until the abort.
+    globalThis.fetch = ((_input: RequestInfo | URL, init?: RequestInit) => {
+      fetched()
+      return new Promise((_, reject) => {
+        init?.signal?.addEventListener("abort", () =>
+          reject(init.signal?.reason)
+        )
+      })
+    }) as typeof fetch
     const logged = vi
       .spyOn(console, "error")
       .mockImplementation(() => undefined)
-    const started = performance.now()
     try {
-      const response = await worker.fetch(
-        new Request("http://api.invalid/workspace", { headers }),
-        env("postgresql://127.0.0.1:1/none"),
-        { waitUntil: () => undefined } as unknown as ExecutionContext
-      )
-      const took = performance.now() - started
+      let answered = false
+      const answer = worker
+        .fetch(
+          new Request("http://api.invalid/workspace", { headers }),
+          env("postgresql://127.0.0.1:1/none"),
+          { waitUntil: () => undefined } as unknown as ExecutionContext
+        )
+        .finally(() => {
+          answered = true
+        })
+      await asked
+      await vi.advanceTimersByTimeAsync(4_999)
+      expect(answered).toBe(false)
+      await vi.advanceTimersByTimeAsync(1)
+      const response = await answer
       expect(response.status).toBe(503)
       expect(ErrorEnvelope.parse(await response.json()).class).toBe("transient")
-      expect(took).toBeGreaterThanOrEqual(4_900)
-      expect(took).toBeLessThan(6_000)
     } finally {
       logged.mockRestore()
+      timeout.mockRestore()
     }
-  }, 10_000)
+  })
 })
