@@ -1248,7 +1248,10 @@ export async function applyLink(
   const [step, ...more] = steps
   if (!env.DOMAIN_CONNECT_KEY || !conversation.success) return undefined
   if (step?.type !== "CNAME" || more.length > 0) return undefined
-  const syncUX = await applyBase(inspection.apex)
+  const syncUX = await applyBase(
+    inspection.apex,
+    env.DOMAIN_CONNECT_TRIAL === "true"
+  )
   if (!syncUX) return undefined
   const back = new URL("/api/domains/applied", env.APP_ORIGIN)
   back.searchParams.set("name", name)

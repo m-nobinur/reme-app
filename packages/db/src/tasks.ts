@@ -370,8 +370,10 @@ async function apply(
       open: sql<boolean>`${ownerTasks.state} in ('active', 'later')`,
       name: sql<string | null>`${ownerTasks.detail}->>'name'`,
       // A task reused while open (an unpaid purchase the owner moved on
-      // from) can predate its domain row; its finish cannot.
-      at: sql<Date>`coalesce(${ownerTasks.doneAt}, ${ownerTasks.createdAt})`.mapWith(
+      // from) can predate its domain row, but its steps moved after it; a
+      // declined task has no finish time, so the steps decide.
+      at: sql<Date>`greatest(${ownerTasks.createdAt}, ${ownerTasks.doneAt},
+        (select max(s.changed_at) from task_steps s where s.task_id = ${ownerTasks.id}))`.mapWith(
         ownerTasks.createdAt
       ),
     })

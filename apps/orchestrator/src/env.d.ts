@@ -47,6 +47,12 @@ interface __BaseEnv_Env {
    */
   DOMAIN_CONNECT_KEY?: string
   /**
+   * `true` shows Add it for me without asking Cloudflare's public template
+   * query, for staging while Cloudflare shows our template to our own account
+   * only. Never set on production.
+   */
+  DOMAIN_CONNECT_TRIAL?: string
+  /**
    * Stripe's secret key, for a bought domain's hold (capture or release) and
    * its renewal Subscription (src/stripe.ts). Unset, `buy_domain` refuses
    * with `domain.buy_unavailable` and finding a domain still works.

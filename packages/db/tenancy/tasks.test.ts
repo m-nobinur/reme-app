@@ -216,5 +216,34 @@ describe("owner tasks", () => {
       state: "done",
       detail: { name: host },
     })
+    // Removed, the same task is declined, and later syncs keep it the one task.
+    await moved(async (db) => {
+      await db
+        .update(domains)
+        .set({ state: "removed", removedAt: new Date() })
+        .where(eq(domains.name, host))
+      await syncTasks(db, MOVED)
+      await syncTasks(db, MOVED)
+    })
+    const removed = await moved((db) => readTasks(db))
+    expect(removed).toHaveLength(1)
+    expect(removed[0]).toMatchObject({ id: task?.id, state: "declined" })
+
+    // Connected again later, the name gets a task of its own.
+    await moved(async (db) => {
+      await db.insert(domains).values({
+        orgId: MOVED,
+        siteId: MOVED,
+        name: host,
+        primaryHost: host,
+        origin: "connected",
+        method: "records",
+        state: "awaiting_dns",
+        createdAt: new Date(Date.now() + 1000),
+      })
+      await syncTasks(db, MOVED)
+    })
+    const again = await moved((db) => readTasks(db))
+    expect(again.map((t) => t.state).sort()).toEqual(["active", "declined"])
   })
 })

@@ -54,7 +54,7 @@ const approval = (assignment: string, expires = ago(-60 * 24)) =>
 const rows = (over: Partial<ActivityRows> = {}): ActivityRows => ({
   since: ago(60 * 24 * 3),
   domains: [],
-  search: { synced_at: null, clicks: 0, impressions: 0 },
+  search: { properties: 1, synced_at: null, clicks: 0, impressions: 0 },
   heartbeat: null,
   first_live: null,
   live_at: null,
@@ -473,7 +473,12 @@ describe("standing", () => {
       rows: rows({
         live_at: ago(month),
         domains: [bought()],
-        search: { synced_at: ago(60), clicks: 12, impressions: 340 },
+        search: {
+          properties: 1,
+          synced_at: ago(60),
+          clicks: 12,
+          impressions: 340,
+        },
         tasks: [
           task("google", [step("first_data", "done")], {
             id: ID(31),
@@ -502,12 +507,31 @@ describe("standing", () => {
   it("says no numbers until Google has sent a day with searches", () => {
     const { standing } = view({
       rows: rows({
-        search: { synced_at: ago(60), clicks: 0, impressions: 0 },
+        search: {
+          properties: 1,
+          synced_at: ago(60),
+          clicks: 0,
+          impressions: 0,
+        },
         tasks: [task("google", [step("sitemap", "done")])],
       }),
     })
     expect(standing?.[0]?.numbers).toBeUndefined()
     expect(standing?.[0]?.synced_at).toBe(ago(60))
+  })
+
+  it("lists no Google numbers coming while Reme holds no property, but a Google wait still shows", () => {
+    const google = (steps: ReturnType<typeof step>[]) =>
+      view({
+        rows: rows({
+          search: { properties: 0, synced_at: null, clicks: 0, impressions: 0 },
+          tasks: [task("google", steps)],
+        }),
+      }).standing?.map((s) => `${s.kind}:${s.state}`)
+    expect(
+      google([step("verify", "done"), step("first_data", "pending")])
+    ).toEqual([])
+    expect(google([step("sign_in", "blocked")])).toEqual(["google:waiting"])
   })
 
   it("dates each done step of a task by when it moved", () => {

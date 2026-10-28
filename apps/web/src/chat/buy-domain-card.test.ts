@@ -506,6 +506,41 @@ it("keeps a fresh Pay after the dialog closes unpaid", async () => {
   await vi.waitFor(() => expect(button(tray, "Pay £8").disabled).toBe(false))
 })
 
+it("opens Pay at the first press when the name was given up before", async () => {
+  // An earlier unpaid purchase of the name reads abandoned until Pay starts a new one.
+  const status = vi
+    .fn<() => Promise<DomainPurchaseStatus | null>>()
+    .mockResolvedValueOnce({ name: NAME, state: "abandoned", test: false })
+    .mockResolvedValue(null)
+  const { tray } = await draw(
+    "buy_domain",
+    {
+      args: { name: NAME, registrant: REGISTRANT, registrant_type: "STRA" },
+      result: {
+        outcome: "awaiting_payment",
+        name: NAME,
+        price_gbp: 8,
+        checkout: "embedded",
+      },
+    },
+    purchaseOf({
+      status,
+      registrant: vi.fn(async () => ({
+        ...PREFILL,
+        registrant: REGISTRANT,
+        missing: [],
+      })),
+    })
+  )
+  await vi.waitFor(() => expect(status).toHaveBeenCalled())
+  fill(tray, { registrant_type: "LTD", company_number: "sc123456" })
+  await submit(tray)
+  await vi.waitFor(() =>
+    expect(status.mock.calls.length).toBeGreaterThanOrEqual(2)
+  )
+  expect(document.querySelector('[data-slot="dialog-content"]')).not.toBeNull()
+})
+
 it("says a refusal by its code", async () => {
   const { tray } = await draw(
     "buy_domain",

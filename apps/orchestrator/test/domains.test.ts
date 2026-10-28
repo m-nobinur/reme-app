@@ -868,10 +868,29 @@ describe("Domain Connect apply page", () => {
     expect(await applyBase("nowhere-at-all.co.uk")).toBeNull()
   })
 
-  it("opens no page a domain's own DNS names that is not one of ours", async () => {
-    // GoDaddy answers Domain Connect, but its page is not on our list yet.
-    const fetched = stubNet()
-    expect(await applyBase("sparklecleanbristol.co.uk")).toBeNull()
+  it("names the page without the query on a trial, and still only one of ours", async () => {
+    const fetched = stubNet({
+      [TEMPLATE]: () =>
+        Response.json({ error: "unknown template" }, { status: 404 }),
+    })
+    expect(await applyBase("sparkleclean.co.uk", true)).toBe(PAGE)
     expect(urls(fetched).some((u) => u.includes("domainTemplates"))).toBe(false)
+    expect(await applyBase("sparkleclean123.co.uk", true)).toBeNull()
+  })
+
+  it("opens no page a domain's own DNS names that is not one of ours", async () => {
+    // 123 Reg answers Domain Connect through Secure Server, whose page is not on our list.
+    const fetched = stubNet()
+    expect(await applyBase("sparkleclean123.co.uk")).toBeNull()
+    expect(urls(fetched).some((u) => u.includes("domainTemplates"))).toBe(false)
+  })
+
+  it("names GoDaddy's page once GoDaddy says our template is live there", async () => {
+    const GODADDY =
+      "https://domainconnect.api.godaddy.com/v2/domainTemplates/providers/remeai.co.uk/services/website"
+    stubNet({ [GODADDY]: () => new Response(null, { status: 200 }) })
+    expect(await applyBase("sparklecleanbristol.co.uk")).toBe(
+      "dcc.godaddy.com/manage"
+    )
   })
 })

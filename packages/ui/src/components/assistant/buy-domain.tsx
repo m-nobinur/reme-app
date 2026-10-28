@@ -530,21 +530,25 @@ function usePurchaseStatus(
   paid: boolean,
   paying: boolean
 ): PurchaseStatus | null | undefined {
-  const [status, setStatus] = useState<PurchaseStatus | null | undefined>(
-    purchase ? undefined : null
-  )
+  // Each read is kept with the `paying` it was made under. A read from before
+  // Pay says nothing about the Checkout just opened, so it is not returned,
+  // even on the render where Pay starts (an earlier abandoned purchase of the
+  // name would otherwise close the new dialog at once).
+  const [kept, setKept] = useState<{
+    paying: boolean
+    status: PurchaseStatus | null | undefined
+  }>({ paying, status: purchase ? undefined : null })
   useEffect(() => {
     if (!purchase) return
     let live = true
     let timer: ReturnType<typeof setTimeout> | undefined
-    // A read from before Pay says nothing about the Checkout just opened.
-    setStatus(undefined)
+    setKept({ paying, status: undefined })
     const read = async () => {
       const next =
         (await purchase.status(name).then(purchaseStatusOf, () => null)) ??
         (paid ? "authorised" : null)
       if (!live) return
-      setStatus(next)
+      setKept({ paying, status: next })
       if (next && MOVING.has(next)) timer = setTimeout(read, REREAD_MS)
       else if (!next && paying) timer = setTimeout(read, PAYING_REREAD_MS)
     }
@@ -554,7 +558,8 @@ function usePurchaseStatus(
       clearTimeout(timer)
     }
   }, [purchase, name, paid, paying])
-  return status
+  if (!purchase) return null
+  return kept.paying === paying ? kept.status : undefined
 }
 
 const STATUS_TEXT: Record<PurchaseStatus, (name: string) => string> = {

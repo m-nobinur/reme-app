@@ -430,12 +430,22 @@ export const SETTINGS_LINKS: Readonly<Record<string, string>> = {
  * The Domain Connect pages an apply link may open, keyed by the provider's
  * `urlSyncUX` as `host[/path]`, each with the API we ask whether our template
  * is live there. Ours for the same reason as `SETTINGS_LINKS`: a domain's own
- * DNS could otherwise send the owner to any page. Add a provider once our
- * template is live there and tested.
+ * DNS could otherwise send the owner to any page. A page is used only once
+ * its API answers that our template is live, so a provider still onboarding
+ * it shows nothing. Each pair is the provider's own discovery answer
+ * (2026-10-29): Cloudflare's for bnwise.tech, GoDaddy's as recorded in the
+ * tests, IONOS's for 1and1.com, whose page carries the account's country.
  */
 const APPLY_PAGES: Readonly<Record<string, string>> = {
   "dash.cloudflare.com/domainconnect":
     "api.cloudflare.com/client/v4/dns/domainconnect",
+  "dcc.godaddy.com/manage": "domainconnect.api.godaddy.com",
+  ...Object.fromEntries(
+    ["co.uk", "com", "de"].map((tld) => [
+      `domainconnect.ionos.${tld}/sync`,
+      "api.domainconnect.ionos.com",
+    ])
+  ),
 }
 
 const IONOS: DomainProvider = {
@@ -647,15 +657,20 @@ async function discover(apex: string): Promise<DomainProvider | null> {
  * The provider's Domain Connect page for `apex`, as `host[/path]`, when its
  * settings name one of `APPLY_PAGES` and that provider's API answers that our
  * template is live there (the spec's template query: 2xx yes, 404 no). That
- * answer is per provider, so it is kept by API host. Null otherwise; never
- * throws.
+ * answer is per provider, so it is kept by API host. `trial` skips the query:
+ * while Cloudflare shows our template to our own account only, its query
+ * still answers 404. Null otherwise; never throws.
  */
-export async function applyBase(apex: string): Promise<string | null> {
+export async function applyBase(
+  apex: string,
+  trial = false
+): Promise<string | null> {
   try {
     const ux = (await settingsOf(apex))?.urlSyncUX
     const page = typeof ux === "string" ? settingsBase(ux) : null
     const api = page && APPLY_PAGES[page]
     if (!page || !api) return null
+    if (trial) return page
     const live = await remembered(`template ${api}`, async () => {
       const response = await fetch(
         `https://${api}/v2/domainTemplates/providers/${TEMPLATE.provider}/services/${TEMPLATE.service}`,
