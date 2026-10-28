@@ -853,8 +853,11 @@ function conflictsAt(host: string, inspection: Inspection): DnsRecord[] {
 
 /**
  * One check, in dub's verify order: the edge does not know the host, a
- * record is in the way, the hostname is not verified, the records point
- * elsewhere, the certificate is not issued, and only then valid. `hosts` are
+ * record is in the way, the hostname is not verified, the certificate is not
+ * issued, and only then valid. No record seen with the hostname active is not
+ * a miss: our resolver can hold the NXDOMAIN from before the owner added it
+ * for the zone's SOA minimum, 30 minutes on Cloudflare, and Cloudflare's
+ * active is a fresh read. Readiness still needs the site answering. `hosts` are
  * the fully qualified names that must reach us: `www`, plus the apex in alias
  * mode, each with its custom hostname or null. `unknown_error` is the
  * caller's, when the inspection or the hostname read itself failed.
@@ -881,11 +884,6 @@ export function domainCheck(
   if (known.some((h) => h.hostname.status !== "active")) {
     return { status: "pending_verification" }
   }
-  const missing = known.some((h) => {
-    const records = inspection.hosts[h.host]
-    return !records || !pointsAtUs(records, inspection)
-  })
-  if (missing) return { status: "invalid_configuration" }
   if (known.some((h) => h.hostname.ssl?.status !== "active")) {
     return { status: "pending_certificate" }
   }

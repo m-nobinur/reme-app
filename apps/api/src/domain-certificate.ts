@@ -81,7 +81,10 @@ export async function certificateWebhook(
   return received()
 }
 
-/** Asks the orchestrator to check the claim now, as the owner's own Check would. */
+/**
+ * Asks the orchestrator to look at the claim now. Without a refresh: one
+ * restarts validation, which sends another event, which would refresh again.
+ */
 async function nudge(env: Env, kit: Tenancy, host: string) {
   try {
     const claim = await resolveDomainClaim(kit, host)
@@ -98,7 +101,7 @@ async function nudge(env: Env, kit: Tenancy, host: string) {
           name: null,
         },
       },
-      `/domains/${claim.name}/check`
+      `/domains/${claim.name}/check?refresh=0`
     )
   } catch (error) {
     logFailure({ at: "/webhooks/cloudflare" }, error)

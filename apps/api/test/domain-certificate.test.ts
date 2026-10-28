@@ -103,7 +103,7 @@ describe.skipIf(!url)("POST /webhooks/cloudflare, on a live connection", () => {
     await settled()
     const [call] = stub.calls
     expect(call?.request.url).toBe(
-      `https://orchestrator/assignments/domains/${name}/check`
+      `https://orchestrator/assignments/domains/${name}/check?refresh=0`
     )
     expect(call?.request.headers.get("x-reme-org-id")).toBe(orgId)
   })

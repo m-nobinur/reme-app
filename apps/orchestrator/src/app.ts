@@ -1001,7 +1001,8 @@ ownerOnly.post("/domains/:name/check", async (c) => {
     c.env,
     c.get("kit"),
     c.get("orgId"),
-    c.req.param("name")
+    c.req.param("name"),
+    c.req.query("refresh") !== "0"
   )
   if ("refused" in result) return domainRefused(c, result)
   return c.json(result)
