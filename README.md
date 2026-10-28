@@ -306,10 +306,9 @@ pnpm --filter @workspace/ui test          # catalog drift, accessibility, and sc
 pnpm --filter @workspace/ui test:update   # write the screenshot baselines for this machine
 ```
 
-This suite runs locally, not in CI. It drives a real browser, and a runner that downloads
-Chromium and its system dependencies on every run and then throws them away spent about a
-minute doing it. `pnpm bootstrap` installs the browser, `pre-push` runs the suite, and CI
-runs `pnpm test:ci`, which is every package except this one.
+This suite runs in CI when a change reaches `packages/ui`, and not in `pnpm test` or
+`pre-push`: its five browsers took most of a 10-core Mac and timed out the other suites
+beside it. Run it locally only when you change `packages/ui`; it uses three workers here.
 
 Screenshot baselines are gitignored on top of that: they are PNGs that every visual change
 rewrites, and git keeps every version of each forever. Run `test:update` once per machine,
