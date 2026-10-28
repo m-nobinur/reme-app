@@ -35,7 +35,8 @@ export async function sign(query: string, key: string): Promise<string> {
 
 /**
  * The apply link on `syncUX` (the provider's `urlSyncUX` as `host[/path]`).
- * The signature covers the query before `key` and `sig`, and `sig` comes
+ * The signature covers the query before `key` and `sig`, its parameters
+ * sorted by name as the spec's canonical form has them, and `sig` comes
  * last, as Cloudflare requires.
  */
 export async function applyUrl(
@@ -43,7 +44,9 @@ export async function applyUrl(
   key: string,
   params: { domain: string; host: string; redirect_uri: string }
 ): Promise<string> {
-  const query = new URLSearchParams(params).toString()
+  const query = new URLSearchParams(
+    Object.entries(params).sort(([a], [b]) => (a < b ? -1 : 1))
+  ).toString()
   const sig = encodeURIComponent(await sign(query, key))
   return `https://${syncUX}/v2/domainTemplates/providers/${TEMPLATE.provider}/services/${TEMPLATE.service}/apply?${query}&key=${KEY_HOST}&sig=${sig}`
 }

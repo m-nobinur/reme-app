@@ -161,6 +161,10 @@ it("puts Add it for me first when the provider can add the record, with the reco
     "Your domain's settings are at Cloudflare, and I can add the record there for you."
   )
   expect(text).toContain("Or make the 2 changes yourself:")
+  // The record it adds is www's; the bare address stays the owner's step.
+  expect(text).toContain(
+    "The address without www is still yours to set: the last step below."
+  )
   const [first, settings] = card.container.querySelectorAll("a")
   expect(first?.textContent).toBe("Add it for me (opens in a new tab)")
   expect(first?.getAttribute("href")).toBe(apply)

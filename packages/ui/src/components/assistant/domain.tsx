@@ -156,7 +156,7 @@ function Records({
               <span className="sr-only"> (opens in a new tab)</span>
             </a>
             <p className={META}>
-              {`${where} asks you to sign in and approve it, then brings you back here.`}
+              {`${where} asks you to sign in and approve it, then brings you back here.${output.apex ? " The address without www is still yours to set: the last step below." : ""}`}
             </p>
           </div>
           <p className="text-sm">
