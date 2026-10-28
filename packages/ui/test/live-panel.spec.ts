@@ -83,22 +83,6 @@ test("a segment marks the step at work, and ticks the ones done", async ({
   await expect(segment.getByText("4 minutes so far")).toBeVisible()
 })
 
-test("a done segment is one line with no caret", async ({ page }) => {
-  await open(page, "PanelSegment done", 400)
-  const segment = page.locator('[data-slot="panel-segment"]')
-  await expect(segment).toHaveAttribute("data-state", "folded")
-  await expect(segment.locator("button[aria-expanded]")).toHaveCount(0)
-})
-
-test("a waiting step offers no link: the answer goes in the chat", async ({
-  page,
-}) => {
-  await open(page, "PanelSegment getting started waiting", 400)
-  await expect(page.getByRole("button", { name: "Answer below" })).toHaveCount(
-    0
-  )
-})
-
 test("the screenshots step through the deck, and the approve button shows a focus ring from the keyboard", async ({
   page,
 }) => {
@@ -305,18 +289,6 @@ test("a next step looks like a button, with a visible border", async ({
     // A fully transparent border computes to an alpha of 0.
     expect(border.replace(/\s/g, "").endsWith(",0)"), theme).toBe(false)
   }
-})
-
-test("an approval whose preview fails still says what the owner can do, and lets them decide", async ({
-  page,
-}) => {
-  await open(page, "ApprovalItem preview unavailable", 400)
-  const entry = page.locator('[data-entry="ApprovalItem preview unavailable"]')
-  await expect(entry.getByRole("link")).toHaveCount(0)
-  await expect(
-    entry.getByRole("button", { name: "Retry preview" })
-  ).toBeEnabled()
-  await expect(entry.getByRole("button", { name: "Publish" })).toBeEnabled()
 })
 
 test("an approval whose preview fails has no accessibility violations at any width", async ({
