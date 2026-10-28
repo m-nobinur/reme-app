@@ -99,12 +99,11 @@ export async function hold<T>(
   name: string,
   wait: { type: string; timeout: WorkflowTimeoutDuration | number },
   again: () => Promise<T>
-): Promise<{ woken: boolean; seen: T }> {
-  let woken = true
+): Promise<{ woken: boolean; payload?: unknown; seen: T }> {
   try {
-    await step.waitForEvent(name, wait)
+    const { payload } = await step.waitForEvent(name, wait)
+    return { woken: true, payload, seen: await again() }
   } catch {
-    woken = false
+    return { woken: false, seen: await again() }
   }
-  return { woken, seen: await again() }
 }

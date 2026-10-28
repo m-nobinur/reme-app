@@ -28,6 +28,7 @@ const script = vi.hoisted(() => ({
   busy: false,
   /** Whether every wait is ended by a `check` nudge. */
   nudged: false,
+  told: undefined as string | undefined,
   /** The buy branch's answers, step by step. */
   buy: {
     payments: [] as string[],
@@ -159,7 +160,8 @@ async function drive(
     waitForEvent: async (name: string, options: { timeout: number }) => {
       names.push(name)
       waits.push(options.timeout)
-      if (script.nudged) return { type: "check", payload: {} }
+      if (script.nudged)
+        return { type: "check", payload: { told: script.told } }
       throw new Error("timed out")
     },
   }
@@ -177,6 +179,7 @@ beforeEach(() => {
   script.calls.length = 0
   script.busy = false
   script.nudged = false
+  script.told = undefined
   script.buy = { payments: [], started: {}, reads: [], ready: [], live: false }
   // By default the host serves the site at the first `loads`, which says live.
   script.loads = [loads(0, true)]
@@ -211,6 +214,18 @@ describe("the domain Workflow", () => {
     ])
     // Each post retries on its own schedule; nothing else does.
     expect(configs).toEqual({ "say 2": SAY_RETRIES, "say live": SAY_RETRIES })
+  })
+
+  it("stays quiet on a look the owner's own check already told, and not on news", async () => {
+    script.nudged = true
+    script.told = "pending_certificate"
+    await drive([
+      at(1000),
+      at(MIN, "pending_certificate", false, "look 2"),
+      at(2 * MIN, "conflicting_record", false, "look 3"),
+      at(3 * MIN, "valid", true),
+    ])
+    expect(script.calls.slice(0, 2)).toEqual(["say look 3", "activate"])
   })
 
   it("goes live even when the chat stays busy past every retry", async () => {
