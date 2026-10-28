@@ -19,7 +19,7 @@
     "build": "turbo build",
     "dev": "turbo dev",
     "typecheck": "turbo typecheck",
-    "test": "turbo test",
+    "test": "VITEST_MAX_WORKERS=3 turbo test --concurrency=2",
     "test:ci": "turbo test --filter=!@workspace/ui --concurrency=4",
     "e2e": "pnpm --filter e2e e2e",
     "e2e:golden": "pnpm --filter e2e golden",

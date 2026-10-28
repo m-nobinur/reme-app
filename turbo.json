@@ -18,7 +18,8 @@
     "ONBOARDING_EVAL_PERSONAS",
     "ONBOARDING_EVAL_VERBOSE",
     "ORCHESTRATOR_TOKEN",
-    "ORCHESTRATOR_URL"
+    "ORCHESTRATOR_URL",
+    "VITEST_MAX_WORKERS"
   ],
   // The floor gate is part of every blocking suite's verdict, and it lives
   // outside the packages that run it. Without these two in the hash, raising a
