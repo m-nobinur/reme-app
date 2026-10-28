@@ -532,7 +532,9 @@ it("opens Pay at the first press when the name was given up before", async () =>
       })),
     })
   )
-  await vi.waitFor(() => expect(status).toHaveBeenCalled())
+  await vi.waitFor(() => expect(button(tray, "Pay £8").disabled).toBe(false))
+  // The earlier purchase's lapse is not news on a page that has not paid yet.
+  expect(tray.textContent).not.toContain("timed out")
   fill(tray, { registrant_type: "LTD", company_number: "sc123456" })
   await submit(tray)
   await vi.waitFor(() =>
