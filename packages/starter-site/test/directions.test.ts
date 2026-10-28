@@ -7,11 +7,11 @@ import {
   SECTION_VARIANTS,
   TEMPLATES,
 } from "@workspace/contracts"
-import { afterAll, beforeAll, describe, expect, test } from "vitest"
+import { beforeAll, describe, expect, test } from "vitest"
 import { brandRamp, contrast } from "../src/brand"
 import { DIRECTIONS, directionOf, LEGACY } from "../src/directions"
 import { PAIRS } from "../src/fonts"
-import { type Built, build, clean, type Page, ROOT, readPages } from "./build"
+import { type Built, build, type Page, ROOT, readPages } from "./build"
 import { FILLED } from "./fixture"
 
 const AA = 4.5
@@ -119,11 +119,6 @@ beforeAll(async () => {
   ])
   Object.assign(built, { fresh_modern, calm_daylight, after_dark, panel })
 }, 120_000)
-
-afterAll(() => {
-  for (const each of Object.values(built)) clean(each)
-})
-
 const home = (name: string): Page => {
   const dist = built[name]?.dist
   if (!dist) throw new Error(`the ${name} build did not run`)

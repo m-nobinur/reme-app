@@ -1,9 +1,9 @@
 import { existsSync } from "node:fs"
 import { join } from "node:path"
 import sharp from "sharp"
-import { afterAll, beforeAll, describe, expect, test } from "vitest"
+import { beforeAll, describe, expect, test } from "vitest"
 import { layout } from "../src/site-config"
-import { type Built, build, clean, type Page, readPages } from "./build"
+import { type Built, build, type Page, readPages } from "./build"
 import { FILLED } from "./fixture"
 
 const image = (w: number, h: number) =>
@@ -64,13 +64,6 @@ beforeAll(async () => {
     }),
   ])
 }, 180_000)
-afterAll(() => {
-  clean(bare)
-  clean(rows)
-  clean(cardless)
-  clean(photos)
-})
-
 const pagesOf = (built: Built | undefined) => {
   if (!built) throw new Error("the build did not run")
   return readPages(built.dist)

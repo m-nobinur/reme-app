@@ -1,5 +1,5 @@
-import { afterAll, beforeAll, describe, expect, test } from "vitest"
-import { type Built, build, clean, readPages } from "./build"
+import { beforeAll, describe, expect, test } from "vitest"
+import { type Built, build, readPages } from "./build"
 import { FILLED } from "./fixture"
 
 describe("the footer's labels", () => {
@@ -13,7 +13,6 @@ describe("the footer's labels", () => {
       },
     })
   }, 180_000)
-  afterAll(() => clean(built))
 
   test("are paragraphs on every page, so no h2 repeats across the site", () => {
     const pages = readPages(built?.dist ?? "")

@@ -2,9 +2,9 @@ import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { PALETTES } from "@workspace/contracts"
 import sharp from "sharp"
-import { afterAll, beforeAll, describe, expect, test } from "vitest"
+import { beforeAll, describe, expect, test } from "vitest"
 import { initialOf, markColours, markSvg, siteMark } from "../src/favicon"
-import { type Built, build, clean, readPages } from "./build"
+import { type Built, build, readPages } from "./build"
 import { FILLED } from "./fixture"
 
 const palette = PALETTES[0] as (typeof PALETTES)[number]
@@ -81,11 +81,6 @@ describe("a built site's favicon set", () => {
       }),
     ])
   }, 180_000)
-  afterAll(() => {
-    clean(initial)
-    clean(logoed)
-  })
-
   test("writes the SVG, the PNGs at their sizes and the manifest", async () => {
     const dist = initial.dist
     expect(readFileSync(join(dist, "favicon.svg"), "utf8")).toMatch(

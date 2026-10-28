@@ -1,7 +1,7 @@
 import sharp from "sharp"
-import { afterAll, beforeAll, describe, expect, test } from "vitest"
+import { beforeAll, describe, expect, test } from "vitest"
 import { layout } from "../src/site-config"
-import { type Built, build, clean, readPages } from "./build"
+import { type Built, build, readPages } from "./build"
 import { FILLED } from "./fixture"
 
 // The inner pages' headers: a page with no photo is one text block, never a
@@ -91,12 +91,6 @@ beforeAll(async () => {
     }),
   ])
 }, 240_000)
-afterAll(() => {
-  clean(bare)
-  clean(photos)
-  clean(bleed)
-})
-
 const headerOf = (html: string) =>
   /<section class="hero[^"]*"[\s\S]*?<\/section>/.exec(html)?.[0] ?? ""
 const pagesOf = (built: Built | undefined) => {

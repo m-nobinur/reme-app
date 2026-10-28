@@ -4,9 +4,9 @@ import {
   QUOTE_FIELD_TYPES as CONTRACT_TYPES,
   QuoteFields,
 } from "@workspace/contracts"
-import { afterAll, beforeAll, describe, expect, test } from "vitest"
+import { beforeAll, describe, expect, test } from "vitest"
 import { QUOTE_FIELD_TYPES, quoteFormProblem } from "../src/quote-form"
-import { type Built, build, clean, type Page, ROOT, readPages } from "./build"
+import { type Built, build, type Page, ROOT, readPages } from "./build"
 import { FILLED, LIMOUSINE_FORM } from "./fixture"
 
 const SHIPPED = JSON.parse(
@@ -108,12 +108,6 @@ beforeAll(async () => {
     build({ site: FILLED, quoteForm: CLEANER_FORM }),
   ])
 }, 120_000)
-
-afterAll(() => {
-  clean(limousine)
-  clean(cleaner)
-})
-
 const quotePage = (built: Built | undefined): Page => {
   if (!built) throw new Error("the build did not run")
   const page = readPages(built.dist).find((p) => p.file === "quote/index.html")

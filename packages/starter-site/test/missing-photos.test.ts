@@ -1,6 +1,6 @@
-import { afterAll, beforeAll, describe, expect, test } from "vitest"
+import { beforeAll, describe, expect, test } from "vitest"
 import { layout } from "../src/site-config"
-import { type Built, build, clean, type Page, readPages } from "./build"
+import { type Built, build, type Page, readPages } from "./build"
 import { FILLED } from "./fixture"
 
 // Every section that has a photo form names a photo here, in its photo
@@ -34,11 +34,6 @@ beforeAll(async () => {
     build({ site: SITE, layout: LAYOUT, standIns: false }),
   ])
 }, 180_000)
-afterAll(() => {
-  clean(present)
-  clean(missing)
-})
-
 const page = (built: Built | undefined, file: string): Page => {
   if (!built) throw new Error("the build did not run")
   const found = readPages(built.dist).find((p) => p.file === file)

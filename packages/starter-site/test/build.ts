@@ -1,9 +1,9 @@
 import { spawn } from "node:child_process"
+import { createHash } from "node:crypto"
 import {
   cpSync,
   existsSync,
   mkdirSync,
-  mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
@@ -12,11 +12,11 @@ import {
   writeFileSync,
 } from "node:fs"
 import { createServer, type Server } from "node:http"
-import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { parse } from "parse5"
 import sharp from "sharp"
+import { inject } from "vitest"
 import { fields, layout, site } from "../src/site-config"
 
 export const ROOT = fileURLToPath(new URL("..", import.meta.url))
@@ -34,21 +34,40 @@ export type Built = { dir: string; dist: string }
  * values, `quoteForm` replaces src/quote-form.json the way the seed writes
  * it from the owner's fact, `layout` replaces the pages' section lists,
  * `pages` plants page files and `remove` deletes them.
+ *
+ * Built once per run for each distinct `options`: the run's other callers
+ * wait for that build and read the same directory, so none may write to it.
  */
-export async function build(
-  options: {
-    site?: Record<string, string>
-    layout?: typeof layout
-    quoteForm?: unknown
-    pages?: Record<string, string>
-    remove?: string[]
-    /** Files planted beside the site, by path from its root, such as src/assets/uploads/x.jpg. */
-    files?: Record<string, Uint8Array>
-    /** False plants no stand-in for a photo the site names, to build one whose file is missing. */
-    standIns?: boolean
-  } = {}
-): Promise<Built> {
-  const dir = mkdtempSync(join(tmpdir(), "reme-starter-"))
+export async function build(options: BuildOptions = {}): Promise<Built> {
+  const key = createHash("sha1").update(JSON.stringify(options)).digest("hex")
+  const dir = join(inject("builds"), key)
+  const settled = join(dir, ".settled")
+  try {
+    mkdirSync(dir)
+    writeFileSync(settled, await astroBuild(dir, options).catch(String))
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error
+    while (!existsSync(settled)) await new Promise((r) => setTimeout(r, 100))
+  }
+  const failure = readFileSync(settled, "utf8")
+  if (failure) throw new Error(failure)
+  return { dir, dist: join(dir, "dist") }
+}
+
+type BuildOptions = {
+  site?: Record<string, string>
+  layout?: typeof layout
+  quoteForm?: unknown
+  pages?: Record<string, string>
+  remove?: string[]
+  /** Files planted beside the site, by path from its root, such as src/assets/uploads/x.jpg. */
+  files?: Record<string, Uint8Array>
+  /** False plants no stand-in for a photo the site names, to build one whose file is missing. */
+  standIns?: boolean
+}
+
+/** Builds into `dir`; the build's output when it fails, otherwise "". */
+async function astroBuild(dir: string, options: BuildOptions): Promise<string> {
   for (const entry of ["astro.config.mjs", "tsconfig.json", "src"]) {
     cpSync(join(ROOT, entry), join(dir, entry), { recursive: true })
   }
@@ -109,12 +128,9 @@ export async function build(
     })
     child.on("close", (code) => resolve({ code, output }))
   })
-  if (result.code !== 0) {
-    // A build expected to fail runs every time, so it leaves nothing behind.
-    rmSync(dir, { recursive: true, force: true })
-    throw new Error(`astro build failed in ${dir}\n${result.output}`)
-  }
-  return { dir, dist: join(dir, "dist") }
+  return result.code === 0
+    ? ""
+    : `astro build failed in ${dir}\n${result.output}`
 }
 
 const TYPES: Record<string, string> = {
@@ -153,10 +169,6 @@ export async function serve(
   const address = server.address()
   const port = typeof address === "object" && address ? address.port : 0
   return { server, origin: `http://127.0.0.1:${port}` }
-}
-
-export const clean = (built: Built | undefined) => {
-  if (built) rmSync(built.dir, { recursive: true, force: true })
 }
 
 type Node = {

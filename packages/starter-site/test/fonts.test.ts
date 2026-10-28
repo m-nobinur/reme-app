@@ -1,9 +1,9 @@
 import { existsSync, readdirSync, statSync } from "node:fs"
 import { join } from "node:path"
 import { FONT_PAIRS, LEGACY_FONT_PAIR } from "@workspace/contracts"
-import { afterAll, beforeAll, describe, expect, test } from "vitest"
+import { beforeAll, describe, expect, test } from "vitest"
 import { filesOf, LEGACY, PAIRS, pairOf } from "../src/fonts"
-import { type Built, build, clean, ROOT, readPages } from "./build"
+import { type Built, build, ROOT, readPages } from "./build"
 import { FILLED } from "./fixture"
 
 /** At most 120 KB of font transfer on the home page (VS1's budget). */
@@ -61,11 +61,6 @@ describe("a built site", () => {
     ])
     Object.assign(built, { none, sora, fraunces })
   }, 180_000)
-
-  afterAll(() => {
-    for (const each of Object.values(built)) clean(each)
-  })
-
   const home = (name: string) => {
     const dist = built[name]?.dist ?? ""
     const page = readPages(dist).find((each) => each.file === "index.html")

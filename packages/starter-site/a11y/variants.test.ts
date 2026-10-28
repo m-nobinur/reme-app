@@ -12,7 +12,7 @@ import AxeBuilder from "@axe-core/playwright"
 import { type Browser, chromium } from "@playwright/test"
 import { PALETTES } from "@workspace/contracts"
 import { afterAll, beforeAll, expect, test } from "vitest"
-import { type Built, build, clean, ROOT, serve } from "../test/build"
+import { type Built, build, ROOT, serve } from "../test/build"
 import { FILLED } from "../test/fixture"
 
 const TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]
@@ -49,7 +49,6 @@ beforeAll(async () => {
 afterAll(async () => {
   await browser?.close()
   server?.close()
-  clean(built)
 })
 
 for (const width of [1440, 390]) {
