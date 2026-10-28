@@ -447,6 +447,42 @@ describe.skipIf(!url)("custom domains against a database", () => {
     expect(site.store.pointers.has(`host:${name}`)).toBe(true)
   })
 
+  it("retires the live domain when another goes live, and a retry finds what it replaced", async () => {
+    const net = stubNet()
+    const site = await published()
+    const { env } = domainEnv(site.store)
+    const live = async (name: string) => {
+      await connect(env, kit, site.orgId, { name, approval_id: "a" })
+      const id = (await rowOf(site.orgId, name))?.id ?? ""
+      await claimHostnames(env, kit, site.orgId, id)
+      expect(await activateDomain(env, kit, site.orgId, id)).toBe(true)
+      return id
+    }
+    const [first, second] = [unique(), unique()]
+    await live(first)
+    const secondId = await live(second)
+    expect(await rowOf(site.orgId, first)).toMatchObject({ state: "removed" })
+    expect(await rowOf(site.orgId, second)).toMatchObject({ state: "active" })
+    const read = (host: string) =>
+      JSON.parse(site.store.pointers.get(`host:${host}`) ?? "null")
+    expect(site.store.pointers.has(`host:www.${first}`)).toBe(false)
+    expect(read(site.slug)).toEqual({ redirect_to: `www.${second}` })
+    expect(net.deleted).toEqual(
+      expect.arrayContaining([`h-${first}`, `h-www.${first}`])
+    )
+    // A retried step stops serving the replaced one again and keeps the new one.
+    net.deleted.length = 0
+    expect(await activateDomain(env, kit, site.orgId, secondId)).toBe(true)
+    expect(net.deleted).toEqual(
+      expect.arrayContaining([`h-${first}`, `h-www.${first}`])
+    )
+    expect(read(`www.${second}`)).toMatchObject({ org_id: site.orgId })
+    const loads = await loadsOf(env, kit, site.orgId, secondId)
+    expect((await loads.reading?.tell?.())?.text).toContain(
+      `www.${first} is no longer used`
+    )
+  })
+
   it("keeps one audit row per status and lets go of an org with no conversation", async () => {
     const site = await published()
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined)
