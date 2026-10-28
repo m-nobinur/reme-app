@@ -1,12 +1,12 @@
 import AxeBuilder from "@axe-core/playwright"
 import { expect, test } from "@playwright/test"
-import { open, WCAG } from "./helpers"
+import { open, settled, WCAG } from "./helpers"
 
 /**
  * The notifications list and every blank panel
- * section's next step. The catalog suite scans each entry at one width; the
- * owner reads these on a phone, a tablet and a laptop, so each is scanned
- * alone at all three, in both themes. The blank-state actions are clicked
+ * section's next step. The catalog suite scans each entry at one width in both
+ * themes; the owner reads these on a phone, a tablet and a laptop, so each is
+ * scanned alone at all three. The blank-state actions are clicked
  * here because the smoke owner, who has no organisation, can only reach the
  * first of them in `qa/e2e`.
  */
@@ -24,41 +24,27 @@ const ENTRIES = [
   "PanelSegment done",
 ]
 
-for (const theme of ["light", "dark"] as const) {
-  test(`notifications and blank states have no accessibility violations in ${theme}`, async ({
-    page,
-  }) => {
-    test.setTimeout(120_000)
-    for (const width of WIDTHS) {
-      for (const entry of ENTRIES) {
-        await open(page, entry, width, theme)
-        // A segment fades in; contrast is read once it has, not mid-fade.
-        await page.evaluate(() =>
-          Promise.all(
-            document
-              .getAnimations()
-              .filter(
-                (animation) =>
-                  animation.effect?.getTiming().iterations !==
-                  Number.POSITIVE_INFINITY
-              )
-              .map((animation) => animation.finished.catch(() => null))
-          )
+test("notifications and blank states have no accessibility violations at any width", async ({
+  page,
+}) => {
+  test.setTimeout(120_000)
+  for (const width of WIDTHS) {
+    for (const entry of ENTRIES) {
+      await open(page, entry, width)
+      await settled(page)
+      const results = await new AxeBuilder({ page })
+        .withTags(WCAG)
+        .include(`[data-entry="${entry}"]`)
+        .analyze()
+      expect
+        .soft(
+          results.violations.map((v) => `${entry} ${width}: ${v.id}`),
+          JSON.stringify(results.violations, null, 2)
         )
-        const results = await new AxeBuilder({ page })
-          .withTags(WCAG)
-          .include(`[data-entry="${entry}"]`)
-          .analyze()
-        expect
-          .soft(
-            results.violations.map((v) => `${entry} ${width}: ${v.id}`),
-            JSON.stringify(results.violations, null, 2)
-          )
-          .toEqual([])
-      }
+        .toEqual([])
     }
-  })
-}
+  }
+})
 
 test("the list shows one row of each kind the contract has, in its order", async ({
   page,

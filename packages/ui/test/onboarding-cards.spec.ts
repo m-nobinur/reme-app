@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test"
 import { PALETTES } from "@workspace/contracts"
-import { axe, open } from "./helpers"
+import { open } from "./helpers"
 
 /**
  * Onboarding's choice and photo questions, in the tray: native groups the
@@ -116,13 +116,8 @@ test("a colour card shows four, brings in four others, and takes a picked colour
   )
 })
 
-test("the colour card's states pass axe in both themes and fit a phone", async ({
-  page,
-}) => {
-  for (const theme of ["light", "dark"]) {
-    await open(page, "ChoiceForm", 1024, theme)
-    await axe(page, `ChoiceForm ${theme}`)
-  }
+// The catalog scans the card's states with axe in both themes.
+test("the colour card's states fit a phone", async ({ page }) => {
   await open(page, "ChoiceForm", 375)
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth > window.innerWidth

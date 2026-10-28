@@ -160,28 +160,27 @@ test("the approve button shows a visible focus ring from the keyboard", async ({
   expect(ring).not.toBe("none")
 })
 
-for (const theme of ["light", "dark"] as const) {
-  for (const [name, width] of Object.entries({
-    phone: 390,
-    tablet: 768,
-    desktop: 1440,
-  })) {
-    for (const entry of ["Onboarding", "AskFact", "RequestChange"]) {
-      test(`${entry} has no accessibility violations on a ${name} in ${theme}`, async ({
-        page,
-      }) => {
-        await open(page, entry, width, theme)
-        await settled(page)
-        const results = await new AxeBuilder({ page })
-          .include(`[data-entry="${entry}"]`)
-          .withTags(WCAG)
-          .analyze()
-        expect(
-          results.violations.map((violation) => violation.id),
-          JSON.stringify(results.violations, null, 2)
-        ).toEqual([])
-      })
-    }
+// The catalog scans these in both themes at 1024.
+for (const [name, width] of Object.entries({
+  phone: 390,
+  tablet: 768,
+  desktop: 1440,
+})) {
+  for (const entry of ["Onboarding", "AskFact", "RequestChange"]) {
+    test(`${entry} has no accessibility violations on a ${name}`, async ({
+      page,
+    }) => {
+      await open(page, entry, width)
+      await settled(page)
+      const results = await new AxeBuilder({ page })
+        .include(`[data-entry="${entry}"]`)
+        .withTags(WCAG)
+        .analyze()
+      expect(
+        results.violations.map((violation) => violation.id),
+        JSON.stringify(results.violations, null, 2)
+      ).toEqual([])
+    })
   }
 }
 

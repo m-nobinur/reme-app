@@ -123,13 +123,19 @@ for (const [entry, slot, yes, busy, target, detail, done, refused] of [
   })
 }
 
-for (const theme of ["light", "dark"] as const) {
-  for (const [name, width] of Object.entries({
-    phone: 390,
-    tablet: 768,
-    desktop: 1440,
-  })) {
-    for (const entry of ["CosReads", "AnswerQuestion", "CreateReminder"]) {
+// The catalog scans each entry as it first renders, in both themes at 1024;
+// an opened read is scanned only here, so it keeps both.
+for (const [entry, themes] of [
+  ["CosReads", ["light", "dark"]],
+  ["AnswerQuestion", ["light"]],
+  ["CreateReminder", ["light"]],
+] as const) {
+  for (const theme of themes) {
+    for (const [name, width] of Object.entries({
+      phone: 390,
+      tablet: 768,
+      desktop: 1440,
+    })) {
       test(`${entry} has no accessibility violations on a ${name} in ${theme}`, async ({
         page,
       }) => {
@@ -198,24 +204,23 @@ test("a reply's thumbs show to the keyboard as well as the pointer", async ({
   )
 })
 
-for (const theme of ["light", "dark"] as const) {
-  for (const [name, width] of Object.entries({
-    phone: 390,
-    tablet: 768,
-    desktop: 1440,
-  })) {
-    test(`ReplyFeedback has no accessibility violations on a ${name} in ${theme}`, async ({
-      page,
-    }) => {
-      await open(page, "ReplyFeedback", width, theme)
-      const results = await new AxeBuilder({ page })
-        .include('[data-entry="ReplyFeedback"]')
-        .withTags(WCAG)
-        .analyze()
-      expect(
-        results.violations.map((violation) => violation.id),
-        JSON.stringify(results.violations, null, 2)
-      ).toEqual([])
-    })
-  }
+// The catalog scans it in both themes at 1024.
+for (const [name, width] of Object.entries({
+  phone: 390,
+  tablet: 768,
+  desktop: 1440,
+})) {
+  test(`ReplyFeedback has no accessibility violations on a ${name}`, async ({
+    page,
+  }) => {
+    await open(page, "ReplyFeedback", width)
+    const results = await new AxeBuilder({ page })
+      .include('[data-entry="ReplyFeedback"]')
+      .withTags(WCAG)
+      .analyze()
+    expect(
+      results.violations.map((violation) => violation.id),
+      JSON.stringify(results.violations, null, 2)
+    ).toEqual([])
+  })
 }

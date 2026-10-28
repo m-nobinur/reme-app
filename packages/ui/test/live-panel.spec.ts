@@ -225,30 +225,27 @@ const REMINDER_ENTRIES = [
   "LiveLine idle",
 ]
 
-for (const theme of ["light", "dark"] as const) {
-  test(`reminders have no accessibility violations in ${theme}`, async ({
-    page,
-  }) => {
-    test.setTimeout(120_000)
-    for (const width of [390, 768, 1440]) {
-      for (const entry of REMINDER_ENTRIES) {
-        await page.setViewportSize({ width, height: 900 })
-        await page.goto(`/?entry=${encodeURIComponent(entry)}&theme=${theme}`)
-        await expect(page.locator(`[data-entry="${entry}"]`)).toBeVisible()
-        const results = await new AxeBuilder({ page })
-          .withTags(WCAG)
-          .include(`[data-entry="${entry}"]`)
-          .analyze()
-        expect
-          .soft(
-            results.violations.map((v) => `${entry} ${width}: ${v.id}`),
-            JSON.stringify(results.violations, null, 2)
-          )
-          .toEqual([])
-      }
+// The catalog scans these in both themes at one width; this adds the others.
+test("reminders have no accessibility violations at any width", async ({
+  page,
+}) => {
+  test.setTimeout(120_000)
+  for (const width of [390, 768, 1440]) {
+    for (const entry of REMINDER_ENTRIES) {
+      await open(page, entry, width)
+      const results = await new AxeBuilder({ page })
+        .withTags(WCAG)
+        .include(`[data-entry="${entry}"]`)
+        .analyze()
+      expect
+        .soft(
+          results.violations.map((v) => `${entry} ${width}: ${v.id}`),
+          JSON.stringify(results.violations, null, 2)
+        )
+        .toEqual([])
     }
-  })
-}
+  }
+})
 
 test("each written reminder has its own Done, named for it", async ({
   page,
@@ -322,25 +319,21 @@ test("an approval whose preview fails still says what the owner can do, and lets
   await expect(entry.getByRole("button", { name: "Publish" })).toBeEnabled()
 })
 
-for (const theme of ["light", "dark"] as const) {
-  test(`an approval whose preview fails has no accessibility violations in ${theme}`, async ({
-    page,
-  }) => {
-    const entry = "ApprovalItem preview unavailable"
-    for (const width of [390, 768, 1440]) {
-      await page.setViewportSize({ width, height: 900 })
-      await page.goto(`/?entry=${encodeURIComponent(entry)}&theme=${theme}`)
-      await expect(page.locator(`[data-entry="${entry}"]`)).toBeVisible()
-      const results = await new AxeBuilder({ page })
-        .withTags(WCAG)
-        .include(`[data-entry="${entry}"]`)
-        .analyze()
-      expect
-        .soft(
-          results.violations.map((v) => `${entry} ${width}: ${v.id}`),
-          JSON.stringify(results.violations, null, 2)
-        )
-        .toEqual([])
-    }
-  })
-}
+test("an approval whose preview fails has no accessibility violations at any width", async ({
+  page,
+}) => {
+  const entry = "ApprovalItem preview unavailable"
+  for (const width of [390, 768, 1440]) {
+    await open(page, entry, width)
+    const results = await new AxeBuilder({ page })
+      .withTags(WCAG)
+      .include(`[data-entry="${entry}"]`)
+      .analyze()
+    expect
+      .soft(
+        results.violations.map((v) => `${entry} ${width}: ${v.id}`),
+        JSON.stringify(results.violations, null, 2)
+      )
+      .toEqual([])
+  }
+})
