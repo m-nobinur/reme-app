@@ -23,6 +23,7 @@ import {
   hasScopes,
   NeedsReauth,
   openToken,
+  removeSite,
   revokeToken,
   sealToken,
   submitSitemap,
@@ -232,17 +233,22 @@ export async function startSearch(
 
 /**
  * Everything Search Console holds for one host of the org: its verification
- * stopped, its files no longer served, its property row gone (the child
- * rows cascade). For a host the org lets go of, so a file of this org's never
- * proves the host for whoever holds it next. The files go before the row,
- * which is how a repeat finds them. Safe to repeat.
+ * stopped, its files no longer served, the property taken out of the owner's
+ * Search Console, its property row gone (the child rows cascade). For a host
+ * the org lets go of, so a file of this org's never proves the host for
+ * whoever holds it next. The files go before the row, which is how a repeat
+ * finds them. The row goes only once Google has let the property go;
+ * otherwise it stays for the hourly `forgetStrays` to try again, and this
+ * answers false. `unlist` false leaves Google alone (a disconnect, whose
+ * grant is already revoked). Safe to repeat.
  */
 export async function forgetHost(
   env: Env,
   kit: Tenancy,
   orgId: string,
-  host: string
-): Promise<void> {
+  host: string,
+  unlist = true
+): Promise<boolean> {
   try {
     const running = await env.SEARCHES.get(searchInstanceId(orgId, host))
     await running.terminate()
@@ -253,21 +259,86 @@ export async function forgetHost(
   const rows = await kit.withOrg({ orgId }, (db) =>
     db
       .select({
+        siteUrl: searchProperties.siteUrl,
         token: searchProperties.token,
         method: searchProperties.method,
       })
       .from(searchProperties)
       .where(where)
   )
+  if (rows.length === 0) return true
   for (const row of rows) {
     if (row.token && row.method === "file") {
       await dropVerification(env, host, row.token)
+    }
+  }
+  if (unlist) {
+    try {
+      // Every state: a 404 for one Google never listed counts as gone.
+      const access = await accessToken(env, kit, orgId)
+      for (const { siteUrl } of rows) await removeSite(access, siteUrl)
+    } catch (error) {
+      console.warn(
+        JSON.stringify({
+          code: "search.unlist_failed",
+          reason: error instanceof Error ? error.name : "unknown",
+        })
+      )
+      return false
     }
   }
   await kit.withOrg({ orgId }, async (db) => {
     await db.delete(searchProperties).where(where)
     await syncTasks(db, orgId)
   })
+  return true
+}
+
+/**
+ * The hourly retry of `forgetHost`: of `orgIds` with a live connection, every
+ * property row for a host the site is no longer served on (its live domain,
+ * else its free host) is let go again. An org that throws is logged and
+ * skipped. Returns how many hosts went.
+ */
+export async function forgetStrays(
+  env: Env,
+  kit: Tenancy,
+  orgIds: string[]
+): Promise<number> {
+  let gone = 0
+  for (const orgId of orgIds) {
+    try {
+      const strays = await kit.withOrg({ orgId }, async (db) => {
+        const [connection] = await db
+          .select({ state: searchConnections.state })
+          .from(searchConnections)
+        if (connection?.state !== "active") return []
+        const [org] = await db
+          .select({ slug: orgs.slug })
+          .from(orgs)
+          .where(eq(orgs.id, orgId))
+        const served =
+          (await activeDomainHost(db)) ??
+          siteHost(org?.slug ?? "", env.SITE_HOST_SUFFIX)
+        return db
+          .selectDistinct({ host: searchProperties.host })
+          .from(searchProperties)
+          .where(sql`${searchProperties.host} <> ${served}`)
+      })
+      for (const { host } of strays) {
+        if (await forgetHost(env, kit, orgId, host)) gone++
+      }
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          code: "search.forget_failed",
+          org_id: orgId,
+          error: error instanceof Error ? error.name : "unknown",
+        })
+      )
+    }
+  }
+  return gone
 }
 
 /**

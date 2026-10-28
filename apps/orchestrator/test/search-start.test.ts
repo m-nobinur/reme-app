@@ -1,7 +1,7 @@
 import { domains, searchConnections, searchProperties } from "@workspace/db"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { sealToken } from "../src/google.ts"
-import { searchInstanceId } from "../src/search.ts"
+import { forgetStrays, searchInstanceId } from "../src/search.ts"
 import { moveGoogle, startSearchForDomain } from "../src/search-start.ts"
 import { freshOrg, kit } from "./fixture.ts"
 
@@ -156,18 +156,18 @@ describe.skipIf(!url)("moving Google to a live domain", () => {
     expect(calls).toHaveLength(1)
   })
 
-  it("leaves a property Reme never added at Google alone there", async () => {
+  it("asks Google about a property in any state, and a 404 counts as gone", async () => {
     const orgId = await freshOrg(kit)
     await domainOf(orgId, "active")
     await propertyOf(orgId, "pending")
     const { env } = stopping()
-    const calls = await google(orgId, env)
+    const calls = await google(orgId, env, 404)
     expect(await moveGoogle(env, kit, orgId, OLD)).toBe("moved")
-    expect(calls).toEqual([])
+    expect(calls).toEqual([DELETE])
     expect(await held(orgId)).toEqual([])
   })
 
-  it("still moves when Google refuses the removal", async () => {
+  it("keeps the row when Google refuses the removal, and the hourly sweep lets it go", async () => {
     const orgId = await freshOrg(kit)
     await domainOf(orgId, "active")
     await propertyOf(orgId)
@@ -179,8 +179,41 @@ describe.skipIf(!url)("moving Google to a live domain", () => {
     expect(warn).toHaveBeenCalledExactlyOnceWith(
       JSON.stringify({ code: "search.unlist_failed", reason: "google.403" })
     )
-    expect(await held(orgId)).toEqual([])
+    expect(await held(orgId)).toHaveLength(1)
     warn.mockRestore()
+
+    const retried = await google(orgId, env)
+    expect(await forgetStrays(env, kit, [orgId])).toBe(1)
+    expect(retried).toEqual([DELETE])
+    expect(await held(orgId)).toEqual([])
+    // Nothing left: the next hour calls nobody.
+    expect(await forgetStrays(env, kit, [orgId])).toBe(0)
+    expect(retried).toHaveLength(1)
+  })
+
+  it("never sweeps the host the site is served on, or an org whose grant ended", async () => {
+    const orgId = await freshOrg(kit)
+    const { host } = await domainOf(orgId, "active")
+    await kit.withOrg({ orgId }, (db) =>
+      db.insert(searchProperties).values({
+        orgId,
+        host,
+        siteUrl: `https://${host}/`,
+        kind: "url_prefix",
+        method: "file",
+        state: "verified",
+      })
+    )
+    const { env } = stopping()
+    const calls = await google(orgId, env)
+    expect(await forgetStrays(env, kit, [orgId])).toBe(0)
+    expect(calls).toEqual([])
+
+    const ended = await freshOrg(kit)
+    await domainOf(ended, "needs_reauth")
+    await propertyOf(ended)
+    expect(await forgetStrays(env, kit, [ended])).toBe(0)
+    expect(await held(ended)).toHaveLength(1)
   })
 
   it("says only that the host was added when Google never held the old one", async () => {

@@ -5,6 +5,7 @@ import {
   eq,
   events,
   orgs,
+  searchConnections,
   searchProperties,
   sql,
   taskSteps,
@@ -26,6 +27,7 @@ import {
   revokeDomains,
   sweepDomains,
 } from "../src/domain-flow.ts"
+import { sealToken } from "../src/google.ts"
 import { probe } from "../src/probe.ts"
 import { clearPointers, writePointer } from "../src/publish.ts"
 import { searchInstanceId } from "../src/search.ts"
@@ -68,14 +70,24 @@ function stubNet(
   {
     active = false,
     pending = false,
-  }: { active?: boolean; pending?: boolean } = {}
+    google = 204,
+  }: { active?: boolean; pending?: boolean; google?: number } = {}
 ) {
   const hostnames = new Map<string, string>()
   const deleted: string[] = []
   const patched: string[] = []
+  const unlisted: string[] = []
   const fetched = vi.fn(
     async (input: string | URL | Request, init?: RequestInit) => {
       const u = new URL(String(input))
+      // Google: a token refresh, and Search Console answering `google`.
+      if (u.hostname === "oauth2.googleapis.com") {
+        return Response.json({ access_token: "ya29.a", expires_in: 3600 })
+      }
+      if (u.hostname === "www.googleapis.com" && init?.method === "DELETE") {
+        unlisted.push(decodeURIComponent(u.pathname.split("/").at(-1) ?? ""))
+        return new Response(null, { status: google })
+      }
       if (u.hostname === "cloudflare-dns.com") {
         const name = u.searchParams.get("name") ?? ""
         const type = u.searchParams.get("type")
@@ -141,7 +153,7 @@ function stubNet(
     }
   )
   vi.stubGlobal("fetch", fetched)
-  return { hostnames, deleted, patched }
+  return { hostnames, deleted, patched, unlisted }
 }
 
 /** An org with a published site: the preview fixture plus a deployment of its revision. */
@@ -164,6 +176,39 @@ async function published() {
   return { ...site, slug: siteHost(org?.slug ?? "", SUFFIX) }
 }
 
+const GOOGLE_KEY = Buffer.from(
+  crypto.getRandomValues(new Uint8Array(32))
+).toString("base64")
+
+/** The org connected to Google, its grant sealed for real. */
+async function connectGoogle(env: Env, orgId: string) {
+  const refreshToken = await sealToken(env, orgId, "1//refresh")
+  await kit.withOrg({ orgId }, (db) =>
+    db
+      .insert(searchConnections)
+      .values({ orgId, state: "active", refreshToken })
+  )
+}
+
+/** A verified property of the org for `host`, its file `token`. */
+const propertyOf = (orgId: string, host: string, token?: string) =>
+  kit.withOrg({ orgId }, (db) =>
+    db.insert(searchProperties).values({
+      orgId,
+      host,
+      siteUrl: `https://${host}/`,
+      kind: "url_prefix",
+      method: "file",
+      token,
+      state: "verified",
+    })
+  )
+
+const propertiesOf = (orgId: string) =>
+  kit.withOrg({ orgId }, (db) =>
+    db.select({ host: searchProperties.host }).from(searchProperties)
+  )
+
 function domainEnv(store: ReturnType<typeof storage>) {
   const created: { id: string; params: unknown }[] = []
   const terminated: string[] = []
@@ -171,6 +216,9 @@ function domainEnv(store: ReturnType<typeof storage>) {
     ...workflowEnv(store).env,
     CF_DOMAINS_TOKEN: "token",
     CF_DOMAINS_ZONE_ID: "zone",
+    GOOGLE_CLIENT_ID: "client",
+    GOOGLE_CLIENT_SECRET: "secret",
+    GOOGLE_TOKEN_KEY: GOOGLE_KEY,
     DOMAINS: {
       create: async (instance: { id: string; params: unknown }) => {
         created.push(instance)
@@ -386,27 +434,16 @@ describe.skipIf(!url)("custom domains against a database", () => {
     // The live domain verified in this org's Google account.
     const file = "google5e.html"
     site.store.pointers.set(`gsv:www.${name}:${file}`, "1")
-    await kit.withOrg({ orgId: site.orgId }, (db) =>
-      db.insert(searchProperties).values({
-        orgId: site.orgId,
-        host: `www.${name}`,
-        siteUrl: `https://www.${name}/`,
-        kind: "url_prefix",
-        method: "file",
-        token: file,
-        state: "verified",
-      })
-    )
+    await connectGoogle(env, site.orgId)
+    await propertyOf(site.orgId, `www.${name}`, file)
 
     expect(await remove(env, kit, site.orgId, name)).toBeNull()
     expect(await rowOf(site.orgId, name)).toMatchObject({ state: "removed" })
-    // Its file and property go, so it proves nothing for the next holder.
+    // Its file and property go, here and in the owner's Search Console, so
+    // it proves nothing for the next holder.
     expect(site.store.pointers.has(`gsv:www.${name}:${file}`)).toBe(false)
-    expect(
-      await kit.withOrg({ orgId: site.orgId }, (db) =>
-        db.select().from(searchProperties)
-      )
-    ).toEqual([])
+    expect(net.unlisted).toEqual([`https://www.${name}/`])
+    expect(await propertiesOf(site.orgId)).toEqual([])
     expect(terminated).toEqual([
       searchInstanceId(site.orgId, `www.${name}`),
       searchInstanceId(site.orgId, name),
@@ -481,6 +518,42 @@ describe.skipIf(!url)("custom domains against a database", () => {
     expect((await loads.reading?.tell?.())?.text).toContain(
       `www.${first} is no longer used`
     )
+  })
+
+  it("takes a retired domain out of Search Console, and keeps a property Google would not let go", async () => {
+    const net = stubNet()
+    const site = await published()
+    const { env } = domainEnv(site.store)
+    await connectGoogle(env, site.orgId)
+    const live = async (name: string) => {
+      await connect(env, kit, site.orgId, { name, approval_id: "a" })
+      const id = (await rowOf(site.orgId, name))?.id ?? ""
+      await claimHostnames(env, kit, site.orgId, id)
+      expect(await activateDomain(env, kit, site.orgId, id)).toBe(true)
+    }
+    const [first, second] = [unique(), unique()]
+    await live(first)
+    await propertyOf(site.orgId, `www.${first}`)
+    await live(second)
+    expect(net.unlisted).toEqual([`https://www.${first}/`])
+    expect(await propertiesOf(site.orgId)).toEqual([])
+
+    // Google down: the domain is removed all the same, its property row stays
+    // for the hourly sweep.
+    const down = stubNet({}, { google: 503 })
+    await propertyOf(site.orgId, `www.${second}`)
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+    expect(await remove(env, kit, site.orgId, second)).toBeNull()
+    expect(await rowOf(site.orgId, second)).toMatchObject({ state: "removed" })
+    expect(down.unlisted).toEqual([`https://www.${second}/`])
+    expect(warn).toHaveBeenCalledWith(
+      JSON.stringify({
+        code: "search.unlist_failed",
+        reason: "google.unavailable",
+      })
+    )
+    expect(await propertiesOf(site.orgId)).toEqual([{ host: `www.${second}` }])
+    warn.mockRestore()
   })
 
   it("keeps one audit row per status and lets go of an org with no conversation", async () => {
