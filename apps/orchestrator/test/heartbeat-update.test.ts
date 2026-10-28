@@ -289,7 +289,9 @@ describe("a model-written update", () => {
     await writeUpdate(env, kit, "org", UPDATE, write)
     expect(write).toHaveBeenCalledWith(
       "test-key",
-      expect.stringMatching(/Quote every value in the facts exactly/),
+      expect.stringMatching(
+        /Use every value in the facts exactly as written, with no quotation marks/
+      ),
       { facts: UPDATE.facts, draft: UPDATE.template },
       15_000
     )
@@ -318,5 +320,21 @@ describe("faithful", () => {
         facts
       )
     ).toBe(false)
+  })
+
+  it("refuses a value set in quotation marks, as the template never does", () => {
+    const facts = { host: "sparkle.co.uk", google: "Google Search Console" }
+    expect(
+      faithful(
+        "“sparkle.co.uk” is live, and I'm adding it to your “Google Search Console”.",
+        facts
+      )
+    ).toBe(false)
+    expect(
+      faithful(
+        "sparkle.co.uk is live, and I'm adding it to your Google Search Console.",
+        facts
+      )
+    ).toBe(true)
   })
 })

@@ -403,17 +403,19 @@ const updatePrompt = (name: string | null) =>
   [
     `${youAre(name)} Something the owner started has just moved on, and you are telling them.`,
     "You get the facts and a draft. Write the update in your own words as one short, warm message: the point first, then what happens next or what the owner can do.",
-    "Quote every value in the facts exactly as written. Add no number, date, name, web address or DNS value that is not in the facts. No greeting, no thanks, no sign-off.",
+    "Use every value in the facts exactly as written, with no quotation marks around it. Add no number, date, name, web address or DNS value that is not in the facts. No greeting, no thanks, no sign-off.",
     `At most ${LIMITS.sentences} sentences and ${LIMITS.chars} characters, and at most one question.`,
   ].join("\n\n")
 
 /** Updates run inside a Workflow step, so the model gets less time than a heartbeat. */
 const UPDATE_TIMEOUT_MS = 15_000
 
+const QUOTES = ['"', "“", "'", "‘", "«"]
+
 /**
  * Whether `text` may stand in for the template: a message inside the limits,
- * every fact's value in it verbatim, no number the facts do not hold, and no
- * link or phone number other than theirs.
+ * every fact's value in it verbatim and not in quotation marks, no number the
+ * facts do not hold, and no link or phone number other than theirs.
  */
 export function faithful(text: string, facts: Record<string, string>): boolean {
   const values = Object.values(facts)
@@ -422,6 +424,10 @@ export function faithful(text: string, facts: Record<string, string>): boolean {
   ])
   if (reply.kind !== "message") return false
   if (!values.every((value) => reply.text.includes(value))) return false
+  if (
+    values.some((value) => QUOTES.some((q) => reply.text.includes(q + value)))
+  )
+    return false
   const numbers = new Set(values.flatMap((value) => value.match(/\d+/g) ?? []))
   return (reply.text.match(/\d+/g) ?? []).every((n) => numbers.has(n))
 }
