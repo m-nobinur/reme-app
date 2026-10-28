@@ -1,7 +1,7 @@
 import { domains, searchConnections, searchProperties } from "@workspace/db"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { sealToken } from "../src/google.ts"
-import { forgetStrays, searchInstanceId } from "../src/search.ts"
+import { addProperty, forgetStrays, searchInstanceId } from "../src/search.ts"
 import { moveGoogle, startSearchForDomain } from "../src/search-start.ts"
 import { freshOrg, kit } from "./fixture.ts"
 
@@ -171,6 +171,20 @@ describe.skipIf(!url)("moving Google to a live domain", () => {
     await propertyOf(orgId, "pending")
     expect(await moveGoogle(env, kit, orgId, OLD)).toBe("moved")
     expect(calls).toHaveLength(1)
+    expect(await held(orgId)).toEqual([])
+  })
+
+  it("unlists a property whose Workflow stopped after its add step", async () => {
+    const orgId = await freshOrg(kit)
+    await domainOf(orgId, "active")
+    await propertyOf(orgId, "pending")
+    const { env } = stopping()
+    const calls = await google(orgId, env)
+    await addProperty(env, kit, { org_id: orgId, host: OLD })
+    expect(calls).toEqual([`PUT ${DELETE.slice("DELETE ".length)}`])
+    // Stopped here: never `verified`, yet in the owner's list.
+    expect(await moveGoogle(env, kit, orgId, OLD)).toBe("moved")
+    expect(calls.at(-1)).toBe(DELETE)
     expect(await held(orgId)).toEqual([])
   })
 

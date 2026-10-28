@@ -274,8 +274,8 @@ export async function forgetHost(
       await dropVerification(env, host, row.token)
     }
   }
-  // Only what Reme's `add` step put in the list (`verifiedAt` is set after
-  // it); a property the owner added there themselves is theirs.
+  // Only what Reme's `add` step may have put in the list (`verifiedAt` is
+  // stamped before it); a property the owner added there themselves is theirs.
   const added = unlist ? rows.filter((r) => r.verifiedAt) : []
   if (added.length > 0) {
     try {
@@ -585,6 +585,16 @@ export async function addProperty(
   if (sitemap) {
     await submitSitemap(access, property.siteUrl, `https://${host}/sitemap.xml`)
   } else {
+    // Stamped before the add, so `forgetHost` unlists it even if the
+    // Workflow stops before `verified`; Google has verified it by now.
+    await kit.withOrg({ orgId }, (db) =>
+      db
+        .update(searchProperties)
+        .set({
+          verifiedAt: sql`coalesce(${searchProperties.verifiedAt}, now())`,
+        })
+        .where(eq(searchProperties.siteUrl, property.siteUrl))
+    )
     await addSite(access, property.siteUrl)
   }
 }
