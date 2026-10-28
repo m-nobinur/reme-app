@@ -65,10 +65,14 @@ let served = ""
  */
 function stubNet(
   doh: Record<string, unknown> = {},
-  { active = false }: { active?: boolean } = {}
+  {
+    active = false,
+    pending = false,
+  }: { active?: boolean; pending?: boolean } = {}
 ) {
   const hostnames = new Map<string, string>()
   const deleted: string[] = []
+  const patched: string[] = []
   const fetched = vi.fn(
     async (input: string | URL | Request, init?: RequestInit) => {
       const u = new URL(String(input))
@@ -109,6 +113,15 @@ function stubNet(
           return envelope({ id: "x" })
         }
         const id = u.pathname.split("/").at(-1) ?? ""
+        if (init?.method === "PATCH") patched.push(id)
+        if (pending && hostnames.has(id)) {
+          return envelope({
+            id,
+            hostname: hostnames.get(id),
+            status: "pending",
+            ssl: { status: "pending_validation" },
+          })
+        }
         if (active && hostnames.has(id)) {
           return envelope({
             id,
@@ -128,7 +141,7 @@ function stubNet(
     }
   )
   vi.stubGlobal("fetch", fetched)
-  return { hostnames, deleted }
+  return { hostnames, deleted, patched }
 }
 
 /** An org with a published site: the preview fixture plus a deployment of its revision. */
@@ -660,6 +673,33 @@ describe.skipIf(!url)("custom domains against a database", () => {
       status: { status: "pending_certificate" },
       next_step: expect.stringContaining(`records for ${sub}`),
     })
+  })
+
+  it("refreshes validation for the owner's check, and not for a certificate event's", async () => {
+    const name = unique()
+    const sub = `book.${name}`
+    const { patched } = stubNet(
+      {
+        [`${sub} SOA`]: {
+          Status: 3,
+          Authority: [{ name, type: 6, TTL: 60, data: "ns. host. 1 1 1 1 1" }],
+        },
+        [`${name} A`]: {
+          Status: 0,
+          Answer: [{ name, type: 1, TTL: 60, data: "192.0.2.10" }],
+        },
+      },
+      { pending: true }
+    )
+    const site = await published()
+    const { env } = domainEnv(site.store)
+    await connect(env, kit, site.orgId, { name: sub, approval_id: "a" })
+    const row = await rowOf(site.orgId, sub)
+    await claimHostnames(env, kit, site.orgId, row?.id ?? "")
+    await checkNow(env, kit, site.orgId, sub, false)
+    expect(patched).toEqual([])
+    await checkNow(env, kit, site.orgId, sub)
+    expect(patched).toEqual([`h-${sub}`])
   })
 
   it("holds one live claim per subdomain, and asks for the TXT when its record already reaches us", async () => {

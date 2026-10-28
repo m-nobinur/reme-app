@@ -535,12 +535,10 @@ describe("the domain check", () => {
     ).toEqual({
       status: "pending_verification",
     })
-    // Active at Cloudflare but the record is gone: the owner moved it.
+    // Active at Cloudflare with no record seen: our resolver's cached NXDOMAIN.
     expect(
       domainCheck(empty, [{ host: WWW, hostname: hostname(WWW) }])
-    ).toEqual({
-      status: "invalid_configuration",
-    })
+    ).toEqual({ status: "valid" })
     expect(
       domainCheck(fakeInspection(), [
         { host: WWW, hostname: hostname(WWW, "active", "pending_validation") },

@@ -1204,13 +1204,15 @@ export async function start(
  * `POST /domains/{name}/check`: the check now, for a claim still connecting,
  * and a nudge so its Workflow looks too; the stored state for any other. A
  * Workflow that cannot take the nudge is created again, which recovers a
- * claim whose create failed after the row was written.
+ * claim whose create failed after the row was written. `refresh` is off for
+ * Cloudflare's own certificate events, which a refresh would only repeat.
  */
 export async function checkNow(
   env: Env,
   kit: Tenancy,
   orgId: string,
-  rawName: string
+  rawName: string,
+  refresh = true
 ): Promise<Refusal | CheckDomainOutput> {
   const name = normalizeName(rawName)
   if (!name) return invalid()
@@ -1230,7 +1232,7 @@ export async function checkNow(
   let status: DomainCheck
   if (connecting(row.state)) {
     // The owner says the records are in: Cloudflare validates now, not on its backoff.
-    status = (await currentCheck(env, row, true)).check
+    status = (await currentCheck(env, row, refresh)).check
     // Valid at Cloudflare is not live: only the Workflow's activation is, as in `look`.
     if (status.status === "valid") status = { status: "pending_certificate" }
     try {
