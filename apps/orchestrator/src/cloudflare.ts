@@ -114,6 +114,7 @@ import {
   workKey,
 } from "./sandbox.ts"
 import { type JobsQueueMessage, SCHEDULE_CRON, scanDue } from "./schedule.ts"
+import { forgetStrays } from "./search.ts"
 import { afterPublish, startDueSyncs } from "./search-sync.ts"
 import {
   advance,
@@ -1780,12 +1781,17 @@ export class SweepWorkflow extends WorkflowEntrypoint<Env, { hour: string }> {
     // Search Console (search-sync.ts): each org due a pull gets its own
     // instance, since a sweep calling Google for every org would pass the
     // subrequest limit. The Monday report is a heartbeat item (heartbeat.ts).
+    // A property Google kept when its host was let go is asked again first;
+    // only those orgs call Google here.
     const { hour } = event.payload
     const day = `${hour.slice(0, 4)}-${hour.slice(4, 6)}-${hour.slice(6, 8)}`
     for (let i = 0; i < orgIds.length; i += SWEEP_CHUNK) {
       const chunk = orgIds.slice(i, i + SWEEP_CHUNK)
       await step.do(`search ${i / SWEEP_CHUNK + 1}`, () =>
-        withKit(this.env, (kit) => startDueSyncs(this.env, kit, chunk, day))
+        withKit(this.env, async (kit) => {
+          await forgetStrays(this.env, kit, chunk)
+          return startDueSyncs(this.env, kit, chunk, day)
+        })
       )
     }
     // The outbox (deliveries.ts): rows the Queue lost are queued again.

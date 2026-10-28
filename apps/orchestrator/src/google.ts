@@ -401,16 +401,20 @@ export async function addSite(
   )
 }
 
-/** Takes the property out of the account's Search Console list. */
+/** Takes the property out of the account's Search Console list. A 404 means it is not there, which is done too. */
 export async function removeSite(
   accessToken: string,
   siteUrl: string
 ): Promise<void> {
-  await google(
-    accessToken,
-    "DELETE",
-    `${WEBMASTERS_API}/${encodeURIComponent(siteUrl)}`
-  )
+  try {
+    await google(
+      accessToken,
+      "DELETE",
+      `${WEBMASTERS_API}/${encodeURIComponent(siteUrl)}`
+    )
+  } catch (error) {
+    if (!(error instanceof GoogleError && error.status === 404)) throw error
+  }
 }
 
 export async function submitSitemap(

@@ -907,7 +907,7 @@ export async function disconnectSearch(
       )
     }
   }
-  for (const p of properties) await forgetHost(env, kit, orgId, p.host)
+  for (const p of properties) await forgetHost(env, kit, orgId, p.host, false)
   await kit.withOrg({ orgId }, async (db) => {
     // The child tables go with their property (on delete cascade).
     await db.delete(searchProperties)

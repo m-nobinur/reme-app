@@ -1,7 +1,7 @@
 import { domains, searchConnections, searchProperties } from "@workspace/db"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { sealToken } from "../src/google.ts"
-import { searchInstanceId } from "../src/search.ts"
+import { addProperty, forgetStrays, searchInstanceId } from "../src/search.ts"
 import { moveGoogle, startSearchForDomain } from "../src/search-start.ts"
 import { freshOrg, kit } from "./fixture.ts"
 
@@ -99,6 +99,7 @@ describe.skipIf(!url)("moving Google to a live domain", () => {
         kind: "subdomain",
         method: "file",
         state,
+        verifiedAt: state === "verified" ? new Date() : null,
       })
     )
   /**
@@ -156,18 +157,38 @@ describe.skipIf(!url)("moving Google to a live domain", () => {
     expect(calls).toHaveLength(1)
   })
 
-  it("leaves a property Reme never added at Google alone there", async () => {
+  it("counts a 404 as gone, and leaves a property Reme never added alone at Google", async () => {
+    const orgId = await freshOrg(kit)
+    await domainOf(orgId, "active")
+    await propertyOf(orgId)
+    const { env } = stopping()
+    const calls = await google(orgId, env, 404)
+    expect(await moveGoogle(env, kit, orgId, OLD)).toBe("moved")
+    expect(calls).toEqual([DELETE])
+    expect(await held(orgId)).toEqual([])
+
+    // Pending: Reme's `add` step never ran, so only our row goes.
+    await propertyOf(orgId, "pending")
+    expect(await moveGoogle(env, kit, orgId, OLD)).toBe("moved")
+    expect(calls).toHaveLength(1)
+    expect(await held(orgId)).toEqual([])
+  })
+
+  it("unlists a property whose Workflow stopped after its add step", async () => {
     const orgId = await freshOrg(kit)
     await domainOf(orgId, "active")
     await propertyOf(orgId, "pending")
     const { env } = stopping()
     const calls = await google(orgId, env)
+    await addProperty(env, kit, { org_id: orgId, host: OLD })
+    expect(calls).toEqual([`PUT ${DELETE.slice("DELETE ".length)}`])
+    // Stopped here: never `verified`, yet in the owner's list.
     expect(await moveGoogle(env, kit, orgId, OLD)).toBe("moved")
-    expect(calls).toEqual([])
+    expect(calls.at(-1)).toBe(DELETE)
     expect(await held(orgId)).toEqual([])
   })
 
-  it("still moves when Google refuses the removal", async () => {
+  it("keeps the row when Google refuses the removal, and the hourly sweep lets it go", async () => {
     const orgId = await freshOrg(kit)
     await domainOf(orgId, "active")
     await propertyOf(orgId)
@@ -179,8 +200,42 @@ describe.skipIf(!url)("moving Google to a live domain", () => {
     expect(warn).toHaveBeenCalledExactlyOnceWith(
       JSON.stringify({ code: "search.unlist_failed", reason: "google.403" })
     )
-    expect(await held(orgId)).toEqual([])
+    expect(await held(orgId)).toHaveLength(1)
     warn.mockRestore()
+
+    const retried = await google(orgId, env)
+    expect(await forgetStrays(env, kit, [orgId])).toBe(1)
+    expect(retried).toEqual([DELETE])
+    expect(await held(orgId)).toEqual([])
+    // Nothing left: the next hour calls nobody.
+    expect(await forgetStrays(env, kit, [orgId])).toBe(0)
+    expect(retried).toHaveLength(1)
+  })
+
+  it("never sweeps the host the site is served on, or an org whose grant ended", async () => {
+    const orgId = await freshOrg(kit)
+    const { host } = await domainOf(orgId, "active")
+    await kit.withOrg({ orgId }, (db) =>
+      db.insert(searchProperties).values({
+        orgId,
+        host,
+        siteUrl: `https://${host}/`,
+        kind: "url_prefix",
+        method: "file",
+        state: "verified",
+        verifiedAt: new Date(),
+      })
+    )
+    const { env } = stopping()
+    const calls = await google(orgId, env)
+    expect(await forgetStrays(env, kit, [orgId])).toBe(0)
+    expect(calls).toEqual([])
+
+    const ended = await freshOrg(kit)
+    await domainOf(ended, "needs_reauth")
+    await propertyOf(ended)
+    expect(await forgetStrays(env, kit, [ended])).toBe(0)
+    expect(await held(ended)).toHaveLength(1)
   })
 
   it("says only that the host was added when Google never held the old one", async () => {
