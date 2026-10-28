@@ -665,6 +665,9 @@ function DetailsPage({
     DomainRegistrantPrefill | Refused | undefined
   >(given)
   const [phase, setPhase] = useState<Phase>({ at: "filling" })
+  // Pay pressed on this page: only then is a lapsed or refused purchase news
+  // here. An earlier one's outcome was said in the chat when it happened.
+  const [tried, setTried] = useState(false)
   const [errors, setErrors] = useState<
     Partial<Record<RegistrantField, string>>
   >({})
@@ -714,6 +717,7 @@ function DetailsPage({
       return
     }
     setErrors({})
+    setTried(true)
     setPhase({ at: "starting" })
     try {
       const started = await purchase.checkout(name, read.details)
@@ -752,7 +756,9 @@ function DetailsPage({
       question="Your details"
       skip={onBack ? { label: "Back", onSkip: onBack } : undefined}
       status={
-        status && PAYABLE.has(status) ? STATUS_TEXT[status](name) : undefined
+        tried && status && PAYABLE.has(status)
+          ? STATUS_TEXT[status](name)
+          : undefined
       }
       submit={
         ready && refused !== "domain.buy_unavailable"
