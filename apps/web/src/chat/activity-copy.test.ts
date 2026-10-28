@@ -38,6 +38,8 @@ const DASH = /[–—]/
 const INTERNAL =
   /[0-9a-f]{8}-[0-9a-f]{4}|[0-9a-f]{7,}|\b[a-z0-9]+(?:_[a-z0-9]+)+\b|\b[A-Z]{3}-\d{3}\b/i
 const WORKING = /^[A-Z][a-z]+ing\b/
+// A capital, or a domain name, which keeps its own case.
+const STARTS = /^(?:[A-Z]|[a-z0-9-]+(?:\.[a-z0-9-]+)+\b)/
 const DONE = /^(?:\w+ed|Found|Wrote|Made|Got|Reminder|Finished)\b/
 
 /** What no line may hold, whatever the form. */
@@ -431,7 +433,7 @@ describe("segment copy", () => {
             const s = segment(kind, state)
             const title = segmentTitle(s, ctx)
             plain(title)
-            expect(title).toMatch(/^[A-Z]/)
+            expect(title).toMatch(STARTS)
             for (const line of [
               segmentLine(s, ctx, {
                 elapsedSeconds: 130,
@@ -741,7 +743,7 @@ describe("page lines", () => {
             }
           )
           plain(line)
-          expect(line).toMatch(/^[A-Z]/)
+          expect(line).toMatch(STARTS)
         }
       }
     }
@@ -812,7 +814,7 @@ describe("page lines", () => {
     for (const id of ["purchase", "ownership", "sign_in", "first_data"]) {
       const text = proofOf(done(id), ctx)?.text ?? ""
       plain(text)
-      expect(text).toMatch(/^[A-Z]/)
+      expect(text).toMatch(STARTS)
     }
   })
 

@@ -737,6 +737,8 @@ type JobCopy = {
 
 const biz = (n: Names) => n.business ?? "Your business"
 const domain = (n: Names) => n.domain ?? "the domain"
+/** At the start of a line: a domain name keeps its case, the fallback is capitalised. */
+const startDomain = (n: Names) => n.domain ?? "The domain"
 
 const JOBS: Record<JobKind, JobCopy> = {
   onboarding: {
@@ -781,7 +783,7 @@ const JOBS: Record<JobKind, JobCopy> = {
         ? [`Putting your website on ${n.domain}`, `Setting up ${n.domain}`]
         : ["Getting your own web address", "Setting up your web address"],
     next: () => ["Your own web address comes next", "Next, your own address"],
-    done: (n) => [`${cap(domain(n))} is live`, `${cap(domain(n))} is working`],
+    done: (n) => [`${startDomain(n)} is live`, `${startDomain(n)} is working`],
     noun: "address setup",
     pill: (n) =>
       n.domain
@@ -793,7 +795,7 @@ const JOBS: Record<JobKind, JobCopy> = {
       `Connecting ${n.domain ?? "your domain"}`,
       `Setting up ${n.domain ?? "your domain"}`,
     ],
-    done: (n) => [`${cap(domain(n))} is live`, `${cap(domain(n))} is working`],
+    done: (n) => [`${startDomain(n)} is live`, `${startDomain(n)} is working`],
     noun: "domain connection",
     pill: (n) => `connecting ${n.domain ?? "your domain"}`,
   },
@@ -803,8 +805,8 @@ const JOBS: Record<JobKind, JobCopy> = {
       `Getting ${n.domain ?? "your domain"}`,
     ],
     done: (n) => [
-      `${cap(domain(n))} is yours`,
-      `${cap(domain(n))} is registered`,
+      `${startDomain(n)} is yours`,
+      `${startDomain(n)} is registered`,
     ],
     noun: "purchase",
     pill: (n) => `buying ${n.domain ?? "your domain"}`,
@@ -1238,9 +1240,9 @@ const COMPLETED: Record<JobKind, (n: Names) => string> = {
   website: () => "Website built",
   golive: () => "Website published",
   change: () => "Website changes made",
-  address: (n) => `${cap(domain(n))} connected`,
-  domain: (n) => `${cap(domain(n))} connected`,
-  purchase: (n) => `${cap(domain(n))} registered`,
+  address: (n) => `${startDomain(n)} connected`,
+  domain: (n) => `${startDomain(n)} connected`,
+  purchase: (n) => `${startDomain(n)} registered`,
   google: () => "Connected to Google",
 }
 
@@ -1255,7 +1257,7 @@ export const notStarted = (segment: ActivitySegment) =>
  * A step with no line here (finding out, choosing) earns no row of its own.
  */
 const PROVED: Readonly<Record<string, (n: Names) => string>> = {
-  purchase: (n) => `${cap(domain(n))} is registered in your name`,
+  purchase: (n) => `${startDomain(n)} is registered in your name`,
   records: (n) => `Your DNS points ${domain(n)} at your website`,
   ownership: (n) => `Ownership of ${domain(n)} is confirmed`,
   certificate: (n) => `The certificate for ${domain(n)} is active`,

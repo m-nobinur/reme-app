@@ -685,7 +685,7 @@ describe("completedOf", () => {
     )
     expect(done.map((row) => [row.text, row.brief])).toEqual([
       [
-        "Spark.example.invalid connected",
+        "spark.example.invalid connected",
         "Your website loads at spark.example.invalid",
       ],
     ])
@@ -721,7 +721,7 @@ describe("completedOf", () => {
       { orgId: ORG, assistant: "Ellie" }
     )
     expect(rows.map((row) => row.text)).toEqual([
-      "Spark.example.invalid connected",
+      "spark.example.invalid connected",
     ])
   })
 })
@@ -812,7 +812,7 @@ describe("coming up and done today", () => {
   it("says what finished today, a quiet check-in too", () => {
     const done = at(ROUTES.home)?.done.map((item) => item.text)
     expect(done?.[0]).toBe("Ellie checked in, all clear")
-    expect(done?.[1]).toBe("Fixture.example.invalid connected")
+    expect(done?.[1]).toBe("fixture.example.invalid connected")
   })
 
   it("says no time until the reader's zone is known", () => {

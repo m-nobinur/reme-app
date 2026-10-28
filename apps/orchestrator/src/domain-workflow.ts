@@ -311,6 +311,11 @@ export class DomainWorkflow extends WorkflowEntrypoint<Env, DomainParams> {
       )
       if (held.woken) checks++
       seen = held.seen
+      // The owner's own check just said this in the chat: no second message.
+      const told = (held.payload as { told?: string } | undefined)?.told
+      if (told && "status" in seen && seen.status === told) {
+        seen = { ...seen, say: undefined }
+      }
     }
     return live()
   }

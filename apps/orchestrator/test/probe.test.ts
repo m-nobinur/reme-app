@@ -115,6 +115,6 @@ describe.skipIf(!url)("the probe and hold engine against a database", () => {
       { type: "check", timeout: 60_000 },
       () => look("look 3", async () => ({ status: "a" }))
     )
-    expect(woken).toEqual({ woken: true, seen: { n: 1 } })
+    expect(woken).toEqual({ woken: true, payload: {}, seen: { n: 1 } })
   })
 })

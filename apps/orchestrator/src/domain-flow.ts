@@ -1289,7 +1289,10 @@ export async function checkNow(
     if (status.status === "valid") status = { status: "pending_certificate" }
     try {
       const instance = await env.DOMAINS.get(domainInstanceId(row.id))
-      await instance.sendEvent({ type: "check", payload: {} })
+      await instance.sendEvent({
+        type: "check",
+        payload: refresh ? { told: status.status } : {},
+      })
     } catch {
       await start(env, orgId, row.id)
     }
