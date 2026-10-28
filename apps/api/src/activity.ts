@@ -46,6 +46,8 @@ export type DomainRow = {
 
 /** Google's last read and what the last 28 days of searches brought. */
 export type SearchRow = {
+  /** Search Console properties Reme holds for the org. */
+  properties: number
   synced_at: string | null
   clicks: number
   impressions: number
@@ -101,6 +103,7 @@ export async function readActivityRows(
         from domains where state = 'active' and origin = 'purchased'
         order by created_at desc limit 10) d) as domains,
       (select json_build_object(
+        'properties', (select count(*) from search_properties)::int,
         'synced_at', (select max(last_synced_at) from search_properties),
         'clicks', coalesce(sum(clicks), 0)::int,
         'impressions', coalesce(sum(impressions), 0)::int)
@@ -506,6 +509,13 @@ export function standingOf(input: ActivityInput): Segment[] {
   for (const task of tasks) {
     const segment = taskSegment(task)
     if (!segment) continue
+    // Google with no property (the domain it watched was removed) has nothing coming.
+    if (
+      segment.kind === "google" &&
+      segment.state === "upcoming" &&
+      search.properties === 0
+    )
+      continue
     standing.push(
       segment.kind === "google"
         ? {
