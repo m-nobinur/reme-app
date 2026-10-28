@@ -1023,10 +1023,9 @@ export function BuyTray({
       return <Line text="You said not now." />
   }
   if (!last) {
-    return rows ? (
-      <Line
-        text={`Names I found: ${rows.map((row) => row.stem).join(", ")}.`}
-      />
+    const offered = rows ? offersOf(rows).map((o) => o.name) : []
+    return offered.length ? (
+      <Line text={`Names I offered: ${offered.join(", ")}.`} />
     ) : null
   }
 

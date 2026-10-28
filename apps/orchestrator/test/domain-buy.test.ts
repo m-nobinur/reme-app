@@ -718,6 +718,37 @@ describe.skipIf(!url)("buying a domain against a database", () => {
     })
   })
 
+  it("drops an unpaid purchase the owner removes, quietly, releasing a payment made anyway", async () => {
+    const p = await purchase()
+    await checkoutSession(p.env, kit, p.orgId, p.row.id, {
+      session_id: "cs_1",
+      customer: "cus_123",
+      ...details,
+    })
+    await openChat(kit, p.orgId)
+    expect(await remove(p.env, kit, p.orgId, p.name)).toBeNull()
+    expect(await rowOf(p.orgId, p.name)).toMatchObject({
+      state: "abandoned",
+      registrant: null,
+      stripe: { customer: "cus_123" },
+    })
+    const event = { domain_id: p.row.id, checkout_session: "cs_1" }
+    await paymentEvent(p.env, kit, p.orgId, p.row.id, {
+      type: "expired",
+      event_id: "evt_lapsed",
+      ...event,
+    })
+    expect(await chatTexts(kit, p.orgId)).toEqual([])
+    p.net.pi = PI("requires_capture", { metadata: { domain_id: p.row.id } })
+    await paymentEvent(p.env, kit, p.orgId, p.row.id, {
+      type: "paid",
+      event_id: "evt_late",
+      payment_intent: "pi_123",
+      ...event,
+    })
+    expect(p.net.pi).toMatchObject({ status: "canceled" })
+  })
+
   it("registers in the sandbox with Cloudflare's phone form, captures, subscribes, and ends as a test", async () => {
     const p = await paid()
     const started = await startRegistration(p.env, kit, p.orgId, p.row.id)
