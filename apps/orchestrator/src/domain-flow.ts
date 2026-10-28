@@ -733,9 +733,12 @@ export async function nudge(
 
 /**
  * The domain goes live: the row first, then every pointer written from it
- * (`writePointer` reads the active domain). False when the claim was removed
- * meanwhile. A retry after the row moved finds it active and writes the
- * pointers again, which repeats what is live. Saying so waits for `served`.
+ * (`writePointer` reads the active domain). A site has one live domain, so
+ * the one it replaces is removed in the same transaction, stamped with the
+ * same time, and stops serving after. False when the claim was removed
+ * meanwhile. A retry after the row moved finds it active, finds what it
+ * replaced by that stamp, and repeats both, which is idempotent. Saying so
+ * waits for `served`.
  */
 export async function activateDomain(
   env: Env,
@@ -747,24 +750,51 @@ export async function activateDomain(
     const claim = await readClaim(db, env, eq(domains.id, domainId))
     if (!claim) return null
     const { row } = claim
-    if (row.state === "active") return claim
+    if (row.state === "active") {
+      const replaced = await db
+        .select()
+        .from(domains)
+        .where(
+          sql`${domains.state} = 'removed' and ${domains.removedAt} = ${row.activatedAt?.toISOString() ?? null}::timestamptz`
+        )
+      return { ...claim, replaced }
+    }
+    const at = new Date()
     const moved = await moveTo(
       db,
       row,
       "active",
       CONNECTING,
-      { activatedAt: new Date() },
+      { activatedAt: at },
       {
         type: "domain.activated",
         payload: { domain_id: domainId, primary_host: row.primaryHost },
       }
     )
     if (!moved) return null
-    return claim
+    const replaced = await db
+      .select()
+      .from(domains)
+      .where(sql`${domains.state} = 'active' and ${domains.id} <> ${row.id}`)
+    for (const old of replaced) {
+      await moveTo(
+        db,
+        old,
+        "removed",
+        ["active"],
+        { removedAt: at },
+        {
+          type: "domain.removed",
+          payload: { domain_id: old.id, was: "active" },
+        }
+      )
+    }
+    return { ...claim, replaced }
   })
   if (!done) return false
   await writePointer(env, kit, orgId, done.row.siteId, done.slug)
   await setRoutes(env, claimHosts(done.row.name, done.row.cfIds as CfIds), true)
+  for (const old of done.replaced) await stopServing(env, kit, orgId, old)
   return true
 }
 
@@ -783,14 +813,31 @@ export async function served(
   orgId: string,
   domainId: string
 ): Promise<Observed<Served>> {
-  const claim = await kit.withOrg({ orgId }, (db) =>
-    readClaim(db, env, eq(domains.id, domainId))
-  )
-  if (claim?.row.state !== "active") return { result: { gone: true } }
-  const { row, slug } = claim
+  const found = await kit.withOrg({ orgId }, async (db) => {
+    const claim = await readClaim(db, env, eq(domains.id, domainId))
+    if (claim?.row.state !== "active") return null
+    // The domain this one replaced, by `activateDomain`'s stamp.
+    const [replaced] = await db
+      .select({ host: domains.primaryHost })
+      .from(domains)
+      .where(
+        sql`${domains.state} = 'removed' and ${domains.removedAt} = ${claim.row.activatedAt?.toISOString() ?? null}::timestamptz`
+      )
+    return { ...claim, replaced: replaced?.host }
+  })
+  if (!found) return { result: { gone: true } }
+  const { row, slug, replaced } = found
   const ready = await reaches(row.primaryHost, row.siteId)
   // Serving is the proof Google is moved on: the new host added, the old one let go.
-  const google = ready ? await moveGoogle(env, kit, orgId, slug) : null
+  let google: "added" | "moved" | null = null
+  let letGo = slug
+  if (ready) {
+    google = await moveGoogle(env, kit, orgId, slug)
+    if (replaced && google) {
+      const moved = await moveGoogle(env, kit, orgId, replaced)
+      if (moved === "moved") [google, letGo] = [moved, replaced]
+    }
+  }
   const gsc = "Google Search Console"
   return {
     result: { gone: false, at: Date.now(), ready },
@@ -805,11 +852,16 @@ export async function served(
             facts: {
               host: row.primaryHost,
               old_host: slug,
+              ...(replaced && { replaced_domain: replaced }),
               ...(google && { google: gsc }),
             },
             template: `${row.primaryHost} is live. ${slug} now forwards to it, so links you've shared still work.${
+              replaced
+                ? ` ${replaced} is no longer used, so its DNS record can be deleted.`
+                : ""
+            }${
               google === "moved"
-                ? ` I'm adding it to your ${gsc} and taking ${slug} out of it.`
+                ? ` I'm adding it to your ${gsc} and taking ${letGo} out of it.`
                 : google
                   ? ` I'm adding it to your ${gsc} too.`
                   : ""
