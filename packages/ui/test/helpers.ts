@@ -18,8 +18,6 @@ export async function open(
   await page.setViewportSize({ width, height: 900 })
   await page.goto(`/?entry=${encodeURIComponent(entry)}&theme=${theme}`)
   await expect(page.locator(`[data-entry="${entry}"]`)).toBeVisible()
-  // Measured before Inter loads, the wider fallback font wraps rows that fit.
-  await page.evaluate(() => document.fonts.ready)
 }
 
 /**
