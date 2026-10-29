@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
-import { CASES, FACTS, partsOf, passed, score } from "../cos-cases.mjs"
+import { FACTS, GATED, partsOf, passed, score } from "../cos-cases.mjs"
 import { serialise } from "../record.mjs"
 import { fixtureLeaks } from "../redact.mjs"
 import { canonical, loadFixture } from "../replay.mjs"
@@ -36,9 +36,9 @@ export function drift(fixture) {
   const recorded = Object.keys(fixture.sessions).sort((a, b) =>
     a.localeCompare(b)
   )
-  const cased = CASES.map((c) => c.name).sort((a, b) => a.localeCompare(b))
+  const cased = GATED.map((c) => c.name).sort((a, b) => a.localeCompare(b))
   if (canonical(recorded) !== canonical(cased)) found.push("the case list")
-  for (const kase of CASES) {
+  for (const kase of GATED) {
     const names = fixture.sessions[kase.name] ?? []
     const sent = names.map((name) => {
       const { mode, text, deny } = fixture.owner[name]
@@ -94,7 +94,7 @@ export default async function cosTools() {
     throw new Error(
       `cos-chat.jsonl was recorded against other cases (${drifted.join(", ")}). Re-record it on staging; see evals/README.md.`
     )
-  const rows = CASES.map((kase) => {
+  const rows = GATED.map((kase) => {
     const names = fixture.sessions[kase.name] ?? []
     const turns = names.map((name) => ({
       outcome: fixture.owner[name].outcome,
@@ -105,7 +105,7 @@ export default async function cosTools() {
   const failed = rows.filter((r) => !passed(r))
   const fabrications = rows.flatMap((r) => r.fabrications).length
   console.log(
-    `      ${rows.length - failed.length} of ${CASES.length} cases, fabrication count ${fabrications}`
+    `      ${rows.length - failed.length} of ${GATED.length} cases, fabrication count ${fabrications}`
   )
   if (failed.length > 0) {
     throw new Error(
