@@ -25,7 +25,7 @@ vi.mock("@assistant-ui/react", async (original) => ({
   useAuiState: (select: (state: unknown) => unknown) =>
     select({
       message: { parts: [], isLast: store.isLast, status: undefined },
-      thread: { isRunning: store.isRunning },
+      thread: { isRunning: store.isRunning, messages: [] },
     }),
   useAui: () => ({ thread: () => ({ append: store.append }) }),
   useThreadViewport: () => undefined,
