@@ -186,4 +186,35 @@ describe.skipIf(!url)("connecting Google through the api", () => {
       email: "owner@example.test",
     })
   })
+
+  // Runs after the case above saved a connection for `me`.
+  it("answers a connect that failed after its token was saved as connected, and never says it didn't connect", async () => {
+    const stub = stubOrchestrator(() =>
+      Response.json(
+        {
+          class: "transient",
+          code: "internal",
+          message: "x",
+          detail: {},
+          occurred_at: new Date().toISOString(),
+        },
+        { status: 500 }
+      )
+    )
+    expect((await connect(me, stub)).status).toBe(204)
+    const sent = await me.call(stubOrchestrator(), "/google/result", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ attempt: "state-saved", result: "failed" }),
+    })
+    expect(sent.status).toBe(204)
+    const rows = await kit.withOrg({ orgId: me.orgId }, (db) =>
+      db
+        .select({ content: conversationMessages.content })
+        .from(conversationMessages)
+    )
+    const texts = JSON.stringify(rows.at(-1)?.content)
+    expect(texts).toContain("Google is connected")
+    expect(texts).not.toContain("didn't connect")
+  })
 })
