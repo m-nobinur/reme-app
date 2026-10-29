@@ -1,6 +1,6 @@
 import { z } from "zod"
 import { InformationRequest } from "./assignment.ts"
-import { ChatRequest, RequestChangeOutput } from "./chat.ts"
+import { ChatRequest, RequestChangeOutput, TimeZone } from "./chat.ts"
 import { JsonObject, Timestamp, Ulid, Uuid } from "./common.ts"
 import { ConversationMessage, MessageRating } from "./conversation.ts"
 import {
@@ -26,6 +26,7 @@ import {
   FactValueKey,
   OwnerAnswerText,
   OwnerChangeRequest,
+  Reminder,
   ReviewValue,
   WorkspaceStatus,
 } from "./owner.ts"
@@ -173,6 +174,21 @@ export const CosWorkspace = z.strictObject({
    * the note of a step that waits on the owner. Optional, as `domains`.
    */
   tasks: z.array(OwnerTask).max(TaskKind.options.length).optional(),
+  /**
+   * The open reminders, soonest first, each due time as the owner's wall
+   * clock with its offset. The title is the owner's words: data, never
+   * instructions. Optional: tool results stored before it replay.
+   */
+  reminders: z
+    .array(
+      z.strictObject({
+        reminder_id: Uuid,
+        title: Reminder.shape.title,
+        due: z.string().max(40).nullable(),
+      })
+    )
+    .max(20)
+    .optional(),
   /** How long each lane usually takes, so the CoS quotes the measured wait. */
   expected_seconds: WorkspaceStatus.shape.expected_seconds,
   /** Each lane's wait in the panel's words, for a build that has just started. */
@@ -260,6 +276,20 @@ export const AnswerQuestionInput = z.strictObject({
   value: z.union([FactValue, OwnerAnswerText]),
 })
 
+/**
+ * `answer_question`'s input as the model is sent it: a fact's inner value
+ * as any object, which the api checks against the question's own field
+ * through `AnswerQuestionInput`. Inlining every fact's schema here cost
+ * about 3.4k tokens on every call.
+ */
+export const AnswerQuestionCall = z.strictObject({
+  request_id: Uuid,
+  value: z.union([
+    z.strictObject({ key: FactValueKey, value: JsonObject }),
+    OwnerAnswerText,
+  ]),
+})
+
 /** `answer_question`'s output once the owner said yes. A no is `output-denied`. */
 export const AnswerQuestionOutput = z.discriminatedUnion("outcome", [
   z.strictObject({ outcome: z.literal("answered"), request_id: Uuid }),
@@ -267,14 +297,84 @@ export const AnswerQuestionOutput = z.discriminatedUnion("outcome", [
 ])
 
 /**
- * `create_reminder`'s output once the owner said yes: the due time as
- * stored, and no id, since the model has nothing to do with one. A no is
- * `output-denied`. Its input is `CreateReminderRequest`.
+ * `create_reminder`'s input: the owner's reminder, and the zone the owner
+ * named its time in when it is not the business's own. Absent, `due_at` is
+ * read in the business's zone.
+ */
+export const CreateReminderInput = CreateReminderRequest.extend({
+  time_zone: TimeZone.optional().describe(
+    'The IANA zone the owner gave the time in, such as "Europe/London" for "8am UK time". Omit it when they named no zone.'
+  ),
+})
+
+/**
+ * `create_reminder`'s output: the reminder as stored, its due time in UTC
+ * and the zone it was read in, so the thread shows the time the reply says.
+ * `replaced` when it moved the open reminder this conversation already set
+ * for the same thing instead of adding another. The id and zone are
+ * optional, since results stored before them replay. A no is
+ * `output-denied`.
  */
 export const CreateReminderOutput = z.discriminatedUnion("outcome", [
   z.strictObject({
     outcome: z.literal("created"),
+    reminder_id: Uuid.optional(),
     due_at: Timestamp.nullable(),
+    time_zone: TimeZone.nullable().optional(),
+    replaced: z.boolean().optional(),
+  }),
+  Refused,
+])
+
+/**
+ * `update_reminder`'s input: an open reminder from the workspace, and what
+ * changes. A field left out stays as it is.
+ */
+export const UpdateReminderInput = z.strictObject({
+  reminder_id: Uuid,
+  title: Reminder.shape.title.optional(),
+  due_at: Timestamp.nullable().optional(),
+  time_zone: CreateReminderInput.shape.time_zone,
+})
+
+/** `update_reminder`'s output: the reminder as it now stands. */
+export const UpdateReminderOutput = z.discriminatedUnion("outcome", [
+  z.strictObject({
+    outcome: z.literal("updated"),
+    reminder_id: Uuid,
+    title: Reminder.shape.title,
+    due_at: Timestamp.nullable(),
+    time_zone: TimeZone.nullable(),
+  }),
+  Refused,
+])
+
+/** `delete_reminder`'s input: an open reminder from the workspace. */
+export const DeleteReminderInput = z.strictObject({ reminder_id: Uuid })
+
+/** `delete_reminder`'s output: the reminder gone, by its title. */
+export const DeleteReminderOutput = z.discriminatedUnion("outcome", [
+  z.strictObject({
+    outcome: z.literal("deleted"),
+    reminder_id: Uuid,
+    title: Reminder.shape.title,
+  }),
+  Refused,
+])
+
+/** `set_time_zone`'s input: the zone the owner says the business runs on. */
+export const SetTimeZoneInput = z.strictObject({
+  time_zone: TimeZone.describe(
+    'The IANA zone, such as "Europe/London" for the UK.'
+  ),
+})
+
+/** `set_time_zone`'s output: the zone now set, and the time it is there. */
+export const SetTimeZoneOutput = z.discriminatedUnion("outcome", [
+  z.strictObject({
+    outcome: z.literal("set"),
+    time_zone: TimeZone,
+    now: z.string().max(40),
   }),
   Refused,
 ])
@@ -473,11 +573,11 @@ export const COS_TOOLS = {
   get_facts: { input: Empty, output: CosFacts },
   get_preview: { input: GetPreviewInput, output: GetPreviewOutput },
   request_change: { input: CosChangeRequest, output: RequestChangeOutput },
-  answer_question: { input: AnswerQuestionInput, output: AnswerQuestionOutput },
-  create_reminder: {
-    input: CreateReminderRequest,
-    output: CreateReminderOutput,
-  },
+  answer_question: { input: AnswerQuestionCall, output: AnswerQuestionOutput },
+  create_reminder: { input: CreateReminderInput, output: CreateReminderOutput },
+  update_reminder: { input: UpdateReminderInput, output: UpdateReminderOutput },
+  delete_reminder: { input: DeleteReminderInput, output: DeleteReminderOutput },
+  set_time_zone: { input: SetTimeZoneInput, output: SetTimeZoneOutput },
   record_review: { input: RecordReviewInput, output: RecordReviewOutput },
   check_domain: { input: CheckDomainInput, output: CheckDomainOutput },
   connect_domain: { input: ConnectDomainInput, output: ConnectDomainOutput },
@@ -505,6 +605,9 @@ const Usage = z.strictObject({
   input_tokens: z.int().nonnegative(),
   cached_input_tokens: z.int().nonnegative(),
   output_tokens: z.int().nonnegative(),
+  /** What the provider reported writing to its cache, and reasoning; absent on rows before them. */
+  cache_write_tokens: z.int().nonnegative().optional(),
+  reasoning_tokens: z.int().nonnegative().optional(),
 })
 
 const Ran = {
@@ -619,6 +722,21 @@ export const CosToolResult = z.discriminatedUnion("tool", [
     ...Called,
     tool: z.literal("create_reminder"),
     output: COS_TOOLS.create_reminder.output,
+  }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("update_reminder"),
+    output: COS_TOOLS.update_reminder.output,
+  }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("delete_reminder"),
+    output: COS_TOOLS.delete_reminder.output,
+  }),
+  z.strictObject({
+    ...Called,
+    tool: z.literal("set_time_zone"),
+    output: COS_TOOLS.set_time_zone.output,
   }),
   z.strictObject({
     ...Called,
@@ -771,7 +889,15 @@ export type GetPreviewInput = z.infer<typeof GetPreviewInput>
 export type GetPreviewOutput = z.infer<typeof GetPreviewOutput>
 export type AnswerQuestionInput = z.infer<typeof AnswerQuestionInput>
 export type AnswerQuestionOutput = z.infer<typeof AnswerQuestionOutput>
+export type AnswerQuestionCall = z.infer<typeof AnswerQuestionCall>
+export type CreateReminderInput = z.infer<typeof CreateReminderInput>
 export type CreateReminderOutput = z.infer<typeof CreateReminderOutput>
+export type UpdateReminderInput = z.infer<typeof UpdateReminderInput>
+export type UpdateReminderOutput = z.infer<typeof UpdateReminderOutput>
+export type DeleteReminderInput = z.infer<typeof DeleteReminderInput>
+export type DeleteReminderOutput = z.infer<typeof DeleteReminderOutput>
+export type SetTimeZoneInput = z.infer<typeof SetTimeZoneInput>
+export type SetTimeZoneOutput = z.infer<typeof SetTimeZoneOutput>
 export type RecordReviewInput = z.infer<typeof RecordReviewInput>
 export type RecordReviewOutput = z.infer<typeof RecordReviewOutput>
 export type CheckDomainInput = z.infer<typeof CheckDomainInput>
