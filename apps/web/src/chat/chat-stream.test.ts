@@ -725,14 +725,19 @@ it("renders a recorded answer turn the way a reload of the stored row does", asy
       time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       turn: {
         ...request.turn,
-        reply: { ...request.turn.reply, message_id: expect.any(String) },
+        // The owner's reply reads the number as the phone writes it.
+        reply: {
+          ...request.turn.reply,
+          message_id: expect.any(String),
+          text: "07700 900123",
+        },
       },
     },
   ])
   // The answer reads as the owner's reply, and the next question as a
   // message of its own, with its own time.
   expect(transcript(chat).slice(-2)).toEqual([
-    "+447700900123",
+    "07700 900123",
     "Which email address should enquiries go to?Email addressSubmit",
   ])
   expect(
@@ -1470,7 +1475,10 @@ it("a call the stream left unfinished stops, rather than working forever", async
   await vi.waitFor(() =>
     expect(chat.textContent).toContain("This was not finished.")
   )
-  expect(chat.textContent).toContain("Stopped checking where things stand")
+  // Cut off before its result, the read says it didn't finish, not that it stopped.
+  expect(chat.textContent).toMatch(
+    /Didn't finish (checking|looking over|catching up on) where things (stand|are)/
+  )
   expect(chat.querySelector(".shimmer")).toBeNull()
   // The turn is over: the composer offers Send again, not Stop.
   expect(chat.querySelector('button[aria-label="Send message"]')).not.toBeNull()

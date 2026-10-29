@@ -444,7 +444,7 @@ const TOOLS: Record<CosToolName, ToolCopy> = {
   set_time_zone: {
     kind: "thinking",
     working: ["Setting your time zone"],
-    done: ["Set your time zone"],
+    done: ["Changed your time zone"],
     fail: ["set your time zone"],
   },
   record_review: {

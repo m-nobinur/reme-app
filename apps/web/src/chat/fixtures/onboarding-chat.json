@@ -1,5 +1,5 @@
 {
-  "recorded": "apps/api POST /chat and GET /conversations/:id/messages on local dev, 2026-09-27, one throwaway owner signing up as a fictional business. Answer turns reshaped on 2026-10-01 to what apps/api writes when an answer carries the owner's reply: the card's row ends on its answer, then a reply row and a row for the next step (apps/api/test/chat.test.ts checks that shape against the stream). The first card was reshaped again on 2026-10-23: plain-text asks (name, tagline) are answered in the composer and draw no card, so the recorded flow asks phone, email, weekday hours and a skippable service radius, all structured cards.",
+  "recorded": "apps/api POST /chat and GET /conversations/:id/messages on local dev, 2026-09-27, one throwaway owner signing up as a fictional business. Answer turns reshaped on 2026-10-01 to what apps/api writes when an answer carries the owner's reply: the card's row ends on its answer, then a reply row and a row for the next step (apps/api/test/chat.test.ts checks that shape against the stream). The first card was reshaped again on 2026-10-23: plain-text asks (name, tagline) are answered in the composer and draw no card, so the recorded flow asks phone, email, weekday hours and a skippable service radius, all structured cards. The phone history's reply row was reshaped on 2026-10-29: the owner's reply reads a phone number as the phone writes it.",
   "org": {
     "org_id": "3c1f8a84-1fef-42ad-a9e8-46446b18fa31",
     "slug": "fixture-cleaning-co-3c1f8a84",
@@ -252,7 +252,7 @@
             "parts": [
               {
                 "type": "text",
-                "text": "+447700900123"
+                "text": "07700 900123"
               }
             ],
             "metadata": {
