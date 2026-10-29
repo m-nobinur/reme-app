@@ -105,6 +105,7 @@ export function workspaceLabels(workspace: CosWorkspace) {
     missing_facts,
     domains,
     tasks,
+    reminders,
   } = workspace
   return {
     site: { address: site.host, live: site.live_version !== null },
@@ -183,6 +184,14 @@ export function workspaceLabels(workspace: CosWorkspace) {
           (s) =>
             `${s.step.replaceAll("_", " ")}: ${STEP[s.state]}${s.note ? ` (${s.note})` : ""}`
         ),
+      })),
+    }),
+    // The owner's own, which update_reminder and delete_reminder take by ref.
+    ...(reminders?.length && {
+      reminders: reminders.map((r) => ({
+        ref: r.reminder_id,
+        title: r.title,
+        due: r.due ?? "no time set",
       })),
     }),
     expected_range: workspace.expected_range,

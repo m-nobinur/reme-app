@@ -69,3 +69,13 @@ export function wallToUtc(written: string, zone: string | null): string {
           before
   return new Date(at).toISOString()
 }
+
+/** Whether `Intl` knows `zone`, as a browser or the owner named it. */
+export function knownZone(zone: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: zone })
+    return true
+  } catch {
+    return false
+  }
+}

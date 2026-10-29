@@ -14,6 +14,7 @@ import {
   memberships,
   NEXT_DUE_KEY,
   openTask,
+  orgs,
   readTasks,
   reminders,
   setStep,
@@ -36,6 +37,7 @@ import {
 import { settleCard } from "../src/build-questions.ts"
 import { remember } from "../src/cos/memory.ts"
 import { getIndexing, getSearchPerformance } from "../src/cos/search-tools.ts"
+import { wallToUtc } from "../src/cos/time.ts"
 import {
   answerQuestion as answerTool,
   boughtSaid,
@@ -45,6 +47,7 @@ import {
   connectApproval,
   connectDomain,
   createReminder,
+  deleteReminder,
   domainBought,
   findDomain,
   getFacts,
@@ -58,9 +61,11 @@ import {
   recordReview,
   removeDomain,
   requestChange,
+  setZone,
   statedIn,
   type ToolContext,
   ToolFailed,
+  updateReminder,
 } from "../src/cos/tools.ts"
 import { connectGoogle } from "../src/google.ts"
 import {
@@ -440,6 +445,7 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         missing_facts: expect.any(Array),
         domains: [],
         tasks: [],
+        reminders: [],
         expected_seconds: expect.any(Object),
         expected_range: {
           quick: "about 1 to 2 minutes",
@@ -1517,7 +1523,12 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         turn,
         null
       )
-      expect(first).toEqual({ outcome: "created", due_at: DUE })
+      expect(first).toEqual({
+        outcome: "created",
+        reminder_id: expect.any(String),
+        due_at: DUE,
+        time_zone: null,
+      })
       expect(again).toEqual(first)
       const rows = await rowsKeyed(me, `approval:${approval}`)
       expect(rows).toHaveLength(1)
@@ -1567,7 +1578,7 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         turn,
         null
       )
-      expect(output).toEqual({ outcome: "created", due_at: DUE })
+      expect(output).toMatchObject({ outcome: "created", due_at: DUE })
       const [owners] = await rowsKeyed(me, approval)
       const [tools] = await rowsKeyed(me, `approval:${approval}`)
       expect(owners).toMatchObject({
@@ -1645,20 +1656,175 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         turn,
         "Asia/Kathmandu"
       )
-      expect(zoned).toEqual({
+      expect(zoned).toMatchObject({
         outcome: "created",
         due_at: new Date(nine - (5 * 60 + 45) * 60_000).toISOString(),
+        time_zone: "Asia/Kathmandu",
       })
       const utc = await createReminder(
         context(me),
-        { title: "Call the supplier", due_at: `${day}T09:00:00-04:00` },
+        { title: "Order the parts", due_at: `${day}T09:00:00-04:00` },
         crypto.randomUUID(),
         turn,
         null
       )
-      expect(utc).toEqual({
+      expect(utc).toMatchObject({
         outcome: "created",
         due_at: new Date(nine).toISOString(),
+        time_zone: null,
+      })
+      // A zone the owner named beats the turn's.
+      const named = await createReminder(
+        context(me),
+        {
+          title: "Ring the bank",
+          due_at: written,
+          time_zone: "Europe/London",
+        },
+        crypto.randomUUID(),
+        turn,
+        "Asia/Kathmandu"
+      )
+      expect(named).toMatchObject({ time_zone: "Europe/London" })
+      expect(
+        kept(
+          "create_reminder",
+          await createReminder(
+            context(me),
+            { title: "x", due_at: null, time_zone: "Mars/Base" },
+            crypto.randomUUID(),
+            turn,
+            null
+          )
+        )
+      ).toMatchObject({
+        outcome: "refused",
+        error: { code: "time_zone.unknown" },
+      })
+    })
+
+    it("moves the open reminder the conversation already holds for the same thing, and never doubles it", async () => {
+      const turn = await turnOf(me)
+      const first = kept(
+        "create_reminder",
+        await createReminder(
+          context(me),
+          { title: "Order brake pads", due_at: DUE },
+          crypto.randomUUID(),
+          turn,
+          null
+        )
+      )
+      const later = new Date(Date.now() + 2 * 86_400_000).toISOString()
+      const second = await createReminder(
+        context(me),
+        { title: "order brake pads.", due_at: later },
+        crypto.randomUUID(),
+        turn,
+        null
+      )
+      expect(second).toMatchObject({
+        outcome: "created",
+        replaced: true,
+        due_at: later,
+      })
+      if (first.outcome !== "created") throw new Error("not created")
+      expect(second).toMatchObject({ reminder_id: first.reminder_id })
+      const rows = await kit.withOrg({ orgId: me.orgId }, (db) =>
+        db
+          .select()
+          .from(reminders)
+          .where(eq(reminders.conversationId, turn.sessionId))
+      )
+      expect(rows).toHaveLength(1)
+    })
+  })
+
+  describe("update_reminder, delete_reminder and set_time_zone", () => {
+    it("moves a reminder by its ref, deletes it, and refuses a ref that is gone", async () => {
+      const turn = await turnOf(me)
+      const DUE = new Date(Date.now() + 86_400_000).toISOString()
+      const made = await createReminder(
+        context(me),
+        { title: "Call the supplier", due_at: DUE },
+        crypto.randomUUID(),
+        turn,
+        null
+      )
+      if (made.outcome !== "created" || !made.reminder_id)
+        throw new Error("no reminder")
+      const day = new Date(Date.now() + 3 * 86_400_000)
+        .toISOString()
+        .slice(0, 10)
+      const moved = kept(
+        "update_reminder",
+        await updateReminder(
+          context(me),
+          { reminder_id: made.reminder_id, due_at: `${day}T10:00:00+00:00` },
+          "",
+          turn,
+          "Europe/London"
+        )
+      )
+      expect(moved).toEqual({
+        outcome: "updated",
+        reminder_id: made.reminder_id,
+        title: "Call the supplier",
+        due_at: wallToUtc(`${day}T10:00:00`, "Europe/London"),
+        time_zone: "Europe/London",
+      })
+      expect(
+        kept(
+          "delete_reminder",
+          await deleteReminder(context(me), { reminder_id: made.reminder_id })
+        )
+      ).toEqual({
+        outcome: "deleted",
+        reminder_id: made.reminder_id,
+        title: "Call the supplier",
+      })
+      for (const output of [
+        await deleteReminder(context(me), { reminder_id: made.reminder_id }),
+        await updateReminder(
+          context(me),
+          { reminder_id: made.reminder_id, title: "x" },
+          "",
+          turn,
+          null
+        ),
+      ]) {
+        expect(kept("delete_reminder", output)).toMatchObject({
+          outcome: "refused",
+          error: { code: "reminder.not_found" },
+        })
+      }
+    })
+
+    it("sets the zone on the owner's word and says the time there", async () => {
+      const fresh = await owner(kit, url as string, "cos-zone")
+      const output = kept(
+        "set_time_zone",
+        await setZone(context(fresh), { time_zone: "Europe/London" })
+      )
+      expect(output).toMatchObject({
+        outcome: "set",
+        time_zone: "Europe/London",
+      })
+      expect(
+        kept(
+          "set_time_zone",
+          await setZone(context(fresh), { time_zone: "Mars/Base" })
+        )
+      ).toMatchObject({
+        outcome: "refused",
+        error: { code: "time_zone.unknown" },
+      })
+      const [org] = await kit.withOrg({ orgId: fresh.orgId }, (db) =>
+        db.select().from(orgs)
+      )
+      expect(org).toMatchObject({
+        timeZone: "Europe/London",
+        timeZoneSource: "owner",
       })
     })
   })

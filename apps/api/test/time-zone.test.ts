@@ -1,5 +1,6 @@
 import { eq, orgs, scheduledJobs, type Tenancy, tenancy } from "@workspace/db"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { offerZone, zoneFromArea } from "../src/time-zone.ts"
 import { type Owner, owner, stubOrchestrator } from "./owner-fixture.ts"
 import { stubJwksFetch } from "./sealed-session.ts"
 
@@ -67,5 +68,54 @@ describe.skipIf(!url)("the time zone route, on a live connection", () => {
     expect((await send({ time_zone: "Mars/Olympus_Mons" })).status).toBe(400)
     expect((await send({ time_zone: "Europe/London" }, false)).status).toBe(400)
     expect((await zoneOf()).zone).toBe("Asia/Dhaka")
+  })
+
+  const offer = (zone: string, source: "browser" | "area" | "owner") =>
+    kit.withOrg({ orgId: mine.orgId }, (db) =>
+      offerZone(db, mine.orgId, zone, source)
+    )
+  const sourceOf = () =>
+    kit.withOrg(
+      { orgId: mine.orgId },
+      async (db) =>
+        (await db.select({ s: orgs.timeZoneSource }).from(orgs))[0]?.s
+    )
+
+  it("lets the browser set the zone only while the org has none", async () => {
+    // The first case left Asia/Dhaka from the browser.
+    expect((await send({ time_zone: "Europe/London" })).status).toBe(204)
+    expect((await zoneOf()).zone).toBe("Asia/Dhaka")
+    expect(await sourceOf()).toBe("browser")
+  })
+
+  it("takes the service area's zone over the browser's, and the owner's over both", async () => {
+    const env = {
+      OPENROUTER_API_KEY: "test",
+      SCHEDULE: { put: async () => undefined } as never,
+      JOBS: undefined as never,
+    }
+    const read = async () => "Europe/London"
+    await zoneFromArea(env as never, kit, mine.orgId, "Bristol", read)
+    expect((await zoneOf()).zone).toBe("Europe/London")
+    expect(await sourceOf()).toBe("area")
+    // A browser in another zone no longer moves it.
+    expect((await send({ time_zone: "Asia/Dhaka" })).status).toBe(204)
+    expect((await zoneOf()).zone).toBe("Europe/London")
+
+    await offer("Europe/Dublin", "owner")
+    expect((await zoneOf()).zone).toBe("Europe/Dublin")
+    expect(await sourceOf()).toBe("owner")
+    // The area never replaces the owner's word; the owner changes their own.
+    await zoneFromArea(env as never, kit, mine.orgId, "Bristol", read)
+    expect((await zoneOf()).zone).toBe("Europe/Dublin")
+    await offer("Europe/London", "owner")
+    expect((await zoneOf()).zone).toBe("Europe/London")
+  })
+
+  it("changes nothing for a zone Jev is unsure of or Intl does not know", async () => {
+    const env = { OPENROUTER_API_KEY: "test" } as never
+    await zoneFromArea(env, kit, mine.orgId, "somewhere", async () => null)
+    await zoneFromArea(env, kit, mine.orgId, "Mars", async () => "Mars/Base")
+    expect((await zoneOf()).zone).toBe("Europe/London")
   })
 })

@@ -312,6 +312,24 @@ const TOOLS: Record<CosToolName, ToolCopy> = {
     done: (a) => (a.when ? `Reminder set for ${a.when}` : "Reminder set"),
     fail: () => "set the reminder",
   },
+  update_reminder: {
+    kind: "reminder",
+    working: () => "Changing the reminder",
+    done: () => "Changed the reminder",
+    fail: () => "change the reminder",
+  },
+  delete_reminder: {
+    kind: "reminder",
+    working: () => "Removing the reminder",
+    done: () => "Removed the reminder",
+    fail: () => "remove the reminder",
+  },
+  set_time_zone: {
+    kind: "thinking",
+    working: () => "Setting your time zone",
+    done: () => "Set your time zone",
+    fail: () => "set your time zone",
+  },
   record_review: {
     kind: "building",
     working: () => "Adding the review",
