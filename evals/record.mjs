@@ -81,7 +81,9 @@ export function serialise(run) {
       const id = `${name}.${i + 1}`
       const { mode, text, deny } = turn.owner
       owner[id] = { mode, text, deny, outcome: turn.outcome }
-      for (const chunk of mergeDeltas(turn.chunks)) {
+      // A message's write time only, which no check reads and every run changes.
+      const kept = turn.chunks.filter((c) => c.type !== "message-metadata")
+      for (const chunk of mergeDeltas(kept)) {
         lines.push({ turn: id, chunk: redact(chunk) })
       }
       return id

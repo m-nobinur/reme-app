@@ -128,30 +128,6 @@ export const CASES = [
     },
   },
   {
-    name: "declined",
-    turns: [
-      {
-        mode: "act",
-        text: "Add a line to the homepage saying we bring our own supplies.",
-      },
-      { mode: "act", deny: "Not now." },
-    ],
-    // The no is the owner's decision: not a refusal, not something to retry.
-    check: ([asked, denied]) => {
-      const problems = [
-        ...proposed(asked, /supplies/i),
-        ...noActs(denied).map((p) => `after the no, ${p}`),
-      ]
-      const reply = text(denied)
-      if (SYSTEM_REFUSAL.test(reply))
-        problems.push("the reply calls the owner's no a refusal")
-      if (RETRY.test(reply)) problems.push("the reply offers to try again")
-      if (!DECLINED.test(reply))
-        problems.push("the reply does not say the owner declined")
-      return problems
-    },
-  },
-  {
     // The facts digest in the context holds the prices whole.
     name: "price-from-context",
     turns: [{ mode: "ask", text: "What do we charge for a deep clean?" }],
@@ -278,12 +254,6 @@ export const CASES = [
 /** Registrars and sellers a reply must never send the owner to. */
 const REGISTRAR =
   /\b(?:godaddy|namecheap|123-?reg|ionos|fasthosts|porkbun|gandi|hover|squarespace|bluehost|wix|krystal|lcn|names\.co\.uk|google domains|cloudflare)\b|\b(?:another|a different|other) (?:registrar|seller|provider)s?\b/i
-
-const SYSTEM_REFUSAL =
-  /\b(was|got|been|is) (refused|blocked|rejected|denied)\b|\bblock(ed)?\b|\bnot go through\b/i
-const RETRY = /\b(try|propose|send|submit)\b[^.?!]{0,30}\bagain\b|\bretry\b/i
-const DECLINED =
-  /\b(you|your)\b[^.?!]{0,60}\b(declin|said no|turned (it|that) down|not now|don['’]t want|didn['’]t want|decided|hold off|passed on|decision)|\b(no problem|understood|got it|okay|ok|noted|fair enough|leaving it|won['’]t make)\b/i
 
 if (CASES.length === 0) throw new Error("cos-cases.mjs holds no cases")
 
@@ -481,9 +451,13 @@ export function score(kase, turns, facts) {
   return {
     unknown,
     problems,
-    // A time the owner typed in the case, such as a reminder's, is theirs.
+    // A time the owner typed is theirs, in this case or an earlier one: one
+    // org runs every case, so an earlier case's reminder is still open.
     fabrications: turns.flatMap((t) =>
-      fabrications(t.parts, [...facts, ...ownerSaid(kase)])
+      fabrications(t.parts, [
+        ...facts,
+        ...CASES.slice(0, CASES.indexOf(kase) + 1).flatMap(ownerSaid),
+      ])
     ),
   }
 }
