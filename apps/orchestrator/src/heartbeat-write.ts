@@ -1,5 +1,5 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider"
-import type { Proactivity } from "@workspace/contracts"
+import { dashesToCommas, type Proactivity } from "@workspace/contracts"
 import { events, failureCode, newUlid, type Tenancy } from "@workspace/db"
 import models from "@workspace/facade/models/openrouter.models.json" with {
   type: "json",
@@ -277,15 +277,16 @@ function contactsIn(text: string): string[] {
 }
 
 /**
- * `readReply`, with a message that breaks a limit read as an error, and so
- * is one that carries a link, an email address or a phone number that no
- * fact the item vouches for (`DigestItem.trusted`) holds exactly: text
- * injected into a review or a page can shape the message, never point the
- * owner somewhere.
+ * `readReply`, with a message's dashes made commas as the chat's are, a
+ * message that breaks a limit read as an error, and so is one that carries
+ * a link, an email address or a phone number that no fact the item vouches
+ * for (`DigestItem.trusted`) holds exactly: text injected into a review or
+ * a page can shape the message, never point the owner somewhere.
  */
 export function replyOf(raw: string, items: DigestItem[] = []): Reply {
-  const reply = readReply(raw)
-  if (reply.kind !== "message") return reply
+  const read = readReply(raw)
+  if (read.kind !== "message") return read
+  const reply = { ...read, text: dashesToCommas(read.text) }
   const over = overLimit(reply.text)
   if (over) return { kind: "error", detail: `over_limit:${over}` }
   const allowed = new Set(

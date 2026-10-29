@@ -4,9 +4,11 @@ import {
   ChangeKind,
   ChatRequest,
   COS_TOOLS,
+  type CosToolName,
   CosToolResult,
   CosTurn,
   CreateReminderRequest,
+  type FactRecord,
   ONBOARDING_STATUS,
   type OnboardingStatus,
   TOOL_CALL_CANCELLED,
@@ -38,7 +40,10 @@ import models from "@workspace/facade/models/openrouter.models.json" with {
   type: "json",
 }
 import {
+  asSchema,
+  type FlexibleSchema,
   type InferAgentUIMessage,
+  type LanguageModel,
   readUIMessageStream,
   type UIMessage,
   type UIMessageChunk,
@@ -58,12 +63,14 @@ import {
 import type { z } from "zod"
 import { type ChatDeps, chat, NO_ANSWER } from "../src/chat.ts"
 import {
+  type AgentTurn,
   APPROVAL_TTL_MS,
   activeTools,
   binds,
   type CosAgent,
   callRepeated,
   contextOf,
+  cosAgent,
   cosPrefix,
   costOf,
   DEFAULT_MODEL,
@@ -351,6 +358,34 @@ describe("a tool's schema", () => {
       ).not.toContain("step")
     }
     expect(instructions).not.toMatch(/takes an optional step/)
+    const change = tools.find((t) => t.name === "request_change")
+    // The panel's alone: it posts the owner's words in a conversation.
+    expect(Object.keys(change?.input_schema.properties ?? {})).not.toContain(
+      "chat"
+    )
+  })
+
+  it("sends each schema lean, as the prefix logs it, and Zod still checks the call", async () => {
+    const { tools: logged } = await cosPrefix()
+    const sent = cosAgent({} as AgentTurn, {} as LanguageModel, "act")
+      .tools as Record<CosToolName, { inputSchema: FlexibleSchema<unknown> }>
+    for (const { name, input_schema } of logged) {
+      const schema = asSchema(sent[name as CosToolName].inputSchema)
+      expect(await schema.jsonSchema, name).toEqual(input_schema)
+    }
+    const text = JSON.stringify(logged)
+    expect(text).not.toContain("$schema")
+    expect(text).not.toContain('"pattern":"\\\\S"')
+    const update = logged.find((t) => t.name === "update_reminder")
+      ?.input_schema.properties as Record<string, unknown> | undefined
+    expect(update?.reminder_id).toEqual({ type: "string", format: "uuid" })
+    const check = asSchema(sent.update_reminder.inputSchema).validate
+    expect(await check?.({ reminder_id: "not-a-ref" })).toMatchObject({
+      success: false,
+    })
+    expect(
+      await check?.({ reminder_id: crypto.randomUUID(), title: " " })
+    ).toMatchObject({ success: false })
   })
 })
 
@@ -401,12 +436,13 @@ describe("a call refused by its schema", () => {
     input: JSON.stringify(input),
   })
 
-  it("drops a spare field that failed, and any step, so the call runs now", () => {
+  it("drops a spare field that failed, any step and the panel's chat, so the call runs now", () => {
     const repaired = repairedCall(
       call({
         text: "Make the hero title more professional",
         label: "the main heading at the very top of your home page",
         step: "Rewriting the hero title",
+        chat: { conversation_id: crypto.randomUUID() },
       })
     )
     expect(JSON.parse(repaired?.input ?? "{}")).toEqual({
@@ -697,6 +733,31 @@ describe("the CoS's model and price", () => {
     expect(text.match(/<\/data>/g)).toHaveLength(2)
     expect(taint).toEqual(["untrusted_input"])
     expect(contextOf("act", EMPTY).text).not.toContain("persona")
+  })
+
+  it("carries the owner's prices whole for a quote, and cuts other long facts", () => {
+    const prices =
+      "Regular clean from 60, deep clean 180 for a three bed, end of tenancy 250 to 400 by size, oven 70, windows inside 40, carpets 30 a room, ironing 20 an hour, fridge 25, blinds 15 a window"
+    const long = "x".repeat(200)
+    const held = [
+      { key: "business.prices", value: { text: prices } },
+      { key: "business.disclaimer", value: { text: long } },
+    ] as unknown as FactRecord[]
+    const { text } = contextOf(
+      "act",
+      EMPTY,
+      null,
+      new Date(),
+      undefined,
+      undefined,
+      false,
+      null,
+      held
+    )
+    expect(prices.length).toBeGreaterThan(160)
+    expect(text).toContain(`business.prices: ${prices}\n`)
+    expect(text).toContain(`business.disclaimer: ${"x".repeat(160)}… (cut)`)
+    expect(INSTRUCTIONS).toMatch(/business\.prices in the facts[^\n]*quote/)
   })
 
   it("names no business kind and no assistant in the cached instructions", () => {

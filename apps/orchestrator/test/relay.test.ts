@@ -209,4 +209,20 @@ live("the relay", () => {
       )
     ).toEqual({ ask: "Is there parking near you for customers?" })
   })
+
+  it("asks in the model's words with a dash made a comma, as the chat does", async () => {
+    const b = await waiting("business.parking")
+    expect(
+      await relayQuestion(
+        key,
+        kit,
+        b.ids,
+        b.requestId,
+        reads({
+          answer: null,
+          question: "One thing — can customers park near you?",
+        })
+      )
+    ).toEqual({ ask: "One thing, can customers park near you?" })
+  })
 })

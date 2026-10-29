@@ -2342,6 +2342,36 @@ describe("the owner's words in say", () => {
     ).toEqual([])
   })
 
+  it("refuses the owner's list read back, and passes a reply that just has it", () => {
+    const listed =
+      "say reads the owner's list back to them; say in a few words that you have it, or pick out one detail, and move on"
+    const owner =
+      "The address, whether it's a house or a shop, roughly how many windows, and if they want gutters or the conservatory done too."
+    // Both seen in local onboarding on 2026-10-29.
+    for (const said of [
+      "Understood, covering the address, property style, window count, and any extras like gutters or conservatories.",
+      "Got it, the address, property style and gutters.",
+    ]) {
+      expect(sayProblems(said, { typed: owner }), said).toContain(listed)
+    }
+    expect(
+      sayProblems(
+        "Got it, that's everything a quote needs. Here is what I'll ask new enquiries.",
+        { typed: owner }
+      )
+    ).toEqual([])
+    expect(
+      sayProblems("Wren it is, they/them, and keeping things casual.", {
+        typed: "Call yourself Wren, they/them, and keep it casual.",
+        persona: {
+          names: ["Wren"],
+          pronouns: ["they_them"],
+          tones: ["casual"],
+        },
+      })
+    ).not.toContain(listed)
+  })
+
   it("thanks for a correction only when the plan changed a held fact", () => {
     const thanks = "Silverline it is, thanks for clearing that up."
     expect(sayProblems(thanks, { corrected: false })).toContain(

@@ -1,8 +1,9 @@
+import { dashesToCommas } from "@workspace/contracts"
 import type { TextStreamPart, ToolSet } from "ai"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { INSTRUCTIONS } from "../src/cos/agent.ts"
 import { withoutRestated } from "../src/cos/run.ts"
-import { dashesToCommas, voiced } from "../src/cos/voice.ts"
+import { voiced } from "../src/cos/voice.ts"
 import { VOICE } from "../src/voice.ts"
 
 type Part = TextStreamPart<ToolSet>

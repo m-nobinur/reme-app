@@ -823,6 +823,11 @@ export function sayProblems(
       "say repeats the owner's own words back to them; acknowledge one detail in your own words instead"
     )
   }
+  if (context.typed && listsBack(say, context.typed, context.persona)) {
+    problems.push(
+      "say reads the owner's list back to them; say in a few words that you have it, or pick out one detail, and move on"
+    )
+  }
   if (context.corrected === false && CORRECTION_THANKS.test(say)) {
     problems.push(
       "say thanks the owner for a correction, but nothing they said changed what was held"
@@ -954,6 +959,53 @@ function echoes(say: string, typed: string): boolean {
     if (runs.has(mine.slice(i, i + ECHO_WORDS).join(" "))) return true
   }
   return false
+}
+
+/** Words too common to show that a part of say came from the owner's list. */
+const COMMON = new Set(
+  "that this they them their there then than what when where which whether with would could should want wants like just also some more most much very have from into about your only each every other over once here been were will does done make made need needs sure okay yeah roughly usually mostly maybe really thing things stuff".split(
+    " "
+  )
+)
+
+/** A word as a list item compares: "windows" is "window", "conservatories" "conservatory". */
+const stem = (word: string) => word.replace(/ies$/, "y").replace(/(?<!s)s$/, "")
+
+/**
+ * Whether a sentence of `say` reads back a list the owner typed: four parts
+ * or more at its commas, "and" and "or" (a list of three after "Got it"),
+ * two of them short and naming a word of the owner's. Two things named back,
+ * "Weddings and proms, lovely", are the one detail a reply may pick out. The persona's own values are left out, since a persona
+ * turn says what it recorded. Observed on 2026-10-29: "Understood, covering
+ * the address, property style, window count, and any extras like gutters or
+ * conservatories."
+ */
+function listsBack(
+  say: string,
+  typed: string,
+  persona?: SayContext["persona"]
+): boolean {
+  const own = new Set(
+    wordsOf(
+      Object.values(persona ?? {})
+        .flat()
+        .join(" ")
+    ).map(stem)
+  )
+  const theirs = new Set(
+    wordsOf(typed)
+      .filter((w) => w.length >= 4 && !COMMON.has(w))
+      .map(stem)
+      .filter((w) => !own.has(w))
+  )
+  return say.split(/(?<=[.!?])\s+/).some((sentence) => {
+    const parts = sentence.split(/,|\s(?:and|or)\s/i)
+    const named = parts.filter((part) => {
+      const words = wordsOf(part)
+      return words.length <= 4 && words.some((w) => theirs.has(stem(w)))
+    })
+    return parts.length >= 4 && named.length >= 2
+  })
 }
 
 /** What `sayProblems` needs to know of a plan's turn. */
