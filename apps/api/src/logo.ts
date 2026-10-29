@@ -33,6 +33,7 @@ import {
 } from "./logo-style.ts"
 import { factValue } from "./onboarding.ts"
 import { DEFAULT_ONBOARDING_MODEL, plannerModel } from "./onboarding-agent.ts"
+import { cropToMark } from "./png-crop.ts"
 import { readFacts } from "./workspace.ts"
 
 /**
@@ -593,7 +594,12 @@ async function drawOne(
   const type = sniff(bytes)
   if (!type) throw new Error("logos.not_an_image")
   if (!hasAlpha(bytes)) throw new Error("logos.opaque")
-  return { bytes, type, cost: Number(body.usage?.cost ?? 0) }
+  // Cut to the mark, so a header's logo fills its box.
+  return {
+    bytes: await cropToMark(bytes),
+    type,
+    cost: Number(body.usage?.cost ?? 0),
+  }
 }
 
 const dataUrl = (bytes: Uint8Array, type: string) => {
