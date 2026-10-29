@@ -201,7 +201,6 @@ async function chunksOf(response) {
     .map((frame) => JSON.parse(frame.slice("data: ".length)))
 }
 
-/** The builds a case's own request_change calls started. */
 const startedBuilds = (turns) =>
   turns
     .flatMap((t) => t.chunks)
@@ -341,9 +340,6 @@ export async function liveRun() {
       }
       const turns = await runCase(call, kase)
       run.cases.push({ name: kase.name, turns })
-      // Act starts a change the owner asked for, with no card (since
-      // 2026-10-26). Cancel it with its case, so it spends no more and the
-      // count below holds only builds nobody asked for.
       for (const id of startedBuilds(turns)) {
         const res = await call("POST", `/builds/${id}/cancel`, {})
         if (!res.ok) throw new Error(`POST /builds/${id}/cancel: ${res.status}`)

@@ -264,13 +264,6 @@ const inputOf = <N extends CosToolName>(name: N) =>
     ? CosChangeRequest.omit({ step: true, chat: true })
     : COS_TOOLS[name].input) as unknown as (typeof COS_TOOLS)[N]["input"]
 
-/**
- * `schema` without what the generator adds and the model gains nothing
- * from: `$schema`, and the pattern under a uuid format, which keeps its
- * format, or one that only asks for some text. Zod still checks every call.
- * A date-time keeps its pattern: without it the model sent times with no
- * offset, and every reminder's first call failed (staging, 2026-10-29).
- */
 function lean(schema: unknown): unknown {
   if (Array.isArray(schema)) return schema.map(lean)
   if (!schema || typeof schema !== "object") return schema

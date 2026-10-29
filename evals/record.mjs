@@ -82,8 +82,6 @@ export function serialise(run) {
       const id = `${name}.${i + 1}`
       const { mode, text, deny } = turn.owner
       owner[id] = { mode, text, deny, outcome: turn.outcome }
-      // A message's write time and the passing thought heading: neither is
-      // stored, no check reads them, and every run changes them.
       const kept = turn.chunks.filter((c) => !TRANSIENT.has(c.type))
       for (const chunk of mergeDeltas(kept)) {
         lines.push({ turn: id, chunk: redact(chunk) })

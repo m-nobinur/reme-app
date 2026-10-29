@@ -383,11 +383,6 @@ const clock24 = (said) =>
       `${String((Number(h) % 12) + (p.toLowerCase() === "p" ? 12 : 0)).padStart(2, "0")}:${m}`
   )
 
-/**
- * What this turn's tools returned, as a fact a reply may repeat, such as a
- * domain's yearly price: a `price_gbp…` number reads as pounds, since the
- * gates trace a price only by its currency sign.
- */
 function toolSaid(parts) {
   const said = []
   const walk = (value, key = "") => {
@@ -471,8 +466,6 @@ export function score(kase, turns, facts) {
   return {
     unknown,
     problems,
-    // A time the owner typed is theirs, in this case or an earlier one: one
-    // org runs every case, so an earlier case's reminder is still open.
     fabrications: turns.flatMap((t) =>
       fabrications(t.parts, [
         ...facts,
