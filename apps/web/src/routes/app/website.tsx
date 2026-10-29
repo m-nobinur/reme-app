@@ -21,6 +21,7 @@ import { SiteReadyCard } from "@/chat/site-ready"
 import { getSiteMedia } from "@/lib/api/server"
 import type { Workspace, WriteOutcome } from "@/lib/api/types"
 import { assistantOf, leading } from "@/lib/briefing"
+import { settingUp } from "@/lib/onboarding"
 import { currentBuild } from "@/lib/panel"
 import { anchorOf } from "@/lib/reminders"
 import { readyForReview } from "@/lib/site-ready"
@@ -250,6 +251,17 @@ function Website() {
             }
             icon={<BuildingIcon animated className="text-primary" />}
             title="Your website is under way"
+          />
+        ) : active && settingUp(workspace) ? (
+          <EmptyState
+            action={
+              <Link className={buttonVariants()} to="/app">
+                Continue setup
+              </Link>
+            }
+            description={`${leading(assistantOf(workspace))} builds your website once setup in the chat is done. You review every version before it goes live.`}
+            icon={<GlobeIcon />}
+            title={`${active.name} has no website yet`}
           />
         ) : (
           <EmptyState
