@@ -79,26 +79,37 @@ export const versionMeta = (
     .filter(Boolean)
     .join(" · ")
 
+/** A review the owner approved here, and when. */
+export type Approved = { review: ReadyReview; at: string }
+
 /**
- * What the card shows: the review to answer; a quiet line once the owner
- * approved it here, until that version is live or a newer one asks again; or
- * nothing, when the review went some other way (the panel, an expiry, a
- * replacement).
+ * What the card shows: the review to answer; a publishing line once the
+ * owner approved it here; or nothing, when the review went some other way
+ * (the panel, an expiry, a replacement). In a chat (`saidAt` given) the line
+ * holds until the assistant says something after the approval, its live
+ * message, with `published` once that version is live, since the load check
+ * runs a while after; elsewhere it goes once the version is live.
  */
 type ReadyCard =
   | { kind: "review"; review: ReadyReview }
-  | { kind: "approved"; version: number }
+  | { kind: "approved"; version: number; published: boolean }
   | null
 
 export function readyCard(
   ready: ReadyReview | null,
-  approvedHere: ReadyReview | null,
-  live: number | null
+  approvedHere: Approved | null,
+  live: number | null,
+  saidAt?: string | null
 ): ReadyCard {
-  if (ready && ready.approvalId !== approvedHere?.approvalId) {
+  if (ready && ready.approvalId !== approvedHere?.review.approvalId) {
     return { kind: "review", review: ready }
   }
-  return approvedHere && (live ?? 0) < approvedHere.version
-    ? { kind: "approved", version: approvedHere.version }
-    : null
+  if (!approvedHere) return null
+  const { version } = approvedHere.review
+  const published = (live ?? 0) >= version
+  const over =
+    saidAt === undefined
+      ? published
+      : saidAt !== null && Date.parse(saidAt) > Date.parse(approvedHere.at)
+  return over ? null : { kind: "approved", version, published }
 }
