@@ -582,38 +582,30 @@ const UNIVERSAL: Record<Phase, string> = {
   denied: "Left as it was",
 }
 
-/** A kind's own line, for a tool the table does not know. */
+/**
+ * A kind's own line where a tool has none of its own: a card waiting on the
+ * owner's yes, or their no. Every other phase is the tool's own. A tool the
+ * table does not know has no kind either, so it reads the universal line.
+ */
 const KIND_LINES: Partial<Record<StatusKind, Partial<Record<Phase, string>>>> =
   {
-    checking: {
-      working: "Checking a few things",
-      still: "Still checking",
-      done: "Checked a few things",
+    reminder: {
+      waiting: "Reminder ready to add",
+      denied: "Reminder not added",
     },
     domain: {
-      working: "Working on your domain",
-      still: "Still working on your domain",
-      done: "Finished with your domain",
-      failed: "Couldn't finish with your domain",
-    },
-    google: {
-      working: "Working with Google",
-      still: "Still working with Google",
-      failed: "Couldn't finish with Google",
-    },
-    building: {
-      working: "Working on your website",
-      still: "Still working on your website",
-      failed: "Couldn't finish with your website",
-    },
-    reminder: {
-      working: "Sorting your reminder",
-      done: "Sorted your reminder",
+      waiting: "Ready for your yes on your domain",
+      denied: "Left your domain as it was",
     },
     payment: {
-      working: "Getting your payment ready",
-      failed: "Couldn't get your payment ready",
+      waiting: "Ready for your payment",
+      denied: "Didn't buy the domain",
     },
+    google: {
+      waiting: "Ready to connect Google",
+      denied: "Left Google unconnected",
+    },
+    building: { denied: "Left your website as it was" },
   }
 
 const FAIL_TOOL = "try again in a moment"
@@ -684,11 +676,11 @@ export function toolSay(
     const plain = says.filter((say): say is string => typeof say === "string")
     if (plain.length) return { text: pick(ctx, key, plain), level: "plain" }
   }
-  // Waiting and denied have no line of a tool's own: the card says the rest.
-  if (copy && phase !== "waiting" && phase !== "denied")
+  // Waiting and denied read as the kind's: the card says the rest. Anything
+  // else here is a gap: a name the table does not know.
+  if (!copy || (phase !== "waiting" && phase !== "denied"))
     reportCopyGap("tool", tool)
-  if (!copy) reportCopyGap("tool", tool)
-  const kind = KIND_LINES[copy?.kind ?? "thinking"]?.[phase]
+  const kind = copy && KIND_LINES[copy.kind]?.[phase]
   return kind
     ? { text: kind, level: "kind" }
     : { text: UNIVERSAL[phase], level: "universal" }
