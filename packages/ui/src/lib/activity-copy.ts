@@ -753,10 +753,6 @@ export const phaseState = (phase: Phase): StatusState =>
       ? "stopped"
       : phase
 
-/** The kind a tool's icon is drawn for. */
-export const toolKind = (tool: string): StatusKind =>
-  known(tool) ? TOOLS[tool].kind : "thinking"
-
 // ---------------------------------------------------------------------------
 // Build stages: the six every full build lists, from its first event.
 
