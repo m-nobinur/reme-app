@@ -1,8 +1,6 @@
 import {
-  AlarmIcon,
   BuildingsIcon,
   ChatCircleTextIcon,
-  CheckCircleIcon,
   FlowArrowIcon,
   GearSixIcon,
   GlobeIcon,
@@ -51,12 +49,14 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@workspace/ui/components/sheet"
+import { DoneIcon } from "@workspace/ui/components/status-line"
 import { toggleTheme } from "@workspace/ui/components/theme-toggle"
 import { Hint } from "@workspace/ui/components/tooltip"
 import {
   WorkspacePage,
   WorkspaceShell,
 } from "@workspace/ui/components/workspace-shell"
+import { STATE_MARKS } from "@workspace/ui/lib/status-icons"
 import { cn } from "@workspace/ui/lib/utils"
 import { type ReactNode, useState } from "react"
 import { BellSample } from "./notification-entries"
@@ -203,7 +203,7 @@ const RAIL_NAV = [
   { href: "#new", label: "New conversation", icon: NotePencilIcon },
   { href: "#website", label: "Website", icon: GlobeIcon },
   { href: "#pipeline", label: "Pipeline", icon: PipelineIcon },
-  { href: "#reminders", label: "Reminders", icon: AlarmIcon },
+  { href: "#reminders", label: "Reminders", icon: STATE_MARKS.reminder.Icon },
   { href: "#tasks", label: "Tasks", icon: ListChecksIcon },
 ]
 
@@ -298,7 +298,7 @@ function ShellSample({ floating = false }: { floating?: boolean }) {
         <h1 className="mb-6 font-semibold text-2xl">Approvals</h1>
         <EmptyState
           description="Approval requests appear here as Reme raises them."
-          icon={<CheckCircleIcon />}
+          icon={<DoneIcon />}
           title="Nothing waiting on you"
         />
       </WorkspacePage>

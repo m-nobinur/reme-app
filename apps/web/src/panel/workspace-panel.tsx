@@ -1,9 +1,4 @@
-import {
-  ChatCircleDotsIcon,
-  ChatCircleTextIcon,
-  CheckCircleIcon,
-  PulseIcon,
-} from "@phosphor-icons/react"
+import { ChatCircleTextIcon, PulseIcon } from "@phosphor-icons/react"
 import {
   getRouteApi,
   Link,
@@ -40,6 +35,7 @@ import {
   WaitingOnYou,
   YourWebsite,
 } from "@workspace/ui/components/live-panel"
+import { DoneIcon, StateIcon } from "@workspace/ui/components/status-line"
 import {
   Tabs,
   TabsContent,
@@ -626,7 +622,7 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
           The first three kinds never sit behind "Show more": links and the
           pill focus them by their anchors. */}
       <WaitingOnYou
-        icon={ChatCircleDotsIcon}
+        icon={<StateIcon state="waiting" />}
         limit={Math.max(SHOWN.now, held.length + panel.waiting.length)}
         status={status}
       >
@@ -656,7 +652,9 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
       </WaitingOnYou>
       <WaitingOnYou
         error={stale}
-        icon={PulseIcon}
+        icon={
+          <PulseIcon aria-hidden className="size-4 text-muted-foreground" />
+        }
         limit={SHOWN.now}
         onRetry={refresh}
         title="Now"
@@ -699,7 +697,7 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
         }
         ahead={false}
         count={panel.done.length}
-        icon={CheckCircleIcon}
+        icon={<DoneIcon />}
         items={panel.done.slice(0, SHOWN.done)}
         title="Completed"
         zone={zone}

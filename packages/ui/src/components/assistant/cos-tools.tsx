@@ -28,7 +28,7 @@ import {
 } from "@workspace/ui/components/assistant/domain"
 import { ConnectGoogle } from "@workspace/ui/components/assistant/google"
 import { StatusLine, ToolStatus } from "@workspace/ui/components/status-line"
-import { type ToolArgs, toolKind } from "@workspace/ui/lib/activity-copy"
+import type { ToolArgs } from "@workspace/ui/lib/activity-copy"
 import { factLabel, factText } from "@workspace/ui/lib/facts"
 import { formatDateTime } from "@workspace/ui/lib/format"
 import { refusalText } from "@workspace/ui/lib/refusal"
@@ -89,7 +89,7 @@ function Read<O>({
     state,
   } as const
   return step && state === "working" ? (
-    <StatusLine {...line} kind={toolKind(tool)} label={step} />
+    <StatusLine {...line} label={step} />
   ) : (
     <ToolStatus {...line} args={args} tool={tool} />
   )

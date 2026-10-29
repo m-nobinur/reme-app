@@ -1,6 +1,5 @@
 import {
   ArrowUpRightIcon,
-  BellIcon,
   BrainIcon,
   BuildingsIcon,
   GearSixIcon,
@@ -22,6 +21,7 @@ import {
   type SettingsSection,
   SettingsTrigger,
 } from "@workspace/ui/components/settings-dialog"
+import { StateIcon } from "@workspace/ui/components/status-line"
 import {
   toggleTheme,
   useDarkTheme,
@@ -210,7 +210,7 @@ export function OwnerSettings({
     {
       id: "notifications",
       label: "Notifications",
-      icon: <BellIcon aria-hidden />,
+      icon: <StateIcon state="notifications" />,
       content: (
         <>
           <Lead>

@@ -1,4 +1,4 @@
-import { CheckCircleIcon, PulseIcon } from "@phosphor-icons/react"
+import { PulseIcon } from "@phosphor-icons/react"
 import type {
   ActivitySegment,
   ApprovalTarget,
@@ -21,6 +21,7 @@ import {
   WaitingOnYou,
   YourWebsite,
 } from "@workspace/ui/components/live-panel"
+import { DoneIcon } from "@workspace/ui/components/status-line"
 import {
   Tabs,
   TabsContent,
@@ -378,7 +379,13 @@ function SamplePanel() {
         <TabsTrigger value="website">Website</TabsTrigger>
       </TabsList>
       <TabsContent className="gap-4" keepMounted value="activity">
-        <WaitingOnYou icon={PulseIcon} limit={3} title="Now">
+        <WaitingOnYou
+          icon={
+            <PulseIcon aria-hidden className="size-4 text-muted-foreground" />
+          }
+          limit={3}
+          title="Now"
+        >
           {segment({
             id: "change",
             kind: "change",
@@ -409,7 +416,7 @@ function SamplePanel() {
             { id: "setup", text: "Brightclean set up", at: STARTED },
           ]}
           ahead={false}
-          icon={CheckCircleIcon}
+          icon={<DoneIcon />}
           title="Completed"
         />
       </TabsContent>
@@ -479,7 +486,7 @@ const panelCatalog: Entry[] = [
             },
           ]}
           ahead={false}
-          icon={CheckCircleIcon}
+          icon={<DoneIcon />}
           title="Completed"
         />
       </div>
@@ -491,7 +498,12 @@ const panelCatalog: Entry[] = [
     name: "Panel first run",
     render: () => (
       <div className="flex max-w-88 flex-col gap-6">
-        <WaitingOnYou icon={PulseIcon} title="Now">
+        <WaitingOnYou
+          icon={
+            <PulseIcon aria-hidden className="size-4 text-muted-foreground" />
+          }
+          title="Now"
+        >
           {segment(
             {
               id: "website",
@@ -531,7 +543,7 @@ const panelCatalog: Entry[] = [
           }
           items={[{ id: "setup", text: "Brightclean set up", at: STARTED }]}
           ahead={false}
-          icon={CheckCircleIcon}
+          icon={<DoneIcon />}
           title="Completed"
         />
       </div>
@@ -730,7 +742,7 @@ const panelCatalog: Entry[] = [
           },
         ]}
         ahead={false}
-        icon={CheckCircleIcon}
+        icon={<DoneIcon />}
         title="Completed"
       />
     ),

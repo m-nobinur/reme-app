@@ -3,12 +3,11 @@ import {
   useAui,
   useAuiState,
 } from "@assistant-ui/react"
-import { CheckCircleIcon } from "@phosphor-icons/react"
 import { ConnectGoogleOutput } from "@workspace/contracts"
 import { Problem } from "@workspace/ui/components/assistant/decision"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { ConnectRow } from "@workspace/ui/components/connect-row"
-import { ToolStatus } from "@workspace/ui/components/status-line"
+import { DoneIcon, ToolStatus } from "@workspace/ui/components/status-line"
 import { CARD_SURFACE } from "@workspace/ui/lib/card"
 import { refusalText } from "@workspace/ui/lib/refusal"
 import { NOT_DONE, readView } from "@workspace/ui/lib/tool-state"
@@ -94,10 +93,7 @@ export const ConnectGoogle: ToolCallMessagePartComponent = (props) => {
       ) : "connected" in output ? (
         <>
           <p className="flex items-center gap-2 text-sm">
-            <CheckCircleIcon
-              aria-hidden
-              className="size-4 shrink-0 text-primary"
-            />
+            <DoneIcon />
             Connected as {output.email}
           </p>
           <div>

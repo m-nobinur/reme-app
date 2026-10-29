@@ -1,34 +1,15 @@
 import {
-  BellIcon,
-  CheckCircleIcon,
-  CreditCardIcon,
-  GlobeIcon,
-  HourglassMediumIcon,
-  MagnifyingGlassIcon,
-  MinusCircleIcon,
-  type Icon as PhosphorIcon,
-  PlugsConnectedIcon,
-  RocketLaunchIcon,
-  WarningCircleIcon,
-} from "@phosphor-icons/react"
-import {
-  BuildingIcon,
-  PhotosIcon,
-  PlanningIcon,
-  PolishingIcon,
-  QuestionIcon,
-  ReadingIcon,
-  SetupIcon,
-  ThinkingIcon,
-  WritingIcon,
-} from "@workspace/ui/components/status-icons"
-import {
   type StatusKind,
   type ToolArgs,
-  toolKind,
   toolLine,
 } from "@workspace/ui/lib/activity-copy"
 import { duration } from "@workspace/ui/lib/format"
+import {
+  KIND_MARKS,
+  type Mark,
+  STATE_MARKS,
+  type StateName,
+} from "@workspace/ui/lib/status-icons"
 import {
   CLOCK_AFTER_MS,
   holdFor,
@@ -39,10 +20,9 @@ import { cn } from "@workspace/ui/lib/utils"
 import { type ComponentProps, useEffect, useRef, useState } from "react"
 
 /**
- * What the assistant is doing, in one line: a small mark that moves while
- * the work runs, a breathing dot while it reads and three dots folding
- * through a wave and a triangle after, then a few words with a soft light
- * sweeping across them, wiped in from the left as they change. Chat and
+ * What the assistant is doing, in one line: the working dots while the work
+ * runs, then a few words with a soft light sweeping across them, wiped in
+ * from the left as they change; once it ends, the state's mark. Chat and
  * panel draw it the same way.
  *
  * The mark sits beside the words, not in them: the shimmer masks everything
@@ -50,31 +30,30 @@ import { type ComponentProps, useEffect, useRef, useState } from "react"
  * is `working`, and both hold still under reduced motion.
  */
 
-/**
- * One icon per kind of work, each with its own small motion (globals.css),
- * keyed by the copy table's kinds so a line and its icon come from one place.
- */
-const KINDS: Record<
-  StatusKind,
-  { Icon: PhosphorIcon; motion: string } | { Drawn: typeof SetupIcon }
-> = {
-  reading: { Drawn: ReadingIcon },
-  thinking: { Drawn: ThinkingIcon },
-  still: { Icon: HourglassMediumIcon, motion: "animate-status-turn" },
-  setup: { Drawn: SetupIcon },
-  question: { Drawn: QuestionIcon },
-  planning: { Drawn: PlanningIcon },
-  building: { Drawn: BuildingIcon },
-  photos: { Drawn: PhotosIcon },
-  writing: { Drawn: WritingIcon },
-  polishing: { Drawn: PolishingIcon },
-  checking: { Icon: MagnifyingGlassIcon, motion: "animate-status-sweep" },
-  domain: { Icon: GlobeIcon, motion: "animate-status-turn" },
-  google: { Icon: PlugsConnectedIcon, motion: "animate-status-meet" },
-  reminder: { Icon: BellIcon, motion: "origin-top animate-status-swing" },
-  payment: { Icon: CreditCardIcon, motion: "animate-status-fade" },
-  publishing: { Icon: RocketLaunchIcon, motion: "animate-status-lift" },
-  waiting: { Icon: HourglassMediumIcon, motion: "" },
+/** A mark from the icon list, moving while `moving`. */
+function MarkIcon({
+  mark,
+  moving,
+  className,
+}: {
+  mark: Mark
+  moving: boolean
+  className?: string | undefined
+}) {
+  if ("Drawn" in mark) {
+    return <mark.Drawn animated={moving} className={className} />
+  }
+  return (
+    <mark.Icon
+      aria-hidden
+      className={cn(
+        "size-4 shrink-0 motion-reduce:animate-none",
+        moving && mark.motion,
+        className
+      )}
+      weight={mark.weight}
+    />
+  )
 }
 
 /**
@@ -90,127 +69,35 @@ export function StatusIcon({
   still?: boolean
   className?: string
 }) {
-  return <KindIcon className={className} kind={kind} moving={!still} />
+  return (
+    <MarkIcon className={className} mark={KIND_MARKS[kind]} moving={!still} />
+  )
 }
 
-/** A kind's icon, drawn or from phosphor, moving while `moving`. */
-function KindIcon({
-  kind,
-  moving,
+/** Where something stands, in the list's size and colour; `className` places it. */
+export function StateIcon({
+  state,
   className,
 }: {
-  kind: StatusKind
-  moving: boolean
-  className?: string | undefined
+  state: StateName
+  className?: string
 }) {
-  const entry = KINDS[kind]
-  if ("Drawn" in entry) {
-    return <entry.Drawn animated={moving} className={className} />
-  }
-  const { Icon, motion } = entry
+  const mark = STATE_MARKS[state]
   return (
-    <Icon
-      aria-hidden
-      className={cn(
-        "size-4 shrink-0 motion-reduce:animate-none",
-        moving && motion,
-        className
-      )}
+    <MarkIcon
+      className={cn(mark.size, mark.colour, className)}
+      mark={mark}
+      moving={state === "working"}
     />
   )
 }
 
-/** The reading dot. */
-function BreathingDot() {
-  return (
-    <span
-      aria-hidden
-      className="flex size-4 shrink-0 items-center justify-center"
-    >
-      <span className="size-2 rounded-full bg-current motion-safe:animate-status-breathe" />
-    </span>
-  )
+/** Finished: the one done mark. */
+export function DoneIcon({ className }: { className?: string }) {
+  return <StateIcon className={className} state="done" />
 }
 
-const CYCLE_MS = 4400
-const SPREAD = 4.6
-const RADIUS = 4.4
-const ease = (k: number) => (k < 0.5 ? 4 * k ** 3 : 1 - (-2 * k + 2) ** 3 / 2)
-
-/** The dots in a line, a wave running through them. */
-const wave = (ms: number) =>
-  [0, 1, 2].map((dot) => ({
-    x: (dot - 1) * SPREAD,
-    y: 1.8 * Math.sin((ms / 1600) * 2 * Math.PI - dot * 0.8),
-  }))
-
-/** The dots as a slowly turning triangle that draws in towards its centre and out, twice. */
-const triangle = (ms: number) => {
-  const r =
-    1.6 + (RADIUS - 1.6) * (0.5 + 0.5 * Math.cos((ms / 1000) * 2 * Math.PI))
-  return [0, 1, 2].map((dot) => {
-    const a = (ms / 5000) * 2 * Math.PI + (dot * 2 * Math.PI) / 3 + Math.PI
-    return { x: r * Math.cos(a), y: r * Math.sin(a) }
-  })
-}
-
-const between = (
-  from: { x: number; y: number }[],
-  to: { x: number; y: number }[],
-  k: number
-) =>
-  from.map((p, dot) => ({
-    x: p.x + ((to[dot]?.x ?? p.x) - p.x) * ease(k),
-    y: p.y + ((to[dot]?.y ?? p.y) - p.y) * ease(k),
-  }))
-
-/** Where the dots are `ms` into a cycle: wave, fold, triangle, unfold. */
-function dotsAt(ms: number) {
-  if (ms < 1600) return wave(ms)
-  if (ms < 2000) return between(wave(1600), triangle(0), (ms - 1600) / 400)
-  if (ms < 4000) return triangle(ms - 2000)
-  return between(triangle(2000), wave(0), (ms - 4000) / 400)
-}
-
-/** The working mark: three dots, moved by the frame, still under reduced motion. */
-function FoldingDots() {
-  const dots = useRef<(SVGCircleElement | null)[]>([])
-  useEffect(() => {
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return
-    const start = performance.now()
-    let frame = requestAnimationFrame(function draw(now) {
-      dotsAt((now - start) % CYCLE_MS).forEach((p, dot) => {
-        dots.current[dot]?.setAttribute("cx", p.x.toFixed(2))
-        dots.current[dot]?.setAttribute("cy", p.y.toFixed(2))
-      })
-      frame = requestAnimationFrame(draw)
-    })
-    return () => cancelAnimationFrame(frame)
-  }, [])
-  return (
-    <svg
-      aria-hidden
-      className="size-4 shrink-0"
-      fill="currentColor"
-      viewBox="-8 -8 16 16"
-    >
-      {wave(0).map((p, dot) => (
-        <circle
-          cx={p.x}
-          cy={p.y}
-          // biome-ignore lint/suspicious/noArrayIndexKey: three fixed dots
-          key={dot}
-          r="1.5"
-          ref={(node) => {
-            dots.current[dot] = node
-          }}
-        />
-      ))}
-    </svg>
-  )
-}
-
-type Line = { kind: StatusKind; state: StatusState; label: string }
+type Line = { state: StatusState; label: string }
 
 /**
  * The line to draw now. A working line waits `delay` before it shows, so a
@@ -223,15 +110,9 @@ function useSettled(next: Line, delay: number): Line | null {
     next.state === "working" && delay > 0 ? null : next
   )
   const shownAt = useRef(Date.now())
-  const { kind, state, label } = next
+  const { state, label } = next
   useEffect(() => {
-    if (
-      shown?.kind === kind &&
-      shown.state === state &&
-      shown.label === label
-    ) {
-      return
-    }
+    if (shown?.state === state && shown.label === label) return
     const wait = shown
       ? holdFor(shown.state, state, shownAt.current, Date.now())
       : state === "working"
@@ -239,7 +120,7 @@ function useSettled(next: Line, delay: number): Line | null {
         : 0
     const show = () => {
       shownAt.current = Date.now()
-      setShown({ kind, state, label })
+      setShown({ state, label })
     }
     if (wait <= 0) {
       show()
@@ -247,7 +128,7 @@ function useSettled(next: Line, delay: number): Line | null {
     }
     const timer = setTimeout(show, wait)
     return () => clearTimeout(timer)
-  }, [kind, state, label, delay, shown])
+  }, [state, label, delay, shown])
   return shown
 }
 
@@ -266,7 +147,6 @@ function useClock(active: boolean, since: number | undefined) {
 }
 
 function StatusLine({
-  kind,
   state = "working",
   label,
   count = 1,
@@ -275,11 +155,9 @@ function StatusLine({
   elapsed,
   delay = SHOW_DELAY_MS,
   announce = true,
-  bare = false,
   className,
   ...props
 }: Omit<ComponentProps<"span">, "children"> & {
-  kind: StatusKind
   state?: StatusState
   /** The words, from the copy table: present tense while working. */
   label: string
@@ -295,10 +173,8 @@ function StatusLine({
   delay?: number
   /** Say the line in a polite live region. One per surface: the rest pass false. */
   announce?: boolean
-  /** The mark alone on screen; the words stay for screen readers. */
-  bare?: boolean
 }) {
-  const shown = useSettled({ kind, state, label }, delay)
+  const shown = useSettled({ state, label }, delay)
   // The words it mounted with: a line that loads finished, as a stored
   // message's does, arrives still, and only a change wipes in.
   const [first] = useState(label)
@@ -309,16 +185,6 @@ function StatusLine({
   const clock = elapsed ?? ticking
   const working = shown.state === "working"
   const reveal = working || shown.label !== first
-  const Icon =
-    shown.state === "done"
-      ? CheckCircleIcon
-      : shown.state === "failed"
-        ? WarningCircleIcon
-        : shown.state === "waiting"
-          ? HourglassMediumIcon
-          : shown.state === "stopped"
-            ? MinusCircleIcon
-            : null
   return (
     <span
       className={cn(
@@ -329,25 +195,11 @@ function StatusLine({
       data-state={shown.state}
       {...props}
     >
-      {Icon ? (
-        <Icon
-          aria-hidden
-          className={cn(
-            "size-4 shrink-0",
-            shown.state === "done" && "text-primary",
-            shown.state === "failed" && "text-destructive"
-          )}
-          weight={shown.state === "done" ? "fill" : "regular"}
-        />
-      ) : shown.kind === "reading" ? (
-        <BreathingDot />
-      ) : (
-        <FoldingDots />
-      )}
+      <StateIcon state={shown.state} />
       {/* The words alone: the live region never reads the clock or the count. */}
       <span
         aria-live={announce ? "polite" : undefined}
-        className={bare ? "sr-only" : "inline-block"}
+        className="inline-block"
         data-slot="status-line-text"
         role={announce ? "status" : undefined}
       >
@@ -379,22 +231,21 @@ function StatusLine({
 }
 
 /**
- * A tool's line in the thread, in the copy table's words and icon for that
- * tool. A tool outside the table reads "Working on it", never its name.
+ * A tool's line in the thread, in the copy table's words for that tool. A
+ * tool outside the table reads "Working on it", never its name.
  */
 function ToolStatus({
   tool,
   args,
   state,
   ...props
-}: Omit<ComponentProps<typeof StatusLine>, "kind" | "label" | "state"> & {
+}: Omit<ComponentProps<typeof StatusLine>, "label" | "state"> & {
   tool: string
   args?: ToolArgs
   state: StatusState
 }) {
   return (
     <StatusLine
-      kind={toolKind(tool)}
       // A tool waiting on the owner still says what it is doing.
       label={toolLine(tool, state === "waiting" ? "working" : state, args)}
       state={state}

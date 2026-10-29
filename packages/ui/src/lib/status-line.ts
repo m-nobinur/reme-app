@@ -4,7 +4,7 @@
  */
 
 /** A working line shows only after this long, so a fast tool never flashes. */
-export const SHOW_DELAY_MS = 300
+export const SHOW_DELAY_MS = 200
 
 /** Once a working line shows, its words stay at least this long. */
 export const MIN_SHOWN_MS = 2000

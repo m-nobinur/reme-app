@@ -463,9 +463,6 @@ export function toolLine(
         : `Couldn't ${copy.fail(a)}, ${FAIL_TOOL}`
 }
 
-/** The kind a tool's icon is drawn for. */
-export const toolKind = (tool: string): StatusKind => toolCopy(tool).kind
-
 // ---------------------------------------------------------------------------
 // Build stages: the six every full build lists, from its first event.
 

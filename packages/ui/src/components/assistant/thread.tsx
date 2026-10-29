@@ -22,8 +22,6 @@ import {
   ArrowBendDownRightIcon,
   ArrowDownIcon,
   ArrowUpIcon,
-  CheckIcon,
-  ChecksIcon,
   PaintBrushIcon,
   PlusIcon,
   SquareIcon,
@@ -53,15 +51,11 @@ import {
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu"
 import { LogoMark } from "@workspace/ui/components/logo"
-import { StatusLine } from "@workspace/ui/components/status-line"
+import { StateIcon, StatusLine } from "@workspace/ui/components/status-line"
 import { ComposerInputContext } from "@workspace/ui/hooks/use-composer-input"
 import { useCycle } from "@workspace/ui/hooks/use-cycle"
 import { useOnboardingWait } from "@workspace/ui/hooks/use-onboarding-status"
-import {
-  WORKING_AFTER,
-  waitingLine,
-  writingBack,
-} from "@workspace/ui/lib/activity-copy"
+import { waitingLine, writingBack } from "@workspace/ui/lib/activity-copy"
 import { formatTime } from "@workspace/ui/lib/format"
 import { SHOW_DELAY_MS } from "@workspace/ui/lib/status-line"
 import {
@@ -1251,20 +1245,13 @@ const TypingIndicator: FC<{ immediate?: boolean }> = ({
   )
   if (shown) return null
   const ctx = { orgId: "", assistant }
-  const { kind, label } =
+  const { label } =
     !status && (immediate || toolsRan)
-      ? { kind: "writing" as const, label: writingBack(ctx) }
+      ? { label: writingBack(ctx) }
       : waitingLine(status, seconds, ctx)
   return (
     <span data-slot="aui_assistant-message-indicator">
-      <StatusLine
-        // The first beat of a turn is the dots alone: the same words every
-        // turn read as a script.
-        bare={!status && !immediate && !toolsRan && seconds < WORKING_AFTER}
-        delay={immediate ? 0 : SHOW_DELAY_MS}
-        kind={kind}
-        label={label}
-      />
+      <StatusLine delay={immediate ? 0 : SHOW_DELAY_MS} label={label} />
     </span>
   )
 }
@@ -1530,22 +1517,14 @@ const deliveryOf = (s: AssistantState): Delivery => {
   return next.content.length > 0 ? "seen" : "delivered"
 }
 
-const DELIVERY = {
-  sent: { label: "Sent", Icon: CheckIcon },
-  delivered: { label: "Delivered", Icon: ChecksIcon },
-  seen: { label: "Seen", Icon: ChecksIcon },
-} as const
+const DELIVERY = { sent: "Sent", delivered: "Delivered", seen: "Seen" }
 
 const DeliveryTick: FC = () => {
   const delivery = useAuiState(deliveryOf)
-  const { label, Icon } = DELIVERY[delivery]
   return (
     <span data-slot="aui_user-message-delivery" data-state={delivery}>
-      <Icon
-        aria-hidden
-        className={cn("size-3", delivery === "seen" && "text-primary")}
-      />
-      <span className="sr-only">{label}</span>
+      <StateIcon state={delivery} />
+      <span className="sr-only">{DELIVERY[delivery]}</span>
     </span>
   )
 }

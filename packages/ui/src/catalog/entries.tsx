@@ -1,4 +1,4 @@
-import { CheckCircleIcon, HouseIcon } from "@phosphor-icons/react"
+import { HouseIcon } from "@phosphor-icons/react"
 import { Alert } from "@workspace/ui/components/alert"
 import { PageHeader } from "@workspace/ui/components/app-shell"
 import { AuthCard, AuthForm } from "@workspace/ui/components/auth-card"
@@ -17,6 +17,7 @@ import {
   StrengthBar,
 } from "@workspace/ui/components/password-field"
 import { Skeleton } from "@workspace/ui/components/skeleton"
+import { DoneIcon } from "@workspace/ui/components/status-line"
 import { SubmitButton } from "@workspace/ui/components/submit-button"
 import { ThemeToggle } from "@workspace/ui/components/theme-toggle"
 import type { PasswordVerdict } from "@workspace/ui/lib/password-policy"
@@ -347,7 +348,7 @@ const catalog: CatalogEntry[] = [
       <EmptyState
         action={<Button variant="outline">Try again</Button>}
         description="Approval requests appear here as Reme raises them."
-        icon={<CheckCircleIcon />}
+        icon={<DoneIcon />}
         title="Nothing waiting on you"
       />
     ),

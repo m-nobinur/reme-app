@@ -1,13 +1,9 @@
-import {
-  CheckCircleIcon,
-  CircleHalfIcon,
-  CircleIcon,
-} from "@phosphor-icons/react"
 import { createFileRoute, getRouteApi } from "@tanstack/react-router"
 import { PageHeader } from "@workspace/ui/components/app-shell"
 import { Badge } from "@workspace/ui/components/badge"
+import { StateIcon } from "@workspace/ui/components/status-line"
 import { formatDateTime } from "@workspace/ui/lib/format"
-import { cn, META } from "@workspace/ui/lib/utils"
+import { META } from "@workspace/ui/lib/utils"
 import { assistantOf, leading } from "@/lib/briefing"
 import { completedOf } from "@/lib/panel"
 import { useLiveWorkspace } from "@/lib/workspace"
@@ -27,9 +23,9 @@ const frame = getRouteApi("/app")
 type Status = "done" | "active" | "waiting"
 
 const STATUS = {
-  done: { label: "Done", icon: CheckCircleIcon },
-  active: { label: "In progress", icon: CircleHalfIcon },
-  waiting: { label: "Up next", icon: CircleIcon },
+  done: { label: "Done", mark: "done" },
+  active: { label: "In progress", mark: "working" },
+  waiting: { label: "Up next", mark: "next" },
 } as const
 
 type Task = {
@@ -100,14 +96,7 @@ function TaskRow({ task }: { task: Task }) {
   const status = STATUS[task.status]
   return (
     <li className="flex items-start gap-3 rounded-2xl border border-border px-4 py-3.5">
-      <status.icon
-        aria-hidden
-        className={cn(
-          "mt-0.5 size-5 shrink-0",
-          task.status === "done" ? "text-primary" : "text-muted-foreground"
-        )}
-        weight={task.status === "done" ? "fill" : "regular"}
-      />
+      <StateIcon className="mt-1" state={status.mark} />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <p className="font-medium">{task.title}</p>
         <p className="max-w-prose text-muted-foreground text-sm">

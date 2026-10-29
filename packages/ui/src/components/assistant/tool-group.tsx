@@ -105,7 +105,6 @@ function ToolGroupTrigger({
         <StatusLine
           announce={false}
           delay={0}
-          kind="checking"
           label={groupLine(count, active)}
           state={active ? "working" : "done"}
         />

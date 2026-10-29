@@ -1,17 +1,15 @@
 import { type ToolCallMessagePartProps, useAuiState } from "@assistant-ui/react"
 import {
-  CheckCircleIcon,
-  ProhibitIcon,
-  SpinnerGapIcon,
-  WarningCircleIcon,
-} from "@phosphor-icons/react"
-import {
   Docked,
   TrayFrame,
   useTraySlot,
 } from "@workspace/ui/components/assistant/question-tray"
-import { StatusLine, ToolStatus } from "@workspace/ui/components/status-line"
-import { toolKind } from "@workspace/ui/lib/activity-copy"
+import {
+  DoneIcon,
+  StateIcon,
+  StatusLine,
+  ToolStatus,
+} from "@workspace/ui/components/status-line"
 import { refusalText } from "@workspace/ui/lib/refusal"
 import {
   BROKEN,
@@ -91,7 +89,6 @@ export function Decision<I, O>({
       <StatusLine
         className="flex px-1 py-1.5 text-sm"
         data-slot={slot}
-        kind={toolKind(props.toolName)}
         label={UNFINISHED}
         state="stopped"
       />
@@ -145,11 +142,6 @@ export function Decision<I, O>({
   // Answered: one line in the thread, what was asked and how it ended.
   const sending = view.state === "responding" && view.approved && !held
   const [line, failed] = endLine(view, held, busy, cancelled, refused)
-  const Icon = sending
-    ? SpinnerGapIcon
-    : failed
-      ? WarningCircleIcon
-      : ProhibitIcon
   return (
     <p
       className={cn(
@@ -158,12 +150,17 @@ export function Decision<I, O>({
       )}
       data-slot={slot}
     >
-      <Icon
-        aria-hidden
-        className={cn(
-          "mt-0.5 size-4 shrink-0",
-          sending && "motion-safe:animate-spin"
-        )}
+      <StateIcon
+        className="mt-0.5"
+        state={
+          sending
+            ? "working"
+            : failed
+              ? "failed"
+              : view.state === "responding" && held
+                ? "waiting"
+                : "stopped"
+        }
       />
       <span className="min-w-0 break-words">
         <span className="font-medium text-foreground">{heading}</span>{" "}
@@ -250,7 +247,7 @@ export function TrayApproval({
 export function Problem({ text }: { text: string }) {
   return (
     <p className="flex items-start gap-2 text-destructive text-sm">
-      <WarningCircleIcon aria-hidden className="mt-0.5 size-4 shrink-0" />
+      <StateIcon className="mt-0.5" state="failed" />
       {text}
     </p>
   )
@@ -259,7 +256,7 @@ export function Problem({ text }: { text: string }) {
 export function Done({ children }: { children: ReactNode }) {
   return (
     <p className="flex items-center gap-2 text-sm">
-      <CheckCircleIcon aria-hidden className="size-4 shrink-0 text-primary" />
+      <DoneIcon />
       {children}
     </p>
   )

@@ -1,10 +1,5 @@
-import {
-  AlarmIcon,
-  ClipboardTextIcon,
-  QuestionIcon,
-  SealCheckIcon,
-  WarningIcon,
-} from "@phosphor-icons/react"
+import { QuestionIcon, RocketLaunchIcon } from "@phosphor-icons/react"
+import { STATE_MARKS } from "@workspace/ui/lib/status-icons"
 
 /**
  * The owner attention contract (§7.3): Question, ApprovalRequest, Report,
@@ -24,10 +19,23 @@ const KIND: Record<
   }
 > = {
   question: { label: "Question", icon: QuestionIcon, variant: "secondary" },
-  approval: { label: "Approval", icon: SealCheckIcon, variant: "secondary" },
-  report: { label: "Report", icon: ClipboardTextIcon, variant: "secondary" },
-  alert: { label: "Alert", icon: WarningIcon, variant: "destructive" },
-  reminder: { label: "Reminder", icon: AlarmIcon, variant: "secondary" },
+  approval: {
+    label: "Approval",
+    icon: STATE_MARKS.waiting.Icon,
+    variant: "secondary",
+  },
+  // Every report is a publish.
+  report: { label: "Report", icon: RocketLaunchIcon, variant: "secondary" },
+  alert: {
+    label: "Alert",
+    icon: STATE_MARKS.failed.Icon,
+    variant: "destructive",
+  },
+  reminder: {
+    label: "Reminder",
+    icon: STATE_MARKS.reminder.Icon,
+    variant: "secondary",
+  },
 }
 
 export type { AttentionKind }

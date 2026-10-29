@@ -1,5 +1,4 @@
 import {
-  CheckCircleIcon,
   PaintBrushIcon,
   RocketLaunchIcon,
   SpinnerGapIcon,
@@ -17,6 +16,7 @@ import {
   SiteIcon,
   type VersionPictures,
 } from "@workspace/ui/components/live-panel"
+import { DoneIcon } from "@workspace/ui/components/status-line"
 import { cn, META } from "@workspace/ui/lib/utils"
 import { useId, useLayoutEffect, useState } from "react"
 import { createPortal } from "react-dom"
@@ -100,7 +100,7 @@ export function SiteReady({
       )}
       data-slot="site-ready"
     >
-      <CheckCircleIcon aria-hidden className="size-4 shrink-0 text-primary" />
+      <DoneIcon />
       Approved. Your website is being published.
     </p>
   )
