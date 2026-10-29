@@ -2324,6 +2324,10 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       reminder_id: stored[0]?.id,
       due_at: due.toISOString(),
       time_zone: "Asia/Kathmandu",
+      evidence: [
+        { kind: "record", table: "reminders", id: stored[0]?.id },
+        { kind: "job", job_id: expect.any(String), runs_at: due.toISOString() },
+      ],
     })
     expect(result?.taint).toEqual([])
   })
@@ -2367,6 +2371,10 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     expect(stub.calls).toHaveLength(1)
     expect(sent).toHaveLength(1)
     expect(JSON.stringify(sent[0]?.prompt)).toContain('"outcome":"started"')
+    // The model reads what the evidence shows, never its row id.
+    expect(JSON.stringify(sent[0]?.prompt)).toContain(
+      '"evidence":[{"kind":"record","table":"assignments"}]'
+    )
     const result = (await logOf(id)).find((e) => e.type === "cos.tool_result")
     // The started build's goal is the change as the CoS wrote it.
     expect(result?.taint.sort()).toEqual(["inferred", "untrusted_input"])
@@ -3887,6 +3895,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
         outcome: "deleted",
         reminder_id: row.id,
         title: "Call the supplier",
+        evidence: [{ kind: "record", table: "reminders", id: row.id }],
       })
       expect(await remindersIn(id)).toEqual([])
     })

@@ -80,10 +80,11 @@ export type ContextPolicy = {
  * reservation. Version 7 puts labels and a `ref` in the workspace data in place
  * of ids, versions and raw states. Version 8 may add a line when the owner
  * asks for Google before a domain of their own is live. Version 10 drops the
- * workspace fields the instructions never use.
+ * workspace fields the instructions never use. Version 11 shows an act tool
+ * result's evidence, its ids dropped.
  */
 export const CONTEXT_POLICY: ContextPolicy = {
-  version: "10",
+  version: "11",
   turns: 80,
   toolTurns: 2,
   historyTokens: 16_000,

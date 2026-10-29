@@ -10,6 +10,7 @@ import {
   jevApproval,
   jevAsksGoogle,
   jevBought,
+  jevClaims,
   jevPromise,
   jevPutOn,
   jevReading,
@@ -546,6 +547,29 @@ describe("the reading of a reply that may promise work", () => {
       await jevPromise("k", "Hmm.", never, read(0.77, 0.6).fetchImpl)
     ).toBe(false)
     expect(await jevPromise("k", "Hmm.", never, fake({}, 500).fetchImpl)).toBe(
+      false
+    )
+  })
+})
+
+describe("the reading of a reply that may state a detail it was not shown", () => {
+  afterEach(() => vi.restoreAllMocks())
+  const read = (score: number, status = 200) =>
+    fake({ answers: { invents: { type: "noul", noul: score } } }, status)
+
+  it("is sure only at the bar, sends the reply and what was shown as data, and passes a failed call", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined)
+    const said = "An oven clean is £45."
+    const sure = read(0.96)
+    expect(
+      await jevClaims("k", said, "Regular clean £60", sure.fetchImpl)
+    ).toBe(true)
+    expect(JSON.parse(sure.sent[0]?.init.body as string).state).toEqual({
+      assistant_said: said,
+      shown: "Regular clean £60",
+    })
+    expect(await jevClaims("k", said, "", read(0.6).fetchImpl)).toBe(false)
+    expect(await jevClaims("k", said, "", read(0.99, 500).fetchImpl)).toBe(
       false
     )
   })
