@@ -56,21 +56,18 @@ function panel(page: Page) {
   return page.getByRole("complementary", { name: "Panel" })
 }
 
-test("the panel asks a new owner to name the business and nothing else", async ({
+test("a new owner is asked to name the business and nothing else", async ({
   page,
 }) => {
   await visit(page, "/app")
   // This account has no organisation, so a question, an approval or a build
   // here is either a leak or a fixture, and both are defects. With no
-  // business there are no steps to list yet: naming it comes first.
-  await expect(panel(page).getByRole("listitem")).toHaveText([
-    "Name your business",
-  ])
+  // business there are no steps to list yet: the page asks for its name, and
+  // the panel does not ask again beside it.
   await expect(
-    panel(page)
-      .getByRole("list", { name: "Next steps" })
-      .getByRole("link", { name: "Name your business" })
+    page.getByRole("heading", { name: "What's your business called?" })
   ).toBeVisible()
+  await expect(panel(page).getByRole("listitem")).toHaveCount(0)
   await expect(
     panel(page).getByRole("heading", { name: "First steps" })
   ).toHaveCount(0)

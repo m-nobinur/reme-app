@@ -52,11 +52,6 @@ test("an account with no business is sent to name one", async ({ page }) => {
   await visit(page, "/app/notifications")
   await expect(panel(page)).toHaveCount(0)
   await visit(page, "/app")
-  await panel(page)
-    .getByRole("list", { name: "Next steps" })
-    .getByRole("link", { name: "Name your business" })
-    .click()
-  await expect(page).toHaveURL(/\/name-your-business$/)
   await expect(
     page.getByRole("heading", { name: "What's your business called?" })
   ).toBeVisible()
