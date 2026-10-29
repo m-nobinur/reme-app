@@ -75,7 +75,7 @@ const states = (o: Onboarding, asked = {}, waiting = false, asking?: string) =>
   )
 
 describe("onboardingSteps", () => {
-  it("lists the same nine steps from the first moment, in the panel's order", () => {
+  it("lists the same eleven steps from the first moment, in the panel's order", () => {
     for (const o of [at([]), at([...WORK, AREA, ...CONTACT, ...ASSISTANT])]) {
       expect(onboardingSteps(o).map((s) => s.id)).toEqual([...ONBOARDING_STEPS])
     }
@@ -85,6 +85,8 @@ describe("onboardingSteps", () => {
       customers: "next",
       proof: "next",
       quote_form: "next",
+      prices: "next",
+      day_to_day: "next",
       contact: "next",
       assistant: "next",
       website: "next",
@@ -127,11 +129,14 @@ describe("onboardingSteps", () => {
     ])
     // A return to the quote form, read with no asked counts as the panel reads it.
     const back = states(at([...WORK, AREA, QUOTE]), {}, true, "quote_form")
-    expect([back.customers, back.proof, back.contact]).toEqual([
+    expect([back.customers, back.proof, back.prices]).toEqual([
       "skipped",
       "skipped",
       "waiting",
     ])
+    // The prices and the day to day pass once the contact card is reached.
+    const later = states(at([...WORK, AREA, QUOTE, ...CONTACT]))
+    expect([later.prices, later.day_to_day]).toEqual(["skipped", "skipped"])
     const told = at([
       ...WORK,
       AREA,

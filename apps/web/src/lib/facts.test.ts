@@ -92,6 +92,21 @@ const SHAPES: [FactValue, string, string][] = [
     "Greater Fairhaven",
   ],
   [
+    { key: "business.prices", value: { text: "Airport run from 60" } },
+    "Your prices",
+    "Airport run from 60",
+  ],
+  [
+    { key: "business.enquiries", value: { text: "Calls and WhatsApp" } },
+    "How enquiries reach you",
+    "Calls and WhatsApp",
+  ],
+  [
+    { key: "owner.priorities", value: { text: "Replying out of hours" } },
+    "What to take off your plate",
+    "Replying out of hours",
+  ],
+  [
     { key: "assistant.name", value: { name: "Sam" } },
     "Assistant's name",
     "Sam",

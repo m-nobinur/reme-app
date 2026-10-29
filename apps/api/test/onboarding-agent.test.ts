@@ -62,6 +62,8 @@ const EVERYTHING: FactValue[] = [
     value: { text: "Twelve years trading, every chauffeur DBS checked." },
   },
   { key: "service_area.text", value: { text: "Greater Manchester" } },
+  { key: "business.prices", value: { text: "Weddings from 300" } },
+  { key: "business.enquiries", value: { text: "Calls and emails" } },
   { key: "business.phone", value: { e164: "+447700900412" } },
   { key: "business.email", value: { address: "bookings@regal.invalid" } },
   { key: "assistant.name", value: { name: "Jeeves" } },
@@ -1127,6 +1129,45 @@ describe("what the planner reads and how often it asks", () => {
     expect(errorsOf(contact, asked(1, 5))).toEqual([])
     // The checklist says so, so the model moves on.
     expect(turnData(asked(1, 0))).toContain("optional, asked enough: leave it")
+  })
+
+  it("asks the owner's prices after the quote form, the one turn that may name them, and never says a question can be skipped", () => {
+    const o = onboarding([
+      ...without("business.prices", "business.enquiries", "site.build_mode"),
+      QUOTE,
+    ])
+    const ask = (about: string, say: string) =>
+      plan({ say, next: { kind: "ask_open", about } as Plan["next"] })
+    expect(
+      errorsOf(
+        ask(
+          "business.prices",
+          "Roughly what do your usual jobs cost? I use it when I quote."
+        ),
+        typed("ok", o)
+      )
+    ).toEqual([])
+    const priced = onboarding([
+      ...without("business.enquiries", "site.build_mode"),
+      QUOTE,
+    ])
+    // Any other turn is still refused a price.
+    expect(
+      errorsOf(
+        ask("business.enquiries", "What do your usual jobs cost?"),
+        typed("ok", priced)
+      )
+    ).toContainEqual(expect.stringMatching(/rates, fees, costs/))
+    // The Skip this one button under the question already says it.
+    expect(
+      errorsOf(
+        ask(
+          "business.enquiries",
+          "How do enquiries reach you today? You can skip this."
+        ),
+        typed("ok", priced)
+      )
+    ).toContainEqual(expect.stringMatching(/Skip this one button/))
   })
 
   it("asks what sets the business apart once, and never lets the assistant choose it", () => {

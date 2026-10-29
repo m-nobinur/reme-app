@@ -118,6 +118,12 @@ const FACTS: Partial<Record<StepId, FactValue[]>> = {
       value: { text: "Fictional Town and villages" },
     },
   ],
+  "business.prices": [
+    { key: "business.prices", value: { text: "Regular clean from 60." } },
+  ],
+  "business.enquiries": [
+    { key: "business.enquiries", value: { text: "Calls and texts." } },
+  ],
   contact: [PHONE, EMAIL],
   assistant: [
     { key: "assistant.name", value: { name: "Maya" } },
@@ -227,6 +233,8 @@ describe("the onboarding steps", () => {
       "business.proof",
       "industry",
       "quote_form",
+      "business.prices",
+      "business.enquiries",
       "contact",
       "assistant",
       "build_for_me",
@@ -462,6 +470,8 @@ const ALL: FactValue[] = [
   ...(FACTS["business.audience"] as FactValue[]),
   ...(FACTS["business.proof"] as FactValue[]),
   { key: "business.industry", value: { name: "x", category: null } },
+  ...(FACTS["business.prices"] as FactValue[]),
+  ...(FACTS["business.enquiries"] as FactValue[]),
   ...(FACTS.contact as FactValue[]),
   ...(FACTS.assistant as FactValue[]),
   { key: "site.build_mode", value: { mode: "assistant" } },
@@ -1453,9 +1463,11 @@ describe("the onboarding copy", () => {
     }
     for (const [tone, name, text] of seen.values()) {
       expect(text, name).not.toMatch(/[—–]/)
-      expect(text, name).not.toMatch(
-        /[$£€]|\bprices?\b|\bpricing\b|\btiers?\b|\brates?\b|\bfees?\b/i
-      )
+      // The prices question is the one line that asks about them.
+      if (!name.endsWith("business.prices"))
+        expect(text, name).not.toMatch(
+          /[$£€]|\bprices?\b|\bpricing\b|\btiers?\b|\brates?\b|\bfees?\b/i
+        )
       expect(text, name).not.toMatch(/\d+\s*(?:an hour|per hour|\/h)/i)
       expect(text, name).not.toMatch(/\(s?he\/|\(they\//)
       expect(text, name).not.toMatch(/\bReme\b/)
