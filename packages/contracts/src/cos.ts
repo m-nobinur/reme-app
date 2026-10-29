@@ -820,6 +820,8 @@ export const CosStep = z.strictObject({
   messages: z.array(JsonObject),
   usage: Usage,
   cost_usd: Usd,
+  /** The model that answered the step, which differs from the turn's when OpenRouter used its fallback. Absent on rows before it. */
+  model: z.string().min(1).optional(),
 })
 
 /** The `cos.call` payload: the hash of the messages a model call was sent. No taint label. */
