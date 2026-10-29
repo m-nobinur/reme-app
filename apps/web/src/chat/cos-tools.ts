@@ -14,11 +14,15 @@ export const questionTitles = (attention: AttentionItem[] = []) =>
     )
   )
 
-/** What the cards need from the app, built from `questionTitles` so it is as stable as they are. */
-export const cosTools = (titles: string) => {
+/**
+ * What the cards need from the app, built from `questionTitles` and the
+ * business's zone so it is as stable as they are: times in the zone the
+ * assistant set them in.
+ */
+export const cosTools = (titles: string, zone: string | null = null) => {
   const byId: Record<string, string> = JSON.parse(titles)
   return {
-    zone: browserZone(),
+    zone: zone ?? browserZone(),
     question: (requestId: string) => byId[requestId] ?? null,
   }
 }

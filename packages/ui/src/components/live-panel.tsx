@@ -14,6 +14,7 @@ import {
   type Icon as PhosphorIcon,
   RocketLaunchIcon,
   SpinnerGapIcon,
+  TrashIcon,
   WarningCircleIcon,
 } from "@phosphor-icons/react"
 import type {
@@ -1540,7 +1541,8 @@ function UpNext({ text, children }: { text: string; children: ReactNode }) {
  * or null while that zone is not known, so one time is never shown two ways.
  * `soon` marks one due within the hour, `overdue` one whose time has passed.
  * Pending shows the reminder as done until the list is read again; a failure
- * puts it back, with the reason under it.
+ * puts it back, with the reason under it. `onDelete`, when given, adds a
+ * button that deletes it instead.
  */
 function ReminderNote({
   title,
@@ -1548,6 +1550,7 @@ function ReminderNote({
   soon = false,
   overdue = false,
   onDone,
+  onDelete,
   pending: busy = false,
   error = null,
 }: {
@@ -1556,6 +1559,7 @@ function ReminderNote({
   soon?: boolean
   overdue?: boolean
   onDone: () => void
+  onDelete?: () => void
   pending?: boolean
   error?: string | null
 }) {
@@ -1613,6 +1617,19 @@ function ReminderNote({
       >
         Done
       </Button>
+      {onDelete ? (
+        <Button
+          aria-label={`Delete: ${title}`}
+          disabled={busy}
+          focusableWhenDisabled
+          onClick={onDelete}
+          size="icon-sm"
+          title="Delete"
+          variant="ghost"
+        >
+          <TrashIcon aria-hidden />
+        </Button>
+      ) : null}
     </div>
   )
 }

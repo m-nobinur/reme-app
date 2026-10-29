@@ -368,6 +368,12 @@ export const completeReminder = createServerFn({ method: "POST" })
     return await source.completeReminder(data.id)
   })
 
+export const deleteReminder = createServerFn({ method: "POST" })
+  .validator((input: unknown) => ({ id: id(record(input).id) }))
+  .handler(async ({ data }): Promise<WriteOutcome> => {
+    return await source.deleteReminder(data.id)
+  })
+
 /** What the Chief of Staff remembers of the owner. */
 export const getMemory = createServerFn({ method: "GET" }).handler(
   async (): Promise<MemoryView | null> => await source.memory()
