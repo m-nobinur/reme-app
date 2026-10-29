@@ -139,6 +139,8 @@ export type Workspace = {
   derivedReminders: DerivedReminder[]
   /** Open reminders someone wrote down, soonest due first, undated after. */
   reminderNotes: Reminder[]
+  /** The business's zone, which reminders run on; absent or null before one is known. */
+  timeZone?: string | null
   /** `/workspace`'s tag, sent back on the next poll; null when nothing was read. */
   etag: string | null
 }
@@ -352,6 +354,8 @@ export type OwnerDataSource = {
   ) => Promise<BoughtElsewhereOutput | { refused: string | null }>
   /** Mark one reminder done. Doing it twice changes nothing. */
   completeReminder: (id: string) => Promise<WriteOutcome>
+  /** Delete one reminder. One already gone counts as deleted. */
+  deleteReminder: (id: string) => Promise<WriteOutcome>
   /** What the owner wants changed, in their words; the api routes it. */
   requestChange: (
     text: string,

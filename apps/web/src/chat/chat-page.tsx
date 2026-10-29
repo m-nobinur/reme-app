@@ -39,6 +39,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react"
+import { deleteReminder } from "@/lib/api/server"
 import { assistantOf, briefingOf } from "@/lib/briefing"
 import { OPENING_REVEAL } from "@/lib/reveal"
 import { useLiveWorkspace } from "@/lib/workspace"
@@ -175,11 +176,19 @@ export function ChatPage() {
     () => false
   )
 
-  // The cards name the question an answer goes to, and times in the zone each
-  // turn carries. Keyed on the titles, so a poll that changes neither redraws
-  // no card.
+  // The cards name the question an answer goes to, and times in the
+  // business's zone. Keyed on the titles and the zone, so a poll that changes
+  // neither redraws no card.
   const titles = questionTitles(live.workspace?.attention)
-  const tools = useMemo(() => cosTools(titles), [titles])
+  const zone = live.workspace?.timeZone ?? null
+  const tools = useMemo(
+    () => ({
+      ...cosTools(titles, zone),
+      removeReminder: (reminder: string) =>
+        deleteReminder({ data: { id: reminder } }),
+    }),
+    [titles, zone]
+  )
 
   const assistant = assistantOf(live.workspace)
 

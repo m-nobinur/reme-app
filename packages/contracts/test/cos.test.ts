@@ -55,14 +55,17 @@ function walk(node: unknown, found: Found) {
 
 describe("COS_TOOLS", () => {
   // A tool added or dropped is a decision, so the list is written out.
-  it("has exactly the nineteen tools, in order", () => {
-    const nineteen = [
+  it("has exactly the twenty-two tools, in order", () => {
+    const all = [
       "get_workspace",
       "get_facts",
       "get_preview",
       "request_change",
       "answer_question",
       "create_reminder",
+      "update_reminder",
+      "delete_reminder",
+      "set_time_zone",
       "record_review",
       "check_domain",
       "connect_domain",
@@ -77,8 +80,8 @@ describe("COS_TOOLS", () => {
       "inspect_domain",
       "domain_bought",
     ]
-    expect(Object.keys(COS_TOOLS)).toStrictEqual(nineteen)
-    expect(CosToolName.options).toStrictEqual(nineteen)
+    expect(Object.keys(COS_TOOLS)).toStrictEqual(all)
+    expect(CosToolName.options).toStrictEqual(all)
   })
 
   // Provider tool APIs take an object as a tool's parameters and refuse a
@@ -313,7 +316,8 @@ describe("the refusal a tool shows the model", () => {
 })
 
 // Beyond the checks every tool gets: a strict tool mode wants every input
-// property required, and the output holds no id of any kind.
+// property required, and the output's only id is the reminder's own ref,
+// which update_reminder and delete_reminder take back.
 describe("create_reminder", () => {
   it("takes an object at its root", () => {
     const schema = z.toJSONSchema(CreateReminderRequest) as Record<
@@ -336,14 +340,18 @@ describe("create_reminder", () => {
     )
   })
 
-  it("shows the model no id, URL or open object", () => {
+  it("shows the model no id but its own ref, no URL and no open object", () => {
     const { keys, formats, open } = walk(z.toJSONSchema(CreateReminderOutput), {
       keys: [],
       formats: [],
       open: 0,
     })
     expect(open).toBe(0)
-    expect(keys.filter((k) => k === "id" || k.endsWith("_id"))).toEqual([])
+    expect(
+      keys.filter(
+        (k) => (k === "id" || k.endsWith("_id")) && k !== "reminder_id"
+      )
+    ).toEqual([])
     expect(formats.filter((f) => f === "uri")).toEqual([])
   })
 

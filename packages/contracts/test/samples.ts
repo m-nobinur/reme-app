@@ -828,6 +828,38 @@ export const samples: Record<ContractName, unknown> = {
     name: "Brightclean Cleaning Co. (fixture)",
   },
   CreateReminderOutput: { outcome: "created", due_at: LATER },
+  AnswerQuestionCall: {
+    request_id: "6f1c4d2a-3b5e-4f7a-8c9d-0e1f2a3b4c5d",
+    value: { key: "hours.weekday", value: { open: "08:00", close: "17:00" } },
+  },
+  CreateReminderInput: {
+    title: "Order brake pads",
+    due_at: "2026-10-30T08:00:00+00:00",
+    time_zone: "Europe/London",
+  },
+  UpdateReminderInput: {
+    reminder_id: "6f1c4d2a-3b5e-4f7a-8c9d-0e1f2a3b4c5d",
+    due_at: "2026-10-30T09:00:00+00:00",
+  },
+  UpdateReminderOutput: {
+    outcome: "updated",
+    reminder_id: "6f1c4d2a-3b5e-4f7a-8c9d-0e1f2a3b4c5d",
+    title: "Order brake pads",
+    due_at: LATER,
+    time_zone: "Europe/London",
+  },
+  DeleteReminderInput: { reminder_id: "6f1c4d2a-3b5e-4f7a-8c9d-0e1f2a3b4c5d" },
+  DeleteReminderOutput: {
+    outcome: "deleted",
+    reminder_id: "6f1c4d2a-3b5e-4f7a-8c9d-0e1f2a3b4c5d",
+    title: "Order brake pads",
+  },
+  SetTimeZoneInput: { time_zone: "Europe/London" },
+  SetTimeZoneOutput: {
+    outcome: "set",
+    time_zone: "Europe/London",
+    now: "2026-10-28T21:52:00+00:00",
+  },
   CreateReminderRequest: {
     title: "Call the window cleaner about the Friday slot",
     due_at: LATER,

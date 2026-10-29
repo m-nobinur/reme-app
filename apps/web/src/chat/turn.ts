@@ -45,8 +45,8 @@ export function chatTurn(
   intent?: ChatRequest["intent"],
   messageId?: string
 ): ChatRequest {
-  // The browser's zone, so the Chief of Staff can read "Friday at 9". The
-  // reminder card names the same zone, from the same source.
+  // The browser's zone, which the org takes only while it has none; after
+  // that the turn reads the business's stored zone.
   const time_zone = browserZone()
   const named = messages.find((m) => m.id === messageId)
   const last = named?.role === "assistant" ? named : messages.at(-1)

@@ -54,9 +54,28 @@ export async function googleConnect(
     signal: AbortSignal.timeout(CONNECT_TIMEOUT_MS),
   })
   if (result.status === 204) return new Response(null, { status: 204 })
+  // A failure after the token was saved is the search start's, which the
+  // orchestrator retries on its own: the owner's Google is connected.
+  if (await connected(kit, owner)) {
+    console.error(
+      JSON.stringify({
+        code: "search.connect_after_save",
+        status: result.status,
+      })
+    )
+    return new Response(null, { status: 204 })
+  }
   return relay(result, () => {
     throw new Error("a connect answers 204 and no body")
   })
+}
+
+/** Whether the org holds a saved, complete Google connection. */
+async function connected(kit: Tenancy, owner: Owner): Promise<boolean> {
+  const [row] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+    db.select({ state: searchConnections.state }).from(searchConnections)
+  )
+  return row?.state === "active"
 }
 
 const CONNECT: ServerButton = {
@@ -88,6 +107,7 @@ const RESULT: Record<
 /**
  * `POST /google/result`: how the callback ended. One message from the
  * assistant says so, keyed by the attempt so a reloaded callback says it once.
+ * A failure with the connection saved is told as connected.
  *
  * shortcut: a chat in a turn drops the message; retry from a Workflow if
  * that ever matters.
@@ -101,7 +121,10 @@ export async function googleResult(
   const parsed = GoogleResultRequest.safeParse(await readBody(request))
   if (!parsed.success) return invalid(parsed.error.issues)
   const { attempt, result } = parsed.data
-  const { text, button } = RESULT[result]
+  // Never "didn't connect" once the connection is saved.
+  const said =
+    result === "failed" && (await connected(kit, owner)) ? "connected" : result
+  const { text, button } = RESULT[said]
   await postAssistantMessage(kit, {
     orgId: owner.orgId,
     key: `google.result:${attempt}`,

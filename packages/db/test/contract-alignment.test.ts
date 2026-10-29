@@ -215,6 +215,7 @@ describe("rows map onto contracts", () => {
     workosOrganizationId: "org_fixture_brightclean",
     stripeCustomerId: null,
     timeZone: null,
+    timeZoneSource: null,
     quietStart: "21:00",
     quietEnd: "08:00",
     proactivity: "default",

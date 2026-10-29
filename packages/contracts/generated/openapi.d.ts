@@ -407,6 +407,50 @@ export interface components {
       retry_id?: string
       pages?: string[]
     }
+    AnswerQuestionCall: {
+      /** Format: uuid */
+      request_id: string
+      value:
+        | {
+            /** @enum {string} */
+            key:
+              | "business.name"
+              | "business.phone"
+              | "business.email"
+              | "hours.weekday"
+              | "service_area.radius"
+              | "business.tagline"
+              | "business.industry"
+              | "business.offerings"
+              | "business.audience"
+              | "business.overview"
+              | "business.proof"
+              | "business.disclaimer"
+              | "service_area.text"
+              | "business.prices"
+              | "business.enquiries"
+              | "owner.priorities"
+              | "assistant.name"
+              | "assistant.pronouns"
+              | "assistant.avatar"
+              | "assistant.tone"
+              | "owner.preferred_name"
+              | "site.build_mode"
+              | "site.template"
+              | "site.palette"
+              | "site.font"
+              | "site.direction"
+              | "site.pages"
+              | "media.uploads"
+              | "quote.form"
+              | "testimonials.review_1"
+              | "testimonials.review_2"
+            value: {
+              [key: string]: unknown
+            }
+          }
+        | string
+    }
     AnswerQuestionInput: {
       /** Format: uuid */
       request_id: string
@@ -5559,6 +5603,9 @@ export interface components {
         | "request_change"
         | "answer_question"
         | "create_reminder"
+        | "update_reminder"
+        | "delete_reminder"
+        | "set_time_zone"
         | "record_review"
         | "check_domain"
         | "connect_domain"
@@ -5983,6 +6030,9 @@ export interface components {
           | "request_change"
           | "answer_question"
           | "create_reminder"
+          | "update_reminder"
+          | "delete_reminder"
+          | "set_time_zone"
           | "record_review"
           | "check_domain"
           | "connect_domain"
@@ -6012,6 +6062,8 @@ export interface components {
         input_tokens: number
         cached_input_tokens: number
         output_tokens: number
+        cache_write_tokens?: number
+        reasoning_tokens?: number
       }
       cost_usd: number
     }
@@ -6302,6 +6354,17 @@ export interface components {
                   }[]
                 }
             )[]
+            reminders?: {
+              /** Format: uuid */
+              reminder_id: string
+              title: string
+              due: string | null
+            }[]
+            waiting?: {
+              title: string
+              /** Format: date-time */
+              since: string
+            }[]
             expected_seconds?: {
               full: {
                 p50: number
@@ -7487,7 +7550,108 @@ export interface components {
             | {
                 /** @constant */
                 outcome: "created"
+                /** Format: uuid */
+                reminder_id?: string
                 due_at: string | null
+                time_zone?: string | null
+                replaced?: boolean
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                }
+              }
+        }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "update_reminder"
+          output:
+            | {
+                /** @constant */
+                outcome: "updated"
+                /** Format: uuid */
+                reminder_id: string
+                title: string
+                due_at: string | null
+                time_zone: string | null
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                }
+              }
+        }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "delete_reminder"
+          output:
+            | {
+                /** @constant */
+                outcome: "deleted"
+                /** Format: uuid */
+                reminder_id: string
+                title: string
+              }
+            | {
+                /** @constant */
+                outcome: "refused"
+                error: {
+                  /** @enum {string} */
+                  class:
+                    | "validation"
+                    | "permission"
+                    | "transient"
+                    | "resource"
+                    | "provider"
+                    | "integrity"
+                    | "security"
+                    | "budgetary"
+                  code: string
+                  message: string
+                }
+              }
+        }
+      | {
+          turn_id: string
+          tool_call_id: string
+          /** @constant */
+          tool: "set_time_zone"
+          output:
+            | {
+                /** @constant */
+                outcome: "set"
+                time_zone: string
+                now: string
               }
             | {
                 /** @constant */
@@ -8163,6 +8327,8 @@ export interface components {
             input_tokens: number
             cached_input_tokens: number
             output_tokens: number
+            cache_write_tokens?: number
+            reasoning_tokens?: number
           }
           cost_usd: number
           tools: (
@@ -8172,6 +8338,9 @@ export interface components {
             | "request_change"
             | "answer_question"
             | "create_reminder"
+            | "update_reminder"
+            | "delete_reminder"
+            | "set_time_zone"
             | "record_review"
             | "check_domain"
             | "connect_domain"
@@ -8200,6 +8369,8 @@ export interface components {
             input_tokens: number
             cached_input_tokens: number
             output_tokens: number
+            cache_write_tokens?: number
+            reasoning_tokens?: number
           }
           cost_usd: number
           tools: (
@@ -8209,6 +8380,9 @@ export interface components {
             | "request_change"
             | "answer_question"
             | "create_reminder"
+            | "update_reminder"
+            | "delete_reminder"
+            | "set_time_zone"
             | "record_review"
             | "check_domain"
             | "connect_domain"
@@ -8235,6 +8409,8 @@ export interface components {
             input_tokens: number
             cached_input_tokens: number
             output_tokens: number
+            cache_write_tokens?: number
+            reasoning_tokens?: number
           }
           cost_usd: number
           tools: (
@@ -8244,6 +8420,9 @@ export interface components {
             | "request_change"
             | "answer_question"
             | "create_reminder"
+            | "update_reminder"
+            | "delete_reminder"
+            | "set_time_zone"
             | "record_review"
             | "check_domain"
             | "connect_domain"
@@ -8270,6 +8449,8 @@ export interface components {
             input_tokens: number
             cached_input_tokens: number
             output_tokens: number
+            cache_write_tokens?: number
+            reasoning_tokens?: number
           }
           cost_usd: number
           tools: (
@@ -8279,6 +8460,9 @@ export interface components {
             | "request_change"
             | "answer_question"
             | "create_reminder"
+            | "update_reminder"
+            | "delete_reminder"
+            | "set_time_zone"
             | "record_review"
             | "check_domain"
             | "connect_domain"
@@ -8305,6 +8489,8 @@ export interface components {
             input_tokens: number
             cached_input_tokens: number
             output_tokens: number
+            cache_write_tokens?: number
+            reasoning_tokens?: number
           }
           cost_usd: number
           tools: (
@@ -8314,6 +8500,9 @@ export interface components {
             | "request_change"
             | "answer_question"
             | "create_reminder"
+            | "update_reminder"
+            | "delete_reminder"
+            | "set_time_zone"
             | "record_review"
             | "check_domain"
             | "connect_domain"
@@ -8589,6 +8778,17 @@ export interface components {
             }[]
           }
       )[]
+      reminders?: {
+        /** Format: uuid */
+        reminder_id: string
+        title: string
+        due: string | null
+      }[]
+      waiting?: {
+        title: string
+        /** Format: date-time */
+        since: string
+      }[]
       expected_seconds?: {
         full: {
           p50: number
@@ -8607,11 +8807,21 @@ export interface components {
     CreateOrgRequest: {
       name: string
     }
+    CreateReminderInput: {
+      title: string
+      due_at: string | null
+      /** @description The IANA zone the owner gave the time in, such as "Europe/London" for "8am UK time". Omit it when they named no zone. */
+      time_zone?: string
+    }
     CreateReminderOutput:
       | {
           /** @constant */
           outcome: "created"
+          /** Format: uuid */
+          reminder_id?: string
           due_at: string | null
+          time_zone?: string | null
+          replaced?: boolean
         }
       | {
           /** @constant */
@@ -8641,6 +8851,36 @@ export interface components {
       /** Format: uuid */
       revision_id: string
     }
+    DeleteReminderInput: {
+      /** Format: uuid */
+      reminder_id: string
+    }
+    DeleteReminderOutput:
+      | {
+          /** @constant */
+          outcome: "deleted"
+          /** Format: uuid */
+          reminder_id: string
+          title: string
+        }
+      | {
+          /** @constant */
+          outcome: "refused"
+          error: {
+            /** @enum {string} */
+            class:
+              | "validation"
+              | "permission"
+              | "transient"
+              | "resource"
+              | "provider"
+              | "integrity"
+              | "security"
+              | "budgetary"
+            code: string
+            message: string
+          }
+        }
     Delivery: {
       /** Format: uuid */
       org_id: string
@@ -12191,6 +12431,35 @@ export interface components {
           }
       )[]
     }
+    SetTimeZoneInput: {
+      /** @description The IANA zone, such as "Europe/London" for the UK. */
+      time_zone: string
+    }
+    SetTimeZoneOutput:
+      | {
+          /** @constant */
+          outcome: "set"
+          time_zone: string
+          now: string
+        }
+      | {
+          /** @constant */
+          outcome: "refused"
+          error: {
+            /** @enum {string} */
+            class:
+              | "validation"
+              | "permission"
+              | "transient"
+              | "resource"
+              | "provider"
+              | "integrity"
+              | "security"
+              | "budgetary"
+            code: string
+            message: string
+          }
+        }
     SetTimeZoneRequest: {
       time_zone: string
     }
@@ -12323,6 +12592,42 @@ export interface components {
       /** @constant */
       format?: "email"
     }
+    UpdateReminderInput: {
+      /** Format: uuid */
+      reminder_id: string
+      title?: string
+      due_at?: string | null
+      /** @description The IANA zone the owner gave the time in, such as "Europe/London" for "8am UK time". Omit it when they named no zone. */
+      time_zone?: string
+    }
+    UpdateReminderOutput:
+      | {
+          /** @constant */
+          outcome: "updated"
+          /** Format: uuid */
+          reminder_id: string
+          title: string
+          due_at: string | null
+          time_zone: string | null
+        }
+      | {
+          /** @constant */
+          outcome: "refused"
+          error: {
+            /** @enum {string} */
+            class:
+              | "validation"
+              | "permission"
+              | "transient"
+              | "resource"
+              | "provider"
+              | "integrity"
+              | "security"
+              | "budgetary"
+            code: string
+            message: string
+          }
+        }
     UploadedAssets: {
       assets: {
         /** Format: uuid */
@@ -13665,6 +13970,7 @@ export interface components {
           }
         }[]
       }
+      time_zone?: string | null
     }
   }
   responses: never

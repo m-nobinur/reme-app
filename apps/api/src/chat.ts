@@ -54,7 +54,6 @@ import {
   caughtUp,
   contextOf,
   cosPrefix,
-  knownZone,
   LIMITS,
   messageTaint,
   NotRun,
@@ -84,6 +83,7 @@ import {
   streamTurn,
   writtenAt,
 } from "./cos/run.ts"
+import { knownZone } from "./cos/time.ts"
 import { loadWorkspace, startOwnerChange } from "./cos/tools.ts"
 import {
   beginTurn,
@@ -169,7 +169,7 @@ import { notStarted } from "./onboarding-copy.ts"
 import { prepare, readPrepared } from "./onboarding-prepare.ts"
 import { type Pace, pace } from "./pacing.ts"
 import { ownerStaffId } from "./staff.ts"
-import { rememberZone } from "./time-zone.ts"
+import { rememberZone, zoneFromArea } from "./time-zone.ts"
 import { readFacts } from "./workspace.ts"
 
 /**
@@ -668,9 +668,8 @@ export type ChatDeps = {
     | ((asked: string | null, said: string) => Promise<MessageReading | null>)
     | null
   /**
-   * Whether a typed message asks to get on Google, read only while the site
-   * has no live domain of its own: left out, Jev on OpenRouter when the api
-   * holds a key. Tests pass one.
+   * Whether a typed message asks to get on Google: left out, Jev on
+   * OpenRouter when the api holds a key. Tests pass one.
    */
   googleFirst?: ((said: string) => Promise<boolean>) | null
 }
@@ -820,8 +819,8 @@ export async function chat(
     ),
     cosPrefix(),
   ])
-  // The org's zone: the browser's, now stored, or the stored one when the
-  // request carries none (ADR-034's change-if).
+  // The org's zone: the stored one, which the browser sets only while there
+  // is none (ADR-034's amendment of 2026-10-29).
   const zone = stored.zone
   if (stored.next) await lowerNextDue(env.SCHEDULE, stored.next, env.JOBS)
   const loaded = ahead.onboarding ? null : await loading
@@ -846,8 +845,9 @@ export async function chat(
       ? readingOf(ahead.card && ahead.asked ? ahead.asked : null, turn.text)
       : null
   reading?.catch(() => undefined)
-  // Before a domain of its own is live, an owner asking for Google is told
-  // why the address comes first; Jev reads it here, beside the turn.
+  // An owner asking for Google is told why the address comes first while no
+  // domain of the site's own is live, and gets the button at once when one
+  // is; Jev reads the ask here, beside the turn.
   const googleFirstOf =
     deps.googleFirst !== undefined
       ? deps.googleFirst
@@ -855,13 +855,15 @@ export async function chat(
         ? (said: string) =>
             jevAsksGoogle(env.OPENROUTER_API_KEY as string, said)
         : null
-  const googleFirst =
-    turn.kind === "message" &&
-    googleFirstOf &&
-    loaded &&
-    !loaded.workspace.domains?.some((d) => d.state === "active")
-      ? googleFirstOf(turn.text).catch(() => false)
-      : Promise.resolve(false)
+  const domainLive =
+    loaded?.workspace.domains?.some((d) => d.state === "active") ?? false
+  const google: Promise<"first" | "now" | null> =
+    turn.kind === "message" && googleFirstOf && loaded
+      ? googleFirstOf(turn.text).then(
+          (asks) => (asks ? (domainLive ? "now" : "first") : null),
+          () => null
+        )
+      : Promise.resolve(null)
   const approvalOf =
     deps.approval !== undefined
       ? deps.approval
@@ -877,11 +879,20 @@ export async function chat(
       : null
   const modelId = env.COS_MODEL ?? routeOf("owner_turn").model
   const price = priceOf(modelId)
+  // A step that fails twice before anything streamed goes to the fallback.
+  const fallbackId = (
+    env.REME_MODEL_FALLBACK ?? DEFAULT_ONBOARDING_MODEL
+  ).replace(/^openrouter\//, "")
   const model =
     deps.model !== undefined
       ? deps.model
       : env.OPENROUTER_API_KEY
-        ? retrying(openrouterModel(env.OPENROUTER_API_KEY, modelId))
+        ? retrying(
+            openrouterModel(env.OPENROUTER_API_KEY, modelId),
+            fallbackId === modelId
+              ? null
+              : openrouterModel(env.OPENROUTER_API_KEY, fallbackId)
+          )
         : null
   const plannerId = env.ONBOARDING_MODEL ?? DEFAULT_ONBOARDING_MODEL
   const planPrice = priceOf(plannerId)
@@ -934,6 +945,12 @@ export async function chat(
         ? plannerModel(env.OPENROUTER_API_KEY, plannerId, "medium")
         : null
   const waitUntil = deps.waitUntil ?? ((promise) => void promise)
+  // Once onboarding has the service area, its zone replaces the browser's guess.
+  if (ahead.onboarding && stored.area) {
+    waitUntil(
+      zoneFromArea(env, kit, owner.orgId, stored.area).catch(() => undefined)
+    )
+  }
   // After an onboarding turn commits, the background copy call, which runs
   // once per conversation and only once the business is known.
   const prepareLater = (response: Response) => {
@@ -1022,7 +1039,7 @@ export async function chat(
       const opening = await openCos(db, held, id, parsed.data, log, heard)
       if (opening instanceof Response) return opening
       const cosTurn: Turn = { ...session, turnId: newUlid() }
-      const { workspace, facts, profile, reminders } =
+      const { workspace, facts, profile } =
         loaded ?? (await loadWorkspace(tools))
       const context = contextOf(
         mode,
@@ -1031,8 +1048,9 @@ export async function chat(
         new Date(),
         turn.kind === "message" ? parsed.data.intent : undefined,
         personaOf(facts, profile),
-        turn.kind === "message" && log.fresh ? { reminders } : null,
-        await googleFirst
+        turn.kind === "message" && log.fresh,
+        await google,
+        facts
       )
       await beginTurn(db, cosTurn, {
         prefix: log.prefixLogged ? null : prefix,

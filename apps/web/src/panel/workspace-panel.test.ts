@@ -41,7 +41,10 @@ vi.mock("@tanstack/react-router", () => ({
     select([{ routeId: "/app/_conversation/" }]),
   useParams: () => ({}),
 }))
-vi.mock("@/lib/workspace", () => ({ useLiveWorkspace: () => live }))
+vi.mock("@/lib/workspace", () => ({
+  useLiveWorkspace: () => live,
+  useBusinessZone: () => null,
+}))
 vi.mock("@/lib/api/server", () => server)
 
 const router = vi.hoisted(() => ({

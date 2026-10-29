@@ -1,8 +1,10 @@
 import { convertArrayToReadableStream } from "ai/test"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import {
+  failureMessage,
   retryableStatus,
   retryMiddleware,
+  retryMiddlewareWith,
   withoutReasoning,
 } from "../src/cos/retry.ts"
 
@@ -51,7 +53,11 @@ const prompt = [
 ]
 
 /** Runs the middleware over a first attempt and a model's later ones, and reads it all. */
-async function run(first: Part[], later: Part[][]) {
+async function run(
+  first: Part[],
+  later: Part[][],
+  middleware: typeof retryMiddleware = retryMiddleware
+) {
   const sent: unknown[] = []
   const model = {
     doStream: vi.fn(async (params: { prompt: unknown }) => {
@@ -59,7 +65,7 @@ async function run(first: Part[], later: Part[][]) {
       return result(later.shift() ?? answer)
     }),
   }
-  const wrapped = await (retryMiddleware.wrapStream as WrapStream)({
+  const wrapped = await (middleware.wrapStream as WrapStream)({
     doStream: async () => result(first),
     params: { prompt } as never,
     model,
@@ -88,7 +94,58 @@ describe("retrying a CoS step that fails before any content", () => {
     expect(sent[0]).toEqual(prompt)
     expect(parts.map((p) => p.type)).not.toContain("error")
     expect(parts).toContainEqual(expect.objectContaining({ delta: "Hello" }))
-    expect(retries()).toEqual([{ code: "cos.retry", attempt: 2, status: 429 }])
+    expect(retries()).toEqual([
+      {
+        code: "cos.retry",
+        attempt: 2,
+        status: 429,
+        message: "rate-limited upstream",
+      },
+    ])
+  })
+
+  it("retries a 502 that came after reasoning alone, closing the failed reasoning", async () => {
+    const bad: Part = {
+      type: "error",
+      error: { error: { code: 502, message: "Provider returned error" } },
+    }
+    const { parts, calls } = await run(
+      [
+        start,
+        { type: "reasoning-start", id: "r1" },
+        { type: "reasoning-delta", id: "r1", delta: "Thinking" },
+        bad,
+      ],
+      [answer]
+    )
+    expect(calls).toBe(1)
+    expect(parts.map((p) => p.type)).not.toContain("error")
+    expect(parts).toContainEqual({ type: "reasoning-end", id: "r1" })
+    expect(parts).toContainEqual(expect.objectContaining({ delta: "Hello" }))
+    expect(retries()[0]).toMatchObject({
+      status: 502,
+      message: "Provider returned error",
+    })
+  })
+
+  it("sends the last attempt to the fallback model, without the encrypted reasoning", async () => {
+    const sent: unknown[] = []
+    const fallback = {
+      doStream: vi.fn(async (params: { prompt: unknown }) => {
+        sent.push(params.prompt)
+        return result(answer)
+      }),
+    }
+    const { parts, calls } = await run(
+      [start, rateLimited],
+      [[start, rateLimited]],
+      retryMiddlewareWith(fallback as never)
+    )
+    expect(calls).toBe(1)
+    expect(fallback.doStream).toHaveBeenCalledTimes(1)
+    expect(JSON.stringify(sent[0])).not.toContain("reasoning")
+    expect(parts).toContainEqual(expect.objectContaining({ delta: "Hello" }))
+    expect(retries().at(-1)).toMatchObject({ attempt: 3, fallback: true })
   })
 
   it("drops the encrypted reasoning on the third attempt, so any host can answer", async () => {
@@ -138,8 +195,23 @@ describe("the parts of a retry", () => {
     expect(retryableStatus({ code: 429 })).toBe(429)
     expect(retryableStatus({ code: "503" })).toBe(503)
     expect(retryableStatus({ statusCode: 408 })).toBe(408)
+    expect(retryableStatus({ status: 503 })).toBe(503)
+    expect(retryableStatus({ error: { code: 502 } })).toBe(502)
     expect(retryableStatus({ code: 400 })).toBeNull()
     expect(retryableStatus(new Error("x"))).toBeNull()
+  })
+
+  it("reads a failure's own words, cut, at the top or nested", () => {
+    expect(failureMessage({ message: "Bad gateway" })).toBe("Bad gateway")
+    expect(
+      failureMessage({ error: { message: "x".repeat(400) } })
+    ).toHaveLength(300)
+    expect(failureMessage(null)).toBeNull()
+    expect(
+      failureMessage({
+        message: "No route for sam@example.com on +44 117 496 0123",
+      })
+    ).toBe("No route for [email] on [number]")
   })
 
   it("keeps everything but the encrypted reasoning", () => {

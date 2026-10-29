@@ -3,8 +3,8 @@ import type {
   AskDetailsOutput,
   AskFactOutput,
   CosWorkspace,
+  CreateReminderInput,
   CreateReminderOutput,
-  CreateReminderRequest,
   RequestChangeOutput,
 } from "@workspace/contracts"
 import { expectTypeOf, it } from "vitest"
@@ -25,7 +25,7 @@ it("types each tool part's input and output from its contract", () => {
   >().toEqualTypeOf<AnswerQuestionOutput>()
   expectTypeOf<
     Done<"create_reminder">["input"]
-  >().toEqualTypeOf<CreateReminderRequest>()
+  >().toEqualTypeOf<CreateReminderInput>()
   expectTypeOf<
     Done<"create_reminder">["output"]
   >().toEqualTypeOf<CreateReminderOutput>()

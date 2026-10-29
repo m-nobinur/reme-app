@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { Uuid } from "./common.ts"
+import { TimeZone, Uuid } from "./common.ts"
 import { ConversationMessage } from "./conversation.ts"
 import { SectionVariant } from "./design.ts"
 import { ToolCallId } from "./ids.ts"
@@ -540,12 +540,6 @@ const ChatResult = z.discriminatedUnion("kind", [
     reason: Text(ANSWER_TEXT_MAX).optional(),
   }),
 ])
-
-/**
- * An IANA zone name as the browser's `Intl` reports it, such as
- * `Europe/London`. The shape only: the api refuses a name `Intl` rejects.
- */
-export const TimeZone = z.string().regex(/^[A-Za-z][A-Za-z0-9_+/-]{0,63}$/)
 
 /**
  * `POST /chat`: one turn of one conversation. The client sends only what

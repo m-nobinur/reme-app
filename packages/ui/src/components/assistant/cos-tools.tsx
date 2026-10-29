@@ -9,8 +9,8 @@ import {
   CheckDomainOutput,
   CosFacts,
   CosWorkspace,
+  CreateReminderInput,
   CreateReminderOutput,
-  CreateReminderRequest,
   GetPreviewOutput,
   RecordReviewInput,
   RecordReviewOutput,
@@ -28,6 +28,7 @@ import {
 } from "@workspace/ui/components/assistant/domain"
 import { ConnectGoogle } from "@workspace/ui/components/assistant/google"
 import { Remembered } from "@workspace/ui/components/assistant/memory-chip"
+import { Button } from "@workspace/ui/components/button"
 import { ToolStatus } from "@workspace/ui/components/status-line"
 import { reminderTitle, type ToolArgs } from "@workspace/ui/lib/activity-copy"
 import { factLabel, factText } from "@workspace/ui/lib/facts"
@@ -39,7 +40,7 @@ import {
   readView,
 } from "@workspace/ui/lib/tool-state"
 import { browserZone, wallText, zoneLabel } from "@workspace/ui/lib/zone"
-import { createContext, useContext } from "react"
+import { createContext, useContext, useState } from "react"
 
 /**
  * The Chief of Staff's tools, in the owner's words. A read is one quiet
@@ -160,9 +161,12 @@ const DomainRead: ToolCallMessagePartComponent = (props) => {
  * provider there is no question to find, so no answer is offered a yes.
  */
 type CosTools = {
+  /** The business's zone, the one reminders run on and the reply says. */
   zone: string
   /** The open question's title, or null when the workspace has no such question. */
   question: (requestId: string) => string | null
+  /** Deletes a reminder the assistant set, for its undo. Absent, there is no undo. */
+  removeReminder?: (id: string) => Promise<{ done: boolean }>
 }
 
 const CosToolsContext = createContext<CosTools | null>(null)
@@ -216,33 +220,65 @@ const AnswerQuestion: ToolCallMessagePartComponent = (props) => {
   )
 }
 
+/** A due time and the zone it is in, as the reply says it. */
+const dueIn = (text: string | null, zone: string) =>
+  text ? `Due ${text} ${zoneLabel(zone)}` : "No date set"
+
+/** A reminder the assistant set, with its time in the zone it was set in and an undo. */
+function ReminderSet({
+  output,
+  zone,
+}: {
+  output: CreateReminderOutput | null
+  zone: string
+}) {
+  const { removeReminder } = useCosTools()
+  const [undo, setUndo] = useState<"idle" | "busy" | "done" | "failed">("idle")
+  const set = output?.outcome === "created" ? output : null
+  if (undo === "done") return <Done>Reminder removed.</Done>
+  const at = set?.time_zone ?? zone
+  const id = set?.reminder_id
+  return (
+    <Done>
+      {set?.replaced ? "Moved the reminder." : "Added to Reminders."}
+      {set?.due_at ? ` ${dueIn(formatDateTime(set.due_at, at), at)}.` : ""}
+      {id && removeReminder ? (
+        <Button
+          disabled={undo === "busy"}
+          onClick={() => {
+            setUndo("busy")
+            removeReminder(id).then(
+              (r) => setUndo(r.done ? "done" : "failed"),
+              () => setUndo("failed")
+            )
+          }}
+          size="xs"
+          variant="ghost"
+        >
+          {undo === "failed" ? "Couldn't undo. Try again" : "Undo"}
+        </Button>
+      ) : null}
+    </Done>
+  )
+}
+
 const CreateReminder: ToolCallMessagePartComponent = (props) => {
   const { zone } = useCosTools()
-  // Before the yes, the digits the model wrote, which the api reads as the
-  // owner's wall time; after it, the stored instant on the owner's clock.
-  const due = (text: string | null) =>
-    text ? `Due ${text} ${zoneLabel(zone)}` : "No date set"
+  // Before a yes, the digits the model wrote, which the api reads as wall
+  // time in the zone the owner named, else the business's.
   return (
     <Decision
       busy="Adding"
       cancelled="Not added."
       refused="The reminder could not be added."
       detail={(input) =>
-        `${due(input.due_at ? wallText(input.due_at) : null)}. It shows under Reminders.`
+        `${dueIn(input.due_at ? wallText(input.due_at) : null, input.time_zone ?? zone)}. It shows under Reminders.`
       }
-      done={(output) =>
-        output?.outcome === "created" && output.due_at ? (
-          <Done>
-            Added to Reminders. {due(formatDateTime(output.due_at, zone))}.
-          </Done>
-        ) : (
-          <Done>Added to Reminders.</Done>
-        )
-      }
+      done={(output) => <ReminderSet output={output} zone={zone} />}
       props={props}
       slot="create-reminder"
       title={(input) => reminderTitle(input.title)}
-      view={decisionView(props, CreateReminderRequest, CreateReminderOutput)}
+      view={decisionView(props, CreateReminderInput, CreateReminderOutput)}
       yes="Add reminder"
     />
   )

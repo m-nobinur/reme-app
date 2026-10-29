@@ -450,6 +450,7 @@ function workspaceOf(
     activity: status.activity ?? null,
     derivedReminders: status.reminders.derived,
     reminderNotes: status.reminders.notes,
+    timeZone: status.time_zone ?? null,
     etag,
   }
 }
@@ -727,6 +728,16 @@ async function completeReminder(id: string): Promise<WriteOutcome> {
   )
 }
 
+async function deleteReminder(id: string): Promise<WriteOutcome> {
+  const path = `/reminders/${segment(id)}`
+  const done = await outcome(
+    await post(path, undefined, `delete:${id}`, "DELETE"),
+    path
+  )
+  // Already gone is what a delete wanted.
+  return !done.done && done.gone ? { done: true } : done
+}
+
 async function memory(): Promise<MemoryView | null> {
   const body = await get("/memory")
   return body === null ? null : MemoryView.parse(body)
@@ -922,6 +933,7 @@ export const apiSource: OwnerDataSource = {
   requestChange,
   createReminder,
   completeReminder,
+  deleteReminder,
   memory,
   undoMemory,
   reviewMemory,

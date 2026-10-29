@@ -471,11 +471,50 @@ export async function connectGoogle(
       "Both Search Console boxes need to be ticked on Google's screen."
     )
   }
-  // The host the site answers on; a redirecting slug host is one Google cannot fetch.
-  const { slug, domain } = await heldHosts(env, kit, orgId)
-  const canonical = domain ?? slug
-  if (canonical) await startSearch(env, orgId, canonical, true)
+  // The token is saved, so the owner is connected whatever happens next.
+  await startSearchRetried(env, kit, orgId)
   return { email: exchanged.email }
+}
+
+/** Pauses before the second and third tries of a search start. */
+const START_PAUSES_MS = [300, 1_000] as const
+
+/**
+ * The `SearchWorkflow` of the host the site answers on, started after a
+ * connect is saved, up to three tries. A failure is logged with its message
+ * and never thrown: the connection stands, and a restart racing a terminate
+ * (`startSearch`) usually goes through on the next try. A redirecting slug
+ * host is one Google cannot fetch, so a live domain comes first.
+ */
+export async function startSearchRetried(
+  env: Env,
+  kit: Tenancy,
+  orgId: string,
+  pauses: readonly number[] = START_PAUSES_MS
+): Promise<boolean> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const { slug, domain } = await heldHosts(env, kit, orgId)
+      const canonical = domain ?? slug
+      if (canonical) await startSearch(env, orgId, canonical, true)
+      return true
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          code: "search.start_failed",
+          attempt: attempt + 1,
+          error: error instanceof Error ? error.name : "unknown",
+          message:
+            error instanceof Error
+              ? error.message.slice(0, 300)
+              : String(error),
+        })
+      )
+      const pause = pauses[attempt]
+      if (pause === undefined) return false
+      await new Promise((resolve) => setTimeout(resolve, pause))
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------

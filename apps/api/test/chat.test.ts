@@ -1444,7 +1444,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       })
     })
 
-    it("stores the browser's zone on a turn, and moves the org's recurring jobs only when it changes", async () => {
+    it("stores the browser's zone on a turn while the org has none, and moves the org's recurring jobs only then", async () => {
       const fresh = await owner(kit, url as string, "chat-zone")
       const talk = talker(fresh)
       const id = await talk.onboarding()
@@ -1487,10 +1487,9 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
       expect((await turn(2)).response.status).toBe(200)
       expect(await zoneOf()).toEqual(tokyo)
 
+      // Another browser's zone no longer moves it: the owner sets it through the assistant.
       expect((await turn(3, "America/New_York")).response.status).toBe(200)
-      const york = await zoneOf()
-      expect(york.zone).toBe("America/New_York")
-      expect(york.next).toMatch(/T1[34]:00:00\.000Z$/)
+      expect(await zoneOf()).toEqual(tokyo)
     })
 
     it("refuses what a client may not send, and an unknown conversation", async () => {

@@ -58,6 +58,7 @@ import {
   cancelBuild,
   completeReminder,
   decideApproval,
+  deleteReminder,
   getPreview,
 } from "@/lib/api/server"
 import type { AttentionItem, Workspace, WriteOutcome } from "@/lib/api/types"
@@ -69,7 +70,7 @@ import {
   type Suggestion,
 } from "@/lib/panel"
 import { anchorOf, noteOf, upcomingNotes } from "@/lib/reminders"
-import { useLiveWorkspace } from "@/lib/workspace"
+import { useBusinessZone, useLiveWorkspace } from "@/lib/workspace"
 import { useFollowStep } from "./follow-step"
 import { everyMinute, thisMoment } from "./minute-clock"
 
@@ -411,16 +412,19 @@ function Suggested({ suggestion }: { suggestion: Suggestion }) {
 }
 
 /**
- * The reader's time zone, or null on the server and while hydrating, when it
- * is not known. The server renders no reminder times at all rather than UTC
- * ones the browser would then replace.
+ * The zone times show in: the business's, which reminders run on and the
+ * assistant says, else the reader's. Null on the server and while hydrating,
+ * so the server renders no reminder times rather than ones the browser
+ * would then replace.
  */
 const noSubscription = () => () => undefined
 export function useBrowserZone(): string | null {
-  return useSyncExternalStore(noSubscription, browserZone, () => null)
+  const reader = useSyncExternalStore(noSubscription, browserZone, () => null)
+  const business = useBusinessZone()
+  return reader && (business ?? reader)
 }
 
-/** A written reminder with its own Done, shown done while the write runs. */
+/** A written reminder with its own Done and Delete, shown done while either write runs. */
 export function Completable({
   note,
   zone,
@@ -432,11 +436,18 @@ export function Completable({
   refresh: Refresh
   announce: Announce
 }) {
-  const { pending, error, run } = useWrite<"done">(refresh, announce)
+  const { pending, error, run } = useWrite<"done" | "delete">(refresh, announce)
   return (
     <ReminderNote
       {...noteOf(note, zone)}
       error={error}
+      onDelete={() =>
+        void run("delete", async () => {
+          const outcome = await deleteReminder({ data: { id: note.id } })
+          if (outcome.done) announce("Deleted.")
+          return outcome
+        })
+      }
       onDone={() =>
         void run("done", async () => {
           const outcome = await completeReminder({ data: { id: note.id } })

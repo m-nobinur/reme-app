@@ -6,7 +6,7 @@ import {
   AssignmentState,
   InformationRequest,
 } from "./assignment.ts"
-import { Timestamp, Ulid, Uuid } from "./common.ts"
+import { Timestamp, TimeZone, Ulid, Uuid } from "./common.ts"
 import { Blueprint, DirectionId, FontPairId } from "./design.ts"
 import { FactRecord } from "./fact.ts"
 import { Asset, AvatarId, choiceFacts } from "./onboarding.ts"
@@ -700,6 +700,12 @@ export const WorkspaceStatus = z.strictObject({
   }),
   /** Every job as segments with fixed steps. Absent until the api fills it. */
   activity: Activity.optional(),
+  /**
+   * The business's zone, which reminders and check-ins run on, so times show
+   * as the assistant says them. Null before any is set; absent until the
+   * api sends it, and the web keeps the reader's.
+   */
+  time_zone: TimeZone.nullable().optional(),
 })
 
 export type FactValue = z.infer<typeof FactValue>
