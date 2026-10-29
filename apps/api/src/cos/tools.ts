@@ -65,7 +65,6 @@ import {
   lowerNextDue,
   type OrgScopedDb,
   openTask,
-  orgs,
   readTasks,
   siteRevisions,
   sql,
@@ -285,7 +284,7 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
   profile: ProfileLine[]
 }> {
   const now = new Date()
-  const [read, rows, { lines: profile }, reports, repairs, lives, [org]] =
+  const [read, rows, { lines: profile }, reports, repairs, lives] =
     await kit.withOrg({ orgId: owner.orgId }, (db) =>
       Promise.all([
         statusWithFacts(db, env, now),
@@ -311,11 +310,10 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
         db.execute<Life & { assignment_id: string }>(
           sql`select e.assignment_id, (extract(epoch from max(e.occurred_at) filter (where e.type <> ${AGENT_NOTE})) * 1000)::float8 as work_ms, (extract(epoch from max(e.occurred_at) filter (where ${resumed})) * 1000)::float8 as resumed_ms, (array_agg(e.payload->>'cause' order by e.event_id desc) filter (where ${resumed}))[1] as cause from events e join assignments a on a.id = e.assignment_id where a.kind in ('site.build', 'site.revise') and a.state not in ${TERMINAL_STATES} group by e.assignment_id`
         ),
-        db.select({ zone: orgs.timeZone }).from(orgs).limit(1),
       ])
     )
-  const zone = org?.zone ?? "UTC"
-  const { status, facts, tasks } = read
+  const { status, facts, tasks, waiting } = read
+  const zone = status.time_zone ?? "UTC"
   const roundsOf = (assignmentId: string) =>
     [...repairs].find((r) => r.assignment_id === assignmentId)?.rounds ?? 0
   const failedChecks = (assignmentId: string | null) => {
@@ -398,6 +396,9 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
       last_check: DomainCheck.safeParse(r.lastCheck).data ?? null,
     })),
     tasks,
+    waiting: waiting
+      .slice(0, 20)
+      .map((w) => ({ title: cut(w.title).slice(0, 120), since: w.since })),
     reminders: status.reminders.notes.map((n) => ({
       reminder_id: n.id,
       title: n.title,
@@ -923,6 +924,28 @@ const unknownZone = () =>
     detail: {},
   })
 
+/**
+ * An owner message that asks to change or drop a reminder. Anything else,
+ * such as text inside a tool result, never moves or deletes one.
+ */
+const EDITS_REMINDER =
+  /\b(?:remind(?:er|ers)?|move|change|instead|earlier|later|cancel|delete|remove|drop|get rid|scrap|bin|forget)\b/i
+
+/** Whether one of the owner's last three messages in the turn's conversation asks for an edit. */
+const askedToEdit = async (ctx: ToolContext, turn: Turn) =>
+  (await ownerSaid(ctx, turn.sessionId))
+    .slice(-3)
+    .some((m) => EDITS_REMINDER.test(m))
+
+const notAsked = () =>
+  failure(400, {
+    class: "validation",
+    code: "reminder.not_asked",
+    message:
+      "Only when the owner asks, in their own message, to change or remove a reminder.",
+    detail: {},
+  })
+
 const noReminder = () =>
   failure(404, {
     class: "resource",
@@ -1002,17 +1025,20 @@ export async function createReminder(
 }
 
 /**
- * Moves or renames an open reminder the workspace lists. A time is read as
- * `createReminder` reads one. Refused for a ref that is not open.
+ * Moves or renames an open reminder the workspace lists, when the owner
+ * asked. A time is read as `createReminder` reads one. Refused for a ref
+ * that is not open.
  */
 export async function updateReminder(
-  { env, kit, owner }: ToolContext,
+  ctx: ToolContext,
   { reminder_id, title, due_at, time_zone: named }: UpdateReminderInput,
   _key: string,
-  _turn: Turn,
+  turn: Turn,
   zone: string | null
 ): Promise<UpdateReminderOutput> {
+  const { env, kit, owner } = ctx
   if (named && !knownZone(named)) return refused(unknownZone())
+  if (!(await askedToEdit(ctx, turn))) return refused(notAsked())
   const read = named ?? zone
   let made: Awaited<ReturnType<typeof moveReminder>>
   try {
@@ -1039,11 +1065,18 @@ export async function updateReminder(
   }
 }
 
-/** Deletes a reminder the workspace lists. Refused for a ref the org does not hold. */
+/**
+ * Deletes a reminder the workspace lists, when the owner asked. Refused for
+ * a ref the org does not hold.
+ */
 export async function deleteReminder(
-  { kit, owner }: ToolContext,
-  { reminder_id }: DeleteReminderInput
+  ctx: ToolContext,
+  { reminder_id }: DeleteReminderInput,
+  _key: string,
+  turn: Turn
 ): Promise<DeleteReminderOutput> {
+  const { kit, owner } = ctx
+  if (!(await askedToEdit(ctx, turn))) return refused(notAsked())
   let gone: Awaited<ReturnType<typeof dropReminder>>
   try {
     gone = await kit.withOrg({ orgId: owner.orgId }, (db) =>

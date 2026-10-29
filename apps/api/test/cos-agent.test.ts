@@ -1435,7 +1435,6 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       "inspect_domain",
       "put_off",
       "remember",
-      "set_time_zone",
     ])
   })
 

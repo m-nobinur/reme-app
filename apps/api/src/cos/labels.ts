@@ -106,6 +106,7 @@ export function workspaceLabels(workspace: CosWorkspace) {
     domains,
     tasks,
     reminders,
+    waiting,
   } = workspace
   return {
     site: { address: site.host, live: site.live_version !== null },
@@ -185,6 +186,10 @@ export function workspaceLabels(workspace: CosWorkspace) {
             `${s.step.replaceAll("_", " ")}: ${STEP[s.state]}${s.note ? ` (${s.note})` : ""}`
         ),
       })),
+    }),
+    // The one list of what the owner has to do, as the panel shows it.
+    ...(waiting?.length && {
+      waiting_on_owner: waiting.map((w) => w.title),
     }),
     // The owner's own, which update_reminder and delete_reminder take by ref.
     ...(reminders?.length && {

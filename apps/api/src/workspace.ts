@@ -1042,6 +1042,7 @@ export async function statusWithFacts(
     notes,
     due,
     rows,
+    [org],
   ] = await Promise.all([
     readBuilds(db),
     readApprovals(db),
@@ -1052,6 +1053,7 @@ export async function statusWithFacts(
     readReminderNotes(db),
     readDueReminders(db, now),
     readActivityRows(db, now),
+    db.select({ zone: orgs.timeZone }).from(orgs).limit(1),
   ])
   const missing = missingFacts(current)
   const status = WorkspaceStatus.parse({
@@ -1069,6 +1071,7 @@ export async function statusWithFacts(
         now
       ),
     },
+    time_zone: org?.zone ?? null,
     activity: activityOf(
       {
         site,

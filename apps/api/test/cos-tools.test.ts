@@ -445,6 +445,7 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         missing_facts: expect.any(Array),
         domains: [],
         tasks: [],
+        waiting: [],
         reminders: [],
         expected_seconds: expect.any(Object),
         expected_range: {
@@ -1742,7 +1743,9 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
 
   describe("update_reminder, delete_reminder and set_time_zone", () => {
     it("moves a reminder by its ref, deletes it, and refuses a ref that is gone", async () => {
-      const turn = await turnOf(me)
+      const turn = await turnOf(me, [
+        "Move the supplier one to 10, then delete it.",
+      ])
       const DUE = new Date(Date.now() + 86_400_000).toISOString()
       const made = await createReminder(
         context(me),
@@ -1776,7 +1779,12 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       expect(
         kept(
           "delete_reminder",
-          await deleteReminder(context(me), { reminder_id: made.reminder_id })
+          await deleteReminder(
+            context(me),
+            { reminder_id: made.reminder_id },
+            "",
+            turn
+          )
         )
       ).toEqual({
         outcome: "deleted",
@@ -1784,7 +1792,12 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         title: "Call the supplier",
       })
       for (const output of [
-        await deleteReminder(context(me), { reminder_id: made.reminder_id }),
+        await deleteReminder(
+          context(me),
+          { reminder_id: made.reminder_id },
+          "",
+          turn
+        ),
         await updateReminder(
           context(me),
           { reminder_id: made.reminder_id, title: "x" },
@@ -1796,6 +1809,39 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         expect(kept("delete_reminder", output)).toMatchObject({
           outcome: "refused",
           error: { code: "reminder.not_found" },
+        })
+      }
+    })
+
+    it("never moves or deletes a reminder the owner did not ask about", async () => {
+      const turn = await turnOf(me, ["What's on tomorrow?"])
+      const made = await createReminder(
+        context(me),
+        { title: "Pay the van insurance", due_at: null },
+        crypto.randomUUID(),
+        turn,
+        null
+      )
+      if (made.outcome !== "created" || !made.reminder_id)
+        throw new Error("no reminder")
+      for (const output of [
+        await deleteReminder(
+          context(me),
+          { reminder_id: made.reminder_id },
+          "",
+          turn
+        ),
+        await updateReminder(
+          context(me),
+          { reminder_id: made.reminder_id, title: "x" },
+          "",
+          turn,
+          null
+        ),
+      ]) {
+        expect(output).toMatchObject({
+          outcome: "refused",
+          error: { code: "reminder.not_asked" },
         })
       }
     })

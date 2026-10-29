@@ -64,6 +64,7 @@ import {
 import { workspaceLabels } from "./labels.ts"
 import { fullness, remember } from "./memory.ts"
 import { gated } from "./promise.ts"
+import { failureMessage } from "./retry.ts"
 import { getIndexing, getSearchPerformance } from "./search-tools.ts"
 import { zonedIso } from "./time.ts"
 
@@ -223,7 +224,7 @@ Rules:
 - When the owner declines a proposal, its call comes back as "The owner declined", followed by their words if they gave any. That is the owner saying no, not a refusal: acknowledge it, and don't retry or propose it again unless the owner asks. A refused tool returns an outcome of "refused", and a failed one starts with unknown_outcome or tool_failed.
 - A proposal the owner talked over by sending a new message comes back as "User cancelled tool call by sending a new message." That is neither yes nor no: don't act on it, and ask about it again only if it still matters.
 - When request_change comes back with outcome "started", the change has started; a state of "queued" only means it waits its turn, so never say queued. Never call request_change again for a change that started: reply to the owner. Say so in one short, natural sentence, as a person would ("On it, I'll let you know when it's ready."). Mention the activity panel only the first time in a conversation, and never repeat the same wording you used for an earlier change. Never ask them to approve it: the only step left is publishing from the review card.
-- When the owner asks what is left or what needs them, answer from the whole workspace in one reply: each task step waiting on them (a purchase waiting for payment among them), reviews, the Developer's questions and the open reminders, each once.
+- When the owner asks what is left or what needs them, answer in one reply from the workspace's waiting_on_owner, which holds everything the panel shows them (a purchase waiting for payment among them), and the open reminders, each once.
 - The facts in your context are the business's facts, long ones cut short. Call get_facts only for one cut short there, or after a change may have moved them.
 - When the owner asks how a build is going, answer from the workspace in one to three sentences: the step you are on and how far, such as "I'm writing the pages, three of seven done". Never only "still being built", and never that you cannot tell what is happening.
 - A build longer_than_usual: say sorry for the wait in a few words, that it is taking a little longer, and give its wait as the new estimate, then where you are.
@@ -319,20 +320,17 @@ const READ_TOOLS: readonly CosToolName[] = [
   "connect_google",
 ]
 /**
- * Writes the owner's own profile, when to ask them again or the zone they
- * live by, not the business: no card, and in both modes.
+ * Writes the owner's own profile or when to ask them again, not the
+ * business: no card, and in both modes.
  */
-const MEMORY_TOOLS: readonly CosToolName[] = [
-  "remember",
-  "put_off",
-  "set_time_zone",
-]
+const MEMORY_TOOLS: readonly CosToolName[] = ["remember", "put_off"]
 const ACT_TOOLS: readonly CosToolName[] = [
   "request_change",
   "answer_question",
   "create_reminder",
   "update_reminder",
   "delete_reminder",
+  "set_time_zone",
   "record_review",
   "connect_domain",
   "remove_domain",
@@ -357,6 +355,7 @@ const OWNERS_WORDS: readonly CosToolName[] = [
   "create_reminder",
   "update_reminder",
   "delete_reminder",
+  "set_time_zone",
   "connect_domain",
   "domain_bought",
 ]
@@ -1178,8 +1177,7 @@ function toolsFor(run: AgentTurn) {
               code: "cos.tool_failed",
               tool: name,
               error: error instanceof Error ? error.name : "unknown",
-              message:
-                error instanceof Error ? error.message.slice(0, 300) : null,
+              message: scrub(failureMessage(error) ?? "") || null,
             })
           )
         }

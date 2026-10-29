@@ -318,6 +318,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
         notes: [],
         derived: [{ rule: "facts_missing", keys: REQUIRED }],
       },
+      time_zone: null,
     })
   })
 
@@ -951,7 +952,7 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     })
   })
 
-  it("reads the workspace in one transaction of twelve statements", async () => {
+  it("reads the workspace in one transaction of thirteen statements", async () => {
     let transactions = 0
     let statements = 0
     const counted: Tenancy = {
@@ -975,8 +976,9 @@ describe.skipIf(!url)("the owner routes, on a live connection", () => {
     // The tenth reads the generated photos of the waiting approval; the
     // reminders that came due and the paused jobs are one each, and the
     // eleventh is the activity view's domain, Google, heartbeat and first
-    // publish rows, pipelined with the twelfth, its owner tasks.
-    expect(statements).toBe(12)
+    // publish rows, pipelined with the twelfth, its owner tasks, and the
+    // thirteenth, the business's zone.
+    expect(statements).toBe(13)
   })
 
   it("lists a reminder once it is due and until it is done, after the questions and before the alerts", async () => {
