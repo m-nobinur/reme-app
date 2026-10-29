@@ -1,7 +1,12 @@
 import { domains, searchConnections, searchProperties } from "@workspace/db"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { sealToken } from "../src/google.ts"
-import { addProperty, forgetStrays, searchInstanceId } from "../src/search.ts"
+import {
+  addProperty,
+  forgetStrays,
+  searchInstanceId,
+  startSearchRetried,
+} from "../src/search.ts"
 import { moveGoogle, startSearchForDomain } from "../src/search-start.ts"
 import { freshOrg, kit } from "./fixture.ts"
 
@@ -260,3 +265,56 @@ describe("the Search Console instance id", () => {
     expect(id.length).toBeLessThanOrEqual(100)
   })
 })
+
+describe.skipIf(!url)(
+  "starting Search Console after a connect is saved",
+  () => {
+    it("tries the start again when it throws, logs the message, and never throws", async () => {
+      const orgId = await freshOrg(kit)
+      const { host } = await domainOf(orgId, "active")
+      const error = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => undefined)
+      // The first try finds an instance and a restart racing its terminate.
+      const create = vi
+        .fn()
+        .mockRejectedValueOnce(new Error("instance.already_exists"))
+        .mockResolvedValue({})
+      const get = vi.fn(async () => ({
+        status: async () => ({ status: "running" }),
+        terminate: async () => undefined,
+        restart: async () => {
+          throw new Error("instance is not running")
+        },
+      }))
+      const env = { SEARCHES: { create, get } } as unknown as Env
+      expect(await startSearchRetried(env, kit, orgId, [0, 0])).toBe(true)
+      expect(create).toHaveBeenLastCalledWith({
+        id: searchInstanceId(orgId, host),
+        params: { org_id: orgId, host },
+      })
+      const logged = error.mock.calls.map(([line]) => JSON.parse(String(line)))
+      expect(logged).toEqual([
+        {
+          code: "search.start_failed",
+          attempt: 1,
+          error: "Error",
+          message: "instance is not running",
+        },
+      ])
+
+      const broken = {
+        SEARCHES: {
+          create: vi.fn(async () => {
+            throw new Error("down")
+          }),
+          get: vi.fn(async () => {
+            throw new Error("down")
+          }),
+        },
+      } as unknown as Env
+      expect(await startSearchRetried(broken, kit, orgId, [0, 0])).toBe(false)
+      error.mockRestore()
+    })
+  }
+)
