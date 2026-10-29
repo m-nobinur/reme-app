@@ -6,6 +6,8 @@ import { defineConfig } from "vitest/config"
 // the starter site's stylesheets as text, so the seed test needs them whole.
 export default defineConfig({
   test: {
+    // Three locally, so targeted runs from several agents leave the Mac usable.
+    maxWorkers: process.env.CI ? undefined : 3,
     css: { include: [/packages\/starter-site\//] },
     globalSetup: ["../../packages/db/fixtures/reap.ts"],
   },

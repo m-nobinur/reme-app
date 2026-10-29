@@ -27,5 +27,9 @@ const webpAsBytes = {
 
 export default defineConfig({
   plugins: [webpAsBytes],
-  test: { setupFiles: ["./test/no-pacing.ts"] },
+  test: {
+    // Three locally, so targeted runs from several agents leave the Mac usable.
+    maxWorkers: process.env.CI ? undefined : 3,
+    setupFiles: ["./test/no-pacing.ts"],
+  },
 })
