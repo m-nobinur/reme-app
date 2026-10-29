@@ -172,10 +172,17 @@ export const orgs = pgTable(
     /** The org's one Stripe Customer, made on its first domain purchase. */
     stripeCustomerId: text("stripe_customer_id"),
     /**
-     * The owner's IANA zone, written from the browser on a chat turn. Null
-     * until the first one; every time of day below is read in it.
+     * The owner's IANA zone. Null until the first browser reports one; every
+     * time of day below is read in it.
      */
     timeZone: text("time_zone"),
+    /**
+     * Who set `time_zone`: `browser` the first visit's guess, `area` read
+     * from the service area at onboarding, `owner` the owner through the
+     * assistant. Each may replace only those before it; null is a zone set
+     * before this column, read as `browser`.
+     */
+    timeZoneSource: text("time_zone_source"),
     /** Quiet hours as `HH:MM`. They may cross midnight; equal means none. */
     quietStart: text("quiet_start").notNull().default("21:00"),
     quietEnd: text("quiet_end").notNull().default("08:00"),
@@ -189,6 +196,10 @@ export const orgs = pgTable(
     check(
       "orgs_time_zone_name",
       sql`time_zone ~ '^[A-Za-z][A-Za-z0-9_+/-]{0,63}$'`
+    ),
+    check(
+      "orgs_time_zone_source_kind",
+      sql`time_zone_source in ('browser', 'area', 'owner')`
     ),
     check(
       "orgs_quiet_hours_time",
