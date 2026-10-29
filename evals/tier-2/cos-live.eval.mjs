@@ -185,18 +185,28 @@ export async function builds(call) {
   }
 }
 
-/** The owner's session against one api. */
-function api(base, cookie) {
+/**
+ * The owner's session against one api. A run outlives the session's access
+ * token, and the api refreshes none, so a 401 signs in again and retries once.
+ */
+function api(base, signIn) {
+  let cookie = signIn()
   return async (method, path, body) => {
-    const headers = { cookie }
-    if (body !== undefined) headers["content-type"] = "application/json"
-    if (method === "POST" && path !== "/chat")
-      headers["idempotency-key"] = crypto.randomUUID()
-    return fetch(`${base}${path}`, {
-      method,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
-    })
+    const send = async () => {
+      const headers = { cookie: await cookie }
+      if (body !== undefined) headers["content-type"] = "application/json"
+      if (method === "POST" && path !== "/chat")
+        headers["idempotency-key"] = crypto.randomUUID()
+      return fetch(`${base}${path}`, {
+        method,
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body),
+      })
+    }
+    const response = await send()
+    if (response.status !== 401) return response
+    cookie = signIn()
+    return send()
   }
 }
 
@@ -384,13 +394,13 @@ export async function liveRun({ pending = false } = {}) {
           })
         ).sealedSession
       )}`
-    const signup = await api(base, await signIn())("POST", "/org", {
+    const signup = await api(base, signIn)("POST", "/org", {
       name: owner.orgName,
     })
     if (!signup.ok) throw new Error(`POST /org: ${signup.status}`)
     const { org_id: orgId } = await signup.json()
     // The first session predates the org and carries no org claim.
-    call = api(base, await signIn())
+    call = api(base, signIn)
     const stated = await call("POST", "/facts", { facts: FACTS })
     if (!stated.ok) throw new Error(`POST /facts: ${stated.status}`)
     const start = await builds(call)
