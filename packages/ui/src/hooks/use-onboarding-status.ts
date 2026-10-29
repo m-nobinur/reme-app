@@ -29,10 +29,10 @@ const set = (on: OnboardingStatus["on"] | null) => {
 export const clearOnboardingStatus = () => set(null)
 
 /**
- * Reads a stream's data part, and says whether it was a status. A status
- * becomes the waiting line, unless the planner's own line for the turn
- * already is, and one that names facts calls `refresh`: the
- * api wrote them before sending it, so the panel can tick them at once.
+ * Reads a stream's data part, and says whether it was a status. Each status
+ * becomes the waiting line in the order the work happened, and one that
+ * names facts calls `refresh`: the api wrote them before sending it, so the
+ * panel can tick them at once.
  */
 export function readOnboardingStatus(
   part: { type: string; data?: unknown },
@@ -41,20 +41,17 @@ export function readOnboardingStatus(
   if (part.type !== ONBOARDING_STATUS) return false
   const status = OnboardingStatus.safeParse(part.data)
   if (!status.success) return true
-  // The planner's own line for the turn stands; the stock lines after it
-  // would only read as a step back.
-  if (latest?.kind !== "doing") set(status.data.on)
+  set(status.data.on)
   if (status.data.facts.length > 0) refresh()
   return true
 }
 
+/** The latest status of the turn in flight, or null, read outside React. */
+export const onboardingStatusNow = () => latest
+
 /** The latest status of the turn in flight, or null. */
 export const useOnboardingStatus = () =>
-  useSyncExternalStore(
-    subscribe,
-    () => latest,
-    () => null
-  )
+  useSyncExternalStore(subscribe, onboardingStatusNow, () => null)
 
 const MARKS = [WORKING_AFTER, STILL_AFTER, LATE_AFTER]
 

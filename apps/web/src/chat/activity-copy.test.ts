@@ -96,8 +96,8 @@ describe("tool lines", () => {
 
   it("shows a domain, never a URL, and keeps the result", () => {
     const args = ARGS[1]
-    expect(toolLine("check_domain", "working", args)).toBe(
-      "Checking DNS for www.spark.mnobinur.dev"
+    expect(toolLine("check_domain", "working", args)).toMatch(
+      /^Checking (the records for )?www\.spark\.mnobinur\.dev$/
     )
     expect(toolLine("create_reminder", "done", args)).toBe(
       "Reminder set for Friday, 9:00 am"
@@ -109,18 +109,18 @@ describe("tool lines", () => {
     )
   })
 
-  it("drops an id used as an argument and cleans the model's step", () => {
+  it("drops an id used as an argument, and never shows a model's step", () => {
     expect(
       toolLine("find_domain", "working", {
         query: "0f8f8431-aaaa-bbbb-cccc-1234567890ab",
       })
-    ).toBe("Searching for a domain")
-    const step = toolLine("request_change", "working", {
-      step: "  Adding   the new photos to the home page, then checking every page on the site ",
-    })
-    expect(step.length).toBeLessThanOrEqual(60)
-    expect(step).toMatch(/^Adding the new photos/)
-    expect(toolLine("request_change", "working")).toBe("Passing on your change")
+    ).toMatch(/^(Searching for a domain|Looking for a free name)$/)
+    // A stored call still carries the step the model once wrote.
+    const stored = {
+      step: "Adding the new photos to the home page",
+    } as Parameters<typeof toolLine>[2]
+    expect(toolLine("request_change", "working", stored)).not.toMatch(/photos/)
+    expect(toolLine("get_facts", "working", stored)).not.toMatch(/photos/)
   })
 })
 
@@ -248,7 +248,7 @@ describe("onboarding lines", () => {
 })
 
 describe("the first line of each kind of turn", () => {
-  const ellie = { orgId: "org-1", assistant: "Ellie" }
+  const ellie = { seed: "org-1", assistant: "Ellie" }
   const first = (on: Parameters<typeof waitingLine>[0]) =>
     waitingLine(on, 0, ellie)
 
@@ -275,11 +275,14 @@ describe("the first line of each kind of turn", () => {
     expect(first({ kind: "reading", about: "question" }).label).toBe(
       "Looking into your question"
     )
-    // The plan's own line, once it writes one.
+    // The plan's own line is model text, so the catalogue words it.
     expect(first({ kind: "doing", text: "Reading about your rates" })).toEqual({
       kind: "planning",
-      label: "Reading about your rates",
+      label: "Working on your answer",
     })
+    expect(first({ kind: "thinking", text: "Weighing the van rates" })).toEqual(
+      { kind: "thinking", label: "Thinking it through" }
+    )
     // A turn with no status: the assistant's own moment.
     expect(first(null)).toEqual({
       kind: "reading",
@@ -306,35 +309,74 @@ describe("the first line of each kind of turn", () => {
 })
 
 describe("the assistant's moments", () => {
-  const ellie = { orgId: "org-1", assistant: "Ellie" }
+  const ellie = { seed: "org-1", assistant: "Ellie" }
 
-  it("moves on at 4 s, 12 s and 30 s and never rotates", () => {
-    expect(turnMoment(0, ellie)).toBe("Ellie is reading your message")
-    expect(turnMoment(3.9, ellie)).toBe("Ellie is reading your message")
-    expect(turnMoment(4, ellie)).toBe("Ellie is putting a reply together")
-    expect(turnMoment(11.9, ellie)).toBe("Ellie is putting a reply together")
-    expect(turnMoment(12, ellie)).toBe("Ellie is still working on it")
-    expect(turnMoment(29.9, ellie)).toBe("Ellie is still working on it")
-    expect(turnMoment(30, ellie)).toBe("Ellie is taking longer than usual")
-    expect(turnMoment(600, ellie)).toBe("Ellie is taking longer than usual")
-    expect(writingBack(ellie)).toBe("Ellie is writing back")
+  const READING =
+    /^(Ellie is r|R)eading your message$|^(Ellie is l|L)ooking at your message$/
+  const WORKING_NOW =
+    /^(Ellie is l|L)ooking into it$|^(Ellie is w|W)orking (on it|out what to do)$/
+  const STILL = /^(Ellie is s|S)till (working on it|on it)$/
+  const LATE = /^(Ellie is t|T)aking (a little )?longer than usual$/
+
+  it("moves on at 4 s, 12 s and 30 s and holds its words within a turn", () => {
+    for (const seed of ["01TURN1", "01TURN2", "01TURN3"]) {
+      const turn = { seed, assistant: "Ellie" }
+      expect(turnMoment(0, turn)).toMatch(READING)
+      expect(turnMoment(3.9, turn)).toBe(turnMoment(0, turn))
+      expect(turnMoment(4, turn)).toMatch(WORKING_NOW)
+      expect(turnMoment(11.9, turn)).toBe(turnMoment(4, turn))
+      expect(turnMoment(12, turn)).toMatch(STILL)
+      expect(turnMoment(29.9, turn)).toBe(turnMoment(12, turn))
+      expect(turnMoment(30, turn)).toMatch(LATE)
+      expect(turnMoment(600, turn)).toBe(turnMoment(30, turn))
+      expect(writingBack(turn)).toMatch(
+        /^Ellie is (writing back|putting a reply together|writing your reply)$/
+      )
+    }
     expect(planningLine(ellie)).toBe("Ellie is planning your website")
+  })
+
+  it("never says a reply is coming before a tool's line can follow", () => {
+    for (const seconds of [0, 4, 12, 30]) {
+      for (const seed of ["a", "b", "c", "d", "e"]) {
+        expect(turnMoment(seconds, { seed, assistant: "Ellie" })).not.toMatch(
+          /reply/
+        )
+      }
+    }
+  })
+
+  it("varies between turns and never reads as the turn before", () => {
+    const seeds = Array.from({ length: 60 }, (_, n) => `01TURN${n}`)
+    const lines = seeds.map((seed, n) =>
+      turnMoment(5, { seed, earlier: seeds.slice(0, n), assistant: "Ellie" })
+    )
+    for (let n = 1; n < lines.length; n++) {
+      expect(lines[n]).not.toBe(lines[n - 1])
+    }
+    expect(new Set(lines).size).toBe(3)
   })
 
   it("is written bare before the assistant has a name", () => {
     for (const assistant of [undefined, null, "", "  "]) {
-      const ctx = { orgId: "org-1", assistant }
-      expect(turnMoment(0, ctx)).toBe("Reading your message")
-      expect(turnMoment(5, ctx)).toBe("Putting a reply together")
-      expect(turnMoment(20, ctx)).toBe("Still working on it")
-      expect(turnMoment(40, ctx)).toBe("Taking longer than usual")
-      expect(writingBack(ctx)).toBe("Writing back")
+      const ctx = { seed: "org-1", assistant }
+      expect(turnMoment(0, ctx)).toMatch(/^(Reading|Looking at) your message$/)
+      expect(turnMoment(5, ctx)).toMatch(
+        /^(Looking into it|Working on it|Working out what to do)$/
+      )
+      expect(turnMoment(20, ctx)).toMatch(/^Still (working on it|on it)$/)
+      expect(turnMoment(40, ctx)).toMatch(
+        /^Taking (a little )?longer than usual$/
+      )
+      expect(writingBack(ctx)).toMatch(
+        /^(Writing back|Putting a reply together|Writing your reply)$/
+      )
       expect(planningLine(ctx)).toBe("Planning your website")
     }
   })
 
   it("uses Reme when the owner chose it as the assistant's name", () => {
-    const ctx = { orgId: "org-1", assistant: "Reme" }
+    const ctx = { seed: "org-1", assistant: "Reme" }
     expect(turnMoment(0, ctx)).toBe("Reme is reading your message")
   })
 })
@@ -372,7 +414,7 @@ const ORGS = Array.from({ length: 30 }, (_, i) => `org-${i}`)
 
 describe("segment copy", () => {
   it("says what an owner task waits for by the step that waits, its note first", () => {
-    const ctx = { orgId: "org-1", assistant: "Ellie" }
+    const ctx = { seed: "org-1", assistant: "Ellie" }
     const address = (id: string, note?: string, total?: number) =>
       segment("address", "waiting", {
         steps: [
@@ -429,7 +471,7 @@ describe("segment copy", () => {
       for (const state of STATES) {
         for (const assistant of ["Ellie", null, "Maya"]) {
           for (const orgId of ORGS) {
-            const ctx = { orgId, assistant }
+            const ctx = { seed: orgId, assistant }
             const s = segment(kind, state)
             const title = segmentTitle(s, ctx)
             plain(title)
@@ -457,7 +499,7 @@ describe("segment copy", () => {
 
   it("uses the persona's name where the title is the assistant's own moment", () => {
     for (const orgId of ORGS) {
-      const ctx = { orgId, assistant: "Ellie" }
+      const ctx = { seed: orgId, assistant: "Ellie" }
       expect(segmentTitle(segment("website", "now"), ctx)).toMatch(/^Ellie is /)
       expect(segmentTitle(segment("change", "now"), ctx)).toMatch(/^Ellie is /)
       expect(pillLine(segment("website", "now"), ctx)).toBe(
@@ -469,7 +511,7 @@ describe("segment copy", () => {
       expect(pillLine(segment("domain", "now"), ctx)).toBe(
         "Ellie is connecting spark.mnobinur.dev"
       )
-      const bare = { orgId, assistant: null }
+      const bare = { seed: orgId, assistant: null }
       expect(segmentTitle(segment("website", "now"), bare)).toMatch(
         /^(?:Building|Putting) your website/
       )
@@ -480,7 +522,7 @@ describe("segment copy", () => {
   })
 
   it("names what the website build is doing now in its title", () => {
-    const ctx = { orgId: "org-1", assistant: "Ellie" }
+    const ctx = { seed: "org-1", assistant: "Ellie" }
     const on = (id: string, count?: { done: number; total: number }) =>
       segmentTitle(
         segment("website", "now", {
@@ -509,7 +551,7 @@ describe("segment copy", () => {
 
   it("says what comes next for a job not begun, never that it is under way", () => {
     for (const orgId of ORGS) {
-      const ctx = { orgId, assistant: "Ellie" }
+      const ctx = { seed: orgId, assistant: "Ellie" }
       expect(segmentTitle(segment("website", "upcoming"), ctx)).toMatch(
         /^(?:Your website comes next|Next, your website)$/
       )
@@ -520,7 +562,7 @@ describe("segment copy", () => {
   })
 
   it("puts the business, host and domain in the titles", () => {
-    const ctx = { orgId: "org-1", assistant: "Ellie" }
+    const ctx = { seed: "org-1", assistant: "Ellie" }
     expect(segmentTitle(segment("onboarding", "now"), ctx)).toContain(
       "Spark Cleaning"
     )
@@ -546,7 +588,7 @@ describe("segment copy", () => {
     const s = segment("website", "now")
     const seen = new Set<string>()
     for (const orgId of ORGS) {
-      const ctx = { orgId, assistant: "Ellie" }
+      const ctx = { seed: orgId, assistant: "Ellie" }
       const first = segmentTitle(s, ctx)
       expect(segmentTitle(s, ctx)).toBe(first)
       seen.add(first as string)
@@ -556,7 +598,7 @@ describe("segment copy", () => {
   })
 
   it("counts nothing in onboarding: the question says enough", () => {
-    const ctx = { orgId: "org-1", assistant: "Ellie" }
+    const ctx = { seed: "org-1", assistant: "Ellie" }
     const steps = (open: number) =>
       Array.from({ length: 8 }, (_, i) => ({
         id: `step_${i}`,
@@ -568,7 +610,7 @@ describe("segment copy", () => {
   })
 
   it("names a change by what it changes, or by the website", () => {
-    const ctx = { orgId: "org-1", assistant: "Ellie" }
+    const ctx = { seed: "org-1", assistant: "Ellie" }
     const titled = segment("change", "now", {
       names: { change: "your hero title" },
     })
@@ -577,13 +619,13 @@ describe("segment copy", () => {
     expect(segmentTitle(segment("change", "now"), ctx)).toBe(
       "Ellie is updating your website"
     )
-    expect(pillLine(segment("change", "now"), { orgId: "org-1" })).toBe(
+    expect(pillLine(segment("change", "now"), { seed: "org-1" })).toBe(
       "Updating your website"
     )
   })
 
   it("writes the lines under a running or waiting job", () => {
-    const ctx = { orgId: "org-1", assistant: "Ellie" }
+    const ctx = { seed: "org-1", assistant: "Ellie" }
     expect(
       segmentLine(
         segment("website", "now", { usual_seconds: 360, late_seconds: 600 }),
@@ -657,7 +699,7 @@ describe("segment copy", () => {
     ).toBe("11 minutes so far, Ellie restarted it")
     expect(
       segmentLine(segment("change", "now", { restarted: true }), {
-        orgId: "org-1",
+        seed: "org-1",
       })
     ).toBe("Your assistant restarted it")
     expect(
@@ -673,7 +715,7 @@ describe("segment copy", () => {
   })
 
   it("never quotes a range that has passed or says a phrase twice", () => {
-    const ctx = { orgId: "org-1", assistant: "Ellie" }
+    const ctx = { seed: "org-1", assistant: "Ellie" }
     const s = segment("website", "now", {
       usual_seconds: 360,
       late_seconds: 600,
@@ -692,13 +734,13 @@ describe("segment copy", () => {
   })
 
   it("says what stopped and what happens next", () => {
-    const ctx = { orgId: "org-1", assistant: "Ellie" }
+    const ctx = { seed: "org-1", assistant: "Ellie" }
     const failed = segment("domain", "failed")
     expect(segmentTitle(failed, ctx)).toBe("The domain connection stopped")
     expect(
       segmentLine(failed, ctx, { why: "Cloudflare did not answer." })
     ).toBe("Cloudflare did not answer. Ask Ellie to try again")
-    expect(segmentLine(failed, { orgId: "org-1" })).toBe(
+    expect(segmentLine(failed, { seed: "org-1" })).toBe(
       "Ask your assistant to try again"
     )
   })
@@ -711,7 +753,7 @@ describe("segment copy", () => {
       "checkin",
       "turn",
     ] as const) {
-      expect(segmentTitle(segment(kind, "now"), { orgId: "org-1" })).toBeNull()
+      expect(segmentTitle(segment(kind, "now"), { seed: "org-1" })).toBeNull()
     }
     expect(waitingRow(segment("review", "waiting"), "11:50")).toBe(
       "Waiting for your approval to publish, until 11:50"
@@ -734,7 +776,7 @@ describe("page lines", () => {
         for (const assistant of ["Ellie", null, "Maya"]) {
           const line = standingLine(
             segment(kind, state),
-            { orgId: "org-1", assistant },
+            { seed: "org-1", assistant },
             {
               when: "today, 3:40 pm",
               renews: "1 October 2027",
@@ -750,7 +792,7 @@ describe("page lines", () => {
   })
 
   it("says where each thing stands", () => {
-    const ctx = { orgId: "org-1", assistant: "Ellie" }
+    const ctx = { seed: "org-1", assistant: "Ellie" }
     const at = (
       kind: ActivitySegment["kind"],
       state: ActivitySegment["state"]
@@ -788,12 +830,12 @@ describe("page lines", () => {
       "The domain connection stopped. Ask Ellie to try again"
     )
     expect(
-      standingLine(at("domain", "failed"), { orgId: "o", assistant: null })
+      standingLine(at("domain", "failed"), { seed: "o", assistant: null })
     ).toBe("The domain connection stopped. Ask your assistant to try again")
   })
 
   it("words what a task's furthest done step proved, and nothing for a step that proves nothing", () => {
-    const ctx = { orgId: "org-1", assistant: null }
+    const ctx = { seed: "org-1", assistant: null }
     const done = (...ids: string[]) =>
       segment("address", "now", {
         steps: ids.map((id) => ({ id, state: "done" as const, at: STAMP })),
@@ -833,7 +875,7 @@ describe("page lines", () => {
   })
 
   it("follows the domain's steps while it connects", () => {
-    const ctx = { orgId: "org-1", assistant: null }
+    const ctx = { seed: "org-1", assistant: null }
     const steps = (here: number) =>
       ["dns", "certificate", "loads"].map((id, i) => ({
         id,

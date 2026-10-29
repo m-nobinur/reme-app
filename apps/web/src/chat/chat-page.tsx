@@ -180,14 +180,6 @@ export function ChatPage() {
   const tools = useMemo(() => cosTools(titles), [titles])
 
   const assistant = assistantOf(live.workspace)
-  const ideas = useMemo(
-    () => [
-      `Ask ${assistant} to draft a quote…`,
-      `Ask ${assistant} to follow up with a customer…`,
-      `Tell ${assistant} about a new service…`,
-    ],
-    [assistant]
-  )
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
@@ -234,8 +226,9 @@ export function ChatPage() {
                         briefing={briefing.line}
                         components={{ ToolFallback: Approval }}
                         mode={mode}
-                        placeholder={`Ask ${assistant} anything…`}
-                        placeholderIdeas={ideas}
+                        // One neutral line: rotating ideas offered work the
+                        // owner could not ask for yet.
+                        placeholder={`Message ${assistant}…`}
                         questionPlaceholder={`Tell ${assistant} what to do instead…`}
                         quickActions={OWNER_QUICK_ACTIONS}
                         reveal={onboarding ? OPENING_REVEAL : undefined}

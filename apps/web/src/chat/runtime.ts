@@ -166,9 +166,11 @@ export function useConversationRuntime({
   })
   // The owner's message carries the time it was sent, as a stored row does:
   // without it the thread shows the converter's clock, which moves on every
-  // render. The api writes the same on its own new messages.
-  const send: typeof chat.sendMessage = (message, options) =>
-    chat.sendMessage(
+  // render. The api writes the same on its own new messages. A new turn
+  // starts with no status, so the last turn's line never shows in it.
+  const send: typeof chat.sendMessage = (message, options) => {
+    clearOnboardingStatus()
+    return chat.sendMessage(
       message && {
         ...message,
         metadata: {
@@ -178,6 +180,7 @@ export function useConversationRuntime({
       },
       options
     )
+  }
   // The open thread's stored rows, or null when it is not stored yet.
   const storedRows = () => {
     const remoteId = aui.threadListItem.getState().remoteId
