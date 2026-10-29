@@ -37,6 +37,7 @@ import {
   transcriptOf,
   turnData,
   typedOverForm,
+  warmPlanner,
 } from "../src/onboarding-agent.ts"
 
 const counter = () => {
@@ -2679,5 +2680,38 @@ describe("the planner's request", () => {
       "say",
     ])
     expect(shown).not.toContain("additionalProperties")
+  })
+})
+
+describe("warmPlanner", () => {
+  it("sends the planner's instructions, marked for the cache, for one token", async () => {
+    const calls: Parameters<MockLanguageModelV4["doGenerate"]>[0][] = []
+    const model = new MockLanguageModelV4({
+      doGenerate: async (options) => {
+        calls.push(options)
+        return {
+          content: [{ type: "text", text: "{" }],
+          finishReason: { unified: "length", raw: undefined },
+          usage: {
+            inputTokens: {
+              total: 7000,
+              noCache: 0,
+              cacheRead: 0,
+              cacheWrite: 7000,
+            },
+            outputTokens: { total: 1, text: 1, reasoning: 0 },
+          },
+          warnings: [],
+        }
+      },
+    })
+    await warmPlanner(model)
+    const [sent] = calls
+    expect(sent?.maxOutputTokens).toBe(1)
+    expect(sent?.prompt[0]).toMatchObject({
+      role: "system",
+      content: await plannerInstructions(),
+      providerOptions: { openrouter: { cacheControl: { type: "ephemeral" } } },
+    })
   })
 })

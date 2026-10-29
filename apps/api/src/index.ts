@@ -26,6 +26,11 @@ import {
 import { receive } from "./inbound-email.ts"
 import { limitWrites } from "./limit.ts"
 import {
+  DEFAULT_ONBOARDING_MODEL,
+  plannerModel,
+  warmPlanner,
+} from "./onboarding-agent.ts"
+import {
   createOrg,
   type Directory,
   EmailTaken,
@@ -117,7 +122,8 @@ async function signup(
   request: Request,
   env: Env,
   kit: Tenancy,
-  session: Session
+  session: Session,
+  waitUntil: (promise: Promise<unknown>) => void
 ): Promise<Response> {
   if (!session) return failure(401, UNAUTHENTICATED)
   const key = idempotencyKey(request)
@@ -147,6 +153,26 @@ async function signup(
       email: session.email,
       displayName: session.name,
     })
+    // The owner reads the opener next: the planner's prompt is cached by
+    // the time they answer it.
+    const model =
+      env.OPENROUTER_API_KEY &&
+      plannerModel(
+        env.OPENROUTER_API_KEY,
+        env.ONBOARDING_MODEL ?? DEFAULT_ONBOARDING_MODEL
+      )
+    if (model) {
+      waitUntil(
+        warmPlanner(model).catch((error: unknown) =>
+          console.warn(
+            JSON.stringify({
+              at: "onboarding.warm",
+              message: error instanceof Error ? error.message : "unknown",
+            })
+          )
+        )
+      )
+    }
     return Response.json(org, { status: 201 })
   } catch (error) {
     if (!(error instanceof EmailTaken)) throw error
@@ -270,7 +296,7 @@ async function route(
   }
 
   if (pathname === "/org" && method === "POST") {
-    return signup(request, env, kit, session)
+    return signup(request, env, kit, session, waitUntil)
   }
 
   if (pathname === "/account" && method === "DELETE") {
