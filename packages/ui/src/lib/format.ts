@@ -40,6 +40,23 @@ export const formatTime = (date: Date, timeZone?: string): string =>
     timeZone,
   }).format(date)
 
+/** The calendar day `at` falls on in `zone`, as a day count to compare. */
+export const dayOf = (at: Date, zone: string) =>
+  Date.parse(at.toLocaleDateString("en-CA", { timeZone: zone })) / 86_400_000
+
+/** `Today`, `Tomorrow`, else `Fri 3 Oct`: the day `at` falls on in `zone`. */
+export function dayLabel(at: Date, zone: string, now = new Date()): string {
+  const days = dayOf(at, zone) - dayOf(now, zone)
+  if (days === 0) return "Today"
+  if (days === 1) return "Tomorrow"
+  return at.toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: zone,
+  })
+}
+
 /**
  * `26 Aug 2026, 8:05 AM`. Used where the hour changes what the reader does.
  * In UTC unless the caller knows the reader's zone and passes it.

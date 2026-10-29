@@ -2218,6 +2218,85 @@ function RevealSample() {
   )
 }
 
+/**
+ * A conversation this browser last showed up to "Publishing now", with two
+ * updates the app posted since: the site going live, then a reminder.
+ */
+const NEW_SINCE: ThreadMessageLike[] = [
+  on("29T14:01:00.000", { ...ask("Can you publish it?"), id: "publish" }),
+  on("29T14:01:30.000", {
+    content: [
+      {
+        text: "Publishing now. I'll tell you when it's live.",
+        type: "text",
+      },
+    ],
+    id: "publishing",
+    role: "assistant",
+    status: DONE,
+  }),
+  on("29T14:14:00.000", {
+    content: [
+      { text: "Your website is live at sparkle-clean.co.uk.", type: "text" },
+      {
+        type: "data",
+        name: "button",
+        data: {
+          label: "View site",
+          action: { kind: "open", url: "https://sparkle-clean.co.uk/" },
+        },
+      },
+    ],
+    id: "srv_live",
+    role: "assistant",
+    status: DONE,
+  }),
+  on("29T15:00:00.000", {
+    content: [{ text: "Reminder: call Sam about Friday.", type: "text" }],
+    id: "srv_reminder",
+    role: "assistant",
+    status: DONE,
+  }),
+]
+
+/**
+ * The "New" rule and the update labels. The mark moves as the thread shows
+ * messages, as the app's does; Open again is the next visit, with none new.
+ */
+function NewSinceSample() {
+  const [visit, setVisit] = useState(0)
+  const [lastShown] = useState(() => {
+    let mark: string | null = "publishing"
+    return {
+      get: () => mark,
+      set: (_conversation: string, id: string) => {
+        mark = id
+      },
+    }
+  })
+  return (
+    <div className="flex flex-col gap-3">
+      <Button
+        className="self-start"
+        onClick={() => setVisit((count) => count + 1)}
+        size="sm"
+        variant="outline"
+      >
+        Open again
+      </Button>
+      <OwnerThread
+        height="h-[36rem]"
+        key={visit}
+        messages={NEW_SINCE}
+        settings={{ lastShown }}
+        stored="stored-new"
+      >
+        <ServerButtonUI />
+      </OwnerThread>
+    </div>
+  )
+}
+
 function SendingThread({ streamed }: { streamed: boolean }) {
   const [messages, setMessages] = useState<ThreadMessageLike[]>(BEFORE_SEND)
   const [isRunning, setRunning] = useState(false)
@@ -2901,6 +2980,7 @@ const assistantCatalog = [
   { name: "ThreadSend", render: () => <SendingThread streamed={false} /> },
   { name: "ThreadSendStreamed", render: () => <SendingThread streamed /> },
   { name: "ThreadReveal", render: () => <RevealSample /> },
+  { name: "ThreadNewSince", render: () => <NewSinceSample /> },
   {
     name: "ThreadLoading",
     render: () => (

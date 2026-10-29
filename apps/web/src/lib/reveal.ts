@@ -1,12 +1,18 @@
-import type { ThreadReveal } from "@workspace/ui/components/assistant/thread"
+import type {
+  ThreadLastShown,
+  ThreadReveal,
+} from "@workspace/ui/components/assistant/thread"
 
 /**
- * Onboarding's opening message plays in as a live reply once per browser:
- * the first time it is seen. After that, a reload, another tab or a return
- * shows it at once.
+ * What this browser has shown of the chat. Onboarding's opening message
+ * plays in as a live reply once per browser: the first time it is seen.
+ * After that, a reload, another tab or a return shows it at once. And each
+ * conversation keeps the last message shown here, so the next visit can say
+ * what is new.
  */
 
 const key = (messageId: string) => `reme:revealed:${messageId}`
+const lastKey = (conversationId: string) => `reme:last-shown:${conversationId}`
 
 /**
  * How recent an opening message has to be to play in when this browser
@@ -45,3 +51,25 @@ export function revealer(
 
 /** This browser's, one object, so the thread's reveal never restarts on a render. */
 export const OPENING_REVEAL = revealer()
+
+/** With storage that throws there is no mark, so nothing is called new. */
+export function lastShown(store: () => Store = local): ThreadLastShown {
+  return {
+    get: (conversationId) => {
+      try {
+        return store().getItem(lastKey(conversationId))
+      } catch {
+        return null
+      }
+    },
+    set: (conversationId, messageId) => {
+      try {
+        store().setItem(lastKey(conversationId), messageId)
+      } catch {
+        // Nothing to keep it in; the next visit marks nothing new.
+      }
+    },
+  }
+}
+
+export const LAST_SHOWN = lastShown()

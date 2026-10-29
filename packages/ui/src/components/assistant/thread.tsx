@@ -29,7 +29,7 @@ import {
   ThumbsUpIcon,
   XIcon,
 } from "@phosphor-icons/react"
-import { SKIP_REPLY } from "@workspace/contracts"
+import { type ServerButton, SKIP_REPLY } from "@workspace/contracts"
 import { OWNER_CARDS } from "@workspace/ui/components/assistant/approval"
 import { waitsToSkip } from "@workspace/ui/components/assistant/ask-open"
 import { COS_QUIET } from "@workspace/ui/components/assistant/cos-tools"
@@ -51,10 +51,18 @@ import {
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu"
 import { LogoMark } from "@workspace/ui/components/logo"
-import { StateIcon, StatusLine } from "@workspace/ui/components/status-line"
+import {
+  StateIcon,
+  StatusIcon,
+  StatusLine,
+} from "@workspace/ui/components/status-line"
 import { ComposerInputContext } from "@workspace/ui/hooks/use-composer-input"
 import { useOnboardingWait } from "@workspace/ui/hooks/use-onboarding-status"
-import { waitingLine, writingBack } from "@workspace/ui/lib/activity-copy"
+import {
+  type StatusKind,
+  waitingLine,
+  writingBack,
+} from "@workspace/ui/lib/activity-copy"
 import { formatTime } from "@workspace/ui/lib/format"
 import { SHOW_DELAY_MS } from "@workspace/ui/lib/status-line"
 import {
@@ -165,6 +173,11 @@ export type ThreadProps = {
    * `seen` records that it now has.
    */
   reveal?: ThreadReveal | undefined
+  /**
+   * Where this browser left the stored conversation, so a "New" rule sits
+   * above the first message it has not shown. Kept as the thread shows more.
+   */
+  lastShown?: ThreadLastShown | undefined
   /** Sends the owner's last message again, offered on a reply that failed. */
   onRetry?: (() => void) | undefined
 }
@@ -174,9 +187,15 @@ export type ThreadReveal = {
   seen: (messageId: string) => void
 }
 
+/** The id of the last message this browser showed of a conversation, if any. */
+export type ThreadLastShown = {
+  get: (conversationId: string) => string | null
+  set: (conversationId: string, messageId: string) => void
+}
+
 type ThreadSettings = Omit<
   ThreadProps,
-  "components" | "autoFocus" | "after" | "updates" | "reveal"
+  "components" | "autoFocus" | "after" | "updates" | "reveal" | "lastShown"
 >
 
 const EMPTY_COMPONENTS: ThreadComponents = {}
@@ -212,6 +231,8 @@ const ThreadSettingsContext = createContext<ThreadSettings>(EMPTY_SETTINGS)
 // Apart from the settings, which every message would otherwise re-render on:
 // a new mode or briefing then redrew the whole transcript.
 const ThreadRevealContext = createContext<ThreadReveal | undefined>(undefined)
+// The first message the owner has not seen here, which the "New" rule sits above.
+const NewSinceContext = createContext<string | null>(null)
 
 // Startup exposes a loading placeholder thread; treat it as a new chat so
 // the composer mounts centered. Loads after startup keep the docked layout.
@@ -283,6 +304,7 @@ export const Thread: FC<ThreadProps> = ({
   after,
   updates,
   reveal,
+  lastShown,
 }) => {
   // A stored conversation with nothing in it is as empty as a new chat, once
   // its history is in: the same welcome and suggestions, with the composer in
@@ -342,24 +364,64 @@ export const Thread: FC<ThreadProps> = ({
   )
   // The composer's input, which a card can hand the owner to.
   const input = useRef<HTMLTextAreaElement>(null)
+  const newSince = useNewSince(stored, lastShown)
 
   return (
     <ThreadComponentsContext.Provider value={parts}>
       <ThreadSettingsContext.Provider value={settings}>
         <ThreadRevealContext.Provider value={reveal}>
-          <ComposerInputContext.Provider value={input}>
-            <ThreadRoot
-              after={after}
-              autoFocus={autoFocus}
-              isEmpty={isEmpty}
-              stored={Boolean(stored)}
-              updates={updates}
-            />
-          </ComposerInputContext.Provider>
+          <NewSinceContext.Provider value={newSince}>
+            <ComposerInputContext.Provider value={input}>
+              <ThreadRoot
+                after={after}
+                autoFocus={autoFocus}
+                isEmpty={isEmpty}
+                stored={Boolean(stored)}
+                updates={updates}
+              />
+            </ComposerInputContext.Provider>
+          </NewSinceContext.Provider>
         </ThreadRevealContext.Provider>
       </ThreadSettingsContext.Provider>
     </ThreadComponentsContext.Provider>
   )
+}
+
+/**
+ * The first message of `stored` this browser had not shown when its history
+ * came in, or null: none new, or no mark to go by. Read once per
+ * conversation, so the rule stays put while it is open; then each message
+ * the thread shows moves the mark, so a message sent here is never new, and
+ * the next visit has none until something lands.
+ */
+const useNewSince = (
+  stored: string | undefined,
+  lastShown: ThreadLastShown | undefined
+) => {
+  const aui = useAui()
+  const ready = useAuiState(
+    (s) =>
+      Boolean(stored && lastShown) &&
+      s.threadListItem.remoteId === stored &&
+      !s.thread.isLoading &&
+      s.thread.messages.length > 0
+  )
+  const last = useAuiState((s) => (ready ? s.thread.messages.at(-1)?.id : null))
+  const since = useRef<{ stored: string; id: string | null } | null>(null)
+  if (ready && stored && lastShown && since.current?.stored !== stored) {
+    const ids = aui
+      .thread()
+      .getState()
+      .messages.map((message) => message.id)
+    const mark = lastShown.get(stored)
+    const at = mark === null ? -1 : ids.indexOf(mark)
+    since.current = { stored, id: at === -1 ? null : (ids[at + 1] ?? null) }
+  }
+  useEffect(() => {
+    if (stored && last) lastShown?.set(stored, last)
+  }, [stored, last, lastShown])
+  const read = since.current
+  return read && read.stored === stored ? read.id : null
 }
 
 /**
@@ -733,10 +795,12 @@ const ThreadMessage: FC = () => {
   const { AssistantMessage: AssistantMessageComponent = AssistantMessage } =
     useContext(ThreadComponentsContext)
   const role = useAuiState((s) => s.message.role)
+  const first = useAuiState((s) => s.message.id) === useContext(NewSinceContext)
 
   return (
     <>
       <DateDivider />
+      {first ? <NewDivider /> : null}
       {role === "user" ? <UserMessage /> : <AssistantMessageComponent />}
     </>
   )
@@ -801,6 +865,60 @@ const DateDivider: FC = () => {
     >
       <time dateTime={at ?? undefined}>{LOCAL_DAY.format(new Date(day))}</time>
     </div>
+  )
+}
+
+/** The rule above the first message this browser had not shown before. */
+const NewDivider: FC = () => (
+  <div
+    data-slot="aui_new-divider"
+    className="flex items-center gap-3 font-medium text-[0.8125rem] text-primary before:h-px before:flex-1 before:bg-primary/40 after:h-px after:flex-1 after:bg-primary/40"
+  >
+    <span>
+      New<span className="sr-only"> messages</span>
+    </span>
+  </div>
+)
+
+type Action = ServerButton["action"]["kind"]
+
+/** What a posted update is about, as its button's action says. */
+const UPDATE_KINDS: Partial<Record<Action, StatusKind>> = {
+  connect: "google",
+  pay: "payment",
+  open: "domain",
+}
+
+/**
+ * Above a message the app posted on its own (a `srv_` id): its kind's icon,
+ * else the bell, "Update" and when it landed, on the device's clock.
+ */
+const UpdateLabel: FC = () => {
+  const kind = useAuiState((s) => {
+    const button = s.message.parts.find(
+      (part) => part.type === "data" && part.name === "button"
+    )
+    const action: Action | undefined =
+      button?.type === "data" ? button.data?.action?.kind : undefined
+    return (action && UPDATE_KINDS[action]) ?? null
+  })
+  const at = useAuiState((s) => sentAt(s.message))
+  return (
+    <p
+      data-slot="aui_update-label"
+      className="mb-1 flex items-center gap-1.5 text-[0.8125rem] text-muted-foreground"
+    >
+      {kind ? (
+        <StatusIcon className="size-3.5" kind={kind} still />
+      ) : (
+        <StateIcon className="size-3.5" state="notifications" />
+      )}
+      Update
+      <span aria-hidden>·</span>
+      <time className="tabular-nums" dateTime={at}>
+        {formatTime(new Date(at))}
+      </time>
+    </p>
   )
 }
 
@@ -1358,6 +1476,7 @@ const AssistantMessage: FC = () => {
   const ACTION_BAR_HEIGHT = `min-h-7.5 ${ACTION_BAR_PT}`
 
   const reveal = useReveal()
+  const posted = useAuiState((s) => s.message.id.startsWith("srv_"))
   const running = useAuiState((s) => s.message.status?.type === "running")
   const writing =
     running || reveal.phase === "typing" || reveal.phase === "writing"
@@ -1381,6 +1500,7 @@ const AssistantMessage: FC = () => {
       className="group/message relative -mb-7.5 ps-2 pb-7.5 [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
     >
       <div className="min-w-0">
+        {posted ? <UpdateLabel /> : null}
         <div
           data-slot="aui_assistant-message-content"
           // What follows words still typing in waits for them (the markdown
@@ -1452,7 +1572,8 @@ const AssistantMessage: FC = () => {
             writing && "invisible"
           )}
         >
-          <MessageTime />
+          {/* A posted update says its time once, in its label. */}
+          {posted ? null : <MessageTime />}
           {/* A message of cards alone has no words to rate. */}
           <AuiIf
             condition={(s) =>
