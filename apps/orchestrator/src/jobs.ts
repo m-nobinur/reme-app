@@ -57,10 +57,25 @@ export type Handlers = Partial<Record<ScheduledJob["kind"], Handler>>
 /** The `jobs` Queue's name in each environment, as the wrangler config spells it. */
 export const JOBS_QUEUES = ["reme-jobs", "reme-jobs-production"]
 
+/**
+ * A `cos_continue` is run by the api, where the CoS lives: the job is handed
+ * to its after-turn queue, ids only. Sent inside the run, so a send that
+ * fails is retried with the job; the api finds a second hand-over done.
+ */
+export const continueJob: Handler = async ({ env, job }) => {
+  await env.AFTER_TURN.send({
+    kind: "cos_continue",
+    orgId: job.orgId,
+    jobId: job.id,
+  })
+  return undefined
+}
+
 /** One handler per kind, added by the story that adds the kind. */
 export const HANDLERS: Handlers = {
   reminder: reminderJob,
   heartbeat: heartbeatJob,
+  cos_continue: continueJob,
 }
 
 /** Failures in a row before a job pauses and the owner is told. */

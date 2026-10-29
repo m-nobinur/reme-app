@@ -784,6 +784,28 @@ async function gateAnswer(
 /** A typed reply already read, by Jev and code, with the state it was read on. */
 type Given = { onboarding: Onboarding; answer: Answer }
 
+/** The Chief of Staff's model, its id and price; no model without an OpenRouter key. */
+export function cosModel(env: Env) {
+  const modelId = env.COS_MODEL ?? routeOf("owner_turn").model
+  // A step that fails twice before anything streamed goes to the fallback.
+  const fallbackId = (
+    env.REME_MODEL_FALLBACK ?? DEFAULT_ONBOARDING_MODEL
+  ).replace(/^openrouter\//, "")
+  const model = env.OPENROUTER_API_KEY
+    ? retrying(
+        openrouterModel(
+          env.OPENROUTER_API_KEY,
+          modelId,
+          modelId === OUTAGE_MODEL ? {} : { models: [modelId, OUTAGE_MODEL] }
+        ),
+        fallbackId === modelId
+          ? null
+          : openrouterModel(env.OPENROUTER_API_KEY, fallbackId)
+      )
+    : null
+  return { modelId, price: priceOf(modelId), model }
+}
+
 export async function chat(
   request: Request,
   env: Env,
@@ -879,29 +901,9 @@ export async function chat(
     turn.kind === "message" && ahead.open
       ? await typedVerdict(ahead.open, turn.text, approvalOf)
       : null
-  const modelId = env.COS_MODEL ?? routeOf("owner_turn").model
-  const price = priceOf(modelId)
-  // A step that fails twice before anything streamed goes to the fallback.
-  const fallbackId = (
-    env.REME_MODEL_FALLBACK ?? DEFAULT_ONBOARDING_MODEL
-  ).replace(/^openrouter\//, "")
-  const model =
-    deps.model !== undefined
-      ? deps.model
-      : env.OPENROUTER_API_KEY
-        ? retrying(
-            openrouterModel(
-              env.OPENROUTER_API_KEY,
-              modelId,
-              modelId === OUTAGE_MODEL
-                ? {}
-                : { models: [modelId, OUTAGE_MODEL] }
-            ),
-            fallbackId === modelId
-              ? null
-              : openrouterModel(env.OPENROUTER_API_KEY, fallbackId)
-          )
-        : null
+  const cos = cosModel(env)
+  const { modelId, price } = cos
+  const model = deps.model !== undefined ? deps.model : cos.model
   const plannerId = env.ONBOARDING_MODEL ?? DEFAULT_ONBOARDING_MODEL
   const planPrice = priceOf(plannerId)
   const planner =
@@ -1522,7 +1524,7 @@ async function resolveApprovals(
  * Writes a message's stored row: its content when the row exists, or a new
  * row after the conversation's last one. The conversation moves up the list.
  */
-async function putRow(
+export async function putRow(
   db: OrgScopedDb,
   owner: Owner,
   id: string,

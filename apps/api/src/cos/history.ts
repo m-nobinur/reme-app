@@ -81,10 +81,11 @@ export type ContextPolicy = {
  * of ids, versions and raw states. Version 8 may add a line when the owner
  * asks for Google before a domain of their own is live. Version 10 drops the
  * workspace fields the instructions never use. Version 11 shows an act tool
- * result's evidence, its ids dropped.
+ * result's evidence, its ids dropped. Version 12 may add a line or two when
+ * the turn carries on from one cut off at its limit.
  */
 export const CONTEXT_POLICY: ContextPolicy = {
-  version: "11",
+  version: "12",
   turns: 80,
   toolTurns: 2,
   historyTokens: 16_000,
