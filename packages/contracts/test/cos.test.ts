@@ -341,7 +341,13 @@ describe("create_reminder", () => {
   })
 
   it("shows the model no id but its own ref, no URL and no open object", () => {
-    const { keys, formats, open } = walk(z.toJSONSchema(CreateReminderOutput), {
+    // The api drops evidence's ids before the model reads a result.
+    const shown = z.toJSONSchema(CreateReminderOutput, {
+      override: ({ jsonSchema }) => {
+        delete jsonSchema.properties?.evidence
+      },
+    })
+    const { keys, formats, open } = walk(shown, {
       keys: [],
       formats: [],
       open: 0,

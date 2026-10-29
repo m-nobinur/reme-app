@@ -42,5 +42,32 @@ export const ErrorClass = z.enum([
 /** Free-form JSON bag. Open on purpose: payloads and tool args are not fixed. */
 export const JsonObject = z.record(z.string(), z.unknown())
 
+/**
+ * What shows an action happened, read back by the code that did it: a page
+ * fetched and the status it answered, a job armed and when it runs, or a
+ * row written. Never taken from what a model said.
+ */
+export const Evidence = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("url"),
+    url: z
+      .string()
+      .max(2000)
+      .regex(/^https?:\/\/\S+$/),
+    status: z.int().min(100).max(599),
+    checked_at: Timestamp,
+  }),
+  z.strictObject({ kind: z.literal("job"), job_id: Uuid, runs_at: Timestamp }),
+  z.strictObject({
+    kind: z.literal("record"),
+    table: z.string().regex(/^[a-z_]{1,63}$/),
+    id: Uuid,
+  }),
+])
+
+/** An action result's evidence: optional, since results stored before it replay. */
+export const ActionEvidence = z.array(Evidence).max(4).optional()
+
 export type VersionedRef = z.infer<typeof VersionedRef>
 export type ErrorClass = z.infer<typeof ErrorClass>
+export type Evidence = z.infer<typeof Evidence>
