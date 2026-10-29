@@ -129,7 +129,7 @@ test("an owner with an org sees its team and the fact it stated @probe-org", asy
   // The panel beside it, with no link to the chat the owner is in.
   await expect(panel(page)).toBeVisible()
   await expect(
-    panel(page).getByRole("link", { name: "Continue getting started" })
+    panel(page).getByRole("link", { name: "Finish setting up" })
   ).toHaveCount(0)
 
   // The starting team: the owner, the Chief of Staff and the Developer.

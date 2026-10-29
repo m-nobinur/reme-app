@@ -160,6 +160,7 @@ const REPLIES: [RegExp, string][] = [
   [/e-?mail/i, "hello@example.net"],
   [/phone|number|ring/i, "07700 900123"],
   [/slogan|tagline|one line|sum up/i, "No slogan yet."],
+  [/charge|price|cost/i, "Regular clean £60, deep clean £180"],
   [
     /quote|need to know|before you (can|could)/i,
     "The size of the home, how many bedrooms and bathrooms, the kind of clean, and the date they want.",

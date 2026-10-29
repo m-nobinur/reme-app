@@ -9,7 +9,7 @@ import { visit } from "./visit"
  * only next step the panel offers is naming the business, on Home and in a
  * chat, and its notifications are empty. With nothing under way, a page like
  * this one has no panel at all. The other next steps ("Start your website",
- * "Continue getting started" with an onboarding chat) and "Try again" on a
+ * "Finish setting up" with an onboarding chat) and "Try again" on a
  * panel that did not load need an organisation or a failed read. They are clicked in
  * `packages/ui/test/notifications.spec.ts` against the catalog, and
  * `apps/web/src/panel/workspace-panel.test.ts` checks the destinations the

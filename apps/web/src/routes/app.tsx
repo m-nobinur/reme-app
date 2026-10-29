@@ -303,7 +303,7 @@ function AppLayout() {
           floating={floating}
           openPanel={press}
           panel={showPanel ? <WorkspacePanel panel={panel} /> : null}
-          // Not beside Continue getting started, which goes to the same chat.
+          // Not beside Finish setting up, which goes to the same chat.
           panelFooter={chat && !continues ? <ChatLink id={chat} /> : null}
           panelFocus={firstAsk(panel)}
           panelIdle={

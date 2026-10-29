@@ -320,13 +320,13 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
     onboarding = page.url()
   })
 
-  await step("blank state: continue getting started", async () => {
+  await step("blank state: finish setting up", async () => {
     // Only while nothing is built: on the Website page the panel's next
     // step links back to the onboarding conversation.
     await visit(page, "/app/website")
     await panel(page)
       .getByRole("list", { name: "Next steps" })
-      .getByRole("link", { name: "Continue getting started" })
+      .getByRole("link", { name: "Finish setting up" })
       .click()
     await expect(page).toHaveURL(onboarding)
     // The welcome is text only and asks what the business does; every
@@ -334,7 +334,7 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
     await expect(
       page.locator('[data-slot="aui_assistant-message-root"]').first()
     ).toContainText("business assistant")
-    run.blank_state_actions["Continue getting started"] = "clicked"
+    run.blank_state_actions["Finish setting up"] = "clicked"
   })
 
   await step("onboarding, build started", async () => {
