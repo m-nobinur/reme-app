@@ -15,8 +15,8 @@ overrides:
   '@modelcontextprotocol/sdk@>=1.3.0 <1.32.0': 1.32.0
   # maxTotalMergeKeys does not limit CPU use for empty merge sources.
   'js-yaml@>=4.0.0 <4.3.2': 4.3.2
-  # Authority injection, host confusion and inconsistent host case normalization.
-  'fast-uri@>=3.0.0 <3.1.8': 3.1.8
+  # Authority injection, host confusion, scheme spoofing and scheme injection.
+  'fast-uri@>=3.0.0 <3.1.9': 3.1.9
   # Denial of service through recursion and quadratic-time expansion.
   'brace-expansion@>=2.0.0 <2.1.7': 2.1.7
   # Event-loop denial of service through indexed source maps.
@@ -29,6 +29,18 @@ overrides:
   # Denial of service through excessive content-encodings, through openai and the AI SDK.
   'undici@>=8.0.0 <8.12.2': 8.12.2
   'undici@>=7.18.0 <7.30.1': 7.30.1
+  # Request size and batch limits, cross-client message delivery and token audience, through Flue's agents.
+  '@modelcontextprotocol/server@>=2.0.0 <2.3.0': 2.3.0
+  # Script and code injection in serialized output. TanStack Router pins 1.6.8 exactly.
+  'seroval@>=1.5.5 <1.6.11': 1.6.11
+  # Command injection in services() on Windows, through the shadcn CLI.
+  'systeminformation@<5.33.16': 5.33.16
+  # Uncaught TypeError in qs.stringify, through express.
+  'qs@>=6.7.0 <6.16.1': 6.16.1
+  # Quadratic-time zone identifier matching, through express-rate-limit and socks.
+  'ip-address@<10.7.4': 10.7.4
+  # Dev server reads any website's requests, through drizzle-kit's esbuild-kit loader.
+  'esbuild@<0.25.0': 0.25.12
 patchedDependencies:
   '@cloudflare/vite-plugin@1.64.0': patches/@cloudflare__vite-plugin@1.64.0.patch
   '@workos/authkit-session@0.7.1': patches/@workos__authkit-session@0.7.1.patch
