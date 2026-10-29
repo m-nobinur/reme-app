@@ -129,7 +129,6 @@ export function workspaceLabels(workspace: CosWorkspace) {
           `${p.step}${p.total > 1 ? `: ${p.done} of ${p.total}` : ""}${p.now ? " (now)" : p.done >= p.total ? " (done)" : ""}`
       ),
       ...(b.timing && {
-        running_minutes: b.timing.running_minutes,
         wait: b.timing.range,
         ...(b.timing.overdue && { longer_than_usual: true }),
         ...(b.timing.quiet_minutes >= QUIET_MINUTES && {
@@ -149,16 +148,14 @@ export function workspaceLabels(workspace: CosWorkspace) {
       ...(s.checks?.length && {
         failed: [...new Set(s.checks.map((c) => CHECK_WORDS[c]))],
       }),
-      at: s.at,
     })),
     questions: questions.map((q) => ({
       ref: { request_id: q.request_id, field: q.field },
       about: plain(q.field),
       why: q.why,
       options: q.options,
-      blocking: q.blocking,
     })),
-    reviews_waiting: approvals.map((a) => ({ expires_at: a.expires_at })),
+    reviews_waiting: approvals.length,
     missing_facts: missing_facts.map(plain),
     ...(domains && {
       domains: domains.map((d) => ({

@@ -58,6 +58,7 @@ import {
   messageTaint,
   NotRun,
   newRunState,
+  OUTAGE_MODEL,
   openrouterModel,
   personaOf,
   priceOf,
@@ -889,7 +890,13 @@ export async function chat(
       ? deps.model
       : env.OPENROUTER_API_KEY
         ? retrying(
-            openrouterModel(env.OPENROUTER_API_KEY, modelId),
+            openrouterModel(
+              env.OPENROUTER_API_KEY,
+              modelId,
+              modelId === OUTAGE_MODEL
+                ? {}
+                : { models: [modelId, OUTAGE_MODEL] }
+            ),
             fallbackId === modelId
               ? null
               : openrouterModel(env.OPENROUTER_API_KEY, fallbackId)

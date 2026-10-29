@@ -112,6 +112,14 @@ import { startedBefore, type Turn, TurnClosed, writeAsTurn } from "./turns.ts"
 export const DEFAULT_MODEL = "openai/gpt-6.1-sol"
 
 /**
+ * The model OpenRouter tries when the owner turn's model has no provider up
+ * (its `models` list). Same price cap as the default, so the reservation
+ * holds, and another lab, so one lab's outage does not take both. A test
+ * keeps it in the facade's list.
+ */
+export const OUTAGE_MODEL = "anthropic/claude-sonnet-5.5"
+
+/**
  * Which model, effort and path serves each kind of CoS work (CM1). The turn
  * runner reads `routeOf`; a row with `enabled: false` is recorded, not used.
  * `effort: null` is the model's own default (medium).
@@ -472,13 +480,22 @@ export function openrouterModel(
 ): LanguageModel | null {
   const routing = models.find((m) => m.id === modelId)?.compat.openRouterRouting
   if (!routing?.max_price) return null
+  // A listed fallback is kept off the hosts any listed model excludes.
+  const ignore = [
+    ...new Set(
+      (settings.models ?? [modelId]).flatMap(
+        (id) =>
+          models.find((m) => m.id === id)?.compat.openRouterRouting.ignore ?? []
+      )
+    ),
+  ]
   return createOpenRouter({ apiKey }).chat(modelId, {
     ...settings,
     usage: { include: true },
     // Someone waits on every call here, so the fastest host under the cap
     // answers. Measured 2026-10-01 for Gemini 3.8 Flash: Vertex flex at p50
     // 12.6 s and p90 114 s, AI Studio at p50 1.6 s.
-    provider: { ...settings.provider, ...routing, sort: "latency" },
+    provider: { ...settings.provider, ...routing, ignore, sort: "latency" },
   })
 }
 
@@ -1649,6 +1666,7 @@ export function cosAgent(
                 turn_id: run.turn.turnId,
                 step: step.stepNumber,
                 messages: step.response.messages as Record<string, unknown>[],
+                model: step.response.modelId,
                 usage,
                 cost_usd: cost,
               },
