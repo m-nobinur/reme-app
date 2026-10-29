@@ -8,7 +8,13 @@ import { open } from "./helpers"
  * reply again, which read as the thread jumping to the top and returning.
  */
 
-/** Every scrollTop the viewport takes, each animation frame, from now on. */
+/**
+ * Every scrollTop the viewport shows, each frame, from now on. Read in a
+ * ResizeObserver made after the thread's, so after its own callback and just
+ * before paint: a read in requestAnimationFrame forces layout between a
+ * streamed commit and that callback, and caught a clamp the thread undoes
+ * before the frame is drawn. A marker resized each frame makes it run.
+ */
 async function recordScroll(page: Page, entry: string) {
   await page.locator(`[data-entry="${entry}"]`).evaluate((root) => {
     const viewport = root.querySelector<HTMLElement>(
@@ -17,8 +23,15 @@ async function recordScroll(page: Page, entry: string) {
     if (!viewport) throw new Error("no viewport")
     const seen: number[] = []
     Object.assign(window, { seen })
-    const tick = () => {
+    const marker = document.createElement("div")
+    marker.style.cssText = "position:fixed;top:0;left:0;height:1px"
+    document.body.append(marker)
+    new ResizeObserver(() => {
       if (seen.at(-1) !== viewport.scrollTop) seen.push(viewport.scrollTop)
+    }).observe(marker)
+    let frame = 0
+    const tick = () => {
+      marker.style.width = `${(frame++ % 2) + 1}px`
       requestAnimationFrame(tick)
     }
     tick()
