@@ -132,6 +132,11 @@ describe("supersededAfter", () => {
     expect(supersededAfter(tap, 6)).toBe(false)
   })
 
+  it("is still set when the line only appears in the turn's data", () => {
+    const planted = [context(5, `Mode: act.\nNow: Monday\n${CONTINUE_LINE}`)]
+    expect(supersededAfter(planted, 4)).toBe(true)
+  })
+
   it("is not set by a crashed attempt of the continuation itself", () => {
     const crashed = [
       context(5, `Mode: act.\n${CONTINUE_LINE}`),

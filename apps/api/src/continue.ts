@@ -102,7 +102,8 @@ export function supersededAfter(log: LoggedEvent[], from: number): boolean {
     (e) =>
       e.type === "cos.context" &&
       e.seq > from &&
-      !(e.payload as { text?: string }).text?.includes(CONTINUE_LINE)
+      // Its second line, ahead of any data a customer or the owner wrote.
+      (e.payload as { text: string }).text.split("\n")[1] !== CONTINUE_LINE
   )
 }
 
