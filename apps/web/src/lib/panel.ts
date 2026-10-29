@@ -24,6 +24,7 @@ import type { AttentionItem, Workspace } from "./api/types"
 import { assistantOf, leading } from "./briefing"
 import { onboardingFor } from "./onboarding"
 import { dayOf, dueLine, upcomingNotes } from "./reminders"
+import { ownDomainLive } from "./website-checklist"
 
 /**
  * What the floating panel says, from what the frame has already read: the
@@ -92,7 +93,11 @@ export type SegmentView = {
 type Approval = Extract<AttentionItem, { kind: "approval" }>
 
 /** The next task not started, and the one button that starts it in the chat. */
-export type UpNext = { id: string; text: string; label: string; ask: string }
+/** The next task to start: a line the owner sends, or Google's own sign-in. */
+export type UpNext = { id: string; text: string; label: string } & (
+  | { ask: string }
+  | { href: string }
+)
 
 export type Panel = {
   /** The collapsed pill, and the panel's header. */
@@ -435,12 +440,19 @@ export function panelFor(input: PanelInput): Panel | null {
   const queued =
     unstarted.find((segment) => segment.kind === "address") ?? unstarted[0]
   const upText = queued && rowLine(queued, ctx)
+  // Google is never a line in the owner's voice: its sign-in, and only once
+  // their own domain is live.
+  const google = queued?.kind === "google"
   const upNext: UpNext | null =
-    queued && upText
+    queued &&
+    upText &&
+    (!google || ownDomainLive(activity.standing ?? [], workspace.host))
       ? {
           id: queued.id,
           text: upText,
-          ...pageAction(queued.kind === "google" ? "google" : "own"),
+          ...(google
+            ? { label: pageAction("google").label, href: "/api/google/start" }
+            : pageAction("own")),
         }
       : null
   const done = zone ? completedOf(workspace, ctx) : []

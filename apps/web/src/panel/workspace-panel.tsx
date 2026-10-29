@@ -564,6 +564,7 @@ export function useAnnouncement(workspace: Workspace | null) {
 export function WorkspacePanel({ panel }: { panel: Panel | null }) {
   const { workspace, failed, refresh } = useLiveWorkspace()
   const zone = useBrowserZone()
+  const chat = lastChat(frame.useLoaderData().conversations)
   const [status, setStatus] = useAnnouncement(workspace)
   const [tab, setTab] = useState<Tab>("activity")
   const thumbnail = liveThumbnail(workspace?.liveRevision ?? null)
@@ -583,6 +584,8 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
   }
   const { live, host } = workspace
   const website = live !== null || host !== null
+  const upNextAsk =
+    panel.upNext && "ask" in panel.upNext ? panel.upNext.ask : undefined
   // A tab that has emptied (its last reminder done) hands back to Activity.
   const shown =
     (tab === "reminders" && upcoming.length) || (tab === "website" && website)
@@ -674,16 +677,24 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
       </WaitingOnYou>
       {panel.upNext ? (
         <UpNext text={panel.upNext.text}>
-          <Link
-            className={NEXT_STEP}
-            state={() => ({
-              chat: crypto.randomUUID(),
-              ask: panel.upNext?.ask,
-            })}
-            to="/app"
-          >
-            {panel.upNext.label}
-          </Link>
+          {"href" in panel.upNext ? (
+            // A document load: the route answers with a redirect to Google,
+            // and the result is said in the owner's current conversation.
+            <a
+              className={NEXT_STEP}
+              href={`${panel.upNext.href}${chat ? `?returnTo=/app/c/${chat.id}` : ""}`}
+            >
+              {panel.upNext.label}
+            </a>
+          ) : (
+            <Link
+              className={NEXT_STEP}
+              state={() => ({ chat: crypto.randomUUID(), ask: upNextAsk })}
+              to="/app"
+            >
+              {panel.upNext.label}
+            </Link>
+          )}
         </UpNext>
       ) : null}
       <ComingUp

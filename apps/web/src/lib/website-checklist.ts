@@ -22,6 +22,21 @@ import { dueLine } from "./reminders"
 export type Mark = "done" | "now" | "waiting" | "next" | "failed"
 
 /**
+ * Whether the owner's own domain is live: its address task done, or the site
+ * already served on it. Google learns the address customers keep, so it waits
+ * for this wherever it is offered.
+ */
+export const ownDomainLive = (
+  standing: readonly ActivitySegment[],
+  host: string | null
+) =>
+  standing.some(
+    (s) =>
+      s.kind === "address" &&
+      (s.state === "done" || (host !== null && s.names?.domain === host))
+  )
+
+/**
  * A row's one next action: a link, a visit to the approvals, a line said in
  * the chat, or Google's own sign-in, which needs no words from the owner.
  */
@@ -167,14 +182,7 @@ export function checklistFor(
   // "not connected" would be a guess.
   if (standing) {
     const google = standing.find((s) => s.kind === "google" && !notStarted(s))
-    // Google learns the address customers keep, so it waits for the owner's
-    // own domain to be live: its task done, or the site already served on it.
-    const domainLive = standing.some(
-      (s) =>
-        s.kind === "address" &&
-        (s.state === "done" ||
-          (workspace.host !== null && s.names?.domain === workspace.host))
-    )
+    const domainLive = ownDomainLive(standing, workspace.host)
     rows.push(
       google
         ? {

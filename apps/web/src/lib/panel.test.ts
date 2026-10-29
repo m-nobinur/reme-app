@@ -602,18 +602,21 @@ describe("tasks not started", () => {
       ).map((id) => step(id, "next")),
       { id: kind === "google" ? "google" : "address:1" }
     )
-  const withUpcoming = (...upcoming: ActivitySegment[]) =>
+  const withUpcoming = (
+    upcoming: ActivitySegment[],
+    standing: ActivitySegment[] = []
+  ) =>
     panelFor(
       input({
         workspace: live({
           assistantName: "Ellie",
-          activity: activity({ upcoming }),
+          activity: activity({ upcoming, standing }),
         }),
       })
     )
 
   it("offers the next one as Up next with one button, the address before Google", () => {
-    const panel = withUpcoming(unbegun("google"), unbegun("address"))
+    const panel = withUpcoming([unbegun("google"), unbegun("address")])
     expect(panel?.upNext).toEqual({
       id: "address:1",
       text: expect.stringMatching(/address/i),
@@ -621,18 +624,28 @@ describe("tasks not started", () => {
       ask: "I'd like to use my own domain",
     })
     expect(panel?.upcoming).toEqual([])
-    expect(withUpcoming(unbegun("google"))?.upNext).toMatchObject({
+  })
+
+  it("offers Google only once the owner's domain is live, as its sign-in and never a line in the owner's voice", () => {
+    expect(withUpcoming([unbegun("google")])?.upNext).toBeNull()
+    const addressDone = segment("address", "done", [step("records", "done")], {
+      id: "address:1",
+    })
+    expect(withUpcoming([unbegun("google")], [addressDone])?.upNext).toEqual({
+      id: "google",
+      text: expect.any(String),
       label: "Connect Google",
+      href: "/api/google/start",
     })
   })
 
   it("keeps a task that has begun in Coming up", () => {
-    const panel = withUpcoming(
+    const panel = withUpcoming([
       segment("google", "upcoming", [
         step("sign_in", "done"),
         step("first_data", "next"),
-      ])
-    )
+      ]),
+    ])
     expect(panel?.upNext).toBeNull()
     expect(panel?.upcoming.map((row) => row.text)).toEqual([
       "Your first search numbers from Google",
