@@ -185,6 +185,16 @@ it("backs off to 60 s after a failed read, and keeps the last workspace", async 
   expect(tags).toHaveLength(3)
 })
 
+it("clears the failure on the first good read, even an unchanged one", async () => {
+  start(building)
+  answers = [new Error("503"), "unchanged"]
+  await wait(INTERVAL.building + INTERVAL.error)
+  expect(changes).toEqual([
+    { workspace: building, failed: true },
+    { workspace: building, failed: false },
+  ])
+})
+
 it("keeps a build's pace while a built draft takes its screenshots", async () => {
   start({ ...idle, builds: [{ ...BUILD, state: "preview_ready" }] })
   await wait(INTERVAL.building)

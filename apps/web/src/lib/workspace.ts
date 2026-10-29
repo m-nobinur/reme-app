@@ -130,12 +130,10 @@ export function startPolling({
           }),
         ])
         if (began !== generation) return
-        failed = false
         unchanged = next === "unchanged" ? unchanged + 1 : 0
-        if (next !== "unchanged") {
-          current = next
-          onChange(current, false)
-        }
+        if (next !== "unchanged") current = next
+        if (next !== "unchanged" || failed) onChange(current, false)
+        failed = false
       } catch {
         if (began !== generation) return
         failed = true
