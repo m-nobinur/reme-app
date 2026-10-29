@@ -19,8 +19,9 @@ test("reads say what they looked at, and a finished one shows nothing", async ({
   await expect(entry.locator('[data-slot="cos-read-workspace"]')).toHaveText([
     "Couldn't check where things stand, try again in a moment",
   ])
+  // The catalogue's wording varies by turn; any of the facts read's lines.
   await expect(entry.locator('[data-slot="cos-read-facts"]')).toHaveText([
-    "Stopped looking up your details",
+    /^Stopped (looking up your details|checking your business details)$/,
   ])
   // A refused preview is finished too; the reply says what came back.
   await expect(entry.locator('[data-slot="cos-read-preview"]')).toHaveCount(0)
@@ -58,13 +59,14 @@ for (const [entry, slot, yes, busy, target, detail, done, refused] of [
     await open(page, entry)
     const everything = page.locator(`[data-entry="${entry}"]`)
     const all = everything.locator(`[data-slot="${slot}"]`)
-    await expect(all).toHaveCount(14)
+    // A card the owner talked over folds into the newer one of its kind.
+    await expect(all).toHaveCount(13)
     // A card waiting on the owner sits in the tray, not the thread: the thread
-    // keeps the other twelve.
+    // keeps the other eleven.
     const cards = all.filter({
       hasNot: page.locator('[data-slot="question-tray"]'),
     })
-    await expect(cards).toHaveCount(12)
+    await expect(cards).toHaveCount(11)
     // Nothing to approve while the model is still writing it, and a call
     // the stream left unfinished stops rather than working forever.
     await expect(cards.nth(0)).toHaveText(
@@ -104,18 +106,19 @@ for (const [entry, slot, yes, busy, target, detail, done, refused] of [
     await expect(cards.nth(5)).toContainText(done)
     await expect(cards.nth(6)).toContainText(refused)
     await expect(cards.nth(7)).toContainText("You said not now.")
-    await expect(cards.nth(8)).not.toContainText("You sent a message instead.")
-    await expect(cards.nth(9)).toContainText(
+    await expect(everything).not.toContainText("You sent a message instead.")
+    await expect(everything).toContainText(/1 earlier card: not (added|sent)\./)
+    await expect(cards.nth(8)).toContainText(
       "We could not confirm this went through."
     )
-    await expect(cards.nth(10)).toContainText(
+    await expect(cards.nth(9)).toContainText(
       "This did not go through. Ask again."
     )
     // A yes that came after the card's time ran out: nothing was done.
-    await expect(cards.nth(11)).toContainText(
+    await expect(cards.nth(10)).toContainText(
       "This expired before your yes, so nothing was done."
     )
-    await expect(cards.nth(11).getByRole("button")).toHaveCount(0)
+    await expect(cards.nth(10).getByRole("button")).toHaveCount(0)
     const text = await everything.innerText()
     expect(text).not.toMatch(WIRE)
     // The api's refusal message is never what the owner reads.

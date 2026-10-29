@@ -238,7 +238,8 @@ test("each written reminder has its own Done, named for it", async ({
   await expect(
     page.getByRole("button", { name: "Done: Send the Hartley Road quote" })
   ).toBeVisible()
-  await expect(page.getByText("Set by your assistant")).toHaveCount(1)
+  // An asked-for reminder carries no byline.
+  await expect(page.getByText("Set by your assistant")).toHaveCount(0)
   await expect(page.getByText("Due Sat 3 Oct, 9:30 AM")).toBeVisible()
   // One due within the hour is marked, and only that one.
   await expect(page.locator('[data-soon="true"]')).toHaveCount(1)
