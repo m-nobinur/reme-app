@@ -173,7 +173,7 @@ jobs:
       # Object bindings into the config wrangler deploys.
       - run: pnpm --filter orchestrator build
 
-      # shortcut: Cloudflare's container application read 500s for minutes at a time (#335); drop the retry once it is fixed.
+      # Cloudflare's container API answers 500 during platform incidents, after the Worker is already live (#335).
       - name: Deploy the orchestrator
         run: |
           set -o pipefail
