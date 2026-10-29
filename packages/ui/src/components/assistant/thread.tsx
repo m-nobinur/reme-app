@@ -1572,7 +1572,8 @@ const AssistantMessage: FC = () => {
             writing && "invisible"
           )}
         >
-          <MessageTime />
+          {/* A posted update says its time once, in its label. */}
+          {posted ? null : <MessageTime />}
           {/* A message of cards alone has no words to rate. */}
           <AuiIf
             condition={(s) =>

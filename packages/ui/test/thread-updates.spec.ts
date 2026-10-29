@@ -47,6 +47,15 @@ test("a posted message carries Update, its kind and its time; a reply does not",
   await expect(
     replies(page).nth(0).locator("[data-slot=aui_update-label]")
   ).toHaveCount(0)
+  // Each says its time once: a reply in its footer, an update in its label.
+  for (const n of [0, 1, 2]) {
+    await expect(replies(page).nth(n).locator("time")).toHaveCount(1)
+  }
+  await expect(
+    replies(page)
+      .nth(1)
+      .locator("[data-slot=aui_assistant-message-footer] time")
+  ).toHaveCount(0)
   // The live site's globe, and the bell for a post with no kind.
   const [globe, bell] = await Promise.all(
     [0, 1].map((n) => labels.nth(n).locator("svg").innerHTML())
