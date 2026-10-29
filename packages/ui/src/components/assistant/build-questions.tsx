@@ -28,8 +28,8 @@ import {
  * What the assistant asks the owner for their website
  * (`data-build_questions`), in the question tray: one page a question, the
  * question in the assistant's words, its inputs, Skip where it may be
- * skipped. Each answer is sent on its own; after its tick the tray moves to
- * the next open question on its own. Once every one is settled it folds to
+ * skipped. Send sends every answered page at once; a page that cannot go
+ * yet is shown with why. Once every one is settled it folds to
  * one row and goes. Typing in the composer is an ordinary turn. The
  * address question is no build's, so once settled the owner's answer goes
  * on as their next message, for the assistant to act on.
@@ -75,6 +75,8 @@ const FAILED = "That didn't go through. Try again."
 type Phase = "asking" | "closing" | "folded" | "gone"
 
 type Given = QuestionReply["answer"]
+/** Answers by question id. */
+type Answers = Record<string, QuestionAnswer>
 
 /** A settled question as the owner reads it. */
 function settledLine(question: BuildQuestion, answer: QuestionAnswer) {
@@ -108,7 +110,7 @@ function BuildQuestionsPart({ data }: { data: BuildQuestions }) {
   const id = useId()
   const { questions } = data
   // Answers stored from this tab, until the message is read again with them.
-  const [given, setGiven] = useState<Record<string, QuestionAnswer>>({})
+  const [given, setGiven] = useState<Answers>({})
   const answerOf = (each: BuildQuestion) => each.answer ?? given[each.id]
   const [index, setIndex] = useState(() =>
     Math.max(
@@ -145,33 +147,31 @@ function BuildQuestionsPart({ data }: { data: BuildQuestions }) {
   if (!question) return null
   const answer = answerOf(question)
 
-  const reply = async (sent: Given) => {
-    if (!send || !conversationId || sending) return
-    setSending(true)
-    setError(null)
-    const stored = await send({
-      conversationId,
-      reply: { message_id: messageId, question_id: question.id, answer: sent },
+  // Saves one answer. Back come the answers now held, with the stored
+  // stack's (an answer can close others, as No closes the address
+  // question's name), or the words to show.
+  const store = async (each: BuildQuestion, sent: Given, now: Answers) => {
+    const stored = await send?.({
+      conversationId: conversationId ?? "",
+      reply: { message_id: messageId, question_id: each.id, answer: sent },
     }).catch(() => FAILED)
-    setSending(false)
-    if (typeof stored === "string") {
-      setError(stored)
-      return
-    }
-    // The stored stack's answers too: an answer can close others, as No
-    // closes the address question's name.
-    const now: Record<string, QuestionAnswer> = {
-      ...given,
+    if (typeof stored === "string") return stored
+    return {
+      ...now,
       ...Object.fromEntries(
-        (stored?.questions ?? []).flatMap((each) =>
-          each.answer ? [[each.id, each.answer]] : []
+        (stored?.questions ?? []).flatMap((one) =>
+          one.answer ? [[one.id, one.answer]] : []
         )
       ),
-      [question.id]: sent,
+      [each.id]: sent,
     }
+  }
+
+  /** After a save: on to the next open question, or fold once all are settled. */
+  const onward = (now: Answers, from: number) => {
     setGiven(now)
     const settledNow = (each: BuildQuestion) => each.answer ?? now[each.id]
-    const next = nextOpen(questions, (each) => Boolean(settledNow(each)), index)
+    const next = nextOpen(questions, (each) => Boolean(settledNow(each)), from)
     if (next === undefined) {
       const said =
         data.kind === "address" ? addressSaid(questions, settledNow) : null
@@ -185,24 +185,63 @@ function BuildQuestionsPart({ data }: { data: BuildQuestions }) {
       setTimeout(() => setPhase("gone"), ONWARD_MS + FOLDED_MS)
     } else {
       // Unless the owner moved on themselves in the pause.
-      setTimeout(() => setIndex((at) => (at === index ? next : at)), ONWARD_MS)
+      setTimeout(() => setIndex((at) => (at === from ? next : at)), ONWARD_MS)
     }
   }
 
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const skip = async () => {
+    if (!send || !conversationId || sending) return
+    setSending(true)
+    setError(null)
+    const now = await store(question, { kind: "skipped" }, given)
+    setSending(false)
+    if (typeof now === "string") setError(now)
+    else onward(now, index)
+  }
+
+  // One Send sends every open page, in order, and stops at the first that
+  // cannot go yet. What was sent before it stays sent.
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const form = new FormData(event.currentTarget)
-    const parsed = answerValue(question.input, (name) =>
-      String(form.get(name) ?? "")
-    )
-    if ("error" in parsed) {
-      setError(parsed.error)
-      return
+    if (!send || !conversationId || sending) return
+    setSending(true)
+    setError(null)
+    let now = given
+    for (const [at, each] of questions.entries()) {
+      if (each.answer ?? now[each.id]) continue
+      const form = document.getElementById(`${id}-${at}`)
+      const fields = new FormData(form as HTMLFormElement)
+      const parsed = answerValue(each.input, (name) =>
+        String(fields.get(name) ?? "")
+      )
+      const saved =
+        "error" in parsed
+          ? parsed.error
+          : await store(
+              each,
+              {
+                kind: "value",
+                value: parsed.value as Extract<
+                  Given,
+                  { kind: "value" }
+                >["value"],
+              },
+              now
+            )
+      if (typeof saved === "string") {
+        setSending(false)
+        // A page after this one not answered yet is next, as after any
+        // answer; one before it, or a refusal, is shown with why.
+        if (at > index && "error" in parsed) return onward(now, index)
+        setGiven(now)
+        setIndex(at)
+        setError(saved)
+        return
+      }
+      now = saved
     }
-    void reply({
-      kind: "value",
-      value: parsed.value as Extract<Given, { kind: "value" }>["value"],
-    })
+    setSending(false)
+    onward(now, index)
   }
 
   const go = (to: number) => {
@@ -226,7 +265,7 @@ function BuildQuestionsPart({ data }: { data: BuildQuestions }) {
           open && question.skippable
             ? {
                 label: "Skip",
-                onSkip: () => void reply({ kind: "skipped" }),
+                onSkip: () => void skip(),
                 disabled: sending,
               }
             : undefined
@@ -254,7 +293,7 @@ function BuildQuestionsPart({ data }: { data: BuildQuestions }) {
                   className="flex flex-col gap-2"
                   id={`${id}-${at}`}
                   noValidate
-                  onSubmit={submit}
+                  onSubmit={(event) => void submit(event)}
                 >
                   <AnswerInputs
                     id={`${id}-${at}`}
