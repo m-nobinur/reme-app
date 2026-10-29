@@ -40,8 +40,9 @@ const CLEAR_NEEDS = [
   "WORKOS_CLIENT_ID",
 ]
 
-/** A fictional number in Ofcom's drama range. */
+/** A fictional number in Ofcom's drama range, and as the profile writes it. */
 const PHONE = "+447700900123"
+const PHONE_SHOWN = "07700 900123"
 
 let user: ProbeUser | null = null
 let orgId: string | null = null
@@ -146,10 +147,39 @@ test("an owner with an org sees its team and the fact it stated @probe-org", asy
   ).toBeVisible()
   const main = page.getByRole("main")
   await expect(
-    main.getByRole("definition").filter({ hasText: PHONE })
+    main.getByRole("definition").filter({ hasText: PHONE_SHOWN })
   ).toBeVisible()
   // The name and the phone at least; the first name signup kept may show too.
   await expect
     .poll(() => main.getByText(/^You said this/).count())
     .toBeGreaterThanOrEqual(2)
+
+  // A typed turn sends the turn and nothing else: no history, system prompt
+  // or tools leave the browser, because the server reads its own rows. Each
+  // request is caught here and never sent on, so no model runs and nothing
+  // is written. Only the typed one is read: the chat may ask for its opener.
+  await visit(page, "/app")
+  const sent: (Record<string, unknown> & { turn?: { kind?: string } })[] = []
+  await page.route("**/api/chat", async (route) => {
+    sent.push(route.request().postDataJSON())
+    await route.abort()
+  })
+  await page.getByLabel("Message input").fill("How did this week go?")
+  await page.getByLabel("Send message").click()
+  const typed = () => sent.find((each) => each.turn?.kind === "message")
+  await expect.poll(typed).toBeDefined()
+  const body = typed() ?? {}
+  expect(Object.keys(body).sort()).toEqual([
+    "conversation_id",
+    "mode",
+    "time_zone",
+    "turn",
+  ])
+  expect(body.mode).toBe("act")
+  expect(body.time_zone).toMatch(/^[A-Za-z][A-Za-z0-9_+/-]{0,63}$/)
+  expect(body.turn).toMatchObject({
+    kind: "message",
+    text: "How did this week go?",
+  })
+  await page.unroute("**/api/chat")
 })

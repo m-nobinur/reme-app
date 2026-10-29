@@ -145,6 +145,28 @@ test("the staff directory tells a new owner it is empty", async ({ page }) => {
   ).toBeVisible()
 })
 
+test("a session with no business cannot run a chat turn", async ({ page }) => {
+  // The probe owner has no organisation, so apps/api refuses the turn before
+  // a model runs or a row is written, with the code the chat turns into the
+  // owner's own sentence. A real turn body, so only the session decides.
+  const response = await page.request.post("/api/chat", {
+    data: {
+      conversation_id: crypto.randomUUID(),
+      mode: "act",
+      turn: {
+        kind: "message",
+        message_id: "smoke-no-business",
+        text: "How did this week go?",
+      },
+    },
+  })
+  expect(response.status()).toBe(403)
+  const refusal = await response.json()
+  expect(refusal).toMatchObject({ class: "permission", code: "org.unresolved" })
+  // The api's own words, never anything of the turn or the session.
+  expect(JSON.stringify(refusal)).not.toContain("How did this week go?")
+})
+
 test("with no business, /app asks for its name and offers no chat", async ({
   page,
 }) => {
