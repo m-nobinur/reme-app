@@ -10,6 +10,7 @@ import {
   GlobeIcon,
   ImageIcon,
   MinusCircleIcon,
+  PaintBrushIcon,
   type Icon as PhosphorIcon,
   RocketLaunchIcon,
   SpinnerGapIcon,
@@ -25,6 +26,7 @@ import type {
   BuildPhoto,
   DecisionRequest,
 } from "@workspace/contracts"
+import { TooltipIconButton } from "@workspace/ui/components/assistant/tooltip-icon-button"
 import { AssistantAvatar } from "@workspace/ui/components/assistant-avatar"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { Diffusing } from "@workspace/ui/components/diffusing"
@@ -1696,9 +1698,21 @@ function YourWebsite({
         {live ? "Your website is live" : "Nothing is published yet"}
       </p>
       {live && (host || change) ? (
-        // Side by side, each growing to share the row; a row too narrow for
-        // both wraps rather than squeezing the words.
-        <div className="flex flex-wrap gap-2">
+        // One row at any width: the change is an icon, the link takes the rest.
+        <div className="flex gap-2">
+          {change ? (
+            <TooltipIconButton
+              className="size-11 rounded-md"
+              // It moves the owner to the composer, so the phone sheet goes.
+              data-leaves-panel
+              onClick={onRequestChanges}
+              size="icon-lg"
+              tooltip="Request changes"
+              variant="outline"
+            >
+              <PaintBrushIcon aria-hidden />
+            </TooltipIconButton>
+          ) : null}
           {host ? (
             <a
               className={cn(
@@ -1717,18 +1731,6 @@ function YourWebsite({
                 className="text-muted-foreground"
               />
             </a>
-          ) : null}
-          {change ? (
-            <Button
-              className="grow"
-              // It moves the owner to the composer, so the phone sheet goes.
-              data-leaves-panel
-              onClick={onRequestChanges}
-              size="lg"
-              variant="outline"
-            >
-              Request changes
-            </Button>
           ) : null}
         </div>
       ) : null}
