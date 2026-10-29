@@ -90,3 +90,47 @@ it("is up next after onboarding, and says so, before any stage has begun", () =>
   ])
   expect(task).toMatchObject({ status: "waiting", after: "Onboarding" })
 })
+
+it("says Waiting on you, and what for, on every stage that waits on the owner", () => {
+  // A task waiting on the owner is in the waiting group and in standing.
+  const owed = [
+    {
+      ...segment("address", "waiting", [{ id: "records", state: "waiting" }]),
+      names: { domain: "spark.co.uk" },
+    },
+    segment("google", "waiting", [{ id: "sign_in", state: "waiting" }]),
+  ]
+  const groups = groupsOf(
+    {
+      ...EMPTY_WORKSPACE,
+      live: 1,
+      activity: {
+        journey: [
+          segment("onboarding", "waiting", [
+            { id: "services", state: "waiting" },
+          ]),
+        ],
+        now: [],
+        waiting: owed,
+        upcoming: [],
+        done: [],
+        standing: owed,
+      },
+    },
+    "Wren"
+  )
+  const row = (title: string) =>
+    groups.flatMap((group) => group.tasks).find((task) => task.title === title)
+  expect(row("Onboarding")).toMatchObject({
+    status: "yours",
+    detail: "Answer the setup question",
+  })
+  expect(row("Domain setup")).toMatchObject({
+    status: "yours",
+    detail: "Make the DNS change for spark.co.uk",
+  })
+  expect(row("Search Console setup")).toMatchObject({
+    status: "yours",
+    detail: "Sign in to Google",
+  })
+})

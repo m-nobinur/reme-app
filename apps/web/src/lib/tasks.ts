@@ -18,13 +18,18 @@ export type Task = {
   when?: string | null
 }
 
-/** Where a segment stands, as a stage's status; none yet is to come. */
+/**
+ * Where a segment stands, as a stage's status; none yet is to come. A
+ * segment waits only on the owner, so waiting is theirs to do.
+ */
 const statusOf = (segment: ActivitySegment | undefined): Status =>
   segment?.state === "done"
     ? "done"
-    : segment && segment.state !== "upcoming" && !notStarted(segment)
-      ? "active"
-      : "waiting"
+    : segment?.state === "waiting"
+      ? "yours"
+      : segment && segment.state !== "upcoming" && !notStarted(segment)
+        ? "active"
+        : "waiting"
 
 /** The stages, each from the activity the panel reads, worded with the assistant's name. */
 export function groupsOf(
