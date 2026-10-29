@@ -7,6 +7,7 @@ import {
   CosToolResult,
   CosTurn,
   CreateReminderRequest,
+  type FactRecord,
   ONBOARDING_STATUS,
   type OnboardingStatus,
   TOOL_CALL_CANCELLED,
@@ -697,6 +698,31 @@ describe("the CoS's model and price", () => {
     expect(text.match(/<\/data>/g)).toHaveLength(2)
     expect(taint).toEqual(["untrusted_input"])
     expect(contextOf("act", EMPTY).text).not.toContain("persona")
+  })
+
+  it("carries the owner's prices whole for a quote, and cuts other long facts", () => {
+    const prices =
+      "Regular clean from 60, deep clean 180 for a three bed, end of tenancy 250 to 400 by size, oven 70, windows inside 40, carpets 30 a room, ironing 20 an hour, fridge 25, blinds 15 a window"
+    const long = "x".repeat(200)
+    const held = [
+      { key: "business.prices", value: { text: prices } },
+      { key: "business.disclaimer", value: { text: long } },
+    ] as unknown as FactRecord[]
+    const { text } = contextOf(
+      "act",
+      EMPTY,
+      null,
+      new Date(),
+      undefined,
+      undefined,
+      false,
+      null,
+      held
+    )
+    expect(prices.length).toBeGreaterThan(160)
+    expect(text).toContain(`business.prices: ${prices}\n`)
+    expect(text).toContain(`business.disclaimer: ${"x".repeat(160)}… (cut)`)
+    expect(INSTRUCTIONS).toMatch(/business\.prices in the facts[^\n]*quote/)
   })
 
   it("names no business kind and no assistant in the cached instructions", () => {
