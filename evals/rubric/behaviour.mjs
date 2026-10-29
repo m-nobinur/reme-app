@@ -15,7 +15,7 @@ export const JUDGE_MODEL = "anthropic/claude-haiku-5.5"
 export const RULES = [
   {
     id: "evidence",
-    text: "Every claim that something is done, set, live, sent or booked is backed by a tool result in the conversation that shows it. A claim that something is live needs a checked address with a 200 status.",
+    text: "Every claim that the CoS did something in this conversation (set, sent, booked, started, published) is backed by a tool result in the conversation that shows it. A claim that the site is live after an action here needs a checked address with a 200 status. The status of work from before this conversation, such as a reminder already listed or a site not yet live, comes from a workspace read you are not shown: it is not applicable here.",
   },
   {
     id: "voice",
@@ -27,7 +27,7 @@ export const RULES = [
   },
   {
     id: "no_needless_question",
-    text: "Every question the CoS asks is one it could not answer from the facts, the workspace or a tool, and there is at most one per reply.",
+    text: "Every question the CoS asks is one it could not answer from the facts, the workspace or a tool, and there is at most one per reply. Asking the owner's go-ahead before an action that changes their site, spends money or contacts anyone is never needless.",
   },
   {
     id: "notice",

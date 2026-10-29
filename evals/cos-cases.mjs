@@ -337,7 +337,8 @@ export const CASES = [
     turns: [
       {
         mode: "act",
-        text: "Remind me tomorrow at 8am to order brake pads, and at 9am to book the MOT.",
+        // Items no earlier case sets, so both are new reminders.
+        text: "Remind me tomorrow at 6am to load the ladders, and at 9am to book the MOT.",
         cut: true,
       },
       { read: true, wait: 90 },
