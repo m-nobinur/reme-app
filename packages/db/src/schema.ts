@@ -1178,6 +1178,7 @@ export const jobKind = pgEnum("job_kind", [
   "reminder",
   "heartbeat",
   "weekly_report",
+  "cos_continue",
 ])
 
 /**
@@ -1190,8 +1191,8 @@ export const jobKind = pgEnum("job_kind", [
  * due again until the lease runs out (the claimer died). When a run ends the
  * consumer writes `last_run_at`, clears `claimed_at` and moves `next_run_at`
  * forward, so the row is due again only at its next occurrence. `ref_id`
- * points at a `reminders` row and has no foreign key, because the other kinds
- * point at nothing.
+ * points at a `reminders` row, or a `cos_continue`'s conversation, and has
+ * no foreign key, because the other kinds point at nothing.
  */
 export const scheduledJobs = pgTable(
   "scheduled_jobs",
@@ -1209,6 +1210,8 @@ export const scheduledJobs = pgTable(
     lastRunAt: timestamp("last_run_at", { withTimezone: true }),
     failures: integer("failures").notNull().default(0),
     pausedAt: timestamp("paused_at", { withTimezone: true }),
+    /** `CosContinue` for a `cos_continue`; null for the other kinds. */
+    payload: jsonb("payload"),
     createdAt,
   },
   (t) => [
