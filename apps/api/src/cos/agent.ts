@@ -256,11 +256,12 @@ Rules:
 /**
  * `name`'s input as the model is sent it. `request_change`'s `step` stays in
  * the contract for stored calls but is not asked for: the status line comes
- * from the web's own copy.
+ * from the web's own copy. Its `chat` is the panel's alone, which posts the
+ * owner's words here.
  */
 const inputOf = <N extends CosToolName>(name: N) =>
   (name === "request_change"
-    ? CosChangeRequest.omit({ step: true })
+    ? CosChangeRequest.omit({ step: true, chat: true })
     : COS_TOOLS[name].input) as unknown as (typeof COS_TOOLS)[N]["input"]
 
 /**
@@ -970,8 +971,8 @@ const SPARE = ["label", "proof"] as const
 
 /**
  * A call refused by its schema only for a `step`, which no tool takes any
- * more but a model may copy from an older call in the history, or for a
- * spare field of `request_change`, with those dropped, so it runs on this
+ * more but a model may copy from an older call in the history, or for
+ * `request_change`'s panel-only `chat` or a spare field, with those dropped, so it runs on this
  * call rather than after the model sees the error and sends it again. Null
  * for any other.
  */
@@ -988,6 +989,7 @@ export function repairedCall<T extends { toolName: string; input: string }>(
   }
   delete input.step
   if (name === "request_change") {
+    delete input.chat
     for (const key of SPARE) {
       if (!CosChangeRequest.shape[key].safeParse(input[key]).success) {
         delete input[key]

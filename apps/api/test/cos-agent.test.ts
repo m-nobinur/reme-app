@@ -358,6 +358,11 @@ describe("a tool's schema", () => {
       ).not.toContain("step")
     }
     expect(instructions).not.toMatch(/takes an optional step/)
+    const change = tools.find((t) => t.name === "request_change")
+    // The panel's alone: it posts the owner's words in a conversation.
+    expect(Object.keys(change?.input_schema.properties ?? {})).not.toContain(
+      "chat"
+    )
   })
 
   it("sends each schema lean, as the prefix logs it, and Zod still checks the call", async () => {
@@ -431,12 +436,13 @@ describe("a call refused by its schema", () => {
     input: JSON.stringify(input),
   })
 
-  it("drops a spare field that failed, and any step, so the call runs now", () => {
+  it("drops a spare field that failed, any step and the panel's chat, so the call runs now", () => {
     const repaired = repairedCall(
       call({
         text: "Make the hero title more professional",
         label: "the main heading at the very top of your home page",
         step: "Rewriting the hero title",
+        chat: { conversation_id: crypto.randomUUID() },
       })
     )
     expect(JSON.parse(repaired?.input ?? "{}")).toEqual({
