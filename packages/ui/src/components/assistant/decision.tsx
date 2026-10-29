@@ -18,9 +18,10 @@ import {
   heldText,
   isHeld,
   NOT_DONE,
+  supersededBy,
   UNCONFIRMED,
 } from "@workspace/ui/lib/tool-state"
-import { cn } from "@workspace/ui/lib/utils"
+import { cn, META } from "@workspace/ui/lib/utils"
 import { type ReactNode, useId, useState } from "react"
 
 /**
@@ -76,6 +77,19 @@ export function Decision<I, O>({
   const id = useId()
   const held = useAuiState((s) => isHeld(s.message.parts, props.toolCallId))
   const running = useAuiState((s) => s.message.status?.type === "running")
+  const replaced = useAuiState((s) =>
+    supersededBy(s.thread.messages, props.toolName, props.toolCallId)
+  )
+  // A card the owner moved past for a newer one of the same kind leaves no
+  // line of its own; the newer one counts it.
+  if (replaced === "later") return null
+  const earlier = replaced ? (
+    // A span, as it also sits inside the answered line's paragraph.
+    <span className={cn(META, "block")}>
+      {replaced === 1 ? "1 earlier card" : `${replaced} earlier cards`}:{" "}
+      {cancelled.toLowerCase()}
+    </span>
+  ) : null
 
   if (view.state === "drafting") {
     return running ? (
@@ -120,6 +134,7 @@ export function Decision<I, O>({
       >
         {input ? <p>{detail(input)}</p> : null}
         {problem ? <Problem text={problem} /> : null}
+        {earlier}
       </TrayApproval>
     )
   }
@@ -135,6 +150,7 @@ export function Decision<I, O>({
           {heading}
         </h3>
         {done(view.output)}
+        {earlier}
       </section>
     )
   }
@@ -170,6 +186,7 @@ export function Decision<I, O>({
         >
           {line}
         </span>
+        {earlier}
       </span>
     </p>
   )

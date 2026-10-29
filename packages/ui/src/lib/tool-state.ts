@@ -44,6 +44,31 @@ const errorOf = (result: unknown): string =>
     ? String((result as { error: unknown }).error)
     : ""
 
+/**
+ * Where a call stands among the thread's calls of the same tool: `later`
+ * when a newer one replaced it, or how many cancelled ones run straight
+ * before it, which its card says in one line instead of one each.
+ */
+export function supersededBy(
+  messages: readonly { content: readonly object[] }[],
+  toolName: string,
+  toolCallId: string
+): number | "later" {
+  const calls = messages.flatMap((message) =>
+    (message.content as CallPart[]).filter(
+      (part) => part.type === "tool-call" && part.toolName === toolName
+    )
+  )
+  const at = calls.findIndex((part) => part.toolCallId === toolCallId)
+  if (at < 0) return 0
+  const cancelled = (part: CallPart | undefined) =>
+    Boolean(part?.isError) && errorOf(part?.result) === TOOL_CALL_CANCELLED
+  if (cancelled(calls[at]) && at < calls.length - 1) return "later"
+  let count = 0
+  while (cancelled(calls[at - count - 1])) count += 1
+  return count
+}
+
 /** A turn's error when the session behind it has ended; the thread offers sign-in. */
 export const SESSION_ENDED =
   "Your session has ended. Sign in again to carry on."
@@ -461,9 +486,10 @@ export function designText(
   return picked.length > 0 ? picked.join(" · ") : SKIPPED
 }
 
-/** The fields of a message part `isHeld` reads. */
+/** The fields of a message part `isHeld` and `supersededBy` read. */
 type CallPart = {
   type: string
+  toolName?: string
   toolCallId?: string
   approval?: { approved?: boolean | undefined } | undefined
   result?: unknown
