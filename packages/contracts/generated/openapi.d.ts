@@ -6066,6 +6066,7 @@ export interface components {
         reasoning_tokens?: number
       }
       cost_usd: number
+      model?: string
     }
     CosToolResult:
       | {
