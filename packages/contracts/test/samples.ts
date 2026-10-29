@@ -1287,6 +1287,7 @@ export const samples: Record<ContractName, unknown> = {
     last_run_at: null,
     failures: 0,
     paused_at: null,
+    payload: null,
     created_at: NOW,
   },
   JobRun: {

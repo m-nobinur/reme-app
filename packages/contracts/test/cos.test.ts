@@ -8,6 +8,7 @@ import {
   CosApproval,
   CosCompaction,
   CosFeedback,
+  CosMessage,
   CosToolName,
   CosToolResult,
   CosToolStarted,
@@ -417,6 +418,7 @@ describe("CosTurn", () => {
       "an abandoned turn",
       { outcome: "abandoned", turn_id, logged_usd: 0.002, reserved_usd: 0.008 },
     ],
+    ["a stopped turn", { ...ran, outcome: "stopped" }],
   ])("accepts %s", (_name, turn) => {
     expect(verdict("CosTurn", CosTurn, turn)).toEqual(ACCEPTED)
   })
@@ -432,6 +434,41 @@ describe("CosTurn", () => {
     ["a tool it does not have", { ...fallback, tools: ["publish"] }],
   ])("refuses %s", (_name, turn) => {
     expect(verdict("CosTurn", CosTurn, turn)).toEqual(REFUSED)
+  })
+})
+
+describe("CosMessage", () => {
+  const logged = samples.CosMessage as { message: Record<string, unknown> }
+  const reply = {
+    ...logged,
+    message: {
+      ...logged.message,
+      role: "assistant",
+      parts: [{ type: "text", text: "Checking" }],
+    },
+  }
+
+  it.each([
+    ["a message logged before the markers", reply],
+    [
+      "a stopped reply",
+      { ...reply, message: { ...reply.message, stopped: true } },
+    ],
+    [
+      "a partial reply",
+      { ...reply, message: { ...reply.message, stopped: true, partial: true } },
+    ],
+  ])("accepts %s", (_name, value) => {
+    expect(verdict("CosMessage", CosMessage, value)).toEqual(ACCEPTED)
+  })
+
+  it("refuses a marker that is not true", () => {
+    expect(
+      verdict("CosMessage", CosMessage, {
+        ...reply,
+        message: { ...reply.message, partial: false },
+      })
+    ).toEqual(REFUSED)
   })
 })
 
