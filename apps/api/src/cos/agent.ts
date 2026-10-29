@@ -41,7 +41,9 @@ import {
   convertToModelMessages,
   type FlexibleSchema,
   isStepCount,
+  type JSONSchema7,
   type JSONValue,
+  jsonSchema,
   type LanguageModel,
   type LanguageModelUsage,
   type ModelMessage,
@@ -261,6 +263,47 @@ const inputOf = <N extends CosToolName>(name: N) =>
     ? CosChangeRequest.omit({ step: true })
     : COS_TOOLS[name].input) as unknown as (typeof COS_TOOLS)[N]["input"]
 
+/**
+ * `schema` without what the generator adds and the model gains nothing
+ * from: `$schema`, and the pattern under a uuid or date-time format, which
+ * keeps its format, or one that only asks for some text. Zod still checks
+ * every call.
+ */
+function lean(schema: unknown): unknown {
+  if (Array.isArray(schema)) return schema.map(lean)
+  if (!schema || typeof schema !== "object") return schema
+  const { $schema: _, ...rest } = schema as Record<string, unknown>
+  if (
+    typeof rest.pattern === "string" &&
+    (rest.pattern === "\\S" ||
+      rest.format === "uuid" ||
+      rest.format === "date-time")
+  )
+    delete rest.pattern
+  return Object.fromEntries(
+    Object.entries(rest).map(([key, value]) => [key, lean(value)])
+  )
+}
+
+/** `name`'s input as the model reads it: `inputOf`, sent `lean`, checked by Zod. */
+const modelInput = <N extends CosToolName>(name: N) => {
+  const input = inputOf(name)
+  return jsonSchema<(typeof COS_TOOLS)[N]["input"]["_output"]>(
+    async () =>
+      lean(
+        await asSchema(input as FlexibleSchema<unknown>).jsonSchema
+      ) as JSONSchema7,
+    {
+      validate: (value) => {
+        const read = input.safeParse(value)
+        return read.success
+          ? { success: true, value: read.data }
+          : { success: false, error: read.error }
+      },
+    }
+  )
+}
+
 export const DESCRIPTIONS: Record<CosToolName, string> = {
   get_workspace:
     "Read the workspace now: the site, unfinished builds with their step, time and any restart, builds that stopped today, the Developer's open questions, reviews waiting on the owner, missing facts, domains, tasks and reminders. Use it when the context may be stale, such as after a change started.",
@@ -391,8 +434,10 @@ async function buildPrefix(): Promise<CosPrefix> {
     (Object.keys(COS_TOOLS) as CosToolName[]).map(async (name) => ({
       name,
       description: DESCRIPTIONS[name],
-      input_schema: (await asSchema(inputOf(name) as FlexibleSchema<unknown>)
-        .jsonSchema) as Record<string, unknown>,
+      input_schema: (await asSchema(modelInput(name)).jsonSchema) as Record<
+        string,
+        unknown
+      >,
     }))
   )
   const body = { version: PREFIX_VERSION, instructions: INSTRUCTIONS, tools }
@@ -1195,7 +1240,7 @@ function toolsFor(run: AgentTurn) {
   return {
     get_workspace: tool({
       ...describe("get_workspace"),
-      inputSchema: inputOf("get_workspace"),
+      inputSchema: modelInput("get_workspace"),
       // The labels the turn's context shows, never raw states or ids outside a ref.
       toModelOutput: ({ output }) => {
         const read = CosWorkspace.safeParse(output)
@@ -1209,47 +1254,47 @@ function toolsFor(run: AgentTurn) {
     }),
     get_facts: tool({
       ...describe("get_facts"),
-      inputSchema: inputOf("get_facts"),
+      inputSchema: modelInput("get_facts"),
     }),
     get_preview: tool({
       ...describe("get_preview"),
-      inputSchema: inputOf("get_preview"),
+      inputSchema: modelInput("get_preview"),
     }),
     request_change: tool({
       ...describe("request_change"),
-      inputSchema: inputOf("request_change"),
+      inputSchema: modelInput("request_change"),
     }),
     answer_question: tool({
       ...describe("answer_question"),
-      inputSchema: inputOf("answer_question"),
+      inputSchema: modelInput("answer_question"),
     }),
     create_reminder: tool({
       ...describe("create_reminder"),
-      inputSchema: inputOf("create_reminder"),
+      inputSchema: modelInput("create_reminder"),
     }),
     update_reminder: tool({
       ...describe("update_reminder"),
-      inputSchema: inputOf("update_reminder"),
+      inputSchema: modelInput("update_reminder"),
     }),
     delete_reminder: tool({
       ...describe("delete_reminder"),
-      inputSchema: inputOf("delete_reminder"),
+      inputSchema: modelInput("delete_reminder"),
     }),
     set_time_zone: tool({
       ...describe("set_time_zone"),
-      inputSchema: inputOf("set_time_zone"),
+      inputSchema: modelInput("set_time_zone"),
     }),
     record_review: tool({
       ...describe("record_review"),
-      inputSchema: inputOf("record_review"),
+      inputSchema: modelInput("record_review"),
     }),
     check_domain: tool({
       ...describe("check_domain"),
-      inputSchema: inputOf("check_domain"),
+      inputSchema: modelInput("check_domain"),
     }),
     connect_domain: tool({
       ...describe("connect_domain"),
-      inputSchema: inputOf("connect_domain"),
+      inputSchema: modelInput("connect_domain"),
       // The card holds the signed link; the model only needs to know it is there.
       toModelOutput: ({ output }) => {
         const read = ConnectDomainOutput.safeParse(output)
@@ -1261,15 +1306,15 @@ function toolsFor(run: AgentTurn) {
     }),
     remove_domain: tool({
       ...describe("remove_domain"),
-      inputSchema: inputOf("remove_domain"),
+      inputSchema: modelInput("remove_domain"),
     }),
     find_domain: tool({
       ...describe("find_domain"),
-      inputSchema: inputOf("find_domain"),
+      inputSchema: modelInput("find_domain"),
     }),
     buy_domain: tool({
       ...describe("buy_domain"),
-      inputSchema: inputOf("buy_domain"),
+      inputSchema: modelInput("buy_domain"),
       // The page shows the owner their details; the model reads only what is missing.
       toModelOutput: ({ output }) => {
         const read = BuyDomainOutput.safeParse(output)
@@ -1289,31 +1334,31 @@ function toolsFor(run: AgentTurn) {
     }),
     get_search_performance: tool({
       ...describe("get_search_performance"),
-      inputSchema: inputOf("get_search_performance"),
+      inputSchema: modelInput("get_search_performance"),
     }),
     get_indexing: tool({
       ...describe("get_indexing"),
-      inputSchema: inputOf("get_indexing"),
+      inputSchema: modelInput("get_indexing"),
     }),
     connect_google: tool({
       ...describe("connect_google"),
-      inputSchema: inputOf("connect_google"),
+      inputSchema: modelInput("connect_google"),
     }),
     domain_bought: tool({
       ...describe("domain_bought"),
-      inputSchema: inputOf("domain_bought"),
+      inputSchema: modelInput("domain_bought"),
     }),
     inspect_domain: tool({
       ...describe("inspect_domain"),
-      inputSchema: inputOf("inspect_domain"),
+      inputSchema: modelInput("inspect_domain"),
     }),
     remember: tool({
       ...describe("remember"),
-      inputSchema: inputOf("remember"),
+      inputSchema: modelInput("remember"),
     }),
     put_off: tool({
       ...describe("put_off"),
-      inputSchema: inputOf("put_off"),
+      inputSchema: modelInput("put_off"),
     }),
   }
 }

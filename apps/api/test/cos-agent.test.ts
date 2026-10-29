@@ -4,6 +4,7 @@ import {
   ChangeKind,
   ChatRequest,
   COS_TOOLS,
+  type CosToolName,
   CosToolResult,
   CosTurn,
   CreateReminderRequest,
@@ -39,7 +40,10 @@ import models from "@workspace/facade/models/openrouter.models.json" with {
   type: "json",
 }
 import {
+  asSchema,
+  type FlexibleSchema,
   type InferAgentUIMessage,
+  type LanguageModel,
   readUIMessageStream,
   type UIMessage,
   type UIMessageChunk,
@@ -59,12 +63,14 @@ import {
 import type { z } from "zod"
 import { type ChatDeps, chat, NO_ANSWER } from "../src/chat.ts"
 import {
+  type AgentTurn,
   APPROVAL_TTL_MS,
   activeTools,
   binds,
   type CosAgent,
   callRepeated,
   contextOf,
+  cosAgent,
   cosPrefix,
   costOf,
   DEFAULT_MODEL,
@@ -352,6 +358,29 @@ describe("a tool's schema", () => {
       ).not.toContain("step")
     }
     expect(instructions).not.toMatch(/takes an optional step/)
+  })
+
+  it("sends each schema lean, as the prefix logs it, and Zod still checks the call", async () => {
+    const { tools: logged } = await cosPrefix()
+    const sent = cosAgent({} as AgentTurn, {} as LanguageModel, "act")
+      .tools as Record<CosToolName, { inputSchema: FlexibleSchema<unknown> }>
+    for (const { name, input_schema } of logged) {
+      const schema = asSchema(sent[name as CosToolName].inputSchema)
+      expect(await schema.jsonSchema, name).toEqual(input_schema)
+    }
+    const text = JSON.stringify(logged)
+    expect(text).not.toContain("$schema")
+    expect(text).not.toContain('"pattern":"\\\\S"')
+    const update = logged.find((t) => t.name === "update_reminder")
+      ?.input_schema.properties as Record<string, unknown> | undefined
+    expect(update?.reminder_id).toEqual({ type: "string", format: "uuid" })
+    const check = asSchema(sent.update_reminder.inputSchema).validate
+    expect(await check?.({ reminder_id: "not-a-ref" })).toMatchObject({
+      success: false,
+    })
+    expect(
+      await check?.({ reminder_id: crypto.randomUUID(), title: " " })
+    ).toMatchObject({ success: false })
   })
 })
 
