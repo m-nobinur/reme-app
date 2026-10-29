@@ -252,19 +252,29 @@ jobs:
       # `WORKOS_API_KEY` is scoped to this step rather than the job, so it is not
       # in the environment of the build, the migration or the uploads. It fails
       # rather than skips: a gate that quietly does not run is the defect this
-      # step exists to close.
+      # step exists to close. The one exception is a PR that adds a migration:
+      # this api reads staging's database, which has not run it, so any query
+      # on a changed table fails here. That smoke still runs and its failure is
+      # a warning in the summary; staging migrates before it deploys and its
+      # own smoke is the gate for the schema.
       - name: Smoke
         env:
           WORKOS_API_KEY: ${{ secrets.WORKOS_API_KEY }}
           E2E_BASE_URL: ${{ steps.urls.outputs.web }}
           WORKOS_CLIENT_ID: client_01M0WWHM5TQAA6MDR2W910XA75
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           if [ -z "${WORKOS_API_KEY:-}" ]; then
             echo "::error::missing repository secret WORKOS_API_KEY, so the smoke could not sign in"
             echo "Set it from the staging environment: gh secret set WORKOS_API_KEY"
             exit 1
           fi
-          pnpm e2e
+          git fetch --quiet --depth=1 origin "$BASE_SHA"
+          migrations=$(git diff --name-only --diff-filter=A "$BASE_SHA" HEAD -- 'packages/db/drizzle/*.sql')
+          if pnpm e2e; then exit 0; fi
+          [ -n "$migrations" ] || exit 1
+          echo "::warning::the smoke failed on a PR that adds $migrations; this preview reads staging's unmigrated database, so the staging deploy's smoke is the gate"
+          echo "The smoke failed against staging's unmigrated database, since this PR adds \`$migrations\`. The staging deploy migrates first and runs the smoke as the gate." >> "$GITHUB_STEP_SUMMARY"
 
   teardown:
     if: github.event.action == 'closed' && github.event.pull_request.user.login != 'dependabot[bot]'
