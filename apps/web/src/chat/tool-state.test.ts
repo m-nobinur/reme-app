@@ -7,6 +7,7 @@ import {
   OwnerChangeRequest,
   RequestChangeOutput,
 } from "@workspace/contracts"
+import { phoneText } from "@workspace/ui/lib/facts"
 import { refusalText } from "@workspace/ui/lib/refusal"
 import {
   askChoiceView,
@@ -19,7 +20,6 @@ import {
   detailsText,
   isHeld,
   isRetried,
-  phoneText,
   readView,
   showsProgress,
   UNCONFIRMED,
@@ -452,10 +452,11 @@ it("reads every ask_details state, and the answer in the owner's words", () => {
   ).toBe("error")
 })
 
-it("writes a UK number the way it is written at home, and leaves others", () => {
+it("writes a number the way it is written in its country, and leaves others", () => {
   expect(phoneText("+447700900123")).toBe("07700 900123")
   expect(phoneText("+442079460000")).toBe("020 7946 0000")
-  expect(phoneText("+14155550100")).toBe("+14155550100")
+  expect(phoneText("+14155550100")).toBe("(415) 555-0100")
+  expect(phoneText("+33142685300")).toBe("+33142685300")
 })
 
 it("hides a refusal the same tool was called again after, and only that", () => {

@@ -14,10 +14,8 @@ import {
   AskUploadOutput,
   type FactValue,
   FactValueKey,
-  PRONOUNS,
   ReviewQuoteFormInput,
   ReviewQuoteFormOutput,
-  TONES,
   TOOL_CALL_CANCELLED,
   toolErrorKind,
 } from "@workspace/contracts"
@@ -313,30 +311,6 @@ export const askOpenView = (part: ToolPartView): AskOpenView =>
   askView(part, AskOpenInput, AskOpenOutput)
 
 /**
- * A UK number as it is written at home: `+447700900123` as `07700 900123`.
- * Any other number stays as it is.
- */
-export function phoneText(e164: string): string {
-  const digits = /^\+44(\d{10})$/.exec(e164)?.[1]
-  if (!digits) return e164
-  const national = `0${digits}`
-  // The grouping packages/starter-site/src/phone.ts uses and tests, so the
-  // card and the site write a number alike. 02x: 3+4+4. 011x, 01x1 and 03,
-  // 05, 08: 4+3+4. Other 01xxx and 07: 5+6.
-  if (national.startsWith("02"))
-    return `${national.slice(0, 3)} ${national.slice(3, 7)} ${national.slice(7)}`
-  return /^0(?:11\d|1\d1|[358])/.test(national)
-    ? `${national.slice(0, 4)} ${national.slice(4, 7)} ${national.slice(7)}`
-    : `${national.slice(0, 5)} ${national.slice(5)}`
-}
-
-/** A preset's label by id; an id no longer offered reads as itself. */
-export const presetLabel = (
-  presets: readonly { id: string; label: string }[],
-  id: string
-) => presets.find((each) => each.id === id)?.label ?? id
-
-/**
  * Details as the owner gave them, in the tray's order and the words it
  * showed: "07700 900123 · hello@example.com" or "Ava · she/her · Friendly".
  * The face is a picture, so it has no words here.
@@ -344,14 +318,7 @@ export const presetLabel = (
 export function detailsText(facts: readonly FactValue[]): string {
   return facts
     .filter((fact) => fact.key !== "assistant.avatar")
-    .map((fact) => {
-      if (fact.key === "business.phone") return phoneText(fact.value.e164)
-      if (fact.key === "assistant.pronouns")
-        return presetLabel(PRONOUNS, fact.value.id)
-      if (fact.key === "assistant.tone")
-        return presetLabel(TONES, fact.value.id)
-      return factText(fact.key, fact.value)
-    })
+    .map((fact) => factText(fact.key, fact.value))
     .join(" · ")
 }
 
