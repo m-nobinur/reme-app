@@ -23,6 +23,7 @@ describe("voiceProblems", () => {
     "Cytech qualified and a three-month guarantee will give customers plenty of confidence.",
     "That makes sense, especially for commuters who rely on their bike each day.",
     "Nice touch with the van.",
+    "Got it, chasing unpaid jobs and handling quote requests will take a lot off your hands.",
   ]
   const AFTER = [
     "I'm Ellie. Now a few questions about the website.",

@@ -45,7 +45,7 @@ const SOFT: readonly [RegExp, string][] = [
   ],
   [/\bas your (business )?assistant\b/i, '"as your assistant"'],
   [
-    /\b(will|would|should|'ll) give (your |their )?(customers|clients|people|riders|visitors)\b|\b(plenty of|real|extra) (confidence|reassurance)\b|(?<=^|[.!?]["'”’)]*\s+)(that|this|it) makes (good |a lot of |total )?sense\b|\b(great|nice|good|smart|excellent) (choice|call|idea|touch|detail|point)\b/i,
+    /\b(will|would|should|'ll) give (your |their )?(customers|clients|people|riders|visitors)\b|\b(plenty of|real|extra) (confidence|reassurance)\b|(?<=^|[.!?]["'”’)]*\s+)(that|this|it) makes (good |a lot of |total )?sense\b|\b(great|nice|good|smart|excellent) (choice|call|idea|touch|detail|point)\b|\b(will|'ll) take (a lot|loads|plenty|a load) off your (hands|plate)\b/i,
     "praise for the owner's answer",
   ],
 ]
