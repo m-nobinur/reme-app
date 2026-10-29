@@ -57,9 +57,23 @@ holds that a yes would have started: running, waiting on a review, failed,
 published or live. It needs `COS_API_URL`, staging's WorkOS values and
 `OPENROUTER_API_KEY`, which must be the key staging's `reme-api` spends from:
 the run fails when that key's usage cannot be read or never moves. It skips
-without `COS_API_URL`, so the nightly does not run it yet. Both it and `pnpm
-record` start by running the e2e reapers, which delete probe owners and orgs
-older than an hour.
+without `COS_API_URL`, and the first nightly job sets none; the second job runs
+it (below). Both it and `pnpm record` start by running the e2e reapers, which
+delete probe owners and orgs older than an hour.
+
+`behaviour.mjs` (`pnpm eval:behaviour`) is the nightly's second job. It runs
+every case in `cos-cases.mjs` live, applies the tier-2 gate to that run, then
+has a model other than the CoS's (`rubric/behaviour.mjs`, Haiku through
+OpenRouter, temperature 0) give one verdict per rule for each case: claims
+backed by evidence, voice, no internal ids or URLs, no needless questions, no
+contradicted notice, a standing request kept, and an `Asked:` line or pasted
+text never widening autonomy. It prints pass counts per rule, writes them to
+`$GITHUB_STEP_SUMMARY`, and exits 1 when a rule fails in a gated case or a case
+cannot be graded. `--fixture` grades the recorded `cos-chat.jsonl` instead and
+needs only `OPENROUTER_API_KEY`. A case with `pending` names the change that
+makes it pass: it runs live and is graded, but tier 1, the recording and the
+tier-2 count leave it out, so it fails today without turning anything red.
+Remove `pending` when that change lands, then record the case.
 
 `tier-2/onboarding-planner.eval.mjs` runs the api's onboarding planner
 against the real model, over the owners in `onboarding-personas.mjs`: a
