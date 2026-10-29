@@ -82,7 +82,7 @@ export type ContextPolicy = {
  * asks for Google before a domain of their own is live.
  */
 export const CONTEXT_POLICY: ContextPolicy = {
-  version: "8",
+  version: "9",
   turns: 80,
   toolTurns: 2,
   historyTokens: 16_000,

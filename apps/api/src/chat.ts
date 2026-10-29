@@ -63,6 +63,7 @@ import {
   priceOf,
   reservation,
   routeOf,
+  SETS_RULE,
   toolErrorText,
 } from "./cos/agent.ts"
 import {
@@ -1050,7 +1051,8 @@ export async function chat(
         personaOf(facts, profile),
         turn.kind === "message" && log.fresh,
         await google,
-        facts
+        facts,
+        turn.kind === "message" && SETS_RULE.test(turn.text)
       )
       await beginTurn(db, cosTurn, {
         prefix: log.prefixLogged ? null : prefix,
