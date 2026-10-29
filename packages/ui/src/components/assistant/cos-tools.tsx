@@ -240,24 +240,28 @@ function ReminderSet({
   const id = set?.reminder_id
   return (
     <Done>
-      {set?.replaced ? "Moved the reminder." : "Added to Reminders."}
-      {set?.due_at ? ` ${dueIn(formatDateTime(set.due_at, at), at)}.` : ""}
-      {id && removeReminder ? (
-        <Button
-          disabled={undo === "busy"}
-          onClick={() => {
-            setUndo("busy")
-            removeReminder(id).then(
-              (r) => setUndo(r.done ? "done" : "failed"),
-              () => setUndo("failed")
-            )
-          }}
-          size="xs"
-          variant="ghost"
-        >
-          {undo === "failed" ? "Couldn't undo. Try again" : "Undo"}
-        </Button>
-      ) : null}
+      {/* One flex item, so the sentence keeps its width and Undo follows it. */}
+      <span>
+        {set?.replaced ? "Moved the reminder." : "Added to Reminders."}
+        {set?.due_at ? ` ${dueIn(formatDateTime(set.due_at, at), at)}.` : ""}
+        {id && removeReminder ? (
+          <Button
+            className="ms-1 h-auto p-0 align-baseline"
+            disabled={undo === "busy"}
+            onClick={() => {
+              setUndo("busy")
+              removeReminder(id).then(
+                (r) => setUndo(r.done ? "done" : "failed"),
+                () => setUndo("failed")
+              )
+            }}
+            size="xs"
+            variant="link"
+          >
+            {undo === "failed" ? "Couldn't undo. Try again" : "Undo"}
+          </Button>
+        ) : null}
+      </span>
     </Done>
   )
 }
