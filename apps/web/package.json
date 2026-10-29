@@ -40,7 +40,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
     "fast-check": "4.10.2",
-    "happy-dom": "21.0.3",
+    "happy-dom": "21.0.4",
     "micromark": "4.0.3",
     "micromark-extension-gfm": "3.0.0",
     "typescript": "^6",
