@@ -17,6 +17,6 @@ has_script() {
 }
 run_script() {
   has_script "$1" || { warn "  ↷ skip pnpm $1 (not defined yet)"; return 0; }
-  printf '  → pnpm %s\n' "$1" >&2
-  pnpm "$1" || die "pnpm $1 failed. Fix it, or --no-verify and own the consequences."
+  printf '  → pnpm %s\n' "$*" >&2
+  pnpm "$@" || die "pnpm $1 failed. Fix it, or --no-verify and own the consequences."
 }

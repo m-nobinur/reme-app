@@ -45,7 +45,7 @@ jobs:
           key: turbo-${{ runner.os }}-${{ github.run_id }}
           restore-keys: turbo-${{ runner.os }}-
 
-      - run: pnpm typecheck
+      - run: pnpm typecheck:ci
 
       - run: pnpm lint:ci --reporter=github
 

@@ -24,6 +24,18 @@ if ! out=$(pnpm install --frozen-lockfile --prefer-offline 2>&1); then
   die "pnpm install --frozen-lockfile failed. Fix the install before pushing."
 fi
 
-run_script typecheck
-run_script test
+# Only the packages this branch changes and their dependents, against the
+# merge-base with origin/main (or a TURBO_SCM_BASE you set, for a stacked
+# branch). Without that ref, everything.
+export TURBO_SCM_BASE=${TURBO_SCM_BASE:-origin/main}
+affected=
+if git rev-parse -q --verify "$TURBO_SCM_BASE^{commit}" >/dev/null; then
+  affected=--affected
+else
+  warn "  ↷ $TURBO_SCM_BASE not found: checking every package"
+fi
+# shellcheck disable=SC2086 # empty means no argument
+run_script typecheck $affected
+# shellcheck disable=SC2086
+run_script test $affected
 ok "✓ pre-push"
