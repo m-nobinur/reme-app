@@ -173,15 +173,18 @@ jobs:
       # Object bindings into the config wrangler deploys.
       - run: pnpm --filter orchestrator build
 
-      # shortcut: Cloudflare answers the container application read with 500 (#335); drop the fallback once it answers 200.
+      # shortcut: Cloudflare's container application read 500s for minutes at a time (#335); drop the retry once it is fixed.
       - name: Deploy the orchestrator
         run: |
           set -o pipefail
-          pnpm --filter orchestrator exec wrangler deploy \
-            --config dist/reme_orchestrator/wrangler.json \
-            --message "${{ github.sha }}" 2>&1 | tee "$RUNNER_TEMP/orchestrator-deploy.log" && exit 0
-          grep -q "The Worker version was deployed, but .*Durable Object-managed Container application settings" "$RUNNER_TEMP/orchestrator-deploy.log" || exit 1
-          echo "::warning::The orchestrator is live but its container settings were not applied (#335)."
+          for attempt in 1 2 3; do
+            pnpm --filter orchestrator exec wrangler deploy \
+              --config dist/reme_orchestrator/wrangler.json \
+              --message "${{ github.sha }}" 2>&1 | tee "$RUNNER_TEMP/orchestrator-deploy.log" && exit 0
+            grep -q "The Worker version was deployed, but .*Durable Object-managed Container application settings" "$RUNNER_TEMP/orchestrator-deploy.log" || exit 1
+            [ "$attempt" = 3 ] || sleep 60
+          done
+          echo "::warning::The orchestrator is live but its container settings were not applied after 3 tries (#335)."
 
       - name: The orchestrator answers
         run: |
