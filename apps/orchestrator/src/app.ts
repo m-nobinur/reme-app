@@ -572,9 +572,10 @@ async function createAssignment(
 
 /**
  * Create the instance for a row, with the assignment id as the instance id so
- * a second create is refused by Workflows rather than run twice. The row
- * records the instance once it exists; a `queued` row with none is the
- * reconcile case `POST /:id/start` covers.
+ * a second create is refused by Workflows rather than run twice. The build
+ * is taken once its row commits: a create that throws may still have made
+ * the instance, so the row records the id either way, and `redriveQueued`
+ * starts a new instance when that id has none.
  */
 async function start(
   c: Context<ConsoleEnv>,
@@ -585,13 +586,22 @@ async function start(
     assignment_id: assignmentId,
     org_id: orgId,
   }
-  const instance = await c.env.ASSIGNMENTS.create({ id: assignmentId, params })
+  await c.env.ASSIGNMENTS.create({ id: assignmentId, params }).catch(
+    (error: unknown) =>
+      console.error(
+        JSON.stringify({
+          code: "assignment.start_failed",
+          assignment_id: assignmentId,
+          error: error instanceof Error ? error.name : "unknown",
+        })
+      )
+  )
   await c
     .get("kit")
     .withOrg({ orgId }, (db) =>
       db
         .update(assignments)
-        .set({ workflowInstanceId: instance.id })
+        .set({ workflowInstanceId: assignmentId })
         .where(eq(assignments.id, assignmentId))
     )
 }

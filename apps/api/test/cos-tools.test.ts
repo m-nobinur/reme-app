@@ -765,16 +765,14 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       })
     })
 
-    it("throws, never refuses, on an unknown outcome, and the rerun finds the one build", async () => {
-      const approval = crypto.randomUUID()
-      const hung = creating(me, true)
+    it("throws, never refuses, when a create times out with nothing made", async () => {
       const restore = deadline(300)
       let failed: unknown
       try {
         failed = await requestChange(
-          context(me, hung),
+          context(me, stubOrchestrator(never)),
           { text: "Add Mondays" },
-          approval,
+          crypto.randomUUID(),
           await turnOf(me)
         ).catch((error: unknown) => error)
       } finally {
@@ -785,7 +783,31 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         status: 503,
         error: { class: "transient", code: "orchestrator.timeout" },
       })
+    })
+
+    it("takes a build whose create timed out after its row landed, and the rerun finds the same one", async () => {
+      const approval = crypto.randomUUID()
+      const hung = creating(me, true)
+      const restore = deadline(300)
+      let first: unknown
+      try {
+        first = kept(
+          "request_change",
+          await requestChange(
+            context(me, hung),
+            { text: "Add Mondays" },
+            approval,
+            await turnOf(me)
+          )
+        )
+      } finally {
+        restore()
+      }
       const made = built.at(-1)
+      expect(first).toMatchObject({
+        outcome: "started",
+        build: { assignment_id: made },
+      })
       const retry = creating(me)
       const again = kept(
         "request_change",

@@ -2410,6 +2410,21 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
         }
       }
 
+      /** The first option on every question, as a finished tray sends it. */
+      const picksOf = (tray: AskDesignInput) =>
+        Object.fromEntries(
+          tray.questions.map((q) => [
+            q.id,
+            q.visual === "logo"
+              ? { logo: LOGO }
+              : q.visual === "photos"
+                ? { photos: [], create: true }
+                : q.card.multiple
+                  ? { choices: [q.card.options[0]?.id] }
+                  : { choice: q.card.options[0]?.id },
+          ])
+        )
+
       it("states an answer as the owner leaves its question, and stays open for the rest", async () => {
         const { who, id, card, at, tray } = await atTray("chat-tray-partial")
         const option = tray.questions[1]?.card.options[0]?.id as string
@@ -2466,18 +2481,7 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
 
       it("finishes on Build my site, and Skip all leaves the look to the builder", async () => {
         const done = await atTray("chat-tray-done")
-        const picks = Object.fromEntries(
-          done.tray.questions.map((q) => [
-            q.id,
-            q.visual === "logo"
-              ? { logo: LOGO }
-              : q.visual === "photos"
-                ? { photos: [], create: true }
-                : q.card.multiple
-                  ? { choices: [q.card.options[0]?.id] }
-                  : { choice: q.card.options[0]?.id },
-          ])
-        )
+        const picks = picksOf(done.tray)
         // The orchestrator snapshots the facts over its own connection, so
         // the tray's answer must be committed before the build starts.
         const seen: string[] = []
@@ -2531,6 +2535,45 @@ describe.skipIf(!url)("POST /chat, on a live connection", () => {
           id: "builder",
         })
         expect(held.find((f) => f.key === "site.palette")).toBeUndefined()
+      }, 60_000)
+
+      it("takes the answer whose build landed though the orchestrator answered 503, and starts it once", async () => {
+        const done = await atTray("chat-tray-lost")
+        const landed = stubOrchestrator(async (request) => {
+          await seed(kit, done.who).assignment("queued", {
+            key: request.headers.get("idempotency-key") as string,
+          })
+          return Response.json(
+            {
+              class: "transient",
+              code: "request.failed",
+              message: "The request could not be completed.",
+              detail: {},
+              occurred_at: AT,
+            },
+            { status: 503 }
+          )
+        })
+        const sent = answer(done.at, {
+          answers: picksOf(done.tray),
+          skip_all: false,
+        })
+        const built = await talker(done.who).turn(done.id, sent, landed)
+        expect(
+          built.after.parts.find((p) => p.type === "tool-ask_design")
+        ).toMatchObject({ state: "output-available" })
+        expect(
+          built.after.parts.find((p) => p.type === "tool-request_change")
+        ).toMatchObject({
+          state: "output-available",
+          output: { outcome: "started" },
+        })
+        const again = await talker(done.who).send(
+          { conversation_id: done.id, mode: "act", ...sent },
+          landed
+        )
+        expect(again.response.status, again.text).toBeLessThan(500)
+        expect(landed.calls).toHaveLength(1)
       }, 60_000)
     })
 

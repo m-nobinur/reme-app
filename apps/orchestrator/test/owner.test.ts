@@ -216,6 +216,50 @@ live("an owner starting a build", () => {
     ).toEqual(["untrusted_input"])
   })
 
+  it("takes the build once its row commits though the Workflow create throws, and replays it", async () => {
+    const { orgId } = await ownerOrg(kit)
+    const key = crypto.randomUUID()
+    const creates: string[] = []
+    const api = new OwnerApi(
+      undefined as never,
+      {
+        ...env,
+        ASSIGNMENTS: {
+          create: async ({ id }: { id: string }) => {
+            creates.push(id)
+            throw new Error("Durable Object reset")
+          },
+        },
+      } as unknown as Env
+    )
+    const send = () =>
+      api.fetch(
+        new Request("https://orchestrator/assignments/", {
+          method: "POST",
+          headers: {
+            ...as(orgId),
+            "content-type": "application/json",
+            "idempotency-key": key,
+          },
+          body: JSON.stringify({ goal: "Build my site" }),
+        })
+      )
+    const first = await send()
+    expect(first.status).toBe(201)
+    const { assignment_id } = (await first.json()) as { assignment_id: string }
+    const [row] = await kit.withOrg({ orgId }, (db) =>
+      db
+        .select({ instance: assignments.workflowInstanceId })
+        .from(assignments)
+        .where(sql`${assignments.id} = ${assignment_id}`)
+    )
+    expect(row?.instance).toBe(assignment_id)
+    const again = await send()
+    expect(again.status).toBe(200)
+    expect(await again.json()).toMatchObject({ assignment_id })
+    expect(creates).toEqual([assignment_id])
+  })
+
   it("taints an owner's steer and leaves the console's alone", async () => {
     const { orgId, slug } = await ownerOrg(kit)
     const ids = await newAssignment(kit, orgId)
