@@ -27,6 +27,7 @@ import {
   ToolStatus,
 } from "@workspace/ui/components/status-line"
 import { useCopyToClipboard } from "@workspace/ui/hooks/use-copy-to-clipboard"
+import { useLiveCards } from "@workspace/ui/lib/live-cards"
 import { refusalText } from "@workspace/ui/lib/refusal"
 import { decisionView, readView } from "@workspace/ui/lib/tool-state"
 import { META } from "@workspace/ui/lib/utils"
@@ -195,7 +196,11 @@ function Records({
   )
 }
 
-/** A connect under way: the records to add, or that it needs none from the owner. */
+/**
+ * A connect under way: the records to add, or that it needs none from the
+ * owner. Once the website is live on the domain, only that, so an old card
+ * never offers the records again.
+ */
 export function ConnectSteps({
   name,
   output,
@@ -203,6 +208,9 @@ export function ConnectSteps({
   name: string
   output: Connecting
 }) {
+  if (useLiveCards()?.domainLive(name)) {
+    return <Done>{`Your website is live on ${name}.`}</Done>
+  }
   return output.steps?.length ? (
     <Records name={name} output={output} steps={output.steps} />
   ) : (
