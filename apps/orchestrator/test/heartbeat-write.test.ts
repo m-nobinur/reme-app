@@ -74,6 +74,18 @@ describe("a message's links and numbers", () => {
       })
   })
 
+  it("makes a message's dashes commas, as the chat does, so the email has none", () => {
+    // A local approval email, 2026-10-29.
+    expect(
+      replyOf(
+        "Your change expires on Friday, 30 October 2026 at 11:40 AM—would you like to approve it now?"
+      )
+    ).toEqual({
+      kind: "message",
+      text: "Your change expires on Friday, 30 October 2026 at 11:40 AM, would you like to approve it now?",
+    })
+  })
+
   it("reads a broken limit as an error and quiet as quiet", () => {
     expect(replyOf("One. Two. Three. Four.")).toEqual({
       kind: "error",

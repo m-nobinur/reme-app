@@ -263,6 +263,17 @@ live("a build note in the assistant's own voice", () => {
       checks_failed: ["checking every claim against your details"],
       draft: "template",
     })
+    expect(
+      await narrate(
+        env,
+        kit,
+        orgId,
+        "site.build",
+        note,
+        "template",
+        writer("I hit a snag checking your details — so I've started it again.")
+      )
+    ).toBe("I hit a snag checking your details, so I've started it again.")
   })
 
   it("falls back to the template on a bad line, an error, no key or the hourly cap", async () => {

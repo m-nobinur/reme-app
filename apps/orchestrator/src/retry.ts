@@ -8,6 +8,7 @@ import {
   BuildSummary,
   buildFailure,
   CompletionReport,
+  dashesToCommas,
   type GateName,
   PLANNED_PAGES,
   TONES,
@@ -397,7 +398,7 @@ export async function narrate(
       },
       NARRATE_TIMEOUT_MS
     )
-    const text = written.text.trim()
+    const text = dashesToCommas(written.text.trim())
     const kept = narrationOk(text, [
       known.name ?? "",
       known.business ?? "",
