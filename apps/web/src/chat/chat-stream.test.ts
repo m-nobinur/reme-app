@@ -190,10 +190,14 @@ afterEach(async () => {
   churn = false
 })
 
+/** What Retry sends, as the chat page holds it. */
+const retry: { current: (() => void) | null } = { current: null }
+
 /** The runtime the chat page builds per thread. */
 const useThreadRuntime = () =>
   useConversationRuntime({
     onFinish: () => undefined,
+    retry,
     // On offer, as the page offers them on a new chat; a stored
     // conversation must never show one.
     suggestions: [{ prompt: "Build my website" }],
@@ -235,6 +239,7 @@ function Chat() {
           autoFocus: false,
           stored: ID,
           components: { ToolFallback: Approval },
+          onRetry: () => retry.current?.(),
         })
       )
     )
@@ -825,6 +830,27 @@ for (const [failure, answer] of Object.entries(FAILURES)) {
     await matches(chat, FIXTURE.histories.typed)
   })
 }
+
+it("a typed message that fails on the way stays once, with the error and Retry, which sends it again", async () => {
+  const chat = await open(FIXTURE.histories.start)
+  const before = transcript(chat)
+  turns.push(() => Promise.reject(new TypeError("Failed to fetch")))
+  await type(chat, "Hello")
+  await vi.waitFor(() =>
+    expect(
+      button(chat, "Retry").closest(".aui-message-error-root")
+    ).not.toBeNull()
+  )
+  // The owner's words once, in the thread and not back in the composer.
+  expect(transcript(chat).sort()).toEqual([...before, "Hello"].sort())
+  expect(chat.querySelector("textarea")?.value).toBe("")
+
+  turns.push(sse(FIXTURE.streams.typed))
+  await press(chat, "Retry")
+  await vi.waitFor(() => expect(sent).toHaveLength(2))
+  await matches(chat, FIXTURE.histories.typed)
+  expect(chat.querySelector(".aui-message-error-root")).toBeNull()
+})
 
 /**
  * A Chief of Staff step as `apps/api` stores it: a read the agent ran

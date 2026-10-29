@@ -47,10 +47,11 @@ type ChatTools = {
  * where assistant-ui reads a submitted one, and, on a message sent here,
  * whether it is the owner's reply to a card rather than a typed message,
  * and whether the reply's words are ones they typed, such as changes to a
- * proposed quote form.
+ * proposed quote form. `retry` marks the reply a failed turn left, which
+ * offers Retry.
  */
 type ChatMetadata = {
-  custom?: { createdAt?: string }
+  custom?: { createdAt?: string; retry?: true }
   submittedFeedback?: { type: "positive" | "negative" }
   reply?: true
   typed?: true

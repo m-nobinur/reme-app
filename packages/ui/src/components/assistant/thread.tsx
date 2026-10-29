@@ -165,6 +165,8 @@ export type ThreadProps = {
    * `seen` records that it now has.
    */
   reveal?: ThreadReveal | undefined
+  /** Sends the owner's last message again, offered on a reply that failed. */
+  onRetry?: (() => void) | undefined
 }
 
 export type ThreadReveal = {
@@ -276,6 +278,8 @@ export const Thread: FC<ThreadProps> = ({
   briefing,
   quickActions,
   mode,
+  assistant,
+  onRetry,
   after,
   updates,
   reveal,
@@ -303,8 +307,19 @@ export const Thread: FC<ThreadProps> = ({
       briefing,
       quickActions,
       mode,
+      assistant,
+      onRetry,
     }),
-    [stored, placeholder, questionPlaceholder, briefing, quickActions, mode]
+    [
+      stored,
+      placeholder,
+      questionPlaceholder,
+      briefing,
+      quickActions,
+      mode,
+      assistant,
+      onRetry,
+    ]
   )
   // Held by its parts, so a caller's inline object does not redraw every
   // message on each of its renders, such as each workspace poll.
@@ -1188,22 +1203,31 @@ const ComposerSend: FC<{ expanded: boolean }> = ({ expanded }) => {
 }
 
 const MessageError: FC = () => {
+  const { onRetry } = useContext(ThreadSettingsContext)
   const ended = useAuiState(
     (s) =>
       s.message.status?.type === "incomplete" &&
       s.message.status.error === SESSION_ENDED
   )
+  // Only a reply the app marked as one it can send again, and only the last.
+  const retryable = useAuiState(
+    (s) => s.message.isLast && s.message.metadata.custom?.["retry"] === true
+  )
   return (
     <MessagePrimitive.Error>
-      <ErrorPrimitive.Root className="aui-message-error-root mt-2 rounded-2xl border border-destructive bg-destructive/10 p-3 text-destructive text-sm dark:bg-destructive/5">
-        <ErrorPrimitive.Message className="aui-message-error-message line-clamp-2" />
+      <ErrorPrimitive.Root className="aui-message-error-root mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-destructive bg-destructive/10 p-3 text-destructive text-sm dark:bg-destructive/5">
+        <ErrorPrimitive.Message className="aui-message-error-message line-clamp-2 min-w-0 flex-1" />
         {ended ? (
           <a
-            className="mt-1 inline-block font-medium text-foreground underline underline-offset-4"
+            className="font-medium text-foreground underline underline-offset-4"
             href={`/sign-in?returnTo=${encodeURIComponent(window.location.pathname)}`}
           >
             Sign in again
           </a>
+        ) : onRetry && retryable ? (
+          <Button onClick={onRetry} size="sm" type="button" variant="outline">
+            Retry
+          </Button>
         ) : null}
       </ErrorPrimitive.Root>
     </MessagePrimitive.Error>
@@ -1337,6 +1361,18 @@ const AssistantMessage: FC = () => {
   const running = useAuiState((s) => s.message.status?.type === "running")
   const writing =
     running || reveal.phase === "typing" || reveal.phase === "writing"
+  // A reply that ended with nothing in it and no error to show is no row at
+  // all, not a time on its own.
+  const blank = useAuiState(
+    (s) =>
+      s.message.status?.type !== "running" &&
+      !(
+        s.message.status?.type === "incomplete" &&
+        s.message.status.reason === "error"
+      ) &&
+      s.message.parts.length === 0
+  )
+  if (blank && reveal.phase === "still") return null
 
   return (
     <MessagePrimitive.Root
