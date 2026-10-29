@@ -212,6 +212,7 @@ describe.skipIf(!url)("connecting Google through the api", () => {
       db
         .select({ content: conversationMessages.content })
         .from(conversationMessages)
+        .orderBy(conversationMessages.seq)
     )
     const texts = JSON.stringify(rows.at(-1)?.content)
     expect(texts).toContain("Google is connected")
