@@ -297,12 +297,28 @@ describe("the edge cache", () => {
     withEdgeCache()
     point(REV, 1)
     expect((await get(SITE_HOST, "/")).status).toBe(200)
-    expect(reads).toHaveLength(2)
+    // The manifest and the page, then the other page read in behind it.
+    expect(reads).toHaveLength(3)
     reads.length = 0
     const again = await get(SITE_HOST, "/")
     expect(await again.text()).toBe(`<h1>${REV.slice(-4)}</h1>`)
     expect(again.headers.get("cache-control")).toBe("no-cache")
     expect(again.headers.get("x-frame-options")).toBe("DENY")
+    expect(reads).toEqual([])
+  })
+
+  it("reads a revision's other pages into the cache behind the first one served", async () => {
+    withEdgeCache()
+    const fresh = "10000001-0000-4000-8000-000000000010"
+    revision(ORG, fresh)
+    point(fresh, 3)
+    expect((await get(SITE_HOST, "/")).status).toBe(200)
+    expect(reads).toContain(`sites/${ORG}/${fresh}/dist/contact/index.html`)
+    reads.length = 0
+    // The visitor's next page answers from the cache.
+    expect(await (await get(SITE_HOST, "/contact/")).text()).toBe(
+      "<p>+15550142</p>"
+    )
     expect(reads).toEqual([])
   })
 
