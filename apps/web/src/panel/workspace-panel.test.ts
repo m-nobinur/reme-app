@@ -38,7 +38,7 @@ vi.mock("@tanstack/react-router", () => ({
     ),
   useRouter: () => router,
   useMatches: ({ select }: { select: (matches: unknown[]) => unknown }) =>
-    select([{ routeId: "/app/_conversation/" }]),
+    select([{ routeId: route.id }]),
   useParams: () => ({}),
 }))
 vi.mock("@/lib/workspace", () => ({
@@ -46,6 +46,8 @@ vi.mock("@/lib/workspace", () => ({
   useBusinessZone: () => null,
 }))
 vi.mock("@/lib/api/server", () => server)
+
+const route = vi.hoisted(() => ({ id: "/app/_conversation/" }))
 
 const router = vi.hoisted(() => ({
   state: { matches: [] as { routeId: string }[] },
@@ -85,6 +87,7 @@ beforeEach(() => {
   }
   server.completeReminder.mockReset()
   server.askForChanges.mockReset()
+  route.id = "/app/_conversation/"
   router.state.matches = []
   router.navigate.mockReset()
   live = { workspace: EMPTY_WORKSPACE, failed: false, refresh: vi.fn() }
@@ -130,9 +133,16 @@ it('sends "Finish setting up" to the onboarding conversation', async () => {
 
 it("sends an account with no business to name one first", async () => {
   loader.active = null
+  route.id = "/app/_conversation/c/$id"
   await render()
   expect(link("Name your business")?.dataset.to).toBe("/name-your-business")
   expect(link("Start your website")).toBeUndefined()
+})
+
+it("offers no naming link at home, where the naming form already is", async () => {
+  loader.active = null
+  await render()
+  expect(link("Name your business")).toBeUndefined()
 })
 
 it('reads the workspace again on "Try again"', async () => {

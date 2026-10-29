@@ -484,8 +484,10 @@ describe("the first run", () => {
   })
 
   it("asks an account with no business to name one", () => {
-    const panel = panelFor(input({ business: null }))
+    const panel = panelFor(input({ business: null, route: ROUTES.chat }))
     expect(panel?.suggestions).toEqual([{ kind: "name-business" }])
+    // Home is the naming form, so the panel offers no second way to it.
+    expect(panelFor(input({ business: null }))?.suggestions).toEqual([])
     expect(panel?.line).toEqual({
       tone: "idle",
       lead: "Name your business",
