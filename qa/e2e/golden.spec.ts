@@ -395,6 +395,14 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
   await step("v1 approved, live with the quote action", async () => {
     first = await approveVersion(page)
     expect(first).toBe(1)
+    // The chat says so too, once the load check has seen the site answer.
+    const said = Date.now()
+    await expect(
+      page.getByText("Published, your website is live", { exact: true })
+    ).toBeVisible({ timeout: WAIT.publish })
+    note(
+      `The chat said v1 is live ${Math.round((Date.now() - said) / 1000)} s after the panel did.`
+    )
     const workspace = await readJson<Workspace>("/workspace")
     expect(workspace.site.live?.version).toBe(first)
     host = workspace.site.host ?? ""
