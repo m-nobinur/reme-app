@@ -266,9 +266,10 @@ const inputOf = <N extends CosToolName>(name: N) =>
 
 /**
  * `schema` without what the generator adds and the model gains nothing
- * from: `$schema`, and the pattern under a uuid or date-time format, which
- * keeps its format, or one that only asks for some text. Zod still checks
- * every call.
+ * from: `$schema`, and the pattern under a uuid format, which keeps its
+ * format, or one that only asks for some text. Zod still checks every call.
+ * A date-time keeps its pattern: without it the model sent times with no
+ * offset, and every reminder's first call failed (staging, 2026-10-29).
  */
 function lean(schema: unknown): unknown {
   if (Array.isArray(schema)) return schema.map(lean)
@@ -276,9 +277,7 @@ function lean(schema: unknown): unknown {
   const { $schema: _, ...rest } = schema as Record<string, unknown>
   if (
     typeof rest.pattern === "string" &&
-    (rest.pattern === "\\S" ||
-      rest.format === "uuid" ||
-      rest.format === "date-time")
+    (rest.pattern === "\\S" || rest.format === "uuid")
   )
     delete rest.pattern
   return Object.fromEntries(
