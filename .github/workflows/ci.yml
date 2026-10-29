@@ -69,6 +69,9 @@ jobs:
       # also refuses an empty `evals/fixtures`.
       - run: pnpm eval --tier 1
 
+      # The evals' own unit tests: scoring, the judge's parsing, the voice corpus.
+      - run: pnpm test:evals
+
       # Bundles the worker and gzips it. Needs no Cloudflare credentials: the
       # dry run never talks to the API.
       - run: pnpm size

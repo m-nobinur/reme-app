@@ -9,6 +9,7 @@
     "seed": "node scripts/seed.mjs",
     "workos:config": "node scripts/workos.mjs",
     "eval": "node --import ./evals/json-imports.mjs --experimental-transform-types evals/run.mjs",
+    "test:evals": "node --import ./evals/json-imports.mjs --experimental-transform-types --test 'evals/**/*.test.mjs'",
     "eval:behaviour": "node --import ./evals/json-imports.mjs --experimental-transform-types evals/behaviour.mjs",
     "record": "node --experimental-transform-types evals/record.mjs",
     "record:session": "node --experimental-transform-types evals/record-session.mjs",

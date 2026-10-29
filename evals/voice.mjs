@@ -6,8 +6,7 @@ import {
   manualEnd,
   notStarted,
   opener,
-  photoQuestion,
-  photos,
+  pickedLook,
   question,
   quoteForm,
   retry,
@@ -160,7 +159,6 @@ function scriptSamples() {
         ownLook: null,
         ownColour: null,
         services: "your regular and end of tenancy cleans",
-        photoQuestion: null,
       }
       const at = `${tone}:${i}`
       add(`opener:${at}`, opener(v))
@@ -171,14 +169,12 @@ function scriptSamples() {
           // A step the script does not ask in words has no question.
         }
       }
-      add(`photoQuestion:${at}`, photoQuestion(v))
-      add(`photos:${at}`, photos(v))
+      add(`pickedLook:${at}`, pickedLook(v))
       add(`quoteForm:${at}`, quoteForm(v))
       add(`started:${at}`, started(v, true))
       add(`started-no-photos:${at}`, started(v, false))
       add(`notStarted:${at}`, notStarted(v))
-      add(`manualEnd:yes:${at}`, manualEnd(v, true))
-      add(`manualEnd:no:${at}`, manualEnd(v, false))
+      add(`manualEnd:${at}`, manualEnd(v))
       add(`chose:${at}`, chose(v, "the ocean colours"))
       for (const reason of RETRY_REASONS)
         add(`retry:${reason}:${at}`, retry(reason, v))
