@@ -1,6 +1,6 @@
 import { appendFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
-import { CASES, partsOf } from "./cos-cases.mjs"
+import { CASES, FACTS, partsOf, passed, score } from "./cos-cases.mjs"
 import { loadFixture } from "./replay.mjs"
 import { failures, JUDGE_MODEL, judge, table } from "./rubric/behaviour.mjs"
 import cosLive, { liveRun } from "./tier-2/cos-live.eval.mjs"
@@ -73,6 +73,28 @@ async function grade({ kase, turns }, options) {
   }
 }
 
+/** Each pending case's own check, so a case that passes can join the gate. */
+function pendingChecks(cases) {
+  const rows = cases
+    .filter(({ kase }) => kase.pending)
+    .map(({ kase, turns }) => {
+      const scored = score(kase, turns, FACTS)
+      const result = passed(scored)
+        ? "passes"
+        : [...scored.unknown, ...scored.problems, ...scored.fabrications].join(
+            "; "
+          )
+      return `| ${kase.name} | ${kase.pending} | ${result} |`
+    })
+  return [
+    "## Pending cases",
+    "",
+    "| Case | Waits for | Its check |",
+    "| --- | --- | --- |",
+    ...rows,
+  ].join("\n")
+}
+
 async function main() {
   // biome-ignore lint/suspicious/noUndeclaredEnvVars: not read by any turbo task
   const key = process.env.OPENROUTER_API_KEY
@@ -96,9 +118,10 @@ async function main() {
     graded,
     graded.reduce((n, g) => n + (g.costUsd ?? 0), 0)
   )
-  console.log(out)
+  const report = `${out}\n${pendingChecks(cases)}`
+  console.log(report)
   if (process.env.GITHUB_STEP_SUMMARY)
-    appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${out}\n`)
+    appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${report}\n`)
   const problems = failures(graded)
   if (run) {
     try {
