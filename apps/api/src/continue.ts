@@ -18,6 +18,7 @@ import { cosModel, putRow } from "./chat.ts"
 import {
   type AgentTurn,
   activeTools,
+  CONTINUE_LINE,
   contextOf,
   cosPrefix,
   LIMITS,
@@ -59,7 +60,7 @@ export type Continued =
   | "fell_back"
   /** Its reply is already logged: a redelivered message. */
   | "done"
-  /** The owner sent a message since: their turn supersedes it. */
+  /** The owner started a turn since, typed or by a tap: it supersedes this. */
   | "superseded"
   | "over_cap"
   | "frozen"
@@ -87,6 +88,21 @@ export function unknownAfter(log: LoggedEvent[], from: number): boolean {
         (e.payload as CosTurn).outcome === "abandoned") ||
       (e.type === "cos.tool_started" &&
         !results.has((e.payload as { tool_call_id: string }).tool_call_id))
+  )
+}
+
+/**
+ * Whether the owner started a turn after the continued turn's context: a
+ * typed message or an approval tap, either of which carries the work on. A
+ * continuation's own earlier attempt, which a crash may have left, does not
+ * count; it is known by its context's line.
+ */
+export function supersededAfter(log: LoggedEvent[], from: number): boolean {
+  return log.some(
+    (e) =>
+      e.type === "cos.context" &&
+      e.seq > from &&
+      !(e.payload as { text?: string }).text?.includes(CONTINUE_LINE)
   )
 }
 
@@ -162,19 +178,14 @@ export async function continueTurn(
         (e.payload as { turn_id?: unknown }).turn_id === turnId
     )
     if (!continued) return "gone" as const
-    const said = (role: string, id?: string) =>
-      log.some((e) => {
-        const { message } = e.payload as {
-          message?: { id: string; role: string }
-        }
-        return (
-          e.type === "cos.message" &&
-          message?.role === role &&
-          (id ? message.id === id : e.seq > continued.seq)
-        )
-      })
-    if (said("assistant", continuationId(turnId))) return "done" as const
-    if (said("user")) return "superseded" as const
+    const done = log.some(
+      (e) =>
+        e.type === "cos.message" &&
+        (e.payload as { message?: { id?: unknown } }).message?.id ===
+          continuationId(turnId)
+    )
+    if (done) return "done" as const
+    if (supersededAfter(log, continued.seq)) return "superseded" as const
     const state = await sessionState(db, sessionId, prefix.sha256, null)
     if (state.frozen) return "frozen" as const
     if (!(await withinCap(db, job.orgId, reserved))) return "over_cap" as const

@@ -4,7 +4,12 @@ import { convertArrayToReadableStream, MockLanguageModelV4 } from "ai/test"
 import postgres from "postgres"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { chat } from "../src/chat.ts"
-import { continuationId, continueTurn, unknownAfter } from "../src/continue.ts"
+import {
+  continuationId,
+  continueTurn,
+  supersededAfter,
+  unknownAfter,
+} from "../src/continue.ts"
 import { CONTINUE_LINE, DEFAULT_MODEL, UNKNOWN_LINE } from "../src/cos/agent.ts"
 import { type Owner, owner, SUFFIX, stubOrchestrator } from "./owner-fixture.ts"
 import { env, stubJwksFetch } from "./sealed-session.ts"
@@ -105,6 +110,35 @@ describe("unknownAfter", () => {
     expect(unknownAfter([at(7, "cos.turn", { outcome: "stopped" })], 4)).toBe(
       false
     )
+  })
+})
+
+describe("supersededAfter", () => {
+  const at = (seq: number, type: string, payload: unknown) => ({
+    seq,
+    type,
+    payload,
+    taint: [],
+  })
+  const context = (seq: number, text: string) =>
+    at(seq, "cos.context", { turn_id: `T${seq}`, text })
+
+  it("is set by an approval tap's turn, which logs no owner message", () => {
+    const tap = [
+      at(5, "cos.message", { message: { id: "a1", role: "assistant" } }),
+      context(6, "Mode: act."),
+    ]
+    expect(supersededAfter(tap, 4)).toBe(true)
+    expect(supersededAfter(tap, 6)).toBe(false)
+  })
+
+  it("is not set by a crashed attempt of the continuation itself", () => {
+    const crashed = [
+      context(5, `Mode: act.\n${CONTINUE_LINE}`),
+      at(6, "cos.turn", { outcome: "abandoned" }),
+    ]
+    expect(supersededAfter(crashed, 4)).toBe(false)
+    expect(unknownAfter(crashed, 4)).toBe(true)
   })
 })
 
