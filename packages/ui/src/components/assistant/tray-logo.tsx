@@ -44,6 +44,7 @@ import {
 } from "@workspace/ui/components/assistant/tray-services"
 import { Button } from "@workspace/ui/components/button"
 import { Diffusing } from "@workspace/ui/components/diffusing"
+import { StateIcon } from "@workspace/ui/components/status-line"
 import { FIELD_ERROR } from "@workspace/ui/lib/card"
 import { checkPhotos, sizeText, typesText } from "@workspace/ui/lib/upload"
 import { cn } from "@workspace/ui/lib/utils"
@@ -681,10 +682,13 @@ function TrayLogo({
                           </Diffusing>
                         )}
                         {busy === variant?.id ? (
-                          <SpinnerGapIcon
+                          <span
                             aria-label="Saving"
-                            className="absolute top-1.5 right-1.5 size-4 animate-spin"
-                          />
+                            className="absolute top-1.5 right-1.5 flex"
+                            role="img"
+                          >
+                            <StateIcon state="working" />
+                          </span>
                         ) : null}
                       </span>
                     </RadioTile>
@@ -723,7 +727,7 @@ function TrayLogo({
             >
               {busy === "upload" ? (
                 <span className="flex items-center gap-2">
-                  <SpinnerGapIcon aria-hidden className="size-4 animate-spin" />
+                  <StateIcon state="working" />
                   Saving your logo
                 </span>
               ) : file ? (
