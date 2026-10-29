@@ -18,6 +18,10 @@ name: preview
 # The smoke runs here, against the preview, which is what C6 asked for and what
 # was true only after merge until now.
 #
+# Dependabot PRs skip both jobs: GitHub gives its runs no repository secrets, so
+# the Credentials step could only fail. A lockfile bump has no preview worth
+# deploying, and the local gate covers it.
+#
 # The trigger stays `pull_request` and specifically not `pull_request_target`.
 # That is the whole of the fork answer: GitHub withholds repository secrets from
 # a workflow triggered by `pull_request` on a fork, so a fork PR gets no
@@ -56,7 +60,7 @@ env:
 
 jobs:
   preview:
-    if: github.event.action != 'closed'
+    if: github.event.action != 'closed' && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
@@ -263,7 +267,7 @@ jobs:
           pnpm e2e
 
   teardown:
-    if: github.event.action == 'closed'
+    if: github.event.action == 'closed' && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
