@@ -504,6 +504,17 @@ export async function startChange(
   })
   const call = (path: string, body?: unknown) =>
     bridge(env, owner, path, { body, key, signal })
+  // A create whose answer was lost may still have made the build; its key finds it.
+  const createCall = async (body: unknown): Promise<Bridged> => {
+    const result = await call("/", body)
+    if (result.status < 500) return result
+    const [row] = await kit
+      .withOrg({ orgId }, (db) =>
+        db.select().from(assignments).where(eq(assignments.idempotencyKey, key))
+      )
+      .catch(() => [])
+    return row ? { status: 201, body: toAssignment(row) } : result
+  }
   // The panel and the chat line read the lane off the build the owner just started.
   const laneOf = (id: string) =>
     kit.withOrg({ orgId }, (db) => readLane(db, id)).catch(() => undefined)
@@ -577,7 +588,7 @@ export async function startChange(
     ...(draft ? { draft_revision_id: draft } : {}),
   })
   const create = async (kind: "site.build" | "site.revise", draft?: string) => {
-    const result = await call("/", createBody(kind, draft))
+    const result = await createCall(createBody(kind, draft))
     const parsed = Assignment.safeParse(result.body)
     const lane = parsed.success
       ? await laneOf(parsed.data.assignment_id)
@@ -607,7 +618,7 @@ export async function startChange(
       // The new build first: while the old one holds the site it queues
       // behind the lock and claims it once the old one ends. A refused or
       // unknown create leaves the review standing.
-      const created = await call("/", createBody(route.rebuild))
+      const created = await createCall(createBody(route.rebuild))
       const build = Assignment.safeParse(created.body)
       if (created.status >= 300 || !build.success) {
         return relay(created, summary)
