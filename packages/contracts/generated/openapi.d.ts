@@ -524,6 +524,27 @@ export interface components {
               }
             | {
                 /** @constant */
+                key: "business.prices"
+                value: {
+                  text: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "business.enquiries"
+                value: {
+                  text: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "owner.priorities"
+                value: {
+                  text: string
+                }
+              }
+            | {
+                /** @constant */
                 key: "assistant.name"
                 value: {
                   name: string
@@ -1308,6 +1329,27 @@ export interface components {
           }
         | {
             /** @constant */
+            key: "business.prices"
+            value: {
+              text: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "business.enquiries"
+            value: {
+              text: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "owner.priorities"
+            value: {
+              text: string
+            }
+          }
+        | {
+            /** @constant */
             key: "assistant.name"
             value: {
               name: string
@@ -1660,6 +1702,27 @@ export interface components {
             | {
                 /** @constant */
                 key: "service_area.text"
+                value: {
+                  text: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "business.prices"
+                value: {
+                  text: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "business.enquiries"
+                value: {
+                  text: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "owner.priorities"
                 value: {
                   text: string
                 }
@@ -2039,6 +2102,30 @@ export interface components {
         }
       | {
           /** @constant */
+          key: "business.prices"
+          skippable: boolean
+          prefill: {
+            text: string
+          } | null
+        }
+      | {
+          /** @constant */
+          key: "business.enquiries"
+          skippable: boolean
+          prefill: {
+            text: string
+          } | null
+        }
+      | {
+          /** @constant */
+          key: "owner.priorities"
+          skippable: boolean
+          prefill: {
+            text: string
+          } | null
+        }
+      | {
+          /** @constant */
           key: "assistant.name"
           skippable: boolean
           prefill: {
@@ -2408,6 +2495,27 @@ export interface components {
               }
             | {
                 /** @constant */
+                key: "business.prices"
+                value: {
+                  text: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "business.enquiries"
+                value: {
+                  text: string
+                }
+              }
+            | {
+                /** @constant */
+                key: "owner.priorities"
+                value: {
+                  text: string
+                }
+              }
+            | {
+                /** @constant */
                 key: "assistant.name"
                 value: {
                   name: string
@@ -2669,6 +2777,9 @@ export interface components {
         | "business.proof"
         | "business.disclaimer"
         | "service_area.text"
+        | "business.prices"
+        | "business.enquiries"
+        | "owner.priorities"
         | "assistant.name"
         | "assistant.pronouns"
         | "assistant.avatar"
@@ -3279,6 +3390,9 @@ export interface components {
                       | "business.proof"
                       | "business.disclaimer"
                       | "service_area.text"
+                      | "business.prices"
+                      | "business.enquiries"
+                      | "owner.priorities"
                       | "assistant.name"
                       | "owner.preferred_name"
                   }
@@ -3340,6 +3454,9 @@ export interface components {
                       | "business.proof"
                       | "business.disclaimer"
                       | "service_area.text"
+                      | "business.prices"
+                      | "business.enquiries"
+                      | "owner.priorities"
                       | "assistant.name"
                       | "owner.preferred_name"
                   }
@@ -4299,6 +4416,27 @@ export interface components {
                                 }
                               | {
                                   /** @constant */
+                                  key: "business.prices"
+                                  value: {
+                                    text: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "business.enquiries"
+                                  value: {
+                                    text: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "owner.priorities"
+                                  value: {
+                                    text: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
                                   key: "assistant.name"
                                   value: {
                                     name: string
@@ -4663,6 +4801,27 @@ export interface components {
                               | {
                                   /** @constant */
                                   key: "service_area.text"
+                                  value: {
+                                    text: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "business.prices"
+                                  value: {
+                                    text: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "business.enquiries"
+                                  value: {
+                                    text: string
+                                  }
+                                }
+                              | {
+                                  /** @constant */
+                                  key: "owner.priorities"
                                   value: {
                                     text: string
                                   }
@@ -5531,6 +5690,27 @@ export interface components {
           }
         | {
             /** @constant */
+            key: "business.prices"
+            value: {
+              text: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "business.enquiries"
+            value: {
+              text: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "owner.priorities"
+            value: {
+              text: string
+            }
+          }
+        | {
+            /** @constant */
             key: "assistant.name"
             value: {
               name: string
@@ -5961,6 +6141,9 @@ export interface components {
               | "business.proof"
               | "business.disclaimer"
               | "service_area.text"
+              | "business.prices"
+              | "business.enquiries"
+              | "owner.priorities"
               | "assistant.name"
               | "assistant.pronouns"
               | "assistant.avatar"
@@ -6248,6 +6431,27 @@ export interface components {
               | {
                   /** @constant */
                   key: "service_area.text"
+                  value: {
+                    text: string
+                  }
+                }
+              | {
+                  /** @constant */
+                  key: "business.prices"
+                  value: {
+                    text: string
+                  }
+                }
+              | {
+                  /** @constant */
+                  key: "business.enquiries"
+                  value: {
+                    text: string
+                  }
+                }
+              | {
+                  /** @constant */
+                  key: "owner.priorities"
                   value: {
                     text: string
                   }
@@ -8244,6 +8448,9 @@ export interface components {
         | "business.proof"
         | "business.disclaimer"
         | "service_area.text"
+        | "business.prices"
+        | "business.enquiries"
+        | "owner.priorities"
         | "assistant.name"
         | "assistant.pronouns"
         | "assistant.avatar"
@@ -8515,6 +8722,9 @@ export interface components {
             | "business.proof"
             | "business.disclaimer"
             | "service_area.text"
+            | "business.prices"
+            | "business.enquiries"
+            | "owner.priorities"
             | "assistant.name"
             | "assistant.pronouns"
             | "assistant.avatar"
@@ -9137,6 +9347,27 @@ export interface components {
       | {
           /** @constant */
           key: "service_area.text"
+          value: {
+            text: string
+          }
+        }
+      | {
+          /** @constant */
+          key: "business.prices"
+          value: {
+            text: string
+          }
+        }
+      | {
+          /** @constant */
+          key: "business.enquiries"
+          value: {
+            text: string
+          }
+        }
+      | {
+          /** @constant */
+          key: "owner.priorities"
           value: {
             text: string
           }
@@ -9990,6 +10221,9 @@ export interface components {
               | "business.proof"
               | "business.disclaimer"
               | "service_area.text"
+              | "business.prices"
+              | "business.enquiries"
+              | "owner.priorities"
               | "assistant.name"
               | "assistant.pronouns"
               | "assistant.tone"
@@ -10040,6 +10274,9 @@ export interface components {
               | "business.proof"
               | "business.disclaimer"
               | "service_area.text"
+              | "business.prices"
+              | "business.enquiries"
+              | "owner.priorities"
               | "assistant.name"
               | "assistant.pronouns"
               | "assistant.tone"
@@ -10080,6 +10317,9 @@ export interface components {
         | "business.proof"
         | "business.disclaimer"
         | "service_area.text"
+        | "business.prices"
+        | "business.enquiries"
+        | "owner.priorities"
         | "assistant.name"
         | "assistant.pronouns"
         | "assistant.tone"
@@ -11473,6 +11713,9 @@ export interface components {
                       | "business.proof"
                       | "business.disclaimer"
                       | "service_area.text"
+                      | "business.prices"
+                      | "business.enquiries"
+                      | "owner.priorities"
                       | "assistant.name"
                       | "owner.preferred_name"
                   }
@@ -11534,6 +11777,9 @@ export interface components {
                       | "business.proof"
                       | "business.disclaimer"
                       | "service_area.text"
+                      | "business.prices"
+                      | "business.enquiries"
+                      | "owner.priorities"
                       | "assistant.name"
                       | "owner.preferred_name"
                   }
@@ -11679,6 +11925,27 @@ export interface components {
         | {
             /** @constant */
             key: "service_area.text"
+            value: {
+              text: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "business.prices"
+            value: {
+              text: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "business.enquiries"
+            value: {
+              text: string
+            }
+          }
+        | {
+            /** @constant */
+            key: "owner.priorities"
             value: {
               text: string
             }
@@ -12955,6 +13222,9 @@ export interface components {
         | "business.proof"
         | "business.disclaimer"
         | "service_area.text"
+        | "business.prices"
+        | "business.enquiries"
+        | "owner.priorities"
         | "assistant.name"
         | "assistant.pronouns"
         | "assistant.avatar"
@@ -13041,6 +13311,9 @@ export interface components {
                 | "business.proof"
                 | "business.disclaimer"
                 | "service_area.text"
+                | "business.prices"
+                | "business.enquiries"
+                | "owner.priorities"
                 | "assistant.name"
                 | "assistant.pronouns"
                 | "assistant.avatar"
