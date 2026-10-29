@@ -118,10 +118,13 @@
   // The outbox (src/deliveries.ts). A message that fails five retries is
   // settled as failed in the row, so the dead-letter queue only holds what
   // the consumer itself could not handle.
+  // `AFTER_TURN` is the api's queue, here only to hand it a `cos_continue`,
+  // since the CoS runs there.
   "queues": {
     "producers": [
       { "binding": "JOBS", "queue": "reme-jobs" },
-      { "binding": "DELIVERIES", "queue": "reme-deliveries" }
+      { "binding": "DELIVERIES", "queue": "reme-deliveries" },
+      { "binding": "AFTER_TURN", "queue": "reme-after-turn" }
     ],
     "consumers": [
       {
@@ -268,7 +271,8 @@
       "queues": {
         "producers": [
           { "binding": "JOBS", "queue": "reme-jobs-production" },
-          { "binding": "DELIVERIES", "queue": "reme-deliveries-production" }
+          { "binding": "DELIVERIES", "queue": "reme-deliveries-production" },
+          { "binding": "AFTER_TURN", "queue": "reme-after-turn-production" }
         ],
         "consumers": [
           {

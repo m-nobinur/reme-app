@@ -12,6 +12,7 @@ import {
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest"
 import {
   backoffMinutes,
+  continueJob,
   type Handler,
   jobsBatch,
   MAX_FAILURES,
@@ -35,6 +36,20 @@ describe("backoff", () => {
   it("doubles from two minutes and stops at an hour", () => {
     expect([1, 2, 3, 4, 5, 6, 7].map(backoffMinutes)).toEqual([
       2, 4, 8, 16, 32, 60, 60,
+    ])
+  })
+})
+
+describe("a cos_continue job", () => {
+  it("is handed to the api's after-turn queue, ids only", async () => {
+    const sent: unknown[] = []
+    const job = { id: "job-1", orgId: "org-1" }
+    await continueJob({
+      env: { AFTER_TURN: { send: async (body: unknown) => sent.push(body) } },
+      job,
+    } as unknown as Parameters<Handler>[0])
+    expect(sent).toEqual([
+      { kind: "cos_continue", orgId: "org-1", jobId: "job-1" },
     ])
   })
 })

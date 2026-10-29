@@ -1,13 +1,15 @@
 import {
+  CosContinue,
   type CosToolName as CosTool,
   CosToolName,
   type CosTurn,
+  MAX_CONTINUATIONS,
   type MemoryChip,
   type MessageReading,
   ONBOARDING_STATUS,
   type OnboardingStatus,
 } from "@workspace/contracts"
-import type { OrgScopedDb } from "@workspace/db"
+import { lowerNextDue, type OrgScopedDb, scheduledJobs } from "@workspace/db"
 import { scrub } from "@workspace/facade/tee"
 import {
   createAgentUIStream,
@@ -37,7 +39,7 @@ import {
 import { contentWords } from "./memory.ts"
 import { failureMessage } from "./retry.ts"
 import { ToolFailed } from "./tools.ts"
-import { abandonTurn, TurnClosed, writeAsTurn } from "./turns.ts"
+import { abandonTurn, type Turn, TurnClosed, writeAsTurn } from "./turns.ts"
 import { voiced } from "./voice.ts"
 
 /**
@@ -101,6 +103,20 @@ const unfinished = (part: UIMessage["parts"][number]) =>
   "toolCallId" in part &&
   (part.state === "input-streaming" || part.state === "input-available")
 
+/**
+ * A system job to carry on from `turn`, due now, its `attempt` counting
+ * the continuations of the owner's turn.
+ */
+async function queueContinue(db: OrgScopedDb, turn: Turn, attempt: number) {
+  await db.insert(scheduledJobs).values({
+    orgId: turn.orgId,
+    kind: "cos_continue",
+    refId: turn.sessionId,
+    payload: CosContinue.parse({ turn_id: turn.turnId, attempt }),
+    nextRunAt: new Date(),
+  })
+}
+
 /** What the closing transaction writes besides the log: the stored rows. */
 export type Rows = (
   db: OrgScopedDb,
@@ -119,6 +135,11 @@ type StreamTurn = {
   lead: UIMessageChunk[]
   /** Memory changes not yet shown: the reply's first part, in the stream, the log and the row. */
   chip: MemoryChip | null
+  /**
+   * Which continuation this run is, for a turn carrying on from one cut off
+   * at its limit. Its reply is a new message after the one it continues.
+   */
+  attempt?: number
   /** Jev's reading of a typed message, for the waiting line while the model thinks. */
   reading: Promise<MessageReading | null> | null
   rows: Rows
@@ -138,7 +159,9 @@ export type FellBack = { fallback: true; state: RunState }
 type Ended = { message: UIMessage | null; aborted: boolean }
 
 /** The `cos.turn` of a run that got as far as a model call. */
-export function ranTurn<O extends "answered" | "error" | "integrity">(
+export function ranTurn<
+  O extends "answered" | "error" | "integrity" | "stopped",
+>(
   run: AgentTurn,
   modelId: string,
   outcome: O,
@@ -182,7 +205,9 @@ export async function streamTurn(
     abortSignal: run.abort.signal,
     timeout: { totalMs: LIMITS.totalMs, firstChunkMs: LIMITS.firstChunkMs },
     experimental_transform: voiced(run.turn.turnId),
-    originalMessages: input.uiMessages as never,
+    // A history ending on an assistant message is continued in that message,
+    // which a continuation must not do: the owner's chat follows a new one.
+    originalMessages: (input.attempt ? [] : input.uiMessages) as never,
     generateMessageId: input.newMessageId,
     onError: (error) => {
       // The SDK reports each error chunk a second time, as an Error holding
@@ -253,10 +278,23 @@ export async function streamTurn(
     ? ({ type: "data-memory", data: input.chip } as const)
     : null
 
-  /** The closing transaction: the response, its `cos.turn` and its rows. */
+  /**
+   * The closing transaction: the response, its `cos.turn` and its rows. A
+   * run cut off once content streamed keeps what streamed, marked
+   * `stopped`, so its cards survive a reload. Cut off, or out of steps, it
+   * is `partial` too, and a `cos_continue` job is queued in the same
+   * transaction while the turn has continuations left.
+   */
   const closeRun = async () => {
     const last = await ended
-    if (last.aborted || !last.message) {
+    const parts = (last.message?.parts ?? []).filter((p) => !unfinished(p))
+    // A run that lost its token can write nothing more.
+    if (
+      !last.message ||
+      (last.aborted &&
+        (run.abort.signal.aborted ||
+          !parts.some((p) => p.type !== "step-start")))
+    ) {
       await run.kit
         .withOrg({ orgId: run.turn.orgId }, (db) => abandonTurn(db, run.turn))
         .catch((error: unknown) => {
@@ -264,26 +302,41 @@ export async function streamTurn(
         })
       return false
     }
-    const outcome = run.state.integrity
-      ? "integrity"
-      : errored
-        ? "error"
-        : "answered"
+    const outcome = last.aborted
+      ? "stopped"
+      : run.state.integrity
+        ? "integrity"
+        : errored
+          ? "error"
+          : "answered"
+    const partial =
+      outcome === "stopped" ||
+      (outcome === "answered" && run.state.steps >= LIMITS.steps)
+    const attempt = (input.attempt ?? 0) + 1
+    const queue = partial && attempt <= MAX_CONTINUATIONS
     // Only what a stored message holds: the SDK's may carry `metadata`.
     const message = {
       id: last.message.id,
       role: last.message.role,
-      parts: [
-        ...(chip ? [chip] : []),
-        ...withoutRestated(last.message.parts.filter((p) => !unfinished(p))),
-      ],
+      parts: [...(chip ? [chip] : []), ...withoutRestated(parts)],
+      ...(last.aborted && { stopped: true }),
+      ...(partial && { partial: true }),
     }
     await closeTurn(
       run,
       ranTurn(run, input.modelId, outcome, firstChunkMs),
       message as UIMessage,
-      input.rows
+      queue
+        ? async (db, stored) => {
+            await input.rows(db, stored)
+            await queueContinue(db, run.turn, attempt)
+          }
+        : input.rows
     )
+    if (queue) {
+      const { env } = run.tools
+      await lowerNextDue(env.SCHEDULE, new Date(), env.JOBS)
+    }
     return true
   }
 

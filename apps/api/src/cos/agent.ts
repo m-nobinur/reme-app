@@ -641,6 +641,14 @@ export const SETS_RULE =
 export const STANDING_LINE =
   'The owner\'s message may set a standing request for how you work. If it does, keep to it now and save it with remember as Asked: "their sentence", their whole sentence as typed, unless the profile already has it.'
 
+/** Added to a turn that carries on from one cut off at its step or time limit. */
+export const CONTINUE_LINE =
+  "Your last reply was cut off at its limit before you finished. Carry on from where it stopped, without repeating what it already said or did. If nothing is left to do, say in one line that it's done."
+
+/** Added too when an earlier attempt ended without a recorded outcome, so its side effects are not known. */
+export const UNKNOWN_LINE =
+  "The earlier attempt's result is unknown; check what it did before repeating it."
+
 /** Who the owner made the Chief of Staff, from their facts. Null where they have not said. */
 type Persona = {
   name: string | null
@@ -769,7 +777,8 @@ export function contextOf(
   first = false,
   google: "first" | "now" | null = null,
   facts: readonly FactRecord[] = [],
-  standing = false
+  standing = false,
+  continued: "cut" | "unknown" | null = null
 ): { text: string; taint: TaintLabel[] } {
   const taint = workspaceTaint(workspace)
   const named =
@@ -782,6 +791,8 @@ export function contextOf(
       : "Mode: ask. You may only read. For a change, the owner switches to Act."
   const text = [
     modeLine,
+    ...(continued ? [CONTINUE_LINE] : []),
+    ...(continued === "unknown" ? [UNKNOWN_LINE] : []),
     ...(intent === "site_change" && mode === "act" ? [SITE_CHANGE_LINE] : []),
     ...(google === "first" ? [GOOGLE_FIRST_LINE] : []),
     ...(google === "now" ? [GOOGLE_NOW_LINE] : []),

@@ -1,4 +1,5 @@
 import { tenancy } from "@workspace/db"
+import { type ContinueJob, continueTurn, isContinueJob } from "./continue.ts"
 import { LIMITS, openrouterModel } from "./cos/agent.ts"
 import { COMPACTION, compactAfterTurn } from "./cos/compaction.ts"
 import { REFLECTION, reflectAfterTurn } from "./cos/reflection.ts"
@@ -50,12 +51,13 @@ export async function enqueueAfterTurn(
 }
 
 /**
- * The work after each closed turn: compaction, then reflection. A message whose job
- * threw is retried, after a newer turn's longest life when it is open, then
- * goes to the dead-letter queue.
+ * The work after each closed turn: compaction, then reflection; and a
+ * continuation the orchestrator handed over (`continue.ts`). A message
+ * whose job threw is retried, after a newer turn's longest life when it is
+ * open, then goes to the dead-letter queue.
  */
 export async function afterTurnBatch(
-  batch: MessageBatch<AfterTurn | LogoJob>,
+  batch: MessageBatch<AfterTurn | LogoJob | ContinueJob>,
   env: Env
 ): Promise<void> {
   // Logo rounds ride this queue for a consumer's fifteen minutes (`logo.ts`),
@@ -69,16 +71,30 @@ export async function afterTurnBatch(
     : null
   try {
     for (const message of batch.messages) {
-      if (isLogoJob(message.body)) continue
+      const { body } = message
+      if (isLogoJob(body)) continue
       try {
-        if (!message.body.idle) await compactAfterTurn(kit, model, message.body)
-        await reflectAfterTurn(kit, model, message.body)
+        if (isContinueJob(body)) {
+          const continued = await continueTurn(env, kit, body)
+          console.log(
+            JSON.stringify({
+              type: "cos.continued",
+              job_id: body.jobId,
+              continued,
+            })
+          )
+        } else {
+          if (!body.idle) await compactAfterTurn(kit, model, body)
+          await reflectAfterTurn(kit, model, body)
+        }
         message.ack()
       } catch (error) {
         console.error(
           JSON.stringify({
             code: "after_turn.failed",
-            turn_id: message.body.turnId,
+            ...(isContinueJob(body)
+              ? { job_id: body.jobId }
+              : { turn_id: body.turnId }),
             attempts: message.attempts,
             error: error instanceof Error ? error.name : "unknown",
           })
