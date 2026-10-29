@@ -5,7 +5,7 @@ import type {
 } from "@workspace/contracts"
 import { reminderTitle } from "@workspace/ui/lib/activity-copy"
 import { factLabel } from "@workspace/ui/lib/facts"
-import { formatTime } from "@workspace/ui/lib/format"
+import { dayLabel, dayOf, formatTime } from "@workspace/ui/lib/format"
 import type { AttentionItem } from "./api/types"
 import { leading } from "./briefing"
 
@@ -43,26 +43,10 @@ export const questionOf = (
       item.kind === "question" && item.id === reminder.request_id
   )
 
-/** The calendar day `at` falls on in `zone`, as a day count to compare. */
-export const dayOf = (at: Date, zone: string) =>
-  Date.parse(at.toLocaleDateString("en-CA", { timeZone: zone })) / 86_400_000
-
 /** `Today, 4:30 PM`, `Tomorrow, 9:00 AM`, else `Fri 3 Oct, 9:00 AM`, in `zone`. */
 export function dueLine(at: string, zone: string, now = new Date()): string {
   const date = new Date(at)
-  const days = dayOf(date, zone) - dayOf(now, zone)
-  const day =
-    days === 0
-      ? "Today"
-      : days === 1
-        ? "Tomorrow"
-        : date.toLocaleDateString("en-GB", {
-            weekday: "short",
-            day: "numeric",
-            month: "short",
-            timeZone: zone,
-          })
-  return `${day}, ${formatTime(date, zone)}`
+  return `${dayLabel(date, zone, now)}, ${formatTime(date, zone)}`
 }
 
 const HOUR = 3_600_000

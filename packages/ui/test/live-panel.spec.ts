@@ -310,3 +310,88 @@ test("an approval whose preview fails has no accessibility violations at any wid
       .toEqual([])
   }
 })
+
+test("each timeline is a list per day, with the time of day and how far off it is", async ({
+  page,
+}) => {
+  await open(page, "ComingUp timeline", 390)
+  const coming = page.getByRole("region", { name: /Coming up/ })
+  await expect(coming.getByRole("heading", { level: 3 })).toHaveText([
+    "Today",
+    "Tomorrow",
+    "Sat 31 Oct",
+  ])
+  const today = coming.getByRole("list", { name: "Today" })
+  await expect(today.getByRole("listitem")).toHaveText([
+    /10:55 AM\s*Ring Mrs Patel back\s*due now/,
+    /11:40 AM\s*Quote for Mrs Patel\s*in 40 min/,
+  ])
+  await expect(coming.getByRole("list", { name: "Tomorrow" })).toContainText(
+    "8:00 AMOrder mop headsin 21 hr"
+  )
+  // Past due and within the hour are marked; tomorrow's are not.
+  await expect(coming.locator("li[data-soon]")).toHaveCount(2)
+  await expect(
+    today.locator("time").first(),
+    "the exact time is the tooltip"
+  ).toHaveAttribute("title", "29 Oct 2026, 10:55 AM")
+  await expect(today.locator("time").first()).toHaveAttribute(
+    "datetime",
+    "2026-10-29T10:55:00.000Z"
+  )
+
+  const done = page.getByRole("region", { name: /Completed/ })
+  await expect(done.getByRole("heading", { level: 3 })).toHaveText([
+    "Today",
+    "Wed 28 Oct",
+  ])
+  await expect(done.getByRole("list", { name: "Today" })).toContainText(
+    "10:40 AMReminder: call Sam20 min ago"
+  )
+  await expect(done.locator("li[data-soon]")).toHaveCount(0)
+  await expect(page.getByText("View all")).toHaveCount(1)
+})
+
+test("a timeline's time column never wraps, at the panel's width or a phone's", async ({
+  page,
+}) => {
+  for (const width of [340, 390]) {
+    await open(page, "ComingUp timeline", width)
+    for (const time of await page
+      .locator('[data-slot="timeline"] time')
+      .all()) {
+      const label = `${width}: ${await time.textContent()}`
+      // One line box for its text, and the text inside its column.
+      expect(
+        await time.evaluate((el) => {
+          const range = document.createRange()
+          range.selectNodeContents(el)
+          return (
+            range.getClientRects().length === 1 &&
+            el.scrollWidth <= el.clientWidth
+          )
+        }),
+        label
+      ).toBe(true)
+    }
+  }
+})
+
+test("the timelines have no accessibility violations in either theme", async ({
+  page,
+}) => {
+  const entry = "ComingUp timeline"
+  for (const theme of ["light", "dark"]) {
+    await open(page, entry, 390, theme)
+    const results = await new AxeBuilder({ page })
+      .withTags(WCAG)
+      .include(`[data-entry="${entry}"]`)
+      .analyze()
+    expect
+      .soft(
+        results.violations.map((v) => `${theme}: ${v.id}`),
+        JSON.stringify(results.violations, null, 2)
+      )
+      .toEqual([])
+  }
+})
