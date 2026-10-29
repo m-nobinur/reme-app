@@ -1,5 +1,4 @@
 import {
-  AlarmIcon,
   ChatCircleTextIcon,
   GlobeIcon,
   ListChecksIcon,
@@ -35,6 +34,7 @@ import {
 } from "@workspace/ui/components/workspace-shell"
 import { formatDate } from "@workspace/ui/lib/format"
 import { SiteNameProvider } from "@workspace/ui/lib/site-name"
+import { STATE_MARKS } from "@workspace/ui/lib/status-icons"
 import { useEffect, useId, useState } from "react"
 import { lastChat } from "@/chat/history"
 import { getWorkspaceFrame, pollWorkspace } from "@/lib/api/server"
@@ -135,7 +135,7 @@ export const Route = createFileRoute("/app")({
 const SECTIONS = [
   { to: "/app/website", label: "Website", icon: GlobeIcon },
   { to: "/app/pipeline", label: "Pipeline", icon: PipelineIcon },
-  { to: "/app/reminders", label: "Reminders", icon: AlarmIcon },
+  { to: "/app/reminders", label: "Reminders", icon: STATE_MARKS.reminder.Icon },
   { to: "/app/tasks", label: "Tasks", icon: ListChecksIcon },
 ] as const
 

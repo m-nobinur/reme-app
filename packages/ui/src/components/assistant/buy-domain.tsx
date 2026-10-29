@@ -2,11 +2,7 @@ import {
   type ToolCallMessagePartComponent,
   useAuiState,
 } from "@assistant-ui/react"
-import {
-  ArrowSquareOutIcon,
-  CaretDownIcon,
-  CheckCircleIcon,
-} from "@phosphor-icons/react"
+import { ArrowSquareOutIcon, CaretDownIcon } from "@phosphor-icons/react"
 import {
   type BoughtElsewhereOutput,
   BuyDomainInput,
@@ -37,7 +33,7 @@ import { Badge } from "@workspace/ui/components/badge"
 import { ConnectRow, ConnectRows } from "@workspace/ui/components/connect-row"
 import { Field } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
-import { ToolStatus } from "@workspace/ui/components/status-line"
+import { DoneIcon, ToolStatus } from "@workspace/ui/components/status-line"
 import type { ToolArgs } from "@workspace/ui/lib/activity-copy"
 import { FIELD_ERROR, OPTION, OPTION_PILL } from "@workspace/ui/lib/card"
 import { refusalText } from "@workspace/ui/lib/refusal"
@@ -290,11 +286,7 @@ function NameCard({
       <span className={cn(META, "tabular-nums")}>
         {pounds(offer.price)} a year
       </span>
-      <CheckCircleIcon
-        aria-hidden
-        className="absolute end-3 bottom-3 hidden size-5 text-primary group-has-[:checked]:block"
-        weight="fill"
-      />
+      <DoneIcon className="absolute end-3 bottom-3 hidden group-has-[:checked]:block" />
     </label>
   )
 }
@@ -617,12 +609,7 @@ function StatusLine({
       data-slot="buy-domain"
       role="status"
     >
-      {ticked ? (
-        <CheckCircleIcon
-          aria-hidden
-          className="mt-0.5 size-4 shrink-0 text-primary"
-        />
-      ) : null}
+      {ticked ? <DoneIcon className="mt-0.5" /> : null}
       {STATUS_TEXT[status](name)}
     </p>
   )

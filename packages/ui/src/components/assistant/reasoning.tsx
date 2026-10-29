@@ -178,7 +178,6 @@ function ReasoningTrigger({
         announce={false}
         data-slot="reasoning-trigger-label"
         delay={0}
-        kind="thinking"
         label={reasoningLine(Boolean(active))}
         state={active ? "working" : "done"}
         {...(duration

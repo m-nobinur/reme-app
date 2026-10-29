@@ -22,8 +22,6 @@ import {
   ArrowBendDownRightIcon,
   ArrowDownIcon,
   ArrowUpIcon,
-  CheckIcon,
-  ChecksIcon,
   PaintBrushIcon,
   PlusIcon,
   SquareIcon,
@@ -53,14 +51,10 @@ import {
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu"
 import { LogoMark } from "@workspace/ui/components/logo"
-import { StatusLine } from "@workspace/ui/components/status-line"
+import { StateIcon, StatusLine } from "@workspace/ui/components/status-line"
 import { ComposerInputContext } from "@workspace/ui/hooks/use-composer-input"
 import { useOnboardingWait } from "@workspace/ui/hooks/use-onboarding-status"
-import {
-  WORKING_AFTER,
-  waitingLine,
-  writingBack,
-} from "@workspace/ui/lib/activity-copy"
+import { waitingLine, writingBack } from "@workspace/ui/lib/activity-copy"
 import { formatTime } from "@workspace/ui/lib/format"
 import { SHOW_DELAY_MS } from "@workspace/ui/lib/status-line"
 import {
@@ -171,6 +165,8 @@ export type ThreadProps = {
    * `seen` records that it now has.
    */
   reveal?: ThreadReveal | undefined
+  /** Sends the owner's last message again, offered on a reply that failed. */
+  onRetry?: (() => void) | undefined
 }
 
 export type ThreadReveal = {
@@ -282,6 +278,8 @@ export const Thread: FC<ThreadProps> = ({
   briefing,
   quickActions,
   mode,
+  assistant,
+  onRetry,
   after,
   updates,
   reveal,
@@ -309,8 +307,19 @@ export const Thread: FC<ThreadProps> = ({
       briefing,
       quickActions,
       mode,
+      assistant,
+      onRetry,
     }),
-    [stored, placeholder, questionPlaceholder, briefing, quickActions, mode]
+    [
+      stored,
+      placeholder,
+      questionPlaceholder,
+      briefing,
+      quickActions,
+      mode,
+      assistant,
+      onRetry,
+    ]
   )
   // Held by its parts, so a caller's inline object does not redraw every
   // message on each of its renders, such as each workspace poll.
@@ -1194,22 +1203,31 @@ const ComposerSend: FC<{ expanded: boolean }> = ({ expanded }) => {
 }
 
 const MessageError: FC = () => {
+  const { onRetry } = useContext(ThreadSettingsContext)
   const ended = useAuiState(
     (s) =>
       s.message.status?.type === "incomplete" &&
       s.message.status.error === SESSION_ENDED
   )
+  // Only a reply the app marked as one it can send again, and only the last.
+  const retryable = useAuiState(
+    (s) => s.message.isLast && s.message.metadata.custom?.["retry"] === true
+  )
   return (
     <MessagePrimitive.Error>
-      <ErrorPrimitive.Root className="aui-message-error-root mt-2 rounded-2xl border border-destructive bg-destructive/10 p-3 text-destructive text-sm dark:bg-destructive/5">
-        <ErrorPrimitive.Message className="aui-message-error-message line-clamp-2" />
+      <ErrorPrimitive.Root className="aui-message-error-root mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-destructive bg-destructive/10 p-3 text-destructive text-sm dark:bg-destructive/5">
+        <ErrorPrimitive.Message className="aui-message-error-message line-clamp-2 min-w-0 flex-1" />
         {ended ? (
           <a
-            className="mt-1 inline-block font-medium text-foreground underline underline-offset-4"
+            className="font-medium text-foreground underline underline-offset-4"
             href={`/sign-in?returnTo=${encodeURIComponent(window.location.pathname)}`}
           >
             Sign in again
           </a>
+        ) : onRetry && retryable ? (
+          <Button onClick={onRetry} size="sm" type="button" variant="outline">
+            Retry
+          </Button>
         ) : null}
       </ErrorPrimitive.Root>
     </MessagePrimitive.Error>
@@ -1247,20 +1265,13 @@ const TypingIndicator: FC<{ immediate?: boolean }> = ({
   })
   if (shown) return null
   const ctx = { seed, earlier: earlier ? earlier.split(" ") : [], assistant }
-  const { kind, label } =
+  const { label } =
     !status && (immediate || toolsRan)
-      ? { kind: "writing" as const, label: writingBack(ctx) }
+      ? { label: writingBack(ctx) }
       : waitingLine(status, seconds, ctx)
   return (
     <span data-slot="aui_assistant-message-indicator">
-      <StatusLine
-        // The first beat of a turn is the dots alone: the same words every
-        // turn read as a script.
-        bare={!status && !immediate && !toolsRan && seconds < WORKING_AFTER}
-        delay={immediate ? 0 : SHOW_DELAY_MS}
-        kind={kind}
-        label={label}
-      />
+      <StatusLine delay={immediate ? 0 : SHOW_DELAY_MS} label={label} />
     </span>
   )
 }
@@ -1350,6 +1361,18 @@ const AssistantMessage: FC = () => {
   const running = useAuiState((s) => s.message.status?.type === "running")
   const writing =
     running || reveal.phase === "typing" || reveal.phase === "writing"
+  // A reply that ended with nothing in it and no error to show is no row at
+  // all, not a time on its own.
+  const blank = useAuiState(
+    (s) =>
+      s.message.status?.type !== "running" &&
+      !(
+        s.message.status?.type === "incomplete" &&
+        s.message.status.reason === "error"
+      ) &&
+      s.message.parts.length === 0
+  )
+  if (blank && reveal.phase === "still") return null
 
   return (
     <MessagePrimitive.Root
@@ -1526,22 +1549,14 @@ const deliveryOf = (s: AssistantState): Delivery => {
   return next.content.length > 0 ? "seen" : "delivered"
 }
 
-const DELIVERY = {
-  sent: { label: "Sent", Icon: CheckIcon },
-  delivered: { label: "Delivered", Icon: ChecksIcon },
-  seen: { label: "Seen", Icon: ChecksIcon },
-} as const
+const DELIVERY = { sent: "Sent", delivered: "Delivered", seen: "Seen" }
 
 const DeliveryTick: FC = () => {
   const delivery = useAuiState(deliveryOf)
-  const { label, Icon } = DELIVERY[delivery]
   return (
     <span data-slot="aui_user-message-delivery" data-state={delivery}>
-      <Icon
-        aria-hidden
-        className={cn("size-3", delivery === "seen" && "text-primary")}
-      />
-      <span className="sr-only">{label}</span>
+      <StateIcon state={delivery} />
+      <span className="sr-only">{DELIVERY[delivery]}</span>
     </span>
   )
 }

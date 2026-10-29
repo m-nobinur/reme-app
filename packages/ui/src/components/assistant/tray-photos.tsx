@@ -1,10 +1,6 @@
 import {
-  CheckCircleIcon,
   CheckSquareIcon,
-  CircleDashedIcon,
-  CircleIcon,
   MagicWandIcon,
-  SpinnerGapIcon,
   SquareIcon,
   UploadSimpleIcon,
   XIcon,
@@ -24,6 +20,7 @@ import {
 } from "@workspace/ui/components/assistant/tray-services"
 import { Button } from "@workspace/ui/components/button"
 import { Skeleton } from "@workspace/ui/components/skeleton"
+import { StateIcon } from "@workspace/ui/components/status-line"
 import { checkPhotos, sizeText, typesText } from "@workspace/ui/lib/upload"
 import { cn } from "@workspace/ui/lib/utils"
 import { useState } from "react"
@@ -204,23 +201,9 @@ function TrayPhotos({
         const done = started && more === 0 && !busy
         return (
           <li className="flex items-center gap-2 text-sm" key={need.id}>
-            {done ? (
-              <CheckCircleIcon
-                aria-hidden
-                className="size-4.5 shrink-0 text-primary"
-                weight="fill"
-              />
-            ) : need.optional ? (
-              <CircleDashedIcon
-                aria-hidden
-                className="size-4.5 shrink-0 text-muted-foreground"
-              />
-            ) : (
-              <CircleIcon
-                aria-hidden
-                className="size-4.5 shrink-0 text-muted-foreground"
-              />
-            )}
+            <StateIcon
+              state={done ? "done" : need.optional ? "optional" : "next"}
+            />
             <span className="min-w-0 flex-1">{NEED_WORDS[need.id]}</span>
             {done ? <span className="sr-only">Done</span> : null}
             {started && !done && !busy && !need.optional ? (
@@ -377,7 +360,7 @@ function TrayPhotos({
               aria-live="polite"
               className="flex items-center gap-2 text-muted-foreground text-sm"
             >
-              <SpinnerGapIcon aria-hidden className="size-4 animate-spin" />
+              <StateIcon state="working" />
               {busy.doing === "uploading"
                 ? `Uploading ${count(busy.n)}`
                 : `Reading your ${busy.n === 1 ? "photo" : "photos"}`}

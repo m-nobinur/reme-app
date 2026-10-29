@@ -22,6 +22,7 @@ import {
   isRetried,
   readView,
   showsProgress,
+  supersededBy,
   UNCONFIRMED,
 } from "@workspace/ui/lib/tool-state"
 import { expect, it } from "vitest"
@@ -494,4 +495,27 @@ it("leaves the reply's status line to a reply with nothing at work on screen", (
   expect(
     showsProgress([call("c", { toolName: "x", isError: true })], quiet)
   ).toBe(false)
+})
+
+it("folds cancelled cards of one kind into the card that replaced them", () => {
+  const toolCall = (
+    id: string,
+    cancelled = false,
+    toolName = "create_reminder"
+  ) => ({
+    type: "tool-call",
+    toolName,
+    toolCallId: id,
+    ...(cancelled ? { isError: true, result: { error: CANCELLED } } : {}),
+  })
+  const messages = [
+    { content: [toolCall("a", true)] },
+    { content: [{ type: "text" }, toolCall("x", true, "buy_domain")] },
+    { content: [toolCall("b", true), toolCall("c")] },
+  ]
+  expect(supersededBy(messages, "create_reminder", "a")).toBe("later")
+  expect(supersededBy(messages, "create_reminder", "b")).toBe("later")
+  expect(supersededBy(messages, "create_reminder", "c")).toBe(2)
+  // The last of its kind, even cancelled, keeps its own line.
+  expect(supersededBy(messages, "buy_domain", "x")).toBe(0)
 })

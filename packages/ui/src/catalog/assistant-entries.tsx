@@ -114,6 +114,25 @@ const COS_TOOLS_FIXTURE = {
 
 const FIXTURE_TIME = new Date("2026-09-24T09:00:00Z")
 
+const REMEMBER_CALL: ThreadMessageLike[] = [
+  { content: "I'd rather you call me after 4pm.", role: "user" },
+  {
+    content: [
+      {
+        args: {
+          operations: [{ action: "add", text: "Prefers calls after 4pm" }],
+        },
+        result: { outcome: "saved", note: "Saved.", fullness: "3 of 40" },
+        toolCallId: "call_remember",
+        toolName: "remember",
+        type: "tool-call",
+      },
+      { text: "Got it, after 4pm from now on.", type: "text" },
+    ],
+    role: "assistant",
+  },
+]
+
 function FixtureThread({
   height = "h-[48rem]",
   messages,
@@ -2833,6 +2852,11 @@ const assistantCatalog = [
         <MemoryChipUI />
       </FixtureThread>
     ),
+  },
+  {
+    // A saved remember call says what it saved in its own turn.
+    name: "Remembered",
+    render: () => <FixtureThread height="h-[20rem]" messages={REMEMBER_CALL} />,
   },
   {
     name: "PersonaCardUI",

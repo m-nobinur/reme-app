@@ -3,18 +3,11 @@ import {
   CaretDownIcon,
   CaretLeftIcon,
   CaretRightIcon,
-  ChatCircleDotsIcon,
-  CheckCircleIcon,
-  CircleIcon,
-  ClockIcon,
   GlobeIcon,
   ImageIcon,
-  MinusCircleIcon,
   PaintBrushIcon,
-  type Icon as PhosphorIcon,
   RocketLaunchIcon,
   SpinnerGapIcon,
-  WarningCircleIcon,
 } from "@phosphor-icons/react"
 import type {
   ApprovalTarget,
@@ -32,7 +25,11 @@ import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { Diffusing } from "@workspace/ui/components/diffusing"
 import { Field } from "@workspace/ui/components/field"
 import { Skeleton } from "@workspace/ui/components/skeleton"
-import { StatusIcon } from "@workspace/ui/components/status-line"
+import {
+  DoneIcon,
+  StateIcon,
+  StatusIcon,
+} from "@workspace/ui/components/status-line"
 import { useCycle } from "@workspace/ui/hooks/use-cycle"
 import { SKIPPED, type StatusKind } from "@workspace/ui/lib/activity-copy"
 import {
@@ -73,14 +70,14 @@ const SECTION_ACTION =
 /** Sections after the first are set off by a hairline. */
 function PanelSection({
   title,
-  icon: Icon,
+  icon,
   count,
   action,
   children,
 }: {
   title: string
-  /** A quiet mark before the heading. */
-  icon?: PhosphorIcon
+  /** A mark before the heading: a `StateIcon` for where its items stand. */
+  icon?: ReactNode
   count?: number
   /** A link or button to the rest of the list, at the heading's end. */
   action?: ReactNode
@@ -94,9 +91,7 @@ function PanelSection({
     >
       <div className="flex items-center justify-between gap-2">
         <h2 className="flex items-center gap-1 font-semibold text-sm" id={id}>
-          {Icon ? (
-            <Icon aria-hidden className="size-4 text-muted-foreground" />
-          ) : null}
+          {icon}
           {title}
           {count ? (
             <span className="ms-1 rounded-full bg-muted px-1.5 font-medium text-[0.6875rem] text-muted-foreground tabular-nums leading-4">
@@ -330,13 +325,7 @@ function StepDetail({
               data-state={item.done ? "done" : item.working ? "now" : "next"}
               key={item.label}
             >
-              {item.done ? (
-                <CheckCircleIcon
-                  aria-hidden
-                  className="size-3 text-primary"
-                  weight="fill"
-                />
-              ) : null}
+              {item.done ? <DoneIcon /> : null}
               {/* The shimmer masks its own box, so it takes the words, not the border. */}
               <span
                 className={cn(
@@ -436,28 +425,30 @@ const STEP_SAID: Record<SegmentStep["state"], string> = {
   skipped: "",
 }
 
-function StepMark({ step, failed }: { step: SegmentStep; failed: boolean }) {
-  if (step.state === "done") {
-    return <CheckCircleIcon className="size-4 text-primary" weight="fill" />
-  }
-  if (failed && (step.state === "now" || step.state === "waiting")) {
-    return <WarningCircleIcon className="size-4 text-destructive" />
-  }
-  switch (step.state) {
+/** Where a step stands, the Website page's rows as well. */
+function StepMark({
+  state,
+  kind,
+}: {
+  state: SegmentStep["state"] | "failed"
+  /** The icon a step at work moves. */
+  kind: StatusKind
+}) {
+  switch (state) {
     // Neutral, so a step reads as part of its segment and the header's
     // brand-coloured icon stays the one that leads.
     case "now":
-      return <StatusIcon className="text-foreground/80" kind={step.kind} />
+      return <StatusIcon className="text-foreground/80" kind={kind} />
+    case "done":
+      return <DoneIcon />
     case "waiting":
-      return step.kind === "question" ? (
-        <StatusIcon className="text-foreground/80" kind="question" />
-      ) : (
-        <ChatCircleDotsIcon className="size-4 animate-status-fade text-foreground/80 motion-reduce:animate-none" />
-      )
+      return <StateIcon state="waiting" />
+    case "failed":
+      return <StateIcon state="failed" />
     case "skipped":
-      return <MinusCircleIcon className="size-4 text-muted-foreground" />
+      return <StateIcon state="stopped" />
     default:
-      return <CircleIcon className="size-4 text-muted-foreground/60" />
+      return <StateIcon state="next" />
   }
 }
 
@@ -524,9 +515,9 @@ function PanelSegment({
       <div className="flex items-start gap-1">
         <span aria-hidden className="mt-0.5 flex size-4 shrink-0">
           {folded ? (
-            <CheckCircleIcon className="size-4 text-primary" weight="fill" />
+            <DoneIcon />
           ) : failed ? (
-            <WarningCircleIcon className="size-4 text-destructive" />
+            <StateIcon state="failed" />
           ) : (
             // Moving only while work runs; waiting on the owner, the step
             // under it moves instead.
@@ -607,7 +598,16 @@ function PanelSegment({
                         )}
                       />
                       <span aria-hidden className="mt-px flex size-4 shrink-0">
-                        <StepMark failed={failed} step={step} />
+                        <StepMark
+                          kind={step.kind}
+                          // The step that stopped takes the failure.
+                          state={
+                            failed &&
+                            (step.state === "now" || step.state === "waiting")
+                              ? "failed"
+                              : step.state
+                          }
+                        />
                       </span>
                       <div className="flex min-w-0 flex-1 flex-col gap-2">
                         <p className="flex min-w-0 items-baseline gap-1.5 text-[0.8125rem]">
@@ -761,7 +761,7 @@ function WaitingOnYou({
 }: {
   children?: ReactNode
   title?: string
-  icon?: PhosphorIcon
+  icon?: ReactNode
   limit?: number
   status?: string | null
   error?: string | null
@@ -1470,7 +1470,7 @@ function ApprovalItem({
 function ComingUp({
   items,
   title = "Coming up",
-  icon = ClockIcon,
+  icon = <StateIcon state="reminder" />,
   count,
   zone,
   action,
@@ -1478,7 +1478,7 @@ function ComingUp({
 }: {
   items: { id: string; text: string; at: string }[]
   title?: string
-  icon?: PhosphorIcon
+  icon?: ReactNode
   /** How many there are in all, when `items` are only the first. */
   count?: number
   zone?: string | null
@@ -1525,7 +1525,7 @@ function ComingUp({
  */
 function UpNext({ text, children }: { text: string; children: ReactNode }) {
   return (
-    <PanelSection icon={CircleIcon} title="Up next">
+    <PanelSection icon={<StateIcon state="next" />} title="Up next">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 ps-5">
         <p className="min-w-0 text-sm">{text}</p>
         {children}
@@ -1585,11 +1585,7 @@ function ReminderNote({
               overdue && "font-medium text-destructive"
             )}
           >
-            <ClockIcon
-              aria-hidden
-              className="size-3.5 shrink-0"
-              weight={soon || overdue ? "fill" : "regular"}
-            />
+            <StateIcon state="time" />
             <span className="sr-only">
               {overdue ? "Overdue, was due " : "Due "}
             </span>
@@ -1847,6 +1843,7 @@ export {
   Shot,
   SiteIcon,
   StageDetail,
+  StepMark,
   StopBuild,
   stageWord,
   UpNext,

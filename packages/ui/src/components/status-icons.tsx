@@ -1,13 +1,15 @@
 import { HammerIcon } from "@phosphor-icons/react"
 import { cn } from "@workspace/ui/lib/utils"
-import type { ReactNode } from "react"
+import { type ReactNode, useEffect, useRef } from "react"
 
 /**
  * Drawn icons for work the phosphor set has no moving picture of: each moves
  * its own parts while `animated`, in currentColor at the size its class
  * gives, and holds still under reduced motion. Keyframes are in globals.css.
  */
-type DrawnIconProps = { className?: string; animated?: boolean }
+type DrawnIconProps = { className?: string | undefined; animated?: boolean }
+
+export type DrawnIcon = (props: DrawnIconProps) => ReactNode
 
 function Svg({
   className,
@@ -24,7 +26,7 @@ function Svg({
       stroke="currentColor"
       strokeLinecap="round"
       strokeLinejoin="round"
-      strokeWidth={1.75}
+      strokeWidth={1.5}
       viewBox="0 0 24 24"
     >
       {children}
@@ -77,8 +79,8 @@ export function SetupIcon({ className, animated }: DrawnIconProps) {
   )
 }
 
-/** A question waiting on the owner: a question mark that rocks, its dot blinking. */
-export function QuestionIcon({ className, animated }: DrawnIconProps) {
+/** An onboarding step at work: a question mark that rocks, its dot blinking. */
+export function QuestionMarkIcon({ className, animated }: DrawnIconProps) {
   return (
     <Svg className={className}>
       <circle cx={12} cy={12} r={9.5} />
@@ -93,7 +95,7 @@ export function QuestionIcon({ className, animated }: DrawnIconProps) {
         cx={12}
         cy={17}
         fill="currentColor"
-        r={0.6}
+        r={1}
         stroke="none"
       />
     </Svg>
@@ -123,7 +125,7 @@ export function PlanningIcon({ className, animated }: DrawnIconProps) {
   )
 }
 
-/** Making photos: a picture, its sun rising, a sparkle where it is made. */
+/** Making photos: a picture, its sun rising. */
 export function PhotosIcon({ className, animated }: DrawnIconProps) {
   return (
     <Svg className={className}>
@@ -134,13 +136,6 @@ export function PhotosIcon({ className, animated }: DrawnIconProps) {
         cx={9}
         cy={8.5}
         r={1.6}
-      />
-      <path
-        className={cn(
-          "origin-center [transform-box:fill-box]",
-          moving(animated, "animate-icon-twinkle")
-        )}
-        d="M19 1.8v4.4M16.8 4h4.4"
       />
     </Svg>
   )
@@ -172,7 +167,7 @@ export function WritingIcon({ className, animated }: DrawnIconProps) {
   )
 }
 
-/** Polishing: a brush sweeping back and forth, a glint where it passed. */
+/** Polishing: a brush sweeping back and forth. */
 export function PolishingIcon({ className, animated }: DrawnIconProps) {
   return (
     <Svg className={className}>
@@ -184,14 +179,6 @@ export function PolishingIcon({ className, animated }: DrawnIconProps) {
         <path d="m12.3 9.7 2 2" />
         <path d="M12.3 9.7 9 13c-.9.9-1.2 2.3-1.6 3.7-.3 1-1 1.7-2.4 2 2.6.6 5.2.1 6.6-1.3l2.7-3.4" />
       </g>
-      <path
-        className={cn(
-          "origin-center [transform-box:fill-box]",
-          moving(animated, "animate-icon-twinkle")
-        )}
-        d="M5 4v4M3 6h4"
-        style={animated ? { animationDelay: "0.6s" } : undefined}
-      />
     </Svg>
   )
 }
@@ -241,25 +228,107 @@ export function ReadingIcon({ className, animated }: DrawnIconProps) {
   )
 }
 
-/** Thinking: a sparkle that turns and breathes, a small one glinting beside it. */
+/** Thinking: two dots breathing in turn. */
 export function ThinkingIcon({ className, animated }: DrawnIconProps) {
   return (
     <Svg className={className}>
-      <path
-        className={cn(
-          "origin-center [transform-box:fill-box]",
-          moving(animated, "animate-icon-breathe")
-        )}
-        d="M11 4.5Q12 11 18.5 12Q12 13 11 19.5Q10 13 3.5 12Q10 11 11 4.5Z"
-      />
-      <path
-        className={cn(
-          "origin-center [transform-box:fill-box]",
-          moving(animated, "animate-icon-twinkle")
-        )}
-        d="M19 2.5v4M17 4.5h4"
-        style={animated ? { animationDelay: "0.5s" } : undefined}
-      />
+      {[8, 16].map((cx, i) => (
+        <circle
+          className={cn(
+            "origin-center [transform-box:fill-box]",
+            moving(animated, "animate-icon-breathe")
+          )}
+          cx={cx}
+          cy={12}
+          fill="currentColor"
+          key={cx}
+          r={2.2}
+          stroke="none"
+          style={animated ? { animationDelay: `${i * 0.6}s` } : undefined}
+        />
+      ))}
     </Svg>
+  )
+}
+
+const CYCLE_MS = 4400
+const SPREAD = 4.6
+const RADIUS = 4.4
+const ease = (k: number) => (k < 0.5 ? 4 * k ** 3 : 1 - (-2 * k + 2) ** 3 / 2)
+
+/** The dots in a line, a wave running through them. */
+const wave = (ms: number) =>
+  [0, 1, 2].map((dot) => ({
+    x: (dot - 1) * SPREAD,
+    y: 1.8 * Math.sin((ms / 1600) * 2 * Math.PI - dot * 0.8),
+  }))
+
+/** The dots as a slowly turning triangle that draws in towards its centre and out, twice. */
+const triangle = (ms: number) => {
+  const r =
+    1.6 + (RADIUS - 1.6) * (0.5 + 0.5 * Math.cos((ms / 1000) * 2 * Math.PI))
+  return [0, 1, 2].map((dot) => {
+    const a = (ms / 5000) * 2 * Math.PI + (dot * 2 * Math.PI) / 3 + Math.PI
+    return { x: r * Math.cos(a), y: r * Math.sin(a) }
+  })
+}
+
+const between = (
+  from: { x: number; y: number }[],
+  to: { x: number; y: number }[],
+  k: number
+) =>
+  from.map((p, dot) => ({
+    x: p.x + ((to[dot]?.x ?? p.x) - p.x) * ease(k),
+    y: p.y + ((to[dot]?.y ?? p.y) - p.y) * ease(k),
+  }))
+
+/** Where the dots are `ms` into a cycle: wave, fold, triangle, unfold. */
+function dotsAt(ms: number) {
+  if (ms < 1600) return wave(ms)
+  if (ms < 2000) return between(wave(1600), triangle(0), (ms - 1600) / 400)
+  if (ms < 4000) return triangle(ms - 2000)
+  return between(triangle(2000), wave(0), (ms - 4000) / 400)
+}
+
+/**
+ * The one working mark: three dots folding through a wave and a triangle,
+ * moved by the frame while `animated`, still under reduced motion.
+ */
+export function WorkingIcon({ className, animated }: DrawnIconProps) {
+  const dots = useRef<(SVGCircleElement | null)[]>([])
+  useEffect(() => {
+    if (!animated || matchMedia("(prefers-reduced-motion: reduce)").matches)
+      return
+    const start = performance.now()
+    let frame = requestAnimationFrame(function draw(now) {
+      dotsAt((now - start) % CYCLE_MS).forEach((p, dot) => {
+        dots.current[dot]?.setAttribute("cx", p.x.toFixed(2))
+        dots.current[dot]?.setAttribute("cy", p.y.toFixed(2))
+      })
+      frame = requestAnimationFrame(draw)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [animated])
+  return (
+    <svg
+      aria-hidden
+      className={cn("size-4 shrink-0", className)}
+      fill="currentColor"
+      viewBox="-8 -8 16 16"
+    >
+      {wave(0).map((p, dot) => (
+        <circle
+          cx={p.x}
+          cy={p.y}
+          // biome-ignore lint/suspicious/noArrayIndexKey: three fixed dots
+          key={dot}
+          r="1.5"
+          ref={(node) => {
+            dots.current[dot] = node
+          }}
+        />
+      ))}
+    </svg>
   )
 }

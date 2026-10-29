@@ -42,6 +42,7 @@ export function SiteReady({
   onRetryPreview,
   approved = false,
   published = false,
+  live = false,
   pending = false,
   error = null,
   onApprove,
@@ -60,6 +61,8 @@ export function SiteReady({
   approved?: boolean
   /** That version is live; the assistant's live message is still to come. */
   published?: boolean
+  /** The assistant said it is live: the approval stays as its result. */
+  live?: boolean
   /** The approval is on its way to the server. */
   pending?: boolean
   /** Why the last approval did not go through, in the owner's words. */
@@ -103,9 +106,8 @@ export function SiteReady({
     >
       <StatusLine
         delay={0}
-        kind="publishing"
-        label={publishLine(published)}
-        state="working"
+        label={publishLine(published, live)}
+        state={live ? "done" : "working"}
       />
     </p>
   )

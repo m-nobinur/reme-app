@@ -27,6 +27,7 @@ import {
   RemoveDomain,
 } from "@workspace/ui/components/assistant/domain"
 import { ConnectGoogle } from "@workspace/ui/components/assistant/google"
+import { Remembered } from "@workspace/ui/components/assistant/memory-chip"
 import { ToolStatus } from "@workspace/ui/components/status-line"
 import { reminderTitle, type ToolArgs } from "@workspace/ui/lib/activity-copy"
 import { factLabel, factText } from "@workspace/ui/lib/facts"
@@ -270,12 +271,11 @@ const RecordReview: ToolCallMessagePartComponent = (props) => (
 )
 
 /**
- * Tools that show nothing in the thread: the chat tells the owner what was
- * remembered on the next reply, as a chip, and Ellie's own words say an offer
- * is put off, so no tool card is drawn.
+ * Tools with no card and no working line: what was remembered is a chip in
+ * the same turn, and Ellie's own words say an offer is put off.
  */
 export const COS_QUIET: Record<string, ToolCallMessagePartComponent> = {
-  remember: () => null,
+  remember: Remembered,
   put_off: () => null,
 }
 

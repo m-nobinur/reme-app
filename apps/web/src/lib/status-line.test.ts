@@ -1,8 +1,5 @@
 // @vitest-environment happy-dom
-import {
-  type StatusKind,
-  StatusLine,
-} from "@workspace/ui/components/status-line"
+import { StatusLine } from "@workspace/ui/components/status-line"
 import { foldLines, holdFor } from "@workspace/ui/lib/status-line"
 import { act, createElement } from "react"
 import { createRoot, type Root } from "react-dom/client"
@@ -33,7 +30,6 @@ const show = (props: Props) =>
   act(async () =>
     root.render(
       createElement(StatusLine, {
-        kind: "checking" as StatusKind,
         label: "Checking your DNS",
         ...props,
       })
@@ -61,7 +57,7 @@ it("holds a working line to its minimum, and lets a failure through", () => {
 it("shows a working line only after its delay", async () => {
   await show({})
   expect(text()).toBe("")
-  await wait(299)
+  await wait(199)
   expect(text()).toBe("")
   await wait(1)
   expect(text()).toBe("Checking your DNS")
@@ -77,7 +73,7 @@ it("never shows a line for work that ended before the delay", async () => {
 
 it("keeps the working words for two seconds, then says it is done", async () => {
   await show({})
-  await wait(300)
+  await wait(200)
   await wait(500)
   await show({ label: "Checked your DNS", state: "done" })
   expect(text()).toBe("Checking your DNS")

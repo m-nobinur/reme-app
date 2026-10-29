@@ -1,5 +1,4 @@
 import type { ToolCallMessagePartComponent } from "@assistant-ui/react"
-import { CheckCircleIcon } from "@phosphor-icons/react"
 import {
   type AskDetailsInput,
   AVATARS,
@@ -17,6 +16,7 @@ import {
 } from "@workspace/ui/components/assistant/question-tray"
 import { AssistantAvatar } from "@workspace/ui/components/assistant-avatar"
 import { AnswerInputs } from "@workspace/ui/components/live-panel"
+import { DoneIcon } from "@workspace/ui/components/status-line"
 import { answerValue, FACT_INPUTS } from "@workspace/ui/lib/answer"
 import {
   FIELD_ERROR,
@@ -176,11 +176,7 @@ function Picks({
             >
               {option.label}
               {tiles && picked === option.id ? (
-                <CheckCircleIcon
-                  aria-hidden
-                  className="ml-auto size-4 shrink-0 text-primary"
-                  weight="fill"
-                />
+                <DoneIcon className="ml-auto" />
               ) : null}
             </span>
             {"hint" in option ? (
@@ -252,11 +248,7 @@ function AvatarPicks({
               id={avatar.id}
             />
             {shown === avatar.id ? (
-              <CheckCircleIcon
-                aria-hidden
-                className="absolute top-1 right-1 size-4 rounded-full bg-card text-primary"
-                weight="fill"
-              />
+              <DoneIcon className="absolute top-1 right-1 rounded-full bg-card" />
             ) : null}
           </label>
         ))}

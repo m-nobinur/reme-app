@@ -67,6 +67,7 @@ export function SiteReadyCard({
     return (
       <SiteReady
         approved
+        live={card.kind === "approved" && card.live}
         published={card.kind === "approved" && card.published}
         className={className}
         docked={docked}

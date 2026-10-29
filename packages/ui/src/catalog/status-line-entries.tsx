@@ -1,9 +1,16 @@
+import { StepMark } from "@workspace/ui/components/live-panel"
 import {
+  StateIcon,
   StatusIcon,
   type StatusKind,
   StatusLine,
   ToolStatus,
 } from "@workspace/ui/components/status-line"
+import {
+  KIND_MARKS,
+  STATE_MARKS,
+  type StateName,
+} from "@workspace/ui/lib/status-icons"
 import type { ReactNode } from "react"
 
 /**
@@ -38,7 +45,64 @@ const Stack = ({ children }: { children: ReactNode }) => (
   <div className="flex max-w-sm flex-col gap-3 text-sm">{children}</div>
 )
 
+/** The icon list, as the owner reads it: each mark, its name and when it is used. */
+function IconList() {
+  return (
+    <div className="flex max-w-xl flex-col gap-6 text-sm">
+      <dl className="grid grid-cols-[auto_auto_1fr] items-center gap-x-3 gap-y-2">
+        {(Object.keys(STATE_MARKS) as StateName[]).map((state) => (
+          <div className="contents" key={state}>
+            <dt className="flex justify-center">
+              <StateIcon state={state} />
+            </dt>
+            <dd className="font-medium">{state}</dd>
+            <dd className="text-muted-foreground">{STATE_MARKS[state].use}</dd>
+          </div>
+        ))}
+      </dl>
+      <dl className="grid grid-cols-[auto_auto_1fr] items-center gap-x-3 gap-y-2">
+        {(Object.keys(KIND_MARKS) as StatusKind[]).map((kind) => (
+          <div className="contents" key={kind}>
+            <dt className="flex justify-center text-primary">
+              <StatusIcon kind={kind} still />
+            </dt>
+            <dd className="font-medium">{kind}</dd>
+            <dd className="text-muted-foreground">{KIND_MARKS[kind].use}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  )
+}
+
+const STEP_STATES = [
+  "done",
+  "now",
+  "waiting",
+  "failed",
+  "skipped",
+  "next",
+] as const
+
 const statusLineCatalog: Entry[] = [
+  ...(["StateIcon", "DoneIcon"] as const).map((name) => ({
+    name,
+    render: () => <IconList />,
+  })),
+  {
+    // A step's mark in the panel and on the Website page, in each state.
+    name: "StepMark",
+    render: () => (
+      <Stack>
+        {STEP_STATES.map((state) => (
+          <p className="flex items-center gap-2" key={state}>
+            <StepMark kind="domain" state={state} />
+            {state}
+          </p>
+        ))}
+      </Stack>
+    ),
+  },
   // The icon alone, as the panel's rows draw it beside their own words, held
   // still; the drawn icons are the kinds that have one of their own.
   ...(
@@ -47,7 +111,8 @@ const statusLineCatalog: Entry[] = [
       "ReadingIcon",
       "ThinkingIcon",
       "SetupIcon",
-      "QuestionIcon",
+      "QuestionMarkIcon",
+      "WorkingIcon",
       "PlanningIcon",
       "BuildingIcon",
       "PhotosIcon",
@@ -93,7 +158,6 @@ const statusLineCatalog: Entry[] = [
             announce={false}
             delay={0}
             key={kind}
-            kind={kind}
             label={KIND_LABELS[kind]}
           />
         ))}
@@ -107,28 +171,24 @@ const statusLineCatalog: Entry[] = [
         <StatusLine
           announce={false}
           delay={0}
-          kind="checking"
           label="Checked your DNS"
           state="done"
         />
         <StatusLine
           announce={false}
           delay={0}
-          kind="domain"
           label="Couldn't reach Cloudflare, trying again"
           state="failed"
         />
         <StatusLine
           announce={false}
           delay={0}
-          kind="payment"
           label="Waiting for your payment, until 11:50"
           state="waiting"
         />
         <StatusLine
           announce={false}
           delay={0}
-          kind="domain"
           label="Stopped searching for a domain"
           state="stopped"
         />
@@ -143,14 +203,12 @@ const statusLineCatalog: Entry[] = [
           announce={false}
           count={3}
           delay={0}
-          kind="checking"
           label="Checking your DNS"
         />
         <StatusLine
           announce={false}
           delay={0}
           elapsed={42_000}
-          kind="building"
           label="Writing the pages"
         />
         <StatusLine
@@ -158,7 +216,6 @@ const statusLineCatalog: Entry[] = [
           clockAfter={0}
           delay={0}
           elapsed={185_000}
-          kind="planning"
           label="Planning your website"
         />
       </Stack>

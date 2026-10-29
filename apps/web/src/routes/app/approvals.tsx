@@ -1,9 +1,9 @@
-import { CheckCircleIcon } from "@phosphor-icons/react"
 import { createFileRoute } from "@tanstack/react-router"
 import { PageHeader } from "@workspace/ui/components/app-shell"
 import { Button } from "@workspace/ui/components/button"
 import { EmptyState } from "@workspace/ui/components/empty-state"
 import { ListFilter } from "@workspace/ui/components/list-filter"
+import { DoneIcon } from "@workspace/ui/components/status-line"
 import { useState } from "react"
 import { validateListSearch } from "@/lib/search"
 import { useLiveWorkspace } from "@/lib/workspace"
@@ -33,7 +33,7 @@ function Approvals() {
           </Button>
         }
         description="Approvals could not be loaded. Nothing was changed."
-        icon={<CheckCircleIcon />}
+        icon={<DoneIcon />}
         role="alert"
         title="Something went wrong"
       />
@@ -66,7 +66,7 @@ function Approvals() {
       {approvals.length === 0 ? (
         <EmptyState
           description="Anything that needs your yes shows here."
-          icon={<CheckCircleIcon />}
+          icon={<DoneIcon />}
           title="Nothing waiting on you"
         />
       ) : (
@@ -93,7 +93,7 @@ function Approvals() {
           {matches.length === 0 ? (
             <EmptyState
               description="No approval matches that filter."
-              icon={<CheckCircleIcon />}
+              icon={<DoneIcon />}
               title="No matches"
             />
           ) : (

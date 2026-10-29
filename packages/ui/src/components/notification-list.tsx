@@ -1,5 +1,4 @@
 import { Popover as PopoverPrimitive } from "@base-ui/react/popover"
-import { BellIcon, HourglassMediumIcon } from "@phosphor-icons/react"
 import { railItemClass } from "@workspace/ui/components/app-shell"
 import {
   type AttentionKind,
@@ -7,6 +6,7 @@ import {
 } from "@workspace/ui/components/attention-card"
 import { Badge } from "@workspace/ui/components/badge"
 import { EmptyState } from "@workspace/ui/components/empty-state"
+import { StateIcon } from "@workspace/ui/components/status-line"
 import {
   Tabs,
   TabsContent,
@@ -15,6 +15,7 @@ import {
 } from "@workspace/ui/components/tabs"
 import { Hint } from "@workspace/ui/components/tooltip"
 import { formatDateTime } from "@workspace/ui/lib/format"
+import { STATE_MARKS } from "@workspace/ui/lib/status-icons"
 import { cn, META } from "@workspace/ui/lib/utils"
 import {
   type ComponentProps,
@@ -39,7 +40,7 @@ import {
 type EntryKind = AttentionKind | "wait"
 const WAIT = {
   label: "Waiting on you",
-  icon: HourglassMediumIcon,
+  icon: STATE_MARKS.waiting.Icon,
   variant: "secondary",
 } as const
 const kindOf = (kind: EntryKind) =>
@@ -72,14 +73,14 @@ function NotificationList({
     return error ? (
       <EmptyState
         description={error}
-        icon={<BellIcon />}
+        icon={<StateIcon state="notifications" />}
         role="alert"
         title="Notifications did not load"
       />
     ) : (
       <EmptyState
         description="When your team asks you something or a version is ready to publish, it shows here. So does news about your site, like a version going live."
-        icon={<BellIcon />}
+        icon={<StateIcon state="notifications" />}
         title="Nothing yet"
       />
     )
@@ -190,7 +191,7 @@ function NotificationMenu({
           className={railItemClass}
           data-slot="notification-bell"
         >
-          <BellIcon aria-hidden />
+          <StateIcon state="notifications" />
           {unread > 0 ? (
             <span
               aria-hidden

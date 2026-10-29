@@ -319,10 +319,12 @@ export const reasoningLine = (working: boolean) =>
  * live message lands: at work at once, then published while the load check
  * runs, so the chat is never silent in between.
  */
-export const publishLine = (published: boolean) =>
-  published
-    ? "Published, checking your website loads"
-    : "Approved, publishing your website"
+export const publishLine = (published: boolean, live = false) =>
+  live
+    ? "Published, your website is live"
+    : published
+      ? "Published, checking your website loads"
+      : "Approved, publishing your website"
 
 /** Several quiet reads folded into one line. */
 export const groupLine = (count: number, working: boolean) =>
@@ -750,10 +752,6 @@ export const phaseState = (phase: Phase): StatusState =>
     : phase === "cut" || phase === "denied"
       ? "stopped"
       : phase
-
-/** The kind a tool's icon is drawn for. */
-export const toolKind = (tool: string): StatusKind =>
-  known(tool) ? TOOLS[tool].kind : "thinking"
 
 // ---------------------------------------------------------------------------
 // Build stages: the six every full build lists, from its first event.

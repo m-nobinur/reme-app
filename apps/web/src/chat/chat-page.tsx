@@ -102,6 +102,7 @@ export function ChatPage() {
     [siteChange]
   )
   const intent = useRef<"site_change" | undefined>(undefined)
+  const retry = useRef<(() => void) | null>(null)
   intent.current = siteChange ? "site_change" : undefined
   // A message the assistant posted on its own, named by the polled tag. Set
   // here, where the workspace re-renders, for the runtime hook to follow.
@@ -129,6 +130,7 @@ export function ChatPage() {
       // loaded started a second conversation.
       suggestions: briefing.suggestions,
       intent,
+      retry,
       onIntentSent: () => setSiteChange(null),
       tail,
       refresh: live.refresh,
@@ -226,6 +228,7 @@ export function ChatPage() {
                         briefing={briefing.line}
                         components={{ ToolFallback: Approval }}
                         mode={mode}
+                        onRetry={() => retry.current?.()}
                         // One neutral line: rotating ideas offered work the
                         // owner could not ask for yet.
                         placeholder={`Message ${assistant}…`}
