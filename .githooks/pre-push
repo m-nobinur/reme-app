@@ -8,6 +8,9 @@ while read -r _local_ref _local_sha remote_ref _remote_sha; do
     die "direct push to '$target' is not allowed. Open a PR:  gh pr create --fill"
 done
 
+# The rest is heavy: wait for any other heavy job on this machine, holding its lock.
+[ -n "${REME_HEAVY_LOCK:-}" ] || exec "$(dirname "$0")/../scripts/heavy.sh" "$0" "$@" </dev/null
+
 # Turbo's cache is shared by every worktree on this machine, and it hashes
 # declared inputs, not what is installed. A cached pass once replayed while
 # packages/db/node_modules was gone (#11). So the install is checked first: a

@@ -19,6 +19,9 @@
     "ONBOARDING_EVAL_VERBOSE",
     "ORCHESTRATOR_TOKEN",
     "ORCHESTRATOR_URL",
+    // scripts/heavy.sh marks its lock as held with this. A task that runs
+    // heavy.sh again (the ui suite) would otherwise wait on its own parent.
+    "REME_HEAVY_LOCK",
     "VITEST_MAX_WORKERS"
   ],
   // The floor gate is part of every blocking suite's verdict, and it lives

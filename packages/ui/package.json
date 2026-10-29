@@ -6,7 +6,7 @@
   "scripts": {
     "catalog": "vite",
     "typecheck": "tsc --noEmit",
-    "test": "playwright test",
+    "test": "../../scripts/heavy.sh playwright test",
     "test:update": "playwright test --update-snapshots"
   },
   "dependencies": {
