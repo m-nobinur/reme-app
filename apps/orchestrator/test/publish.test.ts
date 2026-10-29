@@ -1622,4 +1622,31 @@ live("the publish workflow", () => {
     expect(await redriveQueued(env, kit, orgId)).toEqual([])
     expect(created).toEqual([])
   })
+
+  it("adopts a running instance a row never recorded instead of starting a second", async () => {
+    const orgId = await freshOrg(kit)
+    const queued = await newAssignment(kit, orgId)
+    const created: string[] = []
+    const env = {
+      ASSIGNMENTS: {
+        get: async (id: string) => {
+          if (id !== queued.assignmentId) throw new Error("not found")
+          return { status: async () => ({ status: "running" }) }
+        },
+        create: async ({ id }: { id: string }) => {
+          created.push(id)
+          return { id }
+        },
+      },
+    } as unknown as Env
+    expect(await redriveQueued(env, kit, orgId)).toEqual([])
+    expect(created).toEqual([])
+    const [row] = await kit.withOrg({ orgId }, (db) =>
+      db
+        .select({ instance: assignments.workflowInstanceId })
+        .from(assignments)
+        .where(eq(assignments.id, queued.assignmentId))
+    )
+    expect(row?.instance).toBe(queued.assignmentId)
+  })
 })
