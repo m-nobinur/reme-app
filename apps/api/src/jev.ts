@@ -405,7 +405,7 @@ export async function jevPromise(
         criteria: {
           true: "It promises an action still to come, such as 'I'll set that up now', 'Let me check' or 'I'm going to connect it'",
           false:
-            "It reports work as done, answers, asks the owner something, says what is needed or what stops it, only offers to help, or its only promise is to tell the owner later when something finishes",
+            "It reports work as done, answers, asks the owner something, says what is needed or what stops it, names a step the owner must take first (such as 'switch to Act so I can start'), only offers to help, or its only promise is to tell the owner later when something finishes",
         },
       },
       tells: {
