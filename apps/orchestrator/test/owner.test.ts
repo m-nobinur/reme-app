@@ -220,6 +220,7 @@ live("an owner starting a build", () => {
     const { orgId } = await ownerOrg(kit)
     const key = crypto.randomUUID()
     const creates: string[] = []
+    const queued: unknown[] = []
     const api = new OwnerApi(
       undefined as never,
       {
@@ -228,6 +229,11 @@ live("an owner starting a build", () => {
           create: async ({ id }: { id: string }) => {
             creates.push(id)
             throw new Error("Durable Object reset")
+          },
+        },
+        JOBS: {
+          sendBatch: async (messages: unknown[]) => {
+            queued.push(...messages)
           },
         },
       } as unknown as Env
@@ -258,6 +264,12 @@ live("an owner starting a build", () => {
     expect(again.status).toBe(200)
     expect(await again.json()).toMatchObject({ assignment_id })
     expect(creates).toEqual([assignment_id])
+    expect(queued).toEqual(
+      [60, 180, 600].map((delaySeconds) => ({
+        body: { kind: "redrive", orgId },
+        delaySeconds,
+      }))
+    )
   })
 
   it("taints an owner's steer and leaves the console's alone", async () => {

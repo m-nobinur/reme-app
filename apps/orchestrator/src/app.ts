@@ -97,6 +97,7 @@ import { pickLane } from "./quick.ts"
 import { recordAnswer } from "./relay.ts"
 import { holdDraft, publishedSource } from "./revise.ts"
 import { endSandbox, endSite, probe } from "./sandbox.ts"
+import { REDRIVE_DELAYS_S, type RedriveMessage } from "./schedule.ts"
 import { connectGoogle } from "./search.ts"
 import { liveInspect, livePerformance } from "./search-read.ts"
 import { disconnectSearch } from "./search-sync.ts"
@@ -575,8 +576,8 @@ async function createAssignment(
  * Create the instance for a row, with the assignment id as the instance id so
  * a second create is refused by Workflows rather than run twice. The build
  * is taken once its row commits: a create that throws may still have made
- * the instance, so the row records the id either way, and `redriveQueued`
- * starts a new instance when that id has none.
+ * the instance, so the row records the id either way, and redrives queued at
+ * `REDRIVE_DELAYS_S` start a new instance when that id has none.
  */
 async function start(
   c: Context<ConsoleEnv>,
@@ -588,7 +589,7 @@ async function start(
     org_id: orgId,
   }
   await c.env.ASSIGNMENTS.create({ id: assignmentId, params }).catch(
-    (error: unknown) =>
+    async (error: unknown) => {
       console.error(
         JSON.stringify({
           code: "assignment.start_failed",
@@ -596,6 +597,14 @@ async function start(
           error: error instanceof Error ? error.name : "unknown",
         })
       )
+      const redrive: RedriveMessage = { kind: "redrive", orgId }
+      await c.env.JOBS.sendBatch(
+        REDRIVE_DELAYS_S.map((delaySeconds) => ({
+          body: redrive,
+          delaySeconds,
+        }))
+      ).catch(() => undefined)
+    }
   )
   await c
     .get("kit")

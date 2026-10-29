@@ -73,6 +73,27 @@ describe("a wake on the jobs queue", () => {
     expect(message.ack).not.toHaveBeenCalled()
     vi.mocked(console.error).mockRestore()
   })
+
+  it("redrives the org a redrive names, and acks", async () => {
+    const scan = vi.fn(async () => 0)
+    const redrive = vi.fn(async () => [])
+    const message = {
+      body: { kind: "redrive", orgId: "org-1" },
+      ack: vi.fn(),
+      retry: vi.fn(),
+    }
+    const batch = {
+      messages: [message],
+    } as unknown as MessageBatch<JobsQueueMessage>
+    await jobsBatch(batch, env, scan, redrive)
+    expect(redrive).toHaveBeenCalledExactlyOnceWith(
+      env,
+      expect.anything(),
+      "org-1"
+    )
+    expect(scan).not.toHaveBeenCalled()
+    expect(message.ack).toHaveBeenCalledOnce()
+  })
 })
 
 const url = process.env.DATABASE_URL
