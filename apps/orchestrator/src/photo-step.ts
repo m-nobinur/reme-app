@@ -2,13 +2,13 @@ import { Blueprint, PALETTES } from "@workspace/contracts"
 import {
   appendEvent,
   assignments,
-  currentFacts,
   eq,
   events,
   sql,
   type Tenancy,
   toFactRecord,
 } from "@workspace/db"
+import { siteFacts } from "./brief.ts"
 import { industryOf, ownerPhotos } from "./developer-rules.ts"
 import { DIRECTIONS } from "./directions.ts"
 import {
@@ -120,7 +120,7 @@ export async function makePhotos(input: {
       })
       .from(assignments)
       .where(eq(assignments.id, ids.assignmentId))
-    const facts = (await currentFacts(db)).map(toFactRecord)
+    const facts = (await siteFacts(db)).map(toFactRecord)
     return { done: null, row, facts }
   })
   if (read.done) return read.done

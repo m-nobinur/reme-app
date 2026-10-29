@@ -219,6 +219,39 @@ async function fromR2(
   return fresh
 }
 
+/** The revisions this isolate has read every page of into its data centre's cache, by host. */
+const warmed = new Set<string>()
+
+/**
+ * The rest of a revision's pages read into this data centre's cache behind
+ * the first one served, so a visitor's next page is not another trip to the
+ * bucket. Measured on staging 2026-10-29 from Dhaka: a page this data centre
+ * had not served took 2.7 to 8.8 s, one it had 0.06 s. Once per revision and
+ * host in an isolate; a page already cached costs a cache lookup.
+ */
+function warmPages(
+  c: Context<App>,
+  host: string,
+  found: { manifest: DeploymentManifest; base: string },
+  served: string
+) {
+  const mark = `${host}|${found.base}`
+  if (warmed.has(mark)) return
+  // ponytail: emptied whole at the ceiling, as `manifests` is.
+  if (warmed.size >= 256) warmed.clear()
+  warmed.add(mark)
+  const pages = Object.keys(found.manifest.files).filter(
+    (file) => file.endsWith(".html") && file !== served
+  )
+  // The cache's half of the read fills it; this half is dropped, not
+  // awaited, since a tee's cancel settles only once the other half is done.
+  const read = (file: string) =>
+    fromR2(c, host, `${found.base}dist/${file}`).then((page) => {
+      page?.body?.cancel().catch(() => undefined)
+    })
+  return later(c, Promise.allSettled(pages.map(read)))
+}
+
 /** Parsed manifests for the life of the isolate. A revision never changes, so neither does its manifest. */
 const manifests = new Map<string, DeploymentManifest>()
 
@@ -575,6 +608,7 @@ app.on(["GET", "HEAD"], "*", async (c) => {
   if (!found) return notHere(c)
   const file = resolveSitePath(url.pathname, found.manifest.files)
   if (!file) return notHere(c)
+  if (file.endsWith(".html")) await warmPages(c, host, found, file)
   const headers = previewHeaders(found.manifest.headers, file, cacheFor(file))
   headers.set(SITE_HEADER, pointer.site_id)
   // Which version answered a page, so the publisher's probe judges only its

@@ -87,6 +87,8 @@ export type StepId =
   | "service_area.text"
   | "business.audience"
   | "business.proof"
+  | "business.prices"
+  | "business.enquiries"
   | ChoiceStep
   | DetailsStep
   | "design"
@@ -104,6 +106,8 @@ export { ONBOARDING_GOAL }
 const SKIPPABLE: readonly FactValueKey[] = [
   "business.audience",
   "business.proof",
+  "business.prices",
+  "business.enquiries",
 ]
 
 export type Held = { key: string; value: unknown }
@@ -1202,6 +1206,11 @@ export const STEPS: readonly Step[] = [
       call("tool-ask_open", AskOpenInput.parse({ about: "quote.form" }), newId),
     ],
   },
+  // What a business assistant needs beyond the site, each asked once and
+  // skippable: the prices it quotes from, and how the work reaches the
+  // owner today with what they want taken off their plate.
+  askFact("business.prices"),
+  askFact("business.enquiries"),
   askDetails("contact"),
   askDetails("assistant"),
   askChoice("build_for_me", "site.build_mode"),
@@ -1702,6 +1711,8 @@ const FIELD: Partial<Record<FactValueKey, string>> = {
   "business.name": "name",
   "business.audience": "text",
   "business.proof": "text",
+  "business.prices": "text",
+  "business.enquiries": "text",
   "service_area.text": "text",
   "assistant.name": "name",
   "business.email": "address",

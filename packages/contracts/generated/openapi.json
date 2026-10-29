@@ -1942,6 +1942,93 @@
                     "properties": {
                       "key": {
                         "type": "string",
+                        "const": "business.prices"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "text": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 400,
+                            "pattern": "\\S"
+                          }
+                        },
+                        "required": [
+                          "text"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "const": "business.enquiries"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "text": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 300,
+                            "pattern": "\\S"
+                          }
+                        },
+                        "required": [
+                          "text"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "const": "owner.priorities"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "text": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 300,
+                            "pattern": "\\S"
+                          }
+                        },
+                        "required": [
+                          "text"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
                         "const": "assistant.name"
                       },
                       "value": {
@@ -4642,6 +4729,93 @@
                   "properties": {
                     "key": {
                       "type": "string",
+                      "const": "business.prices"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 400,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": [
+                        "text"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "business.enquiries"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": [
+                        "text"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "owner.priorities"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": [
+                        "text"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
                       "const": "assistant.name"
                     },
                     "value": {
@@ -5836,6 +6010,93 @@
                               "type": "string",
                               "minLength": 1,
                               "maxLength": 200,
+                              "pattern": "\\S"
+                            }
+                          },
+                          "required": [
+                            "text"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "const": "business.prices"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "text": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 400,
+                              "pattern": "\\S"
+                            }
+                          },
+                          "required": [
+                            "text"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "const": "business.enquiries"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "text": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 300,
+                              "pattern": "\\S"
+                            }
+                          },
+                          "required": [
+                            "text"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "const": "owner.priorities"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "text": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 300,
                               "pattern": "\\S"
                             }
                           },
@@ -7179,6 +7440,126 @@
                         "type": "string",
                         "minLength": 1,
                         "maxLength": 200,
+                        "pattern": "\\S"
+                      }
+                    },
+                    "required": [
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "key",
+              "skippable",
+              "prefill"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "const": "business.prices"
+              },
+              "skippable": {
+                "type": "boolean"
+              },
+              "prefill": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 400,
+                        "pattern": "\\S"
+                      }
+                    },
+                    "required": [
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "key",
+              "skippable",
+              "prefill"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "const": "business.enquiries"
+              },
+              "skippable": {
+                "type": "boolean"
+              },
+              "prefill": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 300,
+                        "pattern": "\\S"
+                      }
+                    },
+                    "required": [
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "key",
+              "skippable",
+              "prefill"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "const": "owner.priorities"
+              },
+              "skippable": {
+                "type": "boolean"
+              },
+              "prefill": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 300,
                         "pattern": "\\S"
                       }
                     },
@@ -8559,6 +8940,93 @@
                     "properties": {
                       "key": {
                         "type": "string",
+                        "const": "business.prices"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "text": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 400,
+                            "pattern": "\\S"
+                          }
+                        },
+                        "required": [
+                          "text"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "const": "business.enquiries"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "text": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 300,
+                            "pattern": "\\S"
+                          }
+                        },
+                        "required": [
+                          "text"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "const": "owner.priorities"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "text": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 300,
+                            "pattern": "\\S"
+                          }
+                        },
+                        "required": [
+                          "text"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
                         "const": "assistant.name"
                       },
                       "value": {
@@ -9359,6 +9827,9 @@
               "business.proof",
               "business.disclaimer",
               "service_area.text",
+              "business.prices",
+              "business.enquiries",
+              "owner.priorities",
               "assistant.name",
               "assistant.pronouns",
               "assistant.avatar",
@@ -11488,6 +11959,9 @@
                                     "business.proof",
                                     "business.disclaimer",
                                     "service_area.text",
+                                    "business.prices",
+                                    "business.enquiries",
+                                    "owner.priorities",
                                     "assistant.name",
                                     "owner.preferred_name"
                                   ]
@@ -11685,6 +12159,9 @@
                                     "business.proof",
                                     "business.disclaimer",
                                     "service_area.text",
+                                    "business.prices",
+                                    "business.enquiries",
+                                    "owner.priorities",
                                     "assistant.name",
                                     "owner.preferred_name"
                                   ]
@@ -14967,6 +15444,93 @@
                                               "properties": {
                                                 "key": {
                                                   "type": "string",
+                                                  "const": "business.prices"
+                                                },
+                                                "value": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "text": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 400,
+                                                      "pattern": "\\S"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "text"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              },
+                                              "required": [
+                                                "key",
+                                                "value"
+                                              ],
+                                              "additionalProperties": false
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "key": {
+                                                  "type": "string",
+                                                  "const": "business.enquiries"
+                                                },
+                                                "value": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "text": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 300,
+                                                      "pattern": "\\S"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "text"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              },
+                                              "required": [
+                                                "key",
+                                                "value"
+                                              ],
+                                              "additionalProperties": false
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "key": {
+                                                  "type": "string",
+                                                  "const": "owner.priorities"
+                                                },
+                                                "value": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "text": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 300,
+                                                      "pattern": "\\S"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "text"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              },
+                                              "required": [
+                                                "key",
+                                                "value"
+                                              ],
+                                              "additionalProperties": false
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "key": {
+                                                  "type": "string",
                                                   "const": "assistant.name"
                                                 },
                                                 "value": {
@@ -16161,6 +16725,93 @@
                                                         "type": "string",
                                                         "minLength": 1,
                                                         "maxLength": 200,
+                                                        "pattern": "\\S"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "text"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "key",
+                                                  "value"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
+                                                    "const": "business.prices"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "text": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 400,
+                                                        "pattern": "\\S"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "text"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "key",
+                                                  "value"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
+                                                    "const": "business.enquiries"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "text": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 300,
+                                                        "pattern": "\\S"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "text"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "key",
+                                                  "value"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
+                                                    "const": "owner.priorities"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "text": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 300,
                                                         "pattern": "\\S"
                                                       }
                                                     },
@@ -19415,6 +20066,93 @@
                   "properties": {
                     "key": {
                       "type": "string",
+                      "const": "business.prices"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 400,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": [
+                        "text"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "business.enquiries"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": [
+                        "text"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "owner.priorities"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": [
+                        "text"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
                       "const": "assistant.name"
                     },
                     "value": {
@@ -20796,6 +21534,9 @@
                         "business.proof",
                         "business.disclaimer",
                         "service_area.text",
+                        "business.prices",
+                        "business.enquiries",
+                        "owner.priorities",
                         "assistant.name",
                         "assistant.pronouns",
                         "assistant.avatar",
@@ -21857,6 +22598,93 @@
                                   "type": "string",
                                   "minLength": 1,
                                   "maxLength": 200,
+                                  "pattern": "\\S"
+                                }
+                              },
+                              "required": [
+                                "text"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "key",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string",
+                              "const": "business.prices"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "text": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 400,
+                                  "pattern": "\\S"
+                                }
+                              },
+                              "required": [
+                                "text"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "key",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string",
+                              "const": "business.enquiries"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "text": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 300,
+                                  "pattern": "\\S"
+                                }
+                              },
+                              "required": [
+                                "text"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "key",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string",
+                              "const": "owner.priorities"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "text": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 300,
                                   "pattern": "\\S"
                                 }
                               },
@@ -28589,6 +29417,9 @@
                 "business.proof",
                 "business.disclaimer",
                 "service_area.text",
+                "business.prices",
+                "business.enquiries",
+                "owner.priorities",
                 "assistant.name",
                 "assistant.pronouns",
                 "assistant.avatar",
@@ -29639,6 +30470,9 @@
                     "business.proof",
                     "business.disclaimer",
                     "service_area.text",
+                    "business.prices",
+                    "business.enquiries",
+                    "owner.priorities",
                     "assistant.name",
                     "assistant.pronouns",
                     "assistant.avatar",
@@ -31871,6 +32705,93 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 200,
+                    "pattern": "\\S"
+                  }
+                },
+                "required": [
+                  "text"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "key",
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "const": "business.prices"
+              },
+              "value": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 400,
+                    "pattern": "\\S"
+                  }
+                },
+                "required": [
+                  "text"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "key",
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "const": "business.enquiries"
+              },
+              "value": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300,
+                    "pattern": "\\S"
+                  }
+                },
+                "required": [
+                  "text"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "key",
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "const": "owner.priorities"
+              },
+              "value": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300,
                     "pattern": "\\S"
                   }
                 },
@@ -35033,6 +35954,9 @@
                       "business.proof",
                       "business.disclaimer",
                       "service_area.text",
+                      "business.prices",
+                      "business.enquiries",
+                      "owner.priorities",
                       "assistant.name",
                       "assistant.pronouns",
                       "assistant.tone",
@@ -35115,6 +36039,9 @@
                       "business.proof",
                       "business.disclaimer",
                       "service_area.text",
+                      "business.prices",
+                      "business.enquiries",
+                      "owner.priorities",
                       "assistant.name",
                       "assistant.pronouns",
                       "assistant.tone",
@@ -35165,7 +36092,7 @@
             ]
           },
           "facts": {
-            "maxItems": 23,
+            "maxItems": 26,
             "type": "array",
             "items": {
               "type": "string",
@@ -35183,6 +36110,9 @@
                 "business.proof",
                 "business.disclaimer",
                 "service_area.text",
+                "business.prices",
+                "business.enquiries",
+                "owner.priorities",
                 "assistant.name",
                 "assistant.pronouns",
                 "assistant.tone",
@@ -40186,6 +41116,9 @@
                                     "business.proof",
                                     "business.disclaimer",
                                     "service_area.text",
+                                    "business.prices",
+                                    "business.enquiries",
+                                    "owner.priorities",
                                     "assistant.name",
                                     "owner.preferred_name"
                                   ]
@@ -40383,6 +41316,9 @@
                                     "business.proof",
                                     "business.disclaimer",
                                     "service_area.text",
+                                    "business.prices",
+                                    "business.enquiries",
+                                    "owner.priorities",
                                     "assistant.name",
                                     "owner.preferred_name"
                                   ]
@@ -40545,7 +41481,7 @@
         "properties": {
           "facts": {
             "minItems": 1,
-            "maxItems": 28,
+            "maxItems": 31,
             "type": "array",
             "items": {
               "oneOf": [
@@ -40948,6 +41884,93 @@
                           "type": "string",
                           "minLength": 1,
                           "maxLength": 200,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": [
+                        "text"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "business.prices"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 400,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": [
+                        "text"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "business.enquiries"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": [
+                        "text"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "owner.priorities"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300,
                           "pattern": "\\S"
                         }
                       },
@@ -45487,6 +46510,9 @@
                 "business.proof",
                 "business.disclaimer",
                 "service_area.text",
+                "business.prices",
+                "business.enquiries",
+                "owner.priorities",
                 "assistant.name",
                 "assistant.pronouns",
                 "assistant.avatar",
@@ -45732,6 +46758,9 @@
                               "business.proof",
                               "business.disclaimer",
                               "service_area.text",
+                              "business.prices",
+                              "business.enquiries",
+                              "owner.priorities",
                               "assistant.name",
                               "assistant.pronouns",
                               "assistant.avatar",

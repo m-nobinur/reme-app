@@ -1,4 +1,4 @@
-import { FactValue } from "@workspace/contracts"
+import { FactValue, PALETTES } from "@workspace/contracts"
 import { factLabel, factText } from "@workspace/ui/lib/facts"
 import { expect, it } from "vitest"
 
@@ -16,7 +16,7 @@ const SHAPES: [FactValue, string, string][] = [
   [
     { key: "business.phone", value: { e164: "+447700900123" } },
     "Phone number",
-    "+447700900123",
+    "07700 900123",
   ],
   [
     { key: "business.email", value: { address: "hello@example.invalid" } },
@@ -92,6 +92,21 @@ const SHAPES: [FactValue, string, string][] = [
     "Greater Fairhaven",
   ],
   [
+    { key: "business.prices", value: { text: "Airport run from 60" } },
+    "Your prices",
+    "Airport run from 60",
+  ],
+  [
+    { key: "business.enquiries", value: { text: "Calls and WhatsApp" } },
+    "How enquiries reach you",
+    "Calls and WhatsApp",
+  ],
+  [
+    { key: "owner.priorities", value: { text: "Replying out of hours" } },
+    "What to take off your plate",
+    "Replying out of hours",
+  ],
+  [
     { key: "assistant.name", value: { name: "Sam" } },
     "Assistant's name",
     "Sam",
@@ -99,7 +114,7 @@ const SHAPES: [FactValue, string, string][] = [
   [
     { key: "assistant.pronouns", value: { id: "she_her" } },
     "Assistant's pronouns",
-    "she_her",
+    "she/her",
   ],
   [
     { key: "assistant.avatar", value: { id: "she_1" } },
@@ -109,7 +124,7 @@ const SHAPES: [FactValue, string, string][] = [
   [
     { key: "assistant.tone", value: { id: "friendly" } },
     "Assistant's tone",
-    "friendly",
+    "Friendly",
   ],
   [
     { key: "owner.preferred_name", value: { name: "Jo" } },
@@ -119,28 +134,28 @@ const SHAPES: [FactValue, string, string][] = [
   [
     { key: "site.build_mode", value: { mode: "assistant" } },
     "Who builds the site",
-    "assistant",
+    "Your assistant builds it",
   ],
   [
     { key: "site.template", value: { id: "classic" } },
     "Website template",
-    "classic",
+    "Classic",
   ],
-  [{ key: "site.palette", value: { id: "ocean" } }, "Website colours", "ocean"],
+  [{ key: "site.palette", value: { id: "ocean" } }, "Website colours", "Ocean"],
   [
     { key: "site.font", value: { id: "clean_sans" } },
     "Website font",
-    "clean_sans",
+    "Clean sans",
   ],
   [
     { key: "site.direction", value: { id: "counsel" } },
     "Website look",
-    "counsel",
+    "Counsel",
   ],
   [
     { key: "site.pages", value: { ids: ["home", "quote"] } },
     "Website pages",
-    "home, quote",
+    "Home, Request a quote",
   ],
   [
     {
@@ -208,7 +223,11 @@ it("shows the owner's own words or colour, not the word custom", () => {
   expect(
     factText("site.palette", { id: "custom", custom: "Navy and gold" })
   ).toBe("Navy and gold")
-  expect(factText("site.palette", { id: "custom", brand: "x" })).toBe("x")
+  expect(
+    factText("site.palette", { id: "custom", brand: PALETTES[0]?.brand })
+  ).toBe("Your own colours")
+  expect(factText("site.font", { id: "sora_manrope" })).toBe("Sora and Manrope")
+  expect(factText("site.direction", { id: "bold_young" })).toBe("Bold young")
 })
 
 it("has a sample for every FactValue branch", () => {

@@ -29,6 +29,7 @@ import {
 import { Hint } from "@workspace/ui/components/tooltip"
 import type { ReactNode } from "react"
 import { PushControl } from "@/lib/push-control"
+import { roleText } from "@/lib/tenant"
 import { useLiveWorkspace } from "@/lib/workspace"
 
 /**
@@ -85,7 +86,7 @@ export function OwnerSettings({
   unread,
   onboarding,
 }: {
-  owner: { name: string; email: string; role: string | null }
+  owner: { name: string; email: string; orgId: string | null }
   orgName: string
   unread: number
   /** The onboarding conversation, while it still has steps. */
@@ -109,12 +110,7 @@ export function OwnerSettings({
               },
               { id: "email", term: "Email", description: owner.email },
               { id: "business", term: "Business", description: orgName },
-              // A role is issued by an organisation, so it stays empty until one exists.
-              {
-                id: "role",
-                term: "Role",
-                description: owner.role ?? "None yet",
-              },
+              { id: "role", term: "Role", description: roleText(owner) },
             ]}
           />
           <ThemeButton />

@@ -4,6 +4,7 @@ import { PageHeader } from "@workspace/ui/components/app-shell"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { useState } from "react"
 import { deleteAccount } from "@/lib/api/server"
+import { roleText } from "@/lib/tenant"
 
 export const Route = createFileRoute("/app/account")({ component: Account })
 
@@ -17,14 +18,13 @@ export const Route = createFileRoute("/app/account")({ component: Account })
  * The one write is deleting the account, behind a confirm step (ADR-035).
  */
 function Account() {
-  const { owner } = useLoaderData({ from: "/app" })
+  const { owner, active } = useLoaderData({ from: "/app" })
 
   const rows: Array<{ label: string; value: string }> = [
     { label: "Name", value: owner.name || "Not set" },
     { label: "Email", value: owner.email },
-    { label: "Organisation", value: owner.orgId ?? "None yet" },
-    // A role is issued by an organisation, so it stays empty until one exists.
-    { label: "Role", value: owner.role ?? "None yet" },
+    { label: "Business", value: active?.name ?? "None yet" },
+    { label: "Role", value: roleText(owner) },
   ]
 
   return (

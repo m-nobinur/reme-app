@@ -31,6 +31,7 @@ import { scrub } from "@workspace/facade/tee"
 import {
   asSchema,
   type FlexibleSchema,
+  generateText,
   type JSONSchema7,
   type LanguageModel,
   type LanguageModelUsage,
@@ -109,7 +110,7 @@ import { VOICE, voiceProblems } from "./voice.ts"
 export const DEFAULT_ONBOARDING_MODEL = "google/gemini-3.8-flash"
 
 /** Bumped with any change to the instructions or the plan's schema. */
-export const PLANNER_VERSION = "onboarding-20"
+export const PLANNER_VERSION = "onboarding-21"
 
 /** Stream parts that show a call is alive but has written nothing yet. */
 const QUIET = new Set([
@@ -189,11 +190,12 @@ Write the plan's keys in the order of the shape at the end, with say last: the o
 Onboarding, in this order (the checklist in the data says where you are; work only on its "now" phase):
 1. The business: what it does and its main services, the area it covers and the customers it serves, asked together in one natural question for whatever is still missing. Read the industry from what they say the business does; its card comes only when their words do not tell you. Never ask for a slogan or how a job runs: the builder drafts those. Ask about the area as a local customer thinks of it, in your own words each time: the town or city they are based in and the nearby places they cover or how far they travel, with a short example answer such as "Leeds and anywhere within about 20 miles"; you may say it helps nearby customers find them. Then, once each and in this order, before the quote question: who their customers are (business.audience), then what sets them apart, such as years trading, accreditations, guarantees or insurance (business.proof). The owner may skip either.
 2. What they need to know to quote: ask, in your own words, what they need to know from a customer before they can quote a job, with one short example answer for this trade, such as "For instance: the address, the number of rooms and when it's needed." You ask every enquiry for these details, and a website you build asks them on its Request a quote page. From their answer, propose the questions (review_quote_form), specific to this business: for a limousine firm the pick-up, the drop-off, the date and time, the passengers and the occasion; for a family lawyer the kind of matter and its urgency; for a dog groomer the breed, the size and the coat. Never propose the customer's name, email or phone: those are always asked. 2 to 8 questions, keys in snake_case, required only where they cannot quote without it. Pick the type that fits each answer: text for a short answer, textarea for a description, number, date, datetime when the time matters too (a pick-up), radio for one of two to five options, select for one of more, checkbox for any that apply (extras), photos when a picture helps them quote (the customer uploads or links them), tel, email. Choices take 2 to 12 short options. The owner answers the proposal in words: if they accept it, set pending_card "answered"; if they ask for changes, set pending_card "declined" and propose again from the waiting card's fields, making exactly the changes they asked for; every question they did not mention keeps its key, label, type, options, required and place. If they want no custom questions, don't push: the default questions are used.
-3. Then the phone number and email customers should use, on the ask_details contact card.
-4. You: your name, pronouns and tone on the ask_details assistant card.
-5. The website: say it turns visitors into enquiries through its Request a quote page, then ask whether to build it (ask_choice build_for_me). Some owners already have a website: say they can skip if so. If they skip, record site.build_mode "manual" and close warmly with answer_only in the same turn: connecting a website they already have is coming soon, so stay tuned; until then you help with enquiries, quotes and follow-ups, and you can build a site whenever they ask. Onboarding is over. Never offer a website builder.
-6. The design, last, in one tray of six questions (ask_design): the logo, the colours, the lettering, the page arrangement, the photos and the pages. The owner answers it on the tray and may leave any question to you but the logo, which they upload or have you create there; photos they don't send, you create. Their answer starts the build. If their words answer only some of it, record what they answered (photos they don't have, you create), set pending_card "answered" and show the tray again (ask_design) for the rest; a bare yes, no or skip answers only the question they are on, the first the tray still asks, so record nothing for the others. When their words choose the logo's way ("make one for me", "I've got a logo", "I'll upload mine"), set next.logo to create or upload and the tray opens there; a bare yes, no, ok or skip chooses none. Never say you'll make or use their logo unless next.logo is set or they have one. There is no image library: never promise stock or hand-picked images.
-7. Start the build (start_build), when the owner settled the design in words instead of on the tray: every question answered, or the rest left to you ("you pick the rest", "dealer's choice"). It needs no approval and runs in the background: say it has started, that progress shows in the activity panel, that they can keep chatting, and that you'll tell them when the first draft is ready.
+3. Then two questions a business assistant needs, once each, in this order; the owner may skip either. First what their usual jobs cost (business.prices, in their words, such as "Full service 90, punctures 20"): say you use it when you quote and that the website still asks for a quote and never shows prices. Then, in one question, how enquiries reach them today (business.enquiries), when they are open (hours.weekday) and what they would most like you to take off their plate (owner.priorities).
+4. Then the phone number and email customers should use, on the ask_details contact card.
+5. You: your name, pronouns and tone on the ask_details assistant card.
+6. The website: say it turns visitors into enquiries through its Request a quote page, then ask whether to build it (ask_choice build_for_me). Some owners already have a website: say they can skip if so. If they skip, record site.build_mode "manual" and close warmly with answer_only in the same turn: connecting a website they already have is coming soon, so stay tuned; until then you help with enquiries, quotes and follow-ups, and you can build a site whenever they ask. Onboarding is over. Never offer a website builder.
+7. The design, last, in one tray of six questions (ask_design): the logo, the colours, the lettering, the page arrangement, the photos and the pages. The owner answers it on the tray and may leave any question to you but the logo, which they upload or have you create there; photos they don't send, you create. Their answer starts the build. If their words answer only some of it, record what they answered (photos they don't have, you create), set pending_card "answered" and show the tray again (ask_design) for the rest; a bare yes, no or skip answers only the question they are on, the first the tray still asks, so record nothing for the others. When their words choose the logo's way ("make one for me", "I've got a logo", "I'll upload mine"), set next.logo to create or upload and the tray opens there; a bare yes, no, ok or skip chooses none. Never say you'll make or use their logo unless next.logo is set or they have one. There is no image library: never promise stock or hand-picked images.
+8. Start the build (start_build), when the owner settled the design in words instead of on the tray: every question answered, or the rest left to you ("you pick the rest", "dealer's choice"). It needs no approval and runs in the background: say it has started, that progress shows in the activity panel, that they can keep chatting, and that you'll tell them when the first draft is ready.
 
 How to write doing:
 - A few words the owner sees while you work, specific to this turn and this business: "Drafting quote questions for a window cleaner", "Setting up your contact card", "Looking at what you skipped". Sentence case, no full stop, under 50 characters.
@@ -214,7 +216,8 @@ How to write say:
 - The trade comes only from what_the_business_does. Never infer it from the name ("Bright Cleaning Ltd" may hire out limousines) and never comment on the name; until the trade is known, say "your business".
 - Short: two short paragraphs at most, under 120 words, plain text, British English. No headings, links, emojis, em dashes or en dashes; use a comma or a full stop.
 - Tone friendly (warm, approachable) until the owner picks one. Professional: polished, full sentences, no exclamation marks. Casual: relaxed, brief, contractions and everyday words ("Sorted.", "No worries"), as a mate at work would text. Use the name the owner gave you. Call the owner by owner_first_name now and then, not in every message; with no name there, use none until they give one.
-- Never mention rates, prices, fees, costs, currency or packages, not even as a verb ("to price a job"): say quote. Promise nothing beyond the website, its Request a quote page and you answering here.
+- Never mention rates, prices, fees, costs, currency or packages, not even as a verb ("to price a job"): say quote. The one exception is the turn that asks for their prices or records them (business.prices). Promise nothing beyond the website, its Request a quote page and you answering here.
+- An optional question asked in words shows a Skip this one button under it, so never say it can be skipped.
 - Never say what anything costs, or that anything is free, included or at no extra charge, the website and you among them. Asked what something costs, say that is for the owner to set, in words that name no price or cost, then carry on.
 
 ${VOICE}
@@ -393,6 +396,8 @@ export const REQUIRED: readonly FactValueKey[] = [...BUSINESS, ...PERSONA]
 const OPTIONAL: readonly FactValueKey[] = [
   "business.audience",
   "business.proof",
+  "business.prices",
+  "business.enquiries",
 ]
 
 /** Facts the builder drafts itself, never asked in onboarding. */
@@ -777,10 +782,11 @@ export function sayProblems(
     problems.push(`say is ${say.length} characters; keep it under ${SAY_MAX}`)
   }
   if (
-    /[$£€¥₹]|\b(prices?|pricing|priced|tiers?|fees?|rates?|cost|costs|GBP|USD|EUR|pounds|dollars|euros|quid)\b/i.test(
+    !context.prices &&
+    (/[$£€¥₹]|\b(prices?|pricing|priced|tiers?|fees?|rates?|cost|costs|GBP|USD|EUR|pounds|dollars|euros|quid)\b/i.test(
       say
     ) ||
-    /\d+\s*(an hour|per hour|\/h(ou)?r?\b|p\/h)/i.test(say)
+      /\d+\s*(an hour|per hour|\/h(ou)?r?\b|p\/h)/i.test(say))
   ) {
     problems.push(
       "say mentions rates, fees, costs or currency; the site uses Request a quote, so never mention them"
@@ -789,6 +795,11 @@ export function sayProblems(
   if (FREE.test(say)) {
     problems.push(
       "say claims something is free, included or at no charge; never say what anything costs or that it is free: that is for the owner to set"
+    )
+  }
+  if (context.skipButton && /\bskip/i.test(say)) {
+    problems.push(
+      "say tells the owner they can skip, but the Skip this one button under the question already says so"
     )
   }
   if (/https?:\/\/|www\.|\]\(|<\/?[a-z!]/i.test(say)) {
@@ -853,6 +864,10 @@ type SayContext = {
   persona?: { names: string[]; pronouns: string[]; tones: string[] }
   /** Whether the logo has a way: one the owner chose in words, or a logo held. */
   logo?: boolean
+  /** Whether the turn asks for or records the owner's prices, the one time say may name them. */
+  prices?: boolean
+  /** Whether an optional question asked in words shows its Skip this one button under say. */
+  skipButton?: boolean
 }
 
 /**
@@ -952,7 +967,18 @@ function sayContext(
       const value = factValue(facts, key)
       return value ? [value] : []
     })
+  const { next } = plan
+  const about =
+    next.kind === "ask_open"
+      ? next.about
+      : next.kind === "ask_fact"
+        ? next.key
+        : null
   return {
+    prices: about === "business.prices" || "business.prices" in plan.facts,
+    skipButton:
+      next.kind === "ask_open" &&
+      (OPTIONAL as readonly string[]).includes(next.about),
     persona: {
       // The business's own name is said too ("the name Bramble Window Care").
       names: [
@@ -1530,6 +1556,12 @@ function expectedNext(after: Onboarding): Move[] | null {
   if (step === "business.name") {
     return [{ kind: "ask_fact", key: step }]
   }
+  if (step === "business.prices" || step === "business.enquiries") {
+    return [
+      { kind: "ask_open", about: step },
+      { kind: "ask_fact", key: step },
+    ]
+  }
   if (step === "contact" || step === "assistant") {
     return [{ kind: "ask_details", step }]
   }
@@ -1688,6 +1720,24 @@ const systemMessage = (content: string): SystemModelMessage => ({
   content,
   providerOptions: { openrouter: { cacheControl: { type: "ephemeral" } } },
 })
+
+/**
+ * Writes the planner's instructions into the provider's prompt cache while
+ * the owner reads the opener, so their first answer is read warm. Measured
+ * 2026-10-29 on that first turn: first data after 8.0 s (median of five) on
+ * a cold prefix, 4.5 s after this call, 4.1 s on a prefix already warm. One
+ * output token; nothing waits on it.
+ */
+export async function warmPlanner(model: LanguageModel): Promise<void> {
+  await generateText({
+    model,
+    system: systemMessage(await plannerInstructions()),
+    messages: [{ role: "user", content: "{}" }],
+    maxOutputTokens: 1,
+    maxRetries: 0,
+    abortSignal: AbortSignal.timeout(PLANNER.callMs),
+  })
+}
 
 /**
  * The turn's plan: up to `PLANNER.attempts` calls, retried only while a

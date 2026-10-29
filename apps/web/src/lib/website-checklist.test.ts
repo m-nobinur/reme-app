@@ -97,7 +97,7 @@ it("treats a task nothing has begun as no row, and offers it", () => {
   ).toEqual([
     "published|done|Published today, 12:00 PM|Visit your website",
     "address|done|spark.example.com|Use your own domain",
-    "google|next|Not connected|Connect Google",
+    "google|next|Connect it once your own domain is live|-",
   ])
 })
 
@@ -107,8 +107,27 @@ it("offers a domain and Google when the site has neither", () => {
   ).toEqual([
     "published|done|Published today, 12:00 PM|Visit your website",
     "address|done|spark.example.com|Use your own domain",
-    "google|next|Not connected|Connect Google",
+    "google|next|Connect it once your own domain is live|-",
   ])
+})
+
+it("offers Google's own sign-in once the owner's domain is live, never a chat line", () => {
+  const live = (domain: ActivitySegment) =>
+    checklistFor(workspace([seg("golive", "done"), domain]), ZONE, NOW).at(-1)
+  // The task is done, or the site is served on the domain already.
+  for (const domain of [
+    seg("address", "done", { id: "d", names: { domain: "spark.co.uk" } }),
+    seg("address", "now", { id: "d", names: { domain: "spark.example.com" } }),
+  ]) {
+    expect(live(domain)).toMatchObject({
+      line: "Not connected",
+      action: { kind: "google", label: "Connect Google" },
+    })
+  }
+  expect(
+    live(seg("address", "now", { id: "d", names: { domain: "spark.co.uk" } }))
+      ?.action
+  ).toBeNull()
 })
 
 it("shows an address waiting on the owner, a bought one with its renewal, and Google signing in", () => {

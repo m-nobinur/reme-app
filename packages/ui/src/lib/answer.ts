@@ -164,6 +164,18 @@ export const FACT_INPUTS = {
     ask: "Which areas do you cover?",
     fields: line("text", "Your town or city, and the areas nearby", 200),
   },
+  "business.prices": {
+    ask: "What do your usual jobs cost?",
+    fields: line("text", "Your usual jobs and what you charge", 400),
+  },
+  "business.enquiries": {
+    ask: "How do enquiries reach you today?",
+    fields: line("text", "Calls, texts, email, social media", 300),
+  },
+  "owner.priorities": {
+    ask: "What would you most like taken off your plate?",
+    fields: line("text", "Replying to enquiries, chasing quotes", 300),
+  },
   "assistant.name": {
     ask: "What would you like to call your assistant?",
     fields: [

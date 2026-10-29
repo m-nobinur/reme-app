@@ -59,3 +59,31 @@ test("an answer ticks, moves on by itself, and the stack folds when done", async
   ).toBeVisible()
   await expect(page.locator('[data-slot="build-questions"]')).toHaveCount(0)
 })
+
+test("one Send sends every answered page", async ({ page }) => {
+  await open(page, "BuildQuestionsUI")
+  const card = tray(page)
+  await card.getByLabel("Opening time").fill("08:00")
+  await card.getByLabel("Closing time").fill("17:00")
+  await card.getByRole("button", { name: "Next question" }).click()
+  await card.getByRole("radio").first().check()
+  await card.getByRole("button", { name: "Next question" }).click()
+  await card.getByLabel("Your answer").fill("On the drive")
+  await card.getByRole("button", { name: "Send" }).click()
+  await expect(
+    page.getByText("Thanks, that's everything I needed.")
+  ).toBeVisible()
+})
+
+test("Send on a later page shows an earlier one still open, and why", async ({
+  page,
+}) => {
+  await open(page, "BuildQuestionsUI")
+  const card = tray(page)
+  await card.getByRole("button", { name: "Next question" }).click()
+  await card.getByRole("button", { name: "Next question" }).click()
+  await card.getByLabel("Your answer").fill("On the drive")
+  await card.getByRole("button", { name: "Send" }).click()
+  await expect(card.getByText("1 of 3", { exact: true })).toBeVisible()
+  await expect(card.getByRole("alert")).toBeVisible()
+})

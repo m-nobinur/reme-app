@@ -887,6 +887,9 @@ const FACT_TOPIC: Record<PlanFactKey, string> = {
   "business.proof": "what sets you apart",
   "business.disclaimer": "your regulatory notice",
   "service_area.text": "where you work",
+  "business.prices": "your prices",
+  "business.enquiries": "how enquiries reach you",
+  "owner.priorities": "your priorities",
   "assistant.name": "your assistant's name",
   "assistant.pronouns": "your assistant's pronouns",
   "assistant.tone": "the tone you want",
@@ -1506,6 +1509,8 @@ const STEP_LABELS: Partial<
     assistant: "Your assistant",
     website: "Website",
     quote_form: "Quote requirements",
+    prices: "Your prices",
+    day_to_day: "Your day to day",
     photos: "Photos",
     look: "Look and feel",
   },
@@ -1569,6 +1574,8 @@ const ONBOARDING_ASKS: Readonly<Record<string, string>> = {
   assistant: "What should your assistant be like?",
   website: "Would you like a website?",
   quote_form: "What do you need to know to quote?",
+  prices: "What do your usual jobs cost?",
+  day_to_day: "How do enquiries reach you?",
   photos: "Do you have photos to use?",
   look: "How should your website look?",
 }
@@ -1852,6 +1859,7 @@ export const PAGE_WORDS = {
   notPublished: "Not published yet",
   notConnected: "Not connected",
   afterLive: "Connect it once your website is live",
+  afterDomain: "Connect it once your own domain is live",
 } as const
 
 type PageExtras = {
@@ -1936,13 +1944,7 @@ export function workLine(segment: ActivitySegment): string | null {
   )
 }
 
-export type PageActionKey =
-  | "own"
-  | "dns"
-  | "pay"
-  | "google"
-  | "signin"
-  | "failed"
+export type PageActionKey = "own" | "dns" | "pay" | "google" | "failed"
 
 /**
  * A row's one next action: the button, and what the owner says to the
@@ -1968,8 +1970,6 @@ export function pageAction(key: PageActionKey, subject?: string | null) {
       }
     case "google":
       return { label: "Connect Google", ask: "Connect Google to my website" }
-    case "signin":
-      return { label: "Sign in again", ask: "Connect Google again" }
     case "failed":
       return { label: "Ask what happened", ask: `What happened with ${what}?` }
   }

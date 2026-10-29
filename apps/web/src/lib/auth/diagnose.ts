@@ -36,7 +36,7 @@ function expiresAt(token: string): number | null {
 }
 
 /** The code WorkOS put on a refresh refusal, through AuthKit's wrapper. */
-function codeOf(error: unknown): string {
+export function codeOf(error: unknown): string {
   const cause = (error as { cause?: Record<string, unknown> } | null)?.cause
   for (const field of ["error", "code", "name"] as const) {
     const value = cause?.[field]

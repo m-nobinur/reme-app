@@ -912,14 +912,7 @@ describe("page lines", () => {
   })
 
   it("writes every action as a button and a plain first-person message", () => {
-    const keys: PageActionKey[] = [
-      "own",
-      "dns",
-      "pay",
-      "google",
-      "signin",
-      "failed",
-    ]
+    const keys: PageActionKey[] = ["own", "dns", "pay", "google", "failed"]
     for (const key of keys) {
       for (const subject of ["sparkcleaning.co.uk", "Google", null]) {
         const { label, ask } = pageAction(key, subject)

@@ -155,6 +155,31 @@ live("takeSnapshot and the owner's memory", () => {
     )
     expect(snapshot.facts.map((f) => f.key)).toEqual(["business.phone"])
   })
+
+  it("never freezes the owner's prices or day to day for the site", async () => {
+    const orgId = await freshOrg(kit)
+    await phone(orgId, "020 7946 0000")
+    await kit.withOrg({ orgId }, async (db) => {
+      for (const [key, text] of [
+        ["business.prices", "Full service 90, punctures 20"],
+        ["business.enquiries", "Calls and Facebook messages"],
+        ["owner.priorities", "Chasing quotes"],
+      ] as const) {
+        await supersedeFact(db, {
+          orgId,
+          key,
+          factType: key.split(".")[0] ?? "business",
+          value: { text },
+          provenance: { source: "owner_stated", confidence: 1 },
+        })
+      }
+    })
+    const ids = await newAssignment(kit, orgId)
+    const snapshot = await kit.withOrg({ orgId }, (db) =>
+      takeSnapshot(db, ids, [])
+    )
+    expect(snapshot.facts.map((f) => f.key)).toEqual(["business.phone"])
+  })
 })
 
 live("issueSpec", () => {
