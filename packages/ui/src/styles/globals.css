@@ -570,13 +570,8 @@
    asks it, stays as it is: dimming the reply just read made every turn blink.
    So does what follows it, the after slot. It steps back in colour, not
    opacity: its text tokens turn muted, so its text keeps the muted token's
-   contrast and text already muted stays. */
-@media (prefers-reduced-motion: no-preference) {
-  /* Zero specificity, so a part's own transition still wins. */
-  [data-slot="aui_message-group"] :where(*) {
-    transition: color var(--duration-enter) var(--ease-standard);
-  }
-}
+   contrast and text already muted stays. It steps back at once: a colour
+   transition on every element of the thread cost a long frame on each send. */
 [data-slot="aui_thread-viewport"]:has(
     [data-slot="question-tray"]:not([data-collapsed])
   )
