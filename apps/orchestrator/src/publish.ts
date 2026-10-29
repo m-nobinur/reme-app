@@ -816,22 +816,29 @@ export async function redriveQueued(
   )
   const redriven: string[] = []
   for (const row of rows) {
-    if (row.instance) {
-      let status: string | null = null
-      try {
-        status = (await (await env.ASSIGNMENTS.get(row.instance)).status())
-          .status
-      } catch {
-        status = null
-      }
-      if (
-        status &&
-        ["queued", "running", "waiting", "waitingForPause", "paused"].includes(
-          status
+    // A row with no id may still have its first instance, made by a create that threw.
+    const current = row.instance ?? row.id
+    let status: string | null = null
+    try {
+      status = (await (await env.ASSIGNMENTS.get(current)).status()).status
+    } catch {
+      status = null
+    }
+    if (
+      status &&
+      ["queued", "running", "waiting", "waitingForPause", "paused"].includes(
+        status
+      )
+    ) {
+      if (!row.instance) {
+        await kit.withOrg({ orgId }, (db) =>
+          db
+            .update(assignments)
+            .set({ workflowInstanceId: current })
+            .where(eq(assignments.id, row.id))
         )
-      ) {
-        continue
       }
+      continue
     }
     const attempt = Number(row.instance?.match(/-r(\d+)$/)?.[1] ?? 0) + 1
     const id = `${row.id}-r${attempt}`

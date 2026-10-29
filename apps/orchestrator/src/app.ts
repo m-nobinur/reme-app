@@ -1293,6 +1293,7 @@ bridge.post("/:id/steer", async (c) => {
       }
       throw error
     }
+    if (TERMINAL_STATES.includes(found.state)) return { refused: ENDED }
     // Read under the row lock, which the admission's `earlySteers` also takes,
     // so a steer either finds the Developer or is logged before that read.
     const uid = (await getAgentInstance(Developer, id))?.uid
@@ -1301,7 +1302,6 @@ bridge.post("/:id/steer", async (c) => {
     // render and was recovered again and again.
     let early = false
     if (!held && !uid) {
-      if (TERMINAL_STATES.includes(found.state)) return { refused: ENDED }
       const { lane, change_kind } = await creationChoices(db, {
         orgId,
         assignmentId: id,

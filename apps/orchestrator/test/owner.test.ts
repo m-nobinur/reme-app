@@ -450,6 +450,22 @@ live("an owner starting a build", () => {
     expect(logged).toHaveLength(0)
   })
 
+  it("refuses a steer to an ended build whose Developer still exists", async () => {
+    const { orgId } = await ownerOrg(kit)
+    const ended = await newAssignment(kit, orgId)
+    await cancel(kit, ended)
+    dispatched.length = 0
+    const res = await owner(orgId, `/${ended.assignmentId}/steer`, {
+      message: "Make the header green",
+    })
+    expect(res.status).toBe(409)
+    expect(await res.json()).toMatchObject({
+      code: "steer.not_running",
+      message: expect.stringMatching(/^This build has ended/),
+    })
+    expect(dispatched).toHaveLength(0)
+  })
+
   it("delivers a steer once for its key, and gives a retry the same receipt", async () => {
     const { orgId } = await ownerOrg(kit)
     const ids = await newAssignment(kit, orgId)
