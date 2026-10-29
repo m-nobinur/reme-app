@@ -32,6 +32,7 @@ import {
 import { TrayServicesProvider } from "@workspace/ui/components/assistant/tray-services"
 import { buttonVariants } from "@workspace/ui/components/button"
 import { EmptyState } from "@workspace/ui/components/empty-state"
+import { LiveCardsProvider } from "@workspace/ui/lib/live-cards"
 import {
   useEffect,
   useMemo,
@@ -46,7 +47,7 @@ import { useLiveWorkspace } from "@/lib/workspace"
 import { answerBuildQuestion } from "./build-questions"
 import { BuildStopped } from "./build-stopped"
 import { conversationList, unstored } from "./conversations"
-import { cosTools, questionTitles } from "./cos-tools"
+import { cosTools, liveKey, liveState, questionTitles } from "./cos-tools"
 import { saveDesignAnswer } from "./design"
 import { domainPurchase } from "./domain-purchase"
 import { asked, missingConversations, startsNewChat, tailOf } from "./history"
@@ -177,18 +178,22 @@ export function ChatPage() {
   )
 
   // The cards name the question an answer goes to, and times in the
-  // business's zone. Keyed on the titles and the zone, so a poll that changes
-  // neither redraws no card.
+  // business's zone, and offer only what is still to do: no sign-in once
+  // connected, no undo for a reminder gone. Keyed on strings, so a poll that
+  // changes none of them redraws no card.
   const titles = questionTitles(live.workspace?.attention)
   const zone = live.workspace?.timeZone ?? null
-  const tools = useMemo(
-    () => ({
+  const key = liveKey(live.workspace)
+  const shared = useMemo(() => {
+    const { cards, reminderOpen } = liveState(key)
+    const tools = {
       ...cosTools(titles, zone),
       removeReminder: (reminder: string) =>
         deleteReminder({ data: { id: reminder } }),
-    }),
-    [titles, zone]
-  )
+      ...(reminderOpen && { reminderOpen }),
+    }
+    return { tools, cards }
+  }, [titles, zone, key])
 
   const assistant = assistantOf(live.workspace)
 
@@ -219,40 +224,42 @@ export function ChatPage() {
             />
           </div>
         ) : (
-          <CosToolsProvider value={tools}>
-            <UploadPhotosProvider value={uploadPhotos}>
-              <TrayServicesProvider value={trayServices}>
-                <SaveDesignAnswerProvider value={saveDesignAnswer}>
-                  <DomainPurchaseProvider value={domainPurchase}>
-                    <AnswerBuildQuestionProvider value={answerBuildQuestion}>
-                      <Thread
-                        after={
-                          <>
-                            <StillWorking />
-                            <ChatSiteReadyCard />
-                            <BuildStopped />
-                          </>
-                        }
-                        assistant={live.workspace?.assistantName}
-                        briefing={briefing.line}
-                        components={{ ToolFallback: Approval }}
-                        lastShown={LAST_SHOWN}
-                        mode={mode}
-                        onRetry={() => retry.current?.()}
-                        // One neutral line: rotating ideas offered work the
-                        // owner could not ask for yet.
-                        placeholder={`Message ${assistant}…`}
-                        questionPlaceholder={`Tell ${assistant} what to do instead…`}
-                        quickActions={OWNER_QUICK_ACTIONS}
-                        reveal={onboarding ? OPENING_REVEAL : undefined}
-                        stored={id}
-                        updates={<ChatUpdates />}
-                      />
-                    </AnswerBuildQuestionProvider>
-                  </DomainPurchaseProvider>
-                </SaveDesignAnswerProvider>
-              </TrayServicesProvider>
-            </UploadPhotosProvider>
+          <CosToolsProvider value={shared.tools}>
+            <LiveCardsProvider value={shared.cards}>
+              <UploadPhotosProvider value={uploadPhotos}>
+                <TrayServicesProvider value={trayServices}>
+                  <SaveDesignAnswerProvider value={saveDesignAnswer}>
+                    <DomainPurchaseProvider value={domainPurchase}>
+                      <AnswerBuildQuestionProvider value={answerBuildQuestion}>
+                        <Thread
+                          after={
+                            <>
+                              <StillWorking />
+                              <ChatSiteReadyCard />
+                              <BuildStopped />
+                            </>
+                          }
+                          assistant={live.workspace?.assistantName}
+                          briefing={briefing.line}
+                          components={{ ToolFallback: Approval }}
+                          lastShown={LAST_SHOWN}
+                          mode={mode}
+                          onRetry={() => retry.current?.()}
+                          // One neutral line: rotating ideas offered work the
+                          // owner could not ask for yet.
+                          placeholder={`Message ${assistant}…`}
+                          questionPlaceholder={`Tell ${assistant} what to do instead…`}
+                          quickActions={OWNER_QUICK_ACTIONS}
+                          reveal={onboarding ? OPENING_REVEAL : undefined}
+                          stored={id}
+                          updates={<ChatUpdates />}
+                        />
+                      </AnswerBuildQuestionProvider>
+                    </DomainPurchaseProvider>
+                  </SaveDesignAnswerProvider>
+                </TrayServicesProvider>
+              </UploadPhotosProvider>
+            </LiveCardsProvider>
           </CosToolsProvider>
         )}
       </div>

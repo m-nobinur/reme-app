@@ -317,14 +317,17 @@ export const reasoningLine = (working: boolean) =>
 /**
  * The version card once the owner said publish, held until the assistant's
  * live message lands: at work at once, then published while the load check
- * runs, so the chat is never silent in between.
+ * runs, so the chat is never silent in between. A check still going after the
+ * usual time (`late`) says so, and that the owner will hear.
  */
-export const publishLine = (published: boolean, live = false) =>
+export const publishLine = (published: boolean, live = false, late = false) =>
   live
     ? "Published, your website is live"
-    : published
-      ? "Published, checking your website loads"
-      : "Approved, publishing your website"
+    : published && late
+      ? "Your website is taking longer than usual to come online. I'll tell you when it's live"
+      : published
+        ? "Published, checking your website loads"
+        : "Approved, publishing your website"
 
 /** Several quiet reads folded into one line. */
 export const groupLine = (count: number, working: boolean) =>

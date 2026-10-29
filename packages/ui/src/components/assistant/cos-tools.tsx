@@ -167,6 +167,8 @@ type CosTools = {
   question: (requestId: string) => string | null
   /** Deletes a reminder the assistant set, for its undo. Absent, there is no undo. */
   removeReminder?: (id: string) => Promise<{ done: boolean }>
+  /** Whether a reminder is still open, so a done or deleted one offers no undo. Absent, every one is. */
+  reminderOpen?: (id: string) => boolean
 }
 
 const CosToolsContext = createContext<CosTools | null>(null)
@@ -232,19 +234,27 @@ function ReminderSet({
   output: CreateReminderOutput | null
   zone: string
 }) {
-  const { removeReminder } = useCosTools()
+  const { removeReminder, reminderOpen } = useCosTools()
+  // The newest message keeps its undo until the workspace has read the new reminder.
+  const last = useAuiState((s) => s.message.isLast)
   const [undo, setUndo] = useState<"idle" | "busy" | "done" | "failed">("idle")
   const set = output?.outcome === "created" ? output : null
   if (undo === "done") return <Done>Reminder removed.</Done>
   const at = set?.time_zone ?? zone
   const id = set?.reminder_id
+  const sentence = `${set?.replaced ? "Moved the reminder." : "Added to Reminders."}${set?.due_at ? ` ${dueIn(formatDateTime(set.due_at, at), at)}.` : ""}`
+  if (!id || !removeReminder || !(last || (reminderOpen?.(id) ?? true))) {
+    return <Done>{sentence}</Done>
+  }
+  // The last word and Undo wrap together, so Undo never starts a line alone.
+  const cut = sentence.lastIndexOf(" ") + 1
   return (
     <Done>
       {/* One flex item, so the sentence keeps its width and Undo follows it. */}
       <span>
-        {set?.replaced ? "Moved the reminder." : "Added to Reminders."}
-        {set?.due_at ? ` ${dueIn(formatDateTime(set.due_at, at), at)}.` : ""}
-        {id && removeReminder ? (
+        {sentence.slice(0, cut)}
+        <span className="whitespace-nowrap">
+          {sentence.slice(cut)}
           <Button
             className="ms-1 h-auto p-0 align-baseline"
             disabled={undo === "busy"}
@@ -260,7 +270,7 @@ function ReminderSet({
           >
             {undo === "failed" ? "Couldn't undo. Try again" : "Undo"}
           </Button>
-        ) : null}
+        </span>
       </span>
     </Done>
   )

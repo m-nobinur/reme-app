@@ -19,8 +19,15 @@ import {
 import { StatusLine } from "@workspace/ui/components/status-line"
 import { publishLine } from "@workspace/ui/lib/activity-copy"
 import { cn, META } from "@workspace/ui/lib/utils"
-import { useId, useLayoutEffect, useState } from "react"
+import { useEffect, useId, useLayoutEffect, useState } from "react"
 import { createPortal } from "react-dom"
+
+/**
+ * How long the load check usually takes to bring the live message: its
+ * minute-2 check, with time for the message to land. Past it the line says the
+ * site is slow to come online.
+ */
+export const PUBLISH_LATE_MS = 150_000
 
 /**
  * The end of a build, said in the conversation that is open: the site's
@@ -88,6 +95,14 @@ export function SiteReady({
     setOpen(false)
   }
   const inTray = docked && slot !== null
+  const checking = published && !live
+  const [late, setLate] = useState(false)
+  useEffect(() => {
+    setLate(false)
+    if (!checking) return
+    const timer = setTimeout(() => setLate(true), PUBLISH_LATE_MS)
+    return () => clearTimeout(timer)
+  }, [checking])
   // The node the card is drawn into, put in its spot in the chat or in the tray.
   const [host] = useState(() =>
     typeof document === "undefined" ? null : document.createElement("div")
@@ -106,7 +121,7 @@ export function SiteReady({
     >
       <StatusLine
         delay={0}
-        label={publishLine(published, live)}
+        label={publishLine(published, live, late)}
         state={live ? "done" : "working"}
       />
     </p>

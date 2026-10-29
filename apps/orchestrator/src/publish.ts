@@ -177,8 +177,8 @@ export function requestReview(
         // The owner reads this; version numbers stay in the website history.
         rationale:
           revision.version === 1
-            ? "Your website is ready to go live."
-            : "Your changes are ready to go live.",
+            ? "Look it over, then publish it to put it live."
+            : "Look them over, then publish to put them live.",
         requestedAt: new Date(now),
         expiresAt: new Date(now + REVIEW_TTL_MS),
       })

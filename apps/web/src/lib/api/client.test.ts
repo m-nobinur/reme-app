@@ -269,7 +269,7 @@ it("reads attention from the workspace, in its order and the owner's words", asy
     {
       kind: "approval",
       id: APPROVAL,
-      title: "Your website is ready for you to review",
+      title: "Your website is ready",
       raisedBy: "Alex",
       expiresAt: EXPIRES,
     },

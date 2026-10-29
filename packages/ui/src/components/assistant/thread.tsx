@@ -1094,7 +1094,15 @@ const Composer: FC<{ autoFocus: boolean; expanded: boolean }> = ({
   }, [mode, input])
   useTypeToComposer(input)
   return (
-    <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
+    <ComposerPrimitive.Root
+      className={cn(
+        "aui-composer-root flex w-full flex-col",
+        // Docked, it is the footer's last box, so sticking never moves it.
+        // Chrome then counts a tray docking above it as the footer's sticky
+        // offset, not a layout shift of the composer.
+        expanded ? "relative" : "sticky bottom-0"
+      )}
+    >
       {/* No ring, only a lighter edge: the composer holds focus whenever the
           page is open, so anything heavier would never go away. */}
       <div

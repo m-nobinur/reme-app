@@ -538,10 +538,11 @@ export function panelFor(input: PanelInput): Panel | null {
   })()
 
   // The top segment's next action. Getting started goes on in its own chat;
-  // with no journey under way yet, the owner starts it.
+  // with no journey under way yet, the owner starts it. Home without a
+  // business is the naming form itself, so it offers no link to it.
   const suggestions: Suggestion[] = []
   if (!business) {
-    suggestions.push({ kind: "name-business" })
+    if (page !== "home") suggestions.push({ kind: "name-business" })
   } else if (current?.kind === "onboarding" || (!current && fresh)) {
     if (onboarding && page !== "onboarding") {
       suggestions.push({ kind: "onboarding", id: onboarding })

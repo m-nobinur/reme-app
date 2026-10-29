@@ -227,3 +227,35 @@ for (const [name, width] of Object.entries({
     ).toEqual([])
   })
 }
+
+// The catalog's column is narrower than the app's: 336 is where Undo fell to
+// a line of its own before, and 360 is the phone the owner saw it on.
+for (const width of [336, 360]) {
+  test(`a set reminder's Undo stays on the sentence's last line at ${width} px`, async ({
+    page,
+  }) => {
+    await open(page, "CreateReminder", width)
+    const card = page
+      .locator('[data-entry="CreateReminder"] [data-slot="create-reminder"]')
+      .filter({ hasText: "Added to Reminders." })
+    const undo = card.getByRole("button", { name: "Undo" })
+    await expect(undo).toBeVisible()
+    // The words before Undo, line by line: Undo starts after the last line's
+    // text, at the same height, rather than alone at the start of a new line.
+    const { last, button } = await undo.evaluate((el) => {
+      const range = document.createRange()
+      range.setStart(el.closest("p") as Node, 0)
+      range.setEndBefore(el)
+      const lines = [...range.getClientRects()].filter((r) => r.width > 0)
+      const end = lines.at(-1) as DOMRect
+      const box = el.getBoundingClientRect()
+      return {
+        last: { right: end.right, middle: end.top + end.height / 2 },
+        button: { left: box.left, top: box.top, bottom: box.bottom },
+      }
+    })
+    expect(button.left).toBeGreaterThanOrEqual(last.right - 1)
+    expect(last.middle).toBeGreaterThan(button.top)
+    expect(last.middle).toBeLessThan(button.bottom)
+  })
+}

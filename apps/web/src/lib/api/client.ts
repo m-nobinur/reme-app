@@ -300,11 +300,13 @@ function logged(item: Logged): { title: string; detail: string } {
 const APPROVAL_EXPIRY =
   "Nothing is published without you. If it expires, the build waits until you decide."
 
-/** A version waiting on the owner, as they would say it: the first website, or a change to the live one. */
+/**
+ * A version waiting on the owner, as they would say it: the first website, or
+ * a change to the live one. The title names what happened; the body under it
+ * says what to do.
+ */
 const approvalTitle = (live: boolean) =>
-  live
-    ? "Your website changes are ready for you to review"
-    : "Your website is ready for you to review"
+  live ? "Your website changes are ready" : "Your website is ready"
 
 /**
  * `/workspace`, with the attention list trimmed. An approval whose target is

@@ -74,13 +74,14 @@ test("the change card is one tap either way, and waits for the server", async ({
 }) => {
   await open(page, "RequestChange")
   const all = page.locator('[data-slot="request-change"]')
-  await expect(all).toHaveCount(15)
+  // The cancelled card folds into the newer one of its kind that replaced it.
+  await expect(all).toHaveCount(14)
   // The three waiting on the owner sit in the tray, with the two answer cards
-  // that wait beside them; the thread keeps the other twelve.
+  // that wait beside them; the thread keeps the other eleven.
   const cards = all.filter({
     hasNot: page.locator('[data-slot="question-tray"]'),
   })
-  await expect(cards).toHaveCount(12)
+  await expect(cards).toHaveCount(11)
   // The tray shows the newest of five, and steps back to the rest.
   const tray = page.locator('[data-slot="question-tray"]:visible')
   const older = page.getByRole("button", { name: "Older" })
@@ -102,15 +103,16 @@ test("the change card is one tap either way, and waits for the server", async ({
   }
   await expect(cards.nth(3)).toContainText("Ask again once it is ready")
   await expect(cards.nth(4)).toContainText("You said not now.")
-  await expect(cards.nth(5)).toContainText("Not started")
   // An error after a yes may still have started the build: the owner checks.
-  await expect(cards.nth(6)).toContainText(
+  // The cancelled try before it is folded in as one line.
+  await expect(cards.nth(5)).toContainText(
     "We could not confirm this went through."
   )
+  await expect(cards.nth(5)).toContainText("1 earlier card: not started.")
   // A yes that waits for the rest of its step is not starting anything yet,
   // on either card.
   const HELD = "You said yes. Sent once you answer the other cards."
-  const held = cards.nth(7)
+  const held = cards.nth(6)
   await expect(held.getByRole("status")).toHaveText(HELD)
   // The answer is recorded and nothing runs, so the card offers no buttons.
   await expect(held.getByRole("button")).toHaveCount(0)
@@ -126,18 +128,21 @@ test("the change card is one tap either way, and waits for the server", async ({
   await expect(tray.getByRole("button", { name: "Approve" })).toBeEnabled()
   // And a no, on either card.
   const NOT_NOW = "You said not now. Sent once you answer the other cards."
-  await expect(cards.nth(8).getByRole("status")).toHaveText(NOT_NOW)
+  await expect(cards.nth(7).getByRole("status")).toHaveText(NOT_NOW)
   await expect(heldQuestions.nth(1)).toHaveText(NOT_NOW)
   // A yes already sent, with no other card in its step, is starting.
-  const sent = cards.nth(9)
+  const sent = cards.nth(8)
   await expect(sent).toContainText("Starting…")
   await expect(sent.getByRole("status")).toHaveCount(1)
   await expect(sent.locator('[aria-busy="true"]')).toHaveCount(1)
   // Nothing to approve while the model is still writing the change.
-  await expect(cards.nth(10)).toHaveText("Passing on your change")
-  await expect(cards.nth(10).getByRole("button")).toHaveCount(0)
+  // The catalogue's wording varies by turn; any of the change's lines.
+  await expect(cards.nth(9)).toHaveText(
+    /^(Passing on your change|Getting your change started|Sending your change to be made)$/
+  )
+  await expect(cards.nth(9).getByRole("button")).toHaveCount(0)
   // A no on its way to the server claims nothing is starting.
-  const declining = cards.nth(11)
+  const declining = cards.nth(10)
   await expect(declining).toContainText("You said not now.")
   await expect(declining.locator('[aria-busy="true"]')).toHaveCount(0)
   await expect(declining.getByRole("button")).toHaveCount(0)
