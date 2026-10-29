@@ -10,7 +10,7 @@ import type { Server } from "node:http"
 import { type Browser, chromium, type Page } from "@playwright/test"
 import sharp from "sharp"
 import { afterAll, beforeAll, expect, test } from "vitest"
-import { type Built, build, clean, serve } from "../test/build"
+import { type Built, build, serve } from "../test/build"
 import { FILLED } from "../test/fixture"
 
 let built: Built | undefined
@@ -47,7 +47,6 @@ beforeAll(async () => {
 afterAll(async () => {
   await browser?.close()
   server?.close()
-  clean(built)
 })
 
 const open = async (width: number, height: number, path: string) => {
@@ -153,7 +152,6 @@ test("five service cards fill rows of 3 and 2, the last row centred", async () =
     expect(Math.abs(left - right)).toBeLessThanOrEqual(1)
   } finally {
     other.close()
-    clean(five)
   }
 }, 120_000)
 
@@ -189,7 +187,6 @@ test("a long accent clause in the areas heading stays inside a 390 px phone", as
     expect(right).toBeLessThanOrEqual(390)
   } finally {
     other.close()
-    clean(wide)
   }
 }, 120_000)
 
@@ -237,7 +234,6 @@ test.each(["bright_local", "calm_daylight"] as const)(
       }
     } finally {
       other.close()
-      clean(heavy)
     }
   },
   120_000

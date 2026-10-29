@@ -13,7 +13,7 @@
 import type { Server } from "node:http"
 import { type Browser, chromium } from "@playwright/test"
 import { afterAll, beforeAll, expect, test } from "vitest"
-import { type Built, build, clean, serve } from "../test/build"
+import { type Built, build, serve } from "../test/build"
 import { FILLED } from "../test/fixture"
 
 const REVEALED =
@@ -34,7 +34,6 @@ beforeAll(async () => {
 afterAll(async () => {
   await browser?.close()
   server?.close()
-  clean(built)
 })
 
 /**

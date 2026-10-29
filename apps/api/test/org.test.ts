@@ -32,7 +32,6 @@ import {
   readOrg,
   readStaffDirectory,
   SIGNUP_LEASE_S,
-  SIGNUP_WAIT_MS,
   SignupBusy,
 } from "../src/org.ts"
 
@@ -731,13 +730,14 @@ describe.skipIf(!url)("one signup at a time, on a live connection", () => {
     // An attempt that claimed a moment ago and is still running.
     await admin`update users set signup_claimed_at = now()
       where workos_user_id = ${input.workosUserId}`
+    const wait = 500
     const started = Date.now()
-    await expect(createOrg(kit, directory, input)).rejects.toBeInstanceOf(
-      SignupBusy
-    )
+    await expect(
+      createOrg(kit, directory, input, undefined, wait)
+    ).rejects.toBeInstanceOf(SignupBusy)
     const waited = Date.now() - started
-    expect(waited).toBeGreaterThanOrEqual(SIGNUP_WAIT_MS)
-    expect(waited).toBeLessThan(SIGNUP_WAIT_MS + 2_000)
+    expect(waited).toBeGreaterThanOrEqual(wait)
+    expect(waited).toBeLessThan(wait + 2_000)
     // The running attempt's claim is left alone.
     expect(await claimOf(input.workosUserId)).not.toBeNull()
     expect(calls()).toBe(1)

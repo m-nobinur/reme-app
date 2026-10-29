@@ -459,7 +459,10 @@ async function jevYes(
   name: string | null,
   code: string,
   question: { instructions: string; true: string; false: string },
-  fetchImpl: typeof fetch
+  fetchImpl: typeof fetch,
+  // The promise gate's limit: a yes here waits on nothing else, and the
+  // card is the cost of a timeout.
+  timeoutMs: number = JEV.promiseMs
 ): Promise<boolean> {
   const began = Date.now()
   const { body, error } = await ask(
@@ -476,9 +479,7 @@ async function jevYes(
       },
     },
     fetchImpl,
-    // The promise gate's limit: a yes here waits on nothing else, and the
-    // card is the cost of a timeout.
-    JEV.promiseMs
+    timeoutMs
   )
   const score = num(body?.answers?.yes?.noul)
   console.log(
@@ -508,7 +509,8 @@ export async function jevPutOn(
   apiKey: string,
   said: string,
   name: string,
-  fetchImpl: typeof fetch = fetch
+  fetchImpl: typeof fetch = fetch,
+  timeoutMs?: number
 ): Promise<boolean> {
   if (!holdsName(said, name)) return false
   if (said === addressReply(ADDRESS_ASK.yes, name)) return true
@@ -524,7 +526,8 @@ export async function jevPutOn(
       false:
         "It asks a question, wonders aloud, asks about domains in general, only mentions the domain, names a different domain, asks for a price or another name, or is unclear",
     },
-    fetchImpl
+    fetchImpl,
+    timeoutMs
   )
 }
 
@@ -598,7 +601,8 @@ export async function jevReading(
   apiKey: string,
   asked: string | null,
   said: string,
-  fetchImpl: typeof fetch = fetch
+  fetchImpl: typeof fetch = fetch,
+  timeoutMs: number = JEV.readingMs
 ): Promise<MessageReading | null> {
   const began = Date.now()
   const { body, error } = await ask(
@@ -617,7 +621,7 @@ export async function jevReading(
       },
     },
     fetchImpl,
-    JEV.readingMs
+    timeoutMs
   )
   const { choice, confidence } = body?.answers?.reading ?? {}
   const read = MessageReading.safeParse(choice)

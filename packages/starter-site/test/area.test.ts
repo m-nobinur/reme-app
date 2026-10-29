@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { afterAll, beforeAll, describe, expect, test } from "vitest"
+import { beforeAll, describe, expect, test } from "vitest"
 import {
   areaDeep,
   areaMap,
@@ -9,7 +9,7 @@ import {
   overlaps,
   townNotes,
 } from "../src/area-map"
-import { type Built, build, clean } from "./build"
+import { type Built, build } from "./build"
 import { FILLED } from "./fixture"
 
 const TOWNS = [
@@ -148,7 +148,6 @@ describe("the area section, built", () => {
   beforeAll(async () => {
     built = await build({ site })
   }, 180_000)
-  afterAll(() => clean(built))
   const page = (path: string) =>
     readFileSync(join(built?.dist ?? "", path), "utf8")
 

@@ -14,7 +14,7 @@ import { type Browser, chromium } from "@playwright/test"
 import { PALETTES } from "@workspace/contracts"
 import { afterAll, beforeAll, expect, test } from "vitest"
 import { DIRECTIONS } from "../src/directions"
-import { type Built, build, clean, serve } from "../test/build"
+import { type Built, build, serve } from "../test/build"
 import { FILLED } from "../test/fixture"
 
 const TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]
@@ -66,10 +66,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await browser?.close()
-  for (const site of sites) {
-    site.server.close()
-    clean(site.built)
-  }
+  for (const site of sites) site.server.close()
 })
 
 for (const direction of DIRECTIONS) {

@@ -1,8 +1,8 @@
 import { readdirSync } from "node:fs"
 import { join } from "node:path"
 import sharp from "sharp"
-import { afterAll, beforeAll, describe, expect, test } from "vitest"
-import { type Built, build, clean, readPages } from "./build"
+import { beforeAll, describe, expect, test } from "vitest"
+import { type Built, build, readPages } from "./build"
 import { FILLED } from "./fixture"
 
 /** The hero a real build drew: a 3:4 PNG, 1152 px wide, in a split_arch hero. */
@@ -31,7 +31,6 @@ beforeAll(async () => {
     files: { "src/assets/generated/home_hero_room.png": await generated() },
   })
 }, 180_000)
-afterAll(() => clean(built))
 
 const home = () => readPages(built.dist).find((p) => p.file === "index.html")
 const emitted = () => readdirSync(join(built.dist, "_astro")).sort()
@@ -93,16 +92,10 @@ test("a 1536 px full-bleed hero offers 1280 and its own 1536 width", async () =>
       "src/assets/generated/home_hero_garden.png": await generated(1536, 864),
     },
   })
-  try {
-    const hero = readPages(wide.dist)
-      .find((p) => p.file === "index.html")
-      ?.elements.find(
-        (e) => e.tag === "source" && e.attrs.type === "image/avif"
-      )
-    expect(
-      (hero?.attrs.srcset ?? "").split(",").map((c) => c.trim().split(/\s+/)[1])
-    ).toEqual(["640w", "960w", "1280w", "1536w"])
-  } finally {
-    clean(wide)
-  }
+  const hero = readPages(wide.dist)
+    .find((p) => p.file === "index.html")
+    ?.elements.find((e) => e.tag === "source" && e.attrs.type === "image/avif")
+  expect(
+    (hero?.attrs.srcset ?? "").split(",").map((c) => c.trim().split(/\s+/)[1])
+  ).toEqual(["640w", "960w", "1280w", "1536w"])
 }, 180_000)

@@ -1,11 +1,11 @@
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { PALETTES } from "@workspace/contracts"
-import { afterAll, beforeAll, describe, expect, test } from "vitest"
+import { beforeAll, describe, expect, test } from "vitest"
 import { accentParts, plain } from "../src/accent"
 import { paletteFromBrand } from "../src/brand"
 import { layout } from "../src/site-config"
-import { type Built, build, clean, ROOT, readPages } from "./build"
+import { type Built, build, ROOT, readPages } from "./build"
 import { FILLED } from "./fixture"
 
 // Design rules 2 and 3 of vs-visual-system.md as the starter enforces them: a
@@ -55,7 +55,6 @@ let built: Built | undefined
 beforeAll(async () => {
   built = await build({ site: MARKED })
 }, 120_000)
-afterAll(() => clean(built))
 
 const sectionsOf = (html: string) =>
   [...html.matchAll(/<section[\s>][\s\S]*?<\/section>/g)].map(
@@ -295,10 +294,6 @@ describe("numbered lists and photo-less service cards (rule 7)", () => {
       build({ site: FILLED }),
     ])
   }, 180_000)
-  afterAll(() => {
-    for (const site of [none, some, all, direction]) clean(site)
-  })
-
   test("photo cards without a photo for every service become numbered rows", () => {
     for (const site of [none, some]) {
       const home = page(site, "index.html")

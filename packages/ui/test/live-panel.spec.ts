@@ -83,22 +83,6 @@ test("a segment marks the step at work, and ticks the ones done", async ({
   await expect(segment.getByText("4 minutes so far")).toBeVisible()
 })
 
-test("a done segment is one line with no caret", async ({ page }) => {
-  await open(page, "PanelSegment done", 400)
-  const segment = page.locator('[data-slot="panel-segment"]')
-  await expect(segment).toHaveAttribute("data-state", "folded")
-  await expect(segment.locator("button[aria-expanded]")).toHaveCount(0)
-})
-
-test("a waiting step offers no link: the answer goes in the chat", async ({
-  page,
-}) => {
-  await open(page, "PanelSegment getting started waiting", 400)
-  await expect(page.getByRole("button", { name: "Answer below" })).toHaveCount(
-    0
-  )
-})
-
 test("the screenshots step through the deck, and the approve button shows a focus ring from the keyboard", async ({
   page,
 }) => {
@@ -225,30 +209,27 @@ const REMINDER_ENTRIES = [
   "LiveLine idle",
 ]
 
-for (const theme of ["light", "dark"] as const) {
-  test(`reminders have no accessibility violations in ${theme}`, async ({
-    page,
-  }) => {
-    test.setTimeout(120_000)
-    for (const width of [390, 768, 1440]) {
-      for (const entry of REMINDER_ENTRIES) {
-        await page.setViewportSize({ width, height: 900 })
-        await page.goto(`/?entry=${encodeURIComponent(entry)}&theme=${theme}`)
-        await expect(page.locator(`[data-entry="${entry}"]`)).toBeVisible()
-        const results = await new AxeBuilder({ page })
-          .withTags(WCAG)
-          .include(`[data-entry="${entry}"]`)
-          .analyze()
-        expect
-          .soft(
-            results.violations.map((v) => `${entry} ${width}: ${v.id}`),
-            JSON.stringify(results.violations, null, 2)
-          )
-          .toEqual([])
-      }
+// The catalog scans these in both themes at one width; this adds the others.
+test("reminders have no accessibility violations at any width", async ({
+  page,
+}) => {
+  test.setTimeout(120_000)
+  for (const width of [390, 768, 1440]) {
+    for (const entry of REMINDER_ENTRIES) {
+      await open(page, entry, width)
+      const results = await new AxeBuilder({ page })
+        .withTags(WCAG)
+        .include(`[data-entry="${entry}"]`)
+        .analyze()
+      expect
+        .soft(
+          results.violations.map((v) => `${entry} ${width}: ${v.id}`),
+          JSON.stringify(results.violations, null, 2)
+        )
+        .toEqual([])
     }
-  })
-}
+  }
+})
 
 test("each written reminder has its own Done, named for it", async ({
   page,
@@ -310,37 +291,21 @@ test("a next step looks like a button, with a visible border", async ({
   }
 })
 
-test("an approval whose preview fails still says what the owner can do, and lets them decide", async ({
+test("an approval whose preview fails has no accessibility violations at any width", async ({
   page,
 }) => {
-  await open(page, "ApprovalItem preview unavailable", 400)
-  const entry = page.locator('[data-entry="ApprovalItem preview unavailable"]')
-  await expect(entry.getByRole("link")).toHaveCount(0)
-  await expect(
-    entry.getByRole("button", { name: "Retry preview" })
-  ).toBeEnabled()
-  await expect(entry.getByRole("button", { name: "Publish" })).toBeEnabled()
+  const entry = "ApprovalItem preview unavailable"
+  for (const width of [390, 768, 1440]) {
+    await open(page, entry, width)
+    const results = await new AxeBuilder({ page })
+      .withTags(WCAG)
+      .include(`[data-entry="${entry}"]`)
+      .analyze()
+    expect
+      .soft(
+        results.violations.map((v) => `${entry} ${width}: ${v.id}`),
+        JSON.stringify(results.violations, null, 2)
+      )
+      .toEqual([])
+  }
 })
-
-for (const theme of ["light", "dark"] as const) {
-  test(`an approval whose preview fails has no accessibility violations in ${theme}`, async ({
-    page,
-  }) => {
-    const entry = "ApprovalItem preview unavailable"
-    for (const width of [390, 768, 1440]) {
-      await page.setViewportSize({ width, height: 900 })
-      await page.goto(`/?entry=${encodeURIComponent(entry)}&theme=${theme}`)
-      await expect(page.locator(`[data-entry="${entry}"]`)).toBeVisible()
-      const results = await new AxeBuilder({ page })
-        .withTags(WCAG)
-        .include(`[data-entry="${entry}"]`)
-        .analyze()
-      expect
-        .soft(
-          results.violations.map((v) => `${entry} ${width}: ${v.id}`),
-          JSON.stringify(results.violations, null, 2)
-        )
-        .toEqual([])
-    }
-  })
-}

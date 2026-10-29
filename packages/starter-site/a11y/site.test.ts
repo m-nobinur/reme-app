@@ -16,7 +16,7 @@ import AxeBuilder from "@axe-core/playwright"
 import { type Browser, chromium, type Page } from "@playwright/test"
 import { PALETTES } from "@workspace/contracts"
 import { afterAll, beforeAll, expect, test } from "vitest"
-import { type Built, build, clean, serve } from "../test/build"
+import { type Built, build, serve } from "../test/build"
 import { FILLED, LIMOUSINE_FORM } from "../test/fixture"
 
 const PAGES = [
@@ -84,10 +84,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await browser?.close()
-  for (const site of sites) {
-    site.server.close()
-    clean(site.built)
-  }
+  for (const site of sites) site.server.close()
 })
 
 const WIDTHS = [

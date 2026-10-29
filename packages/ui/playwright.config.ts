@@ -17,6 +17,7 @@ export default defineConfig({
   snapshotPathTemplate: "{testDir}/__screenshots__/{platform}/{arg}{ext}",
   forbidOnly: !!process.env.CI,
   retries: 0,
+  workers: process.env.CI ? undefined : 3,
   reporter: process.env.CI ? "github" : "list",
   use: { baseURL: `http://localhost:${PORT}` },
   // The default is threshold 0.2, a per-pixel colour tolerance wide enough that

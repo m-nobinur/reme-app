@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { SiteFields } from "@workspace/contracts"
-import { afterAll, beforeAll, describe, expect, test } from "vitest"
+import { beforeAll, describe, expect, test } from "vitest"
 import {
   QUOTE_CHOICE_TYPES,
   QUOTE_FIELD_TYPES,
@@ -11,7 +11,6 @@ import { fields, layout, site } from "../src/site-config"
 import {
   type Built,
   build,
-  clean,
   jsonLdOf,
   ORIGIN,
   type Page,
@@ -91,11 +90,6 @@ beforeAll(async () => {
     }),
   ])
 }, 120_000)
-
-afterAll(() => {
-  for (const built of [filled, planted, marked, reordered]) clean(built)
-})
-
 const pagesOf = (built: Built | undefined) => {
   if (!built) throw new Error("the build did not run")
   return readPages(built.dist)
@@ -326,11 +320,6 @@ describe("proof", () => {
       }),
     ])
   }, 120_000)
-  afterAll(() => {
-    clean(bare)
-    clean(nothing)
-  })
-
   const strip = (built: Built | undefined) =>
     pagesOf(built)
       .find((p) => p.file === "index.html")

@@ -493,7 +493,7 @@ describe("the reading of a typed message", () => {
           reject(init.signal?.reason)
         )
       })) as unknown as typeof fetch
-    expect(await jevReading("k", asked, "hmm", slow)).toBeNull()
+    expect(await jevReading("k", asked, "hmm", slow, 10)).toBeNull()
     expect(JSON.parse(log.mock.calls.at(-1)?.[0] as string).error).toBe(
       "timeout"
     )
@@ -628,7 +628,7 @@ describe("the reading of a message that may put the site on a name", () => {
       slow,
     ]) {
       expect(
-        await jevPutOn("k", "put it on a.co.uk", "a.co.uk", fetchImpl)
+        await jevPutOn("k", "put it on a.co.uk", "a.co.uk", fetchImpl, 10)
       ).toBe(false)
     }
     expect(log).toHaveBeenCalledTimes(3)

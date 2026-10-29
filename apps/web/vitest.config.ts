@@ -11,5 +11,8 @@ export default defineConfig({
     // Rendering tests run ~10x slower in the gate's 4-CPU act container
     // beside three other suites; the 5 s default timed out a 95 ms test there.
     testTimeout: 15_000,
+    // Re-importing React and the rest for every file was most of the run.
+    isolate: false,
+    setupFiles: ["./src/fresh-modules.ts"],
   },
 })

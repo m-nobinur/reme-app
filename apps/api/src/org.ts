@@ -168,7 +168,8 @@ export async function createOrg(
     email: string
     displayName: string | null
   },
-  newId: () => string = () => crypto.randomUUID()
+  newId: () => string = () => crypto.randomUUID(),
+  waitMs = SIGNUP_WAIT_MS
 ): Promise<Org> {
   // The person first, before any vendor call, so an email another row holds
   // is refused before a WorkOS organization exists to be left behind. Under a
@@ -199,7 +200,7 @@ export async function createOrg(
 
   // One signup per person at a time. A second one waits, holding no
   // connection, and once it holds the claim it adopts what the first made.
-  const deadline = Date.now() + SIGNUP_WAIT_MS
+  const deadline = Date.now() + waitMs
   let claimed = await claimSignup(kit, input.workosUserId)
   while (!claimed) {
     if (Date.now() >= deadline) throw new SignupBusy()

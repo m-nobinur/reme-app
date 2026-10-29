@@ -118,15 +118,10 @@ test("the last question reads Looks good", async ({ page }) => {
   ).toBeEnabled()
 })
 
-test("the tray has no accessibility violations, in both themes and on a phone", async ({
+// The catalog scans the tray at 1024 in both themes.
+test("the tray has no accessibility violations on a phone", async ({
   page,
 }) => {
-  for (const [width, theme] of [
-    [1024, "light"],
-    [1024, "dark"],
-    [360, "light"],
-  ] as const) {
-    await open(page, "QuestionTray", width, theme)
-    await axe(page, `QuestionTray ${width} ${theme}`)
-  }
+  await open(page, "QuestionTray", 360)
+  await axe(page, "QuestionTray 360")
 })

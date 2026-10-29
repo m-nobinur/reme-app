@@ -1,5 +1,5 @@
-import { afterAll, beforeAll, describe, expect, test } from "vitest"
-import { type Built, build, clean, readPages } from "./build"
+import { beforeAll, describe, expect, test } from "vitest"
+import { type Built, build, readPages } from "./build"
 import { FILLED } from "./fixture"
 
 const NOTICE =
@@ -15,11 +15,6 @@ describe("the footer's regulatory notice", () => {
     ])
     Object.assign(built, { none, some })
   }, 180_000)
-
-  afterAll(() => {
-    for (const each of Object.values(built)) clean(each)
-  })
-
   const footerTexts = (name: string) =>
     readPages(built[name]?.dist ?? "").flatMap((page) =>
       page.elements.some(

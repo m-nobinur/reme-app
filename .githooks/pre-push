@@ -1,12 +1,19 @@
 #!/usr/bin/env bash
 . "$(dirname "$0")/_lib.sh"
 
-while read -r _local_ref _local_sha remote_ref _remote_sha; do
+deletes_only=1
+while read -r _local_ref local_sha remote_ref _remote_sha; do
   [ -z "${remote_ref:-}" ] && continue
   target=${remote_ref#refs/heads/}
   [[ "$target" =~ $PROTECTED_BRANCHES ]] && \
     die "direct push to '$target' is not allowed. Open a PR:  gh pr create --fill"
+  [[ "$local_sha" =~ ^0{40,}$ ]] || deletes_only=0
 done
+# Deleting a merged branch pushes no code, so it has nothing to check.
+[ "$deletes_only" = 1 ] && [ -z "${REME_HEAVY_LOCK:-}" ] && { ok "✓ pre-push (deletes only)"; exit 0; }
+
+# The rest is heavy: wait for any other heavy job on this machine, holding its lock.
+[ -n "${REME_HEAVY_LOCK:-}" ] || exec "$(dirname "$0")/../scripts/heavy.sh" "$0" "$@" </dev/null
 
 # Turbo's cache is shared by every worktree on this machine, and it hashes
 # declared inputs, not what is installed. A cached pass once replayed while
@@ -21,6 +28,18 @@ if ! out=$(pnpm install --frozen-lockfile --prefer-offline 2>&1); then
   die "pnpm install --frozen-lockfile failed. Fix the install before pushing."
 fi
 
-run_script typecheck
-run_script test
+# Only the packages this branch changes and their dependents, against the
+# merge-base with origin/main (or a TURBO_SCM_BASE you set, for a stacked
+# branch). Without that ref, everything.
+export TURBO_SCM_BASE=${TURBO_SCM_BASE:-origin/main}
+affected=
+if git rev-parse -q --verify "$TURBO_SCM_BASE^{commit}" >/dev/null; then
+  affected=--affected
+else
+  warn "  ↷ $TURBO_SCM_BASE not found: checking every package"
+fi
+# shellcheck disable=SC2086 # empty means no argument
+run_script typecheck $affected
+# shellcheck disable=SC2086
+run_script test $affected
 ok "✓ pre-push"

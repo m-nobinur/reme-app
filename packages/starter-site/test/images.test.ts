@@ -1,8 +1,8 @@
 import { statSync } from "node:fs"
 import { join } from "node:path"
 import sharp from "sharp"
-import { afterAll, beforeAll, describe, expect, test } from "vitest"
-import { type Built, build, clean, readPages } from "./build"
+import { beforeAll, describe, expect, test } from "vitest"
+import { type Built, build, readPages } from "./build"
 import { FILLED } from "./fixture"
 
 /** IG3's budget: the hero at 1280 px, any other image, and the phone's home page. */
@@ -64,7 +64,6 @@ beforeAll(async () => {
     },
   })
 }, 180_000)
-afterAll(() => clean(built))
 
 type Tag = { tag: string; attrs: Record<string, string> }
 const home = () => readPages(built.dist).find((p) => p.file === "index.html")

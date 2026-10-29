@@ -608,23 +608,32 @@ describe.skipIf(!url)("deleting an account, on a live connection", () => {
     expect(objects.held.size).toBe(owned(orgId).length)
   })
 
-  /** Never answers, and ignores the abort: the worst a vendor can do. */
-  const stalled = () => new Promise<Response>(() => undefined)
-
-  /** The route's answer to a stalled WorkOS, and how long it took. */
+  /**
+   * The route's answer to a WorkOS that never answers and ignores the abort,
+   * the worst a vendor can do. `outbound.test.ts` holds the bound to the
+   * millisecond; this holds that the route waits for it and answers 503.
+   */
   const timed = async (call: () => Promise<Response>) => {
     const quiet = vi.spyOn(console, "error").mockImplementation(() => undefined)
-    const started = performance.now()
+    workosApi = vi.fn(() => new Promise<Response>(() => undefined))
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
     try {
-      const response = await call()
-      const took = performance.now() - started
+      let answered = false
+      const answer = call().finally(() => {
+        answered = true
+      })
+      // `waitFor` moves the fake clock as it polls, and the database driver
+      // connects on a timer.
+      await vi.waitFor(() => expect(workosApi).toHaveBeenCalled())
+      expect(answered).toBe(false)
+      await vi.advanceTimersByTimeAsync(WORKOS_TIMEOUT_MS)
+      const response = await answer
       expect(response.status).toBe(503)
       expect(ErrorEnvelope.parse(await response.json()).code).toBe(
         "workos.timeout"
       )
-      expect(took).toBeGreaterThanOrEqual(WORKOS_TIMEOUT_MS)
-      expect(took).toBeLessThan(WORKOS_TIMEOUT_MS + 1_500)
     } finally {
+      vi.useRealTimers()
       quiet.mockRestore()
     }
   }
@@ -654,7 +663,6 @@ describe.skipIf(!url)("deleting an account, on a live connection", () => {
         ctx
       )
 
-    workosApi = stalled
     await timed(remove)
 
     workosApi = async (request) =>
@@ -666,11 +674,10 @@ describe.skipIf(!url)("deleting an account, on a live connection", () => {
           })
         : new Response(null, { status: 202 })
     expect((await remove()).status).toBe(204)
-  }, 15_000)
+  })
 
   it("answers a stalled WorkOS on signup with 503 at the bound", async () => {
     const workosUserId = `user_probe_account_signup_stall_${run}`
-    workosApi = stalled
     await timed(async () =>
       worker.fetch(
         new Request("http://api.invalid/org", {
@@ -686,5 +693,5 @@ describe.skipIf(!url)("deleting an account, on a live connection", () => {
         ctx
       )
     )
-  }, 15_000)
+  })
 })

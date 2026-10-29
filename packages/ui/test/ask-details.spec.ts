@@ -131,15 +131,12 @@ test("Escape collapses the tray to its question and the count", async ({
   await expect(row).toContainText("1 of 2")
 })
 
-for (const theme of ["light", "dark"]) {
-  test(`the details trays pass axe in ${theme} and fit a phone`, async ({
-    page,
-  }) => {
-    await open(page, "AskDetails", 390, theme)
-    await axe(page, `AskDetails ${theme}`)
-    const overflow = await page.evaluate(
-      () => document.documentElement.scrollWidth > window.innerWidth
-    )
-    expect(overflow).toBe(false)
-  })
-}
+// The catalog scans the trays in both themes at 1024.
+test("the details trays pass axe and fit a phone", async ({ page }) => {
+  await open(page, "AskDetails", 390)
+  await axe(page, "AskDetails 390")
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth > window.innerWidth
+  )
+  expect(overflow).toBe(false)
+})

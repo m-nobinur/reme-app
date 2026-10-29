@@ -24,9 +24,11 @@ env:
 jobs:
   ci:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # `turbo --affected` diffs against main
 
       - uses: pnpm/action-setup@v6
 
@@ -43,18 +45,22 @@ jobs:
           key: turbo-${{ runner.os }}-${{ github.run_id }}
           restore-keys: turbo-${{ runner.os }}-
 
-      - run: pnpm typecheck
+      - run: pnpm typecheck:ci
 
       - run: pnpm lint:ci --reporter=github
 
-      # Everything except packages/ui, whose suite drives a real browser. Adding
-      # it cost this job a minute, most of it downloading Chromium and its apt
-      # dependencies on a runner that throws them away. So the design system is
-      # checked where it is written: `pnpm --filter @workspace/ui test` covers
-      # catalog drift, axe and the screenshots in one run, and pre-push runs it.
-      # Bring it back here when a browser is already on the image, or when the
-      # runner is not the thing paying for it.
+      # api and orchestrator run once, with their database, in `database`.
       - run: pnpm test:ci
+
+      # The ui Playwright suite runs here, not in pre-push, and only when the
+      # change reaches packages/ui, so other PRs skip the browser install too.
+      # No main to diff against (the local gate's single-branch clone) runs it.
+      - run: |
+          affected=$(pnpm exec turbo test --affected --filter=@workspace/ui --dry=json | jq '[.tasks[] | select(.taskId == "@workspace/ui#test")] | length' || true)
+          if [ "${affected:-1}" != 0 ]; then
+            pnpm --filter @workspace/ui exec playwright install --with-deps chromium
+            pnpm exec turbo test --filter=@workspace/ui
+          fi
 
       # Tier 1 in replay, per the eng guide's suite table: every recorded
       # fixture replays twice to the hash it is pinned to, since an eval scored
@@ -160,8 +166,8 @@ jobs:
         run: pnpm test:tenancy
 
       # `apps/api` reaches the database through a Hyperdrive binding, so its
-      # suite skips in the unit job where there is no DATABASE_URL and runs
-      # here, where a claim about the tenant path can be checked against one.
+      # suite runs here, where a claim about the tenant path can be checked
+      # against one, and not in the unit job too (nor does orchestrator's).
       # It reads the seeded rows written two steps above, which is what makes
       # "an absent org sees zero" evidence rather than an empty database.
       - name: The API reaches the database through the tenant path
