@@ -68,14 +68,10 @@ test("@live a new owner is onboarded in the chat, and a reload keeps it", async 
   const onboarding = page.url()
 
   await answerOnboarding(page)
-  const card = page.locator('[data-slot="request-change"]')
 
-  // The first build, started on its own once the quote form was confirmed:
-  // the card says it started and asks nothing, and no approval was asked.
-  await expect(card).toHaveCount(1)
-  await expect(card).toContainText("Build my website")
-  await expect(card).toContainText("Started. Follow it under Working on.")
-  await expect(card.getByRole("button")).toHaveCount(0)
+  // The first build, started by the design tray's answer: no card in the
+  // chat and no approval asked.
+  await expect(page.locator('[data-slot="request-change"]')).toHaveCount(0)
   await expect(page.locator('[data-slot^="approval-"]')).toHaveCount(0)
   const workspace = (await (
     await api(await sessionCookie(page), "/workspace")

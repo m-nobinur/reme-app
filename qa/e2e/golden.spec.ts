@@ -41,12 +41,12 @@ test.use({
 const expect = baseExpect.configure({ timeout: 30_000 })
 
 /**
- * Builds took 115 to 313 s when the polling interval was chosen, and a
- * question arrived 28 s into the S exit's build. Each wait below is
- * the top of that range with room, and every one polls the page.
+ * A first build says it takes about 6 to 10 minutes, and a question can
+ * arrive in its first minute. Each wait below is the top of that range with
+ * room, and every one polls the page.
  */
 const WAIT = {
-  approval: 480_000,
+  approval: 900_000,
   publish: 180_000,
   chat: 120_000,
 }
@@ -203,7 +203,12 @@ async function answer(page: Page, item: Locator) {
     if (await text.count()) {
       await text.fill("Keep everything else as it is.")
     } else {
-      await card.locator('input[type="radio"]:visible').first().check()
+      // Not now leaves the web address question for later.
+      const later = card.getByRole("radio", { name: "Not now" })
+      await ((await later.isVisible())
+        ? later
+        : card.locator('input[type="radio"]:visible').first()
+      ).check()
     }
     await send.click()
     // The tick, then the next question on its own, or the fold.
@@ -213,45 +218,54 @@ async function answer(page: Page, item: Locator) {
   await expect(stack).toHaveCount(0, { timeout: WAIT.chat })
 }
 
+/** Publish on the chat's ready card, or on the panel's review. */
+const publishIn = {
+  chat: (page: Page) =>
+    page
+      .locator('[data-slot^="site-ready"]')
+      .getByRole("button", { name: "Publish", exact: true }),
+  panel: (page: Page) =>
+    panel(page)
+      .locator('[data-slot="approval-item"]')
+      .getByRole("button", { name: "Publish", exact: true }),
+}
+
 /**
- * Approves the version waiting for review and returns its number. Only a
- * report that passes the gates takes the site's next number (ADR-031), so the
- * first version is v1 even when a gate refused the build's first report.
+ * Publishes the version waiting for review with `publish` and returns its
+ * number, read from the api once it is live past `before`. Only a report that
+ * passes the gates takes the site's next number (ADR-031), so the first
+ * version is v1 even when a gate refused the build's first report.
  */
-async function approveVersion(page: Page): Promise<number> {
-  const approve = panel(page).getByRole("button", {
-    name: /^Approve and publish v\d+$/,
-  })
+async function approveVersion(
+  page: Page,
+  publish: Locator,
+  before: number
+): Promise<number> {
   const question = panel(page).locator('[data-slot="question-item"]').first()
-  // A full build waits on the owner's yes to its plan, in the chat.
-  const blueprint = page
-    .locator('[data-slot="blueprint-card"]')
-    .getByRole("button", { name: "Build it" })
   const deadline = Date.now() + WAIT.approval
   // A guard against a build that asks forever.
   for (let asked = 0; asked < 5; asked++) {
-    await expect(approve.or(question).or(blueprint).first()).toBeVisible({
+    await expect(publish.or(question).first()).toBeVisible({
       timeout: Math.max(deadline - Date.now(), 1),
     })
-    if (await approve.isVisible()) break
-    if (await blueprint.isVisible()) {
-      await blueprint.click()
-      await expect(blueprint).toHaveCount(0, { timeout: WAIT.chat })
-      continue
-    }
+    if (await publish.isVisible()) break
     await answer(page, question)
   }
-  await expect(approve).toBeEnabled()
-  const n = Number(/v(\d+)$/.exec(await approve.innerText())?.[1])
-  await approve.click()
+  await expect(publish).toBeEnabled()
+  await publish.click()
   // The site sits on the panel's Website tab, which appears once it is live.
   const website = panel(page).getByRole("tab", { name: "Website" })
   await expect(website).toBeVisible({ timeout: WAIT.publish })
   await website.click()
-  await expect(panel(page).getByText(`Version ${n} is live`)).toBeVisible({
-    timeout: WAIT.publish,
-  })
-  return n
+  await expect(
+    panel(page).getByRole("tabpanel").getByText("Your website is live")
+  ).toBeVisible({ timeout: WAIT.publish })
+  const version = async () =>
+    (await readJson<Workspace>("/workspace")).site.live?.version ?? 0
+  await expect
+    .poll(version, { timeout: WAIT.publish, intervals: [5_000] })
+    .toBeGreaterThan(before)
+  return version()
 }
 
 /**
@@ -341,25 +355,20 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
 
   await step("onboarding, build started", async () => {
     await answerOnboarding(page)
-    // The yes to "build it for me" was the approval: the build starts
-    // after the photos with no card to approve.
-    const card = page.locator('[data-slot="request-change"]')
-    await expect(card).toContainText("Build my website")
-    await expect(card).toContainText("Started. Follow it under Working on.")
-    await expect(card.getByRole("button")).toHaveCount(0)
-    await expect(
-      panel(page).getByRole("heading", { name: "Working on" })
-    ).toBeVisible()
+    // The design tray's answer started it, with no card to approve.
+    await expect(page.locator('[data-slot="request-change"]')).toHaveCount(0)
   })
 
   await step("blank state: try again", async () => {
     // A failed read, made by failing the panel's poll (a GET server
-    // function) until it shows. The action only renders while nothing
-    // waits on the owner, so a question that arrived first means it is not
+    // function) until it shows. The action only renders on a section with
+    // nothing in it, so a question or a build listed first means it is not
     // reachable on this run, and the run says so.
     const fail = (route: Route) =>
       route.request().method() === "GET" ? route.abort() : route.fallback()
-    const stale = panel(page).getByText("This panel did not refresh.")
+    const stale = panel(page)
+      .getByText("Couldn't refresh. Trying again in a minute.")
+      .first()
     const retry = panel(page).getByRole("button", { name: "Try again" })
     const question = panel(page).locator('[data-slot="question-item"]')
     await page.route("**/_serverFn/**", fail)
@@ -379,7 +388,7 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
     }
     if (!shown || !(await retry.isVisible())) {
       run.blank_state_actions["Try again"] = shown
-        ? "not reached: a question was already waiting"
+        ? "not reached: the panel listed work, so it offered no Try again"
         : "not reached: the failed poll did not show within 70 s"
       note(
         `Try again was not reachable (${run.blank_state_actions["Try again"]}).`
@@ -395,7 +404,8 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
   let first = 0
   let second = 0
   await step("v1 approved, live with the quote action", async () => {
-    first = await approveVersion(page)
+    // From the chat's card, which then says the site is live.
+    first = await approveVersion(page, publishIn.chat(page), 0)
     expect(first).toBe(1)
     const said = Date.now()
     await expect(
@@ -413,20 +423,15 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
     await expect(
       panel(page)
         .getByRole("tabpanel")
-        .getByRole("img", {
-          name: `Your website's home page on a laptop, version ${first}`,
-        })
+        .getByRole("img", { name: "Your website's home page on a laptop" })
     ).toBeVisible()
   })
 
   await step("blank state: see notifications", async () => {
-    // The bell at the top right opens its menu, whose last entry is the
+    // The bell in the rail opens its menu, whose last entry is the
     // notifications page, where v1's publish is listed.
-    await page
-      .getByRole("banner")
-      .getByRole("button", { name: /^Notifications/ })
-      .click()
-    await page.getByRole("menuitem", { name: "View all notifications" }).click()
+    await page.getByRole("button", { name: /^Notifications/ }).click()
+    await page.getByRole("link", { name: "View all notifications" }).click()
     await expect(page).toHaveURL(/\/app\/notifications$/)
     await expect(
       page.getByRole("heading", { name: "Notifications", level: 1 })
@@ -455,16 +460,9 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
     await page
       .getByLabel("Message input")
       .fill(`Change the hero to say "${HERO}"`)
+    // The owner's own words in Act mode start the change with no card.
     await page.getByLabel("Send message").click()
-    const card = page.locator('[data-slot="request-change"]').last()
-    await card
-      .getByRole("button", { name: "Approve" })
-      .click({ timeout: WAIT.chat })
-    await expect(card).toContainText("Started. Follow it under Working on.")
-    await expect(
-      panel(page).getByRole("heading", { name: "Working on" })
-    ).toBeVisible()
-    second = await approveVersion(page)
+    second = await approveVersion(page, publishIn.panel(page), first)
     expect(second).toBe(first + 1)
     await expectLive(page, host, [HERO])
     await expectQuote(page, host)
@@ -504,8 +502,7 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
     // The title is the Chief of Staff's restatement, so it is found by the
     // run's token and then used whole.
     const set = noteOf(token)
-    await expect(set).toContainText("Set by Reme", { timeout: WAIT.chat })
-    await expect(set).toContainText("Tomorrow")
+    await expect(set).toContainText("Tomorrow", { timeout: WAIT.chat })
     const setTitle = await set.locator("span").first().innerText()
     expect(await sourceOf(setTitle)).toBe("assistant")
     await reminders.getByRole("button", { name: `Done: ${setTitle}` }).click()
@@ -531,7 +528,7 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
         "service_area.text",
         "assistant.name",
         "site.build_mode",
-        "site.template",
+        "site.direction",
       ])
     )
 

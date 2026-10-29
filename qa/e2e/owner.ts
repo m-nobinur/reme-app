@@ -191,8 +191,9 @@ const PICKS = ["Cleaning and home services", "Yes, build it for me"]
  * others as plain chat answered in the composer, and an answered card
  * renders nothing. So each step waits for the assistant to finish, answers
  * the open card if there is one, else replies to its last question. The
- * build starts on its own once the quote form is confirmed. A turn budget
- * guards against a conversation that never ends.
+ * design tray's answer starts the build with no card in the chat, so the
+ * panel's line says it has. A turn budget guards against a conversation
+ * that never ends.
  */
 export async function answerOnboarding(page: Page): Promise<void> {
   // A planner turn can take 45 s, read from wherever the run is.
@@ -205,8 +206,8 @@ export async function answerOnboarding(page: Page): Promise<void> {
     .filter({ has: page.locator("form, input[type=file], button") })
     .filter({ visible: true })
   const started = page
-    .locator('[data-slot="request-change"]')
-    .filter({ hasText: "Started" })
+    .getByRole("complementary", { name: "Panel" })
+    .getByText(/is building your website$/)
   const input = page.getByLabel("Message input")
   const settled = async () => {
     await slow(
@@ -274,9 +275,12 @@ export async function answerOnboarding(page: Page): Promise<void> {
             .getByRole("radio", { checked: true })
         ).toBeVisible({ timeout: 90_000 })
       }
+      // Pick for me answers the whole tray, which starts the build.
       await step(() =>
         card.getByRole("button", { name: "Pick for me", exact: true }).click()
       )
+      await slow(started.first()).toBeVisible()
+      return
     } else if (slot === "review-quote-form") {
       await step(() => card.getByRole("button", { name: "Looks good" }).click())
     } else if (slot === "ask-details") {
@@ -344,9 +348,10 @@ export async function answerOnboarding(page: Page): Promise<void> {
       await step(() => card.getByRole("button", { name: "Submit" }).click())
     }
   }
-  await expect(started, "the build had not started after 45 turns").toHaveCount(
-    1
-  )
+  await expect(
+    started.first(),
+    "the build had not started after 45 turns"
+  ).toBeVisible()
 }
 
 /**
