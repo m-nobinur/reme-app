@@ -1787,15 +1787,25 @@ export function trayItem(name: string) {
   return item ?? "something else"
 }
 
-/** What else waits in the tray beside the item shown: "also a reminder", "also a question and 2 more". */
+/**
+ * What else waits in the tray beside the item shown: "also a reminder", "also
+ * 2 answers to send", "also a question and 2 more". Items of one kind count
+ * together; a "your" item has one tray, so it never repeats.
+ */
 export function trayOthers(names: readonly string[]) {
-  const items = names.map(trayItem)
-  const [first, second] = items
+  const counts = new Map<string, number>()
+  for (const item of names.map(trayItem)) {
+    counts.set(item, (counts.get(item) ?? 0) + 1)
+  }
+  const phrases = [...counts].map(([item, n]) =>
+    n === 1 ? item : item.replace(/^an? (\w+)/, `${n} $1s`)
+  )
+  const [first, second] = phrases
   if (!first) return "nothing else"
-  if (items.length === 1) return `also ${first}`
-  return items.length === 2
+  if (phrases.length === 1) return `also ${first}`
+  return phrases.length === 2
     ? `also ${first} and ${second}`
-    : `also ${first} and ${items.length - 1} more`
+    : `also ${first} and ${names.length - (counts.values().next().value ?? 1)} more`
 }
 
 /** A reminder's title as shown: the owner's words, with a capital to start. */

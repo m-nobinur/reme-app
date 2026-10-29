@@ -383,6 +383,21 @@ describe("what waits on the owner", () => {
     expect(trayOthers(["buy-domain", "ask-fact"])).toBe(
       "also your domain payment and a question"
     )
+    // Two of one kind count together, never "an answer and an answer".
+    expect(trayOthers(["answer-question", "answer-question"])).toBe(
+      "also 2 answers to send"
+    )
+    expect(trayOthers(["ask-fact", "ask-choice", "create-reminder"])).toBe(
+      "also 2 questions and a reminder"
+    )
+    expect(
+      trayOthers([
+        "create-reminder",
+        "ask-fact",
+        "buy-domain",
+        "answer-question",
+      ])
+    ).toBe("also a reminder and 3 more")
     readable(trayOthers(["something-new"]))
   })
 })
