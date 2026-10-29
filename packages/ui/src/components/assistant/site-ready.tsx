@@ -42,6 +42,7 @@ export function SiteReady({
   onRetryPreview,
   approved = false,
   published = false,
+  live = false,
   pending = false,
   error = null,
   onApprove,
@@ -60,6 +61,8 @@ export function SiteReady({
   approved?: boolean
   /** That version is live; the assistant's live message is still to come. */
   published?: boolean
+  /** The assistant said it is live: the approval stays as its result. */
+  live?: boolean
   /** The approval is on its way to the server. */
   pending?: boolean
   /** Why the last approval did not go through, in the owner's words. */
@@ -101,7 +104,11 @@ export function SiteReady({
       className={cn("flex text-sm", inTray || row ? "p-3" : className)}
       data-slot="site-ready"
     >
-      <StatusLine delay={0} label={publishLine(published)} state="working" />
+      <StatusLine
+        delay={0}
+        label={publishLine(published, live)}
+        state={live ? "done" : "working"}
+      />
     </p>
   )
   // A heading cannot sit inside the docked row's button.
