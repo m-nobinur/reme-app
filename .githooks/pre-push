@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
 . "$(dirname "$0")/_lib.sh"
 
-while read -r _local_ref _local_sha remote_ref _remote_sha; do
+deletes_only=1
+while read -r _local_ref local_sha remote_ref _remote_sha; do
   [ -z "${remote_ref:-}" ] && continue
   target=${remote_ref#refs/heads/}
   [[ "$target" =~ $PROTECTED_BRANCHES ]] && \
     die "direct push to '$target' is not allowed. Open a PR:  gh pr create --fill"
+  [[ "$local_sha" =~ ^0{40,}$ ]] || deletes_only=0
 done
+# Deleting a merged branch pushes no code, so it has nothing to check.
+[ "$deletes_only" = 1 ] && [ -z "${REME_HEAVY_LOCK:-}" ] && { ok "✓ pre-push (deletes only)"; exit 0; }
 
 # The rest is heavy: wait for any other heavy job on this machine, holding its lock.
 [ -n "${REME_HEAVY_LOCK:-}" ] || exec "$(dirname "$0")/../scripts/heavy.sh" "$0" "$@" </dev/null
