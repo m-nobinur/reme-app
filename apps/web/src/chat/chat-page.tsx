@@ -42,7 +42,7 @@ import {
 } from "react"
 import { deleteReminder } from "@/lib/api/server"
 import { assistantOf, briefingOf } from "@/lib/briefing"
-import { OPENING_REVEAL } from "@/lib/reveal"
+import { LAST_SHOWN, OPENING_REVEAL } from "@/lib/reveal"
 import { useLiveWorkspace } from "@/lib/workspace"
 import { answerBuildQuestion } from "./build-questions"
 import { BuildStopped } from "./build-stopped"
@@ -242,6 +242,7 @@ export function ChatPage() {
                           assistant={live.workspace?.assistantName}
                           briefing={briefing.line}
                           components={{ ToolFallback: Approval }}
+                          lastShown={LAST_SHOWN}
                           mode={mode}
                           onRetry={() => retry.current?.()}
                           // One neutral line: rotating ideas offered work the

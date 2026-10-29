@@ -44,7 +44,12 @@ import {
   paletteName,
   paletteStops,
 } from "@workspace/ui/lib/blueprint"
-import { formatDateTime, relativeTime } from "@workspace/ui/lib/format"
+import {
+  dayLabel,
+  formatDateTime,
+  formatTime,
+  relativeTime,
+} from "@workspace/ui/lib/format"
 import { cn, META } from "@workspace/ui/lib/utils"
 import {
   Children,
@@ -1461,12 +1466,16 @@ function ApprovalItem({
 
 /* Coming up, done today, your website ---------------------------------- */
 
+const HOUR = 3_600_000
+
 /**
- * Things with a time, in the order given: what closes or is due next under
- * "Coming up", or what just happened under another title. Each row says how
- * far off it is ("in 25 min", "2 hr ago") beside its text; the exact time,
- * in `zone` once the reader's is known, is its tooltip. Nothing renders when
- * the list is empty.
+ * Things with a time, in the order given, on a rail grouped by day: what
+ * closes or is due next under "Coming up", or what just happened under
+ * another title. Each row has its time of day in `zone` (UTC until the
+ * reader's is known), its text, and how far off it is ("in 25 min", "2 hr
+ * ago"), measured from `now`, which the panel's minute clock moves; the exact
+ * time is its tooltip. One due within the hour, or past, is marked. Nothing
+ * renders when the list is empty.
  */
 function ComingUp({
   items,
@@ -1476,6 +1485,7 @@ function ComingUp({
   zone,
   action,
   ahead = true,
+  now = Date.now(),
 }: {
   items: { id: string; text: string; at: string }[]
   title?: string
@@ -1487,8 +1497,18 @@ function ComingUp({
   action?: ReactNode
   /** Times still to come: one that has passed is due now, never "ago". */
   ahead?: boolean
+  now?: number
 }) {
+  const id = useId()
   if (items.length === 0) return null
+  const tz = zone ?? "UTC"
+  const days: { day: string; rows: typeof items }[] = []
+  for (const item of items) {
+    const day = dayLabel(new Date(item.at), tz, new Date(now))
+    const last = days.at(-1)
+    if (last?.day === day) last.rows.push(item)
+    else days.push({ day, rows: [item] })
+  }
   return (
     <PanelSection
       action={action}
@@ -1496,26 +1516,69 @@ function ComingUp({
       icon={icon}
       title={title}
     >
-      {/* Under the heading's text, past its icon, so the rows read as the section's own. */}
-      <ul className="flex flex-col divide-y divide-border ps-5">
-        {items.map((item) => (
-          <li
-            className="flex items-baseline justify-between gap-3 py-2 first:pt-0 last:pb-0"
-            key={item.id}
-          >
-            <span className="wrap-break-word min-w-0 text-sm">{item.text}</span>
-            <time
-              className={cn(META, "shrink-0 tabular-nums")}
-              dateTime={item.at}
-              title={formatDateTime(item.at, zone ?? undefined) ?? undefined}
-            >
-              {ahead && Date.parse(item.at) <= Date.now()
-                ? "due now"
-                : relativeTime(item.at)}
-            </time>
-          </li>
+      <div className="flex flex-col gap-3" data-slot="timeline">
+        {days.map(({ day, rows }, index) => (
+          <div className="flex flex-col gap-1.5" key={rows[0]?.id}>
+            <h3 className={cn(META, "font-medium")} id={`${id}-${index}`}>
+              {day}
+            </h3>
+            <ul aria-labelledby={`${id}-${index}`} className="flex flex-col">
+              {rows.map((item) => {
+                const left = Date.parse(item.at) - now
+                const soon = ahead && left <= HOUR
+                return (
+                  <li
+                    // The rail: from under this row's mark to the next one's.
+                    className="relative flex gap-2 pb-3 not-last:before:absolute not-last:before:start-[7.5px] not-last:before:top-5 not-last:before:bottom-0.5 not-last:before:w-px not-last:before:bg-border last:pb-0"
+                    data-soon={soon || undefined}
+                    key={item.id}
+                  >
+                    {ahead ? (
+                      <StateIcon
+                        className={cn("mt-0.5", soon && "text-primary")}
+                        state="next"
+                      />
+                    ) : (
+                      <DoneIcon className="mt-0.5" />
+                    )}
+                    <time
+                      className={cn(
+                        "w-16 shrink-0 whitespace-nowrap text-sm tabular-nums",
+                        !ahead && "text-muted-foreground"
+                      )}
+                      dateTime={item.at}
+                      title={formatDateTime(item.at, tz) ?? undefined}
+                    >
+                      {formatTime(new Date(item.at), tz)}
+                    </time>
+                    <div className="flex min-w-0 flex-col">
+                      <span
+                        className={cn(
+                          "wrap-break-word text-sm",
+                          !ahead && "text-muted-foreground"
+                        )}
+                      >
+                        {item.text}
+                      </span>
+                      <span
+                        className={cn(
+                          META,
+                          "tabular-nums",
+                          soon && "font-medium text-primary"
+                        )}
+                      >
+                        {ahead && left <= 0
+                          ? "due now"
+                          : relativeTime(item.at, now)}
+                      </span>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
         ))}
-      </ul>
+      </div>
     </PanelSection>
   )
 }

@@ -53,6 +53,11 @@ const STARTED = "2026-10-01T09:00:00.000Z"
 /** Four minutes ten seconds in. */
 const NOW_ISO = new Date(Date.parse(STARTED) + 250_000).toISOString()
 const EXPIRES = "2026-10-04T09:00:00.000Z"
+/** The timelines' clock: Thursday 29 October, 11:00 AM in London. */
+const TIMELINE_NOW = Date.parse("2026-10-29T11:00:00.000Z")
+/** `minutes` from the timelines' clock, as an ISO time. */
+const fromNow = (minutes: number) =>
+  new Date(TIMELINE_NOW + minutes * 60_000).toISOString()
 const REVISION: ApprovalTarget = {
   kind: "revision",
   revision_id: "2f41c9ab-0000-4000-8000-000000000005",
@@ -458,6 +463,48 @@ const panelCatalog: Entry[] = [
             Use your own domain
           </a>
         </UpNext>
+      </div>
+    ),
+  },
+  {
+    // Both timelines over three days, on a pinned clock: one past due and
+    // one within the hour marked, then what finished today and before.
+    name: "ComingUp timeline",
+    render: () => (
+      <div className="flex max-w-88 flex-col gap-6">
+        <ComingUp
+          action={
+            <a className={SECTION_ACTION} href="#reminders">
+              View all
+            </a>
+          }
+          count={6}
+          items={[
+            { id: "patel-call", text: "Ring Mrs Patel back", at: fromNow(-5) },
+            { id: "patel-quote", text: "Quote for Mrs Patel", at: fromNow(40) },
+            { id: "pads", text: "Order mop heads", at: fromNow(21 * 60) },
+            {
+              id: "hartley",
+              text: "Invoice the Hartleys for the end of tenancy clean",
+              at: fromNow(29 * 60 + 30),
+            },
+            { id: "domain", text: "Domain renews", at: fromNow(46 * 60) },
+          ]}
+          now={TIMELINE_NOW}
+          zone="Europe/London"
+        />
+        <ComingUp
+          ahead={false}
+          icon={<DoneIcon />}
+          items={[
+            { id: "sam", text: "Reminder: call Sam", at: fromNow(-20) },
+            { id: "live", text: "Website published", at: fromNow(-108) },
+            { id: "setup", text: "Brightclean set up", at: fromNow(-20 * 60) },
+          ]}
+          now={TIMELINE_NOW}
+          title="Completed"
+          zone="Europe/London"
+        />
       </div>
     ),
   },

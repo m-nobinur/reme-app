@@ -20,10 +20,11 @@ import {
   stepKind,
   stepLabel,
 } from "@workspace/ui/lib/activity-copy"
+import { dayOf } from "@workspace/ui/lib/format"
 import type { AttentionItem, Workspace } from "./api/types"
 import { assistantOf, leading } from "./briefing"
 import { onboardingFor } from "./onboarding"
-import { dayOf, dueLine, upcomingNotes } from "./reminders"
+import { dueLine, upcomingNotes } from "./reminders"
 import { ownDomainLive } from "./website-checklist"
 
 /**

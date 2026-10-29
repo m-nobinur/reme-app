@@ -128,7 +128,7 @@ export const STATE_MARKS = {
   notifications: {
     Icon: BellIcon,
     weight: "regular",
-    use: "The Notifications control and list, nothing else.",
+    use: "The Notifications control and list, and a chat update of no known kind.",
     size: "size-4",
     colour: "",
   },

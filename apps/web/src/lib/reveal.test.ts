@@ -1,5 +1,5 @@
 import { expect, it } from "vitest"
-import { FRESH_MS, revealer } from "./reveal"
+import { FRESH_MS, lastShown, revealer } from "./reveal"
 
 const memory = () => {
   const items = new Map<string, string>()
@@ -43,4 +43,22 @@ it("with storage that throws, only a message under two minutes old plays in", ()
   expect(reveal.unseen("m1", at(FRESH_MS + 1000))).toBe(false)
   expect(reveal.unseen("m1", null)).toBe(false)
   expect(() => reveal.seen("m1")).not.toThrow()
+})
+
+it("keeps the last message shown per conversation, apart from the reveal's", () => {
+  const store = memory()
+  const last = lastShown(() => store)
+  expect(last.get("c1")).toBeNull()
+  last.set("c1", "m1")
+  last.set("c1", "m2")
+  last.set("c2", "m9")
+  expect(last.get("c1")).toBe("m2")
+  expect(last.get("c2")).toBe("m9")
+  expect(revealer(() => store).unseen("m2", at(0))).toBe(true)
+})
+
+it("with storage that throws, no conversation has a last message shown", () => {
+  const last = lastShown(broken)
+  expect(() => last.set("c1", "m1")).not.toThrow()
+  expect(last.get("c1")).toBeNull()
 })
