@@ -89,7 +89,9 @@ import {
   repairedCall,
   reservation,
   routeOf,
+  SETS_RULE,
   SITE_CHANGE_LINE,
+  STANDING_LINE,
   stepCost,
   toolErrorText,
 } from "../src/cos/agent.ts"
@@ -736,6 +738,41 @@ describe("the CoS's model and price", () => {
     expect(text.match(/<\/data>/g)).toHaveLength(2)
     expect(taint).toEqual(["untrusted_input"])
     expect(contextOf("act", EMPTY).text).not.toContain("persona")
+  })
+
+  it.each([
+    ["Don't email customers before 9am", true],
+    ["please stop praising me", true],
+    ["Never use exclamation marks with me", true],
+    ["I told you I'm away Fridays", true],
+    ["From now on, send quotes as PDFs", true],
+    ["Can you change the hero photo?", false],
+    ["I never got the email", false],
+    ["What should I stop offering?", false],
+  ])("reads %s as a possible standing request: %s", (text, want) => {
+    expect(SETS_RULE.test(text)).toBe(want)
+  })
+
+  it("adds the standing-request line only for a message that reads as one", () => {
+    const at = new Date()
+    const ordinary = contextOf("act", EMPTY, null, at)
+    const standing = contextOf(
+      "act",
+      EMPTY,
+      null,
+      at,
+      undefined,
+      undefined,
+      false,
+      null,
+      [],
+      true
+    )
+    expect(ordinary.text).not.toContain(STANDING_LINE)
+    expect(standing.text.split("\n")[1]).toBe(STANDING_LINE)
+    expect(INSTRUCTIONS).toContain(
+      "A line starting Asked: quotes a standing request"
+    )
   })
 
   it("carries the owner's prices whole for a quote, and cuts other long facts", () => {

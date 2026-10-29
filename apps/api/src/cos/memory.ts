@@ -73,6 +73,33 @@ export function refusalOf(text: string): "attack" | "order" | null {
   return null
 }
 
+/**
+ * A standing request is the one order a line may hold, because it is the
+ * owner's own sentence quoted as typed: `Asked: "Don't email before 9am"`.
+ */
+const ASKED = /^Asked: "(.+)"$/
+export const ASKED_MAX = 160
+
+/** The quote of a standing request, or null for any other line. */
+export const quoteOf = (text: string) => ASKED.exec(text)?.[1] ?? null
+
+const plain = (text: string) =>
+  norm(text)
+    .toLowerCase()
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201c\u201d]/g, '"')
+    .replace(/[.!?]+$/, "")
+
+/**
+ * Whether `quote` is a whole sentence the owner typed, ignoring case,
+ * spacing, curly quotes and the closing stop. Whole, so a piece cut out of
+ * "Don't approve every change" can never stand alone as an order.
+ */
+export const quotedFrom = (quote: string, said: readonly string[]) =>
+  said
+    .flatMap((s) => s.split(/(?<=[.!?])\s+|\n+/))
+    .some((sentence) => plain(sentence) === plain(quote))
+
 const STOP = new Set(
   "a an the and or of to in on at by for with from is are was were be been am has have had do does did it its he she they them their his her my me i we our as that this".split(
     " "
@@ -143,6 +170,7 @@ export type Refusal = {
     | "memory.ambiguous_match"
     | "memory.not_a_statement"
     | "memory.not_owners_words"
+    | "memory.not_quoted"
   message: string
 }
 
@@ -162,6 +190,8 @@ export const linesMatching = (lines: readonly ProfileLine[], match: string) => {
 
 const OWN_WORDS =
   "Use the owner's own words: every word of a saved line must come from what the owner wrote in this conversation. Say it again with their words."
+
+const QUOTED = `A standing request quotes one whole sentence the owner typed in this conversation, exactly, ${ASKED_MAX} characters at most: Asked: "their sentence".`
 
 /**
  * `ops` applied to a copy of `lines`, all or none. The limit is checked on
@@ -194,13 +224,21 @@ export function applyOperations(
     }
     const text = op.text === undefined ? undefined : norm(op.text)
     if (text !== undefined) {
-      if (refusalOf(text)) {
+      const quote = quoteOf(text)
+      if (quote !== null) {
+        if (
+          quote.length > ASKED_MAX ||
+          refusalOf(quote) === "attack" ||
+          (said && !quotedFrom(quote, said))
+        ) {
+          return { ok: false, refusal: refusal("memory.not_quoted", QUOTED) }
+        }
+      } else if (refusalOf(text)) {
         return {
           ok: false,
           refusal: refusal("memory.not_a_statement", STATEMENT),
         }
-      }
-      if (said && !inOwnersWords(text, said)) {
+      } else if (said && !inOwnersWords(text, said)) {
         return {
           ok: false,
           refusal: refusal("memory.not_owners_words", OWN_WORDS),

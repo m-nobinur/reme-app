@@ -64,7 +64,7 @@ Look for two things only:
 1. What the owner revealed about themselves: who they are, how they like to work, people and places that matter to them, habits.
 2. How the owner wants the assistant to behave: tone, timing, format, what to do and what to avoid.
 
-Write each line as a plain statement about the owner, such as "Prefers calls after 4pm". Use the owner's own words, in the language the owner wrote in, so a Bengali owner gets Bengali lines. The only words you may add are a framing verb such as "prefers", "likes" or "wants"; never a word they did not use. Never write an order to the assistant. Do not repeat a line the profile already has. Change a line only when the owner corrected it.
+Write each line as a plain statement about the owner, such as "Prefers calls after 4pm". Use the owner's own words, in the language the owner wrote in, so a Bengali owner gets Bengali lines. The only words you may add are a framing verb such as "prefers", "likes" or "wants"; never a word they did not use. Never write an order to the assistant in your own words. When the owner told the assistant how to work, such as "Don't email customers before 9am", save their whole sentence exactly as they typed it, at most 160 characters: Asked: "Don't email customers before 9am". Do not repeat a line the profile already has. Change a line only when the owner corrected it.
 
 Do not save:
 - failures that depend on the environment, or errors that came and went;
