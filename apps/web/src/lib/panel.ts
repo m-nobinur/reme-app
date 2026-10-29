@@ -20,10 +20,12 @@ import {
   stepKind,
   stepLabel,
 } from "@workspace/ui/lib/activity-copy"
+import { dayOf } from "@workspace/ui/lib/format"
 import type { AttentionItem, Workspace } from "./api/types"
 import { assistantOf, leading } from "./briefing"
 import { onboardingFor } from "./onboarding"
-import { dayOf, dueLine, upcomingNotes } from "./reminders"
+import { dueLine, upcomingNotes } from "./reminders"
+import { ownDomainLive } from "./website-checklist"
 
 /**
  * What the floating panel says, from what the frame has already read: the
@@ -92,7 +94,11 @@ export type SegmentView = {
 type Approval = Extract<AttentionItem, { kind: "approval" }>
 
 /** The next task not started, and the one button that starts it in the chat. */
-export type UpNext = { id: string; text: string; label: string; ask: string }
+/** The next task to start: a line the owner sends, or Google's own sign-in. */
+export type UpNext = { id: string; text: string; label: string } & (
+  | { ask: string }
+  | { href: string }
+)
 
 export type Panel = {
   /** The collapsed pill, and the panel's header. */
@@ -180,7 +186,7 @@ export const currentBuild = (builds: BuildSummary[]) =>
 const timeOf = (at: string, zone: string, now: Date) =>
   dueLine(at, zone, now).split(", ").at(-1) ?? ""
 
-/** `Today, 9:30 am` mid-sentence: `today, 9:30 am`. A weekday keeps its capital. */
+/** `Today, 9:30 AM` mid-sentence: `today, 9:30 AM`. A weekday keeps its capital. */
 const midSentence = (when: string) =>
   when.replace(/^(Today|Tomorrow)/, (day) => day.toLowerCase())
 
@@ -311,7 +317,7 @@ export function panelFor(input: PanelInput): Panel | null {
   const page = pageOf(input.route, input.conversation, onboarding)
   const fresh = live === null && builds.length === 0
   const ctx: CopyContext = {
-    orgId: input.orgId ?? "",
+    seed: input.orgId ?? "",
     assistant: workspace.assistantName,
   }
 
@@ -347,6 +353,9 @@ export function panelFor(input: PanelInput): Panel | null {
         ...(doing ? { doing } : {}),
       }),
       steps: segment.steps.flatMap((step) => {
+        // A step that never applied (buying, for a domain the owner has)
+        // is not listed; a question the owner skipped in onboarding is.
+        if (step.state === "skipped" && segment.kind !== "onboarding") return []
         const label = stepLabel(
           segment,
           step,
@@ -432,12 +441,19 @@ export function panelFor(input: PanelInput): Panel | null {
   const queued =
     unstarted.find((segment) => segment.kind === "address") ?? unstarted[0]
   const upText = queued && rowLine(queued, ctx)
+  // Google is never a line in the owner's voice: its sign-in, and only once
+  // their own domain is live.
+  const google = queued?.kind === "google"
   const upNext: UpNext | null =
-    queued && upText
+    queued &&
+    upText &&
+    (!google || ownDomainLive(activity.standing ?? [], workspace.host))
       ? {
           id: queued.id,
           text: upText,
-          ...pageAction(queued.kind === "google" ? "google" : "own"),
+          ...(google
+            ? { label: pageAction("google").label, href: "/api/google/start" }
+            : pageAction("own")),
         }
       : null
   const done = zone ? completedOf(workspace, ctx) : []
@@ -522,10 +538,11 @@ export function panelFor(input: PanelInput): Panel | null {
   })()
 
   // The top segment's next action. Getting started goes on in its own chat;
-  // with no journey under way yet, the owner starts it.
+  // with no journey under way yet, the owner starts it. Home without a
+  // business is the naming form itself, so it offers no link to it.
   const suggestions: Suggestion[] = []
   if (!business) {
-    suggestions.push({ kind: "name-business" })
+    if (page !== "home") suggestions.push({ kind: "name-business" })
   } else if (current?.kind === "onboarding" || (!current && fresh)) {
     if (onboarding && page !== "onboarding") {
       suggestions.push({ kind: "onboarding", id: onboarding })

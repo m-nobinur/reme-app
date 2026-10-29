@@ -86,7 +86,7 @@ it("shows the newest item first and steps to the older one", async () => {
     act(async () =>
       slot
         .querySelector<HTMLButtonElement>(
-          `[data-slot="approval"]:not([style*="none"]) button[aria-label="${label}"]`
+          `[data-slot="approval"]:not([style*="none"]) button[aria-label^="${label}"]`
         )
         ?.click()
     )

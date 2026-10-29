@@ -363,14 +363,14 @@ describe("the first run", () => {
     ]).toContain(website?.title)
     expect(website?.line).toBe("4 minutes so far, about 6 to 10 minutes")
     expect(website?.steps.map((each) => [each.label, each.state])).toEqual([
+      // Photos never applied, so they are not listed.
       ["Planning", "done"],
-      ["Photos", "skipped"],
       ["3 pages are done, 3 to go", "now"],
       ["Polishing", "next"],
       ["Checking", "next"],
       ["Ready", "next"],
     ])
-    expect(website?.steps[2]?.kind).toBe("writing")
+    expect(website?.steps[1]?.kind).toBe("writing")
     expect(website?.build?.assignment_id).toBe("build-first")
     expect(panel?.line).toEqual({
       tone: "working",
@@ -484,8 +484,10 @@ describe("the first run", () => {
   })
 
   it("asks an account with no business to name one", () => {
-    const panel = panelFor(input({ business: null }))
+    const panel = panelFor(input({ business: null, route: ROUTES.chat }))
     expect(panel?.suggestions).toEqual([{ kind: "name-business" }])
+    // Home is the naming form, so the panel offers no second way to it.
+    expect(panelFor(input({ business: null }))?.suggestions).toEqual([])
     expect(panel?.line).toEqual({
       tone: "idle",
       lead: "Name your business",
@@ -576,7 +578,7 @@ describe("later jobs", () => {
       ["Site loads on the new address", "next"],
     ])
     expect(purchase?.title).toMatch(/fixtureclean\.example\.invalid$/)
-    expect(purchase?.line).toBe("Pay by 11:50 am to keep the name")
+    expect(purchase?.line).toBe("Pay by 11:50 AM to keep the name")
     expect(purchase?.steps.map((each) => each.label)).toEqual([
       "Your details",
       "Payment",
@@ -602,18 +604,21 @@ describe("tasks not started", () => {
       ).map((id) => step(id, "next")),
       { id: kind === "google" ? "google" : "address:1" }
     )
-  const withUpcoming = (...upcoming: ActivitySegment[]) =>
+  const withUpcoming = (
+    upcoming: ActivitySegment[],
+    standing: ActivitySegment[] = []
+  ) =>
     panelFor(
       input({
         workspace: live({
           assistantName: "Ellie",
-          activity: activity({ upcoming }),
+          activity: activity({ upcoming, standing }),
         }),
       })
     )
 
   it("offers the next one as Up next with one button, the address before Google", () => {
-    const panel = withUpcoming(unbegun("google"), unbegun("address"))
+    const panel = withUpcoming([unbegun("google"), unbegun("address")])
     expect(panel?.upNext).toEqual({
       id: "address:1",
       text: expect.stringMatching(/address/i),
@@ -621,18 +626,28 @@ describe("tasks not started", () => {
       ask: "I'd like to use my own domain",
     })
     expect(panel?.upcoming).toEqual([])
-    expect(withUpcoming(unbegun("google"))?.upNext).toMatchObject({
+  })
+
+  it("offers Google only once the owner's domain is live, as its sign-in and never a line in the owner's voice", () => {
+    expect(withUpcoming([unbegun("google")])?.upNext).toBeNull()
+    const addressDone = segment("address", "done", [step("records", "done")], {
+      id: "address:1",
+    })
+    expect(withUpcoming([unbegun("google")], [addressDone])?.upNext).toEqual({
+      id: "google",
+      text: expect.any(String),
       label: "Connect Google",
+      href: "/api/google/start",
     })
   })
 
   it("keeps a task that has begun in Coming up", () => {
-    const panel = withUpcoming(
+    const panel = withUpcoming([
       segment("google", "upcoming", [
         step("sign_in", "done"),
         step("first_data", "next"),
-      ])
-    )
+      ]),
+    ])
     expect(panel?.upNext).toBeNull()
     expect(panel?.upcoming.map((row) => row.text)).toEqual([
       "Your first search numbers from Google",
@@ -656,7 +671,7 @@ describe("completedOf", () => {
     const rows = completedOf(
       live({ activity: activity({ standing: [open] }) }),
       {
-        orgId: ORG,
+        seed: ORG,
         assistant: "Ellie",
       }
     )
@@ -681,7 +696,7 @@ describe("completedOf", () => {
           ],
         }),
       }),
-      { orgId: ORG, assistant: "Ellie" }
+      { seed: ORG, assistant: "Ellie" }
     )
     expect(done.map((row) => [row.text, row.brief])).toEqual([
       [
@@ -704,7 +719,7 @@ describe("completedOf", () => {
           standing: [published("published")],
         }),
       }),
-      { orgId: ORG, assistant: "Ellie" }
+      { seed: ORG, assistant: "Ellie" }
     )
     expect(rows.map((row) => row.text)).toEqual(["Website published"])
   })
@@ -718,7 +733,7 @@ describe("completedOf", () => {
           standing: [segment("domain", "done", [], { id: "domain:1", names })],
         }),
       }),
-      { orgId: ORG, assistant: "Ellie" }
+      { seed: ORG, assistant: "Ellie" }
     )
     expect(rows.map((row) => row.text)).toEqual([
       "spark.example.invalid connected",
@@ -837,10 +852,10 @@ describe("on the Reminders page", () => {
         note("a", "Call the supplier", "2026-10-01T13:00:00.000Z"),
         note("b", "Send the quote", "2026-10-01T15:30:00.000Z"),
       ])
-    ).toBe("2 reminders today, the next at 2:00 pm")
+    ).toBe("2 reminders today, the next at 2:00 PM")
     expect(
       line([note("a", "Call the supplier", "2026-10-03T08:30:00.000Z")])
-    ).toBe("Nothing due today. The next reminder is Sat 3 Oct, 9:30 am")
+    ).toBe("Nothing due today. The next reminder is Sat 3 Oct, 9:30 AM")
     expect(line([note("a", "Order cloths", null)])).toBe(
       "One reminder, with no time set"
     )

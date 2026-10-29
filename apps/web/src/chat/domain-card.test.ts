@@ -5,6 +5,7 @@ import {
   DONE_WAITING,
   domainStatusText,
 } from "@workspace/ui/components/assistant/domain"
+import { LiveCardsProvider } from "@workspace/ui/lib/live-cards"
 import { act, createElement } from "react"
 import { createRoot } from "react-dom/client"
 import { afterEach, expect, it, vi } from "vitest"
@@ -25,7 +26,7 @@ vi.mock("@assistant-ui/react", async (original) => ({
   useAuiState: (select: (state: unknown) => unknown) =>
     select({
       message: { parts: [], isLast: store.isLast, status: undefined },
-      thread: { isRunning: store.isRunning },
+      thread: { isRunning: store.isRunning, messages: [] },
     }),
   useAui: () => ({ thread: () => ({ append: store.append }) }),
   useThreadViewport: () => undefined,
@@ -49,21 +50,36 @@ const GODADDY = {
 
 type Props = Record<string, unknown>
 
-/** Draws the owner's Approval slot for a connect_domain call. */
-async function draw(props: Props) {
+/**
+ * Draws the owner's Approval slot for a connect_domain call, under the
+ * workspace's live domains when they are given.
+ */
+async function draw(props: Props, live?: readonly string[]) {
   const container = document.createElement("div")
   const root = createRoot(container)
   const respondToApproval = vi.fn()
+  const card = createElement(Approval, {
+    toolName: "connect_domain",
+    toolCallId: "call-1",
+    args: { name: NAME },
+    argsText: "",
+    respondToApproval,
+    ...props,
+  } as never)
   await act(async () =>
     root.render(
-      createElement(Approval, {
-        toolName: "connect_domain",
-        toolCallId: "call-1",
-        args: { name: NAME },
-        argsText: "",
-        respondToApproval,
-        ...props,
-      } as never)
+      live
+        ? createElement(
+            LiveCardsProvider,
+            {
+              value: {
+                googleConnected: null,
+                domainLive: (name) => live.includes(name),
+              },
+            },
+            card
+          )
+        : card
     )
   )
   return {
@@ -174,6 +190,20 @@ it("puts Add it for me first when the provider can add the record, with the reco
   expect(card.container.querySelectorAll("ol > li")).toHaveLength(2)
   expect(buttons(card.container)).toContain("Done, I'll wait")
   await card.unmount()
+})
+
+it("says the website is live, with no records or links, once it is on the domain", async () => {
+  const card = await draw(done({ ...RECORDS, provider: GODADDY }), [NAME])
+  expect(card.container.textContent).toBe(
+    `Put your website on ${NAME}.Your website is live on ${NAME}.`
+  )
+  expect(card.container.querySelector("a")).toBeNull()
+  expect(buttons(card.container)).toEqual([])
+  await card.unmount()
+  // Another domain live leaves this one's records in place.
+  const other = await draw(done(RECORDS), ["other.co.uk"])
+  expect(other.container.querySelectorAll("ol > li")).toHaveLength(3)
+  await other.unmount()
 })
 
 it("keeps every step a list item, so each shows its number", async () => {

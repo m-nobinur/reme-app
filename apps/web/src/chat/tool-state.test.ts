@@ -7,6 +7,7 @@ import {
   OwnerChangeRequest,
   RequestChangeOutput,
 } from "@workspace/contracts"
+import { phoneText } from "@workspace/ui/lib/facts"
 import { refusalText } from "@workspace/ui/lib/refusal"
 import {
   askChoiceView,
@@ -19,9 +20,9 @@ import {
   detailsText,
   isHeld,
   isRetried,
-  phoneText,
   readView,
   showsProgress,
+  supersededBy,
   UNCONFIRMED,
 } from "@workspace/ui/lib/tool-state"
 import { expect, it } from "vitest"
@@ -452,10 +453,11 @@ it("reads every ask_details state, and the answer in the owner's words", () => {
   ).toBe("error")
 })
 
-it("writes a UK number the way it is written at home, and leaves others", () => {
+it("writes a number the way it is written in its country, and leaves others", () => {
   expect(phoneText("+447700900123")).toBe("07700 900123")
   expect(phoneText("+442079460000")).toBe("020 7946 0000")
-  expect(phoneText("+14155550100")).toBe("+14155550100")
+  expect(phoneText("+14155550100")).toBe("(415) 555-0100")
+  expect(phoneText("+33142685300")).toBe("+33142685300")
 })
 
 it("hides a refusal the same tool was called again after, and only that", () => {
@@ -493,4 +495,27 @@ it("leaves the reply's status line to a reply with nothing at work on screen", (
   expect(
     showsProgress([call("c", { toolName: "x", isError: true })], quiet)
   ).toBe(false)
+})
+
+it("folds cancelled cards of one kind into the card that replaced them", () => {
+  const toolCall = (
+    id: string,
+    cancelled = false,
+    toolName = "create_reminder"
+  ) => ({
+    type: "tool-call",
+    toolName,
+    toolCallId: id,
+    ...(cancelled ? { isError: true, result: { error: CANCELLED } } : {}),
+  })
+  const messages = [
+    { content: [toolCall("a", true)] },
+    { content: [{ type: "text" }, toolCall("x", true, "buy_domain")] },
+    { content: [toolCall("b", true), toolCall("c")] },
+  ]
+  expect(supersededBy(messages, "create_reminder", "a")).toBe("later")
+  expect(supersededBy(messages, "create_reminder", "b")).toBe("later")
+  expect(supersededBy(messages, "create_reminder", "c")).toBe(2)
+  // The last of its kind, even cancelled, keeps its own line.
+  expect(supersededBy(messages, "buy_domain", "x")).toBe(0)
 })

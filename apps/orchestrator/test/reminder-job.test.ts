@@ -176,7 +176,7 @@ describe.skipIf(!url)("firing a reminder", () => {
       message: {
         text: [
           "Reminder: “Ring the boiler engineer”",
-          "It was due on Tuesday 20 October at 04:00 GMT-4.",
+          "It was due on Tuesday 20 October at 4:00 AM GMT-4.",
         ],
       },
     })

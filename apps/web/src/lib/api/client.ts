@@ -300,11 +300,13 @@ function logged(item: Logged): { title: string; detail: string } {
 const APPROVAL_EXPIRY =
   "Nothing is published without you. If it expires, the build waits until you decide."
 
-/** A version waiting on the owner, as they would say it: the first website, or a change to the live one. */
+/**
+ * A version waiting on the owner, as they would say it: the first website, or
+ * a change to the live one. The title names what happened; the body under it
+ * says what to do.
+ */
 const approvalTitle = (live: boolean) =>
-  live
-    ? "Your website changes are ready for you to review"
-    : "Your website is ready for you to review"
+  live ? "Your website changes are ready" : "Your website is ready"
 
 /**
  * `/workspace`, with the attention list trimmed. An approval whose target is
@@ -450,6 +452,7 @@ function workspaceOf(
     activity: status.activity ?? null,
     derivedReminders: status.reminders.derived,
     reminderNotes: status.reminders.notes,
+    timeZone: status.time_zone ?? null,
     etag,
   }
 }
@@ -727,6 +730,16 @@ async function completeReminder(id: string): Promise<WriteOutcome> {
   )
 }
 
+async function deleteReminder(id: string): Promise<WriteOutcome> {
+  const path = `/reminders/${segment(id)}`
+  const done = await outcome(
+    await post(path, undefined, `delete:${id}`, "DELETE"),
+    path
+  )
+  // Already gone is what a delete wanted.
+  return !done.done && done.gone ? { done: true } : done
+}
+
 async function memory(): Promise<MemoryView | null> {
   const body = await get("/memory")
   return body === null ? null : MemoryView.parse(body)
@@ -922,6 +935,7 @@ export const apiSource: OwnerDataSource = {
   requestChange,
   createReminder,
   completeReminder,
+  deleteReminder,
   memory,
   undoMemory,
   reviewMemory,

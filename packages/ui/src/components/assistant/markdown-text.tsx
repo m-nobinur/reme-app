@@ -1,5 +1,3 @@
-import "@assistant-ui/react-markdown/styles/dot.css"
-
 import type { TextMessagePartProps } from "@assistant-ui/react"
 import {
   type CodeHeaderProps,
@@ -7,8 +5,9 @@ import {
   unstable_memoizeMarkdownComponents as memoizeMarkdownComponents,
   useIsMarkdownCodeBlock,
 } from "@assistant-ui/react-markdown"
-import { CheckIcon, CopyIcon } from "@phosphor-icons/react"
+import { CopyIcon } from "@phosphor-icons/react"
 import { TooltipIconButton } from "@workspace/ui/components/assistant/tooltip-icon-button"
+import { DoneIcon } from "@workspace/ui/components/status-line"
 import { useCopyToClipboard } from "@workspace/ui/hooks/use-copy-to-clipboard"
 import { cn } from "@workspace/ui/lib/utils"
 import { type FC, memo, useMemo, useRef } from "react"
@@ -195,7 +194,7 @@ const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
       <TooltipIconButton tooltip="Copy" onClick={onCopy}>
         {!isCopied && <CopyIcon />}
         {isCopied && (
-          <CheckIcon className="zoom-in-50 fade-in animate-in duration-fast ease-standard motion-reduce:animate-none" />
+          <DoneIcon className="zoom-in-50 fade-in animate-in duration-fast ease-standard motion-reduce:animate-none" />
         )}
       </TooltipIconButton>
     </div>

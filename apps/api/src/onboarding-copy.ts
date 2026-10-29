@@ -102,7 +102,18 @@ const TONE: Record<ToneId, [RegExp, string][]> = {
     [/\bcould you\b/gi, "can you"],
     [/\bperfect\b/gi, "nice"],
     [/\bI will\b/g, "I'll"],
+    [/\bI am\b/g, "I'm"],
+    // Only before a past participle: "I've started", never "I've a van".
+    [/\bI have(?= \w+(?:ed|en|t|ne|de)\b)/g, "I've"],
+    [/\byou will\b/gi, "you'll"],
+    [/\bwe will\b/gi, "we'll"],
+    [/\byou are\b/gi, "you're"],
+    [/\bit is\b/gi, "it's"],
+    [/\bthat is\b/gi, "that's"],
     [/\bdo not\b/gi, "don't"],
+    [/\bdoes not\b/gi, "doesn't"],
+    [/\bis not\b/gi, "isn't"],
+    [/\bcannot\b/gi, "can't"],
   ],
 }
 
@@ -187,18 +198,30 @@ const QUESTIONS: Record<Asked, (v: Voice) => string[]> = {
     `What are the main services ${v.business} offers? The ones customers ask for most are a good place to start.`,
     `Which services do people come to ${v.business} for? A short list is plenty.`,
   ],
+  // Optional, as is every question asked in words with a Skip this one
+  // button under it: the button says so, so the question never does.
   "business.audience": (v) => [
     v.offering
-      ? `Got it. Who are your ideal customers, the people you'd most like to see booking ${lower(v.offering)}? You can skip this one.`
-      : "Got it. Who are your ideal customers, the people you'd most like to hear from? You can skip this one.",
-    "Who do you most enjoy working for? The site will speak to them first. It's fine to skip this.",
+      ? `Got it. Who are your ideal customers, the people you'd most like to see booking ${lower(v.offering)}?`
+      : "Got it. Who are your ideal customers, the people you'd most like to hear from?",
+    "Who do you most enjoy working for? The site will speak to them first.",
   ],
   // Who runs the business and real proof points: the About page's person
   // and the site's credibility. Never required.
   "business.proof": (v) => [
-    `Who's behind ${v.business}, and what sets it apart? Your name, how long you've been trading, accreditations, insurance or a guarantee all help, and a review you can quote counts too. It's fine to skip this one.`,
-    "Tell me a little about who runs the business and why customers choose you. Your name, years in business, qualifications, awards or a guarantee all help the site earn trust. You can skip this if nothing comes to mind.",
-    "One more about the business. Who's behind it, and is there anything you're proud of that the site could mention, such as years trading, memberships or a guarantee? Skipping is fine.",
+    `Who's behind ${v.business}, and what sets it apart? Your name, how long you've been trading, accreditations, insurance or a guarantee all help, and a review you can quote counts too.`,
+    "Tell me a little about who runs the business and why customers choose you. Your name, years in business, qualifications, awards or a guarantee all help the site earn trust.",
+    "One more about the business. Who's behind it, and is there anything you're proud of that the site could mention, such as years trading, memberships or a guarantee?",
+  ],
+  // For quoting and answering customers only: the site asks for a quote.
+  "business.prices": () => [
+    "Roughly what do your usual jobs cost? I'll use it when I put quotes together. Your website still asks for a quote and never shows them.",
+    "What do you usually charge for your most common jobs? It's for me when I quote, and it stays off your website.",
+  ],
+  // How the work reaches the owner now, their hours, and what to take on first.
+  "business.enquiries": () => [
+    "How do enquiries reach you at the moment, and when are you open? And what would you most like me to take off your plate?",
+    "Where do new enquiries come from today, calls, texts, email or social media, and what hours do you work? Tell me too what you'd most like me to handle first.",
   ],
   // Where the business works, asked the way a local customer would think of it.
   "service_area.text": (v) => [
@@ -313,9 +336,13 @@ const BACK: Partial<Record<Asked, (v: Voice) => string>> = {
   "service_area.text": () =>
     "Now, back to where you work. Which town are you based in, and how far will you travel?",
   "business.audience": () =>
-    "Back to your customers now. Who do you most like working for? You can skip this one.",
+    "Back to your customers now. Who do you most like working for?",
   "business.proof": (v) =>
-    `Back to what sets ${v.business} apart. Years trading, accreditations or a guarantee all help, and you can skip this one.`,
+    `Back to what sets ${v.business} apart. Years trading, accreditations or a guarantee all help.`,
+  "business.prices": () =>
+    "Back to your prices now. Roughly what do your usual jobs cost?",
+  "business.enquiries": () =>
+    "Back to how enquiries reach you now, and when you're open.",
   quote_form: () =>
     "Back to quotes now. What do you need to know from a customer before you can quote a job?",
   contact: (v) =>

@@ -92,6 +92,43 @@ describe("the workspace the CoS reads", () => {
     })
   })
 
+  it("lists what waits on the owner as the panel does, and each reminder with its ref", () => {
+    const reminder = "6f1c4d2a-3b5e-4f7a-8c9d-0e1f2a3b4c5d"
+    const data = dumped({
+      ...WORKSPACE,
+      waiting: [
+        {
+          title: "Pay for pebblewickbikefix.com",
+          since: "2026-10-28T22:06:00Z",
+        },
+        {
+          title: "Make the DNS change for pebblewick.bnwise.tech",
+          since: "2026-10-28T22:07:00Z",
+        },
+      ],
+      reminders: [
+        {
+          reminder_id: reminder,
+          title: "Order brake pads",
+          due: "2026-10-29T08:00:00+00:00",
+        },
+        { reminder_id: ASKED, title: "Call the supplier", due: null },
+      ],
+    }) as { waiting_on_owner: string[]; reminders: unknown[] }
+    expect(data.waiting_on_owner).toEqual([
+      "Pay for pebblewickbikefix.com",
+      "Make the DNS change for pebblewick.bnwise.tech",
+    ])
+    expect(data.reminders).toEqual([
+      {
+        ref: reminder,
+        title: "Order brake pads",
+        due: "2026-10-29T08:00:00+00:00",
+      },
+      { ref: ASKED, title: "Call the supplier", due: "no time set" },
+    ])
+  })
+
   it("shows a finished task and a put-off one with its date, so the next offer can wait on them", () => {
     const task = {
       id: BUILD,

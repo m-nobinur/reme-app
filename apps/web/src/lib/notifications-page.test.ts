@@ -39,7 +39,10 @@ vi.mock("@tanstack/react-router", () => ({
       children
     ),
 }))
-vi.mock("@/lib/workspace", () => ({ useLiveWorkspace: () => ({ workspace }) }))
+vi.mock("@/lib/workspace", () => ({
+  useLiveWorkspace: () => ({ workspace }),
+  useBusinessZone: () => null,
+}))
 
 const ORG_A = "00000000-0000-4000-8000-00000000000a"
 const ORG_B = "00000000-0000-4000-8000-00000000000b"

@@ -32,6 +32,7 @@ import {
 import { TrayServicesProvider } from "@workspace/ui/components/assistant/tray-services"
 import { buttonVariants } from "@workspace/ui/components/button"
 import { EmptyState } from "@workspace/ui/components/empty-state"
+import { LiveCardsProvider } from "@workspace/ui/lib/live-cards"
 import {
   useEffect,
   useMemo,
@@ -39,13 +40,14 @@ import {
   useState,
   useSyncExternalStore,
 } from "react"
+import { deleteReminder } from "@/lib/api/server"
 import { assistantOf, briefingOf } from "@/lib/briefing"
-import { OPENING_REVEAL } from "@/lib/reveal"
+import { LAST_SHOWN, OPENING_REVEAL } from "@/lib/reveal"
 import { useLiveWorkspace } from "@/lib/workspace"
 import { answerBuildQuestion } from "./build-questions"
 import { BuildStopped } from "./build-stopped"
 import { conversationList, unstored } from "./conversations"
-import { cosTools, questionTitles } from "./cos-tools"
+import { cosTools, liveKey, liveState, questionTitles } from "./cos-tools"
 import { saveDesignAnswer } from "./design"
 import { domainPurchase } from "./domain-purchase"
 import { asked, missingConversations, startsNewChat, tailOf } from "./history"
@@ -102,6 +104,7 @@ export function ChatPage() {
     [siteChange]
   )
   const intent = useRef<"site_change" | undefined>(undefined)
+  const retry = useRef<(() => void) | null>(null)
   intent.current = siteChange ? "site_change" : undefined
   // A message the assistant posted on its own, named by the polled tag. Set
   // here, where the workspace re-renders, for the runtime hook to follow.
@@ -129,6 +132,7 @@ export function ChatPage() {
       // loaded started a second conversation.
       suggestions: briefing.suggestions,
       intent,
+      retry,
       onIntentSent: () => setSiteChange(null),
       tail,
       refresh: live.refresh,
@@ -173,21 +177,25 @@ export function ChatPage() {
     () => false
   )
 
-  // The cards name the question an answer goes to, and times in the zone each
-  // turn carries. Keyed on the titles, so a poll that changes neither redraws
-  // no card.
+  // The cards name the question an answer goes to, and times in the
+  // business's zone, and offer only what is still to do: no sign-in once
+  // connected, no undo for a reminder gone. Keyed on strings, so a poll that
+  // changes none of them redraws no card.
   const titles = questionTitles(live.workspace?.attention)
-  const tools = useMemo(() => cosTools(titles), [titles])
+  const zone = live.workspace?.timeZone ?? null
+  const key = liveKey(live.workspace)
+  const shared = useMemo(() => {
+    const { cards, reminderOpen } = liveState(key)
+    const tools = {
+      ...cosTools(titles, zone),
+      removeReminder: (reminder: string) =>
+        deleteReminder({ data: { id: reminder } }),
+      ...(reminderOpen && { reminderOpen }),
+    }
+    return { tools, cards }
+  }, [titles, zone, key])
 
   const assistant = assistantOf(live.workspace)
-  const ideas = useMemo(
-    () => [
-      `Ask ${assistant} to draft a quote…`,
-      `Ask ${assistant} to follow up with a customer…`,
-      `Tell ${assistant} about a new service…`,
-    ],
-    [assistant]
-  )
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
@@ -216,37 +224,42 @@ export function ChatPage() {
             />
           </div>
         ) : (
-          <CosToolsProvider value={tools}>
-            <UploadPhotosProvider value={uploadPhotos}>
-              <TrayServicesProvider value={trayServices}>
-                <SaveDesignAnswerProvider value={saveDesignAnswer}>
-                  <DomainPurchaseProvider value={domainPurchase}>
-                    <AnswerBuildQuestionProvider value={answerBuildQuestion}>
-                      <Thread
-                        after={
-                          <>
-                            <StillWorking />
-                            <ChatSiteReadyCard />
-                            <BuildStopped />
-                          </>
-                        }
-                        assistant={live.workspace?.assistantName}
-                        briefing={briefing.line}
-                        components={{ ToolFallback: Approval }}
-                        mode={mode}
-                        placeholder={`Ask ${assistant} anything…`}
-                        placeholderIdeas={ideas}
-                        questionPlaceholder={`Tell ${assistant} what to do instead…`}
-                        quickActions={OWNER_QUICK_ACTIONS}
-                        reveal={onboarding ? OPENING_REVEAL : undefined}
-                        stored={id}
-                        updates={<ChatUpdates />}
-                      />
-                    </AnswerBuildQuestionProvider>
-                  </DomainPurchaseProvider>
-                </SaveDesignAnswerProvider>
-              </TrayServicesProvider>
-            </UploadPhotosProvider>
+          <CosToolsProvider value={shared.tools}>
+            <LiveCardsProvider value={shared.cards}>
+              <UploadPhotosProvider value={uploadPhotos}>
+                <TrayServicesProvider value={trayServices}>
+                  <SaveDesignAnswerProvider value={saveDesignAnswer}>
+                    <DomainPurchaseProvider value={domainPurchase}>
+                      <AnswerBuildQuestionProvider value={answerBuildQuestion}>
+                        <Thread
+                          after={
+                            <>
+                              <StillWorking />
+                              <ChatSiteReadyCard />
+                              <BuildStopped />
+                            </>
+                          }
+                          assistant={live.workspace?.assistantName}
+                          briefing={briefing.line}
+                          components={{ ToolFallback: Approval }}
+                          lastShown={LAST_SHOWN}
+                          mode={mode}
+                          onRetry={() => retry.current?.()}
+                          // One neutral line: rotating ideas offered work the
+                          // owner could not ask for yet.
+                          placeholder={`Message ${assistant}…`}
+                          questionPlaceholder={`Tell ${assistant} what to do instead…`}
+                          quickActions={OWNER_QUICK_ACTIONS}
+                          reveal={onboarding ? OPENING_REVEAL : undefined}
+                          stored={id}
+                          updates={<ChatUpdates />}
+                        />
+                      </AnswerBuildQuestionProvider>
+                    </DomainPurchaseProvider>
+                  </SaveDesignAnswerProvider>
+                </TrayServicesProvider>
+              </UploadPhotosProvider>
+            </LiveCardsProvider>
           </CosToolsProvider>
         )}
       </div>

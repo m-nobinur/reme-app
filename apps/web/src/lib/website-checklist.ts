@@ -21,11 +21,30 @@ import { dueLine } from "./reminders"
 /** Where a row stands, as the panel's steps mark it. */
 export type Mark = "done" | "now" | "waiting" | "next" | "failed"
 
-/** A row's one next action: a link, a visit to the approvals, or a line said in the chat. */
+/**
+ * Whether the owner's own domain is live: its address task done, or the site
+ * already served on it. Google learns the address customers keep, so it waits
+ * for this wherever it is offered.
+ */
+export const ownDomainLive = (
+  standing: readonly ActivitySegment[],
+  host: string | null
+) =>
+  standing.some(
+    (s) =>
+      s.kind === "address" &&
+      (s.state === "done" || (host !== null && s.names?.domain === host))
+  )
+
+/**
+ * A row's one next action: a link, a visit to the approvals, a line said in
+ * the chat, or Google's own sign-in, which needs no words from the owner.
+ */
 export type RowAction =
   | { kind: "visit"; label: string; href: string }
   | { kind: "review"; label: string }
   | { kind: "ask"; label: string; ask: string }
+  | { kind: "google"; label: string }
 
 export type CheckRow = {
   id: string
@@ -56,7 +75,8 @@ function nextAction(
   subject: string | null
 ): RowAction | null {
   if (segment.state !== "waiting") return null
-  if (segment.kind === "google") return asked("signin")
+  if (segment.kind === "google")
+    return { kind: "google", label: "Sign in again" }
   const step = segment.steps.find((s) => s.state === "waiting")?.id
   if (step === "purchase") return asked("pay", subject)
   return step === "records" || step === "ownership"
@@ -69,7 +89,7 @@ export function checklistFor(
   zone: string | null,
   now: Date
 ): CheckRow[] {
-  const ctx: CopyContext = { orgId: "", assistant: workspace.assistantName }
+  const ctx: CopyContext = { seed: "", assistant: workspace.assistantName }
   const activity = workspace.activity
   const standing = activity?.standing
   // Times wait for the reader's zone, so the server's HTML and the first
@@ -162,6 +182,7 @@ export function checklistFor(
   // "not connected" would be a guess.
   if (standing) {
     const google = standing.find((s) => s.kind === "google" && !notStarted(s))
+    const domainLive = ownDomainLive(standing, workspace.host)
     rows.push(
       google
         ? {
@@ -177,12 +198,17 @@ export function checklistFor(
         : {
             id: "google",
             title: PAGE_WORDS.google,
-            line: workspace.live
-              ? PAGE_WORDS.notConnected
-              : PAGE_WORDS.afterLive,
+            line: !workspace.live
+              ? PAGE_WORDS.afterLive
+              : domainLive
+                ? PAGE_WORDS.notConnected
+                : PAGE_WORDS.afterDomain,
             mark: "next",
             status: "google",
-            action: workspace.live ? asked("google") : null,
+            action:
+              workspace.live && domainLive
+                ? { kind: "google", label: "Connect Google" }
+                : null,
           }
     )
   }

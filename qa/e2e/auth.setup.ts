@@ -41,13 +41,9 @@ setup(
     // `returnTo` carried through the sign-in, so the person lands where they were
     // sent from rather than on a generic home page.
     await expect(page).toHaveURL(/\/app$/)
-    // The probe account has no organisation, so the panel's one next step is
-    // naming the business.
+    // The probe account has no organisation, so the page asks it to name one.
     await expect(
-      page
-        .getByRole("complementary", { name: "Panel" })
-        .getByRole("list", { name: "Next steps" })
-        .getByRole("link", { name: "Name your business" })
+      page.getByRole("heading", { name: "What's your business called?" })
     ).toBeVisible()
 
     await page.context().storageState({ path: STORAGE_STATE })

@@ -15,6 +15,12 @@ export const Ulid = z.string().regex(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/)
 /** RFC 3339 with an offset. Never a `Date`: contracts cross JSON boundaries. */
 export const Timestamp = z.iso.datetime({ offset: true })
 
+/**
+ * An IANA zone name as `Intl` reports it, such as `Europe/London`. The
+ * shape only: the api refuses a name `Intl` rejects.
+ */
+export const TimeZone = z.string().regex(/^[A-Za-z][A-Za-z0-9_+/-]{0,63}$/)
+
 /** A registry entry pinned to a version (§5.3): packs and skills. */
 export const VersionedRef = z.strictObject({
   key: z.string().min(1),

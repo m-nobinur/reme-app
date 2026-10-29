@@ -1,6 +1,5 @@
 import { z } from "zod"
-import { TimeZone } from "./chat.ts"
-import { Timestamp, Uuid } from "./common.ts"
+import { Timestamp, TimeZone, Uuid } from "./common.ts"
 
 // Row shapes for the scheduler and the delivery outbox, and the org columns
 // they read. Reminders, the heartbeat and the weekly report are all rows in

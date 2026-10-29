@@ -19,6 +19,11 @@ describe("voiceProblems", () => {
     "As your assistant, I can do that.",
     "Thank you for picking me to be the business assistant.",
     "Good to be officially on the team.",
+    // Seen in onboarding on staging, 2026-10-28.
+    "Cytech qualified and a three-month guarantee will give customers plenty of confidence.",
+    "That makes sense, especially for commuters who rely on their bike each day.",
+    "Nice touch with the van.",
+    "Got it, chasing unpaid jobs and handling quote requests will take a lot off your hands.",
   ]
   const AFTER = [
     "I'm Ellie. Now a few questions about the website.",
@@ -27,6 +32,9 @@ describe("voiceProblems", () => {
     "Your website is live at spark.mnobinur.dev.",
     "Here's the one change to make at Cloudflare. I'll watch for it.",
     "Your purchase is ready to pay for.",
+    "Got it, mostly checks and adjustments.",
+    "Publishing first makes sense, since the domain goes on the live site.",
+    "Sorted, 8:00 AM tomorrow.",
   ]
 
   it("flags every line of the before column", () => {

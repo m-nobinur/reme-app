@@ -45,8 +45,8 @@ export function chatTurn(
   intent?: ChatRequest["intent"],
   messageId?: string
 ): ChatRequest {
-  // The browser's zone, so the Chief of Staff can read "Friday at 9". The
-  // reminder card names the same zone, from the same source.
+  // The browser's zone, which the org takes only while it has none; after
+  // that the turn reads the business's stored zone.
   const time_zone = browserZone()
   const named = messages.find((m) => m.id === messageId)
   const last = named?.role === "assistant" ? named : messages.at(-1)
@@ -436,10 +436,15 @@ export async function chatFetch(
   if (response.ok) return response
   const body: unknown = await response.json().catch(() => null)
   if (response.status === 401) throw new Error(SESSION_ENDED)
-  // A refusal that says when to try again carries the seconds, for a countdown.
+  // A refusal that says when to try again carries the seconds, for a
+  // countdown, and every refusal its status.
   const wait = Number(response.headers.get("retry-after"))
   const fail = (message: string) =>
-    Object.assign(new Error(message), wait > 0 ? { retryAfter: wait } : {})
+    Object.assign(
+      new Error(message),
+      { status: response.status },
+      wait > 0 ? { retryAfter: wait } : {}
+    )
   const envelope = ErrorEnvelope.safeParse(body)
   if (envelope.success) {
     throw fail(

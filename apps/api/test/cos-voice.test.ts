@@ -1,15 +1,9 @@
-import { COS_TOOLS } from "@workspace/contracts"
-import {
-  isStepCount,
-  type TextStreamPart,
-  ToolLoopAgent,
-  type ToolSet,
-  tool,
-} from "ai"
-import { convertArrayToReadableStream, MockLanguageModelV4 } from "ai/test"
+import { dashesToCommas } from "@workspace/contracts"
+import type { TextStreamPart, ToolSet } from "ai"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { cleanedChange, INSTRUCTIONS, withoutStep } from "../src/cos/agent.ts"
-import { cleanStep, dashesToCommas, voiced } from "../src/cos/voice.ts"
+import { INSTRUCTIONS } from "../src/cos/agent.ts"
+import { withoutRestated } from "../src/cos/run.ts"
+import { voiced } from "../src/cos/voice.ts"
 import { VOICE } from "../src/voice.ts"
 
 type Part = TextStreamPart<ToolSet>
@@ -43,6 +37,23 @@ describe("voiced", () => {
       const deltas = text.match(new RegExp(`.{1,${cut}}`, "gs")) ?? []
       expect(await read(deltas)).toBe(
         "Done, your page is up. It took 9 to 5 minutes, nearly."
+      )
+    }
+  })
+
+  it("reads a range with a currency sign or unit on either side as to", async () => {
+    expect(dashesToCommas("£80–£150")).toBe("£80 to £150")
+    expect(dashesToCommas("£80 – £150 a job")).toBe("£80 to £150 a job")
+    expect(dashesToCommas("10%–20%")).toBe("10% to 20%")
+    expect(dashesToCommas("9am–5pm")).toBe("9am to 5pm")
+    expect(dashesToCommas("£5k—£10k")).toBe("£5k to £10k")
+    expect(dashesToCommas("$40–60")).toBe("$40 to 60")
+    expect(dashesToCommas("Mon–Fri")).toBe("Mon, Fri")
+    const text = "I'd use £80–£150, excluding parts — a rough guide."
+    for (const cut of [1, 2, 3, 5, text.length]) {
+      const deltas = text.match(new RegExp(`.{1,${cut}}`, "gs")) ?? []
+      expect(await read(deltas)).toBe(
+        "I'd use £80 to £150, excluding parts, a rough guide."
       )
     }
   })
@@ -93,72 +104,29 @@ describe("the instructions", () => {
   })
 })
 
-describe("request_change's step", () => {
-  it("cleans a step to what the panel may show", () => {
-    expect(cleanStep("  Adding   the new photos\n to the home page ")).toBe(
-      "Adding the new photos to the home page"
+describe("a text said again after a tool", () => {
+  const text = (t: string) => ({ type: "text", text: t })
+  const tool = { type: "tool-check_domain" }
+
+  it("keeps only the later text when it restates the one before the tool", () => {
+    const before = text(
+      "The only thing left is adding the domain records at your provider."
     )
-    expect(cleanStep("Updating the page — now")).toBe("Updating the page, now")
-    expect(cleanStep("x".repeat(90))).toHaveLength(60)
-    expect(cleanStep("Changing 3f2b9c1e-8a4d-4f6b-9c2a-1d5e7f8a9b0d")).toBe(
-      undefined
+    const after = text(
+      "The domain records still aren't showing, so adding those is the only step left."
     )
-    expect(cleanStep("Opening build ead99cb0")).toBeUndefined()
-    expect(cleanStep("   ")).toBeUndefined()
-    expect(cleanStep(undefined)).toBeUndefined()
+    expect(withoutRestated([before, tool, after])).toEqual([tool, after])
   })
 
-  it("is cleaned on the logged call and stripped before the body runs", async () => {
-    const seen: unknown[] = []
-    const model = new MockLanguageModelV4({
-      doStream: async () => ({
-        stream: convertArrayToReadableStream([
-          { type: "stream-start", warnings: [] },
-          {
-            type: "tool-call",
-            toolCallId: "c1",
-            toolName: "request_change",
-            input: JSON.stringify({
-              text: "Add photos",
-              step: " Adding   the photos — now ",
-            }),
-          },
-          {
-            type: "finish",
-            finishReason: { unified: "tool-calls", raw: "tool_calls" },
-            usage: {
-              inputTokens: {
-                total: 1,
-                noCache: 1,
-                cacheRead: 0,
-                cacheWrite: 0,
-              },
-              outputTokens: { total: 1, text: 1, reasoning: 0 },
-            },
-          },
-        ] as never) as never,
-      }),
-    })
-    const agent = new ToolLoopAgent({
-      model,
-      tools: {
-        request_change: tool({
-          inputSchema: COS_TOOLS.request_change.input,
-          execute: async (input) => {
-            seen.push(withoutStep(input))
-            return "ok"
-          },
-        }),
-      },
-      stopWhen: isStepCount(1),
-      experimental_refineToolInput: { request_change: cleanedChange },
-    })
-    const result = await agent.stream({ prompt: "go" })
-    await result.consumeStream()
-    expect((await result.steps)[0]?.toolCalls[0]?.input).toEqual({
-      text: "Add photos",
-      step: "Adding the photos, now",
-    })
-    expect(seen).toEqual([{ text: "Add photos" }])
+  it("keeps a text the later one does not repeat, a short one, and one with no tool after it", () => {
+    const card = text(
+      "I'd go with pebblewickbikefix.com: short and easy to say."
+    )
+    const reply = text("It's connected, and the certificate is on its way.")
+    expect(withoutRestated([card, tool, reply])).toEqual([card, tool, reply])
+    expect(
+      withoutRestated([text("On it."), tool, text("On it.")])
+    ).toHaveLength(3)
+    expect(withoutRestated([reply, reply])).toHaveLength(2)
   })
 })

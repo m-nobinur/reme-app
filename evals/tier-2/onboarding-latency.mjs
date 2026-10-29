@@ -53,6 +53,8 @@ async function watch(call, body) {
         call.reasoningTokens =
           chunk.usage.completion_tokens_details?.reasoning_tokens ?? 0
         call.outputTokens = chunk.usage.completion_tokens
+        call.cachedTokens =
+          chunk.usage.prompt_tokens_details?.cached_tokens ?? 0
       }
       if (delta?.content) {
         call.firstContent ??= now
@@ -117,16 +119,17 @@ for (const [i, c] of calls.entries()) {
     total: c.end,
     reasoningTokens: c.reasoningTokens,
     outputTokens: c.outputTokens,
+    cachedTokens: c.cachedTokens,
   })
 }
 
 console.log("\n--- onboarding latency (ms from request start)")
 console.log(
-  "call | hedge | aborted | wait for first data | JSON before say | say | say starts | total | reasoning tokens | output tokens"
+  "call | hedge | aborted | wait for first data | JSON before say | say | say starts | total | reasoning tokens | output tokens | cached input tokens"
 )
 for (const r of rows) {
   console.log(
-    `${r.n} | ${r.hedge ? "yes" : "no"} | ${r.aborted ? "yes" : "no"} | ${ms(r.wait)} | ${ms(r.json)} | ${ms(r.say)} | ${ms(r.sayStart)} | ${ms(r.total)} | ${r.reasoningTokens ?? "-"} | ${r.outputTokens ?? "-"}`
+    `${r.n} | ${r.hedge ? "yes" : "no"} | ${r.aborted ? "yes" : "no"} | ${ms(r.wait)} | ${ms(r.json)} | ${ms(r.say)} | ${ms(r.sayStart)} | ${ms(r.total)} | ${r.reasoningTokens ?? "-"} | ${r.outputTokens ?? "-"} | ${r.cachedTokens ?? "-"}`
   )
 }
 const col = (key) => rows.map((r) => r[key]).filter((v) => v !== undefined)

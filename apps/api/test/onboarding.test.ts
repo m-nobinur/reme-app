@@ -56,6 +56,7 @@ import {
   quoteForm,
   quoteUnchanged,
   retry,
+  say,
   started,
   type Voice,
 } from "../src/onboarding-copy.ts"
@@ -117,6 +118,12 @@ const FACTS: Partial<Record<StepId, FactValue[]>> = {
       key: "service_area.text",
       value: { text: "Fictional Town and villages" },
     },
+  ],
+  "business.prices": [
+    { key: "business.prices", value: { text: "Regular clean from 60." } },
+  ],
+  "business.enquiries": [
+    { key: "business.enquiries", value: { text: "Calls and texts." } },
   ],
   contact: [PHONE, EMAIL],
   assistant: [
@@ -227,6 +234,8 @@ describe("the onboarding steps", () => {
       "business.proof",
       "industry",
       "quote_form",
+      "business.prices",
+      "business.enquiries",
       "contact",
       "assistant",
       "build_for_me",
@@ -462,6 +471,8 @@ const ALL: FactValue[] = [
   ...(FACTS["business.audience"] as FactValue[]),
   ...(FACTS["business.proof"] as FactValue[]),
   { key: "business.industry", value: { name: "x", category: null } },
+  ...(FACTS["business.prices"] as FactValue[]),
+  ...(FACTS["business.enquiries"] as FactValue[]),
   ...(FACTS.contact as FactValue[]),
   ...(FACTS.assistant as FactValue[]),
   { key: "site.build_mode", value: { mode: "assistant" } },
@@ -1453,9 +1464,11 @@ describe("the onboarding copy", () => {
     }
     for (const [tone, name, text] of seen.values()) {
       expect(text, name).not.toMatch(/[—–]/)
-      expect(text, name).not.toMatch(
-        /[$£€]|\bprices?\b|\bpricing\b|\btiers?\b|\brates?\b|\bfees?\b/i
-      )
+      // The prices question is the one line that asks about them.
+      if (!name.endsWith("business.prices"))
+        expect(text, name).not.toMatch(
+          /[$£€]|\bprices?\b|\bpricing\b|\btiers?\b|\brates?\b|\bfees?\b/i
+        )
       expect(text, name).not.toMatch(/\d+\s*(?:an hour|per hour|\/h)/i)
       expect(text, name).not.toMatch(/\(s?he\/|\(they\//)
       expect(text, name).not.toMatch(/\bReme\b/)
@@ -1535,6 +1548,24 @@ describe("the onboarding copy", () => {
     expect(at("professional")).not.toContain("!")
     expect(at("professional")).not.toMatch(/\bI'm\b|\bit's\b/i)
     expect(at("casual")).toMatch(/\bWant me to build\b/)
+  })
+
+  it("contracts a model's words in the casual tone, and only before a past participle for I have", () => {
+    const casual = voice({ org: ORGS[0], tone: "casual" })
+    expect(
+      say(
+        casual,
+        "I have started building the website now. I will let you know once it is ready."
+      )
+    ).toBe(
+      "I've started building the website now. I'll let you know once it's ready."
+    )
+    expect(say(casual, "I have a van and you are on the list.")).toBe(
+      "I have a van and you're on the list."
+    )
+    expect(
+      say(voice({ org: ORGS[0], tone: "friendly" }), "I have started.")
+    ).toBe("I have started.")
   })
 
   it("opens with text only: a greeting by first name, the plan, and what the business does", () => {

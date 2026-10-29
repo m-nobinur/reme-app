@@ -1,5 +1,4 @@
 import {
-  CheckCircleIcon,
   PaintBrushIcon,
   RocketLaunchIcon,
   SpinnerGapIcon,
@@ -17,9 +16,18 @@ import {
   SiteIcon,
   type VersionPictures,
 } from "@workspace/ui/components/live-panel"
+import { StatusLine } from "@workspace/ui/components/status-line"
+import { publishLine } from "@workspace/ui/lib/activity-copy"
 import { cn, META } from "@workspace/ui/lib/utils"
-import { useId, useLayoutEffect, useState } from "react"
+import { useEffect, useId, useLayoutEffect, useState } from "react"
 import { createPortal } from "react-dom"
+
+/**
+ * How long the load check usually takes to bring the live message: its
+ * minute-2 check, with time for the message to land. Past it the line says the
+ * site is slow to come online.
+ */
+export const PUBLISH_LATE_MS = 150_000
 
 /**
  * The end of a build, said in the conversation that is open: the site's
@@ -40,6 +48,8 @@ export function SiteReady({
   preview,
   onRetryPreview,
   approved = false,
+  published = false,
+  live = false,
   pending = false,
   error = null,
   onApprove,
@@ -56,6 +66,10 @@ export function SiteReady({
   onRetryPreview?: (() => Promise<void>) | undefined
   /** The owner approved it here and the server recorded it. */
   approved?: boolean
+  /** That version is live; the assistant's live message is still to come. */
+  published?: boolean
+  /** The assistant said it is live: the approval stays as its result. */
+  live?: boolean
   /** The approval is on its way to the server. */
   pending?: boolean
   /** Why the last approval did not go through, in the owner's words. */
@@ -81,6 +95,14 @@ export function SiteReady({
     setOpen(false)
   }
   const inTray = docked && slot !== null
+  const checking = published && !live
+  const [late, setLate] = useState(false)
+  useEffect(() => {
+    setLate(false)
+    if (!checking) return
+    const timer = setTimeout(() => setLate(true), PUBLISH_LATE_MS)
+    return () => clearTimeout(timer)
+  }, [checking])
   // The node the card is drawn into, put in its spot in the chat or in the tray.
   const [host] = useState(() =>
     typeof document === "undefined" ? null : document.createElement("div")
@@ -94,14 +116,14 @@ export function SiteReady({
   useLayoutEffect(() => () => void host?.remove(), [host])
   const done = (
     <p
-      className={cn(
-        "flex items-center gap-2 text-muted-foreground text-sm",
-        inTray || row ? "p-3" : className
-      )}
+      className={cn("flex text-sm", inTray || row ? "p-3" : className)}
       data-slot="site-ready"
     >
-      <CheckCircleIcon aria-hidden className="size-4 shrink-0 text-primary" />
-      Approved. Your website is being published.
+      <StatusLine
+        delay={0}
+        label={publishLine(published, live, late)}
+        state={live ? "done" : "working"}
+      />
     </p>
   )
   // A heading cannot sit inside the docked row's button.

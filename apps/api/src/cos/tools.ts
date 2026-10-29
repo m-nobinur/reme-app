@@ -1,6 +1,7 @@
 import {
   AGENT_NOTE,
-  type AnswerQuestionInput,
+  type AnswerQuestionCall,
+  AnswerQuestionInput,
   type AnswerQuestionOutput,
   BoughtElsewhereOutput,
   BuildStopCause,
@@ -15,8 +16,10 @@ import {
   CosFacts,
   CosMessage,
   CosWorkspace,
+  type CreateReminderInput,
   type CreateReminderOutput,
-  type CreateReminderRequest,
+  type DeleteReminderInput,
+  type DeleteReminderOutput,
   type DomainBoughtInput,
   DomainCheck,
   DomainInspection,
@@ -46,7 +49,11 @@ import {
   type RemoveDomainOutput,
   RequestChangeOutput,
   type ReviewFactKey,
+  type SetTimeZoneInput,
+  type SetTimeZoneOutput,
   TERMINAL_STATES,
+  type UpdateReminderInput,
+  type UpdateReminderOutput,
   type WorkspaceStatus,
 } from "@workspace/contracts"
 import {
@@ -55,6 +62,7 @@ import {
   eq,
   events,
   failureCode,
+  lowerNextDue,
   type OrgScopedDb,
   openTask,
   readTasks,
@@ -86,14 +94,17 @@ import { failure } from "../http.ts"
 import { jevBought, jevPutOn } from "../jev.ts"
 import {
   ASSISTANT_KEY_PREFIX,
+  deleteReminder as dropReminder,
+  updateReminder as moveReminder,
+  openTwin,
   createReminder as storeReminder,
   wakeScheduler,
 } from "../reminders.ts"
+import { offerZone } from "../time-zone.ts"
 import { EXPECTED_SECONDS, readFacts, statusWithFacts } from "../workspace.ts"
-import type { Opening } from "./agent.ts"
 import { readSession } from "./history.ts"
 import { contentWords, inOwnersWords, readProfile } from "./memory.ts"
-import { wallToUtc } from "./time.ts"
+import { knownZone, wallToUtc, zonedIso } from "./time.ts"
 import type { Turn } from "./turns.ts"
 
 /**
@@ -271,8 +282,6 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
   facts: FactRecord[]
   /** What the owner told the CoS about themselves. */
   profile: ProfileLine[]
-  /** The open reminders with a time, soonest first, for a conversation's first turn. */
-  reminders: Opening["reminders"]
 }> {
   const now = new Date()
   const [read, rows, { lines: profile }, reports, repairs, lives] =
@@ -303,7 +312,8 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
         ),
       ])
     )
-  const { status, facts, tasks } = read
+  const { status, facts, tasks, waiting } = read
+  const zone = status.time_zone ?? "UTC"
   const roundsOf = (assignmentId: string) =>
     [...repairs].find((r) => r.assignment_id === assignmentId)?.rounds ?? 0
   const failedChecks = (assignmentId: string | null) => {
@@ -386,21 +396,21 @@ export async function loadWorkspace({ env, kit, owner }: ToolContext): Promise<{
       last_check: DomainCheck.safeParse(r.lastCheck).data ?? null,
     })),
     tasks,
+    waiting: waiting
+      .slice(0, 20)
+      .map((w) => ({ title: cut(w.title).slice(0, 120), since: w.since })),
+    reminders: status.reminders.notes.map((n) => ({
+      reminder_id: n.id,
+      title: n.title,
+      due: n.due_at && zonedIso(new Date(n.due_at), zone),
+    })),
     expected_seconds: status.expected_seconds,
     expected_range: {
       quick: rangeOf(status.expected_seconds, "quick"),
       full: rangeOf(status.expected_seconds, "full"),
     },
   })
-  return {
-    workspace,
-    facts,
-    profile,
-    reminders: status.reminders.notes
-      .filter((n) => n.due_at !== null)
-      .slice(0, 5)
-      .map((n) => ({ title: n.title, due_at: n.due_at })),
-  }
+  return { workspace, facts, profile }
 }
 
 /**
@@ -841,10 +851,14 @@ const reviewElsewhere = () =>
  */
 export async function answerQuestion(
   { env, kit, owner, settleCard }: ToolContext,
-  input: AnswerQuestionInput,
+  call: AnswerQuestionCall,
   key: string,
   turn: Pick<Turn, "sessionId">
 ): Promise<AnswerQuestionOutput> {
+  // The model's schema takes any object for a fact's value; the contract checks it.
+  const parsed = AnswerQuestionInput.safeParse(call)
+  if (!parsed.success) return refused(answerInvalid())
+  const input = parsed.data
   const [asked] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
     db
       .select({
@@ -901,50 +915,198 @@ export async function answerQuestion(
   return { outcome: "answered", request_id: receipt.request_id }
 }
 
+const unknownZone = () =>
+  failure(400, {
+    class: "validation",
+    code: "time_zone.unknown",
+    message:
+      "That is not a time zone we know. Use an IANA name such as Europe/London.",
+    detail: {},
+  })
+
+/**
+ * An owner message that asks to change or drop a reminder. Anything else,
+ * such as text inside a tool result, never moves or deletes one.
+ */
+const EDITS_REMINDER =
+  /\b(?:remind(?:er|ers)?|move|change|instead|earlier|later|cancel|delete|remove|drop|get rid|scrap|bin|forget)\b/i
+
+/** Whether one of the owner's last three messages in the turn's conversation asks for an edit. */
+const askedToEdit = async (ctx: ToolContext, turn: Turn) =>
+  (await ownerSaid(ctx, turn.sessionId))
+    .slice(-3)
+    .some((m) => EDITS_REMINDER.test(m))
+
+const notAsked = () =>
+  failure(400, {
+    class: "validation",
+    code: "reminder.not_asked",
+    message:
+      "Only when the owner asks, in their own message, to change or remove a reminder.",
+    detail: {},
+  })
+
+const noReminder = () =>
+  failure(404, {
+    class: "resource",
+    code: "reminder.not_found",
+    message: "No open reminder with that ref. Read the workspace's reminders.",
+    detail: {},
+  })
+
+/** A reminder store's database error: the outcome is unknown, never a refusal. */
+function reminderUnconfirmed(error: unknown): never {
+  console.error(
+    JSON.stringify({ code: "cos.reminder_failed", error: failureCode(error) })
+  )
+  throw new ToolFailed(503, {
+    class: "transient",
+    code: "reminder.unconfirmed",
+    message: "The reminder could not be confirmed.",
+  })
+}
+
 /**
  * The owner's reminder, stored as `POST /reminders` stores it, with the
- * turn's conversation and the CoS as its maker. Keyed `approval:<id>`: the
- * owner's own route shares the org's key space and can see approval ids,
- * so a bare id could replay an owner's row here. `due_at` is read as the
- * owner's wall time in the turn's zone (`wallToUtc`). A refusal is the 400
- * `createReminder` answers; a database error leaves the outcome unknown.
+ * turn's conversation and the CoS as its maker, with no card: the owner
+ * asking is the yes, and the thread offers an undo. Keyed `approval:<key>`:
+ * the owner's own route shares the org's key space, so a bare key could
+ * replay an owner's row here. `due_at` is read as wall time in the zone the
+ * owner named, else the turn's (`wallToUtc`). A reminder this conversation
+ * already holds for the same thing is moved instead of doubled. A refusal
+ * is the 400 `createReminder` answers; a database error leaves the outcome
+ * unknown.
  */
 export async function createReminder(
   { env, kit, owner }: ToolContext,
-  input: CreateReminderRequest,
-  approvalId: string,
+  input: CreateReminderInput,
+  key: string,
   turn: Turn,
   zone: string | null
 ): Promise<CreateReminderOutput> {
-  const due = input.due_at === null ? null : wallToUtc(input.due_at, zone)
-  let made: Awaited<ReturnType<typeof storeReminder>>
+  const { time_zone: named, ...request } = input
+  if (named && !knownZone(named)) return refused(unknownZone())
+  const read = named ?? zone
+  const due = request.due_at === null ? null : wallToUtc(request.due_at, read)
+  let made: Awaited<ReturnType<typeof storeReminder>> | null
+  let replaced = false as boolean
   try {
-    made = await kit.withOrg({ orgId: owner.orgId }, (db) =>
-      storeReminder(
+    made = await kit.withOrg({ orgId: owner.orgId }, async (db) => {
+      const twin = await openTwin(db, turn.sessionId, request.title)
+      if (twin) {
+        replaced = true
+        return moveReminder(db, twin.id, { title: request.title, due_at: due })
+      }
+      return storeReminder(
         db,
         {
           orgId: owner.orgId,
           createdByStaffId: turn.staffId,
           source: "assistant",
           conversationId: turn.sessionId,
-          idempotencyKey: `${ASSISTANT_KEY_PREFIX}${approvalId}`,
+          idempotencyKey: `${ASSISTANT_KEY_PREFIX}${key}`,
         },
-        { ...input, due_at: due }
+        { ...request, due_at: due }
       )
-    )
-  } catch (error) {
-    console.error(
-      JSON.stringify({ code: "cos.reminder_failed", error: failureCode(error) })
-    )
-    throw new ToolFailed(503, {
-      class: "transient",
-      code: "reminder.unconfirmed",
-      message: "The reminder could not be confirmed.",
     })
+  } catch (error) {
+    reminderUnconfirmed(error)
   }
+  if (!made) return refused(noReminder())
   if (made instanceof Response) return refused(made)
   await wakeScheduler(env, made)
-  return { outcome: "created", due_at: made.due_at }
+  return {
+    outcome: "created",
+    reminder_id: made.id,
+    due_at: made.due_at,
+    time_zone: read,
+    ...(replaced ? { replaced: true } : {}),
+  }
+}
+
+/**
+ * Moves or renames an open reminder the workspace lists, when the owner
+ * asked. A time is read as `createReminder` reads one. Refused for a ref
+ * that is not open.
+ */
+export async function updateReminder(
+  ctx: ToolContext,
+  { reminder_id, title, due_at, time_zone: named }: UpdateReminderInput,
+  _key: string,
+  turn: Turn,
+  zone: string | null
+): Promise<UpdateReminderOutput> {
+  const { env, kit, owner } = ctx
+  if (named && !knownZone(named)) return refused(unknownZone())
+  if (!(await askedToEdit(ctx, turn))) return refused(notAsked())
+  const read = named ?? zone
+  let made: Awaited<ReturnType<typeof moveReminder>>
+  try {
+    made = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+      moveReminder(db, reminder_id, {
+        ...(title !== undefined && { title }),
+        ...(due_at !== undefined && {
+          due_at: due_at === null ? null : wallToUtc(due_at, read),
+        }),
+      })
+    )
+  } catch (error) {
+    reminderUnconfirmed(error)
+  }
+  if (!made) return refused(noReminder())
+  if (made instanceof Response) return refused(made)
+  await wakeScheduler(env, made)
+  return {
+    outcome: "updated",
+    reminder_id: made.id,
+    title: made.title,
+    due_at: made.due_at,
+    time_zone: read,
+  }
+}
+
+/**
+ * Deletes a reminder the workspace lists, when the owner asked. Refused for
+ * a ref the org does not hold.
+ */
+export async function deleteReminder(
+  ctx: ToolContext,
+  { reminder_id }: DeleteReminderInput,
+  _key: string,
+  turn: Turn
+): Promise<DeleteReminderOutput> {
+  const { kit, owner } = ctx
+  if (!(await askedToEdit(ctx, turn))) return refused(notAsked())
+  let gone: Awaited<ReturnType<typeof dropReminder>>
+  try {
+    gone = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+      dropReminder(db, reminder_id)
+    )
+  } catch (error) {
+    reminderUnconfirmed(error)
+  }
+  if (!gone) return refused(noReminder())
+  return { outcome: "deleted", reminder_id: gone.id, title: gone.title }
+}
+
+/**
+ * The business's zone, set on the owner's word: it replaces the browser's
+ * and the service area's, and the org's recurring jobs move into it.
+ */
+export async function setZone(
+  { env, kit, owner }: ToolContext,
+  { time_zone }: SetTimeZoneInput
+): Promise<SetTimeZoneOutput> {
+  if (!knownZone(time_zone)) return refused(unknownZone())
+  const { next } = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+    offerZone(db, owner.orgId, time_zone, "owner")
+  )
+  if (next) await lowerNextDue(env.SCHEDULE, next, env.JOBS)
+  return {
+    outcome: "set",
+    time_zone,
+    now: zonedIso(new Date(), time_zone),
+  }
 }
 
 /**

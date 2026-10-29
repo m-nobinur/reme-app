@@ -32,6 +32,12 @@ interface Env {
   /** The onboarding planner's model id, when not `DEFAULT_ONBOARDING_MODEL`. Same table. */
   ONBOARDING_MODEL?: string
   /**
+   * The model a CoS step falls back to after two failed attempts, with or
+   * without an `openrouter/` prefix; the onboarding planner's when unset.
+   * Same table.
+   */
+  REME_MODEL_FALLBACK?: string
+  /**
    * The buy path's Stripe keys (test mode until live keys are made). With
    * either unset, `buy_domain` and checkout refuse `domain.buy_unavailable`
    * and `/webhooks/stripe` is not a route; `find_domain` still works.

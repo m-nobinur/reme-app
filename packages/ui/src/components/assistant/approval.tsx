@@ -3,7 +3,6 @@ import {
   type ToolCallMessagePartProps,
   useAuiState,
 } from "@assistant-ui/react"
-import { CheckCircleIcon, ProhibitIcon } from "@phosphor-icons/react"
 import { AskChoice } from "@workspace/ui/components/assistant/ask-choice"
 import { AskDesign } from "@workspace/ui/components/assistant/ask-design"
 import { AskDetails } from "@workspace/ui/components/assistant/ask-details"
@@ -19,8 +18,8 @@ import { TrayApproval } from "@workspace/ui/components/assistant/decision"
 import { RequestChange } from "@workspace/ui/components/assistant/request-change"
 import { ReviewQuoteForm } from "@workspace/ui/components/assistant/review-quote-form"
 import { ToolFallback } from "@workspace/ui/components/assistant/tool-fallback"
+import { StateIcon } from "@workspace/ui/components/status-line"
 import { heldText, isHeld } from "@workspace/ui/lib/tool-state"
-import { cn } from "@workspace/ui/lib/utils"
 
 /**
  * The approval half of the owner attention contract, in the transcript.
@@ -102,16 +101,12 @@ function ApprovalRequest({
 
 /** What the transcript keeps once the owner has answered. */
 function ApprovalDecision({ approved }: { approved: boolean }) {
-  const Icon = approved ? CheckCircleIcon : ProhibitIcon
   return (
     <p
-      className={cn(
-        "flex items-center gap-2 px-1 py-1.5 text-sm",
-        approved ? "text-muted-foreground" : "text-destructive"
-      )}
+      className="flex items-center gap-2 px-1 py-1.5 text-muted-foreground text-sm"
       data-slot="approval-decision"
     >
-      <Icon aria-hidden className="size-4 shrink-0" />
+      <StateIcon state={approved ? "done" : "stopped"} />
       {approved ? "You approved this." : "You said not now."}
     </p>
   )

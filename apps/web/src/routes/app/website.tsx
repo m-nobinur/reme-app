@@ -1,11 +1,4 @@
-import {
-  ArrowSquareOutIcon,
-  ChatCircleDotsIcon,
-  CheckCircleIcon,
-  CircleIcon,
-  GlobeIcon,
-  WarningCircleIcon,
-} from "@phosphor-icons/react"
+import { ArrowSquareOutIcon, GlobeIcon } from "@phosphor-icons/react"
 import {
   createFileRoute,
   getRouteApi,
@@ -16,13 +9,14 @@ import type { BuildSummary } from "@workspace/contracts"
 import { PageHeader } from "@workspace/ui/components/app-shell"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { EmptyState } from "@workspace/ui/components/empty-state"
-import { YourWebsite } from "@workspace/ui/components/live-panel"
+import { StepMark, YourWebsite } from "@workspace/ui/components/live-panel"
 import { SitePictures } from "@workspace/ui/components/site-pictures"
 import { BuildingIcon } from "@workspace/ui/components/status-icons"
-import { StatusIcon, StatusLine } from "@workspace/ui/components/status-line"
-import { segmentKind, workLine } from "@workspace/ui/lib/activity-copy"
+import { StatusLine } from "@workspace/ui/components/status-line"
+import { workLine } from "@workspace/ui/lib/activity-copy"
 import { cn } from "@workspace/ui/lib/utils"
 import { useEffect, useRef, useState } from "react"
+import { lastChat } from "@/chat/history"
 import { SiteReadyCard } from "@/chat/site-ready"
 import { getSiteMedia } from "@/lib/api/server"
 import type { Workspace, WriteOutcome } from "@/lib/api/types"
@@ -68,25 +62,8 @@ function BuildLink({ build }: { build: BuildSummary }) {
   )
 }
 
-/** The mark the panel's steps use for the same state. */
-function RowMark({ row }: { row: CheckRow }) {
-  switch (row.mark) {
-    case "done":
-      return <CheckCircleIcon className="size-4 text-primary" weight="fill" />
-    case "now":
-      return <StatusIcon className="text-primary" kind={row.status} />
-    case "waiting":
-      return (
-        <ChatCircleDotsIcon className="size-4 animate-status-fade text-primary motion-reduce:animate-none" />
-      )
-    case "failed":
-      return <WarningCircleIcon className="size-4 text-destructive" />
-    default:
-      return <CircleIcon className="size-4 text-muted-foreground/60" />
-  }
-}
-
 function RowActionLink({ action }: { action: RowAction }) {
+  const { conversations } = frame.useLoaderData()
   switch (action.kind) {
     case "visit":
       return (
@@ -102,6 +79,18 @@ function RowActionLink({ action }: { action: RowAction }) {
           {action.label}
         </Link>
       )
+    case "google": {
+      // Straight to Google's sign-in, never a line in the owner's voice.
+      // Back in the owner's current conversation, where the result is said.
+      const chat = lastChat(conversations)
+      const back = chat ? `?returnTo=/app/c/${chat.id}` : ""
+      return (
+        // A document load: the route answers with a redirect to Google.
+        <a className={LINK} href={`/api/google/start${back}`}>
+          {action.label}
+        </a>
+      )
+    }
     case "ask":
       return (
         <Link
@@ -126,7 +115,7 @@ function Checklist({ rows }: { rows: CheckRow[] }) {
         {rows.map((row) => (
           <li className="flex items-start gap-2.5 py-3" key={row.id}>
             <span aria-hidden className="mt-0.5 flex size-4 shrink-0">
-              <RowMark row={row} />
+              <StepMark kind={row.status} state={row.mark} />
             </span>
             <div className="flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-3">
               <div className="flex min-w-0 flex-col">
@@ -313,7 +302,6 @@ function Website() {
               announce={false}
               clockAfter={null}
               delay={0}
-              kind={work ? segmentKind(work) : "building"}
               label={
                 step ??
                 (live

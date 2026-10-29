@@ -190,10 +190,14 @@ afterEach(async () => {
   churn = false
 })
 
+/** What Retry sends, as the chat page holds it. */
+const retry: { current: (() => void) | null } = { current: null }
+
 /** The runtime the chat page builds per thread. */
 const useThreadRuntime = () =>
   useConversationRuntime({
     onFinish: () => undefined,
+    retry,
     // On offer, as the page offers them on a new chat; a stored
     // conversation must never show one.
     suggestions: [{ prompt: "Build my website" }],
@@ -235,6 +239,7 @@ function Chat() {
           autoFocus: false,
           stored: ID,
           components: { ToolFallback: Approval },
+          onRetry: () => retry.current?.(),
         })
       )
     )
@@ -720,14 +725,19 @@ it("renders a recorded answer turn the way a reload of the stored row does", asy
       time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       turn: {
         ...request.turn,
-        reply: { ...request.turn.reply, message_id: expect.any(String) },
+        // The owner's reply reads the number as the phone writes it.
+        reply: {
+          ...request.turn.reply,
+          message_id: expect.any(String),
+          text: "07700 900123",
+        },
       },
     },
   ])
   // The answer reads as the owner's reply, and the next question as a
   // message of its own, with its own time.
   expect(transcript(chat).slice(-2)).toEqual([
-    "+447700900123",
+    "07700 900123",
     "Which email address should enquiries go to?Email addressSubmit",
   ])
   expect(
@@ -825,6 +835,27 @@ for (const [failure, answer] of Object.entries(FAILURES)) {
     await matches(chat, FIXTURE.histories.typed)
   })
 }
+
+it("a typed message that fails on the way stays once, with the error and Retry, which sends it again", async () => {
+  const chat = await open(FIXTURE.histories.start)
+  const before = transcript(chat)
+  turns.push(() => Promise.reject(new TypeError("Failed to fetch")))
+  await type(chat, "Hello")
+  await vi.waitFor(() =>
+    expect(
+      button(chat, "Retry").closest(".aui-message-error-root")
+    ).not.toBeNull()
+  )
+  // The owner's words once, in the thread and not back in the composer.
+  expect(transcript(chat).sort()).toEqual([...before, "Hello"].sort())
+  expect(chat.querySelector("textarea")?.value).toBe("")
+
+  turns.push(sse(FIXTURE.streams.typed))
+  await press(chat, "Retry")
+  await vi.waitFor(() => expect(sent).toHaveLength(2))
+  await matches(chat, FIXTURE.histories.typed)
+  expect(chat.querySelector(".aui-message-error-root")).toBeNull()
+})
 
 /**
  * A Chief of Staff step as `apps/api` stores it: a read the agent ran
@@ -1281,7 +1312,7 @@ it("shows every Chief of Staff tool in the owner's words, and nothing of its wir
   for (const text of [
     "You have started as many builds as a day allows. Try again tomorrow.",
     "We could not confirm this went through.",
-    "Weekday hours: 08:00 to 18:00",
+    "Weekday hours: 8:00 AM to 6:00 PM",
     "Sent. Your build carries on.",
     "Call the window supplier",
     "No date set. It shows under Reminders.",
@@ -1345,7 +1376,7 @@ for (const [zone, written, kept, label] of [
         ),
       ],
     })
-    expect(asking.textContent).toContain(`Due 2 Oct 2026, 08:00 ${label}`)
+    expect(asking.textContent).toContain(`Due 2 Oct 2026, 8:00 AM ${label}`)
 
     const added = await open({
       messages: [
@@ -1361,7 +1392,7 @@ for (const [zone, written, kept, label] of [
       ],
     })
     expect(added.textContent).toContain(
-      `Added to Reminders. Due 2 Oct 2026, 08:00 ${label}.`
+      `Added to Reminders. Due 2 Oct 2026, 8:00 AM ${label}.`
     )
   })
 }
@@ -1444,7 +1475,10 @@ it("a call the stream left unfinished stops, rather than working forever", async
   await vi.waitFor(() =>
     expect(chat.textContent).toContain("This was not finished.")
   )
-  expect(chat.textContent).toContain("Stopped checking where things stand")
+  // Cut off before its result, the read says it didn't finish, not that it stopped.
+  expect(chat.textContent).toMatch(
+    /Didn't finish (checking|looking over|catching up on) where things (stand|are)/
+  )
   expect(chat.querySelector(".shimmer")).toBeNull()
   // The turn is over: the composer offers Send again, not Stop.
   expect(chat.querySelector('button[aria-label="Send message"]')).not.toBeNull()

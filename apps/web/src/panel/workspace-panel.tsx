@@ -1,9 +1,4 @@
-import {
-  ChatCircleDotsIcon,
-  ChatCircleTextIcon,
-  CheckCircleIcon,
-  PulseIcon,
-} from "@phosphor-icons/react"
+import { ChatCircleTextIcon, PulseIcon } from "@phosphor-icons/react"
 import {
   getRouteApi,
   Link,
@@ -40,6 +35,7 @@ import {
   WaitingOnYou,
   YourWebsite,
 } from "@workspace/ui/components/live-panel"
+import { DoneIcon, StateIcon } from "@workspace/ui/components/status-line"
 import {
   Tabs,
   TabsContent,
@@ -62,6 +58,7 @@ import {
   cancelBuild,
   completeReminder,
   decideApproval,
+  deleteReminder,
   getPreview,
 } from "@/lib/api/server"
 import type { AttentionItem, Workspace, WriteOutcome } from "@/lib/api/types"
@@ -73,7 +70,7 @@ import {
   type Suggestion,
 } from "@/lib/panel"
 import { anchorOf, noteOf, upcomingNotes } from "@/lib/reminders"
-import { useLiveWorkspace } from "@/lib/workspace"
+import { useBusinessZone, useLiveWorkspace } from "@/lib/workspace"
 import { useFollowStep } from "./follow-step"
 import { everyMinute, thisMoment } from "./minute-clock"
 
@@ -415,16 +412,19 @@ function Suggested({ suggestion }: { suggestion: Suggestion }) {
 }
 
 /**
- * The reader's time zone, or null on the server and while hydrating, when it
- * is not known. The server renders no reminder times at all rather than UTC
- * ones the browser would then replace.
+ * The zone times show in: the business's, which reminders run on and the
+ * assistant says, else the reader's. Null on the server and while hydrating,
+ * so the server renders no reminder times rather than ones the browser
+ * would then replace.
  */
 const noSubscription = () => () => undefined
 export function useBrowserZone(): string | null {
-  return useSyncExternalStore(noSubscription, browserZone, () => null)
+  const reader = useSyncExternalStore(noSubscription, browserZone, () => null)
+  const business = useBusinessZone()
+  return reader && (business ?? reader)
 }
 
-/** A written reminder with its own Done, shown done while the write runs. */
+/** A written reminder with its own Done and Delete, shown done while either write runs. */
 export function Completable({
   note,
   zone,
@@ -436,11 +436,18 @@ export function Completable({
   refresh: Refresh
   announce: Announce
 }) {
-  const { pending, error, run } = useWrite<"done">(refresh, announce)
+  const { pending, error, run } = useWrite<"done" | "delete">(refresh, announce)
   return (
     <ReminderNote
       {...noteOf(note, zone)}
       error={error}
+      onDelete={() =>
+        void run("delete", async () => {
+          const outcome = await deleteReminder({ data: { id: note.id } })
+          if (outcome.done) announce("Deleted.")
+          return outcome
+        })
+      }
       onDone={() =>
         void run("done", async () => {
           const outcome = await completeReminder({ data: { id: note.id } })
@@ -557,6 +564,7 @@ export function useAnnouncement(workspace: Workspace | null) {
 export function WorkspacePanel({ panel }: { panel: Panel | null }) {
   const { workspace, failed, refresh } = useLiveWorkspace()
   const zone = useBrowserZone()
+  const chat = lastChat(frame.useLoaderData().conversations)
   const [status, setStatus] = useAnnouncement(workspace)
   const [tab, setTab] = useState<Tab>("activity")
   const thumbnail = liveThumbnail(workspace?.liveRevision ?? null)
@@ -576,6 +584,8 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
   }
   const { live, host } = workspace
   const website = live !== null || host !== null
+  const upNextAsk =
+    panel.upNext && "ask" in panel.upNext ? panel.upNext.ask : undefined
   // A tab that has emptied (its last reminder done) hands back to Activity.
   const shown =
     (tab === "reminders" && upcoming.length) || (tab === "website" && website)
@@ -626,7 +636,7 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
           The first three kinds never sit behind "Show more": links and the
           pill focus them by their anchors. */}
       <WaitingOnYou
-        icon={ChatCircleDotsIcon}
+        icon={<StateIcon state="waiting" />}
         limit={Math.max(SHOWN.now, held.length + panel.waiting.length)}
         status={status}
       >
@@ -656,7 +666,9 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
       </WaitingOnYou>
       <WaitingOnYou
         error={stale}
-        icon={PulseIcon}
+        icon={
+          <PulseIcon aria-hidden className="size-4 text-muted-foreground" />
+        }
         limit={SHOWN.now}
         onRetry={refresh}
         title="Now"
@@ -665,16 +677,24 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
       </WaitingOnYou>
       {panel.upNext ? (
         <UpNext text={panel.upNext.text}>
-          <Link
-            className={NEXT_STEP}
-            state={() => ({
-              chat: crypto.randomUUID(),
-              ask: panel.upNext?.ask,
-            })}
-            to="/app"
-          >
-            {panel.upNext.label}
-          </Link>
+          {"href" in panel.upNext ? (
+            // A document load: the route answers with a redirect to Google,
+            // and the result is said in the owner's current conversation.
+            <a
+              className={NEXT_STEP}
+              href={`${panel.upNext.href}${chat ? `?returnTo=/app/c/${chat.id}` : ""}`}
+            >
+              {panel.upNext.label}
+            </a>
+          ) : (
+            <Link
+              className={NEXT_STEP}
+              state={() => ({ chat: crypto.randomUUID(), ask: upNextAsk })}
+              to="/app"
+            >
+              {panel.upNext.label}
+            </Link>
+          )}
         </UpNext>
       ) : null}
       <ComingUp
@@ -699,7 +719,7 @@ export function WorkspacePanel({ panel }: { panel: Panel | null }) {
         }
         ahead={false}
         count={panel.done.length}
-        icon={CheckCircleIcon}
+        icon={<DoneIcon />}
         items={panel.done.slice(0, SHOWN.done)}
         title="Completed"
         zone={zone}

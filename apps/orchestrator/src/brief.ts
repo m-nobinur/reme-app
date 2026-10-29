@@ -6,6 +6,7 @@ import {
   ChangeKind,
   FactSnapshot,
   type GateName,
+  OFF_SITE_FACT_KEYS,
   type RuntimeSpec,
   ValidationReport,
 } from "@workspace/contracts"
@@ -143,6 +144,15 @@ export function retryContextSignal(brief: Brief) {
 }
 
 /**
+ * The org's current facts the site may draw on: never the ones kept for the
+ * assistant alone (`OFF_SITE_FACT_KEYS`), such as the owner's prices.
+ */
+export const siteFacts = async (db: OrgScopedDb) =>
+  (await currentFacts(db)).filter(
+    (row) => !(OFF_SITE_FACT_KEYS as readonly string[]).includes(row.key)
+  )
+
+/**
  * The fact snapshot (architect ruling 4): the org's current facts, frozen as
  * one `facts.snapshot_taken` event the assignment names by id. `withhold`
  * exists for one test only, the run that must ask for `business.phone`; it
@@ -153,7 +163,7 @@ export async function takeSnapshot(
   ids: Ids,
   withhold: readonly string[]
 ): Promise<FactSnapshot> {
-  const rows = await currentFacts(db)
+  const rows = await siteFacts(db)
   const snapshot = FactSnapshot.parse({
     snapshot_id: crypto.randomUUID(),
     org_id: ids.orgId,

@@ -1,9 +1,9 @@
-import { ClockIcon } from "@phosphor-icons/react"
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { PageHeader } from "@workspace/ui/components/app-shell"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { EmptyState } from "@workspace/ui/components/empty-state"
 import { ReminderList } from "@workspace/ui/components/live-panel"
+import { StateIcon } from "@workspace/ui/components/status-line"
 import { META } from "@workspace/ui/lib/utils"
 import { type ReactNode, useEffect, useRef, useState } from "react"
 import { assistantOf } from "@/lib/briefing"
@@ -102,7 +102,7 @@ function Reminders() {
           </Button>
         }
         description="Couldn't load your reminders. Nothing was changed."
-        icon={<ClockIcon />}
+        icon={<StateIcon state="reminder" />}
         role="alert"
         title="Something went wrong"
       />
@@ -137,7 +137,7 @@ function Reminders() {
       {needed.length === 0 && groups.length === 0 ? (
         <EmptyState
           description="To add one, start a chat and pick Remind me from the + menu."
-          icon={<ClockIcon />}
+          icon={<StateIcon state="reminder" />}
           title="No reminders"
         />
       ) : (

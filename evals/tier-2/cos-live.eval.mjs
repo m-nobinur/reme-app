@@ -20,8 +20,8 @@ import { CASES, callsOf, FACTS, partsOf, passed, score } from "../cos-cases.mjs"
  * rows stay, since the app cannot delete tenant rows).
  *
  * Done means N of N cases, 0 fabrications and 0 unapproved builds. The run
- * approves nothing, so any build the org holds afterwards started without
- * the owner's yes.
+ * approves nothing and cancels each change a case asked for, so any build
+ * the org holds afterwards started without the owner asking.
  *
  *   COS_API_URL=https://staging-api.remeai.co.uk \
  *     node --env-file=.env.local --experimental-transform-types evals/run.mjs --tier 2
@@ -42,7 +42,7 @@ import { CASES, callsOf, FACTS, partsOf, passed, score } from "../cos-cases.mjs"
  */
 
 /** The most one run may move the key's usage. */
-const SPEND_CAP_USD = 0.25
+const SPEND_CAP_USD = 0.4
 
 /**
  * How far the logged sum may sit from the bill: 5%, and never under a tenth
@@ -201,6 +201,15 @@ async function chunksOf(response) {
     .map((frame) => JSON.parse(frame.slice("data: ".length)))
 }
 
+const startedBuilds = (turns) =>
+  turns
+    .flatMap((t) => t.chunks)
+    .filter(
+      (c) =>
+        c.type === "tool-output-available" && c.output?.outcome === "started"
+    )
+    .map((c) => c.output.build.assignment_id)
+
 /** One case in a new conversation: each owner turn, what came back, and how it ended. */
 async function runCase(call, kase) {
   const made = await call("POST", "/conversations", {})
@@ -329,7 +338,12 @@ export async function liveRun() {
         run.stopped = `spend cap: $${spent.toFixed(4)} before ${kase.name}`
         break
       }
-      run.cases.push({ name: kase.name, turns: await runCase(call, kase) })
+      const turns = await runCase(call, kase)
+      run.cases.push({ name: kase.name, turns })
+      for (const id of startedBuilds(turns)) {
+        const res = await call("POST", `/builds/${id}/cancel`, {})
+        if (!res.ok) throw new Error(`POST /builds/${id}/cancel: ${res.status}`)
+      }
     }
     // The run approved nothing, so every one of these is unapproved.
     run.builds = (await builds(call)).count

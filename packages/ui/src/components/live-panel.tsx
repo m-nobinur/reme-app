@@ -3,18 +3,12 @@ import {
   CaretDownIcon,
   CaretLeftIcon,
   CaretRightIcon,
-  ChatCircleDotsIcon,
-  CheckCircleIcon,
-  CircleIcon,
-  ClockIcon,
   GlobeIcon,
   ImageIcon,
-  MinusCircleIcon,
   PaintBrushIcon,
-  type Icon as PhosphorIcon,
   RocketLaunchIcon,
   SpinnerGapIcon,
-  WarningCircleIcon,
+  TrashIcon,
 } from "@phosphor-icons/react"
 import type {
   ApprovalTarget,
@@ -32,7 +26,11 @@ import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { Diffusing } from "@workspace/ui/components/diffusing"
 import { Field } from "@workspace/ui/components/field"
 import { Skeleton } from "@workspace/ui/components/skeleton"
-import { StatusIcon } from "@workspace/ui/components/status-line"
+import {
+  DoneIcon,
+  StateIcon,
+  StatusIcon,
+} from "@workspace/ui/components/status-line"
 import { useCycle } from "@workspace/ui/hooks/use-cycle"
 import { SKIPPED, type StatusKind } from "@workspace/ui/lib/activity-copy"
 import {
@@ -46,7 +44,12 @@ import {
   paletteName,
   paletteStops,
 } from "@workspace/ui/lib/blueprint"
-import { formatDateTime, relativeTime } from "@workspace/ui/lib/format"
+import {
+  dayLabel,
+  formatDateTime,
+  formatTime,
+  relativeTime,
+} from "@workspace/ui/lib/format"
 import { cn, META } from "@workspace/ui/lib/utils"
 import {
   Children,
@@ -73,14 +76,14 @@ const SECTION_ACTION =
 /** Sections after the first are set off by a hairline. */
 function PanelSection({
   title,
-  icon: Icon,
+  icon,
   count,
   action,
   children,
 }: {
   title: string
-  /** A quiet mark before the heading. */
-  icon?: PhosphorIcon
+  /** A mark before the heading: a `StateIcon` for where its items stand. */
+  icon?: ReactNode
   count?: number
   /** A link or button to the rest of the list, at the heading's end. */
   action?: ReactNode
@@ -94,9 +97,7 @@ function PanelSection({
     >
       <div className="flex items-center justify-between gap-2">
         <h2 className="flex items-center gap-1 font-semibold text-sm" id={id}>
-          {Icon ? (
-            <Icon aria-hidden className="size-4 text-muted-foreground" />
-          ) : null}
+          {icon}
           {title}
           {count ? (
             <span className="ms-1 rounded-full bg-muted px-1.5 font-medium text-[0.6875rem] text-muted-foreground tabular-nums leading-4">
@@ -330,13 +331,7 @@ function StepDetail({
               data-state={item.done ? "done" : item.working ? "now" : "next"}
               key={item.label}
             >
-              {item.done ? (
-                <CheckCircleIcon
-                  aria-hidden
-                  className="size-3 text-primary"
-                  weight="fill"
-                />
-              ) : null}
+              {item.done ? <DoneIcon /> : null}
               {/* The shimmer masks its own box, so it takes the words, not the border. */}
               <span
                 className={cn(
@@ -436,28 +431,30 @@ const STEP_SAID: Record<SegmentStep["state"], string> = {
   skipped: "",
 }
 
-function StepMark({ step, failed }: { step: SegmentStep; failed: boolean }) {
-  if (step.state === "done") {
-    return <CheckCircleIcon className="size-4 text-primary" weight="fill" />
-  }
-  if (failed && (step.state === "now" || step.state === "waiting")) {
-    return <WarningCircleIcon className="size-4 text-destructive" />
-  }
-  switch (step.state) {
+/** Where a step stands, the Website page's rows as well. */
+function StepMark({
+  state,
+  kind,
+}: {
+  state: SegmentStep["state"] | "failed"
+  /** The icon a step at work moves. */
+  kind: StatusKind
+}) {
+  switch (state) {
     // Neutral, so a step reads as part of its segment and the header's
     // brand-coloured icon stays the one that leads.
     case "now":
-      return <StatusIcon className="text-foreground/80" kind={step.kind} />
+      return <StatusIcon className="text-foreground/80" kind={kind} />
+    case "done":
+      return <DoneIcon />
     case "waiting":
-      return step.kind === "question" ? (
-        <StatusIcon className="text-foreground/80" kind="question" />
-      ) : (
-        <ChatCircleDotsIcon className="size-4 animate-status-fade text-foreground/80 motion-reduce:animate-none" />
-      )
+      return <StateIcon state="waiting" />
+    case "failed":
+      return <StateIcon state="failed" />
     case "skipped":
-      return <MinusCircleIcon className="size-4 text-muted-foreground" />
+      return <StateIcon state="stopped" />
     default:
-      return <CircleIcon className="size-4 text-muted-foreground/60" />
+      return <StateIcon state="next" />
   }
 }
 
@@ -524,9 +521,9 @@ function PanelSegment({
       <div className="flex items-start gap-1">
         <span aria-hidden className="mt-0.5 flex size-4 shrink-0">
           {folded ? (
-            <CheckCircleIcon className="size-4 text-primary" weight="fill" />
+            <DoneIcon />
           ) : failed ? (
-            <WarningCircleIcon className="size-4 text-destructive" />
+            <StateIcon state="failed" />
           ) : (
             // Moving only while work runs; waiting on the owner, the step
             // under it moves instead.
@@ -607,7 +604,16 @@ function PanelSegment({
                         )}
                       />
                       <span aria-hidden className="mt-px flex size-4 shrink-0">
-                        <StepMark failed={failed} step={step} />
+                        <StepMark
+                          kind={step.kind}
+                          // The step that stopped takes the failure.
+                          state={
+                            failed &&
+                            (step.state === "now" || step.state === "waiting")
+                              ? "failed"
+                              : step.state
+                          }
+                        />
                       </span>
                       <div className="flex min-w-0 flex-1 flex-col gap-2">
                         <p className="flex min-w-0 items-baseline gap-1.5 text-[0.8125rem]">
@@ -761,7 +767,7 @@ function WaitingOnYou({
 }: {
   children?: ReactNode
   title?: string
-  icon?: PhosphorIcon
+  icon?: ReactNode
   limit?: number
   status?: string | null
   error?: string | null
@@ -1460,25 +1466,30 @@ function ApprovalItem({
 
 /* Coming up, done today, your website ---------------------------------- */
 
+const HOUR = 3_600_000
+
 /**
- * Things with a time, in the order given: what closes or is due next under
- * "Coming up", or what just happened under another title. Each row says how
- * far off it is ("in 25 min", "2 hr ago") beside its text; the exact time,
- * in `zone` once the reader's is known, is its tooltip. Nothing renders when
- * the list is empty.
+ * Things with a time, in the order given, on a rail grouped by day: what
+ * closes or is due next under "Coming up", or what just happened under
+ * another title. Each row has its time of day in `zone` (UTC until the
+ * reader's is known), its text, and how far off it is ("in 25 min", "2 hr
+ * ago"), measured from `now`, which the panel's minute clock moves; the exact
+ * time is its tooltip. One due within the hour, or past, is marked. Nothing
+ * renders when the list is empty.
  */
 function ComingUp({
   items,
   title = "Coming up",
-  icon = ClockIcon,
+  icon = <StateIcon state="reminder" />,
   count,
   zone,
   action,
   ahead = true,
+  now = Date.now(),
 }: {
   items: { id: string; text: string; at: string }[]
   title?: string
-  icon?: PhosphorIcon
+  icon?: ReactNode
   /** How many there are in all, when `items` are only the first. */
   count?: number
   zone?: string | null
@@ -1486,8 +1497,18 @@ function ComingUp({
   action?: ReactNode
   /** Times still to come: one that has passed is due now, never "ago". */
   ahead?: boolean
+  now?: number
 }) {
+  const id = useId()
   if (items.length === 0) return null
+  const tz = zone ?? "UTC"
+  const days: { day: string; rows: typeof items }[] = []
+  for (const item of items) {
+    const day = dayLabel(new Date(item.at), tz, new Date(now))
+    const last = days.at(-1)
+    if (last?.day === day) last.rows.push(item)
+    else days.push({ day, rows: [item] })
+  }
   return (
     <PanelSection
       action={action}
@@ -1495,26 +1516,69 @@ function ComingUp({
       icon={icon}
       title={title}
     >
-      {/* Under the heading's text, past its icon, so the rows read as the section's own. */}
-      <ul className="flex flex-col divide-y divide-border ps-5">
-        {items.map((item) => (
-          <li
-            className="flex items-baseline justify-between gap-3 py-2 first:pt-0 last:pb-0"
-            key={item.id}
-          >
-            <span className="wrap-break-word min-w-0 text-sm">{item.text}</span>
-            <time
-              className={cn(META, "shrink-0 tabular-nums")}
-              dateTime={item.at}
-              title={formatDateTime(item.at, zone ?? undefined) ?? undefined}
-            >
-              {ahead && Date.parse(item.at) <= Date.now()
-                ? "due now"
-                : relativeTime(item.at)}
-            </time>
-          </li>
+      <div className="flex flex-col gap-3" data-slot="timeline">
+        {days.map(({ day, rows }, index) => (
+          <div className="flex flex-col gap-1.5" key={rows[0]?.id}>
+            <h3 className={cn(META, "font-medium")} id={`${id}-${index}`}>
+              {day}
+            </h3>
+            <ul aria-labelledby={`${id}-${index}`} className="flex flex-col">
+              {rows.map((item) => {
+                const left = Date.parse(item.at) - now
+                const soon = ahead && left <= HOUR
+                return (
+                  <li
+                    // The rail: from under this row's mark to the next one's.
+                    className="relative flex gap-2 pb-3 not-last:before:absolute not-last:before:start-[7.5px] not-last:before:top-5 not-last:before:bottom-0.5 not-last:before:w-px not-last:before:bg-border last:pb-0"
+                    data-soon={soon || undefined}
+                    key={item.id}
+                  >
+                    {ahead ? (
+                      <StateIcon
+                        className={cn("mt-0.5", soon && "text-primary")}
+                        state="next"
+                      />
+                    ) : (
+                      <DoneIcon className="mt-0.5" />
+                    )}
+                    <time
+                      className={cn(
+                        "min-w-16 shrink-0 whitespace-nowrap text-sm tabular-nums",
+                        !ahead && "text-muted-foreground"
+                      )}
+                      dateTime={item.at}
+                      title={formatDateTime(item.at, tz) ?? undefined}
+                    >
+                      {formatTime(new Date(item.at), tz)}
+                    </time>
+                    <div className="flex min-w-0 flex-col">
+                      <span
+                        className={cn(
+                          "wrap-break-word text-sm",
+                          !ahead && "text-muted-foreground"
+                        )}
+                      >
+                        {item.text}
+                      </span>
+                      <span
+                        className={cn(
+                          META,
+                          "tabular-nums",
+                          soon && "font-medium text-primary"
+                        )}
+                      >
+                        {ahead && left <= 0
+                          ? "due now"
+                          : relativeTime(item.at, now)}
+                      </span>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
         ))}
-      </ul>
+      </div>
     </PanelSection>
   )
 }
@@ -1525,7 +1589,7 @@ function ComingUp({
  */
 function UpNext({ text, children }: { text: string; children: ReactNode }) {
   return (
-    <PanelSection icon={CircleIcon} title="Up next">
+    <PanelSection icon={<StateIcon state="next" />} title="Up next">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 ps-5">
         <p className="min-w-0 text-sm">{text}</p>
         {children}
@@ -1540,15 +1604,16 @@ function UpNext({ text, children }: { text: string; children: ReactNode }) {
  * or null while that zone is not known, so one time is never shown two ways.
  * `soon` marks one due within the hour, `overdue` one whose time has passed.
  * Pending shows the reminder as done until the list is read again; a failure
- * puts it back, with the reason under it.
+ * puts it back, with the reason under it. `onDelete`, when given, adds a
+ * button that deletes it instead.
  */
 function ReminderNote({
   title,
   due,
   soon = false,
   overdue = false,
-  byAssistant,
   onDone,
+  onDelete,
   pending: busy = false,
   error = null,
 }: {
@@ -1556,9 +1621,8 @@ function ReminderNote({
   due: string | null
   soon?: boolean
   overdue?: boolean
-  /** Set by the assistant (Reme to the owner) rather than by the owner. */
-  byAssistant: boolean
   onDone: () => void
+  onDelete?: () => void
   pending?: boolean
   error?: string | null
 }) {
@@ -1588,19 +1652,12 @@ function ReminderNote({
               overdue && "font-medium text-destructive"
             )}
           >
-            <ClockIcon
-              aria-hidden
-              className="size-3.5 shrink-0"
-              weight={soon || overdue ? "fill" : "regular"}
-            />
+            <StateIcon state="time" />
             <span className="sr-only">
               {overdue ? "Overdue, was due " : "Due "}
             </span>
             {due}
           </span>
-        ) : null}
-        {byAssistant ? (
-          <span className={META}>Set by your assistant</span>
         ) : null}
         {error ? (
           <p className="text-[0.8125rem] text-destructive" role="alert">
@@ -1619,6 +1676,19 @@ function ReminderNote({
       >
         Done
       </Button>
+      {onDelete ? (
+        <Button
+          aria-label={`Delete: ${title}`}
+          disabled={busy}
+          focusableWhenDisabled
+          onClick={onDelete}
+          size="icon-sm"
+          title="Delete"
+          variant="ghost"
+        >
+          <TrashIcon aria-hidden />
+        </Button>
+      ) : null}
     </div>
   )
 }
@@ -1853,6 +1923,7 @@ export {
   Shot,
   SiteIcon,
   StageDetail,
+  StepMark,
   StopBuild,
   stageWord,
   UpNext,

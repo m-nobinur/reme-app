@@ -749,3 +749,38 @@ Rejected:
 
 Change if: the org gains a stored time zone. The turn reads that zone and uses the browser's only
 when none is stored.
+
+## Amendment, 2026-10-29: the business's zone, reminders with no card, one cache key per org
+
+**The zone is the business's, not the browser's.** The 2026-09-29 change-if has come true: `orgs`
+stores the zone, and now `orgs.time_zone_source` (migration 0027) says who set it: `browser`,
+`area` or `owner`. Each may replace only the ones before it, and the owner always. A browser sets
+it only while the org has none, through `PUT /time-zone` or a turn's `time_zone`. Once onboarding
+holds a service area, Jev reads the area as one of a fixed list of zones after the turn, and an
+answer it is sure of replaces the browser's guess. The owner changes it through the Act tool
+`set_time_zone` ("I'm in Bristol, UK time please"), never through `remember`. A zone a later browser
+reports is ignored. The Now line names the business's zone and the weekday. `GET /workspace`
+carries `time_zone`, so the web shows reminder times in the zone the assistant says them in.
+
+**Reminders.** `create_reminder` runs with no card when one of the owner's last three messages asks
+for a reminder, and is keyed by its turn and call as the owner's-words tools are; otherwise it still
+shows the card. It takes an optional `time_zone`, the zone the owner named, and reads `due_at` in it
+instead of the turn's. Its output carries the reminder's id as a ref, the zone it was read in and
+`replaced`: an open reminder the conversation already holds for the same title is moved, not
+doubled. `update_reminder` and `delete_reminder` take a ref from the workspace's reminders, and run
+only when one of the owner's last three messages asks to change or drop one. The chat's card shows
+an undo, and the Reminders page and panel a delete, through `DELETE /reminders/:id`.
+
+**The cache key** is the hash of the prefix version and the org, for both `session_id` and
+`prompt_cache_key`, not the conversation's. OpenRouter sticks a `session_id` to its provider from
+the first success and drops it after 10 idle minutes, so a new conversation's first call lands
+where the org's last one left the prefix warm.
+
+**Steps.** No tool takes a `step`: the web's status lines are its own copy. A call repeated with the
+same input in a turn is not run again and the model is told so, and after any repeat, and on the
+last step a turn allows, the next step may only write. A step whose stream fails with a retryable
+status before any text or tool call (reasoning is never shown) is tried again, and the third try
+goes to `REME_MODEL_FALLBACK`, the onboarding planner's model when unset.
+
+Change if: a business works across zones, or the owner asks for one reminder twice under one
+title on purpose.

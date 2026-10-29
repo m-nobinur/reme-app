@@ -84,6 +84,8 @@ export const ReopenStep = z.enum([
   "service_area.text",
   "business.audience",
   "business.proof",
+  "business.prices",
+  "business.enquiries",
   "industry",
   "quote_form",
   "contact",

@@ -6,7 +6,7 @@ import {
   AssignmentState,
   InformationRequest,
 } from "./assignment.ts"
-import { Timestamp, Ulid, Uuid } from "./common.ts"
+import { Timestamp, TimeZone, Ulid, Uuid } from "./common.ts"
 import { Blueprint, DirectionId, FontPairId } from "./design.ts"
 import { FactRecord } from "./fact.ts"
 import { Asset, AvatarId, choiceFacts } from "./onboarding.ts"
@@ -127,6 +127,16 @@ export const FactValue = z.discriminatedUnion("key", [
    */
   fact("business.disclaimer", { text: Text(400) }),
   fact("service_area.text", { text: Text(200) }),
+  /**
+   * Typical jobs and what they cost, in the owner's words, for the assistant
+   * to quote from. Never on the site: the site asks for a quote
+   * (`OFF_SITE_FACT_KEYS`).
+   */
+  fact("business.prices", { text: Text(400) }),
+  /** How enquiries reach the business today, in the owner's words. */
+  fact("business.enquiries", { text: Text(300) }),
+  /** What the owner most wants the assistant to take off their plate. */
+  fact("owner.priorities", { text: Text(300) }),
   fact("assistant.name", { name: Text(40) }),
   fact("assistant.pronouns", choiceFacts.pronouns),
   fact("assistant.avatar", choiceFacts.avatar),
@@ -202,6 +212,17 @@ export const REVIEW_FACT_KEYS = [
   "testimonials.review_2",
 ] as const satisfies readonly FactValueKey[]
 export type ReviewFactKey = (typeof REVIEW_FACT_KEYS)[number]
+
+/**
+ * Facts for the assistant alone, never given to the site's builder: the
+ * owner's prices (the site asks for a quote instead), how enquiries reach
+ * them and what they want off their plate.
+ */
+export const OFF_SITE_FACT_KEYS = [
+  "business.prices",
+  "business.enquiries",
+  "owner.priorities",
+] as const satisfies readonly FactValueKey[]
 
 /** The keys an owner types an answer for, which the web gives inputs to. */
 export type AskableFactKey = Exclude<
@@ -679,6 +700,12 @@ export const WorkspaceStatus = z.strictObject({
   }),
   /** Every job as segments with fixed steps. Absent until the api fills it. */
   activity: Activity.optional(),
+  /**
+   * The business's zone, which reminders and check-ins run on, so times show
+   * as the assistant says them. Null before any is set; absent until the
+   * api sends it, and the web keeps the reader's.
+   */
+  time_zone: TimeZone.nullable().optional(),
 })
 
 export type FactValue = z.infer<typeof FactValue>

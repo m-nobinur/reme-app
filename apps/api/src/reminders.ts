@@ -116,22 +116,8 @@ export async function createReminder(
   // Postgres refuses NUL in text, and a refusal there would be a 500.
   if (input.title.includes("\u0000")) return invalid([{ path: ["title"] }])
   const due = input.due_at === null ? null : new Date(input.due_at)
-  if (due && due.getTime() < now.getTime() - PAST_MS) {
-    return failure(400, {
-      class: "validation",
-      code: "reminder.due_past",
-      message: "A reminder cannot be due in the past.",
-      detail: {},
-    })
-  }
-  if (due && due.getTime() > now.getTime() + AHEAD_MS) {
-    return failure(400, {
-      class: "validation",
-      code: "reminder.due_far",
-      message: "A reminder can be due at most a year ahead.",
-      detail: {},
-    })
-  }
+  const refused = dueRefused(due, now)
+  if (refused) return refused
   const [row] = await db
     .insert(reminders)
     .values({
@@ -150,6 +136,101 @@ export async function createReminder(
   if (!row) return toReminder((await keyed(db, made.idempotencyKey)) as Row)
   await armJob(db, made.orgId, row.id, due)
   return toReminder(row)
+}
+
+/** A title as two reminders for the same thing share it: case, spacing and stops aside. */
+const sameJob = (title: string) =>
+  title
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()
+
+/**
+ * The open reminder `conversationId` already holds for `title`'s job, so
+ * the assistant moves it instead of setting a second one. Null for none.
+ */
+export async function openTwin(
+  db: OrgScopedDb,
+  conversationId: string,
+  title: string
+): Promise<Reminder | null> {
+  const rows = await db
+    .select()
+    .from(reminders)
+    .where(
+      sql`${reminders.conversationId} = ${conversationId} and ${reminders.doneAt} is null`
+    )
+  const twin = rows.find((r) => sameJob(r.title) === sameJob(title))
+  return twin ? toReminder(twin) : null
+}
+
+/** Why a due time is refused, or null when it is in range. */
+function dueRefused(due: Date | null, now: Date): Response | null {
+  if (due && due.getTime() < now.getTime() - PAST_MS) {
+    return failure(400, {
+      class: "validation",
+      code: "reminder.due_past",
+      message: "A reminder cannot be due in the past.",
+      detail: {},
+    })
+  }
+  if (due && due.getTime() > now.getTime() + AHEAD_MS) {
+    return failure(400, {
+      class: "validation",
+      code: "reminder.due_far",
+      message: "A reminder can be due at most a year ahead.",
+      detail: {},
+    })
+  }
+  return null
+}
+
+/**
+ * Changes an open reminder's title or due time, moving its job with it. A
+ * field left out stays. Null for an id the org does not hold or a reminder
+ * already done; a due time out of range is the 400 `createReminder` answers.
+ */
+export async function updateReminder(
+  db: OrgScopedDb,
+  id: string,
+  patch: { title?: string; due_at?: string | null },
+  now: Date = new Date()
+): Promise<Reminder | Response | null> {
+  if (!Uuid.safeParse(id).success) return null
+  if (patch.title?.includes("\u0000")) return invalid([{ path: ["title"] }])
+  const due =
+    patch.due_at === undefined
+      ? undefined
+      : patch.due_at === null
+        ? null
+        : new Date(patch.due_at)
+  const refused = due === undefined ? null : dueRefused(due, now)
+  if (refused) return refused
+  const [row] = await db
+    .update(reminders)
+    .set({
+      ...(patch.title !== undefined && { title: patch.title }),
+      ...(due !== undefined && { dueAt: due }),
+    })
+    .where(sql`${reminders.id} = ${id} and ${reminders.doneAt} is null`)
+    .returning()
+  if (!row) return null
+  if (due !== undefined) await armJob(db, row.orgId, id, due)
+  return toReminder(row)
+}
+
+/** Deletes a reminder and its job. Null for an id the org does not hold. */
+export async function deleteReminder(
+  db: OrgScopedDb,
+  id: string
+): Promise<Reminder | null> {
+  if (!Uuid.safeParse(id).success) return null
+  await armJob(db, "", id, null)
+  const [row] = await db
+    .delete(reminders)
+    .where(eq(reminders.id, id))
+    .returning()
+  return row ? toReminder(row) : null
 }
 
 /**
@@ -209,7 +290,11 @@ const notFound = () =>
  */
 export const ASSISTANT_KEY_PREFIX = "approval:"
 
-/** `POST /reminders` when `id` is empty, `PATCH /reminders/:id` otherwise. */
+/**
+ * `POST /reminders` when `id` is empty, `PATCH /reminders/:id` or
+ * `DELETE /reminders/:id` otherwise. A delete needs no key: deleting twice
+ * is the same as once, and the second answers 404.
+ */
 export async function reminderRoute(
   request: Request,
   env: Pick<Env, "SCHEDULE" | "JOBS">,
@@ -218,7 +303,14 @@ export async function reminderRoute(
   id: string
 ): Promise<Response | null> {
   const method = request.method
-  if (id === "" ? method !== "POST" : method !== "PATCH") return null
+  if (id === "" ? method !== "POST" : method !== "PATCH" && method !== "DELETE")
+    return null
+  if (method === "DELETE") {
+    const gone = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+      deleteReminder(db, id)
+    )
+    return gone ? new Response(null, { status: 204 }) : notFound()
+  }
   const key = idempotencyKey(request)
   if (!key) return keyMissing()
   if (key.startsWith(ASSISTANT_KEY_PREFIX)) {

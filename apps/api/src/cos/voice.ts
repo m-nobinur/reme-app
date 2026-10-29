@@ -1,29 +1,15 @@
+import { dashesToCommas } from "@workspace/contracts"
 import type { TextStreamPart, ToolSet } from "ai"
 import { voiceProblems } from "../voice.ts"
 
-/** A dash read as a pause becomes a comma; one between numbers becomes "to". */
-export const dashesToCommas = (text: string): string =>
-  text.replace(/(\d)\s*[—–]\s*(\d)/g, "$1 to $2").replace(/\s*[—–]\s*/g, ", ")
-
-/**
- * A model-written `step` as the panel may show it: whitespace collapsed,
- * dashes swapped, cut at 60, and gone when it names an id, a hash or a code.
- */
-export function cleanStep(raw: string | undefined): string | undefined {
-  const text = dashesToCommas(raw ?? "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 60)
-    .trimEnd()
-  return text && voiceProblems(text).hard.length === 0 ? text : undefined
-}
-
 /**
  * The end of a delta that the next one may change: trailing space, a dash
- * with its spaces, and the digit before either (a range such as 9–5). A few
- * characters at most.
+ * with its spaces and a currency sign after it, and the figure and unit
+ * before either (a range such as 9am–5pm or £80–£150). A few characters at
+ * most.
  */
-const UNDECIDED = /(?:\d?\s*[—–]\s*|\d?\s+|\d)$/
+const UNDECIDED =
+  /(?:(?:\d[%a-zA-Z]{0,3})?\s*[—–]\s*[£$€]?|(?:\d[%a-zA-Z]{0,3})?\s+|\d[%a-zA-Z]{0,3})$/
 
 /**
  * Passes the Chief of Staff's text straight through, swapping a dash for a

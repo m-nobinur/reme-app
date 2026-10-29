@@ -1510,6 +1510,85 @@
         ],
         "additionalProperties": false
       },
+      "AnswerQuestionCall": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string",
+                    "enum": [
+                      "business.name",
+                      "business.phone",
+                      "business.email",
+                      "hours.weekday",
+                      "service_area.radius",
+                      "business.tagline",
+                      "business.industry",
+                      "business.offerings",
+                      "business.audience",
+                      "business.overview",
+                      "business.proof",
+                      "business.disclaimer",
+                      "service_area.text",
+                      "business.prices",
+                      "business.enquiries",
+                      "owner.priorities",
+                      "assistant.name",
+                      "assistant.pronouns",
+                      "assistant.avatar",
+                      "assistant.tone",
+                      "owner.preferred_name",
+                      "site.build_mode",
+                      "site.template",
+                      "site.palette",
+                      "site.font",
+                      "site.direction",
+                      "site.pages",
+                      "media.uploads",
+                      "quote.form",
+                      "testimonials.review_1",
+                      "testimonials.review_2"
+                    ]
+                  },
+                  "value": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {}
+                  }
+                },
+                "required": [
+                  "key",
+                  "value"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500,
+                "pattern": "\\S"
+              }
+            ]
+          }
+        },
+        "required": [
+          "request_id",
+          "value"
+        ],
+        "additionalProperties": false
+      },
       "AnswerQuestionInput": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -1922,6 +2001,93 @@
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 200,
+                            "pattern": "\\S"
+                          }
+                        },
+                        "required": [
+                          "text"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "const": "business.prices"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "text": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 400,
+                            "pattern": "\\S"
+                          }
+                        },
+                        "required": [
+                          "text"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "const": "business.enquiries"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "text": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 300,
+                            "pattern": "\\S"
+                          }
+                        },
+                        "required": [
+                          "text"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "const": "owner.priorities"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "text": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 300,
                             "pattern": "\\S"
                           }
                         },
@@ -4642,6 +4808,93 @@
                   "properties": {
                     "key": {
                       "type": "string",
+                      "const": "business.prices"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 400,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": [
+                        "text"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "business.enquiries"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": [
+                        "text"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "owner.priorities"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": [
+                        "text"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
                       "const": "assistant.name"
                     },
                     "value": {
@@ -5836,6 +6089,93 @@
                               "type": "string",
                               "minLength": 1,
                               "maxLength": 200,
+                              "pattern": "\\S"
+                            }
+                          },
+                          "required": [
+                            "text"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "const": "business.prices"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "text": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 400,
+                              "pattern": "\\S"
+                            }
+                          },
+                          "required": [
+                            "text"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "const": "business.enquiries"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "text": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 300,
+                              "pattern": "\\S"
+                            }
+                          },
+                          "required": [
+                            "text"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "const": "owner.priorities"
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "text": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 300,
                               "pattern": "\\S"
                             }
                           },
@@ -7179,6 +7519,126 @@
                         "type": "string",
                         "minLength": 1,
                         "maxLength": 200,
+                        "pattern": "\\S"
+                      }
+                    },
+                    "required": [
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "key",
+              "skippable",
+              "prefill"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "const": "business.prices"
+              },
+              "skippable": {
+                "type": "boolean"
+              },
+              "prefill": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 400,
+                        "pattern": "\\S"
+                      }
+                    },
+                    "required": [
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "key",
+              "skippable",
+              "prefill"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "const": "business.enquiries"
+              },
+              "skippable": {
+                "type": "boolean"
+              },
+              "prefill": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 300,
+                        "pattern": "\\S"
+                      }
+                    },
+                    "required": [
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "key",
+              "skippable",
+              "prefill"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "const": "owner.priorities"
+              },
+              "skippable": {
+                "type": "boolean"
+              },
+              "prefill": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 300,
                         "pattern": "\\S"
                       }
                     },
@@ -8559,6 +9019,93 @@
                     "properties": {
                       "key": {
                         "type": "string",
+                        "const": "business.prices"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "text": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 400,
+                            "pattern": "\\S"
+                          }
+                        },
+                        "required": [
+                          "text"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "const": "business.enquiries"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "text": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 300,
+                            "pattern": "\\S"
+                          }
+                        },
+                        "required": [
+                          "text"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "const": "owner.priorities"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "text": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 300,
+                            "pattern": "\\S"
+                          }
+                        },
+                        "required": [
+                          "text"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
                         "const": "assistant.name"
                       },
                       "value": {
@@ -9359,6 +9906,9 @@
               "business.proof",
               "business.disclaimer",
               "service_area.text",
+              "business.prices",
+              "business.enquiries",
+              "owner.priorities",
               "assistant.name",
               "assistant.pronouns",
               "assistant.avatar",
@@ -11488,6 +12038,9 @@
                                     "business.proof",
                                     "business.disclaimer",
                                     "service_area.text",
+                                    "business.prices",
+                                    "business.enquiries",
+                                    "owner.priorities",
                                     "assistant.name",
                                     "owner.preferred_name"
                                   ]
@@ -11685,6 +12238,9 @@
                                     "business.proof",
                                     "business.disclaimer",
                                     "service_area.text",
+                                    "business.prices",
+                                    "business.enquiries",
+                                    "owner.priorities",
                                     "assistant.name",
                                     "owner.preferred_name"
                                   ]
@@ -14967,6 +15523,93 @@
                                               "properties": {
                                                 "key": {
                                                   "type": "string",
+                                                  "const": "business.prices"
+                                                },
+                                                "value": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "text": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 400,
+                                                      "pattern": "\\S"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "text"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              },
+                                              "required": [
+                                                "key",
+                                                "value"
+                                              ],
+                                              "additionalProperties": false
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "key": {
+                                                  "type": "string",
+                                                  "const": "business.enquiries"
+                                                },
+                                                "value": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "text": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 300,
+                                                      "pattern": "\\S"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "text"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              },
+                                              "required": [
+                                                "key",
+                                                "value"
+                                              ],
+                                              "additionalProperties": false
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "key": {
+                                                  "type": "string",
+                                                  "const": "owner.priorities"
+                                                },
+                                                "value": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "text": {
+                                                      "type": "string",
+                                                      "minLength": 1,
+                                                      "maxLength": 300,
+                                                      "pattern": "\\S"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "text"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              },
+                                              "required": [
+                                                "key",
+                                                "value"
+                                              ],
+                                              "additionalProperties": false
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "key": {
+                                                  "type": "string",
                                                   "const": "assistant.name"
                                                 },
                                                 "value": {
@@ -16161,6 +16804,93 @@
                                                         "type": "string",
                                                         "minLength": 1,
                                                         "maxLength": 200,
+                                                        "pattern": "\\S"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "text"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "key",
+                                                  "value"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
+                                                    "const": "business.prices"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "text": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 400,
+                                                        "pattern": "\\S"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "text"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "key",
+                                                  "value"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
+                                                    "const": "business.enquiries"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "text": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 300,
+                                                        "pattern": "\\S"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "text"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "key",
+                                                  "value"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "key": {
+                                                    "type": "string",
+                                                    "const": "owner.priorities"
+                                                  },
+                                                  "value": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "text": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 300,
                                                         "pattern": "\\S"
                                                       }
                                                     },
@@ -18952,6 +19682,9 @@
                 "request_change",
                 "answer_question",
                 "create_reminder",
+                "update_reminder",
+                "delete_reminder",
+                "set_time_zone",
                 "record_review",
                 "check_domain",
                 "connect_domain",
@@ -19395,6 +20128,93 @@
                           "type": "string",
                           "minLength": 1,
                           "maxLength": 200,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": [
+                        "text"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "business.prices"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 400,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": [
+                        "text"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "business.enquiries"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": [
+                        "text"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "owner.priorities"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300,
                           "pattern": "\\S"
                         }
                       },
@@ -20292,6 +21112,9 @@
                     "request_change",
                     "answer_question",
                     "create_reminder",
+                    "update_reminder",
+                    "delete_reminder",
+                    "set_time_zone",
                     "record_review",
                     "check_domain",
                     "connect_domain",
@@ -20373,6 +21196,16 @@
                 "maximum": 9007199254740991
               },
               "output_tokens": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "cache_write_tokens": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "reasoning_tokens": {
                 "type": "integer",
                 "minimum": 0,
                 "maximum": 9007199254740991
@@ -20796,6 +21629,9 @@
                         "business.proof",
                         "business.disclaimer",
                         "service_area.text",
+                        "business.prices",
+                        "business.enquiries",
+                        "owner.priorities",
                         "assistant.name",
                         "assistant.pronouns",
                         "assistant.avatar",
@@ -21349,6 +22185,68 @@
                       ]
                     }
                   },
+                  "reminders": {
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "reminder_id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "title": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "pattern": "\\S"
+                        },
+                        "due": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "maxLength": 40
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "reminder_id",
+                        "title",
+                        "due"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "waiting": {
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "title": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120,
+                          "pattern": "\\S"
+                        },
+                        "since": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                        }
+                      },
+                      "required": [
+                        "title",
+                        "since"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
                   "expected_seconds": {
                     "type": "object",
                     "properties": {
@@ -21857,6 +22755,93 @@
                                   "type": "string",
                                   "minLength": 1,
                                   "maxLength": 200,
+                                  "pattern": "\\S"
+                                }
+                              },
+                              "required": [
+                                "text"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "key",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string",
+                              "const": "business.prices"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "text": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 400,
+                                  "pattern": "\\S"
+                                }
+                              },
+                              "required": [
+                                "text"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "key",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string",
+                              "const": "business.enquiries"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "text": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 300,
+                                  "pattern": "\\S"
+                                }
+                              },
+                              "required": [
+                                "text"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "key",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string",
+                              "const": "owner.priorities"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "text": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 300,
                                   "pattern": "\\S"
                                 }
                               },
@@ -25256,6 +26241,11 @@
                         "type": "string",
                         "const": "created"
                       },
+                      "reminder_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
                       "due_at": {
                         "anyOf": [
                           {
@@ -25267,11 +26257,350 @@
                             "type": "null"
                           }
                         ]
+                      },
+                      "time_zone": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "pattern": "^[A-Za-z][A-Za-z0-9_+/-]{0,63}$"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "replaced": {
+                        "type": "boolean"
                       }
                     },
                     "required": [
                       "outcome",
                       "due_at"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "const": "refused"
+                      },
+                      "error": {
+                        "type": "object",
+                        "properties": {
+                          "class": {
+                            "type": "string",
+                            "enum": [
+                              "validation",
+                              "permission",
+                              "transient",
+                              "resource",
+                              "provider",
+                              "integrity",
+                              "security",
+                              "budgetary"
+                            ]
+                          },
+                          "code": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+                          },
+                          "message": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500
+                          }
+                        },
+                        "required": [
+                          "class",
+                          "code",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "outcome",
+                      "error"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "required": [
+              "turn_id",
+              "tool_call_id",
+              "tool",
+              "output"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "turn_id": {
+                "type": "string",
+                "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+              },
+              "tool_call_id": {
+                "type": "string",
+                "pattern": "^[\\x21-\\x7E]{1,128}$"
+              },
+              "tool": {
+                "type": "string",
+                "const": "update_reminder"
+              },
+              "output": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "const": "updated"
+                      },
+                      "reminder_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "title": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "pattern": "\\S"
+                      },
+                      "due_at": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "time_zone": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "pattern": "^[A-Za-z][A-Za-z0-9_+/-]{0,63}$"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "outcome",
+                      "reminder_id",
+                      "title",
+                      "due_at",
+                      "time_zone"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "const": "refused"
+                      },
+                      "error": {
+                        "type": "object",
+                        "properties": {
+                          "class": {
+                            "type": "string",
+                            "enum": [
+                              "validation",
+                              "permission",
+                              "transient",
+                              "resource",
+                              "provider",
+                              "integrity",
+                              "security",
+                              "budgetary"
+                            ]
+                          },
+                          "code": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+                          },
+                          "message": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500
+                          }
+                        },
+                        "required": [
+                          "class",
+                          "code",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "outcome",
+                      "error"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "required": [
+              "turn_id",
+              "tool_call_id",
+              "tool",
+              "output"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "turn_id": {
+                "type": "string",
+                "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+              },
+              "tool_call_id": {
+                "type": "string",
+                "pattern": "^[\\x21-\\x7E]{1,128}$"
+              },
+              "tool": {
+                "type": "string",
+                "const": "delete_reminder"
+              },
+              "output": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "const": "deleted"
+                      },
+                      "reminder_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "title": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "pattern": "\\S"
+                      }
+                    },
+                    "required": [
+                      "outcome",
+                      "reminder_id",
+                      "title"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "const": "refused"
+                      },
+                      "error": {
+                        "type": "object",
+                        "properties": {
+                          "class": {
+                            "type": "string",
+                            "enum": [
+                              "validation",
+                              "permission",
+                              "transient",
+                              "resource",
+                              "provider",
+                              "integrity",
+                              "security",
+                              "budgetary"
+                            ]
+                          },
+                          "code": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+                          },
+                          "message": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500
+                          }
+                        },
+                        "required": [
+                          "class",
+                          "code",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "outcome",
+                      "error"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "required": [
+              "turn_id",
+              "tool_call_id",
+              "tool",
+              "output"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "turn_id": {
+                "type": "string",
+                "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+              },
+              "tool_call_id": {
+                "type": "string",
+                "pattern": "^[\\x21-\\x7E]{1,128}$"
+              },
+              "tool": {
+                "type": "string",
+                "const": "set_time_zone"
+              },
+              "output": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "const": "set"
+                      },
+                      "time_zone": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z][A-Za-z0-9_+/-]{0,63}$"
+                      },
+                      "now": {
+                        "type": "string",
+                        "maxLength": 40
+                      }
+                    },
+                    "required": [
+                      "outcome",
+                      "time_zone",
+                      "now"
                     ],
                     "additionalProperties": false
                   },
@@ -27692,6 +29021,16 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 9007199254740991
+                  },
+                  "cache_write_tokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "reasoning_tokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
                   }
                 },
                 "required": [
@@ -27716,6 +29055,9 @@
                     "request_change",
                     "answer_question",
                     "create_reminder",
+                    "update_reminder",
+                    "delete_reminder",
+                    "set_time_zone",
                     "record_review",
                     "check_domain",
                     "connect_domain",
@@ -27802,6 +29144,16 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 9007199254740991
+                  },
+                  "cache_write_tokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "reasoning_tokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
                   }
                 },
                 "required": [
@@ -27826,6 +29178,9 @@
                     "request_change",
                     "answer_question",
                     "create_reminder",
+                    "update_reminder",
+                    "delete_reminder",
+                    "set_time_zone",
                     "record_review",
                     "check_domain",
                     "connect_domain",
@@ -27905,6 +29260,16 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 9007199254740991
+                  },
+                  "cache_write_tokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "reasoning_tokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
                   }
                 },
                 "required": [
@@ -27929,6 +29294,9 @@
                     "request_change",
                     "answer_question",
                     "create_reminder",
+                    "update_reminder",
+                    "delete_reminder",
+                    "set_time_zone",
                     "record_review",
                     "check_domain",
                     "connect_domain",
@@ -28007,6 +29375,16 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 9007199254740991
+                  },
+                  "cache_write_tokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "reasoning_tokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
                   }
                 },
                 "required": [
@@ -28031,6 +29409,9 @@
                     "request_change",
                     "answer_question",
                     "create_reminder",
+                    "update_reminder",
+                    "delete_reminder",
+                    "set_time_zone",
                     "record_review",
                     "check_domain",
                     "connect_domain",
@@ -28109,6 +29490,16 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 9007199254740991
+                  },
+                  "cache_write_tokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "reasoning_tokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
                   }
                 },
                 "required": [
@@ -28133,6 +29524,9 @@
                     "request_change",
                     "answer_question",
                     "create_reminder",
+                    "update_reminder",
+                    "delete_reminder",
+                    "set_time_zone",
                     "record_review",
                     "check_domain",
                     "connect_domain",
@@ -28589,6 +29983,9 @@
                 "business.proof",
                 "business.disclaimer",
                 "service_area.text",
+                "business.prices",
+                "business.enquiries",
+                "owner.priorities",
                 "assistant.name",
                 "assistant.pronouns",
                 "assistant.avatar",
@@ -29142,6 +30539,68 @@
               ]
             }
           },
+          "reminders": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "reminder_id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "title": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "pattern": "\\S"
+                },
+                "due": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 40
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "reminder_id",
+                "title",
+                "due"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "waiting": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120,
+                  "pattern": "\\S"
+                },
+                "since": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                }
+              },
+              "required": [
+                "title",
+                "since"
+              ],
+              "additionalProperties": false
+            }
+          },
           "expected_seconds": {
             "type": "object",
             "properties": {
@@ -29235,6 +30694,40 @@
         ],
         "additionalProperties": false
       },
+      "CreateReminderInput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S"
+          },
+          "due_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "time_zone": {
+            "description": "The IANA zone the owner gave the time in, such as \"Europe/London\" for \"8am UK time\". Omit it when they named no zone.",
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_+/-]{0,63}$"
+          }
+        },
+        "required": [
+          "title",
+          "due_at"
+        ],
+        "additionalProperties": false
+      },
       "CreateReminderOutput": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "oneOf": [
@@ -29244,6 +30737,11 @@
               "outcome": {
                 "type": "string",
                 "const": "created"
+              },
+              "reminder_id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
               },
               "due_at": {
                 "anyOf": [
@@ -29256,6 +30754,20 @@
                     "type": "null"
                   }
                 ]
+              },
+              "time_zone": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[A-Za-z][A-Za-z0-9_+/-]{0,63}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "replaced": {
+                "type": "boolean"
               }
             },
             "required": [
@@ -29364,6 +30876,99 @@
           "revision_id"
         ],
         "additionalProperties": false
+      },
+      "DeleteReminderInput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "reminder_id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "reminder_id"
+        ],
+        "additionalProperties": false
+      },
+      "DeleteReminderOutput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "deleted"
+              },
+              "reminder_id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "\\S"
+              }
+            },
+            "required": [
+              "outcome",
+              "reminder_id",
+              "title"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "refused"
+              },
+              "error": {
+                "type": "object",
+                "properties": {
+                  "class": {
+                    "type": "string",
+                    "enum": [
+                      "validation",
+                      "permission",
+                      "transient",
+                      "resource",
+                      "provider",
+                      "integrity",
+                      "security",
+                      "budgetary"
+                    ]
+                  },
+                  "code": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+                  },
+                  "message": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "class",
+                  "code",
+                  "message"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "outcome",
+              "error"
+            ],
+            "additionalProperties": false
+          }
+        ]
       },
       "Delivery": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -29639,6 +31244,9 @@
                     "business.proof",
                     "business.disclaimer",
                     "service_area.text",
+                    "business.prices",
+                    "business.enquiries",
+                    "owner.priorities",
                     "assistant.name",
                     "assistant.pronouns",
                     "assistant.avatar",
@@ -31871,6 +33479,93 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 200,
+                    "pattern": "\\S"
+                  }
+                },
+                "required": [
+                  "text"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "key",
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "const": "business.prices"
+              },
+              "value": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 400,
+                    "pattern": "\\S"
+                  }
+                },
+                "required": [
+                  "text"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "key",
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "const": "business.enquiries"
+              },
+              "value": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300,
+                    "pattern": "\\S"
+                  }
+                },
+                "required": [
+                  "text"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "key",
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "const": "owner.priorities"
+              },
+              "value": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300,
                     "pattern": "\\S"
                   }
                 },
@@ -35033,6 +36728,9 @@
                       "business.proof",
                       "business.disclaimer",
                       "service_area.text",
+                      "business.prices",
+                      "business.enquiries",
+                      "owner.priorities",
                       "assistant.name",
                       "assistant.pronouns",
                       "assistant.tone",
@@ -35115,6 +36813,9 @@
                       "business.proof",
                       "business.disclaimer",
                       "service_area.text",
+                      "business.prices",
+                      "business.enquiries",
+                      "owner.priorities",
                       "assistant.name",
                       "assistant.pronouns",
                       "assistant.tone",
@@ -35165,7 +36866,7 @@
             ]
           },
           "facts": {
-            "maxItems": 23,
+            "maxItems": 26,
             "type": "array",
             "items": {
               "type": "string",
@@ -35183,6 +36884,9 @@
                 "business.proof",
                 "business.disclaimer",
                 "service_area.text",
+                "business.prices",
+                "business.enquiries",
+                "owner.priorities",
                 "assistant.name",
                 "assistant.pronouns",
                 "assistant.tone",
@@ -40186,6 +41890,9 @@
                                     "business.proof",
                                     "business.disclaimer",
                                     "service_area.text",
+                                    "business.prices",
+                                    "business.enquiries",
+                                    "owner.priorities",
                                     "assistant.name",
                                     "owner.preferred_name"
                                   ]
@@ -40383,6 +42090,9 @@
                                     "business.proof",
                                     "business.disclaimer",
                                     "service_area.text",
+                                    "business.prices",
+                                    "business.enquiries",
+                                    "owner.priorities",
                                     "assistant.name",
                                     "owner.preferred_name"
                                   ]
@@ -40545,7 +42255,7 @@
         "properties": {
           "facts": {
             "minItems": 1,
-            "maxItems": 28,
+            "maxItems": 31,
             "type": "array",
             "items": {
               "oneOf": [
@@ -40948,6 +42658,93 @@
                           "type": "string",
                           "minLength": 1,
                           "maxLength": 200,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": [
+                        "text"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "business.prices"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 400,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": [
+                        "text"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "business.enquiries"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": [
+                        "text"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "const": "owner.priorities"
+                    },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300,
                           "pattern": "\\S"
                         }
                       },
@@ -41733,6 +43530,96 @@
         ],
         "additionalProperties": false
       },
+      "SetTimeZoneInput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "time_zone": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_+/-]{0,63}$",
+            "description": "The IANA zone, such as \"Europe/London\" for the UK."
+          }
+        },
+        "required": [
+          "time_zone"
+        ],
+        "additionalProperties": false
+      },
+      "SetTimeZoneOutput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "set"
+              },
+              "time_zone": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_+/-]{0,63}$"
+              },
+              "now": {
+                "type": "string",
+                "maxLength": 40
+              }
+            },
+            "required": [
+              "outcome",
+              "time_zone",
+              "now"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "refused"
+              },
+              "error": {
+                "type": "object",
+                "properties": {
+                  "class": {
+                    "type": "string",
+                    "enum": [
+                      "validation",
+                      "permission",
+                      "transient",
+                      "resource",
+                      "provider",
+                      "integrity",
+                      "security",
+                      "budgetary"
+                    ]
+                  },
+                  "code": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+                  },
+                  "message": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "class",
+                  "code",
+                  "message"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "outcome",
+              "error"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
       "SetTimeZoneRequest": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -42311,6 +44198,147 @@
           "type"
         ],
         "additionalProperties": false
+      },
+      "UpdateReminderInput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "reminder_id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S"
+          },
+          "due_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "time_zone": {
+            "description": "The IANA zone the owner gave the time in, such as \"Europe/London\" for \"8am UK time\". Omit it when they named no zone.",
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_+/-]{0,63}$"
+          }
+        },
+        "required": [
+          "reminder_id"
+        ],
+        "additionalProperties": false
+      },
+      "UpdateReminderOutput": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "updated"
+              },
+              "reminder_id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "\\S"
+              },
+              "due_at": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "time_zone": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[A-Za-z][A-Za-z0-9_+/-]{0,63}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "outcome",
+              "reminder_id",
+              "title",
+              "due_at",
+              "time_zone"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "refused"
+              },
+              "error": {
+                "type": "object",
+                "properties": {
+                  "class": {
+                    "type": "string",
+                    "enum": [
+                      "validation",
+                      "permission",
+                      "transient",
+                      "resource",
+                      "provider",
+                      "integrity",
+                      "security",
+                      "budgetary"
+                    ]
+                  },
+                  "code": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+                  },
+                  "message": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "class",
+                  "code",
+                  "message"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "outcome",
+              "error"
+            ],
+            "additionalProperties": false
+          }
+        ]
       },
       "UploadedAssets": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -45487,6 +47515,9 @@
                 "business.proof",
                 "business.disclaimer",
                 "service_area.text",
+                "business.prices",
+                "business.enquiries",
+                "owner.priorities",
                 "assistant.name",
                 "assistant.pronouns",
                 "assistant.avatar",
@@ -45732,6 +47763,9 @@
                               "business.proof",
                               "business.disclaimer",
                               "service_area.text",
+                              "business.prices",
+                              "business.enquiries",
+                              "owner.priorities",
                               "assistant.name",
                               "assistant.pronouns",
                               "assistant.avatar",
@@ -47021,6 +49055,17 @@
               "done"
             ],
             "additionalProperties": false
+          },
+          "time_zone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_+/-]{0,63}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [

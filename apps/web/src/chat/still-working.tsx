@@ -11,9 +11,8 @@ export function StillWorking() {
   return (
     <StatusLine
       delay={0}
-      kind="still"
       label={resumingLine({
-        orgId: "",
+        seed: "",
         assistant: live.workspace?.assistantName ?? null,
       })}
     />

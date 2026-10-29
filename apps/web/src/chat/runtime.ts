@@ -66,6 +66,7 @@ export function useConversationRuntime({
   onIntentSent,
   tail,
   refresh,
+  retry,
 }: {
   onFinish: () => void
   /** Reads the panel's workspace now: a turn has written facts it shows. */
@@ -84,6 +85,8 @@ export function useConversationRuntime({
    * page calls `moved` when the tail does.
    */
   tail?: { current: string | null; moved?: () => void }
+  /** Sends the failed turn's message again, set while one can be. */
+  retry?: { current: (() => void) | null }
 }) {
   const aui = useAui()
   const id = useAuiState((s) => s.threadListItem.id)
@@ -166,9 +169,11 @@ export function useConversationRuntime({
   })
   // The owner's message carries the time it was sent, as a stored row does:
   // without it the thread shows the converter's clock, which moves on every
-  // render. The api writes the same on its own new messages.
-  const send: typeof chat.sendMessage = (message, options) =>
-    chat.sendMessage(
+  // render. The api writes the same on its own new messages. A new turn
+  // starts with no status, so the last turn's line never shows in it.
+  const send: typeof chat.sendMessage = (message, options) => {
+    clearOnboardingStatus()
+    return chat.sendMessage(
       message && {
         ...message,
         metadata: {
@@ -178,6 +183,7 @@ export function useConversationRuntime({
       },
       options
     )
+  }
   // The open thread's stored rows, or null when it is not stored yet.
   const storedRows = () => {
     const remoteId = aui.threadListItem.getState().remoteId
@@ -199,8 +205,38 @@ export function useConversationRuntime({
     void read
       .then((rows) => {
         const stored = rows.map(toUIMessage)
-        chat.setMessages(stored)
-        if (!stored.some((m) => m.id === last?.id)) giveBack()
+        // A refusal (a 4xx) wants something changed, or a wait: the words
+        // go back to the composer. A failure on the way can be sent again.
+        const { status } = error as { status?: number }
+        const again = status === undefined || status >= 500
+        if (!again || !typed || !last || stored.some((m) => m.id === last.id)) {
+          chat.setMessages(stored)
+          if (!stored.some((m) => m.id === last?.id)) giveBack()
+          return
+        }
+        // Nothing of the turn was stored: the owner's message stays, the
+        // error under it in a reply of its own, and Retry sends it again.
+        chat.setMessages([
+          ...stored,
+          last,
+          {
+            id: `failed:${last.id}`,
+            role: "assistant",
+            parts: [],
+            metadata: { custom: { retry: true } },
+          },
+        ])
+        if (retry) {
+          retry.current = () => {
+            retry.current = null
+            chat.setMessages(stored)
+            // As a typed send goes: what it overtakes is cancelled.
+            runtime.thread.append({
+              role: "user",
+              content: [{ type: "text", text: textOf(last) }],
+            })
+          }
+        }
       })
       // Offline the rows cannot be read either; the words still go back.
       .catch(giveBack)

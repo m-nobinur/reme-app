@@ -247,7 +247,7 @@ test.describe("in London in summer time", () => {
   }) => {
     await open(page, "Thread")
     const meta = page.locator('[data-slot="aui_user-message-meta"]').first()
-    await expect(meta.locator("time")).toHaveText("10:30 am")
+    await expect(meta.locator("time")).toHaveText("10:30 AM")
     // Answered, so seen.
     await expect(meta).toContainText("Seen")
     // Under the bubble, not inside it, and flush with its right edge.
@@ -265,7 +265,7 @@ test.describe("in London in summer time", () => {
     }
     await expect(
       page.locator('[data-slot="aui_assistant-message-footer"] time').first()
-    ).toHaveText("10:31 am")
+    ).toHaveText("10:31 AM")
   })
 })
 

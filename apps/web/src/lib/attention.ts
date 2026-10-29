@@ -16,6 +16,7 @@ export const EMPTY_WORKSPACE: Workspace = {
   activity: null,
   derivedReminders: [],
   reminderNotes: [],
+  timeZone: null,
   etag: null,
 }
 

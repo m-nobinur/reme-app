@@ -85,7 +85,7 @@ function PalettePicture({
           className="flex flex-col gap-2 rounded-xl border border-border bg-card p-3"
           role="status"
         >
-          <Skeleton className="h-9 rounded-xl" />
+          <PendingSwatches />
           <span className="text-muted-foreground text-sm">
             Reading the colours
           </span>
@@ -233,7 +233,7 @@ function LogoPalettes({
         <div className="grid grid-cols-1 gap-3 min-[380px]:grid-cols-2">
           {Array.from({ length: LOGO_SHOWN }, (_, at) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: placeholders with no identity
-            <Skeleton className="h-10 rounded-xl" key={at} />
+            <PendingSwatches key={at} />
           ))}
         </div>
         <span className="text-muted-foreground text-sm">
@@ -289,6 +289,23 @@ function LogoPalettes({
       </div>
       {others.length > 0 ? <Surprise onClick={surprise} /> : null}
     </>
+  )
+}
+
+/** A palette still being read, in the shape it lands in: a tile of four bands. */
+function PendingSwatches() {
+  return (
+    <span
+      aria-hidden
+      className="flex h-10 w-full overflow-hidden rounded-xl border border-border"
+    >
+      {[0, 1, 2, 3].map((band) => (
+        <Skeleton
+          className={cn("h-full flex-1 rounded-none", band % 2 && "opacity-60")}
+          key={band}
+        />
+      ))}
+    </span>
   )
 }
 

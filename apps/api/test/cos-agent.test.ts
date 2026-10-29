@@ -4,9 +4,11 @@ import {
   ChangeKind,
   ChatRequest,
   COS_TOOLS,
+  type CosToolName,
   CosToolResult,
   CosTurn,
   CreateReminderRequest,
+  type FactRecord,
   ONBOARDING_STATUS,
   type OnboardingStatus,
   TOOL_CALL_CANCELLED,
@@ -38,7 +40,10 @@ import models from "@workspace/facade/models/openrouter.models.json" with {
   type: "json",
 }
 import {
+  asSchema,
+  type FlexibleSchema,
   type InferAgentUIMessage,
+  type LanguageModel,
   readUIMessageStream,
   type UIMessage,
   type UIMessageChunk,
@@ -58,20 +63,21 @@ import {
 import type { z } from "zod"
 import { type ChatDeps, chat, NO_ANSWER } from "../src/chat.ts"
 import {
+  type AgentTurn,
   APPROVAL_TTL_MS,
   activeTools,
   binds,
   type CosAgent,
-  changeRepeated,
-  cleanedChange,
+  callRepeated,
   contextOf,
+  cosAgent,
   cosPrefix,
   costOf,
   DEFAULT_MODEL,
   DESCRIPTIONS,
   GOOGLE_FIRST_LINE,
+  GOOGLE_NOW_LINE,
   INSTRUCTIONS,
-  knownZone,
   LIMITS,
   messageTaint,
   NotRun,
@@ -80,16 +86,16 @@ import {
   priceOf,
   ROUTES,
   redacted,
-  repairedChange,
+  repairedCall,
   reservation,
   routeOf,
   SITE_CHANGE_LINE,
   stepCost,
   toolErrorText,
-  withoutStep,
 } from "../src/cos/agent.ts"
 import { sha256 } from "../src/cos/history.ts"
 import { retrying } from "../src/cos/retry.ts"
+import { knownZone, wallToUtc } from "../src/cos/time.ts"
 import { ToolFailed } from "../src/cos/tools.ts"
 import { DAILY_CAP_USD as CAP, GRACE_MS, withinCap } from "../src/cos/turns.ts"
 import kinds from "./cos-change-kinds.json" with { type: "json" }
@@ -342,59 +348,74 @@ describe("the CoS's instructions", () => {
   })
 })
 
-describe("a tool's step line", () => {
-  it("is offered on every tool, with request_change's in its own words", async () => {
-    const { tools } = await cosPrefix()
-    const step = (name: string) => {
-      const found = tools.find((t) => t.name === name)
-      const properties = found?.input_schema.properties as
-        | Record<string, { description?: string } | undefined>
-        | undefined
-      return properties?.step?.description
+describe("a tool's schema", () => {
+  it("asks no tool for a step line, which comes from the web's own copy", async () => {
+    const { tools, instructions } = await cosPrefix()
+    for (const { name, input_schema } of tools) {
+      expect(
+        Object.keys((input_schema.properties ?? {}) as object),
+        name
+      ).not.toContain("step")
     }
-    for (const name of [
-      "get_workspace",
-      "get_facts",
-      "get_preview",
-      "check_domain",
-    ]) {
-      expect(step(name)).toContain("in your own voice")
-    }
-    expect(step("request_change")).toContain("owner's language")
-    // The model sends a step to any tool, so every tool takes one.
-    expect(step("find_domain")).toContain("in your own voice")
-    expect(step("create_reminder")).toContain("in your own voice")
+    expect(instructions).not.toMatch(/takes an optional step/)
+    const change = tools.find((t) => t.name === "request_change")
+    // The panel's alone: it posts the owner's words in a conversation.
+    expect(Object.keys(change?.input_schema.properties ?? {})).not.toContain(
+      "chat"
+    )
   })
 
-  it("is cleaned before the call is logged, and kept from the tool", () => {
+  it("sends each schema lean, as the prefix logs it, and Zod still checks the call", async () => {
+    const { tools: logged } = await cosPrefix()
+    const sent = cosAgent({} as AgentTurn, {} as LanguageModel, "act")
+      .tools as Record<CosToolName, { inputSchema: FlexibleSchema<unknown> }>
+    for (const { name, input_schema } of logged) {
+      const schema = asSchema(sent[name as CosToolName].inputSchema)
+      expect(await schema.jsonSchema, name).toEqual(input_schema)
+    }
+    const text = JSON.stringify(logged)
+    expect(text).not.toContain("$schema")
+    expect(text).not.toContain('"pattern":"\\\\S"')
+    const update = logged.find((t) => t.name === "update_reminder")
+      ?.input_schema.properties as Record<string, unknown> | undefined
+    expect(update?.reminder_id).toEqual({ type: "string", format: "uuid" })
+    const create = logged.find((t) => t.name === "create_reminder")
+      ?.input_schema.properties as Record<string, unknown> | undefined
+    expect(JSON.stringify(create?.due_at)).toContain(`"pattern"`)
+    const check = asSchema(sent.update_reminder.inputSchema).validate
+    expect(await check?.({ reminder_id: "not-a-ref" })).toMatchObject({
+      success: false,
+    })
     expect(
-      cleanedChange({ name: "x.co.uk", step: "  Checking \u2014 your domain " })
-    ).toEqual({ name: "x.co.uk", step: "Checking, your domain" })
-    expect(cleanedChange({ step: "Calling get_facts" })).toEqual({})
-    expect(
-      withoutStep({ name: "x.co.uk", step: "Checking your domain" })
-    ).toEqual({ name: "x.co.uk" })
+      await check?.({ reminder_id: crypto.randomUUID(), title: " " })
+    ).toMatchObject({ success: false })
   })
 })
 
-describe("a change asked twice in one turn", () => {
-  const result = (text: string, outcome: string) => ({
-    toolName: "request_change",
+describe("a call made twice in one turn", () => {
+  const result = (
+    text: string,
+    outcome: string,
+    toolName = "request_change"
+  ) => ({
+    toolName,
     input: { text },
     output: { outcome },
   })
   const steps = (...each: ReturnType<typeof result>[]) =>
     each.map((r) => ({ toolResults: [r] }))
 
-  it("lets the next step only write once the same change started twice", () => {
+  it("lets the next step only write once the same call ran twice, for any tool", () => {
     const once = result("Change the label", "started")
-    expect(changeRepeated(steps(once))).toBe(false)
-    expect(changeRepeated(steps(once, once))).toBe(true)
+    expect(callRepeated(steps(once))).toBe(false)
+    expect(callRepeated(steps(once, once))).toBe(true)
+    const reminder = result("Order brake pads", "created", "create_reminder")
+    expect(callRepeated(steps(reminder, reminder))).toBe(true)
   })
 
   it("keeps the tools for a second change and for a fix after a refusal", () => {
     expect(
-      changeRepeated(
+      callRepeated(
         steps(
           result("Change the label", "started"),
           result("Add our hours", "started")
@@ -402,7 +423,7 @@ describe("a change asked twice in one turn", () => {
       )
     ).toBe(false)
     expect(
-      changeRepeated(
+      callRepeated(
         steps(
           result("Change the label", "refused"),
           result("Change the label", "started")
@@ -412,32 +433,35 @@ describe("a change asked twice in one turn", () => {
   })
 })
 
-describe("a change refused by its schema", () => {
+describe("a call refused by its schema", () => {
   const call = (input: unknown, toolName = "request_change") => ({
     toolName,
     input: JSON.stringify(input),
   })
 
-  it("drops only a spare field that failed, so the change starts on this call", () => {
-    const repaired = repairedChange(
+  it("drops a spare field that failed, any step and the panel's chat, so the call runs now", () => {
+    const repaired = repairedCall(
       call({
         text: "Make the hero title more professional",
         label: "the main heading at the very top of your home page",
         step: "Rewriting the hero title",
+        chat: { conversation_id: crypto.randomUUID() },
       })
     )
     expect(JSON.parse(repaired?.input ?? "{}")).toEqual({
       text: "Make the hero title more professional",
-      step: "Rewriting the hero title",
     })
+    const read = repairedCall(
+      call({ name: "x.co.uk", step: "Checking your domain" }, "check_domain")
+    )
+    expect(JSON.parse(read?.input ?? "{}")).toEqual({ name: "x.co.uk" })
   })
 
-  it("leaves any other failure, and any other tool, to the model", () => {
-    expect(repairedChange(call({ label: "your hero title" }))).toBeNull()
-    expect(repairedChange(call({ text: "x" }, "create_reminder"))).toBeNull()
-    expect(
-      repairedChange({ toolName: "request_change", input: "{" })
-    ).toBeNull()
+  it("leaves any other failure, and an unknown tool, to the model", () => {
+    expect(repairedCall(call({ label: "your hero title" }))).toBeNull()
+    expect(repairedCall(call({ text: "x" }, "create_reminder"))).toBeNull()
+    expect(repairedCall(call({}, "no_such_tool"))).toBeNull()
+    expect(repairedCall({ toolName: "request_change", input: "{" })).toBeNull()
   })
 })
 
@@ -608,6 +632,7 @@ describe("the CoS's model and price", () => {
     const tokens = {
       inputTokens: 1_000_000,
       inputTokenDetails: { cacheReadTokens: 0 },
+      outputTokenDetails: {},
       outputTokens: 0,
     } as Parameters<typeof stepCost>[1]["usage"]
     const billed = (cost: unknown) => ({ openrouter: { usage: { cost } } })
@@ -713,6 +738,31 @@ describe("the CoS's model and price", () => {
     expect(contextOf("act", EMPTY).text).not.toContain("persona")
   })
 
+  it("carries the owner's prices whole for a quote, and cuts other long facts", () => {
+    const prices =
+      "Regular clean from 60, deep clean 180 for a three bed, end of tenancy 250 to 400 by size, oven 70, windows inside 40, carpets 30 a room, ironing 20 an hour, fridge 25, blinds 15 a window"
+    const long = "x".repeat(200)
+    const held = [
+      { key: "business.prices", value: { text: prices } },
+      { key: "business.disclaimer", value: { text: long } },
+    ] as unknown as FactRecord[]
+    const { text } = contextOf(
+      "act",
+      EMPTY,
+      null,
+      new Date(),
+      undefined,
+      undefined,
+      false,
+      null,
+      held
+    )
+    expect(prices.length).toBeGreaterThan(160)
+    expect(text).toContain(`business.prices: ${prices}\n`)
+    expect(text).toContain(`business.disclaimer: ${"x".repeat(160)}… (cut)`)
+    expect(INSTRUCTIONS).toMatch(/business\.prices in the facts[^\n]*quote/)
+  })
+
   it("names no business kind and no assistant in the cached instructions", () => {
     expect(INSTRUCTIONS).not.toMatch(/Maya|cleaning/i)
     expect(INSTRUCTIONS).toMatch(
@@ -729,8 +779,8 @@ describe("the CoS's model and price", () => {
     expect(lines("ask", "site_change")).not.toContain(SITE_CHANGE_LINE)
   })
 
-  it("tells the model why Google waits only on the turn Jev read the owner asking for it", () => {
-    const lines = (googleFirst: boolean) =>
+  it("tells the model about Google only on the turn Jev read the owner asking for it", () => {
+    const lines = (google: "first" | "now" | null) =>
       contextOf(
         "act",
         EMPTY,
@@ -738,34 +788,36 @@ describe("the CoS's model and price", () => {
         new Date(),
         undefined,
         undefined,
-        null,
-        googleFirst
+        false,
+        google
       ).text.split("\n")
-    expect(lines(true)[1]).toBe(GOOGLE_FIRST_LINE)
-    expect(lines(false)).not.toContain(GOOGLE_FIRST_LINE)
+    expect(lines("first")[1]).toBe(GOOGLE_FIRST_LINE)
+    expect(lines("now")[1]).toBe(GOOGLE_NOW_LINE)
+    expect(lines(null)).not.toContain(GOOGLE_FIRST_LINE)
+    expect(lines(null)).not.toContain(GOOGLE_NOW_LINE)
   })
 
-  it("tells the model the owner's time at their offset, or UTC and that the zone is not known", () => {
+  it("tells the model the business's weekday and time at its offset, or UTC and that the zone is not known", () => {
     const line = (zone: string | null, at: string) =>
       contextOf("act", EMPTY, zone, new Date(at)).text.split("\n")[1]
     expect(line("Europe/London", "2026-01-15T00:30:00Z")).toBe(
-      "Now: 2026-01-15T00:30:00+00:00 (Europe/London)"
+      "Now: Thursday 2026-01-15T00:30:00+00:00 (Europe/London)"
     )
     expect(line("Europe/London", "2026-07-15T12:00:00.500Z")).toBe(
-      "Now: 2026-07-15T13:00:00+01:00 (Europe/London)"
+      "Now: Wednesday 2026-07-15T13:00:00+01:00 (Europe/London)"
     )
     expect(line("America/New_York", "2026-07-15T12:00:00Z")).toBe(
-      "Now: 2026-07-15T08:00:00-04:00 (America/New_York)"
+      "Now: Wednesday 2026-07-15T08:00:00-04:00 (America/New_York)"
     )
     expect(line("Asia/Kathmandu", "2026-01-15T12:00:00Z")).toBe(
-      "Now: 2026-01-15T17:45:00+05:45 (Asia/Kathmandu)"
+      "Now: Thursday 2026-01-15T17:45:00+05:45 (Asia/Kathmandu)"
     )
     const utc = line(null, "2026-07-15T12:00:00Z")
     expect(utc).toBe(
-      "Now: 2026-07-15T12:00:00+00:00 (UTC; the owner's time zone is not known)"
+      "Now: Wednesday 2026-07-15T12:00:00+00:00 (UTC; the business's time zone is not known)"
     )
     // The time as written is one a reminder's due_at takes.
-    const written = (utc as string).split(" ")[1]
+    const written = (utc as string).split(" ")[2]
     expect(CreateReminderRequest.shape.due_at.parse(written)).toBe(written)
     expect(knownZone("Europe/London")).toBe(true)
     expect(knownZone("Mars/Olympus_Mons")).toBe(false)
@@ -1003,6 +1055,8 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     faults.dead = false
     faults.hold = null
     faults.held = () => undefined
+    // A browser sets the zone only while the org has none, so each case starts with none.
+    await admin`update orgs set time_zone = null, time_zone_source = null where id = ${me.orgId}`
     await kit.withOrg({ orgId: me.orgId }, (db) =>
       db
         .update(assignments)
@@ -1448,7 +1502,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     ])
   })
 
-  it("asks the owner before a change and an answer that set a phone, and before a reminder", async () => {
+  it("asks the owner before a change and an answer that set a phone, and before a reminder they did not ask for", async () => {
     const s = seed(kit, me)
     const asking = await s.assignment("blocked_on_information")
     const q = question(me, asking)
@@ -1483,7 +1537,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
       {
         ...typed(
           id,
-          "Our phone is 01632 960001, add Saturdays, and remind me to call the supplier."
+          "Our phone is 01632 960001, add Saturdays, and I must call the supplier."
         ),
         time_zone: "Asia/Kathmandu",
       },
@@ -1509,7 +1563,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     expect(stored).toHaveLength(0)
     const log = await logOf(id)
     expect(log.find((e) => e.type === "cos.context")?.payload.text).toMatch(
-      /\nNow: \S+\+05:45 \(Asia\/Kathmandu\)\n/
+      /\nNow: \w+ \S+\+05:45 \(Asia\/Kathmandu\)\n/
     )
     // The step holds the reminder's title, the owner's words.
     expect(log.find((e) => e.type === "cos.step")?.taint.sort()).toEqual([
@@ -1789,7 +1843,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     expect((await turnsOf(id)).at(-1)?.outcome).toBe("error")
   })
 
-  it("logs a provider's mid-stream error once, with its status and without its message", async () => {
+  it("logs a provider's mid-stream error once, with its status and its message scrubbed", async () => {
     // Staging 2026-10-01: get_facts on Azure, then the next step, pinned to
     // Azure by its encrypted reasoning, got OpenRouter's in-stream 429.
     const id = await conversation(me)
@@ -1806,7 +1860,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
               type: "error",
               error: {
                 code: 429,
-                message: "rate-limited upstream, secret detail",
+                message: "rate-limited upstream for owner@example.com",
                 metadata: { error_type: "rate_limit_exceeded" },
               },
             },
@@ -1824,9 +1878,10 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
           error: "AI_StreamProviderError",
           status: 429,
           provider_code: 429,
+          message: expect.stringContaining("rate-limited upstream"),
         },
       ])
-      expect(lines.join()).not.toContain("secret detail")
+      expect(lines.join()).not.toContain("owner@example.com")
     } finally {
       logged.mockRestore()
     }
@@ -1935,7 +1990,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     const id = await conversation(who)
     await turn(
       who,
-      typed(id, "Make three changes and remind me to call the supplier."),
+      typed(id, "Make three changes, and I must call the supplier."),
       {
         model: scripted(
           calls(
@@ -2180,7 +2235,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
   it("stores an approved reminder under the turn's conversation, zone and the CoS, keyed by its approval", async () => {
     const id = await conversation(me)
     const day = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10)
-    await turn(me, typed(id, "Remind me to call the supplier."), {
+    await turn(me, typed(id, "I have to call the supplier tomorrow."), {
       model: scripted(
         calls({
           id: "call_cr",
@@ -2229,7 +2284,9 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     const result = (await logOf(id)).find((e) => e.type === "cos.tool_result")
     expect(result?.payload.output).toEqual({
       outcome: "created",
+      reminder_id: stored[0]?.id,
       due_at: due.toISOString(),
+      time_zone: "Asia/Kathmandu",
     })
     expect(result?.taint).toEqual([])
   })
@@ -2897,7 +2954,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     expect(statuses(writing.chunks)).toEqual([])
   })
 
-  it("logs a read's step cleaned and runs the read without it", async () => {
+  it("runs a read sent with a step copied from an older call, the step dropped", async () => {
     const id = await conversation(me)
     const done = await turn(me, typed(id, "How is my site?", "ask"), {
       model: scripted(
@@ -2913,7 +2970,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     const log = await logOf(id)
     expect(
       JSON.stringify(log.find((e) => e.type === "cos.step")?.payload)
-    ).toContain("Checking where things stand")
+    ).not.toContain("Checking where things stand")
     expect(log.some((e) => e.type === "cos.tool_result")).toBe(true)
     await shownAsStored(me, id, done.chunks)
   })
@@ -3657,6 +3714,230 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     expect(await rowsOf(who, room)).toEqual([])
   }, 15_000)
 
+  describe("reminders, zones and repeated calls", () => {
+    const day = () =>
+      new Date(Date.now() + 2 * 86_400_000).toISOString().slice(0, 10)
+    const remindersIn = (id: string) =>
+      kit.withOrg({ orgId: me.orgId }, (db) =>
+        db.select().from(reminders).where(eq(reminders.conversationId, id))
+      )
+    const zoneOfOrg = async () =>
+      (
+        await admin<
+          { time_zone: string | null; time_zone_source: string | null }[]
+        >`
+          select time_zone, time_zone_source from orgs where id = ${me.orgId}`
+      )[0]
+    const resultsOf = async (id: string, tool: string) =>
+      (await logOf(id)).filter(
+        (e) => e.type === "cos.tool_result" && e.payload.tool === tool
+      )
+
+    it("sets a reminder the owner asked for at once, in the zone they named, and moves it rather than adding a second", async () => {
+      const id = await conversation(me)
+      const first = await turn(
+        me,
+        {
+          ...typed(id, "Remind me to order brake pads at 8am UK time."),
+          time_zone: "Asia/Dhaka",
+        },
+        {
+          model: scripted(
+            calls({
+              id: "call_r1",
+              tool: "create_reminder",
+              input: {
+                title: "Order brake pads",
+                due_at: `${day()}T08:00:00+06:00`,
+                time_zone: "Europe/London",
+              },
+            }),
+            said("Set for 8:00 AM UK time.")
+          ).model,
+        }
+      )
+      expect(first.response.status, first.text).toBe(200)
+      expect(
+        first.chunks.filter((c) => c.type === "tool-approval-request")
+      ).toEqual([])
+      const due = wallToUtc(`${day()}T08:00:00`, "Europe/London")
+      expect(await remindersIn(id)).toMatchObject([
+        { title: "Order brake pads", dueAt: new Date(due) },
+      ])
+      const [made] = await resultsOf(id, "create_reminder")
+      expect(made?.payload.output).toMatchObject({
+        outcome: "created",
+        due_at: due,
+        time_zone: "Europe/London",
+      })
+      // The org's zone is the browser's until someone stronger sets it.
+      expect(await zoneOfOrg()).toEqual({
+        time_zone: "Asia/Dhaka",
+        time_zone_source: "browser",
+      })
+
+      await turn(me, typed(id, "Remind me at 9 instead."), {
+        model: scripted(
+          calls({
+            id: "call_r2",
+            tool: "create_reminder",
+            input: {
+              title: "order brake pads",
+              due_at: `${day()}T09:00:00Z`,
+              time_zone: "Europe/London",
+            },
+          }),
+          said("Moved to 9:00 AM.")
+        ).model,
+      })
+      const later = wallToUtc(`${day()}T09:00:00`, "Europe/London")
+      expect(await remindersIn(id)).toMatchObject([
+        { title: "order brake pads", dueAt: new Date(later) },
+      ])
+      expect(
+        (await resultsOf(id, "create_reminder"))[1]?.payload.output
+      ).toMatchObject({
+        outcome: "created",
+        replaced: true,
+      })
+    })
+
+    it("moves and deletes a reminder by the ref the workspace gives it", async () => {
+      const id = await conversation(me)
+      await turn(me, typed(id, "Remind me to call the supplier."), {
+        model: scripted(
+          calls({
+            id: "call_r1",
+            tool: "create_reminder",
+            input: { title: "Call the supplier", due_at: `${day()}T10:00:00Z` },
+          }),
+          said("Set.")
+        ).model,
+      })
+      const [row] = await remindersIn(id)
+      if (!row) throw new Error("no reminder")
+      const second = scripted(said("You have one reminder."))
+      await turn(me, typed(id, "What reminders do I have?"), {
+        model: second.model,
+      })
+      const context = (await logOf(id))
+        .filter((e) => e.type === "cos.context")
+        .at(-1)?.payload.text as string
+      expect(context).toContain(row.id)
+      expect(context).toContain("Call the supplier")
+
+      await turn(me, typed(id, "Make it 11 and then get rid of it."), {
+        model: scripted(
+          calls({
+            id: "call_u",
+            tool: "update_reminder",
+            input: { reminder_id: row.id, due_at: `${day()}T11:00:00Z` },
+          }),
+          calls({
+            id: "call_d",
+            tool: "delete_reminder",
+            input: { reminder_id: row.id },
+          }),
+          said("Done, it's gone.")
+        ).model,
+      })
+      expect(
+        (await resultsOf(id, "update_reminder"))[0]?.payload.output
+      ).toMatchObject({ outcome: "updated", title: "Call the supplier" })
+      expect(
+        (await resultsOf(id, "delete_reminder"))[0]?.payload.output
+      ).toEqual({
+        outcome: "deleted",
+        reminder_id: row.id,
+        title: "Call the supplier",
+      })
+      expect(await remindersIn(id)).toEqual([])
+    })
+
+    it("sets the business's zone on the owner's word, which the browser no longer moves", async () => {
+      const id = await conversation(me)
+      await turn(
+        me,
+        {
+          ...typed(id, "I'm in Bristol, UK time please."),
+          time_zone: "Asia/Dhaka",
+        },
+        {
+          model: scripted(
+            calls({
+              id: "call_z",
+              tool: "set_time_zone",
+              input: { time_zone: "Europe/London" },
+            }),
+            said("Done, I'm on UK time now.")
+          ).model,
+        }
+      )
+      expect(await zoneOfOrg()).toEqual({
+        time_zone: "Europe/London",
+        time_zone_source: "owner",
+      })
+      expect(
+        (await resultsOf(id, "set_time_zone"))[0]?.payload.output
+      ).toMatchObject({ outcome: "set", time_zone: "Europe/London" })
+      await turn(
+        me,
+        { ...typed(id, "Thanks."), time_zone: "Asia/Dhaka" },
+        { model: scripted(said("Any time.")).model }
+      )
+      expect((await zoneOfOrg())?.time_zone).toBe("Europe/London")
+      const context = (await logOf(id))
+        .filter((e) => e.type === "cos.context")
+        .at(-1)?.payload.text as string
+      expect(context).toMatch(/\nNow: \w+ \S+ \(Europe\/London\)\n/)
+    })
+
+    it("keys the prompt cache on the prefix and the org, so a new conversation shares it", async () => {
+      const keys: unknown[] = []
+      for (const _ of [1, 2]) {
+        const id = await conversation(me)
+        const { model, sent } = scripted(said("Hello."))
+        await turn(me, typed(id, "Hi."), { model })
+        const options = sent[0]?.providerOptions?.openrouter as
+          | { session_id?: unknown; prompt_cache_key?: unknown }
+          | undefined
+        expect(options?.session_id).toBe(options?.prompt_cache_key)
+        expect(options?.session_id).not.toBe(await sha256(id))
+        keys.push(options?.session_id)
+      }
+      expect(keys[0]).toBe(keys[1])
+    })
+
+    it("runs an identical call once, tells the model so, and has the next step only write", async () => {
+      const id = await conversation(me)
+      const { model, sent } = scripted(
+        calls({ id: "call_f1", tool: "get_facts", input: {} }),
+        calls({ id: "call_f2", tool: "get_facts", input: {} }),
+        said("Here are your details.")
+      )
+      await turn(me, typed(id, "What do you know about us?"), { model })
+      expect(await resultsOf(id, "get_facts")).toHaveLength(1)
+      expect(JSON.stringify(sent[2]?.prompt)).toContain("(repeated)")
+      expect(sent[2]?.toolChoice).toEqual({ type: "none" })
+    })
+
+    it("has the last step a turn allows only write, so the turn ends in words", async () => {
+      const id = await conversation(me)
+      const previews = Array.from({ length: 5 }, (_, i) =>
+        calls({
+          id: `call_p${i}`,
+          tool: "get_preview",
+          input: { assignment_id: crypto.randomUUID() },
+        })
+      )
+      const { model, sent } = scripted(...previews, said("No preview yet."))
+      await turn(me, typed(id, "Is there a preview?"), { model })
+      expect(sent).toHaveLength(6)
+      expect(sent[4]?.toolChoice).not.toEqual({ type: "none" })
+      expect(sent[5]?.toolChoice).toEqual({ type: "none" })
+    })
+  })
+
   describe("a typed yes or no over an open card (ADR-042)", () => {
     const tomorrow = () =>
       new Date(Date.now() + 86_400_000).toISOString().slice(0, 10)
@@ -3664,7 +3945,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
     /** A conversation whose tail is a create_reminder card, and that card. */
     const reminderCard = async (who: Owner = me) => {
       const id = await conversation(who)
-      await turn(who, typed(id, "Remind me to call the supplier."), {
+      await turn(who, typed(id, "I need to call the supplier tomorrow."), {
         model: scripted(
           calls({
             id: "call_cr",
@@ -3876,7 +4157,7 @@ describe.skipIf(!url)("a CoS turn, on a live connection", () => {
 
     it("answers only when the tail holds exactly one open card", async () => {
       const id = await conversation(me)
-      await turn(me, typed(id, "Two reminders."), {
+      await turn(me, typed(id, "Two calls to make tomorrow."), {
         model: scripted(
           calls(
             {

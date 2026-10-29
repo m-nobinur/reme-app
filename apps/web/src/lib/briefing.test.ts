@@ -191,10 +191,10 @@ it("names the day and time a review closes, in the browser's time zone", () => {
       NOW
     ).line
   expect(line(at(2, 9))).toBe(
-    "Your website is live. Publish your latest changes by tomorrow at 09:00."
+    "Your website is live. Publish your latest changes by tomorrow at 9:00 AM."
   )
   expect(line(at(1, 15))).toBe(
-    "Your website is live. Publish your latest changes by today at 15:00."
+    "Your website is live. Publish your latest changes by today at 3:00 PM."
   )
 })
 
@@ -221,7 +221,7 @@ it("reads the review's local day even where UTC is on another", () => {
       new Date("2026-10-01T22:30:00.000Z")
     )
     expect(briefing.line).toBe(
-      "Your website is ready to go live. Publish it by tomorrow at 00:30."
+      "Your website is ready to go live. Publish it by tomorrow at 12:30 AM."
     )
   } finally {
     process.env.TZ = zone

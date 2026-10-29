@@ -1,17 +1,15 @@
 import { type ToolCallMessagePartProps, useAuiState } from "@assistant-ui/react"
 import {
-  CheckCircleIcon,
-  ProhibitIcon,
-  SpinnerGapIcon,
-  WarningCircleIcon,
-} from "@phosphor-icons/react"
-import {
   Docked,
   TrayFrame,
   useTraySlot,
 } from "@workspace/ui/components/assistant/question-tray"
-import { StatusLine, ToolStatus } from "@workspace/ui/components/status-line"
-import { toolKind } from "@workspace/ui/lib/activity-copy"
+import {
+  DoneIcon,
+  StateIcon,
+  StatusLine,
+  ToolStatus,
+} from "@workspace/ui/components/status-line"
 import { refusalText } from "@workspace/ui/lib/refusal"
 import {
   BROKEN,
@@ -20,9 +18,10 @@ import {
   heldText,
   isHeld,
   NOT_DONE,
+  supersededBy,
   UNCONFIRMED,
 } from "@workspace/ui/lib/tool-state"
-import { cn } from "@workspace/ui/lib/utils"
+import { cn, META } from "@workspace/ui/lib/utils"
 import { type ReactNode, useId, useState } from "react"
 
 /**
@@ -78,6 +77,19 @@ export function Decision<I, O>({
   const id = useId()
   const held = useAuiState((s) => isHeld(s.message.parts, props.toolCallId))
   const running = useAuiState((s) => s.message.status?.type === "running")
+  const replaced = useAuiState((s) =>
+    supersededBy(s.thread.messages, props.toolName, props.toolCallId)
+  )
+  // A card the owner moved past for a newer one of the same kind leaves no
+  // line of its own; the newer one counts it.
+  if (replaced === "later") return null
+  const earlier = replaced ? (
+    // A span, as it also sits inside the answered line's paragraph.
+    <span className={cn(META, "block")}>
+      {replaced === 1 ? "1 earlier card" : `${replaced} earlier cards`}:{" "}
+      {cancelled.toLowerCase()}
+    </span>
+  ) : null
 
   if (view.state === "drafting") {
     return running ? (
@@ -91,7 +103,6 @@ export function Decision<I, O>({
       <StatusLine
         className="flex px-1 py-1.5 text-sm"
         data-slot={slot}
-        kind={toolKind(props.toolName)}
         label={UNFINISHED}
         state="stopped"
       />
@@ -123,6 +134,7 @@ export function Decision<I, O>({
       >
         {input ? <p>{detail(input)}</p> : null}
         {problem ? <Problem text={problem} /> : null}
+        {earlier}
       </TrayApproval>
     )
   }
@@ -138,6 +150,7 @@ export function Decision<I, O>({
           {heading}
         </h3>
         {done(view.output)}
+        {earlier}
       </section>
     )
   }
@@ -145,11 +158,6 @@ export function Decision<I, O>({
   // Answered: one line in the thread, what was asked and how it ended.
   const sending = view.state === "responding" && view.approved && !held
   const [line, failed] = endLine(view, held, busy, cancelled, refused)
-  const Icon = sending
-    ? SpinnerGapIcon
-    : failed
-      ? WarningCircleIcon
-      : ProhibitIcon
   return (
     <p
       className={cn(
@@ -158,12 +166,17 @@ export function Decision<I, O>({
       )}
       data-slot={slot}
     >
-      <Icon
-        aria-hidden
-        className={cn(
-          "mt-0.5 size-4 shrink-0",
-          sending && "motion-safe:animate-spin"
-        )}
+      <StateIcon
+        className="mt-0.5"
+        state={
+          sending
+            ? "working"
+            : failed
+              ? "failed"
+              : view.state === "responding" && held
+                ? "waiting"
+                : "stopped"
+        }
       />
       <span className="min-w-0 break-words">
         <span className="font-medium text-foreground">{heading}</span>{" "}
@@ -173,6 +186,7 @@ export function Decision<I, O>({
         >
           {line}
         </span>
+        {earlier}
       </span>
     </p>
   )
@@ -250,7 +264,7 @@ export function TrayApproval({
 export function Problem({ text }: { text: string }) {
   return (
     <p className="flex items-start gap-2 text-destructive text-sm">
-      <WarningCircleIcon aria-hidden className="mt-0.5 size-4 shrink-0" />
+      <StateIcon className="mt-0.5" state="failed" />
       {text}
     </p>
   )
@@ -259,7 +273,7 @@ export function Problem({ text }: { text: string }) {
 export function Done({ children }: { children: ReactNode }) {
   return (
     <p className="flex items-center gap-2 text-sm">
-      <CheckCircleIcon aria-hidden className="size-4 shrink-0 text-primary" />
+      <DoneIcon />
       {children}
     </p>
   )

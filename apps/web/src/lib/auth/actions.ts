@@ -1,7 +1,11 @@
 import { env } from "cloudflare:workers"
 import { createServerFn } from "@tanstack/react-start"
-import { getAuthKitContextOrNull } from "@workos/authkit-tanstack-react-start"
+import {
+  getAuthKitContextOrNull,
+  getAuthkit,
+} from "@workos/authkit-tanstack-react-start"
 import { forwardedSession } from "@/lib/api/transport"
+import { codeOf } from "./diagnose"
 import { type AuthFailure, toFailure } from "./failure"
 import { digits, record, secret, text } from "./input"
 import { createOrgForSession } from "./org"
@@ -550,6 +554,39 @@ export const nameBusiness = createServerFn({ method: "POST" })
     await clearOrgIntent().catch(() => undefined)
     return { status: "signed-in", redirectTo: returnTo }
   })
+
+/**
+ * Whether the session still refreshes, asked on load by a page that would
+ * otherwise fail only on submit. A refresh WorkOS refuses (the token named an
+ * organization since deleted, say) ends the session here, so the page can
+ * send the owner to sign in at once. A failure WorkOS did not answer keeps it.
+ */
+export const sessionRefreshes = createServerFn({ method: "POST" }).handler(
+  async (): Promise<boolean> => {
+    const auth = getAuthKitContextOrNull()?.auth()
+    if (!auth?.user) return false
+    const authkit = await getAuthkit()
+    try {
+      const { encryptedSession } = await authkit.refreshSession(
+        {
+          accessToken: auth.accessToken,
+          refreshToken: auth.refreshToken,
+          user: auth.user,
+          impersonator: auth.impersonator,
+        },
+        auth.organizationId
+      )
+      await authkit.saveSession(undefined, encryptedSession)
+      return true
+    } catch (error) {
+      if (codeOf(error) === "none") return true
+      // The kit clears the cookie through the middleware's pending headers;
+      // the response is only what its type asks for.
+      await authkit.clearSession(new Response())
+      return false
+    }
+  }
+)
 
 // --- leaving ----------------------------------------------------------------
 

@@ -14,10 +14,8 @@ import {
   AskUploadOutput,
   type FactValue,
   FactValueKey,
-  PRONOUNS,
   ReviewQuoteFormInput,
   ReviewQuoteFormOutput,
-  TONES,
   TOOL_CALL_CANCELLED,
   toolErrorKind,
 } from "@workspace/contracts"
@@ -43,6 +41,31 @@ const errorOf = (result: unknown): string =>
   result && typeof result === "object" && "error" in result
     ? String((result as { error: unknown }).error)
     : ""
+
+/**
+ * Where a call stands among the thread's calls of the same tool: `later`
+ * when a newer one replaced it, or how many cancelled ones run straight
+ * before it, which its card says in one line instead of one each.
+ */
+export function supersededBy(
+  messages: readonly { content: readonly object[] }[],
+  toolName: string,
+  toolCallId: string
+): number | "later" {
+  const calls = messages.flatMap((message) =>
+    (message.content as CallPart[]).filter(
+      (part) => part.type === "tool-call" && part.toolName === toolName
+    )
+  )
+  const at = calls.findIndex((part) => part.toolCallId === toolCallId)
+  if (at < 0) return 0
+  const cancelled = (part: CallPart | undefined) =>
+    Boolean(part?.isError) && errorOf(part?.result) === TOOL_CALL_CANCELLED
+  if (cancelled(calls[at]) && at < calls.length - 1) return "later"
+  let count = 0
+  while (cancelled(calls[at - count - 1])) count += 1
+  return count
+}
 
 /** A turn's error when the session behind it has ended; the thread offers sign-in. */
 export const SESSION_ENDED =
@@ -313,30 +336,6 @@ export const askOpenView = (part: ToolPartView): AskOpenView =>
   askView(part, AskOpenInput, AskOpenOutput)
 
 /**
- * A UK number as it is written at home: `+447700900123` as `07700 900123`.
- * Any other number stays as it is.
- */
-export function phoneText(e164: string): string {
-  const digits = /^\+44(\d{10})$/.exec(e164)?.[1]
-  if (!digits) return e164
-  const national = `0${digits}`
-  // The grouping packages/starter-site/src/phone.ts uses and tests, so the
-  // card and the site write a number alike. 02x: 3+4+4. 011x, 01x1 and 03,
-  // 05, 08: 4+3+4. Other 01xxx and 07: 5+6.
-  if (national.startsWith("02"))
-    return `${national.slice(0, 3)} ${national.slice(3, 7)} ${national.slice(7)}`
-  return /^0(?:11\d|1\d1|[358])/.test(national)
-    ? `${national.slice(0, 4)} ${national.slice(4, 7)} ${national.slice(7)}`
-    : `${national.slice(0, 5)} ${national.slice(5)}`
-}
-
-/** A preset's label by id; an id no longer offered reads as itself. */
-export const presetLabel = (
-  presets: readonly { id: string; label: string }[],
-  id: string
-) => presets.find((each) => each.id === id)?.label ?? id
-
-/**
  * Details as the owner gave them, in the tray's order and the words it
  * showed: "07700 900123 · hello@example.com" or "Ava · she/her · Friendly".
  * The face is a picture, so it has no words here.
@@ -344,14 +343,7 @@ export const presetLabel = (
 export function detailsText(facts: readonly FactValue[]): string {
   return facts
     .filter((fact) => fact.key !== "assistant.avatar")
-    .map((fact) => {
-      if (fact.key === "business.phone") return phoneText(fact.value.e164)
-      if (fact.key === "assistant.pronouns")
-        return presetLabel(PRONOUNS, fact.value.id)
-      if (fact.key === "assistant.tone")
-        return presetLabel(TONES, fact.value.id)
-      return factText(fact.key, fact.value)
-    })
+    .map((fact) => factText(fact.key, fact.value))
     .join(" · ")
 }
 
@@ -461,9 +453,10 @@ export function designText(
   return picked.length > 0 ? picked.join(" · ") : SKIPPED
 }
 
-/** The fields of a message part `isHeld` reads. */
+/** The fields of a message part `isHeld` and `supersededBy` read. */
 type CallPart = {
   type: string
+  toolName?: string
   toolCallId?: string
   approval?: { approved?: boolean | undefined } | undefined
   result?: unknown

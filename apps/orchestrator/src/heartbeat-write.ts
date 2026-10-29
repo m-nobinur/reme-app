@@ -1,5 +1,5 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider"
-import type { Proactivity } from "@workspace/contracts"
+import { dashesToCommas, type Proactivity } from "@workspace/contracts"
 import { events, failureCode, newUlid, type Tenancy } from "@workspace/db"
 import models from "@workspace/facade/models/openrouter.models.json" with {
   type: "json",
@@ -25,7 +25,7 @@ export type Spent = {
 }
 
 export const GATE = {
-  model: "typesafe/jev-1.13",
+  model: "typesafe/jev-1.14",
   /**
    * "Is any of this worth interrupting the owner for now?", asked as the
    * three reasons it could be; the beat goes on when any is likely. One
@@ -277,15 +277,16 @@ function contactsIn(text: string): string[] {
 }
 
 /**
- * `readReply`, with a message that breaks a limit read as an error, and so
- * is one that carries a link, an email address or a phone number that no
- * fact the item vouches for (`DigestItem.trusted`) holds exactly: text
- * injected into a review or a page can shape the message, never point the
- * owner somewhere.
+ * `readReply`, with a message's dashes made commas as the chat's are, a
+ * message that breaks a limit read as an error, and so is one that carries
+ * a link, an email address or a phone number that no fact the item vouches
+ * for (`DigestItem.trusted`) holds exactly: text injected into a review or
+ * a page can shape the message, never point the owner somewhere.
  */
 export function replyOf(raw: string, items: DigestItem[] = []): Reply {
-  const reply = readReply(raw)
-  if (reply.kind !== "message") return reply
+  const read = readReply(raw)
+  if (read.kind !== "message") return read
+  const reply = { ...read, text: dashesToCommas(read.text) }
   const over = overLimit(reply.text)
   if (over) return { kind: "error", detail: `over_limit:${over}` }
   const allowed = new Set(
@@ -298,13 +299,23 @@ export function replyOf(raw: string, items: DigestItem[] = []): Reply {
     : { kind: "error", detail: "unsourced_contact" }
 }
 
-/** "Monday, 19 October 2026 at 14:00", in `zone` (UTC when null). */
+/**
+ * "Monday, 19 October 2026 at 2:00 PM", in `zone` (UTC when null): the writer
+ * copies the times it reads, so they are in the app's 12-hour form.
+ */
 export const localTime = (at: Date, zone: string | null) =>
   new Intl.DateTimeFormat("en-GB", {
     timeZone: zone ?? "UTC",
-    dateStyle: "full",
-    timeStyle: "short",
-  }).format(at)
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  })
+    .format(at)
+    .replace(/\b(am|pm)\b/, (period) => period.toUpperCase())
 
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/
 

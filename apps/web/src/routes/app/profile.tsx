@@ -13,6 +13,7 @@ import {
   DefinitionList,
 } from "@workspace/ui/components/definition-list"
 import { EmptyState } from "@workspace/ui/components/empty-state"
+import { paletteStops } from "@workspace/ui/lib/blueprint"
 import { factLabel, factText, humanise } from "@workspace/ui/lib/facts"
 import { formatDate } from "@workspace/ui/lib/format"
 import { getBusinessProfile } from "@/lib/api/server"
@@ -89,12 +90,55 @@ const SOURCE: Record<FactRecord["provenance"]["source"], string> = {
   inferred: "Inferred, not confirmed",
 }
 
+/** The colours a stored palette shows; none when it is the owner's words alone. */
+function stopsOf(value: Record<string, unknown>): string[] {
+  const { id, brand, roles } = value as {
+    id?: string
+    brand?: string
+    roles?: { paper: string; tint: string; primary: string; ink: string }
+  }
+  if (roles) return [roles.paper, roles.tint, roles.primary, roles.ink]
+  if (brand) return paletteStops({ kind: "brand", brand })
+  return id && id !== "custom"
+    ? paletteStops({ kind: "preset", id } as Parameters<typeof paletteStops>[0])
+    : []
+}
+
+/** A fact's value; the website's colours as a strip beside their name. */
+function shownValue(fact: FactRecord) {
+  const text = factText(fact.key, fact.value)
+  const stops =
+    fact.key === "site.palette" && fact.value && typeof fact.value === "object"
+      ? stopsOf(fact.value as Record<string, unknown>)
+      : []
+  if (stops.length === 0) return text
+  return (
+    <span className="flex items-center gap-2">
+      {/* The site's own colours, with a hairline so a white stop shows. */}
+      <span
+        aria-hidden
+        className="flex h-4 w-16 shrink-0 overflow-hidden rounded-sm ring-1 ring-foreground/15"
+      >
+        {stops.map((color, at) => (
+          <span
+            className="h-full flex-1"
+            // biome-ignore lint/suspicious/noArrayIndexKey: two stops may share a colour
+            key={at}
+            style={{ backgroundColor: color }}
+          />
+        ))}
+      </span>
+      {text}
+    </span>
+  )
+}
+
 function toItem(fact: FactRecord): DefinitionItem {
   const verified = formatDate(fact.provenance.verified_at)
   return {
     id: fact.fact_id,
     term: factLabel(fact.key),
-    description: factText(fact.key, fact.value),
+    description: shownValue(fact),
     meta: [
       SOURCE[fact.provenance.source],
       verified ? `checked ${verified}` : null,

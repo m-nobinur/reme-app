@@ -29,6 +29,7 @@ const ID_KEYS = {
   id: "part",
 }
 const DROPPED = new Set(["providerMetadata", "messageMetadata"])
+const TRANSIENT = new Set(["message-metadata", "data-onboarding_status"])
 
 function redactor() {
   const seen = new Map()
@@ -81,7 +82,8 @@ export function serialise(run) {
       const id = `${name}.${i + 1}`
       const { mode, text, deny } = turn.owner
       owner[id] = { mode, text, deny, outcome: turn.outcome }
-      for (const chunk of mergeDeltas(turn.chunks)) {
+      const kept = turn.chunks.filter((c) => !TRANSIENT.has(c.type))
+      for (const chunk of mergeDeltas(kept)) {
         lines.push({ turn: id, chunk: redact(chunk) })
       }
       return id

@@ -20,8 +20,8 @@ const note = (over: Partial<Reminder> = {}): Reminder => ({
 const NOW = new Date("2026-06-30T12:00:00.000Z")
 
 it("shows a due time in the reader's zone, and none before the zone is known", () => {
-  expect(noteOf(note(), "Europe/London", NOW).due).toBe("Thu 2 Jul, 12:30 am")
-  expect(noteOf(note(), "America/New_York", NOW).due).toBe("Tomorrow, 7:30 pm")
+  expect(noteOf(note(), "Europe/London", NOW).due).toBe("Thu 2 Jul, 12:30 AM")
+  expect(noteOf(note(), "America/New_York", NOW).due).toBe("Tomorrow, 7:30 PM")
   // The server's render: no time at all, never a UTC one replaced later.
   expect(noteOf(note(), null, NOW).due).toBeNull()
   expect(noteOf(note({ due_at: null }), "Europe/London", NOW).due).toBeNull()
@@ -31,8 +31,8 @@ it("says today and tomorrow by the reader's calendar, not UTC's", () => {
   const at = (due_at: string) =>
     noteOf(note({ due_at }), "Australia/Sydney", NOW).due
   // Noon UTC is 10 pm in Sydney, so 14:30 UTC is already tomorrow there.
-  expect(at("2026-06-30T14:30:00.000Z")).toBe("Tomorrow, 12:30 am")
-  expect(at("2026-06-30T12:30:00.000Z")).toBe("Today, 10:30 pm")
+  expect(at("2026-06-30T14:30:00.000Z")).toBe("Tomorrow, 12:30 AM")
+  expect(at("2026-06-30T12:30:00.000Z")).toBe("Today, 10:30 PM")
 })
 
 it("marks a reminder due within the hour, once the zone is known", () => {
@@ -55,9 +55,13 @@ it("lists only reminders still ahead, undated ones after, in the api's order", (
   ).toEqual(["next", "later", "undated"])
 })
 
-it("names the Chief of Staff only on its own reminders", () => {
-  expect(noteOf(note({ source: "assistant" }), null).byAssistant).toBe(true)
-  expect(noteOf(note(), null).byAssistant).toBe(false)
+it("starts a title with a capital and keeps the owner's words, with no byline", () => {
+  const shown = noteOf(
+    note({ source: "assistant", title: "order brake pads" }),
+    null
+  )
+  expect(shown.title).toBe("Order brake pads")
+  expect(shown).not.toHaveProperty("byAssistant")
 })
 
 it("marks a reminder overdue once its time has passed, never also soon", () => {
@@ -158,7 +162,7 @@ it("words each rule and points it where it is acted on", () => {
     {
       key: `approval-${APPROVAL}`,
       title: "Your website is ready to publish",
-      detail: "Publish by today, 4:30 pm.",
+      detail: "Publish by today, 4:30 PM.",
       action: {
         label: "Review and publish",
         focus: `approval-${APPROVAL}`,

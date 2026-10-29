@@ -54,10 +54,10 @@ it("lists a live site with its own domain and Google, with each next action", ()
     NOW
   )
   expect(summary(rows)).toEqual([
-    "published|done|Published today, 12:00 pm|Visit your website",
+    "published|done|Published today, 12:00 PM|Visit your website",
     "address|done|spark.example.com|-",
     "d|done|Live|-",
-    "google|done|Verified, pages sent. Data read today, 10:30 am|-",
+    "google|done|Verified, pages sent. Data read today, 10:30 AM|-",
   ])
   expect(rows[2]?.title).toBe("spark.co.uk")
 })
@@ -75,7 +75,7 @@ it("shows Google's clicks and appearances for the last 28 days once it has sent 
     NOW
   )
   expect(summary(rows).at(-1)).toBe(
-    "google|done|1 click and 340 appearances on Google in the last 28 days. Data read today, 10:30 am|-"
+    "google|done|1 click and 340 appearances on Google in the last 28 days. Data read today, 10:30 AM|-"
   )
 })
 
@@ -95,9 +95,9 @@ it("treats a task nothing has begun as no row, and offers it", () => {
       )
     )
   ).toEqual([
-    "published|done|Published today, 12:00 pm|Visit your website",
+    "published|done|Published today, 12:00 PM|Visit your website",
     "address|done|spark.example.com|Use your own domain",
-    "google|next|Not connected|Connect Google",
+    "google|next|Connect it once your own domain is live|-",
   ])
 })
 
@@ -105,10 +105,29 @@ it("offers a domain and Google when the site has neither", () => {
   expect(
     summary(checklistFor(workspace([seg("golive", "done")]), ZONE, NOW))
   ).toEqual([
-    "published|done|Published today, 12:00 pm|Visit your website",
+    "published|done|Published today, 12:00 PM|Visit your website",
     "address|done|spark.example.com|Use your own domain",
-    "google|next|Not connected|Connect Google",
+    "google|next|Connect it once your own domain is live|-",
   ])
+})
+
+it("offers Google's own sign-in once the owner's domain is live, never a chat line", () => {
+  const live = (domain: ActivitySegment) =>
+    checklistFor(workspace([seg("golive", "done"), domain]), ZONE, NOW).at(-1)
+  // The task is done, or the site is served on the domain already.
+  for (const domain of [
+    seg("address", "done", { id: "d", names: { domain: "spark.co.uk" } }),
+    seg("address", "now", { id: "d", names: { domain: "spark.example.com" } }),
+  ]) {
+    expect(live(domain)).toMatchObject({
+      line: "Not connected",
+      action: { kind: "google", label: "Connect Google" },
+    })
+  }
+  expect(
+    live(seg("address", "now", { id: "d", names: { domain: "spark.co.uk" } }))
+      ?.action
+  ).toBeNull()
 })
 
 it("shows an address waiting on the owner, a bought one with its renewal, and Google signing in", () => {

@@ -3,12 +3,7 @@ import {
   useAui,
   useAuiState,
 } from "@assistant-ui/react"
-import {
-  ArrowSquareOutIcon,
-  CheckIcon,
-  CopyIcon,
-  HourglassIcon,
-} from "@phosphor-icons/react"
+import { ArrowSquareOutIcon, CopyIcon } from "@phosphor-icons/react"
 import {
   BoughtElsewhereOutput,
   type CheckDomainOutput,
@@ -26,9 +21,13 @@ import {
 } from "@workspace/ui/components/assistant/decision"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { ConnectRow } from "@workspace/ui/components/connect-row"
-import { StatusLine, ToolStatus } from "@workspace/ui/components/status-line"
+import {
+  DoneIcon,
+  StatusLine,
+  ToolStatus,
+} from "@workspace/ui/components/status-line"
 import { useCopyToClipboard } from "@workspace/ui/hooks/use-copy-to-clipboard"
-import { toolKind } from "@workspace/ui/lib/activity-copy"
+import { useLiveCards } from "@workspace/ui/lib/live-cards"
 import { refusalText } from "@workspace/ui/lib/refusal"
 import { decisionView, readView } from "@workspace/ui/lib/tool-state"
 import { META } from "@workspace/ui/lib/utils"
@@ -63,7 +62,7 @@ function CopyValue({ value }: { value: string }) {
         type="button"
         variant="ghost"
       >
-        {isCopied ? <CheckIcon aria-hidden /> : <CopyIcon aria-hidden />}
+        {isCopied ? <DoneIcon /> : <CopyIcon aria-hidden />}
       </Button>
       <span className="sr-only" role="status">
         {isCopied ? "Copied" : ""}
@@ -112,7 +111,6 @@ function WaitButton() {
         size="sm"
         type="button"
       >
-        <HourglassIcon aria-hidden />
         Done, I'll wait
       </Button>
     </div>
@@ -198,7 +196,11 @@ function Records({
   )
 }
 
-/** A connect under way: the records to add, or that it needs none from the owner. */
+/**
+ * A connect under way: the records to add, or that it needs none from the
+ * owner. Once the website is live on the domain, only that, so an old card
+ * never offers the records again.
+ */
 export function ConnectSteps({
   name,
   output,
@@ -206,6 +208,9 @@ export function ConnectSteps({
   name: string
   output: Connecting
 }) {
+  if (useLiveCards()?.domainLive(name)) {
+    return <Done>{`Your website is live on ${name}.`}</Done>
+  }
   return output.steps?.length ? (
     <Records name={name} output={output} steps={output.steps} />
   ) : (
@@ -224,7 +229,6 @@ export const ConnectDomain: ToolCallMessagePartComponent = (props) => {
       <StatusLine
         className="flex px-1 py-1.5 text-sm"
         data-slot="connect-domain"
-        kind={toolKind(props.toolName)}
         label={`Put your website on ${view.input.name}. ${refusalText(view.code, NOT_CONNECTED)}`}
         state="failed"
       />

@@ -45,6 +45,7 @@ import {
 } from "@workspace/db"
 import { factsToAsk } from "@workspace/gates/fields"
 import { fields } from "@workspace/starter-site/site-config"
+import { type OwnerWait, ownerWaits } from "@workspace/ui/lib/activity-copy"
 import { activityOf, readActivityRows } from "./activity.ts"
 import { sha256Hex } from "./http.ts"
 import { readReminderNotes } from "./reminders.ts"
@@ -1013,8 +1014,11 @@ export async function statusOf(
 }
 
 /**
- * `statusOf` with the facts it was read from and each kind's latest owner
- * task in any state, for the assistant's view, which needs all three.
+ * `statusOf` with the facts it was read from, each kind's latest owner task
+ * in any state, and what waits on the owner, for the assistant's view. The
+ * waits are `ownerWaits`, the one list the panel, Notifications and Tasks
+ * read from the same activity, so the assistant never answers "what's left"
+ * with less than the owner sees.
  */
 export async function statusWithFacts(
   db: OrgScopedDb,
@@ -1024,6 +1028,7 @@ export async function statusWithFacts(
   status: WorkspaceStatus
   facts: FactRecord[]
   tasks: OwnerTask[]
+  waiting: OwnerWait[]
 }> {
   // Issued together, so postgres.js pipelines them on the transaction's one
   // connection instead of paying a round trip each.
@@ -1037,6 +1042,7 @@ export async function statusWithFacts(
     notes,
     due,
     rows,
+    [org],
   ] = await Promise.all([
     readBuilds(db),
     readApprovals(db),
@@ -1047,6 +1053,7 @@ export async function statusWithFacts(
     readReminderNotes(db),
     readDueReminders(db, now),
     readActivityRows(db, now),
+    db.select({ zone: orgs.timeZone }).from(orgs).limit(1),
   ])
   const missing = missingFacts(current)
   const status = WorkspaceStatus.parse({
@@ -1064,6 +1071,7 @@ export async function statusWithFacts(
         now
       ),
     },
+    time_zone: org?.zone ?? null,
     activity: activityOf(
       {
         site,
@@ -1085,7 +1093,12 @@ export async function statusWithFacts(
   const tasks = TaskKind.options.flatMap(
     (kind) => rows.tasks.find((t) => t.kind === kind) ?? []
   )
-  return { status, facts: current, tasks }
+  return {
+    status,
+    facts: current,
+    tasks,
+    waiting: ownerWaits(status.activity),
+  }
 }
 
 export async function readActivity(

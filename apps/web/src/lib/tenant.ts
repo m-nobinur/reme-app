@@ -77,3 +77,11 @@ export async function requireOwner(returnTo: string): Promise<Owner> {
   }
   return owner
 }
+
+/**
+ * The role the owner reads. WorkOS gives every membership its default role,
+ * `member`; whoever signs in to a business here is its owner, as apps/api's
+ * memberships record.
+ */
+export const roleText = (owner: Pick<Owner, "orgId">) =>
+  owner.orgId ? "Owner" : "None yet"

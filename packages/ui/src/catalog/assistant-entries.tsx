@@ -110,9 +110,29 @@ const COS_TOOLS_FIXTURE = {
     requestId === "0f4b2c8e-1a3d-4e5f-9b6c-7d8e9f0a1b2c"
       ? "Service area"
       : null,
+  removeReminder: async () => ({ done: true }),
 }
 
 const FIXTURE_TIME = new Date("2026-09-24T09:00:00Z")
+
+const REMEMBER_CALL: ThreadMessageLike[] = [
+  { content: "I'd rather you call me after 4pm.", role: "user" },
+  {
+    content: [
+      {
+        args: {
+          operations: [{ action: "add", text: "Prefers calls after 4pm" }],
+        },
+        result: { outcome: "saved", note: "Saved.", fullness: "3 of 40" },
+        toolCallId: "call_remember",
+        toolName: "remember",
+        type: "tool-call",
+      },
+      { text: "Got it, after 4pm from now on.", type: "text" },
+    ],
+    role: "assistant",
+  },
+]
 
 function FixtureThread({
   height = "h-[48rem]",
@@ -1401,7 +1421,11 @@ const CREATE_REMINDER_STATES = decisionStates(
   "create_reminder",
   { title: "Call the window supplier", due_at: "2026-10-02T09:00:00+01:00" },
   { title: "", due_at: null },
-  { outcome: "created", due_at: "2026-10-02T08:00:00.000Z" },
+  {
+    outcome: "created",
+    reminder_id: "5e2d7c1a-9b3f-4a6e-8c2d-1f0e9a8b7c6d",
+    due_at: "2026-10-02T08:00:00.000Z",
+  },
   refusal("reminder.due_past", "A reminder cannot be due in the past.")
 )
 
@@ -2199,6 +2223,85 @@ function RevealSample() {
   )
 }
 
+/**
+ * A conversation this browser last showed up to "Publishing now", with two
+ * updates the app posted since: the site going live, then a reminder.
+ */
+const NEW_SINCE: ThreadMessageLike[] = [
+  on("29T14:01:00.000", { ...ask("Can you publish it?"), id: "publish" }),
+  on("29T14:01:30.000", {
+    content: [
+      {
+        text: "Publishing now. I'll tell you when it's live.",
+        type: "text",
+      },
+    ],
+    id: "publishing",
+    role: "assistant",
+    status: DONE,
+  }),
+  on("29T14:14:00.000", {
+    content: [
+      { text: "Your website is live at sparkle-clean.co.uk.", type: "text" },
+      {
+        type: "data",
+        name: "button",
+        data: {
+          label: "View site",
+          action: { kind: "open", url: "https://sparkle-clean.co.uk/" },
+        },
+      },
+    ],
+    id: "srv_live",
+    role: "assistant",
+    status: DONE,
+  }),
+  on("29T15:00:00.000", {
+    content: [{ text: "Reminder: call Sam about Friday.", type: "text" }],
+    id: "srv_reminder",
+    role: "assistant",
+    status: DONE,
+  }),
+]
+
+/**
+ * The "New" rule and the update labels. The mark moves as the thread shows
+ * messages, as the app's does; Open again is the next visit, with none new.
+ */
+function NewSinceSample() {
+  const [visit, setVisit] = useState(0)
+  const [lastShown] = useState(() => {
+    let mark: string | null = "publishing"
+    return {
+      get: () => mark,
+      set: (_conversation: string, id: string) => {
+        mark = id
+      },
+    }
+  })
+  return (
+    <div className="flex flex-col gap-3">
+      <Button
+        className="self-start"
+        onClick={() => setVisit((count) => count + 1)}
+        size="sm"
+        variant="outline"
+      >
+        Open again
+      </Button>
+      <OwnerThread
+        height="h-[36rem]"
+        key={visit}
+        messages={NEW_SINCE}
+        settings={{ lastShown }}
+        stored="stored-new"
+      >
+        <ServerButtonUI />
+      </OwnerThread>
+    </div>
+  )
+}
+
 function SendingThread({ streamed }: { streamed: boolean }) {
   const [messages, setMessages] = useState<ThreadMessageLike[]>(BEFORE_SEND)
   const [isRunning, setRunning] = useState(false)
@@ -2835,6 +2938,11 @@ const assistantCatalog = [
     ),
   },
   {
+    // A saved remember call says what it saved in its own turn.
+    name: "Remembered",
+    render: () => <FixtureThread height="h-[20rem]" messages={REMEMBER_CALL} />,
+  },
+  {
     name: "PersonaCardUI",
     render: () => (
       <FixtureThread height="h-[28rem]" messages={PERSONA}>
@@ -2877,6 +2985,7 @@ const assistantCatalog = [
   { name: "ThreadSend", render: () => <SendingThread streamed={false} /> },
   { name: "ThreadSendStreamed", render: () => <SendingThread streamed /> },
   { name: "ThreadReveal", render: () => <RevealSample /> },
+  { name: "ThreadNewSince", render: () => <NewSinceSample /> },
   {
     name: "ThreadLoading",
     render: () => (

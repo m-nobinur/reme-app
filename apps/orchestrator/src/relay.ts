@@ -1,4 +1,5 @@
 import {
+  dashesToCommas,
   FactValueKey,
   InformationAnswer,
   type InformationRequest,
@@ -314,9 +315,9 @@ export async function relayQuestion(
     })
     return { answered: true }
   }
-  const words = [reading?.question, request.question].find(
-    (q): q is string => typeof q === "string" && questionOk(q)
-  )
+  const words = [reading?.question, request.question]
+    .map((q) => (typeof q === "string" ? dashesToCommas(q) : q))
+    .find((q): q is string => typeof q === "string" && questionOk(q))
   return { ask: words?.trim() ?? PLAIN_QUESTION }
 }
 

@@ -9,7 +9,7 @@ import { visit } from "./visit"
  * only next step the panel offers is naming the business, on Home and in a
  * chat, and its notifications are empty. With nothing under way, a page like
  * this one has no panel at all. The other next steps ("Start your website",
- * "Continue getting started" with an onboarding chat) and "Try again" on a
+ * "Finish setting up" with an onboarding chat) and "Try again" on a
  * panel that did not load need an organisation or a failed read. They are clicked in
  * `packages/ui/test/notifications.spec.ts` against the catalog, and
  * `apps/web/src/panel/workspace-panel.test.ts` checks the destinations the
@@ -52,11 +52,6 @@ test("an account with no business is sent to name one", async ({ page }) => {
   await visit(page, "/app/notifications")
   await expect(panel(page)).toHaveCount(0)
   await visit(page, "/app")
-  await panel(page)
-    .getByRole("list", { name: "Next steps" })
-    .getByRole("link", { name: "Name your business" })
-    .click()
-  await expect(page).toHaveURL(/\/name-your-business$/)
   await expect(
     page.getByRole("heading", { name: "What's your business called?" })
   ).toBeVisible()

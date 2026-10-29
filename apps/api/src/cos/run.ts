@@ -8,6 +8,7 @@ import {
   type OnboardingStatus,
 } from "@workspace/contracts"
 import type { OrgScopedDb } from "@workspace/db"
+import { scrub } from "@workspace/facade/tee"
 import {
   createAgentUIStream,
   createUIMessageStreamResponse,
@@ -33,6 +34,8 @@ import {
   deriveCosMessages,
   type SessionEvent,
 } from "./history.ts"
+import { contentWords } from "./memory.ts"
+import { failureMessage } from "./retry.ts"
 import { ToolFailed } from "./tools.ts"
 import { abandonTurn, TurnClosed, writeAsTurn } from "./turns.ts"
 import { voiced } from "./voice.ts"
@@ -65,6 +68,33 @@ export const writtenAt = (): UIMessageChunk => ({
   type: "message-metadata",
   messageMetadata: { custom: { createdAt: new Date().toISOString() } },
 })
+
+/** How much of a text's own words a later one must hold to say it again. */
+const RESTATED = 0.6
+
+/**
+ * `parts` without a text that a text after a tool says again, as "The only
+ * thing left is the records", a check, then "The records still aren't
+ * showing, adding those is the only step left": the owner reads it once
+ * from the stored message. A text of under three words of its own stays.
+ */
+export function withoutRestated<P extends { type: string; text?: string }>(
+  parts: readonly P[]
+): P[] {
+  return parts.filter((part, i) => {
+    if (part.type !== "text" || !part.text) return true
+    const own = new Set(contentWords(part.text))
+    if (own.size < 3) return true
+    const after = parts.slice(i + 1)
+    const tool = after.findIndex((p) => p.type.startsWith("tool-"))
+    if (tool < 0) return true
+    return !after.slice(tool + 1).some((p) => {
+      if (p.type !== "text" || !p.text) return false
+      const later = new Set(contentWords(p.text))
+      return [...own].filter((w) => later.has(w)).length / own.size >= RESTATED
+    })
+  })
+}
 
 /** A tool part the model left unfinished. It never enters the history. */
 const unfinished = (part: UIMessage["parts"][number]) =>
@@ -161,11 +191,12 @@ export async function streamTurn(
         return ERROR_TEXT
       }
       // A provider's status and code say whether it was a rate limit or a
-      // refusal; its message is never logged.
+      // refusal, and its message what a name alone does not, cut and scrubbed.
       const { statusCode, code } = (error ?? {}) as {
         statusCode?: unknown
         code?: unknown
       }
+      const message = failureMessage(error)
       console.error(
         JSON.stringify({
           code: "cos.stream_error",
@@ -174,6 +205,7 @@ export async function streamTurn(
           status: typeof statusCode === "number" ? statusCode : null,
           provider_code:
             typeof code === "string" || typeof code === "number" ? code : null,
+          message: message && scrub(message),
         })
       )
       return ERROR_TEXT
@@ -243,7 +275,7 @@ export async function streamTurn(
       role: last.message.role,
       parts: [
         ...(chip ? [chip] : []),
-        ...last.message.parts.filter((p) => !unfinished(p)),
+        ...withoutRestated(last.message.parts.filter((p) => !unfinished(p))),
       ],
     }
     await closeTurn(

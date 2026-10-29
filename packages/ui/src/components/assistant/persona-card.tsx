@@ -1,7 +1,7 @@
 import { makeAssistantDataUI } from "@assistant-ui/react"
 import { type PersonaCard, PRONOUNS, TONES } from "@workspace/contracts"
 import { AssistantAvatar } from "@workspace/ui/components/assistant-avatar"
-import { presetLabel } from "@workspace/ui/lib/tool-state"
+import { presetLabel } from "@workspace/ui/lib/facts"
 
 /**
  * The assistant as the owner just set it up (`data-persona`), in the reply

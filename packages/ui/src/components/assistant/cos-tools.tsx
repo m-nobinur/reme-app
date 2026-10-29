@@ -9,8 +9,8 @@ import {
   CheckDomainOutput,
   CosFacts,
   CosWorkspace,
+  CreateReminderInput,
   CreateReminderOutput,
-  CreateReminderRequest,
   GetPreviewOutput,
   RecordReviewInput,
   RecordReviewOutput,
@@ -27,8 +27,10 @@ import {
   RemoveDomain,
 } from "@workspace/ui/components/assistant/domain"
 import { ConnectGoogle } from "@workspace/ui/components/assistant/google"
-import { StatusLine, ToolStatus } from "@workspace/ui/components/status-line"
-import { type ToolArgs, toolKind } from "@workspace/ui/lib/activity-copy"
+import { Remembered } from "@workspace/ui/components/assistant/memory-chip"
+import { Button } from "@workspace/ui/components/button"
+import { ToolStatus } from "@workspace/ui/components/status-line"
+import { reminderTitle, type ToolArgs } from "@workspace/ui/lib/activity-copy"
 import { factLabel, factText } from "@workspace/ui/lib/facts"
 import { formatDateTime } from "@workspace/ui/lib/format"
 import { refusalText } from "@workspace/ui/lib/refusal"
@@ -38,7 +40,7 @@ import {
   readView,
 } from "@workspace/ui/lib/tool-state"
 import { browserZone, wallText, zoneLabel } from "@workspace/ui/lib/zone"
-import { createContext, useContext } from "react"
+import { createContext, useContext, useState } from "react"
 
 /**
  * The Chief of Staff's tools, in the owner's words. A read is one quiet
@@ -51,54 +53,49 @@ import { createContext, useContext } from "react"
 /* Reads ----------------------------------------------------------------- */
 
 /**
- * The few words the model wrote for what a read is doing, which the api
- * cleaned before the call was stored.
+ * One read: the copy table's line while it runs, then nothing, since the
+ * reply says what it found. A read the owner's new message cancelled says it
+ * stopped; one its stream left without a result says it did not finish,
+ * never that the work behind it stopped.
  */
-const stepOf = ({ args }: { args: unknown }) => {
-  const { step } = (args ?? {}) as { step?: unknown }
-  return typeof step === "string" ? step : undefined
-}
-
-/** One read: its own few words, or the copy table's, while it runs, then nothing, since the reply says what it found. */
 function Read<O>({
   view,
   tool,
   args,
-  step,
   slot,
 }: {
   view: ReadView<O>
   tool: string
   args?: ToolArgs
-  step?: string | undefined
   slot: string
 }) {
-  // A read the stream left running is over once its message is.
   const running = useAuiState((s) => s.message.status?.type === "running")
+  const seed = useAuiState((s) => s.message.id)
   if (view.state === "done") return null
   const state =
-    view.state === "working" && running
-      ? "working"
-      : view.state === "failed"
-        ? "failed"
-        : "stopped"
-  const line = {
-    className: "flex px-1 py-1.5 text-chat-step",
-    "data-slot": slot,
-    delay: state === "working" ? undefined : 0,
-    state,
-  } as const
-  return step && state === "working" ? (
-    <StatusLine {...line} kind={toolKind(tool)} label={step} />
-  ) : (
-    <ToolStatus {...line} args={args} tool={tool} />
+    view.state === "working"
+      ? running
+        ? "working"
+        : "cut"
+      : view.state === "cancelled"
+        ? "stopped"
+        : "failed"
+  return (
+    <ToolStatus
+      args={args}
+      className="flex px-1 py-1.5 text-chat-step"
+      copy={{ seed }}
+      data-slot={slot}
+      delay={state === "working" ? undefined : 0}
+      state={state}
+      tool={tool}
+    />
   )
 }
 
 const WorkspaceRead: ToolCallMessagePartComponent = (props) => (
   <Read
     slot="cos-read-workspace"
-    step={stepOf(props)}
     tool="get_workspace"
     view={readView(props, CosWorkspace)}
   />
@@ -107,7 +104,6 @@ const WorkspaceRead: ToolCallMessagePartComponent = (props) => (
 const FactsRead: ToolCallMessagePartComponent = (props) => (
   <Read
     slot="cos-read-facts"
-    step={stepOf(props)}
     tool="get_facts"
     view={readView(props, CosFacts)}
   />
@@ -116,7 +112,6 @@ const FactsRead: ToolCallMessagePartComponent = (props) => (
 const PreviewRead: ToolCallMessagePartComponent = (props) => (
   <Read
     slot="cos-read-preview"
-    step={stepOf(props)}
     tool="get_preview"
     view={readView(props, GetPreviewOutput)}
   />
@@ -128,7 +123,8 @@ const PreviewRead: ToolCallMessagePartComponent = (props) => (
  */
 const DomainRead: ToolCallMessagePartComponent = (props) => {
   const view = readView(props, CheckDomainOutput)
-  // The step is not part of the question the owner asked.
+  // A call stored before lines came from the catalogue carries the model's
+  // `step`, which is not part of the question the owner asked.
   const { step: _step, ...asking } = props.args
   const asked = CheckDomainInput.safeParse(asking).data?.name
   const name = asked ?? "Your domain"
@@ -151,7 +147,6 @@ const DomainRead: ToolCallMessagePartComponent = (props) => {
     <Read
       args={asked ? { domain: asked } : {}}
       slot="cos-read-domain"
-      step={stepOf(props)}
       tool="check_domain"
       view={view}
     />
@@ -166,9 +161,14 @@ const DomainRead: ToolCallMessagePartComponent = (props) => {
  * provider there is no question to find, so no answer is offered a yes.
  */
 type CosTools = {
+  /** The business's zone, the one reminders run on and the reply says. */
   zone: string
   /** The open question's title, or null when the workspace has no such question. */
   question: (requestId: string) => string | null
+  /** Deletes a reminder the assistant set, for its undo. Absent, there is no undo. */
+  removeReminder?: (id: string) => Promise<{ done: boolean }>
+  /** Whether a reminder is still open, so a done or deleted one offers no undo. Absent, every one is. */
+  reminderOpen?: (id: string) => boolean
 }
 
 const CosToolsContext = createContext<CosTools | null>(null)
@@ -222,33 +222,77 @@ const AnswerQuestion: ToolCallMessagePartComponent = (props) => {
   )
 }
 
+/** A due time and the zone it is in, as the reply says it. */
+const dueIn = (text: string | null, zone: string) =>
+  text ? `Due ${text} ${zoneLabel(zone)}` : "No date set"
+
+/** A reminder the assistant set, with its time in the zone it was set in and an undo. */
+function ReminderSet({
+  output,
+  zone,
+}: {
+  output: CreateReminderOutput | null
+  zone: string
+}) {
+  const { removeReminder, reminderOpen } = useCosTools()
+  // The newest message keeps its undo until the workspace has read the new reminder.
+  const last = useAuiState((s) => s.message.isLast)
+  const [undo, setUndo] = useState<"idle" | "busy" | "done" | "failed">("idle")
+  const set = output?.outcome === "created" ? output : null
+  if (undo === "done") return <Done>Reminder removed.</Done>
+  const at = set?.time_zone ?? zone
+  const id = set?.reminder_id
+  const sentence = `${set?.replaced ? "Moved the reminder." : "Added to Reminders."}${set?.due_at ? ` ${dueIn(formatDateTime(set.due_at, at), at)}.` : ""}`
+  if (!id || !removeReminder || !(last || (reminderOpen?.(id) ?? true))) {
+    return <Done>{sentence}</Done>
+  }
+  // The last word and Undo wrap together, so Undo never starts a line alone.
+  const cut = sentence.lastIndexOf(" ") + 1
+  return (
+    <Done>
+      {/* One flex item, so the sentence keeps its width and Undo follows it. */}
+      <span>
+        {sentence.slice(0, cut)}
+        <span className="whitespace-nowrap">
+          {sentence.slice(cut)}
+          <Button
+            className="ms-1 h-auto p-0 align-baseline"
+            disabled={undo === "busy"}
+            onClick={() => {
+              setUndo("busy")
+              removeReminder(id).then(
+                (r) => setUndo(r.done ? "done" : "failed"),
+                () => setUndo("failed")
+              )
+            }}
+            size="xs"
+            variant="link"
+          >
+            {undo === "failed" ? "Couldn't undo. Try again" : "Undo"}
+          </Button>
+        </span>
+      </span>
+    </Done>
+  )
+}
+
 const CreateReminder: ToolCallMessagePartComponent = (props) => {
   const { zone } = useCosTools()
-  // Before the yes, the digits the model wrote, which the api reads as the
-  // owner's wall time; after it, the stored instant on the owner's clock.
-  const due = (text: string | null) =>
-    text ? `Due ${text} ${zoneLabel(zone)}` : "No date set"
+  // Before a yes, the digits the model wrote, which the api reads as wall
+  // time in the zone the owner named, else the business's.
   return (
     <Decision
       busy="Adding"
       cancelled="Not added."
       refused="The reminder could not be added."
       detail={(input) =>
-        `${due(input.due_at ? wallText(input.due_at) : null)}. It shows under Reminders.`
+        `${dueIn(input.due_at ? wallText(input.due_at) : null, input.time_zone ?? zone)}. It shows under Reminders.`
       }
-      done={(output) =>
-        output?.outcome === "created" && output.due_at ? (
-          <Done>
-            Added to Reminders. {due(formatDateTime(output.due_at, zone))}.
-          </Done>
-        ) : (
-          <Done>Added to Reminders.</Done>
-        )
-      }
+      done={(output) => <ReminderSet output={output} zone={zone} />}
       props={props}
       slot="create-reminder"
-      title={(input) => input.title}
-      view={decisionView(props, CreateReminderRequest, CreateReminderOutput)}
+      title={(input) => reminderTitle(input.title)}
+      view={decisionView(props, CreateReminderInput, CreateReminderOutput)}
       yes="Add reminder"
     />
   )
@@ -277,12 +321,11 @@ const RecordReview: ToolCallMessagePartComponent = (props) => (
 )
 
 /**
- * Tools that show nothing in the thread: the chat tells the owner what was
- * remembered on the next reply, as a chip, and Ellie's own words say an offer
- * is put off, so no tool card is drawn.
+ * Tools with no card and no working line: what was remembered is a chip in
+ * the same turn, and Ellie's own words say an offer is put off.
  */
 export const COS_QUIET: Record<string, ToolCallMessagePartComponent> = {
-  remember: () => null,
+  remember: Remembered,
   put_off: () => null,
 }
 

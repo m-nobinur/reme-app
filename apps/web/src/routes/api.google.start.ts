@@ -23,10 +23,16 @@ export const Route = createFileRoute("/api/google/start")({
         // The card never offers the link without a client id; a stale one lands in the app.
         if (!clientId) return seeOther(new URL("/app", origin).href)
 
-        // Back to the chat the card was in, where the result is announced.
+        // Back to the chat the link names (the Website page's), else the one
+        // the card was in, where the result is announced.
         let from: URL | null = null
         try {
-          from = new URL(request.headers.get("referer") ?? "")
+          from = new URL(
+            new URL(request.url).searchParams.get("returnTo") ??
+              request.headers.get("referer") ??
+              "",
+            origin
+          )
         } catch {
           // No referer, or one that does not parse: back to /app.
         }

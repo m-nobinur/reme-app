@@ -3,13 +3,13 @@ import {
   useAui,
   useAuiState,
 } from "@assistant-ui/react"
-import { CheckCircleIcon } from "@phosphor-icons/react"
 import { ConnectGoogleOutput } from "@workspace/contracts"
 import { Problem } from "@workspace/ui/components/assistant/decision"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { ConnectRow } from "@workspace/ui/components/connect-row"
-import { ToolStatus } from "@workspace/ui/components/status-line"
+import { DoneIcon, ToolStatus } from "@workspace/ui/components/status-line"
 import { CARD_SURFACE } from "@workspace/ui/lib/card"
+import { useLiveCards } from "@workspace/ui/lib/live-cards"
 import { refusalText } from "@workspace/ui/lib/refusal"
 import { NOT_DONE, readView } from "@workspace/ui/lib/tool-state"
 import { cn } from "@workspace/ui/lib/utils"
@@ -17,9 +17,23 @@ import { cn } from "@workspace/ui/lib/utils"
 /** Where the connect flow starts, which a connected account uses to switch. */
 const START = "/api/google/start"
 
+/** Signed in to Google now, by the live workspace; false when unknown. */
+const useConnected = () => useLiveCards()?.googleConnected === true
+
+/** What a connect offer becomes once the owner has signed in. */
+function Connected({ className }: { className?: string }) {
+  return (
+    <p className={cn("flex items-center gap-2 text-sm", className)}>
+      <DoneIcon />
+      Connected to Google
+    </p>
+  )
+}
+
 /**
  * The row that starts Google's sign-in, in the same tab so the start route
- * reads the chat to come back to from the referrer.
+ * reads the chat to come back to from the referrer. Once signed in it says
+ * so, so an offer posted earlier cannot start a second sign-in.
  */
 export function ConnectGoogleRow({
   href = START,
@@ -28,6 +42,7 @@ export function ConnectGoogleRow({
   href?: string
   className?: string
 }) {
+  if (useConnected()) return <Connected className={className} />
   return (
     <ConnectRow
       className={className}
@@ -47,6 +62,7 @@ export const ConnectGoogle: ToolCallMessagePartComponent = (props) => {
   const aui = useAui()
   const running = useAuiState((s) => s.message.status?.type === "running")
   const view = readView(props, ConnectGoogleOutput)
+  const connected = useConnected()
   if (view.state !== "done") {
     const working = view.state === "working" && running
     return (
@@ -71,7 +87,9 @@ export const ConnectGoogle: ToolCallMessagePartComponent = (props) => {
       className={cn(CARD_SURFACE, "my-3 flex max-w-md flex-col gap-3")}
       data-slot="connect-google"
     >
-      {"url" in output ? (
+      {"url" in output && connected ? (
+        <Connected />
+      ) : "url" in output ? (
         <>
           <p className="text-sm">
             Google will ask you to let me see how your website shows up in
@@ -94,10 +112,7 @@ export const ConnectGoogle: ToolCallMessagePartComponent = (props) => {
       ) : "connected" in output ? (
         <>
           <p className="flex items-center gap-2 text-sm">
-            <CheckCircleIcon
-              aria-hidden
-              className="size-4 shrink-0 text-primary"
-            />
+            <DoneIcon />
             Connected as {output.email}
           </p>
           <div>

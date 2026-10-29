@@ -160,6 +160,7 @@ const REPLIES: [RegExp, string][] = [
   [/e-?mail/i, "hello@example.net"],
   [/phone|number|ring/i, "07700 900123"],
   [/slogan|tagline|one line|sum up/i, "No slogan yet."],
+  [/charge|price|cost/i, "Regular clean £60, deep clean £180"],
   [
     /quote|need to know|before you (can|could)/i,
     "The size of the home, how many bedrooms and bathrooms, the kind of clean, and the date they want.",
@@ -202,6 +203,7 @@ export async function answerOnboarding(page: Page): Promise<void> {
       '[data-slot="ask-open"], [data-slot="ask-fact"], [data-slot="ask-details"], [data-slot="ask-choice"], [data-slot="ask-design"], [data-slot="ask-upload"], [data-slot="review-quote-form"]'
     )
     .filter({ has: page.locator("form, input[type=file], button") })
+    .filter({ visible: true })
   const started = page
     .locator('[data-slot="request-change"]')
     .filter({ hasText: "Started" })
@@ -263,9 +265,9 @@ export async function answerOnboarding(page: Page): Promise<void> {
       // The design tray opens on whether they have a logo, nothing picked.
       // No moves on to the designs drawn as it opened and keeps the first as
       // it lands; Pick for me then sends that logo and the picks already made.
-      const no = card.getByRole("radio", { name: /^No, create one for me/ })
+      const no = card.getByText("No, create one for me", { exact: true })
       if (await no.isVisible()) {
-        await step(() => no.click())
+        await no.click()
         await expect(
           card
             .getByRole("radiogroup", { name: "Logo designs" })
@@ -276,9 +278,7 @@ export async function answerOnboarding(page: Page): Promise<void> {
         card.getByRole("button", { name: "Pick for me", exact: true }).click()
       )
     } else if (slot === "review-quote-form") {
-      await step(() =>
-        card.getByRole("button", { name: "Use this form" }).click()
-      )
+      await step(() => card.getByRole("button", { name: "Looks good" }).click())
     } else if (slot === "ask-details") {
       // One field a page: an empty text field from the sheet, by its label,
       // a prefilled email stays, and a set of chips takes its first option.

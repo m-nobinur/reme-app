@@ -19,8 +19,9 @@ test("reads say what they looked at, and a finished one shows nothing", async ({
   await expect(entry.locator('[data-slot="cos-read-workspace"]')).toHaveText([
     "Couldn't check where things stand, try again in a moment",
   ])
+  // The catalogue's wording varies by turn; any of the facts read's lines.
   await expect(entry.locator('[data-slot="cos-read-facts"]')).toHaveText([
-    "Stopped looking up your details",
+    /^Stopped (looking up your details|checking your business details)$/,
   ])
   // A refused preview is finished too; the reply says what came back.
   await expect(entry.locator('[data-slot="cos-read-preview"]')).toHaveCount(0)
@@ -38,7 +39,7 @@ for (const [entry, slot, yes, busy, target, detail, done, refused] of [
     "answer-question",
     "Send answer",
     "Sending",
-    "Weekday hours: 08:00 to 18:00",
+    "Weekday hours: 8:00 AM to 6:00 PM",
     "This answers your build's question: Service area.",
     "Sent. Your build carries on.",
     "That question is no longer waiting on you.",
@@ -49,8 +50,8 @@ for (const [entry, slot, yes, busy, target, detail, done, refused] of [
     "Add reminder",
     "Adding",
     "Call the window supplier",
-    "Due 2 Oct 2026, 09:00 London time. It shows under Reminders.",
-    "Added to Reminders. Due 2 Oct 2026, 09:00 London time.",
+    "Due 2 Oct 2026, 9:00 AM London time. It shows under Reminders.",
+    "Added to Reminders. Due 2 Oct 2026, 9:00 AM London time.",
     "A reminder cannot be due in the past.",
   ],
 ] as const) {
@@ -58,13 +59,14 @@ for (const [entry, slot, yes, busy, target, detail, done, refused] of [
     await open(page, entry)
     const everything = page.locator(`[data-entry="${entry}"]`)
     const all = everything.locator(`[data-slot="${slot}"]`)
-    await expect(all).toHaveCount(14)
+    // A card the owner talked over folds into the newer one of its kind.
+    await expect(all).toHaveCount(13)
     // A card waiting on the owner sits in the tray, not the thread: the thread
-    // keeps the other twelve.
+    // keeps the other eleven.
     const cards = all.filter({
       hasNot: page.locator('[data-slot="question-tray"]'),
     })
-    await expect(cards).toHaveCount(12)
+    await expect(cards).toHaveCount(11)
     // Nothing to approve while the model is still writing it, and a call
     // the stream left unfinished stops rather than working forever.
     await expect(cards.nth(0)).toHaveText(
@@ -104,18 +106,19 @@ for (const [entry, slot, yes, busy, target, detail, done, refused] of [
     await expect(cards.nth(5)).toContainText(done)
     await expect(cards.nth(6)).toContainText(refused)
     await expect(cards.nth(7)).toContainText("You said not now.")
-    await expect(cards.nth(8)).not.toContainText("You sent a message instead.")
-    await expect(cards.nth(9)).toContainText(
+    await expect(everything).not.toContainText("You sent a message instead.")
+    await expect(everything).toContainText(/1 earlier card: not (added|sent)\./)
+    await expect(cards.nth(8)).toContainText(
       "We could not confirm this went through."
     )
-    await expect(cards.nth(10)).toContainText(
+    await expect(cards.nth(9)).toContainText(
       "This did not go through. Ask again."
     )
     // A yes that came after the card's time ran out: nothing was done.
-    await expect(cards.nth(11)).toContainText(
+    await expect(cards.nth(10)).toContainText(
       "This expired before your yes, so nothing was done."
     )
-    await expect(cards.nth(11).getByRole("button")).toHaveCount(0)
+    await expect(cards.nth(10).getByRole("button")).toHaveCount(0)
     const text = await everything.innerText()
     expect(text).not.toMatch(WIRE)
     // The api's refusal message is never what the owner reads.
@@ -222,5 +225,37 @@ for (const [name, width] of Object.entries({
       results.violations.map((violation) => violation.id),
       JSON.stringify(results.violations, null, 2)
     ).toEqual([])
+  })
+}
+
+// The catalog's column is narrower than the app's: 336 is where Undo fell to
+// a line of its own before, and 360 is the phone the owner saw it on.
+for (const width of [336, 360]) {
+  test(`a set reminder's Undo stays on the sentence's last line at ${width} px`, async ({
+    page,
+  }) => {
+    await open(page, "CreateReminder", width)
+    const card = page
+      .locator('[data-entry="CreateReminder"] [data-slot="create-reminder"]')
+      .filter({ hasText: "Added to Reminders." })
+    const undo = card.getByRole("button", { name: "Undo" })
+    await expect(undo).toBeVisible()
+    // The words before Undo, line by line: Undo starts after the last line's
+    // text, at the same height, rather than alone at the start of a new line.
+    const { last, button } = await undo.evaluate((el) => {
+      const range = document.createRange()
+      range.setStart(el.closest("p") as Node, 0)
+      range.setEndBefore(el)
+      const lines = [...range.getClientRects()].filter((r) => r.width > 0)
+      const end = lines.at(-1) as DOMRect
+      const box = el.getBoundingClientRect()
+      return {
+        last: { right: end.right, middle: end.top + end.height / 2 },
+        button: { left: box.left, top: box.top, bottom: box.bottom },
+      }
+    })
+    expect(button.left).toBeGreaterThanOrEqual(last.right - 1)
+    expect(last.middle).toBeGreaterThan(button.top)
+    expect(last.middle).toBeLessThan(button.bottom)
   })
 }

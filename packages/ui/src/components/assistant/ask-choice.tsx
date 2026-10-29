@@ -1,9 +1,5 @@
 import type { ToolCallMessagePartComponent } from "@assistant-ui/react"
-import {
-  CheckCircleIcon,
-  EyedropperIcon,
-  ShuffleIcon,
-} from "@phosphor-icons/react"
+import { EyedropperIcon, ShuffleIcon } from "@phosphor-icons/react"
 import type { AskChoiceInput } from "@workspace/contracts"
 import {
   Docked,
@@ -13,6 +9,7 @@ import {
 } from "@workspace/ui/components/assistant/question-tray"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
+import { DoneIcon } from "@workspace/ui/components/status-line"
 import {
   FIELD_ERROR,
   OPTION,
@@ -521,11 +518,7 @@ function ChoiceForm({
         >
           {label}
           {checked && (pictured || hinted) ? (
-            <CheckCircleIcon
-              aria-hidden
-              className="ml-auto size-4 shrink-0 text-primary"
-              weight="fill"
-            />
+            <DoneIcon className="ml-auto" />
           ) : null}
         </span>
         {rest?.hint ? (

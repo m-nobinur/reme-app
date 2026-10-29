@@ -16,7 +16,7 @@ import {
 } from "@workspace/db"
 import postgres from "postgres"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
-import { createReminder } from "../src/reminders.ts"
+import { createReminder, updateReminder } from "../src/reminders.ts"
 import { type Owner, owner, stubOrchestrator } from "./owner-fixture.ts"
 import { stubJwksFetch } from "./sealed-session.ts"
 
@@ -300,6 +300,62 @@ describe.skipIf(!url)("reminders, on a live connection", () => {
         detail: {},
       })
     }
+  })
+
+  it("deletes a reminder with its job, and a second delete is a 404", async () => {
+    const made = await post({
+      title: "Bin the old flyers",
+      due_at: new Date(Date.now() + DAY).toISOString(),
+    })
+    expect(made.status).toBe(201)
+    const id = (made.body as Reminder).id
+    const gone = await call(`/reminders/${id}`, { method: "DELETE" })
+    expect(gone.status).toBe(204)
+    const left = await kit.withOrg({ orgId: who.orgId }, async (db) => ({
+      rows: await db.select().from(reminders).where(eq(reminders.id, id)),
+      jobs: await db
+        .select()
+        .from(scheduledJobs)
+        .where(sql`${scheduledJobs.refId} = ${id}`),
+    }))
+    expect(left).toEqual({ rows: [], jobs: [] })
+    expect((await call(`/reminders/${id}`, { method: "DELETE" })).status).toBe(
+      404
+    )
+    expect(
+      (await call("/reminders/not-an-id", { method: "DELETE" })).status
+    ).toBe(404)
+  })
+
+  it("moves an open reminder and its job, refusing a time out of range", async () => {
+    const made = (
+      await post({
+        title: "Ring the van garage",
+        due_at: new Date(Date.now() + DAY).toISOString(),
+      })
+    ).body as Reminder
+    const later = new Date(Date.now() + 2 * DAY)
+    const moved = await kit.withOrg({ orgId: who.orgId }, (db) =>
+      updateReminder(db, made.id, { due_at: later.toISOString() })
+    )
+    expect(moved).toMatchObject({
+      id: made.id,
+      title: "Ring the van garage",
+      due_at: later.toISOString(),
+    })
+    const [job] = await kit.withOrg({ orgId: who.orgId }, (db) =>
+      db
+        .select()
+        .from(scheduledJobs)
+        .where(sql`${scheduledJobs.refId} = ${made.id}`)
+    )
+    expect(job?.nextRunAt.toISOString()).toBe(later.toISOString())
+    const past = await kit.withOrg({ orgId: who.orgId }, (db) =>
+      updateReminder(db, made.id, {
+        due_at: new Date(Date.now() - DAY).toISOString(),
+      })
+    )
+    expect(await refusal(past as Response)).toBe("reminder.due_past")
   })
 
   it("lists both sources, and completes both", async () => {

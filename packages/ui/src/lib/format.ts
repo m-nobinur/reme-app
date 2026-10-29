@@ -11,23 +11,10 @@
  * not a guess this module gets to make.
  */
 
+const DATE_PARTS = { day: "numeric", month: "short", year: "numeric" } as const
+
 const DATE = new Intl.DateTimeFormat("en-GB", {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-  timeZone: "UTC",
-})
-
-const DATE_TIME_PARTS = {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-} as const
-
-const DATE_TIME = new Intl.DateTimeFormat("en-GB", {
-  ...DATE_TIME_PARTS,
+  ...DATE_PARTS,
   timeZone: "UTC",
 })
 
@@ -41,7 +28,37 @@ export function formatDate(value: string | null | undefined): string | null {
 }
 
 /**
- * `26 Aug 2026, 08:05`. Used where the hour changes what the reader does.
+ * `8:05 AM`, the one way a time reads anywhere in the app. en-US only for the
+ * capital AM and PM; en-GB writes "am". In `timeZone`, else the reader's own,
+ * which only a browser-only caller may use.
+ */
+export const formatTime = (date: Date, timeZone?: string): string =>
+  new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZone,
+  }).format(date)
+
+/** The calendar day `at` falls on in `zone`, as a day count to compare. */
+export const dayOf = (at: Date, zone: string) =>
+  Date.parse(at.toLocaleDateString("en-CA", { timeZone: zone })) / 86_400_000
+
+/** `Today`, `Tomorrow`, else `Fri 3 Oct`: the day `at` falls on in `zone`. */
+export function dayLabel(at: Date, zone: string, now = new Date()): string {
+  const days = dayOf(at, zone) - dayOf(now, zone)
+  if (days === 0) return "Today"
+  if (days === 1) return "Tomorrow"
+  return at.toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: zone,
+  })
+}
+
+/**
+ * `26 Aug 2026, 8:05 AM`. Used where the hour changes what the reader does.
  * In UTC unless the caller knows the reader's zone and passes it.
  */
 export function formatDateTime(
@@ -53,11 +70,13 @@ export function formatDateTime(
   }
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return null
-  return timeZone === "UTC"
-    ? DATE_TIME.format(date)
-    : new Intl.DateTimeFormat("en-GB", { ...DATE_TIME_PARTS, timeZone }).format(
-        date
-      )
+  const day =
+    timeZone === "UTC"
+      ? DATE.format(date)
+      : new Intl.DateTimeFormat("en-GB", { ...DATE_PARTS, timeZone }).format(
+          date
+        )
+  return `${day}, ${formatTime(date, timeZone)}`
 }
 
 /**

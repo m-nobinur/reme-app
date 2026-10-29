@@ -1,5 +1,4 @@
 import {
-  AlarmIcon,
   ChatCircleTextIcon,
   GlobeIcon,
   ListChecksIcon,
@@ -35,17 +34,21 @@ import {
 } from "@workspace/ui/components/workspace-shell"
 import { formatDate } from "@workspace/ui/lib/format"
 import { SiteNameProvider } from "@workspace/ui/lib/site-name"
+import { STATE_MARKS } from "@workspace/ui/lib/status-icons"
 import { useEffect, useId, useState } from "react"
 import { lastChat } from "@/chat/history"
 import { getWorkspaceFrame, pollWorkspace } from "@/lib/api/server"
 import type { WorkspacePoll } from "@/lib/api/types"
 import { retryOrgWrite } from "@/lib/auth/actions"
+import { NameBusinessForm } from "@/lib/auth/name-business-form"
 import { useAutoPanel } from "@/lib/auto-panel"
 import {
+  jobWaits,
   laterSeen,
   markSeen,
   notificationsOf,
   unreadCount,
+  waitPage,
 } from "@/lib/notifications"
 import { onboardingFor, settingUp } from "@/lib/onboarding"
 import { OwnerSettings } from "@/lib/owner-settings"
@@ -132,7 +135,7 @@ export const Route = createFileRoute("/app")({
 const SECTIONS = [
   { to: "/app/website", label: "Website", icon: GlobeIcon },
   { to: "/app/pipeline", label: "Pipeline", icon: PipelineIcon },
-  { to: "/app/reminders", label: "Reminders", icon: AlarmIcon },
+  { to: "/app/reminders", label: "Reminders", icon: STATE_MARKS.reminder.Icon },
   { to: "/app/tasks", label: "Tasks", icon: ListChecksIcon },
 ] as const
 
@@ -234,7 +237,19 @@ function AppLayout() {
   useEffect(() => {
     if (arrived) setPress(arrived)
   }, [arrived])
-  const entries = notifications.slice(0, MENU_ITEMS).map(
+  // What waits on the owner first, as the panel lists it, then the newest
+  // notifications. A wait is not news, so it never counts as unread.
+  const waits = jobWaits(live.workspace).map(
+    (wait): NotificationEntry => ({
+      id: wait.id,
+      kind: "wait",
+      title: wait.title,
+      at: wait.since,
+      unread: false,
+      link: <Link to={waitPage(wait)} />,
+    })
+  )
+  const entries = notifications.map(
     (item): NotificationEntry => ({
       id: item.id,
       kind: item.kind,
@@ -254,6 +269,7 @@ function AppLayout() {
         : { link: <Link to="/app/notifications" /> }),
     })
   )
+  const menu = [...waits, ...entries].slice(0, MENU_ITEMS)
   // The clock's list at the top right: every open chat, newest first.
   const history = (conversations ?? [])
     .filter((each) => !each.archived_at)
@@ -287,7 +303,7 @@ function AppLayout() {
           floating={floating}
           openPanel={press}
           panel={showPanel ? <WorkspacePanel panel={panel} /> : null}
-          // Not beside Continue getting started, which goes to the same chat.
+          // Not beside Finish setting up, which goes to the same chat.
           panelFooter={chat && !continues ? <ChatLink id={chat} /> : null}
           panelFocus={firstAsk(panel)}
           panelIdle={
@@ -390,7 +406,7 @@ function AppLayout() {
               </nav>
               <div className="mt-auto flex flex-col gap-2">
                 <NotificationMenu
-                  items={entries}
+                  items={menu}
                   onOpenChange={markMenuSeen}
                   unread={unread}
                   viewAll={<Link to="/app/notifications" />}
@@ -406,7 +422,23 @@ function AppLayout() {
             </>
           }
         >
-          {conversation ? (
+          {conversation && !id && !active && !orgPending ? (
+            // No business yet: naming it comes before any chat, here
+            // rather than by a redirect, since the e2e probe signs in with
+            // no organisation and has to keep reaching /app.
+            // A narrow centred column, clear of the open panel on its own:
+            // WorkspacePage's room for the panel would squeeze it to 220 px.
+            <div className="mx-auto w-full max-w-md px-4 pt-16 pb-10">
+              <h1 className="font-medium text-2xl">
+                What's your business called?
+              </h1>
+              <p className="mt-2 mb-8 text-muted-foreground">
+                Your assistant sets up your workspace and website under this
+                name, then asks about your work. You can change it later.
+              </p>
+              <NameBusinessForm returnTo="/app" />
+            </div>
+          ) : conversation ? (
             <Outlet />
           ) : (
             <WorkspacePage>

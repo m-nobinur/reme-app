@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
 import { Approval } from "@workspace/ui/components/assistant/approval"
+import { ConnectGoogleRow } from "@workspace/ui/components/assistant/google"
+import { type LiveCards, LiveCardsProvider } from "@workspace/ui/lib/live-cards"
 import { act, createElement } from "react"
 import { createRoot } from "react-dom/client"
 import { expect, it, vi } from "vitest"
@@ -26,19 +28,23 @@ vi.mock("@assistant-ui/react", async (original) => ({
   useThreadViewport: () => undefined,
 }))
 
-/** Draws the thread's slot for a connect_google call and returns its card. */
-async function draw(props: Record<string, unknown>) {
+/**
+ * Draws the thread's slot for a connect_google call and returns its card,
+ * under the workspace's live state when one is given.
+ */
+async function draw(props: Record<string, unknown>, live?: LiveCards) {
   const container = document.createElement("div")
   const root = createRoot(container)
+  const card = createElement(Approval, {
+    toolName: "connect_google",
+    toolCallId: "call-1",
+    args: {},
+    argsText: "{}",
+    ...props,
+  } as never)
   await act(async () =>
     root.render(
-      createElement(Approval, {
-        toolName: "connect_google",
-        toolCallId: "call-1",
-        args: {},
-        argsText: "{}",
-        ...props,
-      } as never)
+      live ? createElement(LiveCardsProvider, { value: live }, card) : card
     )
   )
   const view = {
@@ -119,4 +125,42 @@ it("keeps a call that has no result quiet, and an unreadable one honest", async 
   const bad = await draw({ result: { url: "http://insecure.test" } })
   expect(bad.text).toContain("Couldn't connect Google")
   expect(bad.links).toEqual([])
+})
+
+const connected = (googleConnected: boolean | null): LiveCards => ({
+  googleConnected,
+  domainLive: () => false,
+})
+
+it("says connected, with nothing to press, on an offer from before the owner signed in", async () => {
+  const url = "https://reme.test/api/google/start"
+  const card = await draw({ result: { url } }, connected(true))
+  expect(card.text).toBe("Connected to Google")
+  expect(card.links).toEqual([])
+  expect(card.buttons).toEqual([])
+})
+
+it("keeps the sign-in while the workspace says Google is not connected, or does not say", async () => {
+  const url = "https://reme.test/api/google/start"
+  for (const live of [connected(false), connected(null)]) {
+    const card = await draw({ result: { url } }, live)
+    expect(card.links.map((link) => link.href)).toEqual([url])
+  }
+})
+
+it("turns a posted Connect Google row into the connected line once signed in", async () => {
+  const container = document.createElement("div")
+  const root = createRoot(container)
+  await act(async () =>
+    root.render(
+      createElement(
+        LiveCardsProvider,
+        { value: connected(true) },
+        createElement(ConnectGoogleRow)
+      )
+    )
+  )
+  expect(container.textContent).toBe("Connected to Google")
+  expect(container.querySelector("a")).toBeNull()
+  await act(async () => root.unmount())
 })

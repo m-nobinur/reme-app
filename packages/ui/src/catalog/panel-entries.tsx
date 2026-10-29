@@ -1,4 +1,4 @@
-import { CheckCircleIcon, PulseIcon } from "@phosphor-icons/react"
+import { PulseIcon } from "@phosphor-icons/react"
 import type {
   ActivitySegment,
   ApprovalTarget,
@@ -21,6 +21,7 @@ import {
   WaitingOnYou,
   YourWebsite,
 } from "@workspace/ui/components/live-panel"
+import { DoneIcon } from "@workspace/ui/components/status-line"
 import {
   Tabs,
   TabsContent,
@@ -52,6 +53,11 @@ const STARTED = "2026-10-01T09:00:00.000Z"
 /** Four minutes ten seconds in. */
 const NOW_ISO = new Date(Date.parse(STARTED) + 250_000).toISOString()
 const EXPIRES = "2026-10-04T09:00:00.000Z"
+/** The timelines' clock: Thursday 29 October, 11:00 AM in London. */
+const TIMELINE_NOW = Date.parse("2026-10-29T11:00:00.000Z")
+/** `minutes` from the timelines' clock, as an ISO time. */
+const fromNow = (minutes: number) =>
+  new Date(TIMELINE_NOW + minutes * 60_000).toISOString()
 const REVISION: ApprovalTarget = {
   kind: "revision",
   revision_id: "2f41c9ab-0000-4000-8000-000000000005",
@@ -211,7 +217,7 @@ const photo = (
   alt: string | null = "A bright room after a clean"
 ) => ({ slot_id, state, alt, thumbnail })
 
-const CTX = { orgId: "brightclean", assistant: "Ellie" }
+const CTX = { seed: "brightclean", assistant: "Ellie" }
 
 /** A step as the api sends it. */
 const stepAt = (
@@ -323,30 +329,25 @@ type Note = {
   due: string | null
   soon?: boolean
   overdue?: boolean
-  byAssistant: boolean
 }
 const NOTES: Record<"owner" | "assistant" | "undated" | "overdue", Note> = {
   owner: {
     title: "Call the supplier about eco sprays",
     due: "Today, 2:00 pm",
     soon: true,
-    byAssistant: false,
   },
   assistant: {
     title: "Send the Hartley Road quote",
-    due: "Sat 3 Oct, 9:30 am",
-    byAssistant: true,
+    due: "Sat 3 Oct, 9:30 AM",
   },
   undated: {
     title: "Order more microfibre cloths",
     due: null,
-    byAssistant: false,
   },
   overdue: {
     title: "Restock the van with mop heads",
     due: "Mon 28 Sep, 9:00 am",
     overdue: true,
-    byAssistant: false,
   },
 }
 
@@ -378,7 +379,13 @@ function SamplePanel() {
         <TabsTrigger value="website">Website</TabsTrigger>
       </TabsList>
       <TabsContent className="gap-4" keepMounted value="activity">
-        <WaitingOnYou icon={PulseIcon} limit={3} title="Now">
+        <WaitingOnYou
+          icon={
+            <PulseIcon aria-hidden className="size-4 text-muted-foreground" />
+          }
+          limit={3}
+          title="Now"
+        >
           {segment({
             id: "change",
             kind: "change",
@@ -409,7 +416,7 @@ function SamplePanel() {
             { id: "setup", text: "Brightclean set up", at: STARTED },
           ]}
           ahead={false}
-          icon={CheckCircleIcon}
+          icon={<DoneIcon />}
           title="Completed"
         />
       </TabsContent>
@@ -460,6 +467,48 @@ const panelCatalog: Entry[] = [
     ),
   },
   {
+    // Both timelines over three days, on a pinned clock: one past due and
+    // one within the hour marked, then what finished today and before.
+    name: "ComingUp timeline",
+    render: () => (
+      <div className="flex max-w-88 flex-col gap-6">
+        <ComingUp
+          action={
+            <a className={SECTION_ACTION} href="#reminders">
+              View all
+            </a>
+          }
+          count={6}
+          items={[
+            { id: "patel-call", text: "Ring Mrs Patel back", at: fromNow(-5) },
+            { id: "patel-quote", text: "Quote for Mrs Patel", at: fromNow(40) },
+            { id: "pads", text: "Order mop heads", at: fromNow(21 * 60) },
+            {
+              id: "hartley",
+              text: "Invoice the Hartleys for the end of tenancy clean",
+              at: fromNow(29 * 60 + 30),
+            },
+            { id: "domain", text: "Domain renews", at: fromNow(46 * 60) },
+          ]}
+          now={TIMELINE_NOW}
+          zone="Europe/London"
+        />
+        <ComingUp
+          ahead={false}
+          icon={<DoneIcon />}
+          items={[
+            { id: "sam", text: "Reminder: call Sam", at: fromNow(-20) },
+            { id: "live", text: "Website published", at: fromNow(-108) },
+            { id: "setup", text: "Brightclean set up", at: fromNow(-20 * 60) },
+          ]}
+          now={TIMELINE_NOW}
+          title="Completed"
+          zone="Europe/London"
+        />
+      </div>
+    ),
+  },
+  {
     // The Activity tab on Home with nothing waiting: what finished, and
     // the site.
     name: "Panel caught up",
@@ -479,7 +528,7 @@ const panelCatalog: Entry[] = [
             },
           ]}
           ahead={false}
-          icon={CheckCircleIcon}
+          icon={<DoneIcon />}
           title="Completed"
         />
       </div>
@@ -491,7 +540,12 @@ const panelCatalog: Entry[] = [
     name: "Panel first run",
     render: () => (
       <div className="flex max-w-88 flex-col gap-6">
-        <WaitingOnYou icon={PulseIcon} title="Now">
+        <WaitingOnYou
+          icon={
+            <PulseIcon aria-hidden className="size-4 text-muted-foreground" />
+          }
+          title="Now"
+        >
           {segment(
             {
               id: "website",
@@ -531,7 +585,7 @@ const panelCatalog: Entry[] = [
           }
           items={[{ id: "setup", text: "Brightclean set up", at: STARTED }]}
           ahead={false}
-          icon={CheckCircleIcon}
+          icon={<DoneIcon />}
           title="Completed"
         />
       </div>
@@ -730,7 +784,7 @@ const panelCatalog: Entry[] = [
           },
         ]}
         ahead={false}
-        icon={CheckCircleIcon}
+        icon={<DoneIcon />}
         title="Completed"
       />
     ),

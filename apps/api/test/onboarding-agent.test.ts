@@ -37,6 +37,7 @@ import {
   transcriptOf,
   turnData,
   typedOverForm,
+  warmPlanner,
 } from "../src/onboarding-agent.ts"
 
 const counter = () => {
@@ -62,6 +63,8 @@ const EVERYTHING: FactValue[] = [
     value: { text: "Twelve years trading, every chauffeur DBS checked." },
   },
   { key: "service_area.text", value: { text: "Greater Manchester" } },
+  { key: "business.prices", value: { text: "Weddings from 300" } },
+  { key: "business.enquiries", value: { text: "Calls and emails" } },
   { key: "business.phone", value: { e164: "+447700900412" } },
   { key: "business.email", value: { address: "bookings@regal.invalid" } },
   { key: "assistant.name", value: { name: "Jeeves" } },
@@ -1129,6 +1132,45 @@ describe("what the planner reads and how often it asks", () => {
     expect(turnData(asked(1, 0))).toContain("optional, asked enough: leave it")
   })
 
+  it("asks the owner's prices after the quote form, the one turn that may name them, and never says a question can be skipped", () => {
+    const o = onboarding([
+      ...without("business.prices", "business.enquiries", "site.build_mode"),
+      QUOTE,
+    ])
+    const ask = (about: string, say: string) =>
+      plan({ say, next: { kind: "ask_open", about } as Plan["next"] })
+    expect(
+      errorsOf(
+        ask(
+          "business.prices",
+          "Roughly what do your usual jobs cost? I use it when I quote."
+        ),
+        typed("ok", o)
+      )
+    ).toEqual([])
+    const priced = onboarding([
+      ...without("business.enquiries", "site.build_mode"),
+      QUOTE,
+    ])
+    // Any other turn is still refused a price.
+    expect(
+      errorsOf(
+        ask("business.enquiries", "What do your usual jobs cost?"),
+        typed("ok", priced)
+      )
+    ).toContainEqual(expect.stringMatching(/rates, fees, costs/))
+    // The Skip this one button under the question already says it.
+    expect(
+      errorsOf(
+        ask(
+          "business.enquiries",
+          "How do enquiries reach you today? You can skip this."
+        ),
+        typed("ok", priced)
+      )
+    ).toContainEqual(expect.stringMatching(/Skip this one button/))
+  })
+
   it("asks what sets the business apart once, and never lets the assistant choose it", () => {
     const o = onboarding([
       ...without("business.proof", "site.build_mode"),
@@ -1569,7 +1611,8 @@ describe("the plan's parts", () => {
     expect(planParts(checked.checked, s, counter()).slice(0, 2)).toEqual([
       {
         type: "text",
-        text: "I've gone with Reme, she/her, with a professional manner.",
+        // The professional tone it settles drops the model's contraction.
+        text: "I have gone with Reme, she/her, with a professional manner.",
         state: "done",
       },
       {
@@ -2299,6 +2342,36 @@ describe("the owner's words in say", () => {
     ).toEqual([])
   })
 
+  it("refuses the owner's list read back, and passes a reply that just has it", () => {
+    const listed =
+      "say reads the owner's list back to them; say in a few words that you have it, or pick out one detail, and move on"
+    const owner =
+      "The address, whether it's a house or a shop, roughly how many windows, and if they want gutters or the conservatory done too."
+    // Both seen in local onboarding on 2026-10-29.
+    for (const said of [
+      "Understood, covering the address, property style, window count, and any extras like gutters or conservatories.",
+      "Got it, the address, property style and gutters.",
+    ]) {
+      expect(sayProblems(said, { typed: owner }), said).toContain(listed)
+    }
+    expect(
+      sayProblems(
+        "Got it, that's everything a quote needs. Here is what I'll ask new enquiries.",
+        { typed: owner }
+      )
+    ).toEqual([])
+    expect(
+      sayProblems("Wren it is, they/them, and keeping things casual.", {
+        typed: "Call yourself Wren, they/them, and keep it casual.",
+        persona: {
+          names: ["Wren"],
+          pronouns: ["they_them"],
+          tones: ["casual"],
+        },
+      })
+    ).not.toContain(listed)
+  })
+
   it("thanks for a correction only when the plan changed a held fact", () => {
     const thanks = "Silverline it is, thanks for clearing that up."
     expect(sayProblems(thanks, { corrected: false })).toContain(
@@ -2638,5 +2711,38 @@ describe("the planner's request", () => {
       "say",
     ])
     expect(shown).not.toContain("additionalProperties")
+  })
+})
+
+describe("warmPlanner", () => {
+  it("sends the planner's instructions, marked for the cache, for one token", async () => {
+    const calls: Parameters<MockLanguageModelV4["doGenerate"]>[0][] = []
+    const model = new MockLanguageModelV4({
+      doGenerate: async (options) => {
+        calls.push(options)
+        return {
+          content: [{ type: "text", text: "{" }],
+          finishReason: { unified: "length", raw: undefined },
+          usage: {
+            inputTokens: {
+              total: 7000,
+              noCache: 0,
+              cacheRead: 0,
+              cacheWrite: 7000,
+            },
+            outputTokens: { total: 1, text: 1, reasoning: 0 },
+          },
+          warnings: [],
+        }
+      },
+    })
+    await warmPlanner(model)
+    const [sent] = calls
+    expect(sent?.maxOutputTokens).toBe(1)
+    expect(sent?.prompt[0]).toMatchObject({
+      role: "system",
+      content: await plannerInstructions(),
+      providerOptions: { openrouter: { cacheControl: { type: "ephemeral" } } },
+    })
   })
 })

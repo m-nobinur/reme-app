@@ -56,21 +56,18 @@ function panel(page: Page) {
   return page.getByRole("complementary", { name: "Panel" })
 }
 
-test("the panel asks a new owner to name the business and nothing else", async ({
+test("a new owner is asked to name the business and nothing else", async ({
   page,
 }) => {
   await visit(page, "/app")
   // This account has no organisation, so a question, an approval or a build
   // here is either a leak or a fixture, and both are defects. With no
-  // business there are no steps to list yet: naming it comes first.
-  await expect(panel(page).getByRole("listitem")).toHaveText([
-    "Name your business",
-  ])
+  // business there are no steps to list yet: the page asks for its name, and
+  // the panel does not ask again beside it.
   await expect(
-    panel(page)
-      .getByRole("list", { name: "Next steps" })
-      .getByRole("link", { name: "Name your business" })
+    page.getByRole("heading", { name: "What's your business called?" })
   ).toBeVisible()
+  await expect(panel(page).getByRole("listitem")).toHaveCount(0)
   await expect(
     panel(page).getByRole("heading", { name: "First steps" })
   ).toHaveCount(0)
@@ -145,91 +142,59 @@ test("the staff directory tells a new owner it is empty", async ({ page }) => {
   ).toBeVisible()
 })
 
-test("a chat turn sends only what the owner did", async ({ page }) => {
+test("a session with no business cannot run a chat turn", async ({ page }) => {
+  // The probe owner has no organisation, so apps/api refuses the turn before
+  // a model runs or a row is written, with the code the chat turns into the
+  // owner's own sentence. Sent from the page, as the chat sends it, so the
+  // web's same-origin check passes and only the session decides.
   await visit(page, "/app")
-
-  // Server function calls after the send: the frame read the router makes
-  // again once the turn ends, so the panel and its count are not stale.
-  const reads: string[] = []
-  page.on("request", (request) => {
-    if (request.url().includes("/_serverFn/")) {
-      reads.push(request.url())
-    }
-  })
-  const sent = page.waitForRequest((request) =>
-    request.url().endsWith("/api/chat")
-  )
-
-  await page.getByLabel("Message input").fill("How did this week go?")
-  await page.getByLabel("Send message").click()
-
-  // The turn and nothing else: no history, system prompt or tools leave the
-  // browser, because the server reads its own rows. The browser's time zone
-  // rides along, so a time like "Friday at 9" can be read.
-  const body = (await sent).postDataJSON()
-  expect(Object.keys(body).sort()).toEqual([
-    "conversation_id",
-    "mode",
-    "time_zone",
-    "turn",
-  ])
-  expect(body.time_zone).toMatch(/^[A-Za-z][A-Za-z0-9_+/-]{0,63}$/)
-  expect(body.turn).toMatchObject({
-    kind: "message",
-    text: "How did this week go?",
-  })
-
-  // The probe owner has no organisation, so apps/api refuses the turn. It
-  // reads as the api's own sentence, not as the JSON it came in, and it
-  // writes nothing anywhere.
-  const refusal = page.locator(".aui-message-error-message")
-  await expect(refusal).toHaveText(/not linked to a business/)
-  await expect(refusal).not.toContainText("{")
-  await expect
-    .poll(() => reads.length, {
-      message: "the frame was not read again after the turn",
+  const { status, refusal } = await page.evaluate(async () => {
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        conversation_id: crypto.randomUUID(),
+        mode: "act",
+        turn: {
+          kind: "message",
+          message_id: "smoke-no-business",
+          text: "How did this week go?",
+        },
+      }),
     })
-    .toBeGreaterThan(0)
-  await expectNoFixtureContent(page)
+    return { status: response.status, refusal: await response.text() }
+  })
+  expect(status, refusal).toBe(403)
+  expect(JSON.parse(refusal)).toMatchObject({
+    class: "permission",
+    code: "org.unresolved",
+  })
+  // The api's own words, never anything of the turn or the session.
+  expect(refusal).not.toContain("How did this week go?")
 })
 
-test("New chat starts an empty conversation", async ({ page }) => {
+test("with no business, /app asks for its name and offers no chat", async ({
+  page,
+}) => {
+  // The probe owner has no organisation, so the new-chat address is the
+  // naming form: an assistant with no business has nothing to talk about.
+  // Not submitted, so the probe stays without one.
   await visit(page, "/app")
-  await page.getByLabel("Message input").fill("How did this week go?")
-  await page.getByLabel("Send message").click()
-  await expect(page.getByText("How did this week go?")).toBeVisible()
+  await expect(page).toHaveURL(/\/app$/)
+  await expect(
+    page.getByRole("heading", { name: "What's your business called?" })
+  ).toBeVisible()
+  await expect(page.getByLabel("Business name")).toBeVisible()
+  await expect(page.getByLabel("Message input")).toHaveCount(0)
 
-  // The rail's; the top bar carries one too.
+  // New conversation lands on the same form.
   await page
     .getByRole("complementary", { name: "Workspace" })
     .getByRole("link", { name: "New conversation" })
     .click()
-  await expect(
-    page.getByRole("heading", { name: "What should we do today?" })
-  ).toBeVisible()
-  await expect(page.getByText("How did this week go?")).toHaveCount(0)
-})
-
-test("every chat request is sent to act, with no mode to pick", async ({
-  page,
-}) => {
-  await visit(page, "/app")
-  const mode = page
-    .waitForRequest((request) => request.url().endsWith("/api/chat"))
-    .then((request) => request.postDataJSON()?.mode)
-  await page.getByLabel("Message input").fill("How did this week go?")
-  await page.getByLabel("Send message").click()
-  expect(await mode).toBe("act")
-  await expect(page.getByRole("button", { name: /^Mode/ })).toHaveCount(0)
-  // This account has no business, and the chat says so in plain words.
-  await expect(
-    page.getByText("Your account is not linked to a business yet.", {
-      exact: false,
-    })
-  ).toBeVisible()
-  await expect(
-    page.locator('[data-slot="aui_user-message-delivery"]')
-  ).toHaveAttribute("data-state", "sent")
+  await expect(page.getByLabel("Business name")).toBeVisible()
+  await expect(page.getByLabel("Message input")).toHaveCount(0)
+  await expectNoFixtureContent(page)
 })
 
 test("the rail holds a new conversation and the bell", async ({ page }) => {
@@ -264,11 +229,10 @@ test("the settings switch the theme", async ({ page }) => {
   ).toBeVisible()
 })
 
-test("Ask for help sends its question in a new chat", async ({ page }) => {
+test("Ask for help asks for the business first when there is none", async ({
+  page,
+}) => {
   await visit(page, "/app/staff")
-  const sent = page
-    .waitForRequest((request) => request.url().endsWith("/api/chat"))
-    .then((request) => JSON.stringify(request.postDataJSON()))
   await page.locator('[data-slot="profile-menu"]').click()
   const settings = page.getByRole("dialog", { name: "Settings" })
   await settings.getByRole("button", { name: "Help & support" }).click()
@@ -277,8 +241,9 @@ test("Ask for help sends its question in a new chat", async ({ page }) => {
     settings.getByRole("link", { name: "Getting started" })
   ).toHaveCount(0)
   await settings.getByRole("link", { name: "Ask for help" }).click()
-  expect(await sent).toContain("What can you help me with?")
-  await expect(page.getByText(/^What can you help me with\?/)).toBeVisible()
+  // No business to talk about yet, so naming it comes first.
+  await expect(page.getByLabel("Business name")).toBeVisible()
+  await expect(page.getByLabel("Message input")).toHaveCount(0)
 })
 
 test("a conversation the owner has none under says so", async ({ page }) => {
