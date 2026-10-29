@@ -15,6 +15,7 @@ import {
 } from "@workspace/db"
 import { withKit } from "./domain-flow.ts"
 import { heartbeatJob } from "./heartbeat.ts"
+import { redriveQueued } from "./publish.ts"
 import { reminderJob } from "./reminder-job.ts"
 import { type JobMessage, type JobsQueueMessage, scanDue } from "./schedule.ts"
 
@@ -265,19 +266,24 @@ async function failed(
 export async function jobsBatch(
   batch: MessageBatch<JobsQueueMessage>,
   env: Env,
-  scan = scanDue
+  scan = scanDue,
+  redrive = redriveQueued
 ): Promise<void> {
   await withKit(env, async (kit) => {
     for (const message of batch.messages) {
       const { body } = message
       if ("kind" in body) {
         try {
-          await scan(env, Date.now(), true)
+          if (body.kind === "redrive") await redrive(env, kit, body.orgId)
+          else await scan(env, Date.now(), true)
           message.ack()
         } catch (error) {
           console.error(
             JSON.stringify({
-              code: "jobs.wake_failed",
+              code:
+                body.kind === "redrive"
+                  ? "jobs.redrive_failed"
+                  : "jobs.wake_failed",
               error: failureCode(error),
             })
           )

@@ -31,8 +31,13 @@ export const CLAIM_BATCH = 100
 /** One claimed job, which is all a Queue message carries. */
 export type JobMessage = { jobId: string; orgId: string }
 
-/** What `reme-jobs` carries: a claimed job, or a wake asking for a scan. */
-export type JobsQueueMessage = JobMessage | ScanMessage
+export type RedriveMessage = { kind: "redrive"; orgId: string }
+
+/** What `reme-jobs` carries: a claimed job, a wake asking for a scan, or a redrive. */
+export type JobsQueueMessage = JobMessage | ScanMessage | RedriveMessage
+
+/** When a build whose start failed is redriven, ahead of the hourly sweep. */
+export const REDRIVE_DELAYS_S = [60, 180, 600]
 
 type ScheduleEnv = Pick<Env, "HYPERDRIVE" | "SCHEDULE" | "JOBS">
 
