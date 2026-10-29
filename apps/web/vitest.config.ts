@@ -7,6 +7,8 @@ import { defineConfig } from "vitest/config"
 export default defineConfig({
   resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
   test: {
+    // Three locally, so targeted runs from several agents leave the Mac usable.
+    maxWorkers: process.env.CI ? undefined : 3,
     include: ["src/**/*.test.ts", "scripts/**/*.test.ts"],
     // Rendering tests run ~10x slower in the gate's 4-CPU act container
     // beside three other suites; the 5 s default timed out a 95 ms test there.
