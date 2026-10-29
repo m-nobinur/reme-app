@@ -62,3 +62,39 @@ for (const entry of ["ThreadSend", "ThreadSendStreamed"]) {
     expect(drops, `scrollTop over the turn: ${seen.join(", ")}`).toEqual([])
   })
 }
+
+// Chrome counted the composer as moved when the next question's tray docked
+// above it (CLS 0.018 at 1024, 0.025 at 390), though it never moved on screen.
+for (const width of [1024, 390]) {
+  test(`a tray docking above the composer shifts nothing at ${width} px`, async ({
+    page,
+  }) => {
+    const entry = "ThreadSendStreamed"
+    await open(page, entry, width)
+    const root = page.locator(`[data-entry="${entry}"]`)
+    const input = root.getByLabel("Message input")
+    await input.fill("07700 900123")
+    await page.evaluate(() => {
+      const shifts: number[] = []
+      ;(window as unknown as { shifts: number[] }).shifts = shifts
+      new PerformanceObserver((list) => {
+        for (const shift of list.getEntries() as unknown as {
+          value: number
+          hadRecentInput: boolean
+        }[]) {
+          if (!shift.hadRecentInput) shifts.push(shift.value)
+        }
+      }).observe({ type: "layout-shift" })
+    })
+    await input.press("Enter")
+    await expect(
+      root.getByRole("textbox", { name: "Email address" })
+    ).toBeVisible({ timeout: 10_000 })
+    await page.waitForTimeout(1000)
+    expect(
+      await page.evaluate(
+        () => (window as unknown as { shifts: number[] }).shifts
+      )
+    ).toEqual([])
+  })
+}
