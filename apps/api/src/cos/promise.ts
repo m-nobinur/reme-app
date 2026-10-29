@@ -1,3 +1,6 @@
+import type { FactRecord } from "@workspace/contracts"
+import { claimFindings } from "@workspace/gates/claims"
+import { contentClaimsIn } from "@workspace/gates/text"
 import {
   type LanguageModel,
   type LanguageModelMiddleware,
@@ -8,6 +11,13 @@ type WrapStream = NonNullable<LanguageModelMiddleware["wrapStream"]>
 type Result = Awaited<ReturnType<WrapStream>>
 type Part = Result["stream"] extends ReadableStream<infer P> ? P : never
 type Finish = Extract<Part, { type: "finish" }>
+export type Prompt = Parameters<WrapStream>[0]["params"]["prompt"]
+
+/**
+ * One reading of the text a call ended on, against the prompt it was sent:
+ * the note to run the model again with, or null to let the turn end.
+ */
+export type Check = (said: string, prompt: Prompt) => Promise<string | null>
 
 /**
  * A step that ends on text alone ends the turn, since the SDK goes round
@@ -24,8 +34,12 @@ type Finish = Extract<Part, { type: "finish" }>
 export const NUDGE =
   "You said you would do something but made no tool call. Do it now with your tools, or say plainly what stops you. Do not promise it again."
 
-/** Re-runs in one turn. */
+/** Re-runs in one turn, whichever check asked for them. */
 export const MAX_RERUNS = 2
+
+/** What the model is told after a claim nothing it was shown backs; the claims follow. */
+export const CLAIMS_NOTE =
+  "Your reply says something is done, or states a detail about the business, that nothing you were shown backs. Say only what a tool result in this turn, the facts or the owner's words show; check with a tool if you can, or say plainly you are not sure. Do not repeat the claim. It was:"
 
 /** Two calls' usage as one step's: counts added, anything else as the later call has it. */
 function added<T>(first: T, later: T): T {
@@ -44,15 +58,19 @@ function added<T>(first: T, later: T): T {
   return later ?? first
 }
 
+/** The promise check: `promised` true runs the model again with `NUDGE`. */
+export const promiseGate =
+  (promised: (said: string) => Promise<boolean>): Check =>
+  async (said) =>
+    (await promised(said)) ? NUDGE : null
+
 /**
- * `promised` reads the text a call ended on; true runs the model again, at
- * most `MAX_RERUNS` times for the middleware's life, which is one turn. Text
- * streams as it comes and only the finish is held back until the reading is
- * in. A reading that throws ends the step as it would have ended.
+ * The checks read the text a call ended on in order, and the first note
+ * runs the model again, at most `MAX_RERUNS` times for the middleware's
+ * life, which is one turn. Text streams as it comes and only the finish is
+ * held back until the reading is in. A check that throws passes.
  */
-export function promiseGate(
-  promised: (said: string) => Promise<boolean>
-): LanguageModelMiddleware {
+function rerunGate(checks: readonly Check[]): LanguageModelMiddleware {
   let reruns = 0
   return {
     wrapStream: async ({ doStream, params, model }) => {
@@ -75,20 +93,31 @@ export function promiseGate(
           },
           async flush(controller) {
             let prompt = params.prompt
-            while (
-              finish?.finishReason.unified === "stop" &&
-              calls === 0 &&
-              said.trim() &&
-              reruns < MAX_RERUNS &&
-              (await promised(said).catch(() => false))
-            ) {
+            const noted = async () => {
+              if (
+                finish?.finishReason.unified !== "stop" ||
+                calls > 0 ||
+                !said.trim() ||
+                reruns >= MAX_RERUNS
+              )
+                return null
+              for (const check of checks) {
+                const note = await check(said, params.prompt).catch(() => null)
+                if (note) return note
+              }
+              return null
+            }
+            for (;;) {
+              const note = await noted()
+              if (!note) break
               reruns++
               prompt = [
                 ...prompt,
                 { role: "assistant", content: [{ type: "text", text: said }] },
-                { role: "user", content: [{ type: "text", text: NUDGE }] },
+                { role: "user", content: [{ type: "text", text: note }] },
               ]
-              const before = finish
+              // A note comes only after a finish.
+              const before = finish as Finish
               finish = undefined
               said = ""
               const reader = (
@@ -126,14 +155,168 @@ export function promiseGate(
   }
 }
 
-/** The CoS model, with a reply that promises work run again. */
-export const gated = (
-  model: LanguageModel,
-  promised: (said: string) => Promise<boolean>
-) =>
+/** The CoS model, with a reply a check reads as unfinished or unbacked run again. */
+export const gated = (model: LanguageModel, checks: readonly Check[]) =>
   typeof model === "string"
     ? model
     : wrapLanguageModel({
         model: model as never,
-        middleware: promiseGate(promised),
+        middleware: rerunGate(checks),
       })
+
+/** An evidence entry as the model reads it, its ids dropped. */
+type Shown = { kind?: unknown; status?: unknown }
+
+/** A done state: "it's live", "I've booked", "you're all set". */
+const DONE =
+  /\b(?:it['’]?s|it is|that['’]?s|that is|is|are|now|i['’]?ve|i have|has been|have been|all)\s+(?:now\s+)?(live|set|booked|published|connected)\b/i
+
+/** Words before a done state that make it a condition, a future or a no. */
+const NOT_DONE =
+  /\b(?:once|when|until|till|after|before|as soon as|if|whether|will|won['’]t|not|never)\b|['’]ll\b/i
+
+/** Opening hours or a service area, which only the decision model can match. */
+const HOURS_OR_AREA =
+  /\b(?:opening hours|open (?:from|until|till|between|on|at|\d)|closed on|service area|we (?:cover|serve)|areas? (?:we|you) (?:cover|serve))\b/i
+
+/** Every done state `said` states as done: questions, conditions and futures aside. */
+export function doneClaims(said: string): string[] {
+  return said
+    .split(/(?<=[.!?])\s+|\n+/)
+    .filter((line) => !line.trim().endsWith("?"))
+    .flatMap((line) => {
+      const m = DONE.exec(line)
+      return m && !NOT_DONE.test(line.slice(0, m.index)) ? [m[0]] : []
+    })
+}
+
+/** Whether this turn's evidence backs a done state: live and published need a page that answered 2xx. */
+const backs = (claim: string, evidence: readonly Shown[]) =>
+  /live|published/i.test(claim)
+    ? evidence.some(
+        (e) =>
+          e.kind === "url" &&
+          typeof e.status === "number" &&
+          e.status >= 200 &&
+          e.status < 300
+      )
+    : evidence.length > 0
+
+/**
+ * What the turn was shown, out of `prompt`: the owner's messages, the
+ * turn's context and every tool result's value, and the evidence in the
+ * tool results since the owner's latest message. The model's own words and
+ * the instructions say nothing about the business.
+ */
+export function shownIn(prompt: Prompt): {
+  seen: unknown[]
+  evidence: Shown[]
+} {
+  const owner = prompt.map((m) => m.role).lastIndexOf("user")
+  const seen: unknown[] = []
+  const evidence: Shown[] = []
+  prompt.forEach((message, at) => {
+    if (message.role === "user") {
+      for (const part of message.content)
+        if (part.type === "text") seen.push(part.text)
+    }
+    if (message.role !== "tool") return
+    for (const part of message.content) {
+      if (part.type !== "tool-result") continue
+      const { output } = part
+      if (output.type !== "json" && output.type !== "text") continue
+      seen.push(output.value)
+      const listed =
+        output.type === "json" &&
+        typeof output.value === "object" &&
+        output.value !== null &&
+        "evidence" in output.value
+          ? output.value.evidence
+          : null
+      if (at > owner && Array.isArray(listed))
+        evidence.push(...(listed as Shown[]))
+    }
+  })
+  return { seen, evidence }
+}
+
+/**
+ * What the turn was shown, as facts the claims rules read: a key under
+ * `about.` supports a claim word, and a quote has to sit in a
+ * `testimonials.` fact whose customer agreed to it.
+ */
+const asFacts = (seen: unknown[]) =>
+  [
+    { key: "about.seen", value: seen, provenance: { source: "owner_stated" } },
+    {
+      key: "testimonials.seen",
+      value: { permission: true, seen },
+      provenance: { source: "owner_stated" },
+    },
+  ] as unknown as FactRecord[]
+
+/** What the reply may state only as the turn was shown it. A time is left out: it is read in too many zones to match. */
+const CONTENT = new Set(["price", "phone", "email", "postcode"])
+
+/**
+ * What in `said` nothing in `prompt` backs. `unbacked` is sure: a done
+ * state with no evidence this turn, a contact, a postcode or a count, or a
+ * price when the turn was shown none. `unclear` may be a paraphrase or a sum
+ * of the owner's figures: a price when some were shown, a claim word, a
+ * quote, opening hours or a service area.
+ */
+export function readClaims(
+  said: string,
+  prompt: Prompt
+): { unbacked: string[]; unclear: string[]; seen: unknown[] } {
+  const { seen, evidence } = shownIn(prompt)
+  const unbacked = doneClaims(said).filter((c) => !backs(c, evidence))
+  const unclear: string[] = []
+  const shown = new Set(
+    contentClaimsIn(JSON.stringify(seen)).map((c) => `${c.kind}:${c.key}`)
+  )
+  const pricesShown = [...shown].some((k) => k.startsWith("price:"))
+  for (const c of contentClaimsIn(said)) {
+    if (!CONTENT.has(c.kind) || shown.has(`${c.kind}:${c.key}`)) continue
+    if (c.kind === "price" && pricesShown) unclear.push(c.text)
+    else unbacked.push(c.text)
+  }
+  const page = {
+    file: "reply",
+    texts: [{ value: said, node: "reply" }],
+    links: [],
+    jsonLd: [],
+  }
+  for (const f of claimFindings([page], asFacts(seen))) {
+    if (f.kind === "number") unbacked.push(f.claim)
+    else unclear.push(f.claim)
+  }
+  const area = HOURS_OR_AREA.exec(said)
+  if (area) unclear.push(area[0])
+  return { unbacked, unclear, seen }
+}
+
+/**
+ * The claims check: a done state or a business detail in the closing text
+ * that the turn was not shown runs the model again with `CLAIMS_NOTE` and
+ * the claims, once a turn. `unsure` is asked only when nothing is sure but
+ * something is unclear, with the reply and what the turn was shown; one that
+ * throws passes the reply.
+ */
+export function claimsGate(
+  unsure: (said: string, seen: string) => Promise<boolean>
+): Check {
+  let ran = false
+  return async (said, prompt) => {
+    if (ran) return null
+    const { unbacked, unclear, seen } = readClaims(said, prompt)
+    const rerun =
+      unbacked.length > 0 ||
+      (unclear.length > 0 &&
+        (await unsure(said, JSON.stringify(seen)).catch(() => false)))
+    if (!rerun) return null
+    ran = true
+    const claims = [...unbacked, ...unclear].map((c) => `"${c}"`)
+    return `${CLAIMS_NOTE} ${claims.join(", ")}.`
+  }
+}

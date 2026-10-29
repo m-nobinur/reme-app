@@ -18,9 +18,11 @@
   },
   "exports": {
     ".": "./src/index.ts",
+    "./claims": "./src/claims.ts",
     "./fields": "./src/fields.ts",
     "./preview": "./src/preview.ts",
     "./rubric": "./src/rubric.ts",
-    "./site-path": "./src/site-path.ts"
+    "./site-path": "./src/site-path.ts",
+    "./text": "./src/text.ts"
   }
 }

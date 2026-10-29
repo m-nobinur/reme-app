@@ -53,7 +53,7 @@ import {
   tool,
 } from "ai"
 import { connectGoogle } from "../google.ts"
-import { jevPromise } from "../jev.ts"
+import { jevClaims, jevPromise } from "../jev.ts"
 import { VOICE } from "../voice.ts"
 import {
   CONTEXT_POLICY,
@@ -65,7 +65,7 @@ import {
 } from "./history.ts"
 import { workspaceLabels } from "./labels.ts"
 import { fullness, remember } from "./memory.ts"
-import { gated } from "./promise.ts"
+import { type Check, claimsGate, gated, promiseGate } from "./promise.ts"
 import { failureMessage } from "./retry.ts"
 import { getIndexing, getSearchPerformance } from "./search-tools.ts"
 import { zonedIso } from "./time.ts"
@@ -1215,6 +1215,19 @@ function approvalFor(
   return null
 }
 
+/**
+ * A result as the model reads it: its evidence says what was checked, with
+ * no row or job id, which the owner must never hear.
+ */
+function withoutIds(output: unknown): JSONValue {
+  const evidence = (output as { evidence?: unknown } | null)?.evidence
+  if (!Array.isArray(evidence)) return output as JSONValue
+  return {
+    ...(output as object),
+    evidence: evidence.map(({ id: _, job_id: __, ...shown }) => shown),
+  } as JSONValue
+}
+
 /** Each tool, its schema `COS_TOOLS[name].input`, running through `runTool`. */
 function toolsFor(run: AgentTurn) {
   const execute =
@@ -1257,6 +1270,10 @@ function toolsFor(run: AgentTurn) {
   const describe = (name: CosToolName) => ({
     description: DESCRIPTIONS[name],
     execute: execute(name),
+    toModelOutput: ({ output }: { output: unknown }) =>
+      typeof output === "string"
+        ? { type: "text" as const, value: output }
+        : { type: "json" as const, value: withoutIds(output) },
   })
   return {
     get_workspace: tool({
@@ -1320,9 +1337,12 @@ function toolsFor(run: AgentTurn) {
       toModelOutput: ({ output }) => {
         const read = ConnectDomainOutput.safeParse(output)
         if (!(read.success && "apply_url" in read.data && read.data.apply_url))
-          return { type: "json", value: output as JSONValue }
+          return { type: "json", value: withoutIds(output) }
         const { apply_url: _, ...rest } = read.data
-        return { type: "json", value: { ...rest, add_for_me: true } }
+        return {
+          type: "json",
+          value: withoutIds({ ...rest, add_for_me: true }),
+        }
       },
     }),
     remove_domain: tool({
@@ -1449,6 +1469,18 @@ async function watching(run: AgentTurn): Promise<boolean> {
   )
 }
 
+const gateLine = (code: string, run: AgentTurn) =>
+  console.log(JSON.stringify({ code, turn_id: run.turn.turnId }))
+
+/** The claims check, with a `cos.claims_gate` line each time it runs the model again. */
+const logged =
+  (check: Check, run: AgentTurn): Check =>
+  async (said, prompt) => {
+    const note = await check(said, prompt)
+    if (note) gateLine("cos.claims_gate", run)
+    return note
+  }
+
 /**
  * The turn's agent. `prepareStep` refuses a call whose messages are not
  * the log's (ADR-034's check), and `onStepEnd` logs each step before the
@@ -1465,23 +1497,27 @@ export function cosAgent(
     if (error instanceof TurnClosed) run.abort.abort(error)
   }
   return new ToolLoopAgent({
-    // A reply that ends on a promise of work with no tool call is run again
-    // (`promise.ts`). With no key for Jev the turn ends as the model ended it.
-    // The key is read per reply, so building the agent reads no environment.
-    model: gated(model, async (said) => {
-      const jevKey = run.tools.env.OPENROUTER_API_KEY
-      if (!jevKey) return false
-      const rerun = await jevPromise(jevKey, said, () => watching(run))
-      if (rerun) {
-        console.log(
-          JSON.stringify({
-            code: "cos.promise_gate",
-            turn_id: run.turn.turnId,
-          })
-        )
-      }
-      return rerun
-    }),
+    // A reply that ends on a promise of work with no tool call, or on a claim
+    // nothing in the turn backs, is run again (`promise.ts`). With no key for
+    // Jev a promise ends the turn as the model ended it, and only a claim
+    // code is sure of runs again. The key is read per reply, so building the
+    // agent reads no environment.
+    model: gated(model, [
+      promiseGate(async (said) => {
+        const jevKey = run.tools.env.OPENROUTER_API_KEY
+        if (!jevKey) return false
+        const rerun = await jevPromise(jevKey, said, () => watching(run))
+        if (rerun) gateLine("cos.promise_gate", run)
+        return rerun
+      }),
+      logged(
+        claimsGate(async (said, seen) => {
+          const jevKey = run.tools.env.OPENROUTER_API_KEY
+          return jevKey ? jevClaims(jevKey, said, seen) : false
+        }),
+        run
+      ),
+    ]),
     instructions: INSTRUCTIONS,
     tools,
     activeTools: activeTools(mode),

@@ -25,6 +25,7 @@ import {
   DomainInspection,
   DomainRegistrantPrefill,
   ErrorEnvelope,
+  type Evidence,
   type FactRecord,
   FactValue,
   FactValueKey,
@@ -66,6 +67,8 @@ import {
   type OrgScopedDb,
   openTask,
   readTasks,
+  type SQL,
+  scheduledJobs,
   siteRevisions,
   sql,
   type Tenancy,
@@ -201,6 +204,62 @@ function optionsOf(requestId: string, options: string[] | null) {
 
 /** A domain the org still holds. */
 const live = sql`${domains.state} <> 'removed'`
+
+const record = (table: string, id: string): Evidence => ({
+  kind: "record",
+  table,
+  id,
+})
+
+/**
+ * A reminder's row and, when one is armed, its job, read back after the
+ * write. A failed read leaves the job out: the reminder is made either way.
+ */
+async function reminderEvidence(
+  kit: Tenancy,
+  orgId: string,
+  id: string
+): Promise<Evidence[]> {
+  const [job] = await kit
+    .withOrg({ orgId }, (db) =>
+      db
+        .select({ id: scheduledJobs.id, at: scheduledJobs.nextRunAt })
+        .from(scheduledJobs)
+        .where(
+          sql`${scheduledJobs.kind} = 'reminder' and ${scheduledJobs.refId} = ${id}`
+        )
+    )
+    .catch(() => [])
+  return [
+    record("reminders", id),
+    ...(job
+      ? [
+          {
+            kind: "job" as const,
+            job_id: job.id,
+            runs_at: job.at.toISOString(),
+          },
+        ]
+      : []),
+  ]
+}
+
+/** The newest row for `name` that `where` finds, read back after the orchestrator answered. */
+async function domainRecord(
+  { kit, owner }: Pick<ToolContext, "kit" | "owner">,
+  name: string,
+  where: SQL
+): Promise<Evidence[]> {
+  const [row] = await kit.withOrg({ orgId: owner.orgId }, (db) =>
+    db
+      .select({ id: domains.id })
+      .from(domains)
+      .where(sql`${eq(domains.name, name)} and ${where}`)
+      .orderBy(sql`${domains.createdAt} desc`)
+      .limit(1)
+  )
+  return row ? [record("domains", row.id)] : []
+}
 
 /** A Developer started again mid-build (the orchestrator's `noteResumed`). */
 const resumed = sql`e.type = ${AGENT_NOTE} and e.payload->>'kind' = 'resumed'`
@@ -761,9 +820,11 @@ export async function requestChange(
     approvalId
   )
   if (!response.ok) return refused(response)
+  const build = BuildSummary.parse(await response.json())
   return RequestChangeOutput.parse({
     outcome: "started",
-    build: BuildSummary.parse(await response.json()),
+    build,
+    evidence: [record("assignments", build.assignment_id)],
   })
 }
 
@@ -912,7 +973,11 @@ export async function answerQuestion(
         })
       )
     )
-  return { outcome: "answered", request_id: receipt.request_id }
+  return {
+    outcome: "answered",
+    request_id: receipt.request_id,
+    evidence: [record("facts", receipt.fact_id)],
+  }
 }
 
 const unknownZone = () =>
@@ -1021,6 +1086,7 @@ export async function createReminder(
     due_at: made.due_at,
     time_zone: read,
     ...(replaced ? { replaced: true } : {}),
+    evidence: await reminderEvidence(kit, owner.orgId, made.id),
   }
 }
 
@@ -1062,6 +1128,7 @@ export async function updateReminder(
     title: made.title,
     due_at: made.due_at,
     time_zone: read,
+    evidence: await reminderEvidence(kit, owner.orgId, made.id),
   }
 }
 
@@ -1086,7 +1153,12 @@ export async function deleteReminder(
     reminderUnconfirmed(error)
   }
   if (!gone) return refused(noReminder())
-  return { outcome: "deleted", reminder_id: gone.id, title: gone.title }
+  return {
+    outcome: "deleted",
+    reminder_id: gone.id,
+    title: gone.title,
+    evidence: [record("reminders", gone.id)],
+  }
 }
 
 /**
@@ -1106,6 +1178,7 @@ export async function setZone(
     outcome: "set",
     time_zone,
     now: zonedIso(new Date(), time_zone),
+    evidence: [record("orgs", owner.orgId)],
   }
 }
 
@@ -1122,10 +1195,14 @@ export async function recordReview(
   { slot, ...value }: RecordReviewInput
 ): Promise<RecordReviewOutput> {
   const key: ReviewFactKey = `testimonials.review_${slot}`
+  let id: string | undefined
   try {
-    await kit.withOrg(
+    id = await kit.withOrg(
       { orgId: owner.orgId, workosUserId: owner.session.workosUserId },
-      (db) => stateFacts(db, owner, [{ key, value }])
+      async (db) => {
+        await stateFacts(db, owner, [{ key, value }])
+        return (await readFacts(db)).find((f) => f.key === key)?.fact_id
+      }
     )
   } catch (error) {
     console.error(
@@ -1137,7 +1214,11 @@ export async function recordReview(
       message: "The review could not be confirmed.",
     })
   }
-  return { outcome: "recorded", slot }
+  return {
+    outcome: "recorded",
+    slot,
+    evidence: id ? [record("facts", id)] : [],
+  }
 }
 
 const noDomain = () =>
@@ -1218,7 +1299,7 @@ export const CONNECT_RETRY_MS = 2_000
  * provider's Domain Connect page sends the owner back to.
  */
 export async function connectDomain(
-  { env, owner }: ToolContext,
+  { env, kit, owner }: ToolContext,
   { name }: ConnectDomainInput,
   approvalId: string,
   turn: Pick<Turn, "sessionId">
@@ -1236,7 +1317,9 @@ export async function connectDomain(
     await new Promise((resolve) => setTimeout(resolve, CONNECT_RETRY_MS))
     result = await ask()
   }
-  return domainAnswer(result, ConnectDomainOutput.parse)
+  const answer = await domainAnswer(result, ConnectDomainOutput.parse)
+  if (answer.outcome !== "connecting") return answer
+  return { ...answer, evidence: await domainRecord({ kit, owner }, name, live) }
 }
 
 /**
@@ -1445,7 +1528,14 @@ export async function removeDomain(
 ): Promise<RemoveDomainOutput> {
   const answered = await removal(context, name, approvalId)
   if (!answered.ok) return refused(answered)
-  return { outcome: "removed" }
+  return {
+    outcome: "removed",
+    evidence: await domainRecord(
+      context,
+      name,
+      sql`${domains.state} = 'removed' and ${domains.removedAt} > now() - interval '5 minutes'`
+    ),
+  }
 }
 
 /**

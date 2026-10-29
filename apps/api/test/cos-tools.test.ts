@@ -119,6 +119,13 @@ function leaks(value: unknown, at = "$"): string[] {
 }
 
 const AT = new Date(Date.now() + 3_600_000).toISOString()
+
+/** A row a tool wrote, as its evidence names it. */
+const wrote = (table: string) => ({
+  kind: "record",
+  table,
+  id: expect.any(String),
+})
 const HTTPS = "https://preview.invalid/signed?token=bearer"
 
 /**
@@ -1261,6 +1268,7 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       expect(output).toEqual({
         outcome: "answered",
         request_id: waited.request_id,
+        evidence: [wrote("facts")],
       })
       expect(stub.calls).toHaveLength(1)
       const [call] = stub.calls
@@ -1334,6 +1342,7 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       expect(again).toEqual({
         outcome: "answered",
         request_id: waited.request_id,
+        evidence: [wrote("facts")],
       })
       expect(
         stub.calls.map((c) => c.request.headers.get("idempotency-key"))
@@ -1393,6 +1402,7 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       expect(again).toEqual({
         outcome: "answered",
         request_id: waited.request_id,
+        evidence: [wrote("facts")],
       })
       expect(
         stub.calls.map((c) => c.request.headers.get("idempotency-key"))
@@ -1551,6 +1561,10 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         reminder_id: expect.any(String),
         due_at: DUE,
         time_zone: null,
+        evidence: [
+          wrote("reminders"),
+          { kind: "job", job_id: expect.any(String), runs_at: DUE },
+        ],
       })
       expect(again).toEqual(first)
       const rows = await rowsKeyed(me, `approval:${approval}`)
@@ -1797,6 +1811,14 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         title: "Call the supplier",
         due_at: wallToUtc(`${day}T10:00:00`, "Europe/London"),
         time_zone: "Europe/London",
+        evidence: [
+          { ...wrote("reminders"), id: made.reminder_id },
+          {
+            kind: "job",
+            job_id: expect.any(String),
+            runs_at: wallToUtc(`${day}T10:00:00`, "Europe/London"),
+          },
+        ],
       })
       expect(
         kept(
@@ -1812,6 +1834,7 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         outcome: "deleted",
         reminder_id: made.reminder_id,
         title: "Call the supplier",
+        evidence: [{ ...wrote("reminders"), id: made.reminder_id }],
       })
       for (const output of [
         await deleteReminder(
@@ -1925,7 +1948,11 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
       expect(await recordReview(context(me), { slot: 1, ...MARTA })).toEqual(
         first
       )
-      expect(first).toEqual({ outcome: "recorded", slot: 1 })
+      expect(first).toEqual({
+        outcome: "recorded",
+        slot: 1,
+        evidence: [wrote("facts")],
+      })
       expect(await versions(me, "testimonials.review_1")).toEqual([
         { value: MARTA, version: 1, source: "owner_stated", validTo: null },
       ])
@@ -2082,7 +2109,7 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
           { sessionId: chat }
         )
       )
-      expect(output).toEqual(connecting)
+      expect(output).toEqual({ ...connecting, evidence: [] })
       const [call] = stub.calls
       expect(call?.request.method).toBe("POST")
       expect(new URL(call?.request.url ?? "").pathname).toBe(
@@ -2300,7 +2327,10 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
         const { output, stub } = await connectThrough(passing(code), () =>
           Response.json(connecting)
         )
-        expect(kept("connect_domain", output)).toEqual(connecting)
+        expect(kept("connect_domain", output)).toEqual({
+          ...connecting,
+          evidence: [],
+        })
         expect(
           stub.calls.map((c) => c.request.headers.get("idempotency-key"))
         ).toEqual(["approval-blip", "approval-blip"])
@@ -2348,7 +2378,7 @@ describe.skipIf(!url)("the CoS tool bodies, on a live connection", () => {
           approval
         )
       )
-      expect(output).toEqual({ outcome: "removed" })
+      expect(output).toEqual({ outcome: "removed", evidence: [] })
       const [call] = stub.calls
       expect(call?.request.method).toBe("DELETE")
       expect(new URL(call?.request.url ?? "").pathname).toBe(
