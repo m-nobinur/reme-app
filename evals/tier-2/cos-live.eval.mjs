@@ -202,7 +202,8 @@ function api(base, cookie) {
 
 /**
  * Every UI message chunk of an SSE response. With `cutAt`, the connection is
- * dropped as that chunk type arrives, as a client that went away would.
+ * dropped as that chunk type arrives, as a client that went away would:
+ * leaving the loop cancels the body.
  */
 async function chunksOf(response, cutAt) {
   const chunks = []
@@ -215,10 +216,7 @@ async function chunksOf(response, cutAt) {
     for (const frame of frames.filter((f) => f.startsWith("data: {"))) {
       const chunk = JSON.parse(frame.slice("data: ".length))
       chunks.push(chunk)
-      if (chunk.type === cutAt) {
-        await response.body.cancel()
-        return chunks
-      }
+      if (chunk.type === cutAt) return chunks
     }
   }
   return chunks
