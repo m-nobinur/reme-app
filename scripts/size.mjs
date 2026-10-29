@@ -19,7 +19,9 @@
  * first (the orchestrator, web); without it wrangler bundles `src/` from the app's
  * `wrangler.jsonc`. `--forbid` fails the gate when the bundle holds a string:
  * one of parse5's error codes, for a Worker that must not carry the content
- * gate the `@workspace/gates` root pulls in.
+ * gate the `@workspace/gates` root pulls in. `--startup` also profiles the
+ * built Worker's global scope with `wrangler check startup` and fails over
+ * `startupMs` of active CPU (ADR-027).
  */
 import { execFileSync } from "node:child_process"
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs"
@@ -28,14 +30,21 @@ import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { parseArgs } from "node:util"
 import { gzipSync } from "node:zlib"
+import { activeMs, startupProblem } from "./startup-cpu.mjs"
 
 const { positionals, values } = parseArgs({
   allowPositionals: true,
-  options: { config: { type: "string" }, forbid: { type: "string" } },
+  options: {
+    config: { type: "string" },
+    forbid: { type: "string" },
+    startup: { type: "boolean" },
+  },
 })
 const name = positionals[0]
 if (!name || positionals.length > 1) {
-  console.error("usage: size.mjs <app> [--config <path>] [--forbid <marker>]")
+  console.error(
+    "usage: size.mjs <app> [--config <path>] [--forbid <marker>] [--startup]"
+  )
   process.exit(1)
 }
 const app = fileURLToPath(new URL(`../apps/${name}/`, import.meta.url))
@@ -92,9 +101,12 @@ try {
 }
 
 // A misspelt key makes every comparison NaN, and NaN passes every test below.
-const missing = ["limit", "baseline", "drift"].filter(
-  (key) => !Number.isFinite(budget[key]) || budget[key] <= 0
-)
+const missing = [
+  "limit",
+  "baseline",
+  "drift",
+  ...(values.startup ? ["startupMs"] : []),
+].filter((key) => !Number.isFinite(budget[key]) || budget[key] <= 0)
 if (missing.length > 0) {
   console.error(
     `size: apps/${name}/size-budget.json has no usable ${missing.join(", ")}. ` +
@@ -154,4 +166,33 @@ if (Math.abs(delta) > budget.baseline * budget.drift) {
       "If the change is intended, set baseline to the new figure in the same diff."
   )
   process.exit(1)
+}
+
+if (values.startup) {
+  const dir = mkdtempSync(join(tmpdir(), `reme-${name}-startup-`))
+  const profile = join(dir, "worker-startup.cpuprofile")
+  let output = ""
+  try {
+    output = execFileSync(
+      "wrangler",
+      ["check", "startup", "--config", values.config, "--outfile", profile],
+      {
+        cwd: app,
+        encoding: "utf8",
+        env: { ...process.env, FORCE_COLOR: "0" },
+        stdio: ["ignore", "pipe", "inherit"],
+      }
+    )
+  } catch (error) {
+    console.error(`size: wrangler check startup failed. ${error.message}`)
+  }
+  const problem = startupProblem(output, budget.startupMs, profile)
+  console.log(
+    `startup ${activeMs(output) ?? "no reading"} ms  (ceiling ${budget.startupMs} ms)`
+  )
+  if (problem) {
+    console.error(`\nsize: ${problem}`)
+    process.exit(1)
+  }
+  rmSync(dir, { recursive: true, force: true })
 }

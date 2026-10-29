@@ -166,10 +166,10 @@ put it, 6.3 to 7.6.
   builds, read 13.7 to 16.2 and 16.4 to 50.2 ms. That was host load moving between the two blocks,
   and the paired run replaces it.
 
-Cloudflare rejects a deploy whose startup passes 1 second. Nothing in CI checks startup CPU. The
-`startupMs` gate the decision above describes was never built: `size-budget.json` has no such key,
-`pnpm size` does not run `wrangler check startup`, and issue #26 is still open. The numbers here
-come from running the command by hand.
+Cloudflare rejects a deploy whose startup passes 1 second. `pnpm size` for `apps/web` runs
+`wrangler check startup` on the same build and fails over the `startupMs` ceiling in
+`size-budget.json` (150), or when the `Active` line is missing or unparseable. The profile goes to a
+temporary directory, and a failure names its path. Measured on 2026-10-29: 13.9 ms.
 
 TanStack has no route option that keeps a component out of the server build. `ssr: false` and
 `ClientOnly` both leave the import in place. The Start compiler prunes only the bodies of

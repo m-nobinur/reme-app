@@ -10,7 +10,7 @@
     "cf-typegen": "wrangler types",
     "typecheck": "tsc --noEmit",
     "test": "node ../../scripts/floor.mjs web-unit -- vitest run",
-    "size": "node ../../scripts/size.mjs web --config dist/server/wrangler.json",
+    "size": "node ../../scripts/size.mjs web --config dist/server/wrangler.json --startup",
     "check:secrets": "node scripts/secret-scan.mjs"
   },
   "dependencies": {
