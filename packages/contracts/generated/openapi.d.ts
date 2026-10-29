@@ -6015,6 +6015,10 @@ export interface components {
         } & {
           [key: string]: unknown
         })[]
+        /** @constant */
+        stopped?: true
+        /** @constant */
+        partial?: true
       }
     }
     CosPrefix: {
@@ -8484,6 +8488,46 @@ export interface components {
       | {
           /** @constant */
           outcome: "integrity"
+          turn_id: string
+          model: string
+          usage: {
+            input_tokens: number
+            cached_input_tokens: number
+            output_tokens: number
+            cache_write_tokens?: number
+            reasoning_tokens?: number
+          }
+          cost_usd: number
+          tools: (
+            | "get_workspace"
+            | "get_facts"
+            | "get_preview"
+            | "request_change"
+            | "answer_question"
+            | "create_reminder"
+            | "update_reminder"
+            | "delete_reminder"
+            | "set_time_zone"
+            | "record_review"
+            | "check_domain"
+            | "connect_domain"
+            | "remove_domain"
+            | "find_domain"
+            | "buy_domain"
+            | "connect_google"
+            | "get_search_performance"
+            | "get_indexing"
+            | "remember"
+            | "put_off"
+            | "inspect_domain"
+            | "domain_bought"
+          )[]
+          steps: number
+          first_chunk_ms: number | null
+        }
+      | {
+          /** @constant */
+          outcome: "stopped"
           turn_id: string
           model: string
           usage: {
@@ -11827,7 +11871,7 @@ export interface components {
       /** Format: uuid */
       org_id: string
       /** @enum {string} */
-      kind: "reminder" | "heartbeat" | "weekly_report"
+      kind: "reminder" | "heartbeat" | "weekly_report" | "cos_continue"
       ref_id: string | null
       rule: string | null
       /** Format: date-time */
@@ -11836,6 +11880,10 @@ export interface components {
       last_run_at: string | null
       failures: number
       paused_at: string | null
+      payload: {
+        turn_id: string
+        attempt: number
+      } | null
       /** Format: date-time */
       created_at: string
     }

@@ -24,6 +24,14 @@ describe("ScheduledJob", () => {
       "a paused job",
       { ...job, failures: 5, paused_at: "2026-08-27T09:30:00Z" },
     ],
+    [
+      "a continuation",
+      {
+        ...job,
+        kind: "cos_continue",
+        payload: { turn_id: "01K6A000000000000000000001", attempt: 2 },
+      },
+    ],
   ])("accepts %s", (_name, value) => {
     expect(verdict("ScheduledJob", ScheduledJob, value)).toEqual(ACCEPTED)
   })
@@ -39,6 +47,14 @@ describe("ScheduledJob", () => {
     ["no claim field", { ...job, claimed_at: undefined }],
     ["a negative failure count", { ...job, failures: -1 }],
     ["no org", { ...job, org_id: undefined }],
+    [
+      "a third continuation",
+      {
+        ...job,
+        kind: "cos_continue",
+        payload: { turn_id: "01K6A000000000000000000001", attempt: 3 },
+      },
+    ],
   ])("refuses %s", (_name, value) => {
     expect(verdict("ScheduledJob", ScheduledJob, value)).toEqual(REFUSED)
   })

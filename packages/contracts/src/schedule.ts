@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { Timestamp, TimeZone, Uuid } from "./common.ts"
+import { Timestamp, TimeZone, Ulid, Uuid } from "./common.ts"
 
 // Row shapes for the scheduler and the delivery outbox, and the org columns
 // they read. Reminders, the heartbeat and the weekly report are all rows in
@@ -7,10 +7,26 @@ import { Timestamp, TimeZone, Uuid } from "./common.ts"
 // consumer runs each under `withOrg`.
 
 /**
- * `reminder` points at a `reminders` row through `ref_id`. The other two are
- * one job per org and have no referent.
+ * `reminder` points at a `reminders` row through `ref_id`. `heartbeat` and
+ * `weekly_report` are one job per org and have no referent. `cos_continue`
+ * is the system's: one more CoS turn for a turn cut off with work left, its
+ * `ref_id` the conversation.
  */
-export const JobKind = z.enum(["reminder", "heartbeat", "weekly_report"])
+export const JobKind = z.enum([
+  "reminder",
+  "heartbeat",
+  "weekly_report",
+  "cos_continue",
+])
+
+/** Continuations one owner turn may get: the first and a second. */
+export const MAX_CONTINUATIONS = 2
+
+/** A `cos_continue`'s payload: the turn it carries on from, and which try this is. */
+export const CosContinue = z.strictObject({
+  turn_id: Ulid,
+  attempt: z.int().min(1).max(MAX_CONTINUATIONS),
+})
 
 /**
  * `rule` is a cron expression read in `orgs.time_zone`, and null for a
@@ -30,6 +46,8 @@ export const ScheduledJob = z.strictObject({
   last_run_at: Timestamp.nullable(),
   failures: z.int().nonnegative(),
   paused_at: Timestamp.nullable(),
+  /** A `cos_continue`'s payload; null for every other kind. */
+  payload: CosContinue.nullable(),
   created_at: Timestamp,
 })
 
@@ -133,6 +151,7 @@ export const OrgSchedule = z.strictObject({
 export const SetTimeZoneRequest = z.strictObject({ time_zone: TimeZone })
 
 export type JobKind = z.infer<typeof JobKind>
+export type CosContinue = z.infer<typeof CosContinue>
 export type ScheduledJob = z.infer<typeof ScheduledJob>
 export type JobRun = z.infer<typeof JobRun>
 export type Delivery = z.infer<typeof Delivery>

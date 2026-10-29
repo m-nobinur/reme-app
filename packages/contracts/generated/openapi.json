@@ -21066,6 +21066,14 @@
                   ],
                   "additionalProperties": {}
                 }
+              },
+              "stopped": {
+                "type": "boolean",
+                "const": true
+              },
+              "partial": {
+                "type": "boolean",
+                "const": true
               }
             },
             "required": [
@@ -29468,6 +29476,121 @@
               "outcome": {
                 "type": "string",
                 "const": "integrity"
+              },
+              "turn_id": {
+                "type": "string",
+                "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+              },
+              "model": {
+                "type": "string",
+                "minLength": 1
+              },
+              "usage": {
+                "type": "object",
+                "properties": {
+                  "input_tokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "cached_input_tokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "output_tokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "cache_write_tokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "reasoning_tokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "input_tokens",
+                  "cached_input_tokens",
+                  "output_tokens"
+                ],
+                "additionalProperties": false
+              },
+              "cost_usd": {
+                "type": "number",
+                "minimum": 0
+              },
+              "tools": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "get_workspace",
+                    "get_facts",
+                    "get_preview",
+                    "request_change",
+                    "answer_question",
+                    "create_reminder",
+                    "update_reminder",
+                    "delete_reminder",
+                    "set_time_zone",
+                    "record_review",
+                    "check_domain",
+                    "connect_domain",
+                    "remove_domain",
+                    "find_domain",
+                    "buy_domain",
+                    "connect_google",
+                    "get_search_performance",
+                    "get_indexing",
+                    "remember",
+                    "put_off",
+                    "inspect_domain",
+                    "domain_bought"
+                  ]
+                }
+              },
+              "steps": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 6
+              },
+              "first_chunk_ms": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "outcome",
+              "turn_id",
+              "model",
+              "usage",
+              "cost_usd",
+              "tools",
+              "steps",
+              "first_chunk_ms"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "stopped"
               },
               "turn_id": {
                 "type": "string",
@@ -41336,7 +41459,8 @@
             "enum": [
               "reminder",
               "heartbeat",
-              "weekly_report"
+              "weekly_report",
+              "cos_continue"
             ]
           },
           "ref_id": {
@@ -41409,6 +41533,32 @@
               }
             ]
           },
+          "payload": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "turn_id": {
+                    "type": "string",
+                    "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+                  },
+                  "attempt": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2
+                  }
+                },
+                "required": [
+                  "turn_id",
+                  "attempt"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -41426,6 +41576,7 @@
           "last_run_at",
           "failures",
           "paused_at",
+          "payload",
           "created_at"
         ],
         "additionalProperties": false

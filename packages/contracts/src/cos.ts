@@ -641,6 +641,8 @@ export const CosTurn = z.discriminatedUnion("outcome", [
   z.strictObject({ outcome: z.literal("gated"), ...Ran }),
   z.strictObject({ outcome: z.literal("error"), ...Ran }),
   z.strictObject({ outcome: z.literal("integrity"), ...Ran }),
+  /** Cut off by its time limit after content streamed; its message is kept, marked `stopped`. */
+  z.strictObject({ outcome: z.literal("stopped"), ...Ran }),
   z.strictObject({
     outcome: z.literal("abandoned"),
     turn_id: Ulid,
@@ -691,6 +693,10 @@ export const CosMessage = z.strictObject({
     id: ConversationMessage.shape.id,
     role: Content.role,
     parts: Content.parts,
+    /** The run was cut off mid-reply; the parts are what had streamed. */
+    stopped: z.literal(true).optional(),
+    /** The turn hit its step or time limit with work left. */
+    partial: z.literal(true).optional(),
   }),
 })
 
