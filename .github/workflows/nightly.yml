@@ -56,7 +56,11 @@ jobs:
           ORCHESTRATOR_URL: ${{ vars.ORCHESTRATOR_URL }}
           ORCHESTRATOR_TOKEN: ${{ secrets.ORCHESTRATOR_TOKEN }}
 
+  # After tier 2, never beside it: both spend on one OpenRouter key, and this
+  # job's spend cap reads how far that key's usage moved.
   behaviour:
+    needs: tier-2
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
