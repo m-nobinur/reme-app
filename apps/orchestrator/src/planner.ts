@@ -19,7 +19,6 @@ import {
 import {
   appendEvent,
   assignments,
-  currentFacts,
   eq,
   events,
   type RecentDesign,
@@ -37,7 +36,7 @@ import {
 } from "@workspace/facade"
 import { generatedImageFindings } from "@workspace/gates"
 import { z } from "zod"
-import { creationChoices } from "./brief.ts"
+import { creationChoices, siteFacts } from "./brief.ts"
 import {
   DESIGN_RULES,
   factValue,
@@ -1133,7 +1132,7 @@ export async function planRound(input: {
       })
       return { done: kept }
     }
-    const facts = (await currentFacts(db))
+    const facts = (await siteFacts(db))
       .filter((f) => !choices.withhold.includes(f.key))
       .map(toFactRecord)
     return {
