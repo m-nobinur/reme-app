@@ -230,9 +230,7 @@ test("the ready card sits at the end of the thread and never claims an approval 
   await expect(cards.nth(2).getByRole("alert")).toContainText("newer version")
   await expect(cards.nth(3).getByRole("link")).toHaveCount(0)
   await expect(cards.nth(4).getByRole("link")).toHaveCount(0)
-  await expect(cards.nth(5)).toHaveText(
-    "Approved. Your website is being published."
-  )
+  await expect(cards.nth(5)).toHaveText("Approved, publishing your website")
 })
 
 test("a docked ready card is one row above the composer that opens in place", async ({

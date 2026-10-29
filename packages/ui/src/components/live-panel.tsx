@@ -1543,7 +1543,7 @@ function ComingUp({
                     )}
                     <time
                       className={cn(
-                        "w-16 shrink-0 whitespace-nowrap text-sm tabular-nums",
+                        "min-w-16 shrink-0 whitespace-nowrap text-sm tabular-nums",
                         !ahead && "text-muted-foreground"
                       )}
                       dateTime={item.at}
