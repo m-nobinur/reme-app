@@ -69,7 +69,7 @@ export function checklistFor(
   zone: string | null,
   now: Date
 ): CheckRow[] {
-  const ctx: CopyContext = { orgId: "", assistant: workspace.assistantName }
+  const ctx: CopyContext = { seed: "", assistant: workspace.assistantName }
   const activity = workspace.activity
   const standing = activity?.standing
   // Times wait for the reader's zone, so the server's HTML and the first

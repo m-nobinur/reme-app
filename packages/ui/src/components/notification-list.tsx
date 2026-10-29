@@ -1,5 +1,5 @@
 import { Popover as PopoverPrimitive } from "@base-ui/react/popover"
-import { BellIcon } from "@phosphor-icons/react"
+import { BellIcon, HourglassMediumIcon } from "@phosphor-icons/react"
 import { railItemClass } from "@workspace/ui/components/app-shell"
 import {
   type AttentionKind,
@@ -31,9 +31,23 @@ import {
  * on. The link is a slot, so this package still imports no router.
  */
 
+/**
+ * A job waiting on the owner (a DNS change, a payment, a sign-in), listed
+ * beside the notifications from the same list the panel reads. Not a sixth
+ * attention kind: it is where work stands, not something raised.
+ */
+type EntryKind = AttentionKind | "wait"
+const WAIT = {
+  label: "Waiting on you",
+  icon: HourglassMediumIcon,
+  variant: "secondary",
+} as const
+const kindOf = (kind: EntryKind) =>
+  kind === "wait" ? WAIT : attentionKind[kind]
+
 type NotificationItem = {
   id: string
-  kind: AttentionKind
+  kind: EntryKind
   title: string
   /** Model or team text, bounded here rather than trusted to be short. */
   detail: string
@@ -79,7 +93,7 @@ function NotificationList({
       ) : null}
       <ul className="flex flex-col divide-y divide-border">
         {items.map((item) => {
-          const kind = attentionKind[item.kind]
+          const kind = kindOf(item.kind)
           const expires = formatDateTime(item.expiresAt, zone ?? undefined)
           return (
             <li
@@ -116,7 +130,7 @@ function NotificationList({
 /** One row of the bell's menu: a link to follow, or an action to run. */
 type NotificationEntry = {
   id: string
-  kind: AttentionKind
+  kind: EntryKind
   title: string
   at: string
   unread: boolean
@@ -131,7 +145,7 @@ const TABS = [
   {
     id: "needs-you",
     label: "Needs you",
-    kinds: ["question", "approval", "reminder"],
+    kinds: ["wait", "question", "approval", "reminder"],
   },
   { id: "updates", label: "Updates", kinds: ["report", "alert"] },
 ] as const
@@ -273,7 +287,7 @@ function EntryRow({
   close: () => void
   zone?: string | null | undefined
 }) {
-  const kind = attentionKind[item.kind]
+  const kind = kindOf(item.kind)
   const row = (
     <>
       <kind.icon

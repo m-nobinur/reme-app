@@ -4,19 +4,24 @@ import {
   CircleIcon,
 } from "@phosphor-icons/react"
 import { createFileRoute, getRouteApi } from "@tanstack/react-router"
+import type { ActivitySegment } from "@workspace/contracts"
 import { PageHeader } from "@workspace/ui/components/app-shell"
 import { Badge } from "@workspace/ui/components/badge"
+import { notStarted, ownerWaits } from "@workspace/ui/lib/activity-copy"
 import { formatDateTime } from "@workspace/ui/lib/format"
 import { cn, META } from "@workspace/ui/lib/utils"
+import type { Workspace } from "@/lib/api/types"
 import { assistantOf, leading } from "@/lib/briefing"
 import { completedOf } from "@/lib/panel"
 import { useLiveWorkspace } from "@/lib/workspace"
 import { useBrowserZone } from "@/panel/workspace-panel"
 
 /**
- * What the assistant is helping the owner set up. Completed is real, read
- * from the workspace's activity, and the panel's Completed links here. The
- * tasks below it are examples: nothing stores or tracks a task yet.
+ * What the assistant is helping the owner set up. Completed and every
+ * stage's state are read from the workspace's activity, the facts the panel
+ * reads, and a stage waiting on the owner says what from the same list as
+ * the panel's Waiting on you. The panel's Completed links here. Calendar is
+ * not tracked yet, so it only says it comes later.
  */
 export const Route = createFileRoute("/app/tasks")({
   component: TasksPage,
@@ -44,57 +49,110 @@ type Task = {
   when?: string | null
 }
 
-/** The tasks, worded with what the owner calls their assistant. */
-const groupsOf = (
+/** Where a segment stands, as a stage's status; none yet is to come. */
+const statusOf = (segment: ActivitySegment | undefined): Status =>
+  segment?.state === "done"
+    ? "done"
+    : segment && segment.state !== "upcoming" && !notStarted(segment)
+      ? "active"
+      : "waiting"
+
+/** The stages, each from the activity the panel reads, worded with the assistant's name. */
+function groupsOf(
+  workspace: Workspace | null,
   assistant: string
-): { id: string; title: string; tasks: Task[] }[] => [
-  {
-    id: "getting-started",
-    title: "Getting started",
-    tasks: [
-      {
-        title: "Onboarding",
-        detail: `Tell ${assistant} your phone number, industry, services and area.`,
-        status: "active",
-      },
-    ],
-  },
-  {
-    id: "website",
-    title: "Website",
-    tasks: [
-      {
-        title: "Website setup",
-        detail: `${leading(assistant)} builds your first version and you publish it.`,
-        status: "waiting",
-        after: "Onboarding",
-      },
-      {
-        title: "Domain setup",
-        detail: "Point a domain of your own at your website.",
-        status: "waiting",
-        after: "Website setup",
-      },
-      {
-        title: "Search Console setup",
-        detail: "Show Google your site so people can find it in search.",
-        status: "waiting",
-        after: "Domain setup",
-      },
-    ],
-  },
-  {
-    id: "calendar",
-    title: "Calendar",
-    tasks: [
-      {
-        title: "Calendar setup",
-        detail: "Connect your calendar so bookings land where you work.",
-        status: "waiting",
-      },
-    ],
-  },
-]
+): { id: string; title: string; tasks: Task[] }[] {
+  const activity = workspace?.activity
+  const journey = activity?.journey ?? []
+  const standing = activity?.standing ?? []
+  const live = workspace?.live != null
+  const begun =
+    live ||
+    (workspace?.builds.length ?? 0) > 0 ||
+    journey.some((s) => s.kind !== "onboarding" && s.state !== "upcoming")
+  const onboarding = journey.find((s) => s.kind === "onboarding")
+  // Setup is done once a build has begun, whether or not its segment is still read.
+  const setup: Status =
+    onboarding && onboarding.state !== "done"
+      ? statusOf(onboarding)
+      : begun || onboarding
+        ? "done"
+        : "active"
+  const site: Status = live
+    ? "done"
+    : journey.some(
+          (s) =>
+            (s.kind === "website" ||
+              s.kind === "golive" ||
+              s.kind === "change") &&
+            s.state !== "upcoming"
+        )
+      ? "active"
+      : "waiting"
+  const address = standing.find((s) => s.kind === "address")
+  const google = standing.find((s) => s.kind === "google")
+  // A stage waiting on the owner says what, in the panel's words.
+  const waits = ownerWaits(activity)
+  const needs = (segment: ActivitySegment | undefined) =>
+    waits.find((wait) => wait.id === segment?.id)?.title
+  const after = (status: Status, before: Status, name: string) =>
+    status === "waiting" && before !== "done" ? { after: name } : {}
+  const domain = statusOf(address)
+  const search = statusOf(google)
+  return [
+    {
+      id: "getting-started",
+      title: "Getting started",
+      tasks: [
+        {
+          title: "Onboarding",
+          detail:
+            needs(onboarding) ??
+            `Tell ${assistant} about your business, your services and where you work.`,
+          status: setup,
+        },
+      ],
+    },
+    {
+      id: "website",
+      title: "Website",
+      tasks: [
+        {
+          title: "Website setup",
+          detail: `${leading(assistant)} builds your first version and you publish it.`,
+          status: site,
+          ...after(site, setup, "Onboarding"),
+        },
+        {
+          title: "Domain setup",
+          detail:
+            needs(address) ?? "Point a domain of your own at your website.",
+          status: domain,
+          ...after(domain, site, "Website setup"),
+        },
+        {
+          title: "Search Console setup",
+          detail:
+            needs(google) ??
+            "Show Google your site so people can find it in search.",
+          status: search,
+          ...after(search, domain, "Domain setup"),
+        },
+      ],
+    },
+    {
+      id: "calendar",
+      title: "Calendar",
+      tasks: [
+        {
+          title: "Calendar setup",
+          detail: "Connect your calendar so bookings land where you work.",
+          status: "waiting",
+        },
+      ],
+    },
+  ]
+}
 
 function TaskRow({ task }: { task: Task }) {
   const status = STATUS[task.status]
@@ -129,7 +187,7 @@ function TasksPage() {
   const zone = useBrowserZone()
   const assistant = assistantOf(workspace)
   const ctx = {
-    orgId: active?.id ?? "",
+    seed: active?.id ?? "",
     assistant: workspace?.assistantName ?? null,
   }
   // Times wait for the reader's zone, as the panel's do.
@@ -147,7 +205,7 @@ function TasksPage() {
     ...(completed.length
       ? [{ id: "completed", title: "Completed", tasks: completed }]
       : []),
-    ...groupsOf(assistant),
+    ...groupsOf(workspace, assistant),
   ]
   return (
     <>
