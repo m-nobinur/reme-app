@@ -1,6 +1,7 @@
 import type { CosWorkspace } from "@workspace/contracts"
 import { describe, expect, it } from "vitest"
-import { contextOf } from "../src/cos/agent.ts"
+import { contextOf, INSTRUCTIONS } from "../src/cos/agent.ts"
+import { workspaceLabels } from "../src/cos/labels.ts"
 
 const BUILD = "3f2b9c1e-8a4d-4f6b-9c2a-1d5e7f8a9b0d"
 const ASKED = "9d1c0a52-7b3e-4e8f-8a61-2c4d5e6f7a8b"
@@ -178,7 +179,6 @@ describe("the workspace the CoS reads", () => {
         restarted: { minutes_ago: 2, cause: "stalled", working: true },
       })
     ).toMatchObject({
-      running_minutes: 38,
       wait: "about 39 to 47 minutes",
       longer_than_usual: true,
       minutes_since_last_work: 12,
@@ -197,9 +197,32 @@ describe("the workspace the CoS reads", () => {
         range: "about 6 to 10 minutes",
       },
     })
-    expect(onTime).toMatchObject({ running_minutes: 4 })
+    expect(onTime).toMatchObject({ wait: "about 6 to 10 minutes" })
     expect(onTime).not.toHaveProperty("longer_than_usual")
     expect(onTime).not.toHaveProperty("minutes_since_last_work")
+  })
+
+  it("keeps the workspace JSON under 860 characters on the fixture (941 before the trim, 851 after)", () => {
+    expect(JSON.stringify(workspaceLabels(WORKSPACE)).length).toBeLessThan(860)
+  })
+
+  it("keeps every field the instructions name", () => {
+    const data = JSON.stringify(dumped(WORKSPACE))
+    const named = [
+      "reviews_waiting",
+      "missing_facts",
+      "stopped_recently",
+      "questions",
+      "lane",
+      "goal",
+      "fixing",
+    ]
+    for (const key of named) {
+      expect(INSTRUCTIONS).toContain(
+        key.replace(/_/g, " ").split(" ")[0] as string
+      )
+      expect(data).toContain(`"${key}"`)
+    }
   })
 
   it("holds no id or hash outside a ref", () => {
