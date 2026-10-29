@@ -79,7 +79,12 @@ import {
   trayLogoPath,
   voiceOf,
 } from "./onboarding.ts"
-import { firstName, isAsked, question } from "./onboarding-copy.ts"
+import {
+  firstName,
+  say as inTone,
+  isAsked,
+  question,
+} from "./onboarding-copy.ts"
 import {
   DESIGN,
   OPTIONAL_ASKS,
@@ -1781,11 +1786,15 @@ export async function planTurn(
   const calls: PlanCall[] = []
   const began = Date.now()
   const out = { shown: "" as string, firstChunkMs: null as number | null }
+  // The model writes in the tone, but contractions are not left to it: the
+  // owner reads the chosen tone's words. `shown` keeps the model's own text,
+  // which a retry must begin with. Whole sentences arrive, so no word splits.
+  const tone = voiceOf(s.onboarding)
   const show = (words: string) => {
     if (!onSay || words.length === 0 || cancel?.aborted) return
     out.firstChunkMs ??= Date.now() - began
     out.shown += words
-    onSay(words)
+    onSay(inTone(tone, words))
   }
   // A build's message waits for its outcome; a settled persona's card sits
   // inside the message. The parts carry either, paced.
@@ -2151,9 +2160,11 @@ export function planParts(
   // The reply's first paragraph introduces the persona, which sits under it
   // and above the rest, the next question.
   const persona = personaOf(s, after)
-  const [intro = "", ...rest] = plan.say.trim().split(/\n\s*\n/)
+  // In the tone's words, as the stream showed them.
+  const said = inTone(voiceOf(s.onboarding), plan.say.trim())
+  const [intro = "", ...rest] = said.split(/\n\s*\n/)
   const lead = [
-    text(persona.length > 0 ? intro : plan.say.trim()),
+    text(persona.length > 0 ? intro : said),
     ...persona,
     ...(persona.length > 0 && rest.length > 0 ? [text(rest.join("\n\n"))] : []),
   ]

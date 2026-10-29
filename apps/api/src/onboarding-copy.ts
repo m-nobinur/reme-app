@@ -102,7 +102,18 @@ const TONE: Record<ToneId, [RegExp, string][]> = {
     [/\bcould you\b/gi, "can you"],
     [/\bperfect\b/gi, "nice"],
     [/\bI will\b/g, "I'll"],
+    [/\bI am\b/g, "I'm"],
+    // Only before a past participle: "I've started", never "I've a van".
+    [/\bI have(?= \w+(?:ed|en|t|ne|de)\b)/g, "I've"],
+    [/\byou will\b/gi, "you'll"],
+    [/\bwe will\b/gi, "we'll"],
+    [/\byou are\b/gi, "you're"],
+    [/\bit is\b/gi, "it's"],
+    [/\bthat is\b/gi, "that's"],
     [/\bdo not\b/gi, "don't"],
+    [/\bdoes not\b/gi, "doesn't"],
+    [/\bis not\b/gi, "isn't"],
+    [/\bcannot\b/gi, "can't"],
   ],
 }
 

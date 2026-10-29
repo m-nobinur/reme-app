@@ -1611,7 +1611,8 @@ describe("the plan's parts", () => {
     expect(planParts(checked.checked, s, counter()).slice(0, 2)).toEqual([
       {
         type: "text",
-        text: "I've gone with Reme, she/her, with a professional manner.",
+        // The professional tone it settles drops the model's contraction.
+        text: "I have gone with Reme, she/her, with a professional manner.",
         state: "done",
       },
       {

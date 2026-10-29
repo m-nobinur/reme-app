@@ -56,6 +56,7 @@ import {
   quoteForm,
   quoteUnchanged,
   retry,
+  say,
   started,
   type Voice,
 } from "../src/onboarding-copy.ts"
@@ -1547,6 +1548,24 @@ describe("the onboarding copy", () => {
     expect(at("professional")).not.toContain("!")
     expect(at("professional")).not.toMatch(/\bI'm\b|\bit's\b/i)
     expect(at("casual")).toMatch(/\bWant me to build\b/)
+  })
+
+  it("contracts a model's words in the casual tone, and only before a past participle for I have", () => {
+    const casual = voice({ org: ORGS[0], tone: "casual" })
+    expect(
+      say(
+        casual,
+        "I have started building the website now. I will let you know once it is ready."
+      )
+    ).toBe(
+      "I've started building the website now. I'll let you know once it's ready."
+    )
+    expect(say(casual, "I have a van and you are on the list.")).toBe(
+      "I have a van and you're on the list."
+    )
+    expect(
+      say(voice({ org: ORGS[0], tone: "friendly" }), "I have started.")
+    ).toBe("I have started.")
   })
 
   it("opens with text only: a greeting by first name, the plan, and what the business does", () => {
