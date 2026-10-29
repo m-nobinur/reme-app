@@ -474,13 +474,16 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
     const reminders = panel(page).getByRole("tabpanel")
     const noteOf = (title: string) =>
       reminders.locator('[data-slot="reminder-note"]', { hasText: title })
-    /** Which source the api recorded for the note, while it is open. */
-    const sourceOf = async (title: string) =>
-      (await readJson<Workspace>("/workspace")).reminders.notes.find(
-        (each) => each.title === title
+    /**
+     * Which source the api recorded for the note, while it is open: found by
+     * the run's token, since the panel capitalises the title the api holds.
+     */
+    const source = async () =>
+      (await readJson<Workspace>("/workspace")).reminders.notes.find((each) =>
+        each.title.includes(token)
       )?.source
 
-    // The Chief of Staff's, through "+" and its approval card.
+    // The Chief of Staff's, through "+": the owner's own ask needs no card.
     await page.getByRole("button", { name: "Quick actions" }).click()
     await page.getByRole("menuitem", { name: "Remind me" }).click()
     const input = page.getByLabel("Message input")
@@ -489,11 +492,9 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
       `Remind me to ring the window cleaner about ${token} tomorrow at 10am`
     )
     await page.getByLabel("Send message").click()
-    const card = page.locator('[data-slot="create-reminder"]').last()
-    await card
-      .getByRole("button", { name: "Add reminder" })
-      .click({ timeout: WAIT.chat })
-    await expect(card).toContainText("Added to Reminders.", {
+    await expect(
+      page.locator('[data-slot="create-reminder"]').last()
+    ).toContainText("Added to Reminders.", {
       timeout: WAIT.chat,
     })
     await panel(page)
@@ -504,7 +505,7 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
     const set = noteOf(token)
     await expect(set).toContainText("Tomorrow", { timeout: WAIT.chat })
     const setTitle = await set.locator("span").first().innerText()
-    expect(await sourceOf(setTitle)).toBe("assistant")
+    expect(await source()).toBe("assistant")
     await reminders.getByRole("button", { name: `Done: ${setTitle}` }).click()
     // The last one done takes its tab with it.
     await expect(
