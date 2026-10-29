@@ -158,6 +158,8 @@ const script = {
   held: null as string | null,
   /** The lane the created event recorded; none is an instance from before lanes. */
   lane: {} as { lane?: string; change_kind?: string | null },
+  /** The steers logged before the Developer was admitted. */
+  early: [] as { event_id: string; message: string; owner: boolean }[],
   /** Whether the one-call quick edit gets to a report. */
   quickDone: true as boolean,
   /** Whether a failure is followed up with a retry and a line in the chat. */
@@ -267,6 +269,7 @@ vi.mock("../src/revise.ts", () => ({
 // The relay's bodies are driven in relay.test.ts; here the question is always the owner's.
 vi.mock("../src/relay.ts", () => ({
   askOwner: async () => "posted",
+  earlySteers: async () => script.early,
   heldSteers: async () => [],
   relayQuestion: async () => ({ ask: "Do you have parking?" }),
 }))
@@ -709,6 +712,7 @@ const paths: [string, Wake[], Setup, { outcome: string }][] = [
 beforeEach(() => {
   vi.setSystemTime(new Date("2026-09-27T09:00:00Z"))
   script.looks = []
+  script.early = []
   dispatched.length = 0
   resumedOn.length = 0
 })
@@ -842,6 +846,28 @@ describe("the assignment Workflow's step names", () => {
       `Build the site from the canonical facts. ${ROW.goal}`
     )
     expect(console_.initialData.goal_tainted).toBe(false)
+  })
+
+  it("hands the Developer what the owner sent before it was admitted, after its brief", async () => {
+    script.verdicts = ["preview_ready"]
+    script.early = [
+      { event_id: "7", message: "We also clean ovens", owner: true },
+    ]
+    const { names, run } = drive([completion])
+    await run()
+    expect(names).toEqual(steps.AssignmentWorkflow.build)
+    expect(dispatched.slice(0, 2)).toMatchObject([
+      { initialData: { goal: ROW.goal } },
+      {
+        idempotencyKey: `${ROW.id}:early-7`,
+        message: {
+          kind: "signal",
+          type: "site.change_requested",
+          body: "We also clean ovens",
+          attributes: { taint: "untrusted_input" },
+        },
+      },
+    ])
   })
 
   it("starts a planned build's Developer while its photos draw, with none in its brief", async () => {

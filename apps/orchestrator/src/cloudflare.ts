@@ -79,7 +79,7 @@ import {
   writePointer,
 } from "./publish.ts"
 import { quickEdit } from "./quick.ts"
-import { askOwner, heldSteers, relayQuestion } from "./relay.ts"
+import { askOwner, earlySteers, heldSteers, relayQuestion } from "./relay.ts"
 import { retireOthers, type SweepCounts, sweepOrg } from "./retention.ts"
 import {
   afterFailure,
@@ -584,6 +584,7 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
         .do("developer", async () => {
           const { brief, ...timing } = await prepare(role, handedOn)
           const origin = timing.origin
+          let submissionId: string | null = null
           try {
             const receipt = await init(Developer, {
               id: ids.assignmentId,
@@ -602,13 +603,20 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
                 : `Build the site from the canonical facts. ${brief.goal}`,
               initialData: brief,
             })
-            return { submission_id: receipt.submissionId, ...timing, origin }
+            submissionId = receipt.submissionId
           } catch (error) {
-            if (error instanceof AgentInstanceExistsError) {
-              return { submission_id: null, ...timing, origin }
-            }
-            throw error
+            if (!(error instanceof AgentInstanceExistsError)) throw error
           }
+          // What the owner sent before there was a Developer, after its brief.
+          const early = await run((kit) =>
+            kit.withOrg({ orgId: ids.orgId }, (db) =>
+              earlySteers(db, ids.assignmentId)
+            )
+          )
+          for (const steer of early) {
+            await sendSteer(ids.assignmentId, steer, `early-${steer.event_id}`)
+          }
+          return { submission_id: submissionId, ...timing, origin }
         })
         // Out of retries: the Developer never started, so nothing would wake
         // this build again. Null, for the caller to end it as failed.
@@ -1284,23 +1292,32 @@ export class AssignmentWorkflow extends WorkflowEntrypoint<
           )
         )
         for (const held of steers) {
-          await init(Developer, { id: ids.assignmentId }).dispatch({
-            idempotencyKey: `${ids.assignmentId}:held-${held.event_id}`,
-            message: held.owner
-              ? {
-                  kind: "signal",
-                  type: "site.change_requested",
-                  body: held.message,
-                  attributes: { taint: "untrusted_input" },
-                }
-              : { kind: "user", body: held.message },
-          })
+          await sendSteer(ids.assignmentId, held, `held-${held.event_id}`)
         }
         return { fact_id: fact.fact_id }
       })
     }
     return { outcome: "rounds_exhausted" }
   }
+}
+
+/** A logged steer, as the steer route would have sent it, once under `key`. */
+function sendSteer(
+  assignmentId: string,
+  steer: { message: string; owner: boolean },
+  key: string
+) {
+  return init(Developer, { id: assignmentId }).dispatch({
+    idempotencyKey: `${assignmentId}:${key}`,
+    message: steer.owner
+      ? {
+          kind: "signal",
+          type: "site.change_requested",
+          body: steer.message,
+          attributes: { taint: "untrusted_input" },
+        }
+      : { kind: "user", body: steer.message },
+  })
 }
 
 /** One audit row for a step that moves no state. */

@@ -16,6 +16,7 @@ import {
   siteHost,
   siteUrl,
   type TaintLabel,
+  TERMINAL_STATES,
   Uuid,
 } from "@workspace/contracts"
 import {
@@ -64,7 +65,7 @@ import {
 import { bearerAuth } from "hono/bearer-auth"
 import { HTTPException } from "hono/http-exception"
 import { Developer } from "./agents/developer.ts"
-import { hideFacts, updateFacts } from "./brief.ts"
+import { creationChoices, hideFacts, updateFacts } from "./brief.ts"
 import type { AssignmentParams } from "./cloudflare.ts"
 import {
   boughtElsewhere,
@@ -1225,6 +1226,11 @@ bridge.post("/:id/answer", async (c) => {
   return c.json(result.answer, 202)
 })
 
+const ENDED =
+  "This build has ended and takes no more changes. Ask for the change again."
+const ONE_CALL =
+  "This quick change is made in one edit and takes no more details. Ask again once it is ready."
+
 /**
  * A message into the running conversation; flue joins it at the next turn
  * boundary. An owner's message is their own words, tainted as a goal is.
@@ -1254,10 +1260,6 @@ bridge.post("/:id/steer", async (c) => {
     })
   }
   const taint: TaintLabel[] = byOwner(c) ? ["untrusted_input"] : []
-  // A build with no Developer (the quick lane's one call, or one not yet
-  // admitted) has nothing to steer. An unconditional send created one with no
-  // brief, whose submission failed at render and was recovered again and again.
-  const uid = (await getAgentInstance(Developer, id))?.uid
   const reused = () =>
     failure(c, 409, {
       class: "validation",
@@ -1282,8 +1284,24 @@ bridge.post("/:id/steer", async (c) => {
       }
       throw error
     }
+    // Read under the row lock, which the admission's `earlySteers` also takes,
+    // so a steer either finds the Developer or is logged before that read.
+    const uid = (await getAgentInstance(Developer, id))?.uid
     const held = found.state === "blocked_on_information"
-    if (!held && !uid) return { idle: true as const }
+    // A steer never makes a Developer: one made with no brief failed at
+    // render and was recovered again and again.
+    let early = false
+    if (!held && !uid) {
+      if (TERMINAL_STATES.includes(found.state)) return { refused: ENDED }
+      const { lane, change_kind } = await creationChoices(db, {
+        orgId,
+        assignmentId: id,
+      })
+      if (lane === "quick" && change_kind !== "section") {
+        return { refused: ONE_CALL }
+      }
+      early = true
+    }
     const steered = await steerByKey(db, key)
     if (steered) {
       const same =
@@ -1291,7 +1309,7 @@ bridge.post("/:id/steer", async (c) => {
         steered.message === message &&
         canonical(steered.taint) === canonical(taint)
       return same
-        ? { replayed: true as const, held }
+        ? { kept: held || early || steered.early, uid }
         : { reused: true as const }
     }
     await appendEvent(db, {
@@ -1299,25 +1317,30 @@ bridge.post("/:id/steer", async (c) => {
       assignmentId: id,
       staffId: found.createdByStaffId,
       type: "assignment.steered",
-      payload: { message, key_sha256: steerKeyHash(key) },
+      payload: {
+        message,
+        key_sha256: steerKeyHash(key),
+        ...(early ? { early: true } : {}),
+      },
       taint,
     })
-    return { logged: true as const, held }
+    return { kept: held || early, uid }
   })
   if ("missing" in result) return notFound(c, id)
   if ("reused" in result) return reused()
-  if ("idle" in result) {
+  if (result.refused) {
     return failure(c, 409, {
       class: "validation",
       code: "steer.not_running",
-      message:
-        "This build is finishing and takes no more changes. Try again once it is ready.",
+      message: result.refused,
       detail: {},
     })
   }
   // A build waiting on the owner's answer gets the steer with that answer
-  // (cloudflare.ts `resume`), so its Developer never wakes mid-wait.
-  if (result.held) {
+  // (cloudflare.ts `resume`), and one not yet admitted with its brief
+  // (`admit`), so a steer never wakes or makes a Developer.
+  const { uid } = result
+  if (result.kept || !uid) {
     return c.json({ assignment_id: id, submission_id: null }, 202)
   }
   // An owner's words reach the model the way a change request does: as a

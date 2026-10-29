@@ -13,7 +13,8 @@ export const steerKeyHash = (key: string) =>
 
 /**
  * The steer an Idempotency-Key already made in the org, or null: the build it
- * went to, its words and its taint (which says who sent it). The api reads it
+ * went to, its words, its taint (which says who sent it) and whether it came
+ * before the build's Developer, for the admission to deliver. The api reads it
  * to replay a retried change against the same build; the orchestrator, to
  * replay one steer. RLS keeps it to the org.
  *
@@ -27,13 +28,16 @@ export async function steerByKey(
   assignment_id: string
   message: unknown
   taint: string[]
+  early: boolean
 } | null> {
   const [row] = await db.execute<{
     assignment_id: string
     message: unknown
     taint: string[]
+    early: boolean
   }>(sql`
-    select e.assignment_id, e.payload->'message' as message, e.taint
+    select e.assignment_id, e.payload->'message' as message, e.taint,
+      e.payload->>'early' is not null as early
     from ${events} e
     where e.type = 'assignment.steered'
       and e.payload->>'key_sha256' = ${steerKeyHash(key)}
