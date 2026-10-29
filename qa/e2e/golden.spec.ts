@@ -324,6 +324,8 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
     // Only while nothing is built: on the Website page the panel's next
     // step links back to the onboarding conversation.
     await visit(page, "/app/website")
+    const opener = panel(page).getByRole("button", { name: /open the panel$/ })
+    if (await opener.isVisible()) await opener.click()
     await panel(page)
       .getByRole("list", { name: "Next steps" })
       .getByRole("link", { name: "Finish setting up" })
@@ -395,7 +397,6 @@ test("@live the golden path: signup to v2 live, and cleared after", async ({
   await step("v1 approved, live with the quote action", async () => {
     first = await approveVersion(page)
     expect(first).toBe(1)
-    // The chat says so too, once the load check has seen the site answer.
     const said = Date.now()
     await expect(
       page.getByText("Published, your website is live", { exact: true })
