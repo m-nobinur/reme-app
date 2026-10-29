@@ -25,11 +25,12 @@ export const Route = createFileRoute("/app/tasks")({
 
 const frame = getRouteApi("/app")
 
-type Status = "done" | "active" | "waiting"
+type Status = "done" | "active" | "yours" | "waiting"
 
 const STATUS = {
   done: { label: "Done", mark: "done" },
   active: { label: "In progress", mark: "working" },
+  yours: { label: "Waiting on you", mark: "waiting" },
   waiting: { label: "Up next", mark: "next" },
 } as const
 
@@ -74,23 +75,26 @@ function groupsOf(
       : begun || onboarding
         ? "done"
         : "active"
-  const site: Status = live
-    ? "done"
-    : journey.some(
-          (s) =>
-            (s.kind === "website" ||
-              s.kind === "golive" ||
-              s.kind === "change") &&
-            s.state !== "upcoming"
-        )
-      ? "active"
-      : "waiting"
-  const address = standing.find((s) => s.kind === "address")
-  const google = standing.find((s) => s.kind === "google")
   // A stage waiting on the owner says what, in the panel's words.
   const waits = ownerWaits(activity)
   const needs = (segment: ActivitySegment | undefined) =>
     waits.find((wait) => wait.id === segment?.id)?.title
+  const stages = journey.filter(
+    (s) =>
+      (s.kind === "website" || s.kind === "golive" || s.kind === "change") &&
+      s.state !== "upcoming"
+  )
+  // The build may be done while going live waits: the wait is what shows.
+  const owed = stages.map(needs).find(Boolean)
+  const site: Status = live
+    ? "done"
+    : owed
+      ? "yours"
+      : stages.length > 0
+        ? "active"
+        : "waiting"
+  const address = standing.find((s) => s.kind === "address")
+  const google = standing.find((s) => s.kind === "google")
   const after = (status: Status, before: Status, name: string) =>
     status === "waiting" && before !== "done" ? { after: name } : {}
   const domain = statusOf(address)
@@ -115,7 +119,9 @@ function groupsOf(
       tasks: [
         {
           title: "Website setup",
-          detail: `${leading(assistant)} builds your first version and you publish it.`,
+          detail:
+            (!live && owed) ||
+            `${leading(assistant)} builds your first version and you publish it.`,
           status: site,
           ...after(site, setup, "Onboarding"),
         },
