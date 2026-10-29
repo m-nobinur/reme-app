@@ -50,20 +50,27 @@ export async function sessionCookie(page: Page): Promise<string> {
   return `wos-session=${session?.value}`
 }
 
-/** `apps/api` as the signed-in owner. */
+/**
+ * `apps/api` as the signed-in owner. A connection dropped before any response
+ * is sent once more when that cannot double a write: a read, or a write with
+ * an idempotency key.
+ */
 export async function api(
   cookie: string,
   path: string,
   init: RequestInit = {}
 ): Promise<Response> {
-  return fetch(`${apiUrl()}${path}`, {
-    ...init,
-    headers: {
-      "content-type": "application/json",
-      cookie,
-      ...init.headers,
-    },
-  })
+  const headers = new Headers({ "content-type": "application/json", cookie })
+  for (const [key, value] of new Headers(init.headers)) headers.set(key, value)
+  const send = () => fetch(`${apiUrl()}${path}`, { ...init, headers })
+  const safe =
+    !init.method || init.method === "GET" || headers.has("idempotency-key")
+  try {
+    return await send()
+  } catch (error) {
+    if (!safe || !(error instanceof TypeError)) throw error
+    return send()
+  }
 }
 
 /**
