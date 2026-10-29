@@ -29,7 +29,11 @@ const ID_KEYS = {
   id: "part",
 }
 const DROPPED = new Set(["providerMetadata", "messageMetadata"])
-const TRANSIENT = new Set(["message-metadata", "data-onboarding_status"])
+const TRANSIENT = new Set([
+  "message-metadata",
+  "data-onboarding_status",
+  "data-memory",
+])
 
 function redactor() {
   const seen = new Map()
