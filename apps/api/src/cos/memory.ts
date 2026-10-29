@@ -88,10 +88,17 @@ const plain = (text: string) =>
     .toLowerCase()
     .replace(/[\u2018\u2019]/g, "'")
     .replace(/[\u201c\u201d]/g, '"')
+    .replace(/[.!?]+$/, "")
 
-/** Whether `quote` is a piece of one thing the owner typed, ignoring case, spacing and curly quotes. */
+/**
+ * Whether `quote` is a whole sentence the owner typed, ignoring case,
+ * spacing, curly quotes and the closing stop. Whole, so a piece cut out of
+ * "Don't approve every change" can never stand alone as an order.
+ */
 export const quotedFrom = (quote: string, said: readonly string[]) =>
-  said.some((s) => plain(s).includes(plain(quote)))
+  said
+    .flatMap((s) => s.split(/(?<=[.!?])\s+|\n+/))
+    .some((sentence) => plain(sentence) === plain(quote))
 
 const STOP = new Set(
   "a an the and or of to in on at by for with from is are was were be been am has have had do does did it its he she they them their his her my me i we our as that this".split(
@@ -184,7 +191,7 @@ export const linesMatching = (lines: readonly ProfileLine[], match: string) => {
 const OWN_WORDS =
   "Use the owner's own words: every word of a saved line must come from what the owner wrote in this conversation. Say it again with their words."
 
-const QUOTED = `A standing request quotes the owner exactly as they typed it in this conversation, ${ASKED_MAX} characters at most: Asked: "their words".`
+const QUOTED = `A standing request quotes one whole sentence the owner typed in this conversation, exactly, ${ASKED_MAX} characters at most: Asked: "their sentence".`
 
 /**
  * `ops` applied to a copy of `lines`, all or none. The limit is checked on

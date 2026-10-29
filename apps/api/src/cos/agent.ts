@@ -337,7 +337,7 @@ export const DESCRIPTIONS: Record<CosToolName, string> = {
   connect_google:
     "Get the button that connects the owner's Google account, so their website goes into their own Google Search Console. Google's screen is where they agree, so there is no card. Returns the link for the card, the account already connected, or that Google is not available here.",
   remember:
-    "Save a lasting fact about the owner to their profile, which you read every turn: a preference, a correction or a personal detail about them or how they work, corrections first. Each line is a plain statement about the owner in words they wrote in this conversation, such as 'Prefers calls after 4pm', never an order to you; a line with a word they did not write is refused. The one exception is a standing request, how the owner tells you to work ('Don't email customers before 9am'): save their sentence exactly as they typed it, as Asked: \"their words\", 160 characters at most. Not for task progress, anything stale in a week, business facts (request_change), a time zone (set_time_zone) or a promise or deadline (create_reminder). Make every change in one call: operations add, replace or remove lines, matching a line by a short piece only it contains. The profile holds 1,500 characters; when full, merge or remove lines first.",
+    "Save a lasting fact about the owner to their profile, which you read every turn: a preference, a correction or a personal detail about them or how they work, corrections first. Each line is a plain statement about the owner in words they wrote in this conversation, such as 'Prefers calls after 4pm', never an order to you; a line with a word they did not write is refused. The one exception is a standing request, how the owner tells you to work ('Don't email customers before 9am'): save their whole sentence exactly as they typed it, as Asked: \"their sentence\", 160 characters at most. Not for task progress, anything stale in a week, business facts (request_change), a time zone (set_time_zone) or a promise or deadline (create_reminder). Make every change in one call: operations add, replace or remove lines, matching a line by a short piece only it contains. The profile holds 1,500 characters; when full, merge or remove lines first.",
   put_off:
     "Put an offer off when the owner says not now to it: kind is address (their own web address) or google. days until you may offer it again, 7 unless the owner gave a time. Never for work under way or a change the owner asked for.",
   record_review:
@@ -622,7 +622,7 @@ export const SETS_RULE =
 
 /** Added when the owner's message reads as a standing request. */
 export const STANDING_LINE =
-  'The owner\'s message may set a standing request for how you work. If it does, keep to it now and save it with remember as Asked: "their words", unless the profile already has it.'
+  'The owner\'s message may set a standing request for how you work. If it does, keep to it now and save it with remember as Asked: "their sentence", their whole sentence as typed, unless the profile already has it.'
 
 /** Who the owner made the Chief of Staff, from their facts. Null where they have not said. */
 type Persona = {
