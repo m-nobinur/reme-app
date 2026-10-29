@@ -242,14 +242,19 @@ function ReminderSet({
   if (undo === "done") return <Done>Reminder removed.</Done>
   const at = set?.time_zone ?? zone
   const id = set?.reminder_id
-  const open = id && (last || (reminderOpen?.(id) ?? true))
+  const sentence = `${set?.replaced ? "Moved the reminder." : "Added to Reminders."}${set?.due_at ? ` ${dueIn(formatDateTime(set.due_at, at), at)}.` : ""}`
+  if (!id || !removeReminder || !(last || (reminderOpen?.(id) ?? true))) {
+    return <Done>{sentence}</Done>
+  }
+  // The last word and Undo wrap together, so Undo never starts a line alone.
+  const cut = sentence.lastIndexOf(" ") + 1
   return (
     <Done>
       {/* One flex item, so the sentence keeps its width and Undo follows it. */}
       <span>
-        {set?.replaced ? "Moved the reminder." : "Added to Reminders."}
-        {set?.due_at ? ` ${dueIn(formatDateTime(set.due_at, at), at)}.` : ""}
-        {id && open && removeReminder ? (
+        {sentence.slice(0, cut)}
+        <span className="whitespace-nowrap">
+          {sentence.slice(cut)}
           <Button
             className="ms-1 h-auto p-0 align-baseline"
             disabled={undo === "busy"}
@@ -265,7 +270,7 @@ function ReminderSet({
           >
             {undo === "failed" ? "Couldn't undo. Try again" : "Undo"}
           </Button>
-        ) : null}
+        </span>
       </span>
     </Done>
   )

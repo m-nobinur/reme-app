@@ -110,6 +110,7 @@ const COS_TOOLS_FIXTURE = {
     requestId === "0f4b2c8e-1a3d-4e5f-9b6c-7d8e9f0a1b2c"
       ? "Service area"
       : null,
+  removeReminder: async () => ({ done: true }),
 }
 
 const FIXTURE_TIME = new Date("2026-09-24T09:00:00Z")
@@ -1420,7 +1421,11 @@ const CREATE_REMINDER_STATES = decisionStates(
   "create_reminder",
   { title: "Call the window supplier", due_at: "2026-10-02T09:00:00+01:00" },
   { title: "", due_at: null },
-  { outcome: "created", due_at: "2026-10-02T08:00:00.000Z" },
+  {
+    outcome: "created",
+    reminder_id: "5e2d7c1a-9b3f-4a6e-8c2d-1f0e9a8b7c6d",
+    due_at: "2026-10-02T08:00:00.000Z",
+  },
   refusal("reminder.due_past", "A reminder cannot be due in the past.")
 )
 
