@@ -62,7 +62,6 @@ jobs:
     outputs:
       web: ${{ steps.urls.outputs.web }}
       api: ${{ steps.urls.outputs.api }}
-      orchestrator: ${{ steps.urls.outputs.orchestrator }}
       # The branch name, never its connection string: that string carries a
       # password, and a job output is readable by every later job and by anyone
       # who can read the run. A job that needs the database derives the string
@@ -107,7 +106,6 @@ jobs:
           {
             echo "web=https://$PREVIEW_ALIAS-reme-web.beapp.workers.dev"
             echo "api=https://$PREVIEW_ALIAS-reme-api.beapp.workers.dev"
-            echo "orchestrator=https://$PREVIEW_ALIAS-reme-orchestrator.beapp.workers.dev"
             echo "neon_branch=$NEON_BRANCH"
           } >> "$GITHUB_OUTPUT"
 
@@ -208,7 +206,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           WEB: ${{ steps.urls.outputs.web }}
           API: ${{ steps.urls.outputs.api }}
-          ORCHESTRATOR: ${{ steps.urls.outputs.orchestrator }}
         run: |
           gh pr comment "${{ github.event.number }}" --edit-last --create-if-none --body "$(
             cat <<EOF
@@ -216,7 +213,6 @@ jobs:
 
           Owner app: $WEB
           API: $API
-          Orchestrator: $ORCHESTRATOR
 
           Sign-in runs against the WorkOS staging environment on this hostname.
           Both are uploaded versions rather than deployments, so no production

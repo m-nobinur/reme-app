@@ -173,11 +173,15 @@ jobs:
       # Object bindings into the config wrangler deploys.
       - run: pnpm --filter orchestrator build
 
+      # shortcut: Cloudflare answers the container application read with 500 (#335); drop the fallback once it answers 200.
       - name: Deploy the orchestrator
-        run: >
-          pnpm --filter orchestrator exec wrangler deploy
-          --config dist/reme_orchestrator/wrangler.json
-          --message "${{ github.sha }}"
+        run: |
+          set -o pipefail
+          pnpm --filter orchestrator exec wrangler deploy \
+            --config dist/reme_orchestrator/wrangler.json \
+            --message "${{ github.sha }}" 2>&1 | tee "$RUNNER_TEMP/orchestrator-deploy.log" && exit 0
+          grep -q "could not finish applying its Durable Object-managed Container application settings" "$RUNNER_TEMP/orchestrator-deploy.log" || exit 1
+          echo "::warning::The orchestrator is live but its container settings were not applied (#335)."
 
       - name: The orchestrator answers
         run: |
