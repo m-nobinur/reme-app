@@ -16,15 +16,20 @@ const WORDS = {
   removed: (text: string) => `removed "${text}"`,
 } as const
 
-type Change = Pick<MemoryChip["changes"][number], "kind" | "text">
+type Change = Pick<MemoryChip["changes"][number], "kind" | "text"> &
+  Partial<MemoryChip["changes"][number]>
 
 /** One change in a few words, the owner's own line in it. */
 export const memoryChangeText = (change: Change) =>
   WORDS[change.kind](change.text)
 
 /** What a chip says: each change in a few words. */
-export const memoryChipText = ({ changes }: { changes: readonly Change[] }) =>
-  `Saved to memory: ${changes.map(memoryChangeText).join("; ")}`
+export const memoryChipText = ({
+  changes,
+}: {
+  changes: readonly Change[]
+  version?: number
+}) => `Saved to memory: ${changes.map(memoryChangeText).join("; ")}`
 
 /** What a saved `remember` call changed, or nothing for one that did not save. */
 const remembered = (input: unknown, output: unknown): Change[] => {
